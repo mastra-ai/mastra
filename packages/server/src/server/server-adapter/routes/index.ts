@@ -8,6 +8,7 @@ import { A2A_ROUTES } from './a2a';
 import { AGENT_BUILDER_ROUTES } from './agent-builder';
 import { AGENTS_ROUTES } from './agents';
 import { AUTH_ROUTES } from './auth';
+import { BACKGROUND_TASK_ROUTES } from './background-tasks';
 import { DATASETS_ROUTES } from './datasets';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
@@ -136,6 +137,7 @@ export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...PROCESSOR_PROVIDER_ROUTES,
   ...SYSTEM_ROUTES,
   ...DATASETS_ROUTES,
+  ...BACKGROUND_TASK_ROUTES,
 ];
 
 // Export route builder and OpenAPI utilities

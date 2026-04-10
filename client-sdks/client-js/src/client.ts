@@ -104,6 +104,10 @@ import type {
   DatasetVersionResponse,
   ListToolProvidersResponse,
   GetProcessorProvidersResponse,
+  ListBackgroundTasksParams,
+  ListBackgroundTasksResponse,
+  BackgroundTaskResponse,
+  StreamBackgroundTasksParams,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -1504,5 +1508,92 @@ export class MastraClient extends BaseResource {
       method: 'POST',
       body,
     });
+  }
+
+  // ============================================================================
+  // Background Tasks
+  // ============================================================================
+
+  /**
+   * Lists background tasks with optional filtering and pagination.
+   */
+  public listBackgroundTasks(params: ListBackgroundTasksParams = {}): Promise<ListBackgroundTasksResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.agentId) searchParams.set('agentId', params.agentId);
+    if (params.status) searchParams.set('status', params.status);
+    if (params.runId) searchParams.set('runId', params.runId);
+    if (params.threadId) searchParams.set('threadId', params.threadId);
+    if (params.resourceId) searchParams.set('resourceId', params.resourceId);
+    if (params.fromDate) searchParams.set('fromDate', params.fromDate.toISOString());
+    if (params.toDate) searchParams.set('toDate', params.toDate.toISOString());
+    if (params.dateFilterBy) searchParams.set('dateFilterBy', params.dateFilterBy);
+    if (params.orderBy) searchParams.set('orderBy', params.orderBy);
+    if (params.orderDirection) searchParams.set('orderDirection', params.orderDirection);
+    if (params.page !== undefined) searchParams.set('page', String(params.page));
+    if (params.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+    const qs = searchParams.toString();
+    return this.request(`/background-tasks${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets a single background task by ID.
+   */
+  public getBackgroundTask(taskId: string): Promise<BackgroundTaskResponse> {
+    return this.request(`/background-tasks/${encodeURIComponent(taskId)}`);
+  }
+
+  /**
+   * Opens an SSE stream of background task events (completed/failed).
+   * Returns a Response that can be consumed as a ReadableStream.
+   */
+  public async streamBackgroundTasks(params: StreamBackgroundTasksParams = {}) {
+    const searchParams = new URLSearchParams();
+    if (params.agentId) searchParams.set('agentId', params.agentId);
+    if (params.runId) searchParams.set('runId', params.runId);
+    if (params.threadId) searchParams.set('threadId', params.threadId);
+    if (params.resourceId) searchParams.set('resourceId', params.resourceId);
+    const qs = searchParams.toString();
+    const response: Response = await this.request(`/background-tasks/stream${qs ? `?${qs}` : ''}`, { stream: true });
+
+    if (!response.ok) {
+      throw new Error(`Failed to stream background tasks: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    //using undefined instead of empty string to avoid parsing errors
+    let failedChunk: string | undefined = undefined;
+
+    return response.body.pipeThrough(
+      new TransformStream({
+        async transform(chunk, controller) {
+          try {
+            // Decode binary data to text
+            const decoded = new TextDecoder().decode(chunk);
+
+            // Split by record separator
+            const chunks = decoded.substring('data: '.length).split('\n\n');
+
+            // Process each chunk
+            for (const chunk of chunks) {
+              if (chunk) {
+                const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
+                try {
+                  const parsedChunk = JSON.parse(newChunk);
+                  controller.enqueue(parsedChunk);
+                  failedChunk = undefined;
+                } catch {
+                  failedChunk = newChunk;
+                }
+              }
+            }
+          } catch {
+            // Silently ignore processing errors
+          }
+        },
+      }),
+    );
   }
 }

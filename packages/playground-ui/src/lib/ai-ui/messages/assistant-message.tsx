@@ -19,7 +19,7 @@ interface ContentItem {
     mode?: string;
     completionResult?: unknown;
     isTaskCompleteResult?: unknown;
-    pendingBackgroundTasksCount?: number;
+    runningBackgroundTasksCount?: number;
   };
 }
 
@@ -38,9 +38,9 @@ export const AssistantMessage = ({ hasModelList }: AssistantMessageProps) => {
       (type === 'text' && (metadata?.completionResult || metadata?.isTaskCompleteResult)),
   );
 
-  const pendingBackgroundTasksCount = (data.content as readonly ContentItem[])
+  const runningBackgroundTasksCount = (data.content as readonly ContentItem[])
     .toReversed()
-    .find(({ metadata }) => metadata?.pendingBackgroundTasksCount)?.metadata?.pendingBackgroundTasksCount;
+    .find(({ metadata }) => metadata?.runningBackgroundTasksCount)?.metadata?.runningBackgroundTasksCount;
 
   const modelMetadata = data.metadata?.custom?.modelMetadata as { modelId: string; modelProvider: string } | undefined;
 
@@ -57,11 +57,11 @@ export const AssistantMessage = ({ hasModelList }: AssistantMessageProps) => {
           }}
         />
       </div>
-      {pendingBackgroundTasksCount && (
+      {runningBackgroundTasksCount && (
         <div className="pt-2">
           <Badge variant="info" icon={<Loader2Icon className="animate-spin" />}>
-            {pendingBackgroundTasksCount} background task{pendingBackgroundTasksCount > 1 ? 's' : ''}{' '}
-            {pendingBackgroundTasksCount > 1 ? 'are' : 'is'} running
+            {runningBackgroundTasksCount} background task{runningBackgroundTasksCount > 1 ? 's' : ''}{' '}
+            {runningBackgroundTasksCount > 1 ? 'are' : 'is'} running
           </Badge>
         </div>
       )}

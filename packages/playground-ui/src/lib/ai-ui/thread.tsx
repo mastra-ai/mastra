@@ -5,7 +5,7 @@ import {
   ToolCallMessagePartComponent,
   useComposerRuntime,
 } from '@assistant-ui/react';
-import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
+import { ArrowUp, CheckCircleIcon, Loader2Icon, Mic, PlusIcon, XCircleIcon } from 'lucide-react';
 
 import { IconButton } from '@/ds/components/IconButton';
 import { Avatar } from '@/ds/components/Avatar';
@@ -23,15 +23,18 @@ import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { ComposerModelSwitcher } from '@/domains/agents/components/composer-model-switcher';
 import { BracketOverlay } from './components/bracket-overlay';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
+import { useBackgroundTaskStream } from '@/hooks';
+import { Badge } from '@/ds/components/Badge';
 
 export interface ThreadProps {
   agentName?: string;
   agentId?: string;
+  threadId?: string;
   hasMemory?: boolean;
   hasModelList?: boolean;
 }
 
-export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadProps) => {
+export const Thread = ({ agentName, agentId, threadId, hasMemory, hasModelList }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
@@ -64,7 +67,7 @@ export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadPr
         </ThreadPrimitive.If>
       </ThreadPrimitive.Viewport>
 
-      <Composer hasMemory={hasMemory} agentId={agentId} hasModelList={hasModelList} />
+      <Composer hasMemory={hasMemory} threadId={threadId} agentId={agentId} hasModelList={hasModelList} />
     </ThreadWrapper>
   );
 };
@@ -94,19 +97,49 @@ const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
 
 interface ComposerProps {
   hasMemory?: boolean;
+  threadId?: string;
   agentId?: string;
   hasModelList?: boolean;
 }
 
-const Composer = ({ hasMemory, agentId, hasModelList }: ComposerProps) => {
+const Composer = ({ hasMemory, threadId, agentId, hasModelList }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { canExecute } = usePermissions();
   const canExecuteAgent = canExecute('agents');
 
+  const { runningTasks, completedTasks, failedTasks, clearCompletedAndFailedTasks } = useBackgroundTaskStream({
+    threadId,
+    agentId,
+  });
+
   return (
     <div className="mx-4">
-      <ComposerPrimitive.Root>
+      <div className="flex gap-2 items-center">
+        {runningTasks.length > 0 ? (
+          <div className="pt-2">
+            <Badge variant="info" icon={<Loader2Icon className="animate-spin" />}>
+              {runningTasks.length} background task{runningTasks.length > 1 ? 's' : ''}{' '}
+              {runningTasks.length > 1 ? 'are' : 'is'} running
+            </Badge>
+          </div>
+        ) : null}
+        {completedTasks.length > 0 ? (
+          <div className="pt-2">
+            <Badge variant="success" icon={<CheckCircleIcon />}>
+              {completedTasks.length} background task{completedTasks.length > 1 ? 's' : ''} completed
+            </Badge>
+          </div>
+        ) : null}
+        {failedTasks.length > 0 ? (
+          <div className="pt-2">
+            <Badge variant="error" icon={<XCircleIcon />}>
+              {failedTasks.length} background task{failedTasks.length > 1 ? 's' : ''} failed
+            </Badge>
+          </div>
+        ) : null}
+      </div>
+      <ComposerPrimitive.Root onSubmit={clearCompletedAndFailedTasks}>
         <div className="max-w-3xl w-full mx-auto pb-2">
           <ComposerAttachments />
         </div>

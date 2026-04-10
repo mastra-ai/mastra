@@ -1,8 +1,6 @@
 import EventEmitter from 'node:events';
 import { PubSub } from './pubsub';
-import type { Event, SubscribeOptions } from './types';
-
-type EventCallback = (event: Event, ack?: () => Promise<void>) => void;
+import type { Event, EventCallback, SubscribeOptions } from './types';
 
 export class EventEmitterPubSub extends PubSub {
   private emitter: EventEmitter;
@@ -13,6 +11,15 @@ export class EventEmitterPubSub extends PubSub {
   private groupCounters: Map<string, number> = new Map();
   // "topic:group" → the single listener registered on the emitter for this group
   private groupListeners: Map<string, (event: Event) => void> = new Map();
+
+  // Track pending nack redeliveries so flush() can wait and close() can cancel them
+  private pendingNacks: Set<ReturnType<typeof setTimeout>> = new Set();
+
+  // Track delivery attempts per message id
+  private deliveryAttempts: Map<string, number> = new Map();
+
+  // Map original callback → wrapped listener for fan-out (non-group) subscribers
+  private fanoutWrappers: Map<EventCallback, (event: Event) => void> = new Map();
 
   constructor(existingEmitter?: EventEmitter) {
     super();
@@ -26,22 +33,27 @@ export class EventEmitterPubSub extends PubSub {
       ...event,
       id,
       createdAt,
+      deliveryAttempt: 1,
     });
   }
 
-  async subscribe(
-    topic: string,
-    cb: (event: Event, ack?: () => Promise<void>) => void,
-    options?: SubscribeOptions,
-  ): Promise<void> {
+  async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
     if (options?.group) {
       this.subscribeWithGroup(topic, cb, options.group);
     } else {
-      this.emitter.on(topic, cb);
+      const wrapper = (event: Event) => {
+        cb(
+          event,
+          async () => {},
+          async () => {},
+        );
+      };
+      this.fanoutWrappers.set(cb, wrapper);
+      this.emitter.on(topic, wrapper);
     }
   }
 
-  async unsubscribe(topic: string, cb: (event: Event, ack?: () => Promise<void>) => void): Promise<void> {
+  async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
     // Check if this callback is in any group for this topic
     for (const [group, topicMap] of this.groups) {
       const members = topicMap.get(topic);
@@ -69,21 +81,47 @@ export class EventEmitterPubSub extends PubSub {
     }
 
     // Not in a group — remove as fan-out listener
-    this.emitter.off(topic, cb);
+    const wrapper = this.fanoutWrappers.get(cb);
+    if (wrapper) {
+      this.emitter.off(topic, wrapper);
+      this.fanoutWrappers.delete(cb);
+    } else {
+      this.emitter.off(topic, cb);
+    }
   }
 
   async flush(): Promise<void> {
-    // no-op
+    // Wait for any pending nack redeliveries to fire
+    if (this.pendingNacks.size > 0) {
+      await new Promise<void>(resolve => {
+        const check = () => {
+          if (this.pendingNacks.size === 0) {
+            resolve();
+          } else {
+            setTimeout(check, 10);
+          }
+        };
+        check();
+      });
+    }
   }
 
   /**
    * Clean up all listeners during graceful shutdown.
    */
   async close(): Promise<void> {
+    // Cancel pending nack redeliveries
+    for (const handle of this.pendingNacks) {
+      clearTimeout(handle);
+    }
+    this.pendingNacks.clear();
+    this.deliveryAttempts.clear();
+
     this.emitter.removeAllListeners();
     this.groups.clear();
     this.groupCounters.clear();
     this.groupListeners.clear();
+    this.fanoutWrappers.clear();
   }
 
   private subscribeWithGroup(topic: string, cb: EventCallback, group: string): void {
@@ -105,18 +143,44 @@ export class EventEmitterPubSub extends PubSub {
     const listenerKey = `${topic}:${group}`;
     if (!this.groupListeners.has(listenerKey)) {
       const listener = (event: Event) => {
-        const currentMembers = this.groups.get(group)?.get(topic);
-        if (!currentMembers || currentMembers.length === 0) return;
-
-        const counter = this.groupCounters.get(listenerKey) ?? 0;
-        const idx = counter % currentMembers.length;
-        this.groupCounters.set(listenerKey, counter + 1);
-
-        currentMembers[idx]!(event);
+        this.deliverToGroup(topic, group, listenerKey, event);
       };
 
       this.groupListeners.set(listenerKey, listener);
       this.emitter.on(topic, listener);
     }
+  }
+
+  private deliverToGroup(topic: string, group: string, listenerKey: string, event: Event): void {
+    const currentMembers = this.groups.get(group)?.get(topic);
+    if (!currentMembers || currentMembers.length === 0) return;
+
+    const counter = this.groupCounters.get(listenerKey) ?? 0;
+    const idx = counter % currentMembers.length;
+    this.groupCounters.set(listenerKey, counter + 1);
+
+    // Track delivery attempts
+    const attemptKey = event.id;
+    const attempt = this.deliveryAttempts.get(attemptKey) ?? 1;
+    const eventWithAttempt = { ...event, deliveryAttempt: attempt };
+
+    const ack = async () => {
+      // Message successfully processed — clean up attempt tracking
+      this.deliveryAttempts.delete(attemptKey);
+    };
+
+    const nack = async () => {
+      // Message processing failed — redeliver to the group after a short delay
+      // Increment delivery attempt counter
+      this.deliveryAttempts.set(attemptKey, attempt + 1);
+
+      const handle = setTimeout(() => {
+        this.pendingNacks.delete(handle);
+        this.deliverToGroup(topic, group, listenerKey, event);
+      }, 0);
+      this.pendingNacks.add(handle);
+    };
+
+    currentMembers[idx]!(eventWithAttempt, ack, nack);
   }
 }

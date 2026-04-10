@@ -70,6 +70,27 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
 
   const toolCalled = metadata?.mode === 'network' && metadata?.hasMoreMessages ? true : undefined;
 
+  const isBackgroundTaskResult =
+    result && typeof result === 'string' && (result as string)?.toLowerCase()?.includes('background task');
+
+  if (isBackgroundTaskResult) {
+    return (
+      <ToolBadge
+        toolName={isAgent ? agentToolName : isWorkflow ? workflowToolName : toolName}
+        args={args}
+        result={result}
+        toolOutput={[]}
+        metadata={metadata}
+        toolCallId={toolCallId}
+        toolApprovalMetadata={toolApprovalMetadata}
+        suspendPayload={suspendedToolMetadata?.suspendPayload}
+        isNetwork={isNetwork}
+        toolCalled={toolCalled}
+        withoutArgs={isAgent || isWorkflow}
+      />
+    );
+  }
+
   if (isAgent) {
     return (
       <AgentBadgeWrapper

@@ -3,12 +3,13 @@ import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 import type { StorageDomains } from '@mastra/core/storage';
 import Cloudflare from 'cloudflare';
+import { BackgroundTasksStorageD1 } from './domains/background-tasks';
 import { MemoryStorageD1 } from './domains/memory';
 import { ScoresStorageD1 } from './domains/scores';
 import { WorkflowsStorageD1 } from './domains/workflows';
 
 // Export domain classes for direct use with MastraStorage composition
-export { MemoryStorageD1, ScoresStorageD1, WorkflowsStorageD1 };
+export { BackgroundTasksStorageD1, MemoryStorageD1, ScoresStorageD1, WorkflowsStorageD1 };
 export type { D1DomainConfig } from './db';
 
 /**
@@ -175,10 +176,15 @@ export class D1Store extends MastraCompositeStore {
       memory = new MemoryStorageD1(domainConfig);
     }
 
+    const bgConfig = this.binding
+      ? { binding: this.binding, tablePrefix: this.tablePrefix }
+      : { client: this.client!, tablePrefix: this.tablePrefix };
+
     this.stores = {
       scores,
       workflows,
       memory,
+      backgroundTasks: new BackgroundTasksStorageD1(bgConfig as any),
     };
   }
 

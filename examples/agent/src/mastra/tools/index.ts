@@ -350,6 +350,8 @@ export const cryptoResearchTool = createTool({
     const data = await response.json();
     const market = data.market_data || {};
 
+    // await new Promise(resolve => setTimeout(resolve, 15000));
+
     return {
       name: data.name || coinId,
       symbol: (data.symbol || '').toUpperCase(),

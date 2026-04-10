@@ -11,6 +11,7 @@ import {
   jsonSchema,
 } from '@mastra/schema-compat';
 import { z } from 'zod/v4';
+import { backgroundOverrideJsonSchema, backgroundOverrideZodSchema } from '../../background-tasks';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import { SpanType, wrapMastra, executeWithContext, EntityType, createObservabilityContext } from '../../observability';
@@ -59,12 +60,7 @@ export class CoreToolBuilder extends MastraBase {
     this.options = input.options;
     this.logType = input.logType;
 
-    if (
-      !isVercelTool(this.originalTool) &&
-      (input.autoResumeSuspendedTools ||
-        (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-') ||
-        (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('workflow-'))
-    ) {
+    if (!isVercelTool(this.originalTool)) {
       let schema = this.originalTool.inputSchema;
       if (typeof schema === 'function') {
         schema = schema();
@@ -74,13 +70,22 @@ export class CoreToolBuilder extends MastraBase {
       }
 
       if (isZodObject(schema)) {
-        this.originalTool.inputSchema = schema.extend({
-          suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
-          resumeData: z
-            .any()
-            .describe('The resumeData object created from the resumeSchema of suspended tool')
-            .optional(),
+        schema = schema.extend({
+          _background: backgroundOverrideZodSchema,
         });
+        if (
+          input.autoResumeSuspendedTools ||
+          (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-') ||
+          (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('workflow-')
+        ) {
+          this.originalTool.inputSchema = schema.extend({
+            suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
+            resumeData: z
+              .any()
+              .describe('The resumeData object created from the resumeSchema of suspended tool')
+              .optional(),
+          });
+        }
       } else {
         // Non-Zod StandardSchemaWithJSON (e.g. JsonSchemaWrapper from JSONSchema7).
         // Extract JSON Schema, add suspend/resume fields, re-wrap.
@@ -88,14 +93,24 @@ export class CoreToolBuilder extends MastraBase {
         if (jsonSchema && typeof jsonSchema === 'object' && jsonSchema.type === 'object') {
           jsonSchema.properties = {
             ...jsonSchema.properties,
-            suspendedToolRunId: {
-              type: ['string', 'null'],
-              description: 'The runId of the suspended tool',
-            },
-            resumeData: {
-              description: 'The resumeData object created from the resumeSchema of suspended tool',
-            },
+            _background: backgroundOverrideJsonSchema,
           };
+          if (
+            input.autoResumeSuspendedTools ||
+            (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-') ||
+            (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('workflow-')
+          ) {
+            jsonSchema.properties = {
+              ...jsonSchema.properties,
+              suspendedToolRunId: {
+                type: ['string', 'null'],
+                description: 'The runId of the suspended tool',
+              },
+              resumeData: {
+                description: 'The resumeData object created from the resumeSchema of suspended tool',
+              },
+            };
+          }
           this.originalTool.inputSchema = toStandardSchema(jsonSchema) as any;
         }
       }

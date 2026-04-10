@@ -10,13 +10,19 @@ import {
 } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageDomains } from '@mastra/core/storage';
 import Cloudflare from 'cloudflare';
+import { BackgroundTasksStorageCloudflare } from './domains/background-tasks';
 import { MemoryStorageCloudflare } from './domains/memory';
 import { ScoresStorageCloudflare } from './domains/scores';
 import { WorkflowsStorageCloudflare } from './domains/workflows';
 import { isWorkersConfig } from './types';
 
 // Export domain classes for direct use with MastraStorage composition
-export { MemoryStorageCloudflare, ScoresStorageCloudflare, WorkflowsStorageCloudflare };
+export {
+  BackgroundTasksStorageCloudflare,
+  MemoryStorageCloudflare,
+  ScoresStorageCloudflare,
+  WorkflowsStorageCloudflare,
+};
 export type { CloudflareDomainConfig } from './types';
 import type { CloudflareStoreConfig, CloudflareWorkersConfig, CloudflareRestConfig } from './types';
 
@@ -115,10 +121,15 @@ export class CloudflareStore extends MastraCompositeStore {
         scores = new ScoresStorageCloudflare(domainConfig);
       }
 
+      const bgConfig = this.bindings
+        ? { bindings: this.bindings, keyPrefix: this.namespacePrefix }
+        : { client: this.client!, accountId: this.accountId!, namespacePrefix: this.namespacePrefix };
+
       this.stores = {
         workflows,
         memory,
         scores,
+        backgroundTasks: new BackgroundTasksStorageCloudflare(bgConfig as any),
       };
     } catch (error) {
       throw new MastraError(

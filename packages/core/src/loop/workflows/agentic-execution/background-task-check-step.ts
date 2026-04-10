@@ -9,14 +9,17 @@ import type { LLMIterationData } from '../schema';
  * Step that checks for pending background tasks after the LLM has responded.
  *
  * If there are pending background tasks:
- * 1. Emits a `background-task-waiting` chunk so the UI can show a loading state
- * 2. Waits for the NEXT task to complete (Strategy B — process as they arrive)
- * 3. Emits periodic `background-task-waiting` chunks while waiting
- * 4. Sets `backgroundTaskPending = true` and `isContinued = true`
- *    so the loop iterates again for the LLM to process the result
+ * 1. First invocation (retryCount === 0): returns immediately with backgroundTaskPending=true
+ *    so the loop can re-enter without blocking.
+ * 2. Subsequent invocations: waits up to `waitTimeoutMs` for the NEXT task to complete
+ *    (Strategy B — process as they arrive). Emits progress chunks while waiting.
+ *    - If a task completes within the timeout: sets isContinued=true so the LLM processes it.
+ *    - If the timeout elapses: returns WITHOUT setting isContinued, allowing the loop to end
+ *      naturally. The background task continues running — its result will be picked up on
+ *      the next user message or stream.
  *
- * Result injection and stream chunk emission are handled by the
- * setResultInjector and setStreamChunkEmitter hooks set in tool-call-step.
+ * Result injection and stream chunk emission are handled by per-task hooks
+ * registered via createBackgroundTask in tool-call-step.
  *
  * If no pending tasks: passes through unchanged with `backgroundTaskPending = false`.
  */
@@ -24,32 +27,51 @@ export function createBackgroundTaskCheckStep<Tools extends ToolSet = ToolSet, O
   _internal,
   controller,
   runId,
+  agentId,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'backgroundTaskCheckStep',
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
-    execute: async ({ inputData }) => {
+    execute: async ({ inputData, retryCount }) => {
       const typedInput = inputData as LLMIterationData<Tools, OUTPUT>;
-      const pendingTasks = _internal?.pendingBackgroundTasks;
+      const { threadId, resourceId } = _internal || {};
       const bgManager = _internal?.backgroundTaskManager;
 
-      // No pending tasks or no manager — pass through
-      if (!pendingTasks || pendingTasks.size === 0 || !bgManager) {
+      const runningResult = await bgManager?.listTasks({
+        agentId,
+        status: 'running',
+        threadId,
+        resourceId,
+      });
+      const runningTasks = runningResult?.tasks;
+
+      // No running tasks or no manager — pass through
+      if (!runningTasks || runningTasks.length === 0 || !bgManager) {
         return { ...typedInput, backgroundTaskPending: false };
       }
 
-      const taskIds = [...pendingTasks];
+      const taskIds = runningTasks.map(task => task.id);
 
-      // Emit initial waiting chunk so the UI can show a loading state
+      // Resolve wait timeout: agent config → manager config → undefined (wait forever)
+      const agentBgConfig = _internal?.agentBackgroundConfig;
+      const managerConfig = _internal?.backgroundTaskManagerConfig;
+      const waitTimeoutMs = agentBgConfig?.waitTimeoutMs ?? managerConfig?.waitTimeoutMs;
+
+      // First invocation — signal pending but don't block
+      if (retryCount === 0 || !waitTimeoutMs) {
+        return { ...typedInput, backgroundTaskPending: true };
+      }
+
+      // Emit initial progress chunk
       try {
         controller.enqueue({
-          type: 'background-task-waiting' as any,
+          type: 'background-task-progress',
           runId,
           from: ChunkFrom.AGENT,
           payload: {
             taskIds,
-            pendingCount: pendingTasks.size,
+            runningCount: runningTasks.length,
             elapsedMs: 0,
           },
         });
@@ -57,31 +79,38 @@ export function createBackgroundTaskCheckStep<Tools extends ToolSet = ToolSet, O
         // Controller may be closed — ignore
       }
 
-      // Wait for the NEXT task to complete, emitting progress chunks periodically
-      const completedTask = await bgManager.waitForNextTask(pendingTasks, {
-        onProgress: elapsedMs => {
-          try {
-            controller.enqueue({
-              type: 'background-task-waiting' as any,
-              runId,
-              from: ChunkFrom.AGENT,
-              payload: {
-                taskIds: [...pendingTasks],
-                pendingCount: pendingTasks.size,
-                elapsedMs,
-              },
-            });
-          } catch {
-            // Controller may be closed — ignore
-          }
-        },
-        progressIntervalMs: 3000,
-      });
+      // Wait for the NEXT task to complete (or until waitTimeoutMs elapses)
+      try {
+        await bgManager.waitForNextTask(taskIds, {
+          timeoutMs: waitTimeoutMs,
+          onProgress: elapsedMs => {
+            try {
+              controller.enqueue({
+                type: 'background-task-progress',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  taskIds,
+                  runningCount: runningTasks.length,
+                  elapsedMs,
+                },
+              });
+            } catch {
+              // Controller may be closed — ignore
+            }
+          },
+          progressIntervalMs: 3000,
+        });
+      } catch {
+        // Timeout elapsed — no task completed within waitTimeoutMs.
+        // Return WITHOUT setting isContinued so the loop can end.
+        // The tasks keep running in the background — results will be
+        // picked up on the next user message or stream.
+        return { ...typedInput, backgroundTaskPending: false };
+      }
 
-      // Remove from pending set
-      pendingTasks.delete(completedTask.id);
-
-      // Force the loop to continue so the LLM processes the result
+      // A task completed within the timeout — force the loop to continue
+      // so the LLM processes the injected result
       if (typedInput.stepResult) {
         typedInput.stepResult.isContinued = true;
       }

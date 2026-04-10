@@ -567,12 +567,18 @@ You can handle both at the same time — start a background research while answe
     cryptoPriceTool,
   },
   memory: new Memory(),
-  backgroundTasks: {
-    tools: {
-      cryptoResearchTool: true, // Runs in background (uses tool's background config)
-      cryptoPriceTool: false, // Always foreground (fast endpoint)
-    },
-  },
+  // backgroundTasks: {
+  //   tools: {
+  //     cryptoResearchTool: true,
+  //   },
+  //   waitTimeoutMs: 10000,
+  //   onTaskComplete: async task => {
+  //     console.log(`Tool ${task.toolName} completed, result: ${JSON.stringify(task.result)}`);
+  //   },
+  //   onTaskFailed: async task => {
+  //     console.log(`Tool ${task.toolName} failed, error: ${JSON.stringify(task.error)}`);
+  //   },
+  // },
 });
 
 export const subscriptionOrchestratorAgent = new Agent({

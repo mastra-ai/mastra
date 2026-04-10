@@ -1,7 +1,5 @@
 import deepEqual from 'fast-deep-equal';
 import { z } from 'zod/v4';
-import { generateBackgroundTaskSystemPrompt } from '../../../background-tasks/system-prompt';
-import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
@@ -46,7 +44,6 @@ interface PrepareMemoryStepOptions<OUTPUT = undefined> {
   instructions: SystemMessage;
   memoryConfig?: MemoryConfigInternal;
   memory?: MastraMemory;
-  agentBackgroundConfig?: AgentBackgroundConfig;
 }
 
 export function createPrepareMemoryStep<OUTPUT = undefined>({
@@ -59,7 +56,6 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
   instructions,
   memoryConfig,
   memory,
-  agentBackgroundConfig,
 }: PrepareMemoryStepOptions<OUTPUT>) {
   return createStep({
     id: 'prepare-memory-step',
@@ -88,22 +84,6 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
 
       // Add user-provided system message if present
       addSystemMessage(messageList, options.system, 'user-provided');
-
-      // Add background task system prompt if agent has background task config with explicit tool entries
-      if (agentBackgroundConfig?.tools && agentBackgroundConfig.tools !== 'all') {
-        // Build a synthetic tools map from the agent config entries
-        const toolsForPrompt: Record<string, { background?: { enabled: boolean } }> = {};
-        for (const [name, entry] of Object.entries(agentBackgroundConfig.tools)) {
-          const enabled = typeof entry === 'boolean' ? entry : entry.enabled;
-          if (enabled) {
-            toolsForPrompt[name] = { background: { enabled: true } };
-          }
-        }
-        const bgPrompt = generateBackgroundTaskSystemPrompt(toolsForPrompt, agentBackgroundConfig);
-        if (bgPrompt) {
-          addSystemMessage(messageList, bgPrompt, 'background-tasks');
-        }
-      }
 
       if (!memory || (!thread?.id && !resourceId)) {
         messageList.add(options.messages, 'input');

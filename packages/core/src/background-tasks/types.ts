@@ -2,7 +2,7 @@ import type {
   BackgroundTaskFailedPayload,
   BackgroundTaskResultPayload,
   BackgroundTaskStartedPayload,
-  BackgroundTaskWaitingPayload,
+  BackgroundTaskProgressPayload,
 } from '../stream/types';
 
 export type BackgroundTaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
@@ -20,6 +20,7 @@ export interface BackgroundTask {
   agentId: string;
   threadId?: string;
   resourceId?: string;
+  runId: string;
 
   // Result
   result?: unknown;
@@ -42,6 +43,7 @@ export interface BackgroundTask {
  * Payload accepted by `BackgroundTaskManager.enqueue()`.
  */
 export interface TaskPayload {
+  runId: string;
   toolName: string;
   toolCallId: string;
   args: Record<string, unknown>;
@@ -55,19 +57,33 @@ export interface TaskPayload {
 /**
  * Filter for querying and managing tasks.
  */
+export type TaskDateColumn = 'createdAt' | 'startedAt' | 'completedAt';
+
 export interface TaskFilter {
   status?: BackgroundTaskStatus | BackgroundTaskStatus[];
   agentId?: string;
   threadId?: string;
   resourceId?: string;
   toolName?: string;
-  createdBefore?: Date;
-  createdAfter?: Date;
-  completedBefore?: Date;
-  orderBy?: 'createdAt' | 'startedAt' | 'completedAt';
+  runId?: string;
+  /** Start of the date range (inclusive). Filtered on `dateFilterBy` column. */
+  fromDate?: Date;
+  /** End of the date range (exclusive). Filtered on `dateFilterBy` column. */
+  toDate?: Date;
+  /** Which date column to use for fromDate/toDate filtering. Default: 'createdAt' */
+  dateFilterBy?: TaskDateColumn;
+  /** Column to sort by. Default: 'createdAt' */
+  orderBy?: TaskDateColumn;
   orderDirection?: 'asc' | 'desc';
-  limit?: number;
-  offset?: number;
+  /** Page number (0-indexed). Used with perPage for pagination. */
+  page?: number;
+  /** Number of results per page. */
+  perPage?: number;
+}
+
+export interface TaskListResult {
+  tasks: BackgroundTask[];
+  total: number;
 }
 
 // --- Configuration ---
@@ -94,9 +110,9 @@ export interface CleanupConfig {
   cleanupIntervalMs?: number;
 }
 
-export type MessageHandling = 'all' | 'final-only' | 'none';
-
 export interface BackgroundTaskManagerConfig {
+  /** Whether background tasks are enabled. Default: true */
+  enabled?: boolean;
   /** Global concurrency limit across all agents. Default: 10 */
   globalConcurrency?: number;
   /** Per-agent concurrency limit. Default: 5 */
@@ -114,8 +130,13 @@ export interface BackgroundTaskManagerConfig {
   defaultRetries?: RetryConfig;
   /** Cleanup configuration for old task records */
   cleanup?: CleanupConfig;
-  /** What gets persisted to the thread's message history. Default: 'final-only' */
-  messageHandling?: MessageHandling;
+  /**
+   * How long the agentic loop waits for a background task to complete before
+   * moving on (in ms). If a task hasn't finished within this time, the loop
+   * proceeds without setting isContinued — allowing it to end naturally.
+   * Can be overridden per-agent or per-tool. Default: undefined (wait indefinitely).
+   */
+  waitTimeoutMs?: number;
   /** Optional callback invoked when a task completes (in addition to stream + message list injection) */
   onTaskComplete?: (task: BackgroundTask) => void | Promise<void>;
   /** Optional callback invoked when a task fails (in addition to stream + message list injection) */
@@ -130,9 +151,9 @@ export interface ToolBackgroundConfig {
   /** Override the manager's default timeout for this tool */
   timeoutMs?: number;
   /** Override retry config for this tool */
-  retries?: RetryConfig;
-  /** Override message handling for this tool */
-  messageHandling?: MessageHandling;
+  maxRetries?: number;
+  /** Override how long the loop waits for this tool's background task to complete (in ms) */
+  waitTimeoutMs?: number;
   /** Per-tool callback on completion */
   onComplete?: (task: BackgroundTask) => void | Promise<void>;
   /** Per-tool callback on failure */
@@ -152,8 +173,8 @@ export interface AgentBackgroundConfig {
   tools?: Record<string, AgentBackgroundToolConfig> | 'all';
   /** Per-agent concurrency override */
   concurrency?: number;
-  /** Per-agent message handling override */
-  messageHandling?: MessageHandling;
+  /** Override how long the loop waits for background tasks from this agent (in ms) */
+  waitTimeoutMs?: number;
   /** Per-agent callback on completion */
   onTaskComplete?: (task: BackgroundTask) => void | Promise<void>;
   /** Per-agent callback on failure */
@@ -192,30 +213,53 @@ export interface BackgroundTaskFailedChunk {
 
 export interface BackgroundTaskProgressChunk {
   type: 'background-task-progress';
-  payload: BackgroundTaskWaitingPayload;
+  payload: BackgroundTaskProgressPayload;
 }
 
 export type BackgroundTaskResultChunk = BackgroundTaskCompletedChunk | BackgroundTaskFailedChunk;
 
-// --- Tool resolver ---
+// --- Progress ---
 
 /**
- * Function that resolves a tool name to an executable tool.
- * Used by the manager to execute tools by name.
+ * An intermediate progress chunk emitted during background task execution.
+ * Tools can emit these to provide visibility into long-running operations.
  */
-export interface ToolExecutor {
-  execute(args: Record<string, unknown>, options?: { abortSignal?: AbortSignal }): Promise<unknown>;
+export interface BackgroundTaskProgressData {
+  /** Application-defined progress type (e.g., 'fetching', 'processing', 'step-complete') */
+  type: string;
+  /** Arbitrary progress data */
+  data: unknown;
 }
 
-export type ToolResolver = (toolName: string, agentId: string) => ToolExecutor;
+// --- Tool executor ---
+
+/**
+ * Interface for executing a tool. Passed per-task so each background task
+ * carries its own execution context.
+ */
+export interface ToolExecutor {
+  execute(
+    args: Record<string, unknown>,
+    options?: {
+      abortSignal?: AbortSignal;
+      /**
+       * Emit intermediate progress during execution.
+       * Called by tools that support streaming progress from background execution.
+       * Each call produces a `background-task-progress` chunk on the SSE stream.
+       */
+      onProgress?: (progress: BackgroundTaskProgressData) => void;
+    },
+  ): Promise<unknown>;
+}
 
 // --- Result injection ---
 
 /**
  * Callback for injecting background task results into the agent's message history.
- * Called by the manager when a task completes or fails.
+ * Called when a task completes or fails.
  */
 export type ResultInjector = (params: {
+  runId: string;
   taskId: string;
   toolCallId: string;
   toolName: string;
@@ -227,6 +271,36 @@ export type ResultInjector = (params: {
   status: 'completed' | 'failed';
 }) => void | Promise<void>;
 
+// --- Per-task context ---
+
+/**
+ * Per-task hooks that are scoped to a specific stream/session.
+ * Stored in-memory on the manager, keyed by task ID.
+ * These capture closures from the caller (controller, messageList, etc.)
+ * and are never serialized.
+ */
+export interface TaskContext {
+  /** The tool executor for this specific task */
+  executor: ToolExecutor;
+  /** Emits stream chunks (background-task-completed/failed) to the caller's stream */
+  onChunk?: (chunk: BackgroundTaskResultChunk) => void;
+  /** Receives intermediate progress data from the executor during execution */
+  onProgress?: (taskId: string, progress: BackgroundTaskProgressData) => void;
+  /** Injects tool results into the caller's message list */
+  onResult?: ResultInjector;
+  /** Per-task callback on completion */
+  onComplete?: (task: BackgroundTask) => void | Promise<void>;
+  /** Per-task callback on failure */
+  onFailed?: (task: BackgroundTask) => void | Promise<void>;
+}
+
+// --- createBackgroundTask options ---
+
+export interface CreateBackgroundTaskOptions extends TaskPayload {
+  /** Per-task execution and delivery hooks */
+  context: TaskContext;
+}
+
 // --- Enqueue result ---
 
 export interface EnqueueResult {
@@ -236,4 +310,24 @@ export interface EnqueueResult {
    * this is set to true to signal the caller should run the tool synchronously.
    */
   fallbackToSync?: boolean;
+}
+
+// --- Background task handle ---
+
+/**
+ * A handle returned by `createBackgroundTask()`.
+ * Encapsulates a single background task with its per-stream hooks.
+ */
+export interface BackgroundTaskHandle {
+  /** The task record (available after dispatch) */
+  readonly task: BackgroundTask;
+  /** Dispatch the task for background execution. Returns the enqueue result. */
+  dispatch(): Promise<EnqueueResult>;
+  /** Cancel this task */
+  cancel(): Promise<void>;
+  /** Wait for this task to complete */
+  waitForCompletion(options?: {
+    timeoutMs?: number;
+    onProgress?: (elapsedMs: number) => void;
+  }): Promise<BackgroundTask>;
 }

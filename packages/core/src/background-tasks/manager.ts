@@ -1,16 +1,18 @@
 import { randomUUID } from 'node:crypto';
+import type { Mastra } from '..';
 import type { PubSub } from '../events/pubsub';
-import type { Event } from '../events/types';
+import type { Event, EventCallback } from '../events/types';
 import type {
   BackgroundTask,
   BackgroundTaskManagerConfig,
-  BackgroundTaskResultChunk,
+  BackgroundTaskProgressData,
   BackgroundTaskStatus,
   EnqueueResult,
-  ResultInjector,
+  TaskContext,
   TaskFilter,
   TaskPayload,
-  ToolResolver,
+  TaskListResult,
+  ToolExecutor,
 } from './types';
 
 const TOPIC_DISPATCH = 'background-tasks';
@@ -19,31 +21,27 @@ const WORKER_GROUP = 'background-task-workers';
 
 export class BackgroundTaskManager {
   private pubsub!: PubSub;
-  private config: Required<
+  config: Required<
     Pick<BackgroundTaskManagerConfig, 'globalConcurrency' | 'perAgentConcurrency' | 'backpressure' | 'defaultTimeoutMs'>
   > &
     BackgroundTaskManagerConfig;
 
-  // In-memory task state (replaced by storage in Sprint 2)
-  private tasks: Map<string, BackgroundTask> = new Map();
+  #mastra?: Mastra;
 
-  // Tool resolver — set via setToolResolver()
-  private toolResolver?: ToolResolver;
+  // Per-task contexts — keyed by task ID, holds closures from the caller's stream
+  private taskContexts: Map<string, TaskContext> = new Map();
 
   // Track active AbortControllers for running tasks (for cancellation + timeout)
   private activeAbortControllers: Map<string, AbortController> = new Map();
 
   // Pubsub callbacks (kept for unsubscribe)
-  private workerCallback?: (event: Event, ack?: () => Promise<void>) => void;
-  private resultCallback?: (event: Event, ack?: () => Promise<void>) => void;
+  private workerCallback?: EventCallback;
+  private resultCallback?: EventCallback;
 
   private shuttingDown = false;
 
-  // Stream chunk emitter — set externally
-  private streamChunkEmitter?: (agentId: string, chunk: BackgroundTaskResultChunk) => void;
-
-  // Result injector — injects completed/failed results into the agent's message list
-  private resultInjector?: ResultInjector;
+  // Cleanup interval handle
+  private cleanupInterval?: ReturnType<typeof setInterval>;
 
   constructor(config: BackgroundTaskManagerConfig = {}) {
     this.config = {
@@ -55,15 +53,30 @@ export class BackgroundTaskManager {
     };
   }
 
+  __registerMastra(mastra: Mastra) {
+    this.#mastra = mastra;
+  }
+
+  async getStorage() {
+    const storage = this.#mastra?.getStorage();
+    if (!storage) {
+      throw new Error('Storage is not initialized');
+    }
+    const bgStore = await storage.getStore('backgroundTasks');
+    if (!bgStore) {
+      throw new Error('Background tasks storage is not available');
+    }
+    return bgStore;
+  }
+
   async init(pubsub: PubSub): Promise<void> {
     this.pubsub = pubsub;
 
     // Worker: subscribes with group so only one worker processes each task.
-    // Handles both dispatch and cancel events in a single subscription to avoid
-    // round-robin issues where a cancel event could be sent to the wrong handler.
-    this.workerCallback = async (event: Event, ack?: () => Promise<void>) => {
+    this.workerCallback = async (event: Event, ack?: () => Promise<void>, nack?: () => Promise<void>) => {
       if (event.type === 'task.dispatch') {
-        await this.handleDispatch(event);
+        const nacked = await this.handleDispatch(event, nack);
+        if (nacked) return; // Don't ack — pubsub will redeliver
       } else if (event.type === 'task.cancel') {
         this.handleCancel(event);
       }
@@ -80,29 +93,50 @@ export class BackgroundTaskManager {
 
     await this.pubsub.subscribe(TOPIC_DISPATCH, this.workerCallback, { group: WORKER_GROUP });
     await this.pubsub.subscribe(TOPIC_RESULT, this.resultCallback);
+
+    // Recover stale tasks from a previous process
+    await this.recoverStaleTasks();
+
+    // Start periodic cleanup if configured
+    const cleanupConfig = this.config.cleanup;
+    if (cleanupConfig) {
+      const intervalMs = cleanupConfig.cleanupIntervalMs ?? 60_000;
+      this.cleanupInterval = setInterval(() => {
+        void this.cleanup();
+      }, intervalMs);
+    }
   }
 
-  setToolResolver(resolver: ToolResolver): void {
-    this.toolResolver = resolver;
+  // --- Per-task context registration ---
+
+  /**
+   * Register per-task hooks (executor, stream emitter, result injector).
+   * Called internally by createBackgroundTask or directly for advanced usage.
+   */
+  registerTaskContext(taskId: string, context: TaskContext): void {
+    this.taskContexts.set(taskId, context);
   }
 
-  setStreamChunkEmitter(emitter: (agentId: string, chunk: BackgroundTaskResultChunk) => void): void {
-    this.streamChunkEmitter = emitter;
-  }
-
-  setResultInjector(injector: ResultInjector): void {
-    this.resultInjector = injector;
+  /**
+   * Remove per-task hooks. Called after task reaches terminal state.
+   */
+  deregisterTaskContext(taskId: string): void {
+    this.taskContexts.delete(taskId);
   }
 
   // --- Core operations ---
 
-  async enqueue(payload: TaskPayload): Promise<EnqueueResult> {
+  /**
+   * Enqueue a task for background execution.
+   * Prefer `createBackgroundTask()` which returns a self-contained handle.
+   */
+  async enqueue(payload: TaskPayload, context?: TaskContext): Promise<EnqueueResult> {
     if (this.shuttingDown) {
       throw new Error('BackgroundTaskManager is shutting down, cannot enqueue new tasks');
     }
 
     const task: BackgroundTask = {
-      id: randomUUID(),
+      id: this.#mastra?.generateId() ?? randomUUID(),
       status: 'pending',
       toolName: payload.toolName,
       toolCallId: payload.toolCallId,
@@ -110,15 +144,22 @@ export class BackgroundTaskManager {
       agentId: payload.agentId,
       threadId: payload.threadId,
       resourceId: payload.resourceId,
+      runId: payload.runId,
       retryCount: 0,
       maxRetries: payload.maxRetries ?? this.config.defaultRetries?.maxRetries ?? 0,
       timeoutMs: payload.timeoutMs ?? this.config.defaultTimeoutMs,
       createdAt: new Date(),
     };
 
-    this.tasks.set(task.id, task);
+    // Register per-task context if provided
+    if (context) {
+      this.registerTaskContext(task.id, context);
+    }
 
-    const canRun = this.checkConcurrency(task.agentId);
+    const storage = await this.getStorage();
+    await storage.createTask(task);
+
+    const canRun = await this.checkConcurrency(task.agentId);
 
     if (canRun) {
       await this.dispatch(task);
@@ -128,22 +169,25 @@ export class BackgroundTaskManager {
     // Backpressure
     switch (this.config.backpressure) {
       case 'reject':
-        this.tasks.delete(task.id);
+        this.deregisterTaskContext(task.id);
+        await storage.deleteTask(task.id);
         throw new Error(`Concurrency limit reached, cannot enqueue task for tool "${task.toolName}"`);
 
       case 'fallback-sync':
-        this.tasks.delete(task.id);
+        this.deregisterTaskContext(task.id);
+        await storage.deleteTask(task.id);
         return { task, fallbackToSync: true };
 
       case 'queue':
       default:
-        // Task stays pending in the map, will be dispatched when a slot opens
+        // Task stays pending in storage, will be dispatched when a slot opens
         return { task };
     }
   }
 
   async cancel(taskId: string): Promise<void> {
-    const task = this.tasks.get(taskId);
+    const storage = await this.getStorage();
+    const task = await storage.getTask(taskId);
     if (!task) {
       throw new Error(`Task not found: ${taskId}`);
     }
@@ -158,14 +202,15 @@ export class BackgroundTaskManager {
     }
 
     if (task.status === 'pending') {
-      task.status = 'cancelled';
-      task.completedAt = new Date();
+      await storage.updateTask(taskId, { status: 'cancelled', completedAt: new Date() });
+      const cancelledTask = await storage.getTask(taskId);
+      if (cancelledTask) await this.publishLifecycleEvent('task.cancelled', cancelledTask);
+      this.deregisterTaskContext(taskId);
       return;
     }
 
     if (task.status === 'running') {
-      task.status = 'cancelled';
-      task.completedAt = new Date();
+      await storage.updateTask(taskId, { status: 'cancelled', completedAt: new Date() });
 
       // Abort the running tool
       const controller = this.activeAbortControllers.get(taskId);
@@ -174,7 +219,11 @@ export class BackgroundTaskManager {
         this.activeAbortControllers.delete(taskId);
       }
 
-      // Publish cancel event for distributed scenarios
+      const cancelledTask = await storage.getTask(taskId);
+      if (cancelledTask) await this.publishLifecycleEvent('task.cancelled', cancelledTask);
+      this.deregisterTaskContext(taskId);
+
+      // Also publish cancel on dispatch topic for distributed worker abort
       await this.pubsub.publish(TOPIC_DISPATCH, {
         type: 'task.cancel',
         data: { taskId },
@@ -183,86 +232,62 @@ export class BackgroundTaskManager {
     }
   }
 
-  getTask(taskId: string): BackgroundTask | undefined {
-    return this.tasks.get(taskId);
+  async getTask(taskId: string): Promise<BackgroundTask | null> {
+    const storage = await this.getStorage();
+    return storage.getTask(taskId);
   }
 
-  listTasks(filter: TaskFilter = {}): BackgroundTask[] {
-    let tasks = Array.from(this.tasks.values());
+  async listTasks(filter: TaskFilter = {}): Promise<TaskListResult> {
+    const storage = await this.getStorage();
+    return storage.listTasks(filter);
+  }
 
-    if (filter.status) {
-      const statuses = Array.isArray(filter.status) ? filter.status : [filter.status];
-      tasks = tasks.filter(t => statuses.includes(t.status));
-    }
-    if (filter.agentId) {
-      tasks = tasks.filter(t => t.agentId === filter.agentId);
-    }
-    if (filter.threadId) {
-      tasks = tasks.filter(t => t.threadId === filter.threadId);
-    }
-    if (filter.resourceId) {
-      tasks = tasks.filter(t => t.resourceId === filter.resourceId);
-    }
-    if (filter.toolName) {
-      tasks = tasks.filter(t => t.toolName === filter.toolName);
-    }
-    if (filter.createdBefore) {
-      tasks = tasks.filter(t => t.createdAt < filter.createdBefore!);
-    }
-    if (filter.createdAfter) {
-      tasks = tasks.filter(t => t.createdAt > filter.createdAfter!);
-    }
-    if (filter.completedBefore) {
-      tasks = tasks.filter(t => t.completedAt && t.completedAt < filter.completedBefore!);
-    }
+  /**
+   * Deletes old completed/failed/cancelled/timed_out task records from storage.
+   */
+  async cleanup(): Promise<void> {
+    const completedTtlMs = this.config.cleanup?.completedTtlMs ?? 3_600_000;
+    const failedTtlMs = this.config.cleanup?.failedTtlMs ?? 86_400_000;
+    const now = Date.now();
 
-    // Sort
-    const orderBy = filter.orderBy ?? 'createdAt';
-    const direction = filter.orderDirection ?? 'asc';
-    tasks.sort((a, b) => {
-      const aVal = a[orderBy]?.getTime() ?? 0;
-      const bVal = b[orderBy]?.getTime() ?? 0;
-      return direction === 'asc' ? aVal - bVal : bVal - aVal;
+    const storage = await this.getStorage();
+    await storage.deleteTasks({
+      status: ['completed'],
+      toDate: new Date(now - completedTtlMs),
+      dateFilterBy: 'completedAt',
     });
 
-    // Pagination
-    if (filter.offset) {
-      tasks = tasks.slice(filter.offset);
-    }
-    if (filter.limit) {
-      tasks = tasks.slice(0, filter.limit);
-    }
-
-    return tasks;
+    await storage.deleteTasks({
+      status: ['failed', 'cancelled', 'timed_out'],
+      toDate: new Date(now - failedTtlMs),
+      dateFilterBy: 'completedAt',
+    });
   }
 
   /**
    * Returns a promise that resolves when the next task from the given set
-   * reaches a terminal state (completed, failed, cancelled, timed_out).
-   * Used by the agentic loop to wait for background task results.
+   * reaches a terminal state.
    */
   async waitForNextTask(
-    taskIds: Set<string>,
+    taskIds: string[],
     options?: {
       timeoutMs?: number;
-      /** Called periodically while waiting, with the elapsed time in ms */
       onProgress?: (elapsedMs: number) => void;
-      /** How often to call onProgress, in ms. Default: 3000 */
       progressIntervalMs?: number;
     },
   ): Promise<BackgroundTask> {
+    const storage = await this.getStorage();
+
     const isTerminal = (status: string) =>
       status === 'completed' || status === 'failed' || status === 'cancelled' || status === 'timed_out';
 
-    // Check if any are already done
     for (const id of taskIds) {
-      const task = this.tasks.get(id);
+      const task = await storage.getTask(id);
       if (task && isTerminal(task.status)) {
         return task;
       }
     }
 
-    // Wait for the next one to complete
     return new Promise((resolve, reject) => {
       const startTime = Date.now();
 
@@ -274,16 +299,15 @@ export class BackgroundTaskManager {
           }, options.timeoutMs)
         : undefined;
 
-      // Progress callback — fires periodically while waiting
       const progressInterval = options?.onProgress
         ? setInterval(() => {
             options.onProgress!(Date.now() - startTime);
           }, options.progressIntervalMs ?? 3000)
         : undefined;
 
-      const pollInterval = setInterval(() => {
+      const pollInterval = setInterval(async () => {
         for (const id of taskIds) {
-          const task = this.tasks.get(id);
+          const task = await storage.getTask(id);
           if (task && isTerminal(task.status)) {
             clearInterval(pollInterval);
             if (timeout) clearTimeout(timeout);
@@ -296,8 +320,134 @@ export class BackgroundTaskManager {
     });
   }
 
+  /**
+   * Returns a ReadableStream of all background task lifecycle events,
+   * filtered by optional criteria. Intended to be piped directly to an SSE response.
+   *
+   * On connection, emits the current state of all non-terminal tasks as a snapshot,
+   * then subscribes to live pubsub events for subsequent updates.
+   *
+   * Events include:
+   * - `task.running` (status: 'running') — task picked up by a worker
+   * - `task.completed` (status: 'completed') — task finished successfully
+   * - `task.failed` (status: 'failed' or 'timed_out') — task errored or timed out
+   * - `task.cancelled` (status: 'cancelled') — task was cancelled
+   *
+   * The stream stays open until the caller's AbortSignal fires (client disconnect).
+   */
+  stream(options?: {
+    agentId?: string;
+    runId?: string;
+    threadId?: string;
+    resourceId?: string;
+    abortSignal?: AbortSignal;
+  }): ReadableStream<Record<string, unknown>> {
+    const manager = this;
+    const pubsub = this.pubsub;
+    const { agentId, runId, threadId, resourceId, abortSignal } = options ?? {};
+
+    const EVENT_STATUS_MAP: Record<string, BackgroundTaskStatus> = {
+      'task.running': 'running',
+      'task.completed': 'completed',
+      'task.failed': 'failed',
+      'task.cancelled': 'cancelled',
+    };
+
+    const STATUS_EVENT_MAP: Record<string, string> = {
+      pending: 'task.pending',
+      running: 'task.running',
+      completed: 'task.completed',
+      failed: 'task.failed',
+      cancelled: 'task.cancelled',
+      timed_out: 'task.failed',
+    };
+
+    return new ReadableStream({
+      async start(controller) {
+        // 1. Subscribe to live events first (so we don't miss anything between snapshot and subscribe)
+        const handler = async (event: Event) => {
+          const status = EVENT_STATUS_MAP[event.type];
+          if (!status) return;
+
+          const data = event.data;
+          if (agentId && data.agentId !== agentId) return;
+          if (runId && data.runId !== runId) return;
+          if (threadId && data.threadId !== threadId) return;
+          if (resourceId && data.resourceId !== resourceId) return;
+
+          try {
+            controller.enqueue({
+              type: event.type,
+              status,
+              taskId: data.taskId,
+              toolName: data.toolName,
+              toolCallId: data.toolCallId,
+              agentId: data.agentId,
+              runId: data.runId,
+              result: data.result,
+              error: data.error,
+              args: data.args,
+            });
+          } catch {
+            // Controller closed
+          }
+        };
+
+        void pubsub.subscribe(TOPIC_RESULT, handler);
+
+        abortSignal?.addEventListener('abort', () => {
+          void pubsub.unsubscribe(TOPIC_RESULT, handler);
+          try {
+            controller.close();
+          } catch {
+            // Already closed
+          }
+        });
+
+        // 2. Emit snapshot of existing tasks
+        try {
+          const storage = await manager.getStorage();
+          const { tasks: existing } = await storage.listTasks({
+            agentId,
+            runId,
+            threadId,
+            resourceId,
+            status: 'running',
+          });
+
+          for (const task of existing) {
+            if (abortSignal?.aborted) break;
+            try {
+              controller.enqueue({
+                type: STATUS_EVENT_MAP[task.status] ?? 'task.running',
+                status: task.status,
+                taskId: task.id,
+                toolName: task.toolName,
+                toolCallId: task.toolCallId,
+                agentId: task.agentId,
+                runId: task.runId,
+                result: task.result,
+                error: task.error,
+                args: task.args,
+              });
+            } catch {
+              break;
+            }
+          }
+        } catch {
+          // Storage not available — continue with live events only
+        }
+      },
+    });
+  }
+
   async shutdown(): Promise<void> {
     this.shuttingDown = true;
+
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = undefined;
+    }
 
     if (this.workerCallback) {
       await this.pubsub.unsubscribe(TOPIC_DISPATCH, this.workerCallback);
@@ -306,6 +456,7 @@ export class BackgroundTaskManager {
       await this.pubsub.unsubscribe(TOPIC_RESULT, this.resultCallback);
     }
 
+    this.taskContexts.clear();
     await this.pubsub.flush();
   }
 
@@ -324,154 +475,186 @@ export class BackgroundTaskManager {
         resourceId: task.resourceId,
         timeoutMs: task.timeoutMs,
         maxRetries: task.maxRetries,
+        runId: task.runId,
       },
       runId: task.id,
     });
   }
 
-  private async handleDispatch(event: Event): Promise<void> {
-    const { taskId, toolName, args, agentId, timeoutMs } = event.data;
+  /**
+   * Handles a task.dispatch event. Returns true if the message was nacked (for retry).
+   */
+  private async handleDispatch(event: Event, nack?: () => Promise<void>): Promise<boolean> {
+    const { taskId, args, timeoutMs } = event.data;
+    const deliveryAttempt = event.deliveryAttempt ?? 1;
+    let nacked = false;
 
-    const task = this.tasks.get(taskId);
+    const storage = await this.getStorage();
+    const task = await storage.getTask(taskId);
     if (!task || task.status === 'cancelled') {
-      return; // Task was cancelled before worker picked it up
+      this.deregisterTaskContext(taskId);
+      return false;
     }
 
-    task.status = 'running';
-    task.startedAt = new Date();
+    await storage.updateTask(taskId, { status: 'running', startedAt: new Date(), retryCount: deliveryAttempt - 1 });
 
-    if (!this.toolResolver) {
-      task.status = 'failed';
-      task.error = { message: 'No tool resolver configured' };
-      task.completedAt = new Date();
-      await this.publishResult('task.failed', task);
-      return;
+    // Publish running lifecycle event (fan-out, for stream consumers)
+    const runningTask = await storage.getTask(taskId);
+    if (runningTask) await this.publishLifecycleEvent('task.running', runningTask);
+
+    // Look up per-task executor
+    const ctx = this.taskContexts.get(taskId);
+    if (!ctx?.executor) {
+      await storage.updateTask(taskId, {
+        status: 'failed',
+        error: { message: 'No executor registered for this task' },
+        completedAt: new Date(),
+      });
+      const failedTask = await storage.getTask(taskId);
+      if (failedTask) await this.publishLifecycleEvent('task.failed', failedTask);
+      this.deregisterTaskContext(taskId);
+      return false;
     }
-
-    const tool = this.toolResolver(toolName, agentId);
 
     try {
-      const result = await this.executeWithTimeout(taskId, tool, args, timeoutMs);
+      // Build onProgress callback that forwards to the task context hook
+      const onProgress = ctx.onProgress
+        ? (progress: BackgroundTaskProgressData) => ctx.onProgress!(taskId, progress)
+        : undefined;
 
-      // Re-check — task could have been cancelled during execution (status mutated by cancel())
-      const statusAfterExec = task.status as BackgroundTaskStatus;
-      if (statusAfterExec === 'cancelled') {
-        return;
+      const result = await this.executeWithTimeout(taskId, ctx.executor, args, timeoutMs, onProgress);
+
+      const currentTask = await storage.getTask(taskId);
+      if (!currentTask || (currentTask.status as BackgroundTaskStatus) === 'cancelled') {
+        this.deregisterTaskContext(taskId);
+        return false;
       }
 
-      task.status = 'completed';
-      task.result = result;
-      task.completedAt = new Date();
+      await storage.updateTask(taskId, {
+        status: 'completed',
+        result,
+        completedAt: new Date(),
+      });
 
-      await this.publishResult('task.completed', task);
+      const completedTask = await storage.getTask(taskId);
+      if (completedTask) await this.publishLifecycleEvent('task.completed', completedTask);
     } catch (error: any) {
-      // Task could have been cancelled during execution (status mutated by cancel())
-      const statusOnError = task.status as BackgroundTaskStatus;
-      if (statusOnError === 'cancelled') {
-        return;
+      const currentTask = await storage.getTask(taskId);
+      if (!currentTask || (currentTask.status as BackgroundTaskStatus) === 'cancelled') {
+        this.deregisterTaskContext(taskId);
+        return false;
       }
 
       if (error?.name === 'AbortError' || error?.message === 'Task cancelled') {
-        if ((statusOnError as string) !== 'timed_out' && (statusOnError as string) !== 'cancelled') {
-          task.status = 'timed_out';
-          task.error = { message: `Task timed out after ${timeoutMs}ms` };
-          task.completedAt = new Date();
-          await this.publishResult('task.failed', task);
+        const status = currentTask.status as string;
+        if (status !== 'timed_out' && status !== 'cancelled') {
+          await storage.updateTask(taskId, {
+            status: 'timed_out',
+            error: { message: `Task timed out after ${timeoutMs}ms` },
+            completedAt: new Date(),
+          });
+          const timedOutTask = await storage.getTask(taskId);
+          if (timedOutTask) await this.publishLifecycleEvent('task.failed', timedOutTask);
         }
-        return;
+        return false;
       }
 
-      task.error = { message: error?.message ?? 'Unknown error', stack: error?.stack };
-      task.completedAt = new Date();
+      const errorInfo = { message: error?.message ?? 'Unknown error', stack: error?.stack };
 
-      // Check retry policy
-      if (task.retryCount < task.maxRetries) {
+      // Check retry policy — use nack to let pubsub handle redelivery
+      if (currentTask.maxRetries > 0 && deliveryAttempt <= currentTask.maxRetries) {
         const shouldRetry = this.config.defaultRetries?.retryableErrors
           ? this.config.defaultRetries.retryableErrors(error)
           : true;
 
-        if (shouldRetry) {
-          task.retryCount++;
-          task.status = 'pending';
-          task.error = undefined;
-          task.completedAt = undefined;
-          task.startedAt = undefined;
-
-          // Delay before retry
-          const delay = this.getRetryDelay(task.retryCount);
-          if (delay > 0) {
-            await new Promise(resolve => setTimeout(resolve, delay));
-          }
-
-          await this.dispatch(task);
-          return;
+        if (shouldRetry && nack) {
+          await storage.updateTask(taskId, {
+            status: 'pending',
+            error: undefined,
+            completedAt: undefined,
+            startedAt: undefined,
+          });
+          await nack();
+          nacked = true;
         }
       }
 
-      task.status = 'failed';
-      await this.publishResult('task.failed', task);
+      if (!nacked) {
+        await storage.updateTask(taskId, {
+          status: 'failed',
+          error: errorInfo,
+          completedAt: new Date(),
+        });
+        const failedTask = await storage.getTask(taskId);
+        if (failedTask) await this.publishLifecycleEvent('task.failed', failedTask);
+        // Context cleanup happens in handleResult after it processes the result event
+      }
     } finally {
       this.activeAbortControllers.delete(taskId);
-      await this.drainPending();
+      if (!nacked) {
+        await this.drainPending();
+      }
     }
+
+    return nacked;
   }
 
   private async handleResult(event: Event): Promise<void> {
-    const { taskId, toolName, agentId, toolCallId, threadId, resourceId } = event.data;
-    const task = this.tasks.get(taskId);
-    const messageHandling = this.config.messageHandling ?? 'final-only';
+    const { taskId, toolName, toolCallId, threadId, resourceId, runId } = event.data;
+    const storage = await this.getStorage();
+    const task = await storage.getTask(taskId);
+
+    // Look up per-task hooks
+    const ctx = this.taskContexts.get(taskId);
 
     if (event.type === 'task.completed') {
-      // Always stream the chunk
-      this.streamChunkEmitter?.(agentId, {
+      ctx?.onChunk?.({
         type: 'background-task-completed',
-        payload: { taskId, toolName, toolCallId, result: event.data.result },
+        payload: { taskId, toolName, toolCallId, runId, result: event.data.result },
       });
 
-      // Inject into message list (unless messageHandling is 'none')
-      if (messageHandling !== 'none') {
-        await this.resultInjector?.({
-          taskId,
-          toolCallId,
-          toolName,
-          agentId,
-          threadId,
-          resourceId,
-          result: event.data.result,
-          status: 'completed',
-        });
-      }
+      await ctx?.onResult?.({
+        runId,
+        taskId,
+        toolCallId,
+        toolName,
+        agentId: event.data.agentId,
+        threadId,
+        resourceId,
+        result: event.data.result,
+        status: 'completed',
+      });
 
       if (task) {
-        await this.config.onTaskComplete?.(task);
+        await Promise.all([ctx?.onComplete?.(task), this.config.onTaskComplete?.(task)]);
       }
     }
 
     if (event.type === 'task.failed') {
-      // Always stream the chunk
-      this.streamChunkEmitter?.(agentId, {
+      ctx?.onChunk?.({
         type: 'background-task-failed',
-        payload: { taskId, toolName, toolCallId, error: event.data.error },
+        payload: { taskId, toolName, toolCallId, runId, error: event.data.error },
       });
 
-      // Inject into message list (unless messageHandling is 'none')
-      if (messageHandling !== 'none') {
-        await this.resultInjector?.({
-          taskId,
-          toolCallId,
-          toolName,
-          agentId,
-          threadId,
-          resourceId,
-          error: event.data.error,
-          status: 'failed',
-        });
-      }
+      await ctx?.onResult?.({
+        runId,
+        taskId,
+        toolCallId,
+        toolName,
+        agentId: event.data.agentId,
+        threadId,
+        resourceId,
+        error: event.data.error,
+        status: 'failed',
+      });
 
       if (task) {
-        await this.config.onTaskFailed?.(task);
+        await Promise.all([ctx?.onFailed?.(task), this.config.onTaskFailed?.(task)]);
       }
     }
+
+    // Clean up context after terminal result
+    this.deregisterTaskContext(taskId);
   }
 
   private handleCancel(event: Event): void {
@@ -481,13 +664,15 @@ export class BackgroundTaskManager {
       controller.abort(new Error('Task cancelled'));
       this.activeAbortControllers.delete(taskId);
     }
+    this.deregisterTaskContext(taskId);
   }
 
   private async executeWithTimeout(
     taskId: string,
-    tool: { execute(args: Record<string, unknown>, options?: { abortSignal?: AbortSignal }): Promise<unknown> },
+    executor: ToolExecutor,
     args: Record<string, unknown>,
     timeoutMs: number,
+    onProgress?: (progress: BackgroundTaskProgressData) => void,
   ): Promise<unknown> {
     const abortController = new AbortController();
     this.activeAbortControllers.set(taskId, abortController);
@@ -497,22 +682,27 @@ export class BackgroundTaskManager {
     }, timeoutMs);
 
     try {
-      return await tool.execute(args, { abortSignal: abortController.signal });
+      return await executor.execute(args, { abortSignal: abortController.signal, onProgress });
     } finally {
       clearTimeout(timeoutHandle);
     }
   }
 
-  private async publishResult(type: 'task.completed' | 'task.failed', task: BackgroundTask): Promise<void> {
+  private async publishLifecycleEvent(
+    type: 'task.running' | 'task.completed' | 'task.failed' | 'task.cancelled',
+    task: BackgroundTask,
+  ): Promise<void> {
     await this.pubsub.publish(TOPIC_RESULT, {
       type,
       data: {
         taskId: task.id,
         toolName: task.toolName,
         toolCallId: task.toolCallId,
+        runId: task.runId,
         agentId: task.agentId,
         threadId: task.threadId,
         resourceId: task.resourceId,
+        args: task.args,
         result: task.result,
         error: task.error,
       },
@@ -520,15 +710,15 @@ export class BackgroundTaskManager {
     });
   }
 
-  private checkConcurrency(agentId: string): boolean {
-    const running = Array.from(this.tasks.values()).filter(t => t.status === 'running');
-
-    if (running.length >= this.config.globalConcurrency) {
+  private async checkConcurrency(agentId: string): Promise<boolean> {
+    const storage = await this.getStorage();
+    const globalRunning = await storage.getRunningCount();
+    if (globalRunning >= this.config.globalConcurrency) {
       return false;
     }
 
-    const agentRunning = running.filter(t => t.agentId === agentId);
-    if (agentRunning.length >= this.config.perAgentConcurrency) {
+    const agentRunning = await storage.getRunningCountByAgent(agentId);
+    if (agentRunning >= this.config.perAgentConcurrency) {
       return false;
     }
 
@@ -536,22 +726,50 @@ export class BackgroundTaskManager {
   }
 
   private async drainPending(): Promise<void> {
-    const pending = Array.from(this.tasks.values())
-      .filter(t => t.status === 'pending')
-      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    const storage = await this.getStorage();
+    const { tasks: pending } = await storage.listTasks({
+      status: 'pending',
+      orderBy: 'createdAt',
+      orderDirection: 'asc',
+    });
 
     for (const task of pending) {
-      if (this.checkConcurrency(task.agentId)) {
+      if (await this.checkConcurrency(task.agentId)) {
         await this.dispatch(task);
       }
     }
   }
 
-  private getRetryDelay(attempt: number): number {
-    const base = this.config.defaultRetries?.retryDelayMs ?? 1000;
-    const multiplier = this.config.defaultRetries?.backoffMultiplier ?? 2;
-    const maxDelay = this.config.defaultRetries?.maxRetryDelayMs ?? 30_000;
-    const delay = base * Math.pow(multiplier, attempt - 1);
-    return Math.min(delay, maxDelay);
+  /**
+   * Recovers tasks left in 'running' or 'pending' state from a previous process.
+   */
+  private async recoverStaleTasks(): Promise<void> {
+    const storage = await this.getStorage();
+    const { tasks: staleTasks } = await storage.listTasks({ status: 'running' });
+    for (const task of staleTasks) {
+      if (task.maxRetries > 0) {
+        await storage.updateTask(task.id, {
+          status: 'pending',
+          startedAt: undefined,
+        });
+      } else {
+        await storage.updateTask(task.id, {
+          status: 'failed',
+          error: { message: 'Worker process terminated before task completed' },
+          completedAt: new Date(),
+        });
+      }
+    }
+
+    const { tasks: pendingTasks } = await storage.listTasks({
+      status: 'pending',
+      orderBy: 'createdAt',
+      orderDirection: 'asc',
+    });
+    for (const task of pendingTasks) {
+      if (await this.checkConcurrency(task.agentId)) {
+        await this.dispatch(task);
+      }
+    }
   }
 }

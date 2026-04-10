@@ -1,4 +1,3 @@
-import { isBackgroundEligible } from './schema-injection';
 import type { AgentBackgroundConfig, ToolBackgroundConfig } from './types';
 
 interface ToolEntry {
@@ -19,14 +18,20 @@ export function generateBackgroundTaskSystemPrompt(
 ): string | undefined {
   const eligibleTools: ToolEntry[] = [];
 
+  const enableAll = agentConfig?.tools === 'all';
+
   for (const [toolName, tool] of Object.entries(tools)) {
-    if (isBackgroundEligible(toolName, tool.background, agentConfig)) {
-      eligibleTools.push({
-        toolName,
-        toolConfig: tool.background,
-        defaultBackground: tool.background?.enabled ?? false,
-      });
-    }
+    const bgEnabledFromAgentConfig =
+      agentConfig?.tools === 'all'
+        ? false
+        : typeof agentConfig?.tools?.[toolName] === 'boolean'
+          ? agentConfig.tools[toolName]
+          : (agentConfig?.tools?.[toolName]?.enabled ?? false);
+    eligibleTools.push({
+      toolName,
+      toolConfig: tool.background,
+      defaultBackground: enableAll ? true : (bgEnabledFromAgentConfig ?? tool.background?.enabled ?? false),
+    });
   }
 
   if (eligibleTools.length === 0) {

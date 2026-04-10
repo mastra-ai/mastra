@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { Agent } from '../agent';
 import { Mastra } from '../mastra';
 import { MockMemory } from '../memory/mock';
+import { MockStore } from '../storage';
 import { createTool } from '../tools';
 
 config();
@@ -13,6 +14,8 @@ const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // Skip if no API key
 const describeE2E = process.env.OPENAI_API_KEY ? describe : describe.skip;
+
+const testStorage = new MockStore();
 
 describeE2E('Background Tasks E2E', () => {
   let mastra: Mastra;
@@ -74,6 +77,7 @@ describeE2E('Background Tasks E2E', () => {
         globalConcurrency: 5,
         perAgentConcurrency: 3,
       },
+      storage: testStorage,
     });
   });
 
@@ -82,6 +86,8 @@ describeE2E('Background Tasks E2E', () => {
     if (manager) {
       await manager.shutdown();
     }
+    const backgroundTasksStore = await testStorage.getStore('backgroundTasks');
+    await backgroundTasksStore?.dangerouslyClearAll();
   });
 
   it('dispatches a background-eligible tool and returns a placeholder', async () => {
@@ -108,7 +114,7 @@ describeE2E('Background Tasks E2E', () => {
 
     // Check the manager knows about the task
     const manager = mastra.backgroundTaskManager!;
-    const tasks = manager.listTasks({ toolName: 'research' });
+    const tasks = await manager.listTasks({ toolName: 'research' });
     expect(tasks.length).toBeGreaterThan(0);
 
     const task = tasks[0]!;
@@ -147,7 +153,7 @@ describeE2E('Background Tasks E2E', () => {
     await new Promise(resolve => setTimeout(resolve, 1500));
 
     const manager = mastra.backgroundTaskManager!;
-    const task = manager.getTask(taskId);
+    const task = await manager.getTask(taskId);
     expect(task).toBeDefined();
     expect(task!.status).toBe('completed');
     expect((task!.result as any).summary).toContain('artificial intelligence');
@@ -173,7 +179,7 @@ describeE2E('Background Tasks E2E', () => {
 
     // The task should have completed in the manager
     const manager = mastra.backgroundTaskManager!;
-    const tasks = manager.listTasks({ toolName: 'research', status: 'completed' });
+    const tasks = await manager.listTasks({ toolName: 'research', status: 'completed' });
     expect(tasks.length).toBeGreaterThan(0);
   }, 30_000);
 
@@ -205,6 +211,7 @@ describeE2E('Background Tasks E2E', () => {
         globalConcurrency: 5,
         perAgentConcurrency: 3,
       },
+      storage: testStorage,
     });
 
     try {
@@ -250,7 +257,7 @@ describeE2E('Background Tasks E2E', () => {
 
       // Background task should have completed
       const manager = memoryMastra.backgroundTaskManager!;
-      const tasks = manager.listTasks({ toolName: 'research', status: 'completed' });
+      const tasks = await manager.listTasks({ toolName: 'research', status: 'completed' });
       expect(tasks.length).toBeGreaterThan(0);
       expect((tasks[0]!.result as any).summary).toContain('neural networks');
 

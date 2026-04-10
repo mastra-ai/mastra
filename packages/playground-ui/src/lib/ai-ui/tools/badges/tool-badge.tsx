@@ -16,6 +16,7 @@ export interface ToolBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCall
   toolOutput: Array<{ toolId: string }>;
   suspendPayload?: any;
   toolCalled?: boolean;
+  withoutArgs?: boolean;
 }
 
 export const ToolBadge = ({
@@ -29,6 +30,7 @@ export const ToolBadge = ({
   suspendPayload,
   isNetwork,
   toolCalled: toolCalledProp,
+  withoutArgs,
 }: ToolBadgeProps) => {
   let argSlot = null;
 
@@ -74,10 +76,12 @@ export const ToolBadge = ({
       initialCollapsed={!!!(toolApprovalMetadata ?? suspendPayload)}
     >
       <div className="space-y-4">
-        <div>
-          <p className="font-medium pb-2">Tool arguments</p>
-          {argSlot}
-        </div>
+        {withoutArgs ? null : (
+          <div>
+            <p className="font-medium pb-2">Tool arguments</p>
+            {argSlot}
+          </div>
+        )}
 
         {suspendPayloadSlot !== undefined && suspendPayload && (
           <div>

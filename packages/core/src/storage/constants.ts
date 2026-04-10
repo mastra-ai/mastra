@@ -34,6 +34,7 @@ export const TABLE_DATASET_VERSIONS = 'mastra_dataset_versions';
 // Experiment tables
 export const TABLE_EXPERIMENTS = 'mastra_experiments';
 export const TABLE_EXPERIMENT_RESULTS = 'mastra_experiment_results';
+export const TABLE_BACKGROUND_TASKS = 'mastra_background_tasks';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -62,7 +63,8 @@ export type TABLE_NAMES =
   | typeof TABLE_DATASET_ITEMS
   | typeof TABLE_DATASET_VERSIONS
   | typeof TABLE_EXPERIMENTS
-  | typeof TABLE_EXPERIMENT_RESULTS;
+  | typeof TABLE_EXPERIMENT_RESULTS
+  | typeof TABLE_BACKGROUND_TASKS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -531,6 +533,25 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_DATASET_VERSIONS]: DATASET_VERSIONS_SCHEMA,
   [TABLE_EXPERIMENTS]: EXPERIMENTS_SCHEMA,
   [TABLE_EXPERIMENT_RESULTS]: EXPERIMENT_RESULTS_SCHEMA,
+  [TABLE_BACKGROUND_TASKS]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    tool_call_id: { type: 'text', nullable: false },
+    tool_name: { type: 'text', nullable: false },
+    agent_id: { type: 'text', nullable: false },
+    run_id: { type: 'text', nullable: false },
+    thread_id: { type: 'text', nullable: true },
+    resource_id: { type: 'text', nullable: true },
+    status: { type: 'text', nullable: false },
+    args: { type: 'jsonb', nullable: false },
+    result: { type: 'jsonb', nullable: true },
+    error: { type: 'jsonb', nullable: true },
+    retry_count: { type: 'integer', nullable: false },
+    max_retries: { type: 'integer', nullable: false },
+    timeout_ms: { type: 'integer', nullable: false },
+    createdAt: { type: 'timestamp', nullable: false },
+    startedAt: { type: 'timestamp', nullable: true },
+    completedAt: { type: 'timestamp', nullable: true },
+  },
 };
 
 /**

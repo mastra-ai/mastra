@@ -543,13 +543,6 @@ export class Mastra<
       this.#pubsub = new EventEmitterPubSub();
     }
 
-    if (config?.backgroundTasks) {
-      // Sync creation, async init is fire-and-forget but manager is available immediately
-      const bgManager = new BackgroundTaskManager(config.backgroundTasks);
-      this.#backgroundTaskManager = bgManager;
-      void bgManager.init(this.#pubsub);
-    }
-
     this.#events = {};
     for (const topic in config?.events ?? {}) {
       if (!Array.isArray(config?.events?.[topic])) {
@@ -616,6 +609,13 @@ export class Mastra<
 
     this.#storage = storage;
 
+    if (config?.backgroundTasks?.enabled !== false) {
+      // Sync creation, async init is fire-and-forget but manager is available immediately
+      const bgManager = new BackgroundTaskManager(config?.backgroundTasks);
+      bgManager.__registerMastra(this);
+      this.#backgroundTaskManager = bgManager;
+      void bgManager.init(this.#pubsub);
+    }
     // Initialize all primitive storage objects first, we need to do this before adding primitives to avoid circular dependencies
     this.#vectors = {} as TVectors;
     this.#mcpServers = {} as TMCPServers;
@@ -731,17 +731,6 @@ export class Mastra<
     this.#observability.setMastraContext({ mastra: this });
 
     this.setLogger({ logger });
-  }
-
-  private async initializeBackgroundTaskManager(
-    backgroundTaskManagerConfig: BackgroundTaskManagerConfig,
-  ): Promise<void> {
-    if (this.#backgroundTaskManager) {
-      return;
-    }
-    const manager = new BackgroundTaskManager(backgroundTaskManagerConfig);
-    await manager.init(this.#pubsub);
-    this.#backgroundTaskManager = manager;
   }
 
   /**

@@ -40,6 +40,7 @@ export class StoreOperationsInMemory extends StoreOperations {
       mastra_dataset_versions: new Map(),
       mastra_experiments: new Map(),
       mastra_experiment_results: new Map(),
+      mastra_background_tasks: new Map(),
     };
   }
 

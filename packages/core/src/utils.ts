@@ -4,6 +4,7 @@ import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { z } from 'zod/v3';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
+import type { ToolBackgroundConfig } from './background-tasks';
 import { ErrorCategory, ErrorDomain, MastraError } from './error';
 import type { MastraLanguageModel, MastraLegacyLanguageModel } from './llm/model/shared.types';
 import type { IMastraLogger } from './logger';
@@ -295,6 +296,7 @@ export interface ToolOptions extends Partial<ObservabilityContext> {
    * workspace.filesystem and workspace.sandbox for file operations and command execution.
    */
   workspace?: Workspace;
+  backgroundConfig?: ToolBackgroundConfig;
 }
 
 /**

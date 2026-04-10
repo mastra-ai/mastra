@@ -1,14 +1,14 @@
 import { PubSub as PubSubClient } from '@google-cloud/pubsub';
 import type { ClientConfig, Message, Subscription } from '@google-cloud/pubsub';
 import { PubSub } from '@mastra/core/events';
-import type { Event, SubscribeOptions } from '@mastra/core/events';
+import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 
 export class GoogleCloudPubSub extends PubSub {
   private instanceId: string;
   private pubsub: PubSubClient;
   private ackBuffer: Record<string, Promise<any>> = {};
   private activeSubscriptions: Record<string, Subscription> = {};
-  private activeCbs: Record<string, Set<(event: Event, ack: () => Promise<void>) => void>> = {};
+  private activeCbs: Record<string, Set<EventCallback>> = {};
 
   constructor(config: ClientConfig) {
     super();
@@ -102,11 +102,7 @@ export class GoogleCloudPubSub extends PubSub {
     }
   }
 
-  async subscribe(
-    topic: string,
-    cb: (event: Event, ack?: () => Promise<void>) => void,
-    options?: SubscribeOptions,
-  ): Promise<void> {
+  async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
     if (topic.startsWith('workflow.events.')) {
       const parts = topic.split('.');
       if (parts[parts.length - 2] === 'v2') {
@@ -141,17 +137,28 @@ export class GoogleCloudPubSub extends PubSub {
       const event = JSON.parse(message.data.toString()) as Event;
       event.id = message.id;
       event.createdAt = message.publishTime;
+      event.deliveryAttempt = message.deliveryAttempt ?? 1;
 
       try {
         const activeCbs = this.activeCbs[subscriptionKey] ?? [];
         for (const cb of activeCbs) {
-          cb(event, async () => {
-            try {
-              await this.ackMessage(subscriptionKey, message);
-            } catch (e) {
-              console.error('Error acking message', e);
-            }
-          });
+          cb(
+            event,
+            async () => {
+              try {
+                await this.ackMessage(subscriptionKey, message);
+              } catch (e) {
+                console.error('Error acking message', e);
+              }
+            },
+            async () => {
+              try {
+                message.nack();
+              } catch (e) {
+                console.error('Error nacking message', e);
+              }
+            },
+          );
         }
       } catch (error) {
         console.error('Error processing event', error);
@@ -163,7 +170,7 @@ export class GoogleCloudPubSub extends PubSub {
     });
   }
 
-  async unsubscribe(topic: string, cb: (event: Event, ack?: () => Promise<void>) => void): Promise<void> {
+  async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
     // Check both grouped and non-grouped subscription keys for this callback
     const keysToCheck = [topic];
     for (const key of Object.keys(this.activeCbs)) {

@@ -385,18 +385,20 @@ export interface BackgroundTaskResultPayload {
   toolName: string;
   toolCallId: string;
   result: unknown;
+  runId: string;
 }
 
 export interface BackgroundTaskFailedPayload {
   taskId: string;
   toolName: string;
   toolCallId: string;
+  runId: string;
   error: { message: string };
 }
 
-export interface BackgroundTaskWaitingPayload {
+export interface BackgroundTaskProgressPayload {
   taskIds: string[];
-  pendingCount: number;
+  runningCount: number;
   elapsedMs: number;
 }
 
@@ -723,8 +725,8 @@ export type AgentChunkType<OUTPUT = undefined> =
       payload: BackgroundTaskFailedPayload;
     })
   | (BaseChunkType & {
-      type: 'background-task-waiting';
-      payload: BackgroundTaskWaitingPayload;
+      type: 'background-task-progress';
+      payload: BackgroundTaskProgressPayload;
     });
 
 export type WorkflowStreamEvent =

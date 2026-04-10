@@ -56,7 +56,7 @@ export function resolveBackgroundConfig({
 
   // --- maxRetries ---
   const maxRetries =
-    llmOverride?.maxRetries ?? toolConfig?.retries?.maxRetries ?? managerConfig?.defaultRetries?.maxRetries ?? 0;
+    llmOverride?.maxRetries ?? toolConfig?.maxRetries ?? managerConfig?.defaultRetries?.maxRetries ?? 0;
 
   return { runInBackground: enabled, timeoutMs, maxRetries };
 }

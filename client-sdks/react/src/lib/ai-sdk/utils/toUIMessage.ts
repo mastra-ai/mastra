@@ -243,7 +243,7 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       ];
     }
 
-    case 'background-task-waiting': {
+    case 'background-task-progress': {
       const lastMessage = result[result.length - 1];
       if (!lastMessage || lastMessage.role !== 'assistant') return result;
 
@@ -254,7 +254,7 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
           metadata: {
             mode: metadata.mode,
             ...lastMessage.metadata,
-            pendingBackgroundTasksCount: chunk.payload.pendingCount,
+            runningBackgroundTasksCount: chunk.payload.runningCount,
           } as MastraUIMessageMetadata,
         },
       ];
@@ -272,7 +272,7 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
           metadata: {
             mode: metadata.mode,
             ...lastMessage.metadata,
-            pendingBackgroundTasksCount: undefined,
+            runningBackgroundTasksCount: undefined,
           } as MastraUIMessageMetadata,
         },
       ];
