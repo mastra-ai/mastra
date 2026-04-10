@@ -7473,7 +7473,12 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                         },
                         {
                           "providerOptions": undefined,
-                          "text": "I'm thinking...Separate thoughts",
+                          "text": "Separate thoughts",
+                          "type": "reasoning",
+                        },
+                        {
+                          "providerOptions": undefined,
+                          "text": "I'm thinking...",
                           "type": "reasoning",
                         },
                         {
@@ -7520,7 +7525,12 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                         },
                         {
                           "providerOptions": undefined,
-                          "text": "I'm thinking...Separate thoughts",
+                          "text": "Separate thoughts",
+                          "type": "reasoning",
+                        },
+                        {
+                          "providerOptions": undefined,
+                          "text": "I'm thinking...",
                           "type": "reasoning",
                         },
                         {
@@ -7595,7 +7605,12 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                               },
                               {
                                 "providerOptions": undefined,
-                                "text": "I'm thinking...Separate thoughts",
+                                "text": "Separate thoughts",
+                                "type": "reasoning",
+                              },
+                              {
+                                "providerOptions": undefined,
+                                "text": "I'm thinking...",
                                 "type": "reasoning",
                               },
                               {
@@ -7670,7 +7685,12 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                         },
                         {
                           "providerOptions": undefined,
-                          "text": "I'm thinking...Separate thoughts",
+                          "text": "Separate thoughts",
+                          "type": "reasoning",
+                        },
+                        {
+                          "providerOptions": undefined,
+                          "text": "I'm thinking...",
                           "type": "reasoning",
                         },
                         {
@@ -7717,7 +7737,12 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                         },
                         {
                           "providerOptions": undefined,
-                          "text": "I'm thinking...Separate thoughts",
+                          "text": "Separate thoughts",
+                          "type": "reasoning",
+                        },
+                        {
+                          "providerOptions": undefined,
+                          "text": "I'm thinking...",
                           "type": "reasoning",
                         },
                         {
@@ -7792,7 +7817,12 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                               },
                               {
                                 "providerOptions": undefined,
-                                "text": "I'm thinking...Separate thoughts",
+                                "text": "Separate thoughts",
+                                "type": "reasoning",
+                              },
+                              {
+                                "providerOptions": undefined,
+                                "text": "I'm thinking...",
                                 "type": "reasoning",
                               },
                               {
