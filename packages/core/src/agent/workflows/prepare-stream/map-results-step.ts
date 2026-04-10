@@ -310,6 +310,8 @@ export function createMapResultsStep<OUTPUT = undefined>({
             capabilities.logger.error(`Upstream LLM API error${providerInfo}${modelInfo}`, {
               error: streamError,
               runId,
+              ...(provider && { provider }),
+              ...(modelId && { modelId }),
             });
           } else {
             capabilities.logger.error('Error in agent stream', {
