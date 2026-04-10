@@ -52,7 +52,7 @@ export function DatasetExperiments({
   const handleCompare = () => {
     if (selectedExperimentIds.length === 2) {
       const [experimentIdA, experimentIdB] = selectedExperimentIds;
-      navigate(`/evaluation/datasets/${datasetId}/experiments?baseline=${experimentIdA}&contender=${experimentIdB}`);
+      navigate(`/datasets/${datasetId}/experiments?baseline=${experimentIdA}&contender=${experimentIdB}`);
     }
   };
 
@@ -62,7 +62,7 @@ export function DatasetExperiments({
   };
 
   const handleRowClick = (experimentId: string) => {
-    navigate(`/evaluation/datasets/${datasetId}/experiments/${experimentId}`);
+    navigate(`/datasets/${datasetId}/experiments/${experimentId}`);
   };
 
   if (isLoading) {

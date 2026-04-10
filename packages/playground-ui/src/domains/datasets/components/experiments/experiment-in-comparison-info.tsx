@@ -49,7 +49,7 @@ export function ExperimentInComparisonInfo({ datasetId, experiment, type }: Expe
           </Chip>
         )}
 
-        <Button as={Link} href={`/evaluation/datasets/${datasetId}/experiments/${experiment.id}`}>
+        <Button as={Link} href={`/datasets/${datasetId}/experiments/${experiment.id}`}>
           <span className="truncate min-w-0">{experiment.id}</span>
         </Button>
 

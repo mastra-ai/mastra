@@ -92,7 +92,7 @@ function ExperimentPage() {
     <MainContentLayout>
       <Header>
         <Breadcrumb>
-          <Crumb as={Link} to="/evaluation?tab=experiments">
+          <Crumb as={Link} to="/experiments">
             <Icon>
               <FlaskConical />
             </Icon>

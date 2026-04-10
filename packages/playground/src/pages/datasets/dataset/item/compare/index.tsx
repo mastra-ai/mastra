@@ -79,7 +79,7 @@ function DatasetItemsComparePage() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to="/evaluation?tab=datasets">
+            <Crumb as={Link} to="/datasets">
               <Icon>
                 <Database />
               </Icon>
@@ -103,13 +103,13 @@ function DatasetItemsComparePage() {
     <MainContentLayout>
       <Header>
         <Breadcrumb>
-          <Crumb as={Link} to="/evaluation?tab=datasets">
+          <Crumb as={Link} to="/datasets">
             <Icon>
               <Database />
             </Icon>
             Datasets
           </Crumb>
-          <Crumb as={Link} to={`/evaluation/datasets/${datasetId}`}>
+          <Crumb as={Link} to={`/datasets/${datasetId}`}>
             {dataset?.name || datasetId?.slice(0, 8)}
           </Crumb>
           <Crumb isCurrent as="span">
@@ -117,7 +117,7 @@ function DatasetItemsComparePage() {
           </Crumb>
         </Breadcrumb>
         <HeaderAction>
-          <Button as={Link} to={`/evaluation/datasets/${datasetId}`} variant="outline">
+          <Button as={Link} to={`/datasets/${datasetId}`} variant="outline">
             <Icon>
               <ArrowLeft />
             </Icon>
@@ -141,7 +141,7 @@ function DatasetItemsComparePage() {
               <MainHeader.Description>
                 <TextAndIcon>
                   Comparing {itemIds.length} items of{' '}
-                  <Link to={`/evaluation/datasets/${datasetId}`} className="text-info1 hover:underline">
+                  <Link to={`/datasets/${datasetId}`} className="text-info1 hover:underline">
                     {dataset?.name || datasetId?.slice(0, 8)}
                   </Link>
                 </TextAndIcon>
@@ -149,7 +149,7 @@ function DatasetItemsComparePage() {
             </MainHeader.Column>
             <MainHeader.Column>
               <ButtonsGroup>
-                <Button as={Link} to={`/evaluation/datasets/${datasetId}`}>
+                <Button as={Link} to={`/datasets/${datasetId}`}>
                   <ArrowLeftIcon />
                   Back to Dataset
                 </Button>

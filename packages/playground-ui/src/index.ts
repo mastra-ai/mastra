@@ -13,6 +13,8 @@ export * from './domains/observability/index';
 export * from './domains/datasets/index';
 export * from './domains/logs/index';
 export * from './domains/evaluation/index';
+export * from './domains/experiments/index';
+export * from './domains/review/index';
 export * from './ds/components/Threads';
 export * from './types';
 
@@ -51,6 +53,7 @@ export * from './ds/components/Kbd';
 export * from './ds/components/Label';
 export * from './ds/components/MarkdownRenderer';
 export * from './ds/components/MetricsCard';
+export * from './ds/components/MetricsFlexGrid';
 export * from './ds/components/Popover';
 export * from './ds/components/RadioGroup';
 export * from './ds/components/ScrollArea';
