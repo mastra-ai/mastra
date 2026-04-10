@@ -386,4 +386,10 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS source VARCHAR`,
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS feedbackSource VARCHAR`,
   `ALTER TABLE feedback_events ALTER COLUMN traceId DROP NOT NULL`,
+
+  // Signal IDs for de-duplication (added in observability signal IDs feature)
+  `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS logId VARCHAR`,
+  `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS metricId VARCHAR`,
+  `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS scoreId VARCHAR`,
+  `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS feedbackId VARCHAR`,
 ];

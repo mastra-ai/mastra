@@ -610,6 +610,18 @@ export const ALL_MIGRATIONS = [
 
 export const ALL_DDL = [...ALL_TABLE_DDL, ...ALL_MV_DDL, ...DISCOVERY_MV_DDL];
 
+/**
+ * Idempotent migrations for existing tables that were created before new columns were added.
+ * ClickHouse supports ADD COLUMN IF NOT EXISTS so these are safe to re-run.
+ */
+export const ALL_MIGRATIONS = [
+  // Signal IDs for de-duplication (added in observability signal IDs feature)
+  `ALTER TABLE ${TABLE_LOG_EVENTS} ADD COLUMN IF NOT EXISTS logId Nullable(String)`,
+  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD COLUMN IF NOT EXISTS metricId Nullable(String)`,
+  `ALTER TABLE ${TABLE_SCORE_EVENTS} ADD COLUMN IF NOT EXISTS scoreId Nullable(String)`,
+  `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} ADD COLUMN IF NOT EXISTS feedbackId Nullable(String)`,
+];
+
 export const ALL_TABLE_NAMES = [
   TABLE_SPAN_EVENTS,
   TABLE_TRACE_ROOTS,
