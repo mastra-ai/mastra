@@ -56,6 +56,7 @@ export class PrefillErrorHandler implements Processor<'prefill-error-handler'> {
     messageList,
     retryCount,
     writer,
+    rotateResponseMessageId,
   }: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
     // Only handle on first attempt — if it fails again after our fix, don't loop
     if (retryCount > 0) return;
@@ -67,7 +68,7 @@ export class PrefillErrorHandler implements Processor<'prefill-error-handler'> {
       const chunk: SystemReminderChunk = {
         type: 'data-system-reminder',
         data: {
-          message: '<system-reminder>continue</system-reminder>',
+          message: 'Continuing after prefill error',
           reminderType: 'anthropic-prefill-processor-retry',
         },
         transient: true,
@@ -98,6 +99,8 @@ export class PrefillErrorHandler implements Processor<'prefill-error-handler'> {
       },
       'input',
     );
+
+    rotateResponseMessageId?.();
 
     return { retry: true };
   }

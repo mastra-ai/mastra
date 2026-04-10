@@ -29,7 +29,11 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../memory/types';
 import type { Span, SpanType, TracingOptions, TracingPolicy, ObservabilityContext } from '../observability';
-import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
+import type {
+  ErrorProcessorOrWorkflow,
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+} from '../processors/index';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
@@ -349,12 +353,11 @@ export interface AgentConfig<
    */
   outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[], TRequestContext>;
   /**
-   * Maximum number of times processors can trigger a retry per generation.
-   * When a processor calls abort({ retry: true }), the agent will retry with feedback.
-   * This limit prevents infinite retry loops.
-   * If not set, no retries are performed.
+   * Error processors that handle LLM API rejections.
+   * These implement `processAPIError` and can inspect the error, modify messages, and signal a retry.
+   * Error processors can also be placed in `inputProcessors` or `outputProcessors`.
    */
-  maxProcessorRetries?: number;
+  errorProcessors?: DynamicArgument<ErrorProcessorOrWorkflow[], TRequestContext>;
   /**
    * Options to pass to the agent upon creation.
    */
@@ -423,12 +426,8 @@ export type AgentGenerateOptions<
   inputProcessors?: InputProcessorOrWorkflow[];
   /** Output processors to use for this generation call (overrides agent's default) */
   outputProcessors?: OutputProcessorOrWorkflow[];
-  /**
-   * Maximum number of times processors can trigger a retry for this generation.
-   * Overrides agent's default maxProcessorRetries.
-   * If not set, no retries are performed.
-   */
-  maxProcessorRetries?: number;
+  /** Error processors to use for this generation call (overrides agent's default) */
+  errorProcessors?: ErrorProcessorOrWorkflow[];
   /** tracing options for starting new traces */
   tracingOptions?: TracingOptions;
   /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */

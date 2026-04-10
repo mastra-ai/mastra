@@ -4,7 +4,7 @@
  *
  * Sends a conversation that ends with an assistant message directly to the
  * agent (no memory). Anthropic rejects the request because the last message
- * is an assistant message (interpreted as prefill). The auto-injected
+ * is an assistant message (interpreted as prefill). An explicit
  * PrefillErrorHandler appends a system-reminder continue message and retries.
  *
  * Requires ANTHROPIC_API_KEY in the environment.
@@ -14,6 +14,7 @@
 import { anthropic } from '@ai-sdk/anthropic-v5';
 import { createGatewayMock } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { PrefillErrorHandler } from '../../processors/prefill-error-handler';
 import { Agent } from '../agent';
 
 const mock = createGatewayMock();
@@ -36,7 +37,7 @@ function createAgent() {
     name: 'Prefill E2E Test Agent',
     instructions: 'You are a helpful assistant. Reply briefly.',
     model: anthropic('claude-opus-4-6'),
-    maxProcessorRetries: 1,
+    errorProcessors: [new PrefillErrorHandler()],
   });
 }
 

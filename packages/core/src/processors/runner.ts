@@ -12,11 +12,14 @@ import type { ObservabilityContext, Span } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
-import { PrefillErrorHandler } from './prefill-error-handler';
+
 import type { ProcessorStepOutput } from './step-schema';
 import { isMaybeClaude46, TrailingAssistantGuard } from './trailing-assistant-guard';
 import { isProcessorWorkflow } from './index';
 import type {
+  ErrorProcessorOrWorkflow,
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
   OutputResult,
   ProcessInputStepResult,
   Processor,
@@ -111,11 +114,12 @@ export class ProcessorState<OUTPUT = undefined> {
 /**
  * Union type for processor or workflow that can be used as a processor
  */
-type ProcessorOrWorkflow = Processor | ProcessorWorkflow;
+type ProcessorOrWorkflow = InputProcessorOrWorkflow | OutputProcessorOrWorkflow | ErrorProcessorOrWorkflow;
 
 export class ProcessorRunner {
-  public readonly inputProcessors: ProcessorOrWorkflow[];
-  public readonly outputProcessors: ProcessorOrWorkflow[];
+  public readonly inputProcessors: InputProcessorOrWorkflow[];
+  public readonly outputProcessors: OutputProcessorOrWorkflow[];
+  public readonly errorProcessors: ErrorProcessorOrWorkflow[];
   private readonly logger: IMastraLogger;
   private readonly agentName: string;
   /**
@@ -128,18 +132,21 @@ export class ProcessorRunner {
   constructor({
     inputProcessors,
     outputProcessors,
+    errorProcessors,
     logger,
     agentName,
     processorStates,
   }: {
-    inputProcessors?: ProcessorOrWorkflow[];
-    outputProcessors?: ProcessorOrWorkflow[];
+    inputProcessors?: InputProcessorOrWorkflow[];
+    outputProcessors?: OutputProcessorOrWorkflow[];
+    errorProcessors?: ErrorProcessorOrWorkflow[];
     logger: IMastraLogger;
     agentName: string;
     processorStates?: Map<string, ProcessorState>;
   }) {
     this.inputProcessors = inputProcessors ?? [];
     this.outputProcessors = outputProcessors ?? [];
+    this.errorProcessors = errorProcessors ?? [];
     this.logger = logger;
     this.agentName = agentName;
     this.processorStates = processorStates ?? new Map();
@@ -1283,7 +1290,7 @@ export class ProcessorRunner {
   }
 
   /**
-   * Run processAPIError on all processors that implement it (including auto-injected PrefillErrorHandler).
+   * Run processAPIError on all processors that implement it.
    * Called when an LLM API call fails with a non-retryable error.
    * Iterates through both input and output processors.
    *
@@ -1296,21 +1303,21 @@ export class ProcessorRunner {
       messageList: MessageList;
       stepNumber: number;
       steps: Array<StepResult<any>>;
+      messageId?: string;
       requestContext?: RequestContext;
       retryCount?: number;
       writer?: ProcessorStreamWriter;
+      rotateResponseMessageId?: () => string;
     } & Partial<ObservabilityContext>,
   ): Promise<{ retry: boolean }> {
     const { error, messageList, stepNumber, steps, requestContext, retryCount = 0, writer } = args;
     const observabilityContext = resolveObservabilityContext(args);
 
-    // Combine input and output processors, plus auto-injected error handlers
-    // PrefillErrorHandler is appended last so user-defined processors take priority
-    const userProcessors: ProcessorOrWorkflow[] = [...this.inputProcessors, ...this.outputProcessors];
-    const hasPrefillHandler = userProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'prefill-error-handler');
-    const allProcessors: ProcessorOrWorkflow[] = hasPrefillHandler
-      ? userProcessors
-      : [...userProcessors, new PrefillErrorHandler()];
+    const allProcessors: ProcessorOrWorkflow[] = [
+      ...this.inputProcessors,
+      ...this.outputProcessors,
+      ...this.errorProcessors,
+    ];
 
     for (const [index, processorOrWorkflow] of allProcessors.entries()) {
       // Skip workflows — processAPIError is only available on Processor instances
@@ -1365,6 +1372,12 @@ export class ProcessorRunner {
           requestContext,
           retryCount,
           writer,
+          messageId: args.messageId,
+          ...(args.rotateResponseMessageId
+            ? {
+                rotateResponseMessageId: args.rotateResponseMessageId,
+              }
+            : {}),
         });
 
         // Stop recording and get mutations for this processor

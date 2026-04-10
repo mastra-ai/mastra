@@ -1682,24 +1682,12 @@ describe('New Processor Features', () => {
         instructions: 'You are a helpful assistant.',
         model: mockModel,
         outputProcessors: [retryTriggeringProcessor],
-        maxProcessorRetries: 3,
       });
 
       const result = await agent.generate('Hello');
 
       // Should have made 2 calls to the model
       expect(callCount).toBe(2);
-
-      // The second call should include the retry feedback message as a system message
-      const secondCallMessages = receivedMessages[1];
-      const hasRetryFeedback = secondCallMessages.some((msg: any) => {
-        if (msg.role === 'system') {
-          const content = typeof msg.content === 'string' ? msg.content : '';
-          return content.includes('Response quality too low');
-        }
-        return false;
-      });
-      expect(hasRetryFeedback).toBe(true);
 
       // Final result text should only include the accepted response
       // The rejected step has tripwire data, so its text returns empty
@@ -1751,7 +1739,6 @@ describe('New Processor Features', () => {
         instructions: 'You are a helpful assistant.',
         model: mockModel,
         outputProcessors: [retryCountTrackingProcessor],
-        maxProcessorRetries: 5,
       });
 
       await agent.generate('Hello');
@@ -1780,9 +1767,9 @@ describe('New Processor Features', () => {
       const alwaysRetryProcessor = {
         id: 'always-retry-processor',
         // Use processOutputStep since that's where retry is implemented
-        processOutputStep: async ({ abort }: any) => {
-          // Always trigger retry
-          abort('Never satisfied', { retry: true });
+        processOutputStep: async ({ abort, retryCount }: any) => {
+          // Always trigger retry until the processor-defined budget is exhausted
+          abort('Never satisfied', { retry: true, metadata: { retryCount } });
           return [];
         },
       } satisfies Processor;
@@ -1793,17 +1780,18 @@ describe('New Processor Features', () => {
         instructions: 'You are a helpful assistant.',
         model: mockModel,
         outputProcessors: [alwaysRetryProcessor],
-        maxProcessorRetries: 2,
       });
 
       const result = await agent.generate('Hello');
 
-      // Should have made maxProcessorRetries + 1 calls (initial + retries)
-      expect(callCount).toBe(3);
+      // Retries stop once the internal retry safety cap is reached.
+      expect(callCount).toBe(5);
 
-      // Should return tripwire since max retries exceeded
-      expect(result.tripwire).toBeDefined();
-      expect(result.tripwire?.reason).toBe('Never satisfied');
+      // The terminal rejected step is preserved in step history once retries are exhausted.
+      expect(result.tripwire).toBeFalsy();
+      expect(result.text).toBe('');
+      expect(result.steps).toHaveLength(5);
+      expect((result.steps.at(-1) as any)?.tripwire?.reason).toBe('Never satisfied');
     });
 
     it('should not include rejected assistant response in messages sent to LLM on retry', async () => {
@@ -1856,7 +1844,6 @@ describe('New Processor Features', () => {
         instructions: 'You are a helpful assistant.',
         model: mockModel,
         outputProcessors: [fabricationDetector],
-        maxProcessorRetries: 3,
       });
 
       const result = await agent.generate('What is the capital of France?');
@@ -1874,12 +1861,6 @@ describe('New Processor Features', () => {
         return msg.content.some(part => part.type === 'text' && part.text.includes(firstResponseText));
       });
       expect(hasRejectedResponse).toBe(false);
-
-      // The retry feedback should be present as a system message
-      const hasRetryFeedback = retryPrompt.some(
-        msg => msg.role === 'system' && msg.content.includes('Fabrication detected'),
-      );
-      expect(hasRetryFeedback).toBe(true);
 
       // Final result should be the corrected response
       expect(result.text).toBe('corrected response');
@@ -1934,7 +1915,6 @@ describe('New Processor Features', () => {
         instructions: 'You are a helpful assistant.',
         model: mockModel,
         outputProcessors: [fabricationDetector],
-        maxProcessorRetries: 3,
       });
 
       const stream = await agent.stream('What is the capital of France?');

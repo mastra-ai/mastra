@@ -6,7 +6,7 @@ import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { CompletionConfig, CompletionRunResult } from '../loop/network/validation';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
 import type { ObservabilityContext, TracingOptions } from '../observability';
-import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
+import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { OutputWriter } from '../workflows/types';
 import type { MessageListInput } from './message-list';
@@ -486,12 +486,8 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   inputProcessors?: InputProcessorOrWorkflow[];
   /** Output processors to use for this execution (overrides agent's default) */
   outputProcessors?: OutputProcessorOrWorkflow[];
-  /**
-   * Maximum number of times processors can trigger a retry for this generation.
-   * Overrides agent's default maxProcessorRetries.
-   * If not set, defaults to the agent's maxProcessorRetries (which defaults to no retries if also unset).
-   */
-  maxProcessorRetries?: number;
+  /** Error processors to use for this execution (overrides agent's default) */
+  errorProcessors?: ErrorProcessorOrWorkflow[];
 
   /** Additional tool sets that can be used for this execution */
   toolsets?: ToolsetsInput;
@@ -621,6 +617,8 @@ export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptions
   outputWriter?: OutputWriter;
   messages: MessageListInput;
   methodType: AgentMethodType;
+  /** Internal-only loop retry cap; not part of the public Agent API surface. */
+  maxProcessorRetries?: number;
   /** Internal: Model override for when structuredOutput.model is used with maxSteps=1 */
   model?: MastraLanguageModel;
   /** Internal: Whether the execution is a resume */

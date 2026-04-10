@@ -20,6 +20,7 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory, MemoryConfigInternal } from '../memory';
 import type { IModelSpanTracker, ObservabilityContext } from '../observability';
 import type {
+  ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
   ProcessInputStepArgs,
@@ -115,6 +116,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   providerOptions?: SharedProviderOptions;
   outputProcessors?: OutputProcessorOrWorkflow[];
   inputProcessors?: InputProcessorOrWorkflow[];
+  errorProcessors?: ErrorProcessorOrWorkflow[];
   tools?: TOOLS;
   experimental_generateMessageId?: () => string;
   stopWhen?: StopCondition | Array<StopCondition>;
@@ -133,7 +135,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   requestContext?: RequestContext;
   methodType: ModelMethodType;
   /**
-   * Maximum number of times processors can trigger a retry per generation.
+   * Maximum number of consecutive times processors can trigger a retry per generation.
    * When a processor calls abort({ retry: true }), the agent will retry with feedback.
    * If not set, no retries are performed.
    */

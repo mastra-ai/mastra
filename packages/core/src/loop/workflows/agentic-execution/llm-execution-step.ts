@@ -658,6 +658,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   structuredOutput,
   outputProcessors,
   inputProcessors,
+  errorProcessors,
   logger,
   agentId,
   downloadRetries,
@@ -1169,11 +1170,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             } else {
               // For non-last models, try processAPIError before falling through to next model
               // This allows error processors to fix the request and retry with the SAME model
-              // Note: ProcessorRunner auto-injects built-in error processors (e.g. PrefillErrorHandler),
-              // so we always attempt this even if the user hasn't explicitly configured error processors.
               const processorRunner = new ProcessorRunner({
                 inputProcessors: inputProcessors || [],
                 outputProcessors: outputProcessors || [],
+                errorProcessors: errorProcessors || [],
                 logger: logger || new ConsoleLogger({ level: 'error' }),
                 agentName: agentId || 'unknown',
                 processorStates,
@@ -1196,6 +1196,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   retryCount: currentRetryCount,
                   requestContext,
                   writer: apiErrorWriter,
+                  messageId: currentMessageId,
+                  rotateResponseMessageId: () => {
+                    currentMessageId = _internal?.generateId?.() ?? generateId();
+                    return currentMessageId;
+                  },
                 });
 
                 if (errorResult.retry) {
@@ -1300,6 +1305,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           const processorRunner = new ProcessorRunner({
             inputProcessors: inputProcessors || [],
             outputProcessors: outputProcessors || [],
+            errorProcessors: errorProcessors || [],
             logger: logger || new ConsoleLogger({ level: 'error' }),
             agentName: agentId || 'unknown',
             processorStates,
@@ -1318,6 +1324,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             retryCount: currentRetryCount,
             requestContext,
             writer: apiErrorWriter2,
+            messageId: currentMessageId,
+            rotateResponseMessageId: () => {
+              currentMessageId = _internal?.generateId?.() ?? generateId();
+              return currentMessageId;
+            },
           });
 
           if (errorResult.retry) {
@@ -1336,14 +1347,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       if (apiErrorRetryResult?.retry) {
         const currentProcessorRetryCount = inputData.processorRetryCount || 0;
         const steps = inputData.output?.steps || [];
-
-        // Remove any partial response messages from the messageList
-        messageList.removeByIds([outputStream.messageId]);
+        const nextProcessorRetryCount = currentProcessorRetryCount + 1;
 
         const messages = {
           all: messageList.get.all.aiV5.model(),
           user: messageList.get.input.aiV5.model(),
-          nonUser: messageList.get.response.aiV5.model(),
+          // Keep assistant messages out of the retry payload so agentic-execution/index.ts
+          // does not replay failed step output back into messageList. Error processors own
+          // any cleanup or replacement of assistant responses before the next attempt.
+          nonUser: [],
         };
 
         return {
@@ -1367,7 +1379,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             steps,
           },
           messages,
-          processorRetryCount: currentProcessorRetryCount + 1,
+          processorRetryCount: nextProcessorRetryCount,
         };
       }
 
@@ -1480,7 +1492,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       const currentProcessorRetryCount = inputData.processorRetryCount || 0;
 
       // Check if this is a retry request from processOutputStep
-      // Only allow retry if maxProcessorRetries is set and we haven't exceeded it
       const retryRequested = processOutputStepTripwire?.options?.retry === true;
       const canRetry = maxProcessorRetries !== undefined && currentProcessorRetryCount < maxProcessorRetries;
       const shouldRetry = retryRequested && canRetry;
@@ -1562,8 +1573,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         shouldRetry ||
         (!tripwireTriggered && (hasPendingToolCalls || !['stop', 'error', 'length'].includes(finishReason)));
 
-      // Increment processor retry count if we're retrying
-      const nextProcessorRetryCount = shouldRetry ? currentProcessorRetryCount + 1 : currentProcessorRetryCount;
+      // Reset retry count after a successful non-retry step; only consecutive retries carry forward.
+      const nextProcessorRetryCount = shouldRetry ? currentProcessorRetryCount + 1 : 0;
 
       return {
         messageId: outputStream.messageId,

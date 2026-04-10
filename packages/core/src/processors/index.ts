@@ -271,6 +271,10 @@ export interface ProcessAPIErrorArgs<TTripwireMetadata = unknown> extends Proces
   stepNumber: number;
   /** All completed steps so far */
   steps: Array<StepResult<any>>;
+  /** The active assistant response message ID for this step, when this processor is running inside an agent loop */
+  messageId?: string;
+  /** Mark the current assistant response message ID as complete and rotate to a fresh one, when supported by the caller */
+  rotateResponseMessageId?: () => string;
   /** Per-processor state that persists across all method calls within this request */
   state: Record<string, unknown>;
   /** The current retry count for this error handler */
@@ -462,17 +466,27 @@ export type ProcessorTypes<TTripwireMetadata = unknown> =
 export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOutput, ProcessorStepOutput, any>;
 
 /**
- * Input processor config: can be a Processor or a Workflow.
+ * Input processor config: can be a Processor, ErrorProcessor, or a Workflow.
  */
 export type InputProcessorOrWorkflow<TTripwireMetadata = unknown> =
   | InputProcessor<TTripwireMetadata>
+  | ErrorProcessor<TTripwireMetadata>
   | ProcessorWorkflow;
 
 /**
- * Output processor config: can be a Processor or a Workflow.
+ * Output processor config: can be a Processor, ErrorProcessor, or a Workflow.
  */
 export type OutputProcessorOrWorkflow<TTripwireMetadata = unknown> =
   | OutputProcessor<TTripwireMetadata>
+  | ErrorProcessor<TTripwireMetadata>
+  | ProcessorWorkflow;
+
+/**
+ * Error processor config: can be a Processor or a Workflow.
+ * Error processors only need processAPIError — they handle LLM API rejections.
+ */
+export type ErrorProcessorOrWorkflow<TTripwireMetadata = unknown> =
+  | ErrorProcessor<TTripwireMetadata>
   | ProcessorWorkflow;
 
 /**

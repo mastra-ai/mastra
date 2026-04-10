@@ -46,6 +46,7 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import type {
+  ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
   ProcessorWorkflow,
@@ -181,7 +182,7 @@ export class Agent<
   #workspace?: DynamicArgument<AnyWorkspace | undefined, TRequestContext>;
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[], TRequestContext>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[], TRequestContext>;
-  #maxProcessorRetries?: number;
+  #errorProcessors?: DynamicArgument<ErrorProcessorOrWorkflow[], TRequestContext>;
   #browser?: MastraBrowser;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   readonly #options?: AgentCreateOptions;
@@ -332,8 +333,8 @@ export class Agent<
       this.#outputProcessors = config.outputProcessors;
     }
 
-    if (config.maxProcessorRetries !== undefined) {
-      this.#maxProcessorRetries = config.maxProcessorRetries;
+    if (config.errorProcessors) {
+      this.#errorProcessors = config.errorProcessors;
     }
 
     if (config.requestContextSchema) {
@@ -516,20 +517,30 @@ export class Agent<
     requestContext,
     inputProcessorOverrides,
     outputProcessorOverrides,
+    errorProcessorOverrides,
     processorStates,
   }: {
     requestContext: RequestContext;
     inputProcessorOverrides?: InputProcessorOrWorkflow[];
     outputProcessorOverrides?: OutputProcessorOrWorkflow[];
+    errorProcessorOverrides?: ErrorProcessorOrWorkflow[];
     processorStates?: Map<string, ProcessorState>;
   }): Promise<ProcessorRunner> {
     // Resolve processors - overrides replace user-configured but auto-derived (memory, skills) are kept
     const inputProcessors = await this.listResolvedInputProcessors(requestContext, inputProcessorOverrides);
     const outputProcessors = await this.listResolvedOutputProcessors(requestContext, outputProcessorOverrides);
+    const errorProcessors =
+      errorProcessorOverrides ??
+      (this.#errorProcessors
+        ? typeof this.#errorProcessors === 'function'
+          ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
+          : this.#errorProcessors
+        : []);
 
     return new ProcessorRunner({
       inputProcessors,
       outputProcessors,
+      errorProcessors,
       logger: this.logger,
       agentName: this.name,
       processorStates,
@@ -4603,6 +4614,19 @@ export class Agent<
         requestContext: RequestContext;
         overrides?: OutputProcessorOrWorkflow[];
       }) => this.listResolvedOutputProcessors(requestContext, overrides),
+      errorProcessors: async ({
+        requestContext,
+        overrides,
+      }: {
+        requestContext: RequestContext;
+        overrides?: ErrorProcessorOrWorkflow[];
+      }) =>
+        overrides ??
+        (this.#errorProcessors
+          ? typeof this.#errorProcessors === 'function'
+            ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
+            : this.#errorProcessors
+          : []),
       llm,
     };
 
@@ -5110,8 +5134,6 @@ export class Agent<
         : undefined,
       messages,
       methodType: 'generate',
-      // Use agent's maxProcessorRetries as default, allow options to override
-      maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
     } as unknown as InnerAgentExecutionOptions<any>;
 
     const result = await this.#execute(executeOptions);
@@ -5227,8 +5249,6 @@ export class Agent<
         : undefined,
       messages,
       methodType: 'stream',
-      // Use agent's maxProcessorRetries as default, allow options to override
-      maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
     } as unknown as InnerAgentExecutionOptions<OUTPUT>;
 
     const result = await this.#execute(executeOptions);
@@ -5479,8 +5499,6 @@ export class Agent<
         snapshot: existingSnapshot,
       },
       methodType: 'generate',
-      // Use agent's maxProcessorRetries as default, allow options to override
-      maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
     } as unknown as InnerAgentExecutionOptions<OUTPUT>);
 
     if (result.status !== 'success') {

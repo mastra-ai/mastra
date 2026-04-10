@@ -77,8 +77,8 @@ export interface LLMIterationData<Tools extends ToolSet = ToolSet, OUTPUT = unde
   metadata: LLMIterationMetadata;
   stepResult: LLMIterationStepResult;
   /**
-   * Number of times processors have triggered retry for this generation.
-   * Used to enforce maxProcessorRetries limit.
+   * Number of consecutive processor-triggered retries for the current generation.
+   * Used to enforce the processor retry safety cap.
    */
   processorRetryCount?: number;
 }

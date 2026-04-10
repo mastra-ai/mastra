@@ -197,6 +197,16 @@ export function createMapResultsStep<OUTPUT = undefined>({
         : options.inputProcessors || capabilities.inputProcessors
       : options.inputProcessors || [];
 
+    // Resolve error processors
+    const effectiveErrorProcessors = capabilities.errorProcessors
+      ? typeof capabilities.errorProcessors === 'function'
+        ? await capabilities.errorProcessors({
+            requestContext: result.requestContext!,
+            overrides: options.errorProcessors,
+          })
+        : options.errorProcessors || capabilities.errorProcessors
+      : options.errorProcessors || [];
+
     const messageList = memoryData.messageList!;
 
     const modelMethodType: ModelMethodType = getModelMethodFromAgentMethod(methodType);
@@ -329,12 +339,13 @@ export function createMapResultsStep<OUTPUT = undefined>({
       structuredOutput: options.structuredOutput,
       inputProcessors: effectiveInputProcessors,
       outputProcessors: effectiveOutputProcessors,
+      errorProcessors: effectiveErrorProcessors,
       modelSettings: {
         temperature: 0,
         ...(options.modelSettings || {}),
       },
       messageList: memoryData.messageList!,
-      maxProcessorRetries: options.maxProcessorRetries,
+      maxProcessorRetries: options.maxProcessorRetries ?? 10,
       // IsTaskComplete scoring for supervisor patterns
       isTaskComplete: options.isTaskComplete,
       // Iteration hook for supervisor patterns

@@ -3,6 +3,7 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { MockMemory } from '../../memory/mock';
+import { PrefillErrorHandler } from '../../processors/prefill-error-handler';
 import { Agent } from '../agent';
 
 /**
@@ -11,7 +12,7 @@ import { Agent } from '../agent';
  * Simulates the Anthropic "assistant message prefill" error:
  * - Pre-populates a conversation thread that ends with an assistant message
  * - The mock model throws the prefill error on the first call
- * - The PrefillErrorHandler (auto-injected) appends a system reminder continue message and signals retry
+ * - The PrefillErrorHandler appends a system reminder continue message and signals retry
  * - On retry, the model succeeds
  *
  * Related: https://github.com/mastra-ai/mastra/issues/13969
@@ -136,6 +137,7 @@ describe('PrefillErrorHandler Recovery', () => {
       });
 
       const { model, getCallCount, getReceivedPrompts } = createPrefillErrorModel('Recovery successful!');
+      const persistedAssistantText = 'The answer is 4.';
 
       const agent = new Agent({
         id: 'prefill-test-generate',
@@ -143,7 +145,7 @@ describe('PrefillErrorHandler Recovery', () => {
         instructions: 'You are a test agent',
         model: [{ model, maxRetries: 0 }],
         memory: mockMemory,
-        maxProcessorRetries: 1,
+        errorProcessors: [new PrefillErrorHandler()],
       });
 
       // The conversation in memory ends with an assistant message.
@@ -170,6 +172,14 @@ describe('PrefillErrorHandler Recovery', () => {
           msg.content.some((part: any) => part.type === 'text' && part.text === ANTHROPIC_PREFILL_RETRY_REMINDER),
       );
       expect(hasRetryReminderMessage).toBe(true);
+      expect(
+        retryPrompt.filter(
+          (msg: any) =>
+            msg.role === 'assistant' &&
+            Array.isArray(msg.content) &&
+            msg.content.some((part: any) => part.type === 'text' && part.text === persistedAssistantText),
+        ),
+      ).toHaveLength(1);
 
       const visibleMessages = await mockMemory.recall({ threadId, resourceId });
       expect(
@@ -288,7 +298,7 @@ describe('PrefillErrorHandler Recovery', () => {
         instructions: 'You are a test agent',
         model: [{ model, maxRetries: 0 }],
         memory: mockMemory,
-        maxProcessorRetries: 1,
+        errorProcessors: [new PrefillErrorHandler()],
       });
 
       const result = await agent.stream('Continue', {
@@ -381,7 +391,7 @@ describe('PrefillErrorHandler Recovery', () => {
         instructions: 'You are a test agent',
         model: [{ model, maxRetries: 0 }],
         memory: mockMemory,
-        maxProcessorRetries: 1,
+        errorProcessors: [new PrefillErrorHandler()],
       });
 
       const result = await agent.stream('Continue', {

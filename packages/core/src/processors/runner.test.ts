@@ -2234,56 +2234,5 @@ describe('ProcessorRunner', () => {
       expect(result).toEqual({ retry: false });
       expect(mockLogger.error).toHaveBeenCalled();
     });
-
-    it('should auto-inject PrefillErrorHandler when no user-defined handler exists', async () => {
-      runner = new ProcessorRunner({
-        inputProcessors: [],
-        outputProcessors: [],
-        logger: mockLogger,
-        agentName: 'test-agent',
-      });
-
-      // Set up a message list with a trailing assistant message
-      messageList.add(createMessage('hello', 'user'), 'user');
-      messageList.add(createMessage('hi there', 'assistant'), 'response');
-
-      // Create a prefill error
-      const { APICallError } = await import('@internal/ai-sdk-v5');
-      const prefillError = new APICallError({
-        message: 'This model does not support assistant message prefill.',
-        url: 'https://api.anthropic.com/v1/messages',
-        requestBodyValues: {},
-        statusCode: 400,
-        responseBody: '{}',
-        isRetryable: false,
-      });
-
-      const result = await runner.runProcessAPIError({
-        error: prefillError,
-        messages: messageList.get.all.db(),
-        messageList,
-        stepNumber: 0,
-        steps: [],
-        retryCount: 0,
-      });
-
-      expect(result).toEqual({ retry: true });
-
-      // Verify a system reminder continue message was appended
-      const messages = messageList.get.all.db();
-      const lastMessage = messages[messages.length - 1]!;
-      expect(lastMessage.role).toBe('user');
-      expect(lastMessage.content.parts).toEqual([
-        expect.objectContaining({
-          type: 'text',
-          text: '<system-reminder>continue</system-reminder>',
-        }),
-      ]);
-      expect(lastMessage.content.metadata).toEqual({
-        systemReminder: {
-          type: 'anthropic-prefill-processor-retry',
-        },
-      });
-    });
   });
 });
