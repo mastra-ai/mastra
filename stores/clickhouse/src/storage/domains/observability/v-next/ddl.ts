@@ -206,6 +206,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_METRIC_EVENTS} (
   timestamp          DateTime64(3, 'UTC'),
 
   -- IDs
+  metricId           Nullable(String),
   traceId            Nullable(String),
   spanId             Nullable(String),
   experimentId       Nullable(String),
@@ -268,6 +269,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_LOG_EVENTS} (
   timestamp          DateTime64(3, 'UTC'),
 
   -- IDs
+  logId              Nullable(String),
   traceId            Nullable(String),
   spanId             Nullable(String),
   experimentId       Nullable(String),
@@ -326,6 +328,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
   timestamp          DateTime64(3, 'UTC'),
 
   -- IDs
+  scoreId            Nullable(String),
   traceId            Nullable(String),
   spanId             Nullable(String),
   experimentId       Nullable(String),
@@ -391,6 +394,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS} (
   timestamp          DateTime64(3, 'UTC'),
 
   -- IDs
+  feedbackId         Nullable(String),
   traceId            Nullable(String),
   spanId             Nullable(String),
   experimentId       Nullable(String),

@@ -4,6 +4,7 @@ import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './f
 import { v, jsonV, toDate, parseJson, parseJsonArray } from './helpers';
 
 const COLUMNS = [
+  'logId',
   'timestamp',
   'level',
   'message',
@@ -42,6 +43,7 @@ const COLUMNS_SQL = COLUMNS.join(', ');
 
 function rowToLogRecord(row: Record<string, unknown>): Record<string, unknown> {
   return {
+    logId: (row.logId as string) ?? null,
     timestamp: toDate(row.timestamp),
     level: row.level as string,
     message: row.message as string,
@@ -83,6 +85,7 @@ export async function batchCreateLogs(db: DuckDBConnection, args: BatchCreateLog
 
   const tuples = args.logs.map(log => {
     return `(${[
+      v(log.logId ?? null),
       v(log.timestamp),
       v(log.level),
       v(log.message),

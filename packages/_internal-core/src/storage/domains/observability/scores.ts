@@ -43,6 +43,12 @@ const scoreReasonField = z.string().describe('Explanation for the score');
  */
 export const scoreRecordSchema = z
   .object({
+    /**
+     * Unique id for this score event, generated at emission time.
+     * Nullish for backward compatibility with rows written before this field existed.
+     * Acts as a de-duplication key in OLAP stores.
+     */
+    scoreId: z.string().nullish().describe('Unique id for this score event (de-duplication key)'),
     timestamp: z.date().describe('When the score was recorded'),
 
     // Target

@@ -63,6 +63,12 @@ export interface ScoreInput {
  * User-defined metadata is inherited from the span/trace being scored.
  */
 export interface ExportedScore {
+  /**
+   * Unique identifier for this score event, generated at emission time.
+   * Acts as a de-duplication key in downstream OLAP stores.
+   */
+  scoreId: string;
+
   /** When the score was recorded */
   timestamp: Date;
 

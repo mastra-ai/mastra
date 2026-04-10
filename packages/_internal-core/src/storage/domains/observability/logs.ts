@@ -31,6 +31,13 @@ const logDataField = z.record(z.string(), z.unknown()).describe('Structured data
  */
 export const logRecordSchema = z
   .object({
+    /**
+     * Unique id for this log event, generated at emission time.
+     * Nullish for backward compatibility with rows written before this field existed.
+     * Aligns with the OpenTelemetry `log.record.uid` semantic convention and
+     * acts as a de-duplication key in OLAP stores.
+     */
+    logId: z.string().nullish().describe('Unique id for this log event (de-duplication key)'),
     timestamp: z.date().describe('When the log was created'),
     level: logLevelSchema.describe('Log severity level'),
     message: messageField,

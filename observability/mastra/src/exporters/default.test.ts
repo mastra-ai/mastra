@@ -947,6 +947,7 @@ describe('DefaultExporter', () => {
         const event: MetricEvent = {
           type: 'metric',
           metric: {
+            metricId: 'metric-default-test-1',
             timestamp: new Date('2026-01-01T00:00:00Z'),
             traceId: 'trace-1',
             spanId: 'span-1',
@@ -1038,6 +1039,7 @@ describe('DefaultExporter', () => {
         const event: MetricEvent = {
           type: 'metric',
           metric: {
+            metricId: 'metric-default-test-2',
             timestamp: new Date(),
             name: 'mastra_custom_metric',
             value: 42,
@@ -1083,6 +1085,7 @@ describe('DefaultExporter', () => {
         const event: ScoreEvent = {
           type: 'score',
           score: {
+            scoreId: 'score-default-test',
             timestamp: new Date('2026-01-01T00:00:00Z'),
             traceId: 'trace-1',
             scorerId: 'relevance',
@@ -1116,6 +1119,7 @@ describe('DefaultExporter', () => {
         const event: FeedbackEvent = {
           type: 'feedback',
           feedback: {
+            feedbackId: 'feedback-default-test',
             timestamp: new Date('2026-01-01T00:00:00Z'),
             traceId: 'trace-1',
             source: 'user',
@@ -1149,6 +1153,7 @@ describe('DefaultExporter', () => {
         const event: LogEvent = {
           type: 'log',
           log: {
+            logId: 'log-default-test',
             timestamp: new Date('2026-01-01T00:00:00Z'),
             traceId: 'trace-1',
             level: 'info',
@@ -1190,7 +1195,7 @@ describe('DefaultExporter', () => {
 
         const metricEvent: MetricEvent = {
           type: 'metric',
-          metric: { timestamp: new Date(), name: 'test', value: 1, labels: {} },
+          metric: { metricId: 'metric-default-noop', timestamp: new Date(), name: 'test', value: 1, labels: {} },
         };
 
         // Should not throw

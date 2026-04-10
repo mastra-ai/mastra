@@ -154,6 +154,7 @@ function toSeriesName(values: unknown[]): string {
 
 function rowToScoreRecord(row: Record<string, unknown>): Record<string, unknown> {
   return {
+    scoreId: (row.scoreId as string) ?? null,
     timestamp: toDate(row.timestamp),
     traceId: (row.traceId as string) ?? null,
     spanId: (row.spanId as string) ?? null,
@@ -231,12 +232,13 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
   const scoreSource = s.scoreSource ?? s.source ?? null;
   await db.execute(
     `INSERT INTO score_events (
-      timestamp, traceId, spanId, experimentId, scoreTraceId,
+      scoreId, timestamp, traceId, spanId, experimentId, scoreTraceId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope
     )
      VALUES (${[
+       v(s.scoreId ?? null),
        v(s.timestamp),
        v(s.traceId),
        v(s.spanId ?? null),
@@ -284,6 +286,7 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
     const legacyScore = s as LegacyScoreRecord;
     const scoreSource = legacyScore.scoreSource ?? legacyScore.source ?? null;
     return `(${[
+      v(legacyScore.scoreId ?? null),
       v(legacyScore.timestamp),
       v(legacyScore.traceId),
       v(legacyScore.spanId ?? null),
@@ -324,7 +327,7 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
 
   await db.execute(
     `INSERT INTO score_events (
-      timestamp, traceId, spanId, experimentId, scoreTraceId,
+      scoreId, timestamp, traceId, spanId, experimentId, scoreTraceId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope

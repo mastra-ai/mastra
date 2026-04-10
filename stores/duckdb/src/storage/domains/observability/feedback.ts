@@ -164,6 +164,7 @@ function rowToFeedbackRecord(row: Record<string, unknown>): Record<string, unkno
   if (!isNaN(numValue)) value = numValue;
 
   return {
+    feedbackId: (row.feedbackId as string) ?? null,
     timestamp: toDate(row.timestamp),
     traceId: (row.traceId as string) ?? null,
     spanId: (row.spanId as string) ?? null,
@@ -242,12 +243,13 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
   const feedbackUserId = f.feedbackUserId ?? f.userId ?? null;
   await db.execute(
     `INSERT INTO feedback_events (
-      timestamp, traceId, spanId, experimentId,
+      feedbackId, timestamp, traceId, spanId, experimentId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       feedbackUserId, sourceId, feedbackSource, feedbackType, value, comment, tags, metadata, scope
     )
      VALUES (${[
+       v(f.feedbackId ?? null),
        v(f.timestamp),
        v(f.traceId),
        v(f.spanId ?? null),
@@ -296,6 +298,7 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
     const feedbackSource = legacyFeedback.feedbackSource ?? legacyFeedback.source ?? '';
     const feedbackUserId = legacyFeedback.feedbackUserId ?? legacyFeedback.userId ?? null;
     return `(${[
+      v(legacyFeedback.feedbackId ?? null),
       v(legacyFeedback.timestamp),
       v(legacyFeedback.traceId),
       v(legacyFeedback.spanId ?? null),
@@ -336,7 +339,7 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
 
   await db.execute(
     `INSERT INTO feedback_events (
-      timestamp, traceId, spanId, experimentId,
+      feedbackId, timestamp, traceId, spanId, experimentId,
       entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       feedbackUserId, sourceId, feedbackSource, feedbackType, value, comment, tags, metadata, scope
