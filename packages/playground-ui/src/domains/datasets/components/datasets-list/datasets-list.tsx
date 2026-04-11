@@ -45,7 +45,7 @@ export function DatasetsList({
   experimentFilter = 'all',
   tagFilter = 'all',
 }: DatasetsListProps) {
-  const { paths } = useLinkComponent();
+  const { paths, navigate } = useLinkComponent();
 
   const enrichedDatasets = useMemo(() => {
     return datasets.map(ds => {
@@ -145,7 +145,7 @@ export function DatasetsList({
                       onClick={e => {
                         e.preventDefault();
                         e.stopPropagation();
-                        window.location.href = `${paths.datasetLink(ds.id)}?tab=review`;
+                        navigate(`${paths.datasetLink(ds.id)}?tab=review`);
                       }}
                       className="inline-flex"
                     >

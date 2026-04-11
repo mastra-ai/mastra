@@ -18,5 +18,5 @@ test('clicking on the scorer row redirects to detail page', async ({ page }) => 
 
   await page.getByRole('link', { name: /Response Quality Scorer/i }).click();
 
-  await expect(page).toHaveURL(/\/evaluation\/scorers\/response-quality$/);
+  await expect(page).toHaveURL(/\/scorers\/response-quality$/);
 });

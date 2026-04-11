@@ -11,6 +11,7 @@ export interface DatasetsToolbarTagOption {
 }
 
 export interface DatasetsToolbarProps {
+  search: string;
   onSearchChange: (query: string) => void;
   targetFilter: string;
   onTargetFilterChange: (value: string) => void;
@@ -24,6 +25,7 @@ export interface DatasetsToolbarProps {
 }
 
 export function DatasetsToolbar({
+  search,
   onSearchChange,
   targetFilter,
   onTargetFilterChange,
@@ -37,7 +39,12 @@ export function DatasetsToolbar({
 }: DatasetsToolbarProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <ListSearch label="Search datasets" placeholder="Filter by dataset name" onSearch={onSearchChange} />
+      <ListSearch
+        label="Search datasets"
+        placeholder="Filter by dataset name"
+        value={search}
+        onSearch={onSearchChange}
+      />
       <ButtonsGroup>
         <SelectFieldBlock
           label="Target"

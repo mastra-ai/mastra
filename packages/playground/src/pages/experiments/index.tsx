@@ -45,7 +45,15 @@ export default function Experiments() {
     );
   }
 
-  if (error && is403ForbiddenError(error)) {
+  if (errorExperiments && is403ForbiddenError(errorExperiments)) {
+    return (
+      <NoDataPageLayout title="Experiments" icon={<FlaskConical />}>
+        <PermissionDenied resource="experiments" />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (errorDatasets && is403ForbiddenError(errorDatasets)) {
     return (
       <NoDataPageLayout title="Experiments" icon={<FlaskConical />}>
         <PermissionDenied resource="datasets" />
@@ -101,6 +109,7 @@ export default function Experiments() {
           </PageLayout.Column>
         </PageLayout.Row>
         <ExperimentsToolbar
+          search={search}
           onSearchChange={setSearch}
           statusFilter={statusFilter}
           onStatusFilterChange={setStatusFilter}

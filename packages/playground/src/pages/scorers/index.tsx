@@ -84,6 +84,7 @@ export default function Scorers() {
           </PageLayout.Column>
         </PageLayout.Row>
         <ScorersToolbar
+          search={search}
           onSearchChange={setSearch}
           sourceFilter={sourceFilter}
           onSourceFilterChange={setSourceFilter}

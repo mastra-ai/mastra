@@ -6,6 +6,7 @@ import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks';
 import { ListSearch } from '@/ds/components/ListSearch/list-search';
 
 export interface ScorersToolbarProps {
+  search: string;
   onSearchChange: (query: string) => void;
   sourceFilter: string;
   onSourceFilterChange: (value: string) => void;
@@ -14,6 +15,7 @@ export interface ScorersToolbarProps {
 }
 
 export function ScorersToolbar({
+  search,
   onSearchChange,
   sourceFilter,
   onSourceFilterChange,
@@ -22,7 +24,12 @@ export function ScorersToolbar({
 }: ScorersToolbarProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <ListSearch label="Search scorers" placeholder="Filter by scorer name" onSearch={onSearchChange} />
+      <ListSearch
+        label="Search scorers"
+        placeholder="Filter by scorer name"
+        value={search}
+        onSearch={onSearchChange}
+      />
       <ButtonsGroup>
         <SelectFieldBlock
           label="Source"

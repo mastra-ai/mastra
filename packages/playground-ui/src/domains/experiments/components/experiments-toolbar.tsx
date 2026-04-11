@@ -11,6 +11,7 @@ export interface ExperimentsToolbarDatasetOption {
 }
 
 export interface ExperimentsToolbarProps {
+  search: string;
   onSearchChange: (query: string) => void;
   statusFilter: string;
   onStatusFilterChange: (value: string) => void;
@@ -22,6 +23,7 @@ export interface ExperimentsToolbarProps {
 }
 
 export function ExperimentsToolbar({
+  search,
   onSearchChange,
   statusFilter,
   onStatusFilterChange,
@@ -36,6 +38,7 @@ export function ExperimentsToolbar({
       <ListSearch
         label="Search experiments"
         placeholder="Filter by experiment, dataset, or target"
+        value={search}
         onSearch={onSearchChange}
       />
       <ButtonsGroup>

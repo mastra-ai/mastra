@@ -116,6 +116,7 @@ export default function Datasets() {
           </PageLayout.Column>
         </PageLayout.Row>
         <DatasetsToolbar
+          search={search}
           onSearchChange={setSearch}
           targetFilter={targetFilter}
           onTargetFilterChange={setTargetFilter}

@@ -9,11 +9,31 @@ export type ListSearchProps = {
   placeholder: string;
   debounceMs?: number;
   size?: InputProps['size'];
+  /**
+   * Optional controlled value. When provided, ListSearch stays in sync with this
+   * prop — useful when the parent needs to clear the input programmatically
+   * (e.g. from a Reset button). If omitted, ListSearch manages its own state.
+   */
+  value?: string;
 };
 
-export const ListSearch = ({ onSearch, label, placeholder, debounceMs = 300, size }: ListSearchProps) => {
+export const ListSearch = ({
+  onSearch,
+  label,
+  placeholder,
+  debounceMs = 300,
+  size,
+  value: controlledValue,
+}: ListSearchProps) => {
   const id = useId();
-  const [value, setValue] = useState('');
+  const [internalValue, setInternalValue] = useState(controlledValue ?? '');
+
+  // Sync internal state with controlled value (e.g. parent Reset clears it to '').
+  useEffect(() => {
+    if (controlledValue !== undefined) {
+      setInternalValue(controlledValue);
+    }
+  }, [controlledValue]);
 
   const debouncedSearch = useDebouncedCallback((val: string) => {
     onSearch(val);
@@ -23,14 +43,14 @@ export const ListSearch = ({ onSearch, label, placeholder, debounceMs = 300, siz
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      setValue(e.target.value);
+      setInternalValue(e.target.value);
       debouncedSearch(e.target.value);
     },
     [debouncedSearch],
   );
 
   const handleReset = useCallback(() => {
-    setValue('');
+    setInternalValue('');
     onSearch('');
     debouncedSearch.cancel();
   }, [onSearch, debouncedSearch]);
@@ -41,7 +61,7 @@ export const ListSearch = ({ onSearch, label, placeholder, debounceMs = 300, siz
       label={label}
       labelIsHidden
       placeholder={placeholder}
-      value={value}
+      value={internalValue}
       onChange={handleChange}
       onReset={handleReset}
       size={size}
