@@ -86,6 +86,47 @@ describe('Agent Type Tests', () => {
     });
   });
 
+  describe('Issue #15229: AgentConfig.tools should not accept function values for individual tools', () => {
+    it('should reject function values as individual tool entries (static tools)', () => {
+      const realTool = {
+        id: 'real-tool',
+        description: 'A real tool',
+        execute: async () => ({ result: 'ok' }),
+      };
+
+      // @ts-expect-error — individual tool entries must be tool objects, not resolver functions
+      const config: Pick<AgentConfig, 'tools'> = {
+        tools: { myTool: () => realTool },
+      };
+    });
+
+    it('should accept static tool objects', () => {
+      const realTool = {
+        id: 'real-tool',
+        description: 'A real tool',
+        execute: async () => ({ result: 'ok' }),
+      };
+
+      // Static tool objects are valid
+      const config: Pick<AgentConfig, 'tools'> = {
+        tools: { myTool: realTool as any },
+      };
+    });
+
+    it('should accept dynamic tools function (DynamicArgument pattern)', () => {
+      const realTool = {
+        id: 'real-tool',
+        description: 'A real tool',
+        execute: async () => ({ result: 'ok' }),
+      };
+
+      // The entire tools value can be a resolver function (DynamicArgument)
+      const config: Pick<AgentConfig, 'tools'> = {
+        tools: ({ requestContext: _rc }) => ({ myTool: realTool as any }),
+      };
+    });
+  });
+
   describe('requestContextSchema type inference', () => {
     it('should type requestContext in instructions function based on requestContextSchema', () => {
       const config: AgentConfig<

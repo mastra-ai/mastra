@@ -30,10 +30,12 @@ export type ProviderDefinedTool =
     }
   | {
       // ToolV5 structure
+      // `id` is required to distinguish provider-defined tools (e.g. 'google.google_search')
+      // from plain function values, which do not have an `id` property.
+      id: string;
       inputSchema?: unknown;
       description?: string;
       type?: string;
-      id?: string;
       name?: string;
       providerOptions?: any;
       execute?: ((...args: any[]) => any) | undefined;
