@@ -128,6 +128,19 @@ function filterMessagesForSubAgent(messages: MastraDBMessage[]): MastraDBMessage
   });
 }
 
+/**
+ * Merges default client tools from agent config with runtime (invocation-scoped) client tools.
+ * Runtime tools take precedence over defaults when names collide.
+ */
+async function resolveClientTools(
+  agent: Agent,
+  requestContext: RequestContext,
+  runtimeClientTools?: ToolsInput,
+): Promise<ToolsInput> {
+  const defaultClientTools = (await agent.getDefaultOptions({ requestContext }))?.clientTools;
+  return { ...(defaultClientTools || {}), ...(runtimeClientTools || {}) };
+}
+
 /** @internal Exported for testing purposes */
 export async function getRoutingAgent({
   requestContext,
@@ -148,8 +161,7 @@ export async function getRoutingAgent({
   const toolsToUse = await agent.listTools({ requestContext: requestContext });
   const model = await agent.getModel({ requestContext: requestContext });
   const memoryToUse = await agent.getMemory({ requestContext: requestContext });
-  const defaultClientTools = (await agent.getDefaultOptions({ requestContext: requestContext }))?.clientTools;
-  const clientToolsToUse = { ...(defaultClientTools || {}), ...(clientTools || {}) };
+  const clientToolsToUse = await resolveClientTools(agent, requestContext, clientTools);
 
   // Get only user-configured processors (not memory processors) for the routing agent.
   // Memory processors (semantic recall, working memory) can interfere with routing decisions,
@@ -876,8 +888,7 @@ export async function createNetworkLoop({
       ];
 
       // Forward parent agent's client tools so sub-agents can request them.
-      const defaultClientTools = (await agent.getDefaultOptions({ requestContext }))?.clientTools;
-      const clientTools = { ...(defaultClientTools || {}), ...(routingAgentOptions?.clientTools || {}) };
+      const clientTools = await resolveClientTools(agent, requestContext, routingAgentOptions?.clientTools);
 
       // We set lastMessages: 0 to prevent loading messages from the network's thread
       // (which contains isNetwork JSON and completion feedback). We still pass
@@ -1463,8 +1474,7 @@ export async function createNetworkLoop({
       const agentTools = await agent.listTools({ requestContext });
       const memory = await agent.getMemory({ requestContext });
       const memoryTools = await memory?.listTools?.();
-      const defaultClientTools = (await agent.getDefaultOptions({ requestContext }))?.clientTools;
-      const clientTools = { ...(defaultClientTools || {}), ...(routingAgentOptions?.clientTools || {}) };
+      const clientTools = await resolveClientTools(agent, requestContext, routingAgentOptions?.clientTools);
       const toolsMap = { ...agentTools, ...memoryTools, ...(clientTools || {}) };
 
       let tool = toolsMap[inputData.primitiveId];
