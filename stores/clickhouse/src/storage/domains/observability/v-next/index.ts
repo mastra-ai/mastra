@@ -86,7 +86,7 @@ import type { ClickhouseDomainConfig } from '../../../db';
 import {
   ALL_TABLE_DDL,
   ALL_MV_DDL,
-  ALL_MIGRATIONS,
+  SIGNAL_TABLES_REQUIRING_ENGINE_MIGRATION,
   DISCOVERY_MV_DDL,
   ALL_TABLE_NAMES,
   MV_DISCOVERY_VALUES,
@@ -125,10 +125,18 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   async init(): Promise<void> {
     try {
-      // Migrations run first (e.g., drop old MergeTree signal tables so they
-      // can be recreated as ReplacingMergeTree with the correct schema).
-      for (const migration of ALL_MIGRATIONS) {
-        await this.#client.command({ query: migration });
+      // One-time migration: drop signal tables that still use MergeTree so they
+      // can be recreated as ReplacingMergeTree with non-nullable signal IDs.
+      // Tables already on ReplacingMergeTree (or not yet created) are skipped.
+      for (const table of SIGNAL_TABLES_REQUIRING_ENGINE_MIGRATION) {
+        const result = await this.#client.query({
+          query: `SELECT engine FROM system.tables WHERE database = currentDatabase() AND name = '${table}'`,
+          format: 'JSONEachRow',
+        });
+        const rows = await result.json<{ engine: string }[]>();
+        if (rows.length > 0 && rows[0]!.engine !== 'ReplacingMergeTree') {
+          await this.#client.command({ query: `DROP TABLE IF EXISTS ${table}` });
+        }
       }
 
       // Core tables + incremental MVs (must succeed)

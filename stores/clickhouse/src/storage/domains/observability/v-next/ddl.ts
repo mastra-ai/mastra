@@ -610,22 +610,14 @@ export const ALL_MIGRATIONS = [
 export const ALL_DDL = [...ALL_TABLE_DDL, ...ALL_MV_DDL, ...DISCOVERY_MV_DDL];
 
 /**
- * Idempotent migrations for existing tables.
- *
- * Signal tables are dropped and recreated because the engine changed from MergeTree
- * to ReplacingMergeTree with non-nullable signal IDs in the ORDER BY key.
- * ClickHouse does not support changing the engine or modifying existing ORDER BY
- * columns via ALTER TABLE, so a drop+recreate is the only path.
- *
- * This is safe because ClickHouse vNext observability is not yet used in production.
- * After the drops, init() re-runs CREATE TABLE IF NOT EXISTS to recreate them
- * with the correct ReplacingMergeTree schema.
+ * Signal tables that need to be migrated from MergeTree to ReplacingMergeTree.
+ * Used by init() to check the current engine and drop+recreate only if needed.
  */
-export const ALL_MIGRATIONS = [
-  `DROP TABLE IF EXISTS ${TABLE_METRIC_EVENTS}`,
-  `DROP TABLE IF EXISTS ${TABLE_LOG_EVENTS}`,
-  `DROP TABLE IF EXISTS ${TABLE_SCORE_EVENTS}`,
-  `DROP TABLE IF EXISTS ${TABLE_FEEDBACK_EVENTS}`,
+export const SIGNAL_TABLES_REQUIRING_ENGINE_MIGRATION = [
+  TABLE_METRIC_EVENTS,
+  TABLE_LOG_EVENTS,
+  TABLE_SCORE_EVENTS,
+  TABLE_FEEDBACK_EVENTS,
 ];
 
 export const ALL_TABLE_NAMES = [
