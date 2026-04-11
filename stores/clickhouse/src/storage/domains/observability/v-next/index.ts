@@ -133,7 +133,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
           query: `SELECT engine FROM system.tables WHERE database = currentDatabase() AND name = '${table}'`,
           format: 'JSONEachRow',
         });
-        const rows = await result.json<{ engine: string }[]>();
+        const rows = (await result.json()) as Array<{ engine: string }>;
         if (rows.length > 0 && rows[0]!.engine !== 'ReplacingMergeTree') {
           await this.#client.command({ query: `DROP TABLE IF EXISTS ${table}` });
         }
