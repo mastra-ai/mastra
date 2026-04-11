@@ -9,6 +9,7 @@ import { MessageList } from '../../message-list';
 import type { AgentExecuteOnFinishOptions } from '../../types';
 
 export type AgentCapabilities = {
+  agent: Agent<any, any, any, any>;
   agentName: string;
   logger: MastraBase['logger'];
   getMemory: Agent['getMemory'];

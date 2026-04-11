@@ -49,6 +49,10 @@ export class MessageList {
 
   private memoryInfo: null | MemoryInfo = null;
 
+  getMemoryInfo() {
+    return this.memoryInfo;
+  }
+
   // Centralized state management for message tracking
   private stateManager = new MessageStateManager();
 

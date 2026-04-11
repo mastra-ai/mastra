@@ -3,6 +3,7 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 import type { Agent } from '../../agent';
+import { MessageList } from '../../agent/message-list';
 import { Mastra } from '../../mastra';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
@@ -196,6 +197,73 @@ describe('StructuredOutputProcessor', () => {
         '[StructuredOutputProcessor] Structuring failed: No recording found for gpt-5.4',
         upstreamError,
       );
+    });
+
+    it('should use the parent agent with model override and read-only memory when memory context is available', async () => {
+      const { controller } = createMockController();
+      const abort = createMockAbort();
+      const parentAgent = {
+        stream: vi.fn().mockResolvedValue({
+          fullStream: convertArrayToReadableStream([
+            {
+              runId: 'test-run',
+              from: ChunkFrom.AGENT,
+              type: 'object-result',
+              object: { color: 'blue', intensity: 'bright' },
+            },
+          ]),
+        }),
+      } as unknown as Agent;
+      const fallbackStreamSpy = vi.spyOn(processor['structuringAgent'], 'stream');
+
+      processor.setParentAgent(parentAgent);
+
+      const finishChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'finish' as const,
+        payload: {
+          stepResult: { reason: 'stop' as const },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
+
+      const messageList = new MessageList({ threadId: 'thread-123', resourceId: 'resource-456' });
+
+      await processor.processOutputStream({
+        part: finishChunk,
+        streamParts: [
+          {
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            type: 'text-delta',
+            payload: { id: 'text-1', text: 'The answer is blue and bright' },
+          },
+        ],
+        state: { controller },
+        abort,
+        retryCount: 0,
+        messageList,
+      });
+
+      expect(parentAgent.stream).toHaveBeenCalledWith(
+        expect.stringContaining('# Assistant Response'),
+        expect.objectContaining({
+          model: mockModel,
+          structuredOutput: {
+            schema: testSchema,
+            jsonPromptInjection: undefined,
+          },
+          memory: {
+            thread: 'thread-123',
+            resource: 'resource-456',
+            options: { readOnly: true },
+          },
+        }),
+      );
+      expect(fallbackStreamSpy).not.toHaveBeenCalled();
     });
 
     it('should surface plain object error messages', async () => {

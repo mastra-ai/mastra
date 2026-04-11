@@ -1,8 +1,10 @@
 import type { TransformStreamDefaultController } from 'node:stream/web';
 import { Agent } from '../../agent';
+import type { MessageList } from '../../agent/message-list';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { ProviderOptions } from '../../llm/model/provider-options';
+import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { ObservabilityContext } from '../../observability';
@@ -35,6 +37,8 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
 
   public schema: StandardSchemaWithJSON<OUTPUT>;
   private structuringAgent: Agent<any, any, undefined>;
+  private structuringModel: MastraModelConfig;
+  private parentAgent?: Agent<any, any, any>;
   private errorStrategy: 'strict' | 'warn' | 'fallback';
   private fallbackValue?: OUTPUT;
   private isStructuringAgentStreamStarted = false;
@@ -61,12 +65,13 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     }
 
     this.schema = options.schema;
+    this.structuringModel = options.model;
     this.errorStrategy = options.errorStrategy ?? 'strict';
     this.fallbackValue = options.fallbackValue;
     this.jsonPromptInjection = options.jsonPromptInjection;
     this.providerOptions = options.providerOptions;
     this.logger = options.logger;
-    // Create internal structuring agent
+    // Create internal structuring agent as fallback (used when no parentAgent is set)
     this.structuringAgent = new Agent({
       id: 'structured-output-structurer',
       name: 'structured-output-structurer',
@@ -79,6 +84,10 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     this.structuringAgent.__registerMastra(mastra);
   }
 
+  setParentAgent(agent: Agent<any, any, any>) {
+    this.parentAgent = agent;
+  }
+
   async processOutputStream(
     args: {
       part: ChunkType;
@@ -88,9 +97,10 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
       };
       abort: (reason?: string, options?: unknown) => never;
       retryCount: number;
+      messageList?: MessageList;
     } & Partial<ObservabilityContext>,
   ): Promise<ChunkType | null | undefined> {
-    const { part, state, streamParts, abort, ...rest } = args;
+    const { part, state, streamParts, abort, messageList, ...rest } = args;
     const observabilityContext = resolveObservabilityContext(rest);
     const controller = state.controller as TransformStreamDefaultController<ChunkType<OUTPUT>>;
 
@@ -100,7 +110,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         // - enqueue the structuring agent stream chunks into the main stream
         // - when the structuring agent stream is finished, enqueue the final chunk into the main stream
 
-        await this.processAndEmitStructuredOutput(streamParts, controller, abort, observabilityContext);
+        await this.processAndEmitStructuredOutput(streamParts, controller, abort, observabilityContext, messageList);
         return part;
 
       default:
@@ -113,6 +123,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     controller: TransformStreamDefaultController<ChunkType<OUTPUT>>,
     abort: (reason?: string) => never,
     observabilityContext?: ObservabilityContext,
+    messageList?: MessageList,
   ): Promise<void> {
     if (this.isStructuringAgentStreamStarted) return;
     this.isStructuringAgentStreamStarted = true;
@@ -120,15 +131,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
       const structuringPrompt = this.buildStructuringPrompt(streamParts);
       const prompt = `Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n${structuringPrompt}`;
 
-      // Use structuredOutput in 'direct' mode (no model) since this agent already has a model
-      const structuringAgentStream = await this.structuringAgent.stream(prompt, {
-        structuredOutput: {
-          schema: this.schema,
-          jsonPromptInjection: this.jsonPromptInjection,
-        },
-        providerOptions: this.providerOptions,
-        ...observabilityContext,
-      });
+      const structuringAgentStream = await this.getStructuringStream(prompt, messageList, observabilityContext);
 
       const excludedChunkTypes = [
         'start',
@@ -179,6 +182,48 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     } catch (error) {
       this.handleError('Structured output processing failed', error, abort);
     }
+  }
+
+  /**
+   * Get the structuring stream, using the parent agent with model override and
+   * read-only memory when available, falling back to the bare internal agent.
+   */
+  private async getStructuringStream(
+    prompt: string,
+    messageList?: MessageList,
+    observabilityContext?: ObservabilityContext,
+  ) {
+    const memoryInfo = messageList?.getMemoryInfo();
+
+    // When a parent agent is available and we have thread/resource info,
+    // use the parent agent with a model override and read-only memory.
+    // This gives the structuring model full conversation context.
+    if (this.parentAgent && memoryInfo?.threadId && memoryInfo?.resourceId) {
+      return this.parentAgent.stream(prompt, {
+        model: this.structuringModel,
+        structuredOutput: {
+          schema: this.schema,
+          jsonPromptInjection: this.jsonPromptInjection,
+        },
+        memory: {
+          thread: memoryInfo.threadId,
+          resource: memoryInfo.resourceId,
+          options: { readOnly: true },
+        },
+        providerOptions: this.providerOptions,
+        ...observabilityContext,
+      });
+    }
+
+    // Fallback: use the bare internal structuring agent (no conversation context)
+    return this.structuringAgent.stream(prompt, {
+      structuredOutput: {
+        schema: this.schema,
+        jsonPromptInjection: this.jsonPromptInjection,
+      },
+      providerOptions: this.providerOptions,
+      ...observabilityContext,
+    });
   }
 
   /**
