@@ -2076,7 +2076,7 @@
         "minimax/minimax-m2-her",
         "minimax/minimax-m2.1",
         "minimax/minimax-m2.5",
-        "minimax/minimax-m2.5:free",
+        "minimax/minimax-m2.7",
         "mistralai/codestral-2508",
         "mistralai/devstral-2512",
         "mistralai/devstral-medium",
@@ -2275,7 +2275,8 @@
         "z-ai/glm-4.6v",
         "z-ai/glm-4.7",
         "z-ai/glm-4.7-flash",
-        "z-ai/glm-5"
+        "z-ai/glm-5",
+        "z-ai/glm-5.1"
       ],
       "docUrl": "https://kilo.ai",
       "gateway": "models.dev"
@@ -6283,7 +6284,7 @@
       "minimax/minimax-m2-her",
       "minimax/minimax-m2.1",
       "minimax/minimax-m2.5",
-      "minimax/minimax-m2.5:free",
+      "minimax/minimax-m2.7",
       "mistralai/codestral-2508",
       "mistralai/devstral-2512",
       "mistralai/devstral-medium",
@@ -6482,7 +6483,8 @@
       "z-ai/glm-4.6v",
       "z-ai/glm-4.7",
       "z-ai/glm-4.7-flash",
-      "z-ai/glm-5"
+      "z-ai/glm-5",
+      "z-ai/glm-5.1"
     ],
     "morph": ["auto", "morph-v3-fast", "morph-v3-large"],
     "mixlayer": [

@@ -1813,7 +1813,7 @@ export type ProviderModelsMap = {
     'minimax/minimax-m2-her',
     'minimax/minimax-m2.1',
     'minimax/minimax-m2.5',
-    'minimax/minimax-m2.5:free',
+    'minimax/minimax-m2.7',
     'mistralai/codestral-2508',
     'mistralai/devstral-2512',
     'mistralai/devstral-medium',
@@ -2013,6 +2013,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.7',
     'z-ai/glm-4.7-flash',
     'z-ai/glm-5',
+    'z-ai/glm-5.1',
   ];
   readonly morph: readonly ['auto', 'morph-v3-fast', 'morph-v3-large'];
   readonly mixlayer: readonly [
