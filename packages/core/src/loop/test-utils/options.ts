@@ -876,7 +876,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   },
                 },
                 "processorRetryCount": 0,
-
                 "stepResult": {
                   "isContinued": true,
                   "reason": "tool-calls",
@@ -1258,7 +1257,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   },
                 },
                 "processorRetryCount": 0,
-
                 "stepResult": {
                   "isContinued": false,
                   "reason": "stop",
@@ -1592,7 +1590,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   },
                 },
                 "processorRetryCount": 0,
-
                 "stepResult": {
                   "isContinued": false,
                   "reason": "stop",
@@ -7650,7 +7647,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   },
                 },
                 "processorRetryCount": 0,
-
                 "stepResult": {
                   "isContinued": false,
                   "reason": "stop",
@@ -7862,7 +7858,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   },
                 },
                 "processorRetryCount": 0,
-
                 "stepResult": {
                   "isContinued": false,
                   "reason": "stop",
@@ -8612,7 +8607,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   },
                 },
                 "processorRetryCount": 0,
-
                 "stepResult": {
                   "isContinued": true,
                   "reason": "tool-calls",
