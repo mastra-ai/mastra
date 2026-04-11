@@ -24,12 +24,7 @@ export function ScorersToolbar({
 }: ScorersToolbarProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <ListSearch
-        label="Search scorers"
-        placeholder="Filter by scorer name"
-        value={search}
-        onSearch={onSearchChange}
-      />
+      <ListSearch label="Search scorers" placeholder="Filter by scorer name" value={search} onSearch={onSearchChange} />
       <ButtonsGroup>
         <SelectFieldBlock
           label="Source"

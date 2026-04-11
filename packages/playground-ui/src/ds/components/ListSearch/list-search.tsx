@@ -28,16 +28,19 @@ export const ListSearch = ({
   const id = useId();
   const [internalValue, setInternalValue] = useState(controlledValue ?? '');
 
-  // Sync internal state with controlled value (e.g. parent Reset clears it to '').
-  useEffect(() => {
-    if (controlledValue !== undefined) {
-      setInternalValue(controlledValue);
-    }
-  }, [controlledValue]);
-
   const debouncedSearch = useDebouncedCallback((val: string) => {
     onSearch(val);
   }, debounceMs);
+
+  // Sync internal state with controlled value (e.g. parent Reset clears it to '').
+  // Also cancel any pending debounced callback so a stale handleChange call
+  // can't overwrite the newly-applied controlled value.
+  useEffect(() => {
+    if (controlledValue !== undefined) {
+      debouncedSearch.cancel();
+      setInternalValue(controlledValue);
+    }
+  }, [controlledValue, debouncedSearch]);
 
   useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch]);
 
