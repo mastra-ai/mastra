@@ -1,7 +1,0 @@
-node_modules/
-dist/
-screenshots/
-pnpm-lock.yaml
-
-# Mastra dev server generated files
-src/mastra/public/
