@@ -290,7 +290,7 @@ export function rowToLogRecord(row: Record<string, any>): LogRecord {
 
 export function logRecordToRow(log: CreateLogRecord): Record<string, unknown> {
   return {
-    logId: log.logId ?? null,
+    logId: log.logId ?? '',
     timestamp: toISOString(log.timestamp),
     level: log.level,
     message: log.message,
@@ -371,7 +371,7 @@ export function rowToMetricRecord(row: Record<string, any>): MetricRecord {
 
 export function metricRecordToRow(metric: CreateMetricRecord): Record<string, unknown> {
   return {
-    metricId: metric.metricId ?? null,
+    metricId: metric.metricId ?? '',
     timestamp: toISOString(metric.timestamp),
     name: metric.name,
     value: metric.value,
@@ -459,7 +459,7 @@ export function scoreRecordToRow(score: CreateScoreRecord): Record<string, unkno
   const scoreSource = score.scoreSource ?? score.source ?? null;
 
   return {
-    scoreId: score.scoreId ?? null,
+    scoreId: score.scoreId ?? '',
     timestamp: toISOString(score.timestamp),
     traceId: score.traceId ?? null,
     spanId: score.spanId ?? null,
@@ -549,7 +549,7 @@ export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<stri
   const feedbackUserId = feedback.feedbackUserId ?? feedback.userId ?? null;
 
   return {
-    feedbackId: feedback.feedbackId ?? null,
+    feedbackId: feedback.feedbackId ?? '',
     timestamp: toISOString(feedback.timestamp),
     traceId: feedback.traceId ?? null,
     spanId: feedback.spanId ?? null,

@@ -2,8 +2,8 @@
  * ClickHouse v-next observability storage domain.
  *
  * Insert-only model: only completed spans stored. Uses ReplacingMergeTree for
- * tracing tables with dedupeKey for retry-idempotency. Append-only MergeTree
- * for metric/log/score/feedback signals.
+ * tracing tables with dedupeKey for retry-idempotency, and ReplacingMergeTree
+ * for metric/log/score/feedback signals with signal IDs for de-duplication.
  *
  * Domain layout follows DuckDB reference: thin class delegating to module functions.
  */
@@ -125,14 +125,15 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   async init(): Promise<void> {
     try {
+      // Migrations run first (e.g., drop old MergeTree signal tables so they
+      // can be recreated as ReplacingMergeTree with the correct schema).
+      for (const migration of ALL_MIGRATIONS) {
+        await this.#client.command({ query: migration });
+      }
+
       // Core tables + incremental MVs (must succeed)
       for (const ddl of [...ALL_TABLE_DDL, ...ALL_MV_DDL]) {
         await this.#client.command({ query: ddl });
-      }
-
-      // Additive migrations for existing databases (add new columns)
-      for (const migration of ALL_MIGRATIONS) {
-        await this.#client.command({ query: migration });
       }
 
       // Apply retention TTL if configured (per design doc: per-signal, day increments).

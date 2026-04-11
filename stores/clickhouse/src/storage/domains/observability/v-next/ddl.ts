@@ -197,7 +197,7 @@ WHERE parentSpanId IS NULL
 `;
 
 // ---------------------------------------------------------------------------
-// metric_events — append-only MergeTree
+// metric_events — ReplacingMergeTree with metricId dedup
 // ---------------------------------------------------------------------------
 
 export const METRIC_EVENTS_DDL = `
@@ -206,7 +206,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_METRIC_EVENTS} (
   timestamp          DateTime64(3, 'UTC'),
 
   -- IDs
-  metricId           Nullable(String),
+  metricId           String,
   traceId            Nullable(String),
   spanId             Nullable(String),
   experimentId       Nullable(String),
@@ -254,13 +254,13 @@ CREATE TABLE IF NOT EXISTS ${TABLE_METRIC_EVENTS} (
   metadata           Nullable(String),
   scope              Nullable(String)
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
-ORDER BY (name, timestamp)
+ORDER BY (name, timestamp, metricId)
 `;
 
 // ---------------------------------------------------------------------------
-// log_events — append-only MergeTree
+// log_events — ReplacingMergeTree with logId dedup
 // ---------------------------------------------------------------------------
 
 export const LOG_EVENTS_DDL = `
@@ -269,7 +269,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_LOG_EVENTS} (
   timestamp          DateTime64(3, 'UTC'),
 
   -- IDs
-  logId              Nullable(String),
+  logId              String,
   traceId            Nullable(String),
   spanId             Nullable(String),
   experimentId       Nullable(String),
@@ -312,14 +312,13 @@ CREATE TABLE IF NOT EXISTS ${TABLE_LOG_EVENTS} (
   metadata           Nullable(String),
   scope              Nullable(String)
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
-ORDER BY (timestamp, traceId)
-SETTINGS allow_nullable_key = 1
+ORDER BY (timestamp, logId)
 `;
 
 // ---------------------------------------------------------------------------
-// score_events — append-only MergeTree
+// score_events — ReplacingMergeTree with scoreId dedup
 // ---------------------------------------------------------------------------
 
 export const SCORE_EVENTS_DDL = `
@@ -328,7 +327,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
   timestamp          DateTime64(3, 'UTC'),
 
   -- IDs
-  scoreId            Nullable(String),
+  scoreId            String,
   traceId            Nullable(String),
   spanId             Nullable(String),
   experimentId       Nullable(String),
@@ -378,14 +377,14 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
   metadata           Nullable(String),
   scope              Nullable(String)
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
-ORDER BY (traceId, timestamp)
+ORDER BY (traceId, timestamp, scoreId)
 SETTINGS allow_nullable_key = 1
 `;
 
 // ---------------------------------------------------------------------------
-// feedback_events — append-only MergeTree
+// feedback_events — ReplacingMergeTree with feedbackId dedup
 // ---------------------------------------------------------------------------
 
 export const FEEDBACK_EVENTS_DDL = `
@@ -394,7 +393,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS} (
   timestamp          DateTime64(3, 'UTC'),
 
   -- IDs
-  feedbackId         Nullable(String),
+  feedbackId         String,
   traceId            Nullable(String),
   spanId             Nullable(String),
   experimentId       Nullable(String),
@@ -447,9 +446,9 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS} (
   metadata           Nullable(String),
   scope              Nullable(String)
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
-ORDER BY (traceId, timestamp)
+ORDER BY (traceId, timestamp, feedbackId)
 SETTINGS allow_nullable_key = 1
 `;
 
@@ -611,15 +610,22 @@ export const ALL_MIGRATIONS = [
 export const ALL_DDL = [...ALL_TABLE_DDL, ...ALL_MV_DDL, ...DISCOVERY_MV_DDL];
 
 /**
- * Idempotent migrations for existing tables that were created before new columns were added.
- * ClickHouse supports ADD COLUMN IF NOT EXISTS so these are safe to re-run.
+ * Idempotent migrations for existing tables.
+ *
+ * Signal tables are dropped and recreated because the engine changed from MergeTree
+ * to ReplacingMergeTree with non-nullable signal IDs in the ORDER BY key.
+ * ClickHouse does not support changing the engine or modifying existing ORDER BY
+ * columns via ALTER TABLE, so a drop+recreate is the only path.
+ *
+ * This is safe because ClickHouse vNext observability is not yet used in production.
+ * After the drops, init() re-runs CREATE TABLE IF NOT EXISTS to recreate them
+ * with the correct ReplacingMergeTree schema.
  */
 export const ALL_MIGRATIONS = [
-  // Signal IDs for de-duplication (added in observability signal IDs feature)
-  `ALTER TABLE ${TABLE_LOG_EVENTS} ADD COLUMN IF NOT EXISTS logId Nullable(String)`,
-  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD COLUMN IF NOT EXISTS metricId Nullable(String)`,
-  `ALTER TABLE ${TABLE_SCORE_EVENTS} ADD COLUMN IF NOT EXISTS scoreId Nullable(String)`,
-  `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} ADD COLUMN IF NOT EXISTS feedbackId Nullable(String)`,
+  `DROP TABLE IF EXISTS ${TABLE_METRIC_EVENTS}`,
+  `DROP TABLE IF EXISTS ${TABLE_LOG_EVENTS}`,
+  `DROP TABLE IF EXISTS ${TABLE_SCORE_EVENTS}`,
+  `DROP TABLE IF EXISTS ${TABLE_FEEDBACK_EVENTS}`,
 ];
 
 export const ALL_TABLE_NAMES = [
