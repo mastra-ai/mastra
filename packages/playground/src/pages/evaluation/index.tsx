@@ -28,15 +28,25 @@ export default function Evaluation() {
   const { data: scorers, isLoading: isLoadingScorers, error: errorScorers } = useScorers();
   const { data: datasetsData, isLoading: isLoadingDatasets, error: errorDatasets } = useDatasets();
   const { data: experimentsData, isLoading: isLoadingExperiments, error: errorExperiments } = useExperiments();
-  const { data: scoreMetrics, isLoading: isLoadingScores, isError: isErrorScores } = useScoreMetrics();
-  const { data: reviewSummary, isLoading: isLoadingReview, isError: errorReview } = useReviewSummary();
+  const {
+    data: scoreMetrics,
+    isLoading: isLoadingScores,
+    isError: isErrorScores,
+    error: errorScores,
+  } = useScoreMetrics();
+  const {
+    data: reviewSummary,
+    isLoading: isLoadingReview,
+    isError: errorReview,
+    error: errorReviewSummary,
+  } = useReviewSummary();
 
   const datasets = datasetsData?.datasets;
   const experiments = experimentsData?.experiments;
 
   const reviewTotals = useMemo(() => computeReviewTotals(reviewSummary), [reviewSummary]);
 
-  const error = errorScorers || errorDatasets || errorExperiments;
+  const error = errorScorers || errorDatasets || errorExperiments || errorScores || errorReviewSummary;
 
   if (error && is401UnauthorizedError(error)) {
     return (
