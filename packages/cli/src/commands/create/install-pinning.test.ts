@@ -38,7 +38,7 @@ vi.mock('node:util', () => ({
   promisify: () => mocks.mockExec,
 }));
 
-vi.mock('fs/promises', () => ({
+vi.mock('node:fs/promises', () => ({
   default: {
     mkdir: vi.fn().mockResolvedValue(undefined),
     readFile: vi.fn().mockResolvedValue(JSON.stringify({ scripts: {}, engines: {} })),
@@ -47,7 +47,7 @@ vi.mock('fs/promises', () => ({
   },
 }));
 
-vi.mock('fs', () => ({
+vi.mock('node:fs', () => ({
   default: {
     existsSync: mocks.mockExistsSync,
   },
