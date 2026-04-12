@@ -2351,11 +2351,16 @@ ${formattedMessages}
     const { threads: allThreads } = await this.storage.listThreads({ filter: { resourceId } });
     const messagesByThread = new Map<string, MastraDBMessage[]>();
 
+    // Fetch the OM record once so we can fall back to its lastObservedAt
+    // for threads whose metadata was never stamped.  See #15265.
+    const record = await this.getRecord(currentThreadId, resourceId);
+    const recordLastObservedAt = record?.lastObservedAt;
+
     for (const thread of allThreads) {
       if (thread.id === currentThreadId) continue;
 
       const omMetadata = getThreadOMMetadata(thread.metadata);
-      const threadLastObservedAt = omMetadata?.lastObservedAt;
+      const threadLastObservedAt = omMetadata?.lastObservedAt ?? recordLastObservedAt;
       const startDate = threadLastObservedAt ? new Date(new Date(threadLastObservedAt).getTime() + 1) : undefined;
 
       const result = await this.storage.listMessages({
