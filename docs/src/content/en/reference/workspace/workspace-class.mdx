@@ -51,7 +51,8 @@ const workspace = new Workspace({
   {
     name: 'filesystem',
     type: 'WorkspaceFilesystem | WorkspaceFilesystemResolver',
-    description: 'Filesystem provider instance, or a resolver function that receives `requestContext` and returns a filesystem per request. See [dynamic filesystem](/docs/workspace/filesystem#dynamic-filesystem).',
+    description:
+      'Filesystem provider instance, or a resolver function that receives `requestContext` and returns a filesystem per request. See [dynamic filesystem](/docs/workspace/filesystem#dynamic-filesystem).',
     isOptional: true,
   },
   {
@@ -244,7 +245,8 @@ Tool names must be unique across all workspace tools. Setting a custom name that
   {
     name: 'filesystem',
     type: 'WorkspaceFilesystem | undefined',
-    description: 'The static filesystem provider. Returns `undefined` when a resolver function is configured — use `hasFilesystemConfig()` to check availability.',
+    description:
+      'The static filesystem provider. Returns `undefined` when a resolver function is configured — use `hasFilesystemConfig()` to check availability.',
   },
   {
     name: 'sandbox',
