@@ -1,7 +1,7 @@
 import { getThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
-import { filterObservedMessages } from '../message-utils';
+import { filterObservedMessages, getMessageListPartsForToolScan } from '../message-utils';
 import { resolveRetentionFloor } from '../thresholds';
 
 import type { ObservationTurn } from './turn';
@@ -104,10 +104,9 @@ export class ObservationStep {
     // while the agent loop continues. We must not observe/buffer until they complete.
     const allMsgsForToolCheck = messageList.get.all.db();
     const hasIncompleteToolCalls = allMsgsForToolCheck.some(msg => {
-      const parts = msg?.content?.parts;
-      if (!parts || !Array.isArray(parts)) return false;
+      const parts = getMessageListPartsForToolScan(msg);
       return parts.some(part => {
-        if (part?.type !== 'tool-invocation') return false;
+        if ((part as { type?: string })?.type !== 'tool-invocation') return false;
         const state = (part as { toolInvocation?: { state?: string } }).toolInvocation?.state;
         return state === 'call' || state === 'partial-call';
       });

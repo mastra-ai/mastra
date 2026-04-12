@@ -11369,6 +11369,7 @@ describe('Single-thread replay red tests', () => {
           parts: [
             {
               type: 'tool-invocation',
+              createdAt: t0.getTime(),
               toolInvocation: {
                 state: 'call',
                 toolCallId: 'tc-client-1',
@@ -11394,6 +11395,7 @@ describe('Single-thread replay red tests', () => {
           parts: [
             {
               type: 'tool-invocation',
+              createdAt: t1.getTime(),
               toolInvocation: {
                 state: 'result',
                 toolCallId: 'tc-client-1',
@@ -11440,6 +11442,7 @@ describe('Single-thread replay red tests', () => {
           parts: [
             {
               type: 'tool-invocation',
+              createdAt: t0.getTime(),
               toolInvocation: {
                 state: 'call',
                 toolCallId: 'tc-marker-1',
@@ -11484,6 +11487,7 @@ describe('Single-thread replay red tests', () => {
           parts: [
             {
               type: 'tool-invocation',
+              createdAt: t2.getTime(),
               toolInvocation: {
                 state: 'result',
                 toolCallId: 'tc-marker-1',
@@ -11528,6 +11532,7 @@ describe('Single-thread replay red tests', () => {
           parts: [
             {
               type: 'tool-invocation',
+              createdAt: t0.getTime(),
               toolInvocation: {
                 state: 'call',
                 toolCallId: 'tc-2',
@@ -11549,6 +11554,7 @@ describe('Single-thread replay red tests', () => {
           parts: [
             {
               type: 'tool-invocation',
+              createdAt: t1.getTime(),
               toolInvocation: {
                 state: 'result',
                 toolCallId: 'tc-2',

@@ -7,7 +7,19 @@ type ToolInvocationPart = {
   toolCallId?: string;
 };
 
-const TOOL_RESULT_LIKE_STATES = new Set(['result', 'error']);
+/** Terminal tool-invocation states that pair with a prior call (see MastraToolInvocation.state). */
+const TOOL_RESULT_LIKE_STATES = new Set(['result', 'error', 'output-error', 'output-denied']);
+
+export function getMessageListPartsForToolScan(msg: MastraDBMessage | undefined): unknown[] {
+  const c = msg?.content as unknown;
+  if (typeof c === 'string' || c == null) return [];
+  if (Array.isArray(c)) return c;
+  if (typeof c === 'object' && 'parts' in c) {
+    const parts = (c as { parts?: unknown }).parts;
+    return Array.isArray(parts) ? parts : [];
+  }
+  return [];
+}
 
 function accumulateToolInvocationPart(
   part: ToolInvocationPart,
@@ -37,8 +49,8 @@ function scanToolInvocationIds(messages: MastraDBMessage[]): ToolInvocationScan 
   const withResultLike = new Set<string>();
 
   for (const msg of messages) {
-    const parts = msg.content?.parts;
-    if (!parts || !Array.isArray(parts)) continue;
+    const parts = getMessageListPartsForToolScan(msg);
+    if (parts.length === 0) continue;
     for (const raw of parts) {
       accumulateToolInvocationPart(raw as ToolInvocationPart, withCallOrPartial, withResultLike);
     }
@@ -48,8 +60,7 @@ function scanToolInvocationIds(messages: MastraDBMessage[]): ToolInvocationScan 
 }
 
 function messageHasToolCallForId(msg: MastraDBMessage, toolCallId: string): boolean {
-  const parts = msg.content?.parts;
-  if (!parts || !Array.isArray(parts)) return false;
+  const parts = getMessageListPartsForToolScan(msg);
   for (const raw of parts) {
     const part = raw as ToolInvocationPart;
     if (part?.type !== 'tool-invocation') continue;
@@ -61,8 +72,7 @@ function messageHasToolCallForId(msg: MastraDBMessage, toolCallId: string): bool
 }
 
 function messageHasToolResultLikeForId(msg: MastraDBMessage, toolCallId: string): boolean {
-  const parts = msg.content?.parts;
-  if (!parts || !Array.isArray(parts)) return false;
+  const parts = getMessageListPartsForToolScan(msg);
   for (const raw of parts) {
     const part = raw as ToolInvocationPart;
     if (part?.type !== 'tool-invocation') continue;
