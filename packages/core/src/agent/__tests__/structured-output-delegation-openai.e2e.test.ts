@@ -1,6 +1,6 @@
 import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import { getLLMTestMode } from '@internal/llm-recorder';
-import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
+import { createGatewayMock, hasRealApiKey, setupDummyApiKeys } from '@internal/test-utils';
 import { config } from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
@@ -17,7 +17,7 @@ beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());
 
 describe('OpenAI structured output delegation', () => {
-  it.skipIf(!process.env.OPENAI_API_KEY)(
+  it.skipIf(!hasRealApiKey('openai'))(
     'should allow structured output when a parent agent exposes a sub-agent as a tool',
     async () => {
       const subAgent = new Agent({

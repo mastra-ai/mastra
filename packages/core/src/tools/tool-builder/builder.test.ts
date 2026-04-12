@@ -4,6 +4,7 @@ import { z } from 'zod/v4';
 import { SpanType } from '../../observability';
 import type { AnySpan } from '../../observability';
 import { RequestContext } from '../../request-context';
+import { toStandardSchema } from '../../schema';
 import { createTool } from '../../tools';
 import { isProviderDefinedTool, isVercelTool } from '../toolchecks';
 import { CoreToolBuilder } from './builder';
@@ -245,5 +246,69 @@ describe('Provider-defined Tool Handling', () => {
         autoResumeSuspendedTools: true,
       });
     }).not.toThrow();
+  });
+});
+
+describe('Workflow-style schema handling', () => {
+  it('should produce OpenAI-safe resumeData branches for non-Zod workflow-style schemas', () => {
+    const workflowTool = createTool({
+      id: 'workflow-subWorkflow',
+      description: 'A workflow tool',
+      inputSchema: toStandardSchema({
+        $schema: 'http://json-schema.org/draft-07/schema#',
+        type: 'object',
+        properties: {
+          inputData: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+            },
+            required: ['name'],
+            additionalProperties: false,
+          },
+        },
+        required: ['inputData'],
+        additionalProperties: true,
+      }),
+      execute: async () => 'result',
+    });
+
+    const mockModel = {
+      modelId: 'openai/gpt-4.1-mini',
+      provider: 'openrouter',
+      specificationVersion: 'v2',
+      supportsStructuredOutputs: false,
+    } as any;
+
+    const toolDef = new CoreToolBuilder({
+      originalTool: workflowTool,
+      options: {
+        name: 'workflow-tool',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        description: 'Run workflow',
+        requestContext: new RequestContext(),
+        tracingContext: {},
+        model: mockModel,
+      },
+      autoResumeSuspendedTools: true,
+    }).buildV5();
+
+    const properties = (toolDef.inputSchema as any).jsonSchema.properties;
+    const resumeDataSchema = properties.resumeData as Record<string, any>;
+    const suspendedToolRunIdSchema = properties.suspendedToolRunId as Record<string, any>;
+
+    expect(suspendedToolRunIdSchema.anyOf).toBeDefined();
+    expect(resumeDataSchema.anyOf).toBeDefined();
+    expect(
+      resumeDataSchema.anyOf.find((branch: Record<string, any>) => branch.type === 'object')?.additionalProperties,
+    ).toBe(false);
+    for (const branch of resumeDataSchema.anyOf) {
+      expect(branch.type).toBeDefined();
+    }
   });
 });

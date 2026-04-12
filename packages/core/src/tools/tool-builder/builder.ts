@@ -43,6 +43,22 @@ import { validateToolInput, validateToolOutput, validateToolSuspendData } from '
 export type ToolToConvert = VercelTool | ToolAction<any, any, any> | VercelToolV5 | ProviderDefinedTool;
 export type LogType = 'tool' | 'toolset' | 'client-tool';
 
+function createPermissiveResumeDataBranches(description: string) {
+  return [
+    { type: 'string' },
+    { type: 'number' },
+    { type: 'integer' },
+    { type: 'boolean' },
+    {
+      type: 'object',
+      description,
+      properties: {},
+      additionalProperties: false,
+    },
+    { type: 'null' },
+  ];
+}
+
 interface LogOptions {
   agentName?: string;
   toolName: string;
@@ -102,14 +118,14 @@ export class CoreToolBuilder extends MastraBase {
           jsonSchema.properties = {
             ...jsonSchema.properties,
             suspendedToolRunId: {
-              type: ['string', 'null'],
+              anyOf: [{ type: 'string', description: 'The runId of the suspended tool' }, { type: 'null' }],
               description: 'The runId of the suspended tool',
             },
             resumeData: {
-              type: 'object',
               description: 'The resumeData object created from the resumeSchema of suspended tool',
-              properties: {},
-              additionalProperties: true,
+              anyOf: createPermissiveResumeDataBranches(
+                'The resumeData object created from the resumeSchema of suspended tool',
+              ),
             },
           };
           this.originalTool.inputSchema = toStandardSchema(jsonSchema) as any;
