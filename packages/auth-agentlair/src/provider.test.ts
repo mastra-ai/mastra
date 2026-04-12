@@ -56,6 +56,9 @@ function mockTrustScore(overrides: Partial<TrustScore> = {}): TrustScore {
   };
 }
 
+// Shared test audience — always provided to satisfy the required audience check
+const TEST_AUDIENCE = 'https://test.example.com';
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 describe('MastraAgentLairAuth', () => {
@@ -71,8 +74,13 @@ describe('MastraAgentLairAuth', () => {
   });
 
   describe('constructor', () => {
-    it('constructs with default options', () => {
-      const auth = new MastraAgentLairAuth();
+    it('throws when audience is not provided', () => {
+      expect(() => new MastraAgentLairAuth()).toThrow('audience');
+      expect(() => new MastraAgentLairAuth({ baseUrl: 'https://agentlair.dev' })).toThrow('audience');
+    });
+
+    it('constructs with required audience', () => {
+      const auth = new MastraAgentLairAuth({ audience: TEST_AUDIENCE });
       expect(auth).toBeInstanceOf(MastraAgentLairAuth);
     });
 
@@ -90,14 +98,14 @@ describe('MastraAgentLairAuth', () => {
     });
 
     it('creates JWKS client with correct URL', () => {
-      new MastraAgentLairAuth({ baseUrl: 'https://custom.example.com' });
+      new MastraAgentLairAuth({ baseUrl: 'https://custom.example.com', audience: TEST_AUDIENCE });
       expect(mockCreateRemoteJWKSet).toHaveBeenCalledWith(
         new URL('https://custom.example.com/.well-known/jwks.json'),
       );
     });
 
     it('accepts custom JWKS URL', () => {
-      new MastraAgentLairAuth({ jwksUrl: 'https://keys.example.com/jwks' });
+      new MastraAgentLairAuth({ jwksUrl: 'https://keys.example.com/jwks', audience: TEST_AUDIENCE });
       expect(mockCreateRemoteJWKSet).toHaveBeenCalledWith(new URL('https://keys.example.com/jwks'));
     });
   });
@@ -137,7 +145,7 @@ describe('MastraAgentLairAuth', () => {
     it('returns null for invalid token', async () => {
       mockJwtVerify.mockRejectedValue(new Error('Invalid signature'));
 
-      const auth = new MastraAgentLairAuth();
+      const auth = new MastraAgentLairAuth({ audience: TEST_AUDIENCE });
       const agent = await auth.authenticateToken('invalid.token', mockHonoRequest() as any);
 
       expect(agent).toBeNull();
@@ -156,6 +164,7 @@ describe('MastraAgentLairAuth', () => {
       const auth = new MastraAgentLairAuth({
         apiKey: 'al_live_test',
         fetchTrustScore: true,
+        audience: TEST_AUDIENCE,
       });
       const agent = await auth.authenticateToken('valid.token', mockHonoRequest() as any);
 
@@ -172,7 +181,7 @@ describe('MastraAgentLairAuth', () => {
       mockJwtVerify.mockResolvedValue({ payload: validClaims() });
       (globalThis.fetch as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Network error'));
 
-      const auth = new MastraAgentLairAuth({ apiKey: 'key', fetchTrustScore: true });
+      const auth = new MastraAgentLairAuth({ apiKey: 'key', fetchTrustScore: true, audience: TEST_AUDIENCE });
       const agent = await auth.authenticateToken('valid.token', mockHonoRequest() as any);
 
       expect(agent).not.toBeNull();
@@ -182,7 +191,7 @@ describe('MastraAgentLairAuth', () => {
 
   describe('authorizeUser', () => {
     it('authorizes agent with no trust requirements', async () => {
-      const auth = new MastraAgentLairAuth();
+      const auth = new MastraAgentLairAuth({ audience: TEST_AUDIENCE });
       const agent: VerifiedAgent = {
         accountId: 'test',
         scopes: [],
@@ -195,7 +204,7 @@ describe('MastraAgentLairAuth', () => {
     });
 
     it('rejects agent missing required scope', async () => {
-      const auth = new MastraAgentLairAuth({ requiredScopes: ['admin'] });
+      const auth = new MastraAgentLairAuth({ requiredScopes: ['admin'], audience: TEST_AUDIENCE });
       const agent: VerifiedAgent = {
         accountId: 'test',
         scopes: ['read', 'write'],
@@ -208,7 +217,7 @@ describe('MastraAgentLairAuth', () => {
     });
 
     it('allows wildcard scope to satisfy any requirement', async () => {
-      const auth = new MastraAgentLairAuth({ requiredScopes: ['admin', 'superuser'] });
+      const auth = new MastraAgentLairAuth({ requiredScopes: ['admin', 'superuser'], audience: TEST_AUDIENCE });
       const agent: VerifiedAgent = {
         accountId: 'test',
         scopes: ['*'],
@@ -221,7 +230,7 @@ describe('MastraAgentLairAuth', () => {
     });
 
     it('rejects agent below minimum trust score', async () => {
-      const auth = new MastraAgentLairAuth({ minimumTrustScore: 800 });
+      const auth = new MastraAgentLairAuth({ minimumTrustScore: 800, audience: TEST_AUDIENCE });
       const agent: VerifiedAgent = {
         accountId: 'test',
         scopes: [],
@@ -235,7 +244,7 @@ describe('MastraAgentLairAuth', () => {
     });
 
     it('allows agent meeting minimum trust score', async () => {
-      const auth = new MastraAgentLairAuth({ minimumTrustScore: 500 });
+      const auth = new MastraAgentLairAuth({ minimumTrustScore: 500, audience: TEST_AUDIENCE });
       const agent: VerifiedAgent = {
         accountId: 'test',
         scopes: [],
@@ -249,7 +258,7 @@ describe('MastraAgentLairAuth', () => {
     });
 
     it('rejects agent below required tier', async () => {
-      const auth = new MastraAgentLairAuth({ requiredTier: 'verified' });
+      const auth = new MastraAgentLairAuth({ requiredTier: 'verified', audience: TEST_AUDIENCE });
       const agent: VerifiedAgent = {
         accountId: 'test',
         scopes: [],
@@ -263,7 +272,7 @@ describe('MastraAgentLairAuth', () => {
     });
 
     it('allows agent meeting required tier', async () => {
-      const auth = new MastraAgentLairAuth({ requiredTier: 'trusted' });
+      const auth = new MastraAgentLairAuth({ requiredTier: 'trusted', audience: TEST_AUDIENCE });
       const agent: VerifiedAgent = {
         accountId: 'test',
         scopes: [],
@@ -286,6 +295,7 @@ describe('MastraAgentLairAuth', () => {
       const auth = new MastraAgentLairAuth({
         apiKey: 'al_live_test',
         minimumTrustScore: 500,
+        audience: TEST_AUDIENCE,
       });
       const agent: VerifiedAgent = {
         accountId: 'test',
@@ -301,7 +311,7 @@ describe('MastraAgentLairAuth', () => {
     });
 
     it('rejects when trust score needed but no API key', async () => {
-      const auth = new MastraAgentLairAuth({ minimumTrustScore: 500 });
+      const auth = new MastraAgentLairAuth({ minimumTrustScore: 500, audience: TEST_AUDIENCE });
       const agent: VerifiedAgent = {
         accountId: 'test',
         scopes: [],
@@ -318,7 +328,7 @@ describe('MastraAgentLairAuth', () => {
     it('returns user from valid Bearer token', async () => {
       mockJwtVerify.mockResolvedValue({ payload: validClaims() });
 
-      const auth = new MastraAgentLairAuth();
+      const auth = new MastraAgentLairAuth({ audience: TEST_AUDIENCE });
       const request = mockRequest({ Authorization: 'Bearer valid.token' });
       const user = await auth.getCurrentUser(request);
 
@@ -331,7 +341,7 @@ describe('MastraAgentLairAuth', () => {
     });
 
     it('returns null when no Authorization header', async () => {
-      const auth = new MastraAgentLairAuth();
+      const auth = new MastraAgentLairAuth({ audience: TEST_AUDIENCE });
       const user = await auth.getCurrentUser(mockRequest());
       expect(user).toBeNull();
     });
@@ -339,7 +349,7 @@ describe('MastraAgentLairAuth', () => {
     it('returns null for invalid token', async () => {
       mockJwtVerify.mockRejectedValue(new Error('Invalid'));
 
-      const auth = new MastraAgentLairAuth();
+      const auth = new MastraAgentLairAuth({ audience: TEST_AUDIENCE });
       const user = await auth.getCurrentUser(mockRequest({ Authorization: 'Bearer bad' }));
       expect(user).toBeNull();
     });
@@ -347,7 +357,7 @@ describe('MastraAgentLairAuth', () => {
     it('accepts case-insensitive Bearer scheme', async () => {
       mockJwtVerify.mockResolvedValue({ payload: validClaims() });
 
-      const auth = new MastraAgentLairAuth();
+      const auth = new MastraAgentLairAuth({ audience: TEST_AUDIENCE });
       const user = await auth.getCurrentUser(mockRequest({ Authorization: 'BEARER valid.token' }));
       expect(user).not.toBeNull();
     });
@@ -355,7 +365,7 @@ describe('MastraAgentLairAuth', () => {
     it('returns null when authorization fails', async () => {
       mockJwtVerify.mockResolvedValue({ payload: validClaims() });
 
-      const auth = new MastraAgentLairAuth({ requiredScopes: ['admin'] });
+      const auth = new MastraAgentLairAuth({ requiredScopes: ['admin'], audience: TEST_AUDIENCE });
       const user = await auth.getCurrentUser(mockRequest({ Authorization: 'Bearer valid.token' }));
       expect(user).toBeNull();
     });
@@ -363,7 +373,7 @@ describe('MastraAgentLairAuth', () => {
 
   describe('getUser', () => {
     it('returns null (JWT is stateless)', async () => {
-      const auth = new MastraAgentLairAuth();
+      const auth = new MastraAgentLairAuth({ audience: TEST_AUDIENCE });
       const user = await auth.getUser('agent_123');
       expect(user).toBeNull();
     });
@@ -371,7 +381,7 @@ describe('MastraAgentLairAuth', () => {
 
   describe('convenience methods', () => {
     it('hasScope returns true for matching scope', () => {
-      const auth = new MastraAgentLairAuth();
+      const auth = new MastraAgentLairAuth({ audience: TEST_AUDIENCE });
       const agent: VerifiedAgent = {
         accountId: 'test',
         scopes: ['read', 'write'],
@@ -383,7 +393,7 @@ describe('MastraAgentLairAuth', () => {
     });
 
     it('hasScope returns true for wildcard', () => {
-      const auth = new MastraAgentLairAuth();
+      const auth = new MastraAgentLairAuth({ audience: TEST_AUDIENCE });
       const agent: VerifiedAgent = {
         accountId: 'test',
         scopes: ['*'],
@@ -394,7 +404,7 @@ describe('MastraAgentLairAuth', () => {
     });
 
     it('meetsTrustTier compares tiers correctly', () => {
-      const auth = new MastraAgentLairAuth();
+      const auth = new MastraAgentLairAuth({ audience: TEST_AUDIENCE });
       const agent: VerifiedAgent = {
         accountId: 'test',
         scopes: [],
@@ -409,7 +419,7 @@ describe('MastraAgentLairAuth', () => {
     });
 
     it('meetsTrustTier returns false without trust score', () => {
-      const auth = new MastraAgentLairAuth();
+      const auth = new MastraAgentLairAuth({ audience: TEST_AUDIENCE });
       const agent: VerifiedAgent = {
         accountId: 'test',
         scopes: [],
@@ -419,16 +429,27 @@ describe('MastraAgentLairAuth', () => {
       expect(auth.meetsTrustTier(agent, 'provisional')).toBe(false);
     });
 
-    it('getUserProfileUrl returns correct URL', () => {
-      const auth = new MastraAgentLairAuth();
-      const url = auth.getUserProfileUrl({ id: 'agent_123', name: 'Test' });
-      expect(url).toBe('https://agentlair.dev/agents/agent_123');
+    it('getUserProfileUrl returns correct URL using configured baseUrl', () => {
+      const auth = new MastraAgentLairAuth({ audience: TEST_AUDIENCE });
+      expect(auth.getUserProfileUrl({ id: 'agent_123', name: 'Test' })).toBe(
+        'https://agentlair.dev/agents/agent_123',
+      );
+    });
+
+    it('getUserProfileUrl uses custom baseUrl', () => {
+      const auth = new MastraAgentLairAuth({
+        audience: TEST_AUDIENCE,
+        baseUrl: 'https://self-hosted.example.com',
+      });
+      expect(auth.getUserProfileUrl({ id: 'agent_123', name: 'Test' })).toBe(
+        'https://self-hosted.example.com/agents/agent_123',
+      );
     });
   });
 
   describe('fetchTrustScore', () => {
     it('requires API key', async () => {
-      const auth = new MastraAgentLairAuth();
+      const auth = new MastraAgentLairAuth({ audience: TEST_AUDIENCE });
       await expect(auth.fetchTrustScore('agent_123')).rejects.toThrow('API key required');
     });
 
@@ -439,7 +460,7 @@ describe('MastraAgentLairAuth', () => {
         json: () => Promise.resolve(score),
       });
 
-      const auth = new MastraAgentLairAuth({ apiKey: 'al_live_test' });
+      const auth = new MastraAgentLairAuth({ apiKey: 'al_live_test', audience: TEST_AUDIENCE });
       const result = await auth.fetchTrustScore('agent_123');
 
       expect(result).toEqual(score);
@@ -454,8 +475,29 @@ describe('MastraAgentLairAuth', () => {
     it('throws on API error', async () => {
       (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: false, status: 404 });
 
-      const auth = new MastraAgentLairAuth({ apiKey: 'al_live_test' });
+      const auth = new MastraAgentLairAuth({ apiKey: 'al_live_test', audience: TEST_AUDIENCE });
       await expect(auth.fetchTrustScore('agent_404')).rejects.toThrow('HTTP 404');
+    });
+
+    it('throws a timeout error when fetch exceeds trustScoreTimeoutMs', async () => {
+      (globalThis.fetch as ReturnType<typeof vi.fn>).mockImplementation(
+        (_url: string, opts: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            opts.signal?.addEventListener('abort', () => {
+              const err = new Error('The operation was aborted');
+              (err as Error & { name: string }).name = 'AbortError';
+              reject(err);
+            });
+          }),
+      );
+
+      const auth = new MastraAgentLairAuth({
+        apiKey: 'al_live_test',
+        audience: TEST_AUDIENCE,
+        trustScoreTimeoutMs: 50,
+      });
+
+      await expect(auth.fetchTrustScore('agent_slow')).rejects.toThrow('timed out');
     });
   });
 });

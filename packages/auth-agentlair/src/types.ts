@@ -92,9 +92,17 @@ export interface MastraAgentLairAuthOptions extends MastraAuthProviderOptions<Ve
   jwksUrl?: string;
 
   /**
-   * Expected JWT audience. If set, tokens with a different `aud` are rejected.
+   * Expected JWT audience. Tokens with a different `aud` are rejected.
+   * Required — omitting this disables `aud` validation and allows tokens
+   * issued for any service to authenticate against yours.
    */
   audience?: string;
+
+  /**
+   * Timeout in milliseconds for trust score API requests.
+   * @default 5000
+   */
+  trustScoreTimeoutMs?: number;
 
   /**
    * Expected JWT issuer.

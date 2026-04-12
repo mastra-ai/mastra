@@ -38,26 +38,36 @@ export class MastraAgentLairAuth extends MastraAuthProvider<VerifiedAgent> imple
   private readonly baseUrl: string;
   private readonly jwks: ReturnType<typeof createRemoteJWKSet>;
   private readonly apiKey?: string;
-  private readonly audience?: string;
+  private readonly audience: string;
   private readonly issuer: string;
   private readonly fetchTrustScoreOnAuth: boolean;
   private readonly minimumTrustScore: number;
   private readonly requiredTier?: TrustScore['tier'];
   private readonly requiredScopes?: string[];
+  private readonly trustScoreTimeoutMs: number;
 
   constructor(options?: MastraAgentLairAuthOptions) {
     super({ name: options?.name ?? 'agentlair', ...options });
+
+    if (!options?.audience) {
+      throw new Error(
+        'AgentLair auth requires a configured `audience`. ' +
+          'Set it to your service URL (e.g. "https://my-service.com") to enable JWT aud claim ' +
+          'validation and prevent token reuse across services.',
+      );
+    }
 
     this.baseUrl = (options?.baseUrl ?? 'https://agentlair.dev').replace(/\/$/, '');
     const jwksUrl = options?.jwksUrl ?? `${this.baseUrl}/.well-known/jwks.json`;
     this.jwks = createRemoteJWKSet(new URL(jwksUrl));
     this.apiKey = options?.apiKey;
-    this.audience = options?.audience;
+    this.audience = options.audience;
     this.issuer = options?.issuer ?? 'https://agentlair.dev';
     this.fetchTrustScoreOnAuth = options?.fetchTrustScore ?? false;
     this.minimumTrustScore = options?.minimumTrustScore ?? 0;
     this.requiredTier = options?.requiredTier;
     this.requiredScopes = options?.requiredScopes;
+    this.trustScoreTimeoutMs = options?.trustScoreTimeoutMs ?? 5000;
 
     this.registerOptions(options);
   }
@@ -68,7 +78,7 @@ export class MastraAgentLairAuth extends MastraAuthProvider<VerifiedAgent> imple
    * Uses `jose` to fetch the signing key from AgentLair's JWKS endpoint
    * and verify the JWT signature. Returns a VerifiedAgent on success.
    */
-  async authenticateToken(token: string, _request: HonoRequest): Promise<VerifiedAgent | null> {
+  async authenticateToken(token: string, _request: HonoRequest | Request): Promise<VerifiedAgent | null> {
     try {
       const { payload } = await jwtVerify(token, this.jwks, {
         issuer: this.issuer,
@@ -129,7 +139,7 @@ export class MastraAgentLairAuth extends MastraAuthProvider<VerifiedAgent> imple
    * 2. Minimum trust score
    * 3. Required trust tier
    */
-  async authorizeUser(agent: VerifiedAgent, _request: HonoRequest): Promise<boolean> {
+  async authorizeUser(agent: VerifiedAgent, _request: HonoRequest | Request): Promise<boolean> {
     // Check required scopes
     if (this.requiredScopes?.length) {
       const agentScopes = new Set(agent.scopes);
@@ -172,10 +182,10 @@ export class MastraAgentLairAuth extends MastraAuthProvider<VerifiedAgent> imple
     if (!token) return null;
 
     try {
-      const agent = await this.authenticateToken(token, request as unknown as HonoRequest);
+      const agent = await this.authenticateToken(token, request);
       if (!agent) return null;
 
-      const allowed = await this.authorizeUser(agent, request as unknown as HonoRequest);
+      const allowed = await this.authorizeUser(agent, request);
       if (!allowed) return null;
 
       return {
@@ -200,29 +210,45 @@ export class MastraAgentLairAuth extends MastraAuthProvider<VerifiedAgent> imple
    * Get the agent's audit trail URL as their profile URL.
    */
   getUserProfileUrl(user: User): string {
-    return `https://agentlair.dev/agents/${user.id}`;
+    return `${this.baseUrl}/agents/${user.id}`;
   }
 
   /**
    * Fetch the behavioral trust score for an agent.
+   *
+   * Enforces a configurable timeout (default 5 s) so `authorizeUser` never
+   * blocks indefinitely when the trust API is slow or unreachable.
    */
   async fetchTrustScore(agentId: string): Promise<TrustScore> {
     if (!this.apiKey) {
       throw new Error('API key required for trust score lookups');
     }
 
-    const response = await fetch(`${this.baseUrl}/v1/trust/${encodeURIComponent(agentId)}`, {
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.trustScoreTimeoutMs);
 
-    if (!response.ok) {
-      throw new Error(`Trust score lookup failed: HTTP ${response.status}`);
+    try {
+      const response = await fetch(`${this.baseUrl}/v1/trust/${encodeURIComponent(agentId)}`, {
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Trust score lookup failed: HTTP ${response.status}`);
+      }
+
+      return response.json() as Promise<TrustScore>;
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error(`Trust score lookup timed out after ${this.trustScoreTimeoutMs}ms`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
     }
-
-    return response.json() as Promise<TrustScore>;
   }
 
   // ── Convenience methods ───────────────────────────────────────────────────
