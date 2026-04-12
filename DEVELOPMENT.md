@@ -154,6 +154,8 @@ Create a `.env` file in the root directory with the following content:
 
 ```text
 OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+GOOGLE_GENERATIVE_AI_API_KEY=
 COHERE_API_KEY=
 PINECONE_API_KEY=
 CLOUDFLARE_ACCOUNT_ID=
