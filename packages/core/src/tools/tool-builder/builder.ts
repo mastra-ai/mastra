@@ -10,6 +10,7 @@ import {
   convertZodSchemaToAISDKSchema,
   jsonSchema,
 } from '@mastra/schema-compat';
+import type { JSONSchema7Definition } from 'json-schema';
 import { z } from 'zod/v4';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
@@ -43,19 +44,19 @@ import { validateToolInput, validateToolOutput, validateToolSuspendData } from '
 export type ToolToConvert = VercelTool | ToolAction<any, any, any> | VercelToolV5 | ProviderDefinedTool;
 export type LogType = 'tool' | 'toolset' | 'client-tool';
 
-function createPermissiveResumeDataBranches(description: string) {
+function createPermissiveResumeDataBranches(description: string): JSONSchema7Definition[] {
   return [
-    { type: 'string' },
-    { type: 'number' },
-    { type: 'integer' },
-    { type: 'boolean' },
+    { type: 'string' as const },
+    { type: 'number' as const },
+    { type: 'integer' as const },
+    { type: 'boolean' as const },
     {
-      type: 'object',
+      type: 'object' as const,
       description,
       properties: {},
       additionalProperties: false,
     },
-    { type: 'null' },
+    { type: 'null' as const },
   ];
 }
 
