@@ -25,6 +25,23 @@ let serverStartTime: number | undefined;
 let requestContextPresetsJson: string | undefined;
 const ON_ERROR_MAX_RESTARTS = 3;
 
+function waitForProcessExit(child: ChildProcess, timeoutMs = 2000): Promise<void> {
+  return new Promise(resolve => {
+    if (child.exitCode !== null || child.killed) {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      resolve();
+    }, timeoutMs);
+    child.once('exit', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
 interface HTTPSOptions {
   key: Buffer;
   cert: Buffer;
@@ -310,6 +327,8 @@ async function rebundleAndRestart(
       devLogger.restarting();
       devLogger.debug('Stopping current server...');
       currentServerProcess.kill('SIGINT');
+      await waitForProcessExit(currentServerProcess);
+      currentServerProcess = undefined;
     }
 
     const env = await bundler.loadEnvVars();
@@ -508,6 +527,8 @@ export async function dev({
 
     if (currentServerProcess) {
       currentServerProcess.kill();
+      await waitForProcessExit(currentServerProcess);
+      currentServerProcess = undefined;
     }
 
     watcher
@@ -516,11 +537,11 @@ export async function dev({
       .finally(() => process.exit(0));
   };
 
-  process.on('SIGINT', () => {
+  const onSignal = () => {
     handleShutdown().catch(() => process.exit(0));
-  });
+  };
 
-  process.on('SIGTERM', () => {
-    handleShutdown().catch(() => process.exit(0));
-  });
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
+  process.on('SIGHUP', onSignal);
 }
