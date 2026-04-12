@@ -52,7 +52,7 @@ Visit our [official documentation](https://mastra.ai/docs).
 
 ## Build with AI
 
-Learn how to make your agent a Mastra expert by following the [Build with AI guide](https://mastra.ai/docs/getting-started/build-with-ai).
+Learn how to make your IDE a Mastra expert by following the [Build with AI guide](https://mastra.ai/docs/getting-started/build-with-ai).
 
 ## Contributing
 
