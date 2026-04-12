@@ -32,7 +32,7 @@
 
 import * as path from 'node:path';
 import type { IMastraLogger } from '../logger';
-import type { RequestContext } from '../request-context';
+import { RequestContext } from '../request-context';
 import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError } from './errors';
@@ -855,11 +855,16 @@ export class Workspace<
     }
   }
 
-  private async getAllFiles(dir: string, depth: number = 0, maxDepth: number = 10): Promise<string[]> {
-    if (!this._fs || depth >= maxDepth) return [];
+  private async getAllFiles(
+    dir: string,
+    depth: number = 0,
+    maxDepth: number = 10,
+    filesystem: WorkspaceFilesystem | undefined = this._fs,
+  ): Promise<string[]> {
+    if (!filesystem || depth >= maxDepth) return [];
 
     const files: string[] = [];
-    const entries = await this._fs.readdir(dir);
+    const entries = await filesystem.readdir(dir);
 
     for (const entry of entries) {
       const fullPath = dir === '.' || dir === '' ? entry.name : `${dir}/${entry.name}`;
@@ -867,7 +872,7 @@ export class Workspace<
         files.push(fullPath);
       } else if (entry.type === 'directory' && !entry.isSymlink) {
         // Skip symlink directories to prevent infinite recursion from cycles
-        files.push(...(await this.getAllFiles(fullPath, depth + 1, maxDepth)));
+        files.push(...(await this.getAllFiles(fullPath, depth + 1, maxDepth, filesystem)));
       }
     }
 
@@ -942,7 +947,7 @@ export class Workspace<
    * Get workspace information.
    * @param options.includeFileCount - Whether to count total files (can be slow for large workspaces)
    */
-  async getInfo(options?: { includeFileCount?: boolean }): Promise<WorkspaceInfo> {
+  async getInfo(options?: { includeFileCount?: boolean; requestContext?: RequestContext }): Promise<WorkspaceInfo> {
     const info: WorkspaceInfo = {
       id: this.id,
       name: this.name,
@@ -951,13 +956,19 @@ export class Workspace<
       lastAccessedAt: this.lastAccessedAt,
     };
 
-    if (this._fs) {
-      const fsInfo = await this._fs.getInfo?.();
+    const filesystem =
+      this._fs ??
+      (this._filesystemResolver
+        ? await this.resolveFilesystem({ requestContext: options?.requestContext ?? new RequestContext() })
+        : undefined);
+
+    if (filesystem) {
+      const fsInfo = await filesystem.getInfo?.();
       info.filesystem = {
-        id: fsInfo?.id ?? this._fs.id,
-        name: fsInfo?.name ?? this._fs.name,
-        provider: fsInfo?.provider ?? this._fs.provider,
-        readOnly: fsInfo?.readOnly ?? this._fs.readOnly,
+        id: fsInfo?.id ?? filesystem.id,
+        name: fsInfo?.name ?? filesystem.name,
+        provider: fsInfo?.provider ?? filesystem.provider,
+        readOnly: fsInfo?.readOnly ?? filesystem.readOnly,
         status: fsInfo?.status,
         error: fsInfo?.error,
         icon: fsInfo?.icon,
@@ -966,7 +977,7 @@ export class Workspace<
 
       if (options?.includeFileCount) {
         try {
-          const files = await this.getAllFiles('.');
+          const files = await this.getAllFiles('.', 0, 10, filesystem);
           info.filesystem.totalFiles = files.length;
         } catch {
           // Ignore errors - filesystem may not support listing

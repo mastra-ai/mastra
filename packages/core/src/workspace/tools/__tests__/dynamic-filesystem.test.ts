@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { RequestContext } from '../../../request-context';
 import { WORKSPACE_TOOLS } from '../../constants';
@@ -127,5 +127,47 @@ describe('dynamic filesystem tools', () => {
     );
 
     expect(result).toContain('hello');
+  });
+
+  it('should resolve the configured filesystem even when requestContext is omitted', async () => {
+    await fs.writeFile(path.join(tempDir, 'hello.txt'), 'hello');
+
+    const workspace = new Workspace({
+      filesystem: () => new LocalFilesystem({ basePath: tempDir }),
+    });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({
+      path: 'hello.txt',
+      showLineNumbers: false,
+    });
+
+    expect(result).toContain('hello');
+  });
+
+  it('should emit filesystem metadata for dynamically resolved filesystems', async () => {
+    await fs.writeFile(path.join(tempDir, 'hello.txt'), 'hello');
+    const custom = vi.fn(async () => {});
+
+    const workspace = new Workspace({
+      filesystem: () => new LocalFilesystem({ basePath: tempDir, readOnly: true }),
+    });
+    const tools = await createWorkspaceTools(workspace);
+
+    await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
+      { path: 'hello.txt', showLineNumbers: false },
+      { requestContext: new RequestContext(), writer: { custom } },
+    );
+
+    expect(custom).toHaveBeenCalledTimes(1);
+    expect(custom.mock.calls[0]?.[0]).toMatchObject({
+      type: 'data-workspace-metadata',
+      data: {
+        filesystem: {
+          provider: 'local',
+          readOnly: true,
+        },
+      },
+    });
   });
 });

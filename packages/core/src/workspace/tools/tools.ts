@@ -7,6 +7,7 @@
  * into the tool execution context.
  */
 
+import { RequestContext } from '../../request-context';
 import type { WorkspaceToolName } from '../constants';
 import { WORKSPACE_TOOLS } from '../constants';
 import { FileNotFoundError, FileReadRequiredError } from '../errors';
@@ -65,6 +66,13 @@ async function resolveDynamicValue<TContext>(
     console.warn('[Workspace Tools] Dynamic config function threw, using safe default:', error);
     return safeDefault;
   }
+}
+
+function hasFilesystemConfig(workspace: Workspace): boolean {
+  if (typeof (workspace as any)?.hasFilesystemConfig === 'function') {
+    return (workspace as any).hasFilesystemConfig();
+  }
+  return !!workspace.filesystem;
 }
 
 /**
@@ -158,8 +166,9 @@ export async function resolveToolConfig(
  * Falls back to the workspace as-is when a static filesystem is available.
  */
 async function resolveEffectiveWorkspace(workspace: Workspace, context: any): Promise<Workspace> {
-  if (!workspace.filesystem && workspace.hasFilesystemConfig() && context?.requestContext) {
-    const resolvedFs = await workspace.resolveFilesystem({ requestContext: context.requestContext });
+  if (!workspace.filesystem && hasFilesystemConfig(workspace)) {
+    const requestContext = context?.requestContext ?? new RequestContext();
+    const resolvedFs = await workspace.resolveFilesystem({ requestContext });
     if (resolvedFs) {
       return new Proxy(workspace, {
         get(target: any, prop: string | symbol) {
@@ -386,7 +395,7 @@ export async function createWorkspaceTools(
   };
 
   // Filesystem tools — add when filesystem is available (static instance or resolver function)
-  if (workspace.hasFilesystemConfig()) {
+  if (hasFilesystemConfig(workspace)) {
     await addTool(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE, readFileTool, { readTrackerMode: 'read' });
     await addTool(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE, writeFileTool, {
       requireWrite: true,
