@@ -1,11 +1,9 @@
 // File browser components
-export {
-  FileBrowser,
-  FileViewer,
-  WorkspaceNotConfigured,
-  type FileBrowserProps,
-  type FileViewerProps,
-} from './file-browser';
+export { FileBrowser, FileViewer, type FileBrowserProps, type FileViewerProps } from './file-browser';
+
+export { NoWorkspacesInfo } from './no-workspaces-info';
+export { WorkspaceNotConfigured } from './workspace-not-configured';
+export { WorkspaceNotSupported } from './workspace-not-supported';
 
 // Search components
 export {

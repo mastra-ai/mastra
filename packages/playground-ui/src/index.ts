@@ -101,6 +101,7 @@ export * from './ds/components/DataList';
 export * from './ds/components/EntityList';
 export * from './ds/components/LogsDataList';
 export * from './ds/components/EntityListPageLayout';
+export * from './ds/components/PageLayout';
 export * from './ds/components/ListSearch';
 export * from './ds/components/ErrorState';
 

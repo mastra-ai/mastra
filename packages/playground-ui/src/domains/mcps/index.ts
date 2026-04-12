@@ -1,5 +1,6 @@
 export * from './components/mcp-table/mcp-table';
 export * from './components/mcps-list/mcps-list';
+export * from './components/mcps-list/no-mcp-servers-info';
 export * from './hooks/index';
 export * from './components/MCPToolPanel';
 export * from './components/MCPDetail';

@@ -12,7 +12,6 @@ import { TraceDataPanel } from './trace-data-panel';
 import { useScorers } from '@/domains/scores';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
 import { TracesDataList, DataListSkeleton } from '@/ds/components/DataList';
-import { ErrorState } from '@/ds/components/ErrorState';
 
 import { cn } from '@/lib/utils';
 
@@ -39,7 +38,6 @@ export interface ObservabilityTracesListProps {
   isFetchingNextPage?: boolean;
   hasNextPage?: boolean;
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
-  error?: string | null;
   filtersApplied?: boolean;
   selectedTraceId?: string;
   initialSpanId?: string;
@@ -59,7 +57,6 @@ export function ObservabilityTracesList({
   isFetchingNextPage,
   hasNextPage,
   setEndOfListElement,
-  error,
   filtersApplied,
   selectedTraceId,
   initialSpanId,
@@ -266,10 +263,6 @@ export function ObservabilityTracesList({
         }
       : undefined;
 
-  if (error) {
-    return <ErrorState title="Failed to load traces" message={error} />;
-  }
-
   if (isLoading) {
     return <DataListSkeleton columns={COLUMNS} />;
   }
@@ -302,7 +295,7 @@ export function ObservabilityTracesList({
 
   return (
     <div
-      className={cn('grid h-full min-h-0 gap-4 items-start', hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]')}
+      className={cn('grid h-full min-h-0 gap-4 items-start ', hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]')}
     >
       <div className="h-full overflow-auto">
         <TracesDataList columns={COLUMNS} className="min-w-0">

@@ -2,26 +2,21 @@ import type { GetAgentResponse } from '@mastra/client-js';
 import { useMemo } from 'react';
 import { extractPrompt } from '../../utils/extractPrompt';
 import { ProviderLogo } from '../agent-metadata/provider-logo';
-import { NoAgentsInfo } from './no-agents-info';
 import { EntityList, EntityListSkeleton } from '@/ds/components/EntityList';
-import { ErrorState } from '@/ds/components/ErrorState';
-import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { TextAndIcon } from '@/ds/components/Text';
 import { WorkflowIcon } from '@/ds/icons';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { useLinkComponent } from '@/lib/framework';
-import { is403ForbiddenError } from '@/lib/query-utils';
 import { truncateString } from '@/lib/truncate-string';
 
 export interface AgentsListProps {
   agents: Record<string, GetAgentResponse>;
   isLoading: boolean;
-  error?: Error | null;
   search?: string;
 }
 
-export function AgentsList({ agents, isLoading, error, search = '' }: AgentsListProps) {
+export function AgentsList({ agents, isLoading, search = '' }: AgentsListProps) {
   const { paths } = useLinkComponent();
 
   const agentData = useMemo(() => Object.values(agents ?? {}), [agents]);
@@ -33,18 +28,6 @@ export function AgentsList({ agents, isLoading, error, search = '' }: AgentsList
       return agent.name.toLowerCase().includes(term) || instructions.toLowerCase().includes(term);
     });
   }, [agentData, search]);
-
-  if (error && is403ForbiddenError(error)) {
-    return <PermissionDenied resource="agents" />;
-  }
-
-  if (error) {
-    return <ErrorState title="Failed to load agents" message={error.message} />;
-  }
-
-  if (agentData.length === 0 && !isLoading) {
-    return <NoAgentsInfo />;
-  }
 
   if (isLoading) {
     return <EntityListSkeleton columns="auto 1fr auto auto auto auto" />;
