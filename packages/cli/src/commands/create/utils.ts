@@ -138,18 +138,9 @@ async function installMastraDependency(
   try {
     await execWithTimeout(`${pm} ${installCommand} ${dependency}${versionTag}`, timeout);
   } catch (err) {
-    if (versionTag === '@latest') {
-      throw new Error(
-        `Failed to install ${dependency}@latest: ${err instanceof Error ? err.message : 'Unknown error'}`,
-      );
-    }
-    try {
-      await execWithTimeout(`${pm} ${installCommand} ${dependency}@latest`, timeout);
-    } catch (fallbackErr) {
-      throw new Error(
-        `Failed to install ${dependency} (tried ${versionTag} and @latest): ${fallbackErr instanceof Error ? fallbackErr.message : 'Unknown error'}`,
-      );
-    }
+    throw new Error(
+      `Failed to install ${dependency}${versionTag}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+    );
   }
 }
 

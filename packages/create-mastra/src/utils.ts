@@ -1,6 +1,5 @@
 import path, { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execa } from 'execa';
 import fsExtra from 'fs-extra';
 
 export async function getPackageVersion() {
@@ -10,21 +9,4 @@ export async function getPackageVersion() {
 
   const content = await fsExtra.readJSON(pkgJsonPath);
   return content.version;
-}
-
-export async function getCreateVersionTag(): Promise<string | undefined> {
-  try {
-    const pkgPath = fileURLToPath(import.meta.resolve('create-mastra/package.json'));
-    const json = await fsExtra.readJSON(pkgPath);
-
-    const { stdout } = await execa('npm', ['dist-tag', 'create-mastra']);
-    const tagLine = stdout.split('\n').find(distLine => distLine.endsWith(`: ${json.version}`));
-    const tag = tagLine ? tagLine.split(':')[0].trim() : 'latest';
-
-    return tag;
-  } catch {
-    console.error('We could not resolve the create-mastra version tag, falling back to "latest"');
-  }
-
-  return 'latest';
 }
