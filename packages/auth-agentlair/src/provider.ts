@@ -103,6 +103,24 @@ export class MastraAgentLairAuth extends MastraAuthProvider<VerifiedAgent> imple
   }
 
   /**
+   * Ensure the agent has a trust score, fetching it on-demand if needed.
+   *
+   * Returns true if the agent already has a trust score or one was
+   * successfully fetched. Returns false if no API key is configured or
+   * the fetch fails.
+   */
+  private async ensureTrustScore(agent: VerifiedAgent): Promise<boolean> {
+    if (agent.trustScore) return true;
+    if (!this.apiKey) return false;
+    try {
+      agent.trustScore = await this.fetchTrustScore(agent.accountId);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Authorize a verified agent based on trust score, tier, and scopes.
    *
    * When no trust requirements are configured, all verified agents pass.
@@ -125,37 +143,16 @@ export class MastraAgentLairAuth extends MastraAuthProvider<VerifiedAgent> imple
 
     // Check minimum trust score
     if (this.minimumTrustScore > 0) {
-      if (!agent.trustScore) {
-        // Try to fetch if we have an API key
-        if (this.apiKey) {
-          try {
-            agent.trustScore = await this.fetchTrustScore(agent.accountId);
-          } catch {
-            return false;
-          }
-        } else {
-          return false;
-        }
-      }
-      if (agent.trustScore.score < this.minimumTrustScore) {
+      if (!(await this.ensureTrustScore(agent))) return false;
+      if (agent.trustScore!.score < this.minimumTrustScore) {
         return false;
       }
     }
 
     // Check required tier
     if (this.requiredTier) {
-      if (!agent.trustScore) {
-        if (this.apiKey) {
-          try {
-            agent.trustScore = await this.fetchTrustScore(agent.accountId);
-          } catch {
-            return false;
-          }
-        } else {
-          return false;
-        }
-      }
-      const agentTierIdx = TIER_ORDER.indexOf(agent.trustScore.tier);
+      if (!(await this.ensureTrustScore(agent))) return false;
+      const agentTierIdx = TIER_ORDER.indexOf(agent.trustScore!.tier);
       const requiredTierIdx = TIER_ORDER.indexOf(this.requiredTier);
       if (agentTierIdx < requiredTierIdx) {
         return false;
