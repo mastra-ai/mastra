@@ -493,6 +493,66 @@ describe('prepareToolsAndToolChoice', () => {
         expect(branch.type).toBeDefined();
       }
     });
+
+    it('should fix typeless branches inside oneOf', () => {
+      const toolWithOneOf = {
+        description: 'A tool with oneOf containing a typeless branch',
+        parameters: jsonSchema({
+          type: 'object',
+          properties: {
+            data: {
+              oneOf: [{ description: 'typeless branch' }, { type: 'null' }],
+            },
+          },
+        }),
+        execute: async () => 'ok',
+      };
+
+      const result = prepareToolsAndToolChoice({
+        tools: { testTool: toolWithOneOf as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v2',
+      });
+
+      const toolDef = result.tools![0] as { type: string; inputSchema: Record<string, any> };
+      const dataProp = toolDef.inputSchema.properties.data as Record<string, any>;
+
+      expect(dataProp.oneOf).toBeDefined();
+      for (const branch of dataProp.oneOf) {
+        expect(branch.type).toBeDefined();
+      }
+    });
+
+    it('should fix typeless branches inside allOf', () => {
+      const toolWithAllOf = {
+        description: 'A tool with allOf containing a typeless branch',
+        parameters: jsonSchema({
+          type: 'object',
+          properties: {
+            data: {
+              allOf: [{ description: 'typeless branch' }, { type: 'null' }],
+            },
+          },
+        }),
+        execute: async () => 'ok',
+      };
+
+      const result = prepareToolsAndToolChoice({
+        tools: { testTool: toolWithAllOf as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v2',
+      });
+
+      const toolDef = result.tools![0] as { type: string; inputSchema: Record<string, any> };
+      const dataProp = toolDef.inputSchema.properties.data as Record<string, any>;
+
+      expect(dataProp.allOf).toBeDefined();
+      for (const branch of dataProp.allOf) {
+        expect(branch.type).toBeDefined();
+      }
+    });
   });
 
   describe('default targetVersion', () => {
