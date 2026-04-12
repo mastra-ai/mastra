@@ -7,10 +7,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { injectAnchorIds, parseAnchorId, stripEphemeralAnchorIds } from '../anchor-ids';
 import { BufferingCoordinator } from '../buffering-coordinator';
 import {
+  combineObservationsForBuffering,
   filterObservedMessages,
   getBufferedChunks,
+  resolveMessageIdsToRemoveRespectingToolPairs,
   sortThreadsByOldestMessage,
-  combineObservationsForBuffering,
 } from '../message-utils';
 import { ModelByInputTokens } from '../model-by-input-tokens';
 import {
@@ -11350,6 +11351,219 @@ describe('Single-thread replay red tests', () => {
     expect(remainingText).not.toContain('fully-observed-before-marker');
     expect(remainingText).not.toContain('observed-prefix-in-marker-message');
     expect(remainingText).toContain('fresh-post-marker-tail');
+  });
+
+  it('T2-B2: filterObservedMessages keeps an observed tool-call message when the result lives in a separate message', async () => {
+    const { messageList, threadId, resourceId } = await createReplayFixture();
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date(t0.getTime() + 1);
+
+    messageList.add(
+      {
+        id: 'call-msg',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-client-1',
+                toolName: 'myTool',
+                args: { query: 'x' },
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'result-msg',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-client-1',
+                toolName: 'myTool',
+                args: { query: 'x' },
+                result: { ok: true },
+              },
+            },
+          ],
+        },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['call-msg'] } as any,
+      useMarkerBoundaryPruning: false,
+    });
+
+    const ids = messageList.get.all
+      .db()
+      .map((m: any) => m.id)
+      .sort();
+    expect(ids).toEqual(['call-msg', 'result-msg']);
+  });
+
+  it('T2-B3: marker-boundary pruning keeps a pre-boundary tool-call when the result arrives after the marker message', async () => {
+    const { messageList, threadId, resourceId } = await createReplayFixture();
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date(t0.getTime() + 1);
+    const t2 = new Date(t0.getTime() + 2);
+
+    messageList.add(
+      {
+        id: 'pre-marker-call',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        createdAt: t0,
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-marker-1',
+                toolName: 'myTool',
+                args: {},
+              },
+            },
+          ],
+        },
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'marker-msg',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        createdAt: t1,
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'prefix' },
+            { type: 'data-om-observation-end', data: { cycleId: 'c1' } },
+            { type: 'text', text: 'suffix' },
+          ],
+        },
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'post-marker-result',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        createdAt: t2,
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-marker-1',
+                toolName: 'myTool',
+                args: {},
+                result: { ok: 1 },
+              },
+            },
+          ],
+        },
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: {} as any,
+      useMarkerBoundaryPruning: true,
+    });
+
+    const ids = messageList.get.all
+      .db()
+      .map((m: any) => m.id)
+      .sort();
+    expect(ids).toEqual(['marker-msg', 'post-marker-result', 'pre-marker-call'].sort());
+  });
+
+  it('T2-B4: resolveMessageIdsToRemoveRespectingToolPairs drops removal of a result-only message when the call is still present', () => {
+    const threadId = 'pairing-direct';
+    const resourceId = 'pairing-direct-r';
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date(t0.getTime() + 1);
+
+    const allMessages = [
+      {
+        id: 'call-msg',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-2',
+                toolName: 't',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      },
+      {
+        id: 'result-msg',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-2',
+                toolName: 't',
+                args: {},
+                result: 1,
+              },
+            },
+          ],
+        },
+        createdAt: t1,
+      },
+    ] as MastraDBMessage[];
+
+    expect(resolveMessageIdsToRemoveRespectingToolPairs(allMessages, new Set(['result-msg'])).sort()).toEqual([]);
   });
 
   it('T2-C: getObservedMessageIdsForCleanup trims partial messages and returns only fully observed ids', async () => {

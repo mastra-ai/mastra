@@ -1,6 +1,144 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import type { BufferedObservationChunk, ObservationalMemoryRecord } from '@mastra/core/storage';
 
+type ToolInvocationPart = {
+  type?: string;
+  toolInvocation?: { state?: string; toolCallId?: string; toolName?: string };
+  toolCallId?: string;
+};
+
+const TOOL_RESULT_LIKE_STATES = new Set(['result', 'error']);
+
+function accumulateToolInvocationPart(
+  part: ToolInvocationPart,
+  withCallOrPartial: Set<string>,
+  withResultLike: Set<string>,
+): void {
+  if (part?.type !== 'tool-invocation') return;
+  const toolCallId = part.toolInvocation?.toolCallId ?? part.toolCallId;
+  if (!toolCallId) return;
+  const state = part.toolInvocation?.state;
+  if (state === 'call' || state === 'partial-call') {
+    withCallOrPartial.add(toolCallId);
+    return;
+  }
+  if (state && TOOL_RESULT_LIKE_STATES.has(state)) {
+    withResultLike.add(toolCallId);
+  }
+}
+
+type ToolInvocationScan = {
+  withCallOrPartial: Set<string>;
+  withResultLike: Set<string>;
+};
+
+function scanToolInvocationIds(messages: MastraDBMessage[]): ToolInvocationScan {
+  const withCallOrPartial = new Set<string>();
+  const withResultLike = new Set<string>();
+
+  for (const msg of messages) {
+    const parts = msg.content?.parts;
+    if (!parts || !Array.isArray(parts)) continue;
+    for (const raw of parts) {
+      accumulateToolInvocationPart(raw as ToolInvocationPart, withCallOrPartial, withResultLike);
+    }
+  }
+
+  return { withCallOrPartial, withResultLike };
+}
+
+function messageHasToolCallForId(msg: MastraDBMessage, toolCallId: string): boolean {
+  const parts = msg.content?.parts;
+  if (!parts || !Array.isArray(parts)) return false;
+  for (const raw of parts) {
+    const part = raw as ToolInvocationPart;
+    if (part?.type !== 'tool-invocation') continue;
+    const id = part.toolInvocation?.toolCallId ?? part.toolCallId;
+    const state = part.toolInvocation?.state;
+    if (id === toolCallId && (state === 'call' || state === 'partial-call')) return true;
+  }
+  return false;
+}
+
+function messageHasToolResultLikeForId(msg: MastraDBMessage, toolCallId: string): boolean {
+  const parts = msg.content?.parts;
+  if (!parts || !Array.isArray(parts)) return false;
+  for (const raw of parts) {
+    const part = raw as ToolInvocationPart;
+    if (part?.type !== 'tool-invocation') continue;
+    const id = part.toolInvocation?.toolCallId ?? part.toolCallId;
+    const state = part.toolInvocation?.state;
+    if (id === toolCallId && state && TOOL_RESULT_LIKE_STATES.has(state)) return true;
+  }
+  return false;
+}
+
+/**
+ * When pruning messages for observational memory, avoid removing a message that would
+ * orphan a tool-invocation `toolCallId` across the remaining thread (e.g. client-side
+ * tools where the call and result may land in different {@link MastraDBMessage}s).
+ *
+ * @returns Message ids that are still safe to remove after applying pairing rules.
+ */
+function partitionMessagesByRemovalPlan(
+  allMessages: MastraDBMessage[],
+  toRemove: ReadonlySet<string>,
+): { staying: MastraDBMessage[]; removed: MastraDBMessage[] } {
+  const staying: MastraDBMessage[] = [];
+  const removed: MastraDBMessage[] = [];
+  for (const m of allMessages) {
+    if (!m?.id || m.id === 'om-continuation') continue;
+    if (toRemove.has(m.id)) removed.push(m);
+    else staying.push(m);
+  }
+  return { staying, removed };
+}
+
+function restoreToolPairingDonors(
+  removed: MastraDBMessage[],
+  stayScan: ToolInvocationScan,
+  remScan: ToolInvocationScan,
+  toRemove: Set<string>,
+): boolean {
+  let changed = false;
+
+  for (const t of stayScan.withResultLike) {
+    if (stayScan.withCallOrPartial.has(t)) continue;
+    const donor = removed.find(m => m.id && messageHasToolCallForId(m, t));
+    if (!donor?.id) continue;
+    toRemove.delete(donor.id);
+    changed = true;
+  }
+
+  for (const t of stayScan.withCallOrPartial) {
+    if (stayScan.withResultLike.has(t)) continue;
+    if (!remScan.withResultLike.has(t)) continue;
+    const donor = removed.find(m => m.id && messageHasToolResultLikeForId(m, t));
+    if (!donor?.id) continue;
+    toRemove.delete(donor.id);
+    changed = true;
+  }
+
+  return changed;
+}
+
+export function resolveMessageIdsToRemoveRespectingToolPairs(
+  allMessages: MastraDBMessage[],
+  candidateIdsToRemove: ReadonlySet<string>,
+): string[] {
+  const toRemove = new Set(candidateIdsToRemove);
+  const maxIter = Math.max(8, allMessages.length + 2);
+
+  for (let i = 0; i < maxIter; i++) {
+    const { staying, removed } = partitionMessagesByRemovalPlan(allMessages, toRemove);
+    const stayScan = scanToolInvocationIds(staying);
+    const remScan = scanToolInvocationIds(removed);
+    if (!restoreToolPairingDonors(removed, stayScan, remScan, toRemove)) break;
+  }
+
+  return [...toRemove];
+}
+
 /**
  * Find the index of the last completed observation boundary (end marker) in a message's parts.
  * Returns -1 if no completed observation is found.
@@ -126,7 +264,13 @@ export function filterObservedMessages(opts: {
     }
 
     if (messagesToRemove.length > 0) {
-      messageList.removeByIds(messagesToRemove);
+      const adjusted = resolveMessageIdsToRemoveRespectingToolPairs(
+        allMessages,
+        new Set(messagesToRemove.filter(Boolean)),
+      );
+      if (adjusted.length > 0) {
+        messageList.removeByIds(adjusted);
+      }
     }
 
     const unobserved = getUnobservedParts(markerMessage);
@@ -166,7 +310,13 @@ export function filterObservedMessages(opts: {
     }
 
     if (messagesToRemove.length > 0) {
-      messageList.removeByIds(messagesToRemove);
+      const adjusted = resolveMessageIdsToRemoveRespectingToolPairs(
+        allMessages,
+        new Set(messagesToRemove.filter(Boolean)),
+      );
+      if (adjusted.length > 0) {
+        messageList.removeByIds(adjusted);
+      }
     }
   }
 }

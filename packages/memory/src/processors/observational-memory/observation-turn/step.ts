@@ -2,7 +2,6 @@ import { getThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
 import { filterObservedMessages } from '../message-utils';
-import { getLatestStepParts } from '../observational-memory';
 import { resolveRetentionFloor } from '../thresholds';
 
 import type { ObservationTurn } from './turn';
@@ -104,14 +103,16 @@ export class ObservationStep {
     // Provider-executed tools (e.g. Anthropic web_search) may still be in state:'call'
     // while the agent loop continues. We must not observe/buffer until they complete.
     const allMsgsForToolCheck = messageList.get.all.db();
-    const lastMessage = allMsgsForToolCheck[allMsgsForToolCheck.length - 1];
-    const latestStepParts = getLatestStepParts(lastMessage?.content?.parts ?? []);
-    const hasIncompleteToolCalls = latestStepParts.some(
-      part => part?.type === 'tool-invocation' && (part as any).toolInvocation?.state === 'call',
-    );
-    omDebug(
-      `[OM:deferred-check] hasIncompleteToolCalls=${hasIncompleteToolCalls}, latestStepPartsCount=${latestStepParts.length}`,
-    );
+    const hasIncompleteToolCalls = allMsgsForToolCheck.some(msg => {
+      const parts = msg?.content?.parts;
+      if (!parts || !Array.isArray(parts)) return false;
+      return parts.some(part => {
+        if (part?.type !== 'tool-invocation') return false;
+        const state = (part as { toolInvocation?: { state?: string } }).toolInvocation?.state;
+        return state === 'call' || state === 'partial-call';
+      });
+    });
+    omDebug(`[OM:deferred-check] hasIncompleteToolCalls=${hasIncompleteToolCalls}`);
 
     // ── Check thresholds + buffer trigger (all steps) ──────────
     let statusSnapshot = await om.getStatus({
