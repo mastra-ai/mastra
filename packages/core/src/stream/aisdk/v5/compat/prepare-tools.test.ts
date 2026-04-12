@@ -416,9 +416,14 @@ describe('prepareToolsAndToolChoice', () => {
       }
 
       const resumeDataSchema = properties.resumeData as Record<string, any>;
-      expect(Array.isArray(resumeDataSchema.type)).toBe(true);
-      expect(resumeDataSchema.type).not.toContain('array');
+      expect(resumeDataSchema.anyOf).toBeDefined();
       expect(resumeDataSchema.items).toBeUndefined();
+      for (const branch of resumeDataSchema.anyOf) {
+        expect(branch.type).toBeDefined();
+      }
+      expect(
+        resumeDataSchema.anyOf.find((branch: Record<string, any>) => branch.type === 'object')?.additionalProperties,
+      ).toBe(false);
     });
 
     it('should drop items for typeless properties when applying non-array fallback type', () => {
@@ -449,9 +454,12 @@ describe('prepareToolsAndToolChoice', () => {
       expect(toolDef.type).toBe('function');
 
       const resumeDataSchema = toolDef.inputSchema.properties.resumeData as Record<string, any>;
-      expect(Array.isArray(resumeDataSchema.type)).toBe(true);
-      expect(resumeDataSchema.type).not.toContain('array');
+      expect(resumeDataSchema.anyOf).toBeDefined();
       expect(resumeDataSchema.items).toBeUndefined();
+      expect(resumeDataSchema.anyOf.some((branch: Record<string, any>) => branch.type === 'object')).toBe(true);
+      expect(
+        resumeDataSchema.anyOf.find((branch: Record<string, any>) => branch.type === 'object')?.additionalProperties,
+      ).toBe(false);
     });
   });
 

@@ -25,10 +25,20 @@ type PreparedTool =
 
 type PreparedToolChoice = LanguageModelV2ToolChoice | LanguageModelV3ToolChoice;
 
-const PERMISSIVE_TYPE = ['string', 'number', 'integer', 'boolean', 'object', 'null'];
-
 function isTypelessSchema(s: Record<string, unknown>): boolean {
   return !('type' in s) && !('$ref' in s) && !('anyOf' in s) && !('oneOf' in s) && !('allOf' in s);
+}
+
+function expandTypelessSchema(schema: Record<string, unknown>) {
+  const { items: _items, ...rest } = schema;
+  return [
+    { ...rest, type: 'string' },
+    { ...rest, type: 'number' },
+    { ...rest, type: 'integer' },
+    { ...rest, type: 'boolean' },
+    { ...rest, type: 'object', properties: {}, additionalProperties: false },
+    { ...rest, type: 'null' },
+  ];
 }
 
 /**
@@ -50,8 +60,7 @@ function fixTypelessProperties(schema: Record<string, unknown>): Record<string, 
         const propSchema = value as Record<string, unknown>;
 
         if (isTypelessSchema(propSchema)) {
-          const { items: _items, ...rest } = propSchema;
-          return [key, { ...rest, type: PERMISSIVE_TYPE }];
+          return [key, { anyOf: expandTypelessSchema(propSchema) }];
         }
 
         return [key, fixTypelessProperties(propSchema)];
@@ -69,12 +78,11 @@ function fixTypelessProperties(schema: Record<string, unknown>): Record<string, 
 
   for (const keyword of ['anyOf', 'oneOf', 'allOf'] as const) {
     if (Array.isArray(result[keyword])) {
-      result[keyword] = (result[keyword] as Record<string, unknown>[]).map(branch => {
+      result[keyword] = (result[keyword] as Record<string, unknown>[]).flatMap(branch => {
         if (typeof branch !== 'object' || branch === null || Array.isArray(branch)) return branch;
         const b = branch as Record<string, unknown>;
         if (isTypelessSchema(b)) {
-          const { items: _items, ...rest } = b;
-          return { ...rest, type: PERMISSIVE_TYPE };
+          return expandTypelessSchema(b);
         }
         return fixTypelessProperties(b);
       });

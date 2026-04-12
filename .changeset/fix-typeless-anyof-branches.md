@@ -9,6 +9,7 @@ fix: ensure all anyOf branches have a type key for OpenAI strict mode
 producing `anyOf: [{ description: "..." }, { type: "null" }]` where the first
 branch had no `type` key. OpenAI rejects this when using structuredOutput.
 
-The OpenAI compat layer now assigns `type: "object"` to typeless anyOf branches,
-and `fixTypelessProperties` now recurses into anyOf/oneOf/allOf branches as a
-safety net.
+The OpenAI compat layer now expands typeless branches into concrete typed
+branches, and `fixTypelessProperties` now recurses into anyOf/oneOf/allOf
+branches while preserving a strict object variant with
+`additionalProperties: false`.
