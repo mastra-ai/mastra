@@ -1,0 +1,70 @@
+{
+  "name": "@mastra/auth-agentlair",
+  "version": "0.1.0",
+  "description": "AgentLair auth provider for Mastra — EdDSA JWT verification and behavioral trust scoring for AI agents.",
+  "type": "module",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "scripts": {
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "build:watch": "tsup --watch --silent --config tsup.config.ts",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "keywords": [
+    "mastra",
+    "agentlair",
+    "auth",
+    "agent-identity",
+    "eddsa",
+    "jwt",
+    "trust-scoring",
+    "ai-agent"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "jose": "^6.0.11"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "@types/node": "22.19.15",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
+    "eslint": "^9.39.4",
+    "tsup": "^8.5.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/auth-agentlair"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}
