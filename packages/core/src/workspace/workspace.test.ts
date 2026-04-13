@@ -555,6 +555,65 @@ Line 3 conclusion`;
       expect(skills1).toBe(skills2);
     });
 
+    it('should de-duplicate symlinked skill aliases when workspace skills use LocalFilesystem as the source', async () => {
+      await fs.mkdir(path.join(tempDir, '.agents', 'skills', 'mastra'), { recursive: true });
+      await fs.writeFile(
+        path.join(tempDir, '.agents', 'skills', 'mastra', 'SKILL.md'),
+        skillContent('mastra', 'helping with Mastra development'),
+      );
+      await fs.mkdir(path.join(tempDir, '.claude', 'skills'), { recursive: true });
+      await fs.symlink(
+        path.join(tempDir, '.agents', 'skills', 'mastra'),
+        path.join(tempDir, '.claude', 'skills', 'mastra'),
+      );
+
+      const filesystem = new LocalFilesystem({
+        basePath: tempDir,
+      });
+      const workspace = new Workspace({
+        filesystem,
+        skills: ['.claude/skills', '.agents/skills'],
+      });
+
+      await expect(workspace.skills!.list()).resolves.toMatchObject([
+        { name: 'mastra', path: '.agents/skills/mastra' },
+      ]);
+      await expect(workspace.skills!.get('mastra')).resolves.toMatchObject({
+        name: 'mastra',
+        path: expect.stringMatching(/\/mastra$/),
+      });
+    });
+
+    it('should list a skill through an allowed symlink root that points outside the workspace', async () => {
+      const externalSkillRoot = await fs.mkdtemp(path.join(tempDir, 'external-skill-root-'));
+      await fs.mkdir(path.join(externalSkillRoot, 'linked-tool'), { recursive: true });
+      await fs.writeFile(
+        path.join(externalSkillRoot, 'linked-tool', 'SKILL.md'),
+        skillContent('linked-tool', 'Query GitHub PR activity from a linked skill'),
+      );
+      await fs.mkdir(path.join(tempDir, '.mastracode', 'skills'), { recursive: true });
+      await fs.symlink(
+        path.join(externalSkillRoot, 'linked-tool'),
+        path.join(tempDir, '.mastracode', 'skills', 'linked-tool'),
+      );
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({
+          basePath: tempDir,
+          allowedPaths: [path.join(tempDir, '.mastracode', 'skills')],
+        }),
+        skills: ['.mastracode/skills'],
+      });
+
+      await expect(workspace.skills!.list()).resolves.toMatchObject([
+        { name: 'linked-tool', path: '.mastracode/skills/linked-tool' },
+      ]);
+      await expect(workspace.skills!.get('linked-tool')).resolves.toMatchObject({
+        name: 'linked-tool',
+        path: '.mastracode/skills/linked-tool',
+      });
+    });
+
     // =========================================================================
     // Skills + search interaction (regression tests for shared SearchEngine)
     // =========================================================================

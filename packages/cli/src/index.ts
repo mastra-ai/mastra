@@ -22,6 +22,7 @@ import { createTokenAction, listTokensAction, revokeTokenAction } from './comman
 import { whoamiAction } from './commands/auth/whoami';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
 import { serverDeployAction } from './commands/server/deploy';
+import { envListAction, envSetAction, envUnsetAction, envImportAction } from './commands/server/env';
 import { deployAction } from './commands/studio/deploy';
 import { deploysAction } from './commands/studio/deploy-list';
 import { logsAction } from './commands/studio/deploy-logs';
@@ -267,6 +268,32 @@ serverCommand
   .option('-y, --yes', 'Auto-accept defaults without confirmation')
   .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
   .action(wrapAction(serverDeployAction));
+
+const serverEnvCommand = serverCommand.command('env').description('Manage server environment variables');
+
+serverEnvCommand
+  .command('list')
+  .description('List environment variables for the linked project')
+  .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .action(wrapAction(envListAction));
+
+serverEnvCommand
+  .command('set <key> <value>')
+  .description('Set an environment variable')
+  .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .action(wrapAction(envSetAction));
+
+serverEnvCommand
+  .command('unset <key>')
+  .description('Remove an environment variable')
+  .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .action(wrapAction(envUnsetAction));
+
+serverEnvCommand
+  .command('import <file>')
+  .description('Import environment variables from a .env file')
+  .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .action(wrapAction(envImportAction));
 
 program.parse(process.argv);
 

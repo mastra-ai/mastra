@@ -39,7 +39,7 @@ export const mastra = new Mastra({
         serviceName: 'mastra',
         exporters: [
           new DefaultExporter(), // Persists traces to storage for Studio
-          new CloudExporter(), // Sends traces to Mastra Cloud (if MASTRA_CLOUD_ACCESS_TOKEN is set)
+          new CloudExporter(), // Sends observability data to hosted Mastra Studio (if MASTRA_CLOUD_ACCESS_TOKEN is set)
         ],
         spanOutputProcessors: [
           new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
@@ -60,7 +60,7 @@ This configuration includes:
 - **Sampling**: `"always"` by default (100% of traces)
 - **Exporters**:
   - `DefaultExporter` - Persists traces to your configured storage for Studio
-  - `CloudExporter` - Sends traces to Mastra Cloud (requires `MASTRA_CLOUD_ACCESS_TOKEN`)
+  - `CloudExporter` - Sends observability data to hosted Mastra Studio (requires `MASTRA_CLOUD_ACCESS_TOKEN`)
 - **Span Output Processors**: `SensitiveDataFilter` - Redacts sensitive fields
 
 ## Exporters
@@ -72,7 +72,7 @@ Exporters determine where your trace data is sent and how it's stored. They inte
 Mastra provides two built-in exporters:
 
 - **[Default](/docs/observability/tracing/exporters/default)** - Persists traces to local storage for viewing in Studio
-- **[Cloud](/docs/observability/tracing/exporters/cloud)** - Sends traces to Mastra Cloud for production monitoring and collaboration
+- **[Cloud](/docs/observability/tracing/exporters/cloud)** - Sends observability data to hosted Mastra Studio for production monitoring and collaboration
 
 ### External Exporters
 
@@ -279,9 +279,9 @@ export const mastra = new Mastra({
 
 ### Common Configuration Patterns & Troubleshooting
 
-#### Maintaining Studio and Cloud Access
+#### Maintaining Studio access
 
-When adding external exporters, include `DefaultExporter` and `CloudExporter` to maintain access to Studio and Mastra Cloud:
+When adding external exporters, include `DefaultExporter` and `CloudExporter` to maintain access to Studio:
 
 ```ts title="src/mastra/index.ts"
 import {
@@ -316,7 +316,7 @@ This configuration sends traces to all three destinations simultaneously:
 
 - **Arize Phoenix/AX** for external observability
 - **DefaultExporter** for Studio
-- **CloudExporter** for Mastra Cloud dashboard
+- **CloudExporter** for hosted Studio dashboard
 
 :::info
 
@@ -671,6 +671,50 @@ Processors are executed in the order they're defined, allowing you to chain mult
 - Filtering out spans based on criteria
 - Normalizing data formats
 - Enriching spans with business context
+
+## Span filtering
+
+Span filtering lets you reduce noise and per-span costs before data reaches your observability platform. Configure it per observability instance, so different exporters or environments can keep different levels of detail.
+
+- Use `excludeSpanTypes` to drop entire categories of spans with minimal configuration.
+- Use `spanFilter` when you need custom logic based on the exported span data.
+
+The following example demonstrates how to combine both options in a single config:
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { SpanType } from '@mastra/core/observability'
+import { Observability, DefaultExporter } from '@mastra/observability'
+import { LangfuseExporter } from '@mastra/langfuse'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'my-app',
+        exporters: [new DefaultExporter(), new LangfuseExporter()],
+        excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP],
+        spanFilter: span => {
+          if (span.type === SpanType.TOOL_CALL && span.attributes?.success) {
+            return false
+          }
+
+          return true
+        },
+      },
+    },
+  }),
+})
+```
+
+Filtering happens at export time in this order:
+
+1. Internal spans are dropped unless `includeInternalSpans` is `true`.
+1. `excludeSpanTypes` removes matching span types.
+1. `spanOutputProcessors` transform the remaining spans.
+1. `spanFilter` decides whether to keep the final exported span.
+
+If `spanFilter` throws, Mastra keeps the span and logs the error to avoid silent data loss. For the full span type list and more examples, see the [Span filtering reference](/reference/observability/tracing/span-filtering).
 
 ### Custom Span Formatters
 
@@ -1103,26 +1147,27 @@ Mastra automatically creates spans for:
 
 ### Reference Documentation
 
-- [Configuration API](/reference/observability/tracing/configuration) - ObservabilityConfig details
-- [Tracing Classes](/reference/observability/tracing/instances) - Core classes and methods
-- [Span Interfaces](/reference/observability/tracing/spans) - Span types and lifecycle
-- [Type Definitions](/reference/observability/tracing/interfaces) - Complete interface reference
+- [Configuration API](/reference/observability/tracing/configuration): ObservabilityConfig details
+- [Tracing Classes](/reference/observability/tracing/instances): Core classes and methods
+- [Span Interfaces](/reference/observability/tracing/spans): Span types and lifecycle
+- [Type Definitions](/reference/observability/tracing/interfaces): Complete interface reference
+- [Span filtering](/reference/observability/tracing/span-filtering): Filtering behavior, span types, and examples
 
 ### Exporters
 
-- [DefaultExporter](/reference/observability/tracing/exporters/default-exporter) - Storage persistence
-- [CloudExporter](/reference/observability/tracing/exporters/cloud-exporter) - Mastra Cloud integration
-- [ConsoleExporter](/reference/observability/tracing/exporters/console-exporter) - Debug output
-- [Arize](/reference/observability/tracing/exporters/arize) - Arize Phoenix and Arize AX integration
-- [Braintrust](/reference/observability/tracing/exporters/braintrust) - Braintrust integration
-- [Langfuse](/reference/observability/tracing/exporters/langfuse) - Langfuse integration
-- [MLflow](/docs/observability/tracing/exporters/otel#mlflow) - MLflow OTLP endpoint setup
-- [OpenTelemetry](/reference/observability/tracing/exporters/otel) - OTEL-compatible platforms
+- [DefaultExporter](/reference/observability/tracing/exporters/default-exporter): Storage persistence
+- [CloudExporter](/reference/observability/tracing/exporters/cloud-exporter): Mastra platform integration
+- [ConsoleExporter](/reference/observability/tracing/exporters/console-exporter): Debug output
+- [Arize](/reference/observability/tracing/exporters/arize): Arize Phoenix and Arize AX integration
+- [Braintrust](/reference/observability/tracing/exporters/braintrust): Braintrust integration
+- [Langfuse](/reference/observability/tracing/exporters/langfuse): Langfuse integration
+- [MLflow](/docs/observability/tracing/exporters/otel#mlflow): MLflow OTLP endpoint setup
+- [OpenTelemetry](/reference/observability/tracing/exporters/otel): OTEL-compatible platforms
 
 ### Bridges
 
-- [OpenTelemetry Bridge](/reference/observability/tracing/bridges/otel) - OTEL context integration
+- [OpenTelemetry Bridge](/reference/observability/tracing/bridges/otel): OTEL context integration
 
 ### Processors
 
-- [Sensitive Data Filter](/docs/observability/tracing/processors/sensitive-data-filter) - Data redaction
+- [Sensitive Data Filter](/docs/observability/tracing/processors/sensitive-data-filter): Data redaction

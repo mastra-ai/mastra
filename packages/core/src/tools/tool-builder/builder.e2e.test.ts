@@ -14,7 +14,7 @@ import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import { CoreToolBuilder } from './builder';
 
-const mock = createGatewayMock();
+const mock = createGatewayMock({ exactMatch: true });
 beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());
 

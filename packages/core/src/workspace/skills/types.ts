@@ -230,7 +230,9 @@ export interface WorkspaceSkills {
   // ===========================================================================
 
   /**
-   * List all discovered skills (metadata only)
+   * List discovered skills as canonical metadata entries.
+   *
+   * Alias paths that resolve to the same underlying skill are de-duplicated.
    */
   list(): Promise<SkillMetadata[]>;
 

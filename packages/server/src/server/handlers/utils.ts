@@ -1,5 +1,5 @@
 import type { RequestContext } from '@mastra/core/di';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 
 // Validation helper

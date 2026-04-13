@@ -11,7 +11,7 @@ export function DataListRoot({ children, columns, className }: DataListRootProps
   return (
     <div
       className={cn(
-        'grid bg-surface2 border h-full border-border1 rounded-xl overflow-y-auto content-start',
+        'grid bg-surface2 border max-h-full border-border1 rounded-xl overflow-y-auto content-start',
         className,
       )}
       style={{ gridTemplateColumns: columns }}

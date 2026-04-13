@@ -1,34 +1,32 @@
 import type { DatasetItem } from '@mastra/client-js';
 import {
-  Header,
-  MainContentLayout,
-  MainContentContent,
-  Icon,
-  Button,
-  HeaderAction,
   Breadcrumb,
-  Crumb,
-  MainHeader,
-  TextAndIcon,
-  useDataset,
-  useDatasetItem,
-  useDatasetItems,
-  SelectField,
-  DatasetItemHeader,
-  DatasetItemContent,
-  CodeDiff,
-  useLinkComponent,
-  Columns,
-  Column,
+  Button,
   ButtonsGroup,
+  CodeDiff,
+  Column,
+  Columns,
+  Crumb,
+  Header,
+  HeaderAction,
+  Icon,
+  MainContentContent,
+  MainContentLayout,
+  MainHeader,
   PermissionDenied,
   SessionExpired,
-  is403ForbiddenError,
+  TextAndIcon,
   is401UnauthorizedError,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { Database, ArrowLeft, GitCompareIcon, History, ArrowLeftIcon, DiffIcon, ColumnsIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router';
+import { DatasetItemHeader, DatasetItemContent } from '@/domains/datasets';
+import { useDatasetItem, useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
+import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+import { SelectField } from '@/lib/form/components/select-field';
+import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/lib/utils';
 
 function itemToText(item: DatasetItem): string {
@@ -79,7 +77,7 @@ function DatasetItemsComparePage() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to="/evaluation?tab=datasets">
+            <Crumb as={Link} to="/datasets">
               <Icon>
                 <Database />
               </Icon>
@@ -103,13 +101,13 @@ function DatasetItemsComparePage() {
     <MainContentLayout>
       <Header>
         <Breadcrumb>
-          <Crumb as={Link} to="/evaluation?tab=datasets">
+          <Crumb as={Link} to="/datasets">
             <Icon>
               <Database />
             </Icon>
             Datasets
           </Crumb>
-          <Crumb as={Link} to={`/evaluation/datasets/${datasetId}`}>
+          <Crumb as={Link} to={`/datasets/${datasetId}`}>
             {dataset?.name || datasetId?.slice(0, 8)}
           </Crumb>
           <Crumb isCurrent as="span">
@@ -117,7 +115,7 @@ function DatasetItemsComparePage() {
           </Crumb>
         </Breadcrumb>
         <HeaderAction>
-          <Button as={Link} to={`/evaluation/datasets/${datasetId}`} variant="outline">
+          <Button as={Link} to={`/datasets/${datasetId}`} variant="outline">
             <Icon>
               <ArrowLeft />
             </Icon>
@@ -141,7 +139,7 @@ function DatasetItemsComparePage() {
               <MainHeader.Description>
                 <TextAndIcon>
                   Comparing {itemIds.length} items of{' '}
-                  <Link to={`/evaluation/datasets/${datasetId}`} className="text-info1 hover:underline">
+                  <Link to={`/datasets/${datasetId}`} className="text-info1 hover:underline">
                     {dataset?.name || datasetId?.slice(0, 8)}
                   </Link>
                 </TextAndIcon>
@@ -149,7 +147,7 @@ function DatasetItemsComparePage() {
             </MainHeader.Column>
             <MainHeader.Column>
               <ButtonsGroup>
-                <Button as={Link} to={`/evaluation/datasets/${datasetId}`}>
+                <Button as={Link} to={`/datasets/${datasetId}`}>
                   <ArrowLeftIcon />
                   Back to Dataset
                 </Button>
