@@ -9,7 +9,7 @@
 
 import { existsSync, mkdirSync } from 'node:fs';
 import { Stagehand } from '@browserbasehq/stagehand';
-import { MastraBrowser, ScreencastStreamImpl, DEFAULT_THREAD_ID, killProcessGroup } from '@mastra/core/browser';
+import { MastraBrowser, ScreencastStreamImpl, DEFAULT_THREAD_ID } from '@mastra/core/browser';
 import type {
   BrowserState,
   BrowserTabState,
@@ -75,7 +75,7 @@ export class StagehandBrowser extends MastraBrowser {
       },
       // When a new browser is created for a thread, set up close listener
       onBrowserCreated: (stagehand, threadId) => {
-        this.setupCloseListener(stagehand, () => this.handleThreadBrowserDisconnected(threadId));
+        this.setupCloseListener(stagehand, () => this.handleThreadBrowserDisconnected(threadId), threadId);
       },
     });
   }
@@ -244,14 +244,21 @@ export class StagehandBrowser extends MastraBrowser {
    * reliable than Playwright's `context.close` / `page.close` events which don't
    * fire when Chrome is killed externally (SIGTERM/SIGKILL).
    */
-  private setupCloseListener(stagehand: Stagehand, onDisconnect: () => void): void {
+  private setupCloseListener(stagehand: Stagehand, onDisconnect: () => void, threadId?: string): void {
     const chromePid = getStagehandChromePid(stagehand);
+    // Store PID so the base class can kill the process group on disconnect/close
+    if (chromePid != null) {
+      if (threadId) {
+        this.threadBrowserPids.set(threadId, chromePid);
+      } else {
+        this.sharedBrowserPid = chromePid;
+      }
+    }
 
     let disconnectHandled = false;
     const handleDisconnect = () => {
       if (disconnectHandled) return;
       disconnectHandled = true;
-      killProcessGroup(chromePid, this.logger);
       onDisconnect();
     };
 

@@ -450,6 +450,23 @@ export abstract class MastraBrowser extends MastraBase {
   /** Active screencast streams per thread (for triggering reconnects on tab changes) */
   protected activeScreencastStreams = new Map<string, ScreencastStream>();
 
+  // ---------------------------------------------------------------------------
+  // Process ID Tracking (for orphaned process cleanup)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * PID of the shared browser process.
+   * Set by providers after launch so the base class can kill the process group
+   * (GPU, renderer, crashpad, etc.) when the browser disconnects or closes.
+   */
+  protected sharedBrowserPid?: number;
+
+  /**
+   * PIDs of per-thread browser processes.
+   * Set by providers after creating a thread session.
+   */
+  protected threadBrowserPids = new Map<string, number>();
+
   /**
    * Get the stream key for a thread (or shared key for shared scope).
    * @param threadId - Optional thread ID
@@ -668,6 +685,13 @@ export abstract class MastraBrowser extends MastraBase {
         throw err;
       } finally {
         this._closePromise = undefined;
+        // Kill orphaned child processes (GPU, renderer, crashpad, etc.)
+        killProcessGroup(this.sharedBrowserPid, this.logger);
+        this.sharedBrowserPid = undefined;
+        for (const [, pid] of this.threadBrowserPids) {
+          killProcessGroup(pid, this.logger);
+        }
+        this.threadBrowserPids.clear();
         // Clean up any stale lock files in the profile directory
         // This ensures the profile can be reused even after unclean shutdowns
         if (this.config.profile) {
@@ -846,6 +870,10 @@ export abstract class MastraBrowser extends MastraBase {
     const threadId = this.getCurrentThread();
 
     if (scope === 'thread' && threadId !== DEFAULT_THREAD_ID) {
+      // Kill orphaned child processes for this thread
+      const pid = this.threadBrowserPids.get(threadId);
+      killProcessGroup(pid, this.logger);
+      this.threadBrowserPids.delete(threadId);
       // Only clear the specific thread's session - other threads have independent browsers
       this.threadManager!.clearSession(threadId);
       this.logger.debug?.(`Cleared browser session for thread: ${threadId}`);
@@ -853,6 +881,9 @@ export abstract class MastraBrowser extends MastraBase {
       // since other threads may still have active browsers
       this.notifyBrowserClosed(threadId);
     } else {
+      // Kill orphaned child processes for the shared browser
+      killProcessGroup(this.sharedBrowserPid, this.logger);
+      this.sharedBrowserPid = undefined;
       // For 'shared' scope or default thread, the shared browser is gone
       this.sharedManager = null;
       // Also clear the shared manager in the thread manager so getManagerForThread
@@ -1241,6 +1272,10 @@ export abstract class MastraBrowser extends MastraBase {
       return;
     }
     await this.threadManager.destroySession(threadId);
+    // Kill orphaned child processes for this thread
+    const pid = this.threadBrowserPids.get(threadId);
+    killProcessGroup(pid, this.logger);
+    this.threadBrowserPids.delete(threadId);
     // Notify callbacks registered for this specific thread
     this.notifyBrowserClosed(threadId);
     // Clean up any stale lock files in the profile directory
@@ -1260,6 +1295,11 @@ export abstract class MastraBrowser extends MastraBase {
     if (!this.threadManager) {
       return;
     }
+    // Kill orphaned child processes for this thread
+    const pid = this.threadBrowserPids.get(threadId);
+    killProcessGroup(pid, this.logger);
+    this.threadBrowserPids.delete(threadId);
+
     this.threadManager.clearSession(threadId);
     this.logger.debug?.(`Cleared browser session for thread: ${threadId}`);
     // Notify only the callbacks registered for this specific thread

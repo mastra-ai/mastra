@@ -1,4 +1,4 @@
-import { MastraBrowser, ScreencastStreamImpl, DEFAULT_THREAD_ID, killProcessGroup } from '@mastra/core/browser';
+import { MastraBrowser, ScreencastStreamImpl, DEFAULT_THREAD_ID } from '@mastra/core/browser';
 import type {
   BrowserState,
   BrowserTabState,
@@ -51,12 +51,6 @@ export class AgentBrowser extends MastraBrowser {
 
   /** Thread manager - narrowed type from base class */
   declare protected threadManager: AgentBrowserThreadManager;
-
-  /** Browser PID for shared scope (used for orphan process cleanup) */
-  private sharedBrowserPid: number | undefined;
-
-  /** Browser PIDs for thread scope (used for orphan process cleanup) */
-  private threadBrowserPids = new Map<string, number>();
 
   constructor(config: BrowserConfig = {}) {
     super(config);
@@ -192,9 +186,7 @@ export class AgentBrowser extends MastraBrowser {
   private setupCloseListenerForSharedScope(manager: BrowserManager): void {
     try {
       // Capture the Chrome process PID via CDP while the browser is alive.
-      // On manual close the main process dies but child processes (GPU, renderer,
-      // network, storage, crashpad) can linger as orphans. We need the PID to
-      // kill the whole process group during cleanup.
+      // The base class uses this to kill orphaned child processes on disconnect.
       void getBrowserPid(manager).then(pid => {
         if (pid) this.sharedBrowserPid = pid;
       });
@@ -203,7 +195,6 @@ export class AgentBrowser extends MastraBrowser {
       const handleDisconnect = () => {
         if (disconnectHandled) return;
         disconnectHandled = true;
-        killProcessGroup(this.sharedBrowserPid, this.logger);
         this.handleBrowserDisconnected();
       };
 
@@ -330,6 +321,7 @@ export class AgentBrowser extends MastraBrowser {
   private setupCloseListenerForThread(manager: BrowserManager, threadId: string): void {
     try {
       // Capture the Chrome process PID via CDP while the browser is alive.
+      // The base class uses this to kill orphaned child processes on disconnect.
       void getBrowserPid(manager).then(pid => {
         if (pid) this.threadBrowserPids.set(threadId, pid);
       });
@@ -338,9 +330,6 @@ export class AgentBrowser extends MastraBrowser {
       const handleDisconnect = () => {
         if (disconnectHandled) return;
         disconnectHandled = true;
-        const pid = this.threadBrowserPids.get(threadId);
-        killProcessGroup(pid, this.logger);
-        this.threadBrowserPids.delete(threadId);
         this.handleThreadBrowserDisconnected(threadId);
       };
 
