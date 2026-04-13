@@ -1,19 +1,18 @@
 import {
-  Header,
-  Crumb,
   Breadcrumb,
-  Icon,
-  McpServerIcon,
-  MainContentLayout,
-  HeaderAction,
   Button,
+  Crumb,
   DocsIcon,
-  MCPDetail,
-  useMCPServers,
-  MCPServerCombobox,
+  Header,
+  HeaderAction,
+  Icon,
+  MainContentLayout,
+  McpServerIcon,
 } from '@mastra/playground-ui';
-
 import { Link, useParams } from 'react-router';
+import { MCPServerCombobox } from '@/domains/mcps/components/mcp-server-combobox';
+import { MCPDetail } from '@/domains/mcps/components/MCPDetail';
+import { useMCPServers } from '@/domains/mcps/hooks/use-mcp-servers';
 
 export const McpServerPage = () => {
   const { serverId } = useParams();
