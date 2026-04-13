@@ -1,4 +1,4 @@
-import { useQuery } from '@mastra/playground-ui';
+import { useQuery } from '@tanstack/react-query';
 import { useMastraClient } from '@mastra/react';
 
 export const useTrace = (traceId: string | null | undefined, options?: { enabled: boolean }) => {

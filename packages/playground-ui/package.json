@@ -123,6 +123,7 @@
     "zustand": "^5.0.12"
   },
   "peerDependencies": {
+    "@internal/playground": "workspace:*",
     "@mastra/ai-sdk": "workspace:^",
     "@mastra/client-js": "workspace:^",
     "@mastra/core": ">=1.7.1-0 <2.0.0-0",
@@ -136,6 +137,7 @@
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
+    "@internal/playground": "workspace:*",
     "@internal/lint": "workspace:*",
     "@mastra/ai-sdk": "workspace:^",
     "@mastra/client-js": "workspace:^",

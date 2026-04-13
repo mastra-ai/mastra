@@ -1,5 +1,5 @@
 import { transitions, focusRing } from '@/ds/primitives/transitions';
-import { useLinkComponent } from '@/lib/framework';
+import { useLinkComponent } from '@internal/playground';
 import { cn } from '@/lib/utils';
 
 export type ItemListLinkCellProps = {

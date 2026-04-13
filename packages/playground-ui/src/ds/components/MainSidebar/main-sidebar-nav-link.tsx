@@ -2,7 +2,7 @@ import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { CircleAlertIcon } from 'lucide-react';
 import type { SidebarState } from './main-sidebar-context';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { useLinkComponent } from '@/lib/framework';
+import { useLinkComponent } from '@internal/playground';
 import { cn } from '@/lib/utils';
 
 export type NavLink = {

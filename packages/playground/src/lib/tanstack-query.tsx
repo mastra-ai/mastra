@@ -1,6 +1,6 @@
 import type { QueryClientConfig } from '@tanstack/react-query';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { shouldRetryQuery } from './query-utils';
+import { shouldRetryQuery } from '@mastra/playground-ui';
 
 export interface PlaygroundQueryClientProps {
   children: React.ReactNode;

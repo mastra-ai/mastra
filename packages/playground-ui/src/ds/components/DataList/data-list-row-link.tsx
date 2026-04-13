@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { dataListRowStyles } from './shared';
-import { useLinkComponent } from '@/lib/framework';
+import { useLinkComponent } from '@internal/playground';
 import { cn } from '@/lib/utils';
 
 export type DataListRowLinkProps = {

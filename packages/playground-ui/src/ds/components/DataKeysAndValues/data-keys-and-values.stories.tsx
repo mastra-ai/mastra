@@ -3,8 +3,8 @@ import { DataKeysAndValues } from './data-keys-and-values';
 import type { DataKeysAndValuesProps } from './data-keys-and-values-root';
 import { forwardRef } from 'react';
 import { TooltipProvider } from '@/ds/components/Tooltip';
-import { LinkComponentProvider } from '@/lib/framework';
-import type { LinkComponentProps } from '@/lib/framework';
+import { LinkComponentProvider } from '@internal/playground';
+import type { LinkComponentProps } from '@internal/playground';
 
 const meta: Meta<typeof DataKeysAndValues> = {
   title: 'Elements/DataKeysAndValues',

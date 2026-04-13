@@ -2,7 +2,7 @@ import * as HoverCard from '@radix-ui/react-hover-card';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { ChevronRightIcon } from 'lucide-react';
 import React from 'react';
-import { useLinkComponent } from '@/lib/framework';
+import { useLinkComponent } from '@internal/playground';
 import { cn } from '@/lib/utils';
 
 export type KeyValueListItemValue = {

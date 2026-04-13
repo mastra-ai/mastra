@@ -4310,6 +4310,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@internal/playground':
+        specifier: workspace:*
+        version: link:../playground
       '@mastra/ai-sdk':
         specifier: workspace:^
         version: link:../../client-sdks/ai-sdk

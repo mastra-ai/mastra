@@ -120,9 +120,6 @@ export * from './hooks/use-copy-to-clipboard';
 export * from './hooks/use-in-view';
 export * from './hooks/use-autoscroll';
 
-// Framework (Link component provider, used by DS components)
-export * from './lib/framework';
-
 // Pure lib utilities
 export { cn } from './lib/utils';
 export * from './lib/string';
@@ -133,7 +130,6 @@ export * from './lib/colors';
 export * from './lib/truncate-string';
 export * from './lib/errors';
 export * from './lib/query-utils';
-export * from './lib/tanstack-query';
 export * from './lib/toast';
 
 // Store (used by DS components for theme)

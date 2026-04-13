@@ -1,4 +1,4 @@
-import { PlaygroundQueryClient } from '@mastra/playground-ui';
+import { PlaygroundQueryClient } from '@/lib/tanstack-query';
 import { createFetchWithRefresh } from '@/domains/auth/hooks/fetch-with-refresh';
 import { PlaygroundConfigGuard } from '@/domains/configuration/components/playground-config-guard';
 import { StudioConfigProvider, useStudioConfig } from '@/domains/configuration/context/studio-config-context';

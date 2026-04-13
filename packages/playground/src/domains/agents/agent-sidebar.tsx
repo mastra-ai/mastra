@@ -1,5 +1,5 @@
 import type { StorageThreadType } from '@mastra/core/memory';
-import { useLinkComponent } from '@mastra/playground-ui';
+import { useLinkComponent } from '@/lib/framework';
 import { ChatThreads } from '@/domains/agents/components/chat-threads';
 import { useDeleteThread } from '@/domains/memory/hooks/use-memory';
 

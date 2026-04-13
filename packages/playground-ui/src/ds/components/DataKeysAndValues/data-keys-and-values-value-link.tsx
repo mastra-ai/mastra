@@ -1,6 +1,6 @@
 import { ExternalLinkIcon, Link2Icon } from 'lucide-react';
 import { dataKeysAndValuesValueStyles } from './shared';
-import { useLinkComponent } from '@/lib/framework';
+import { useLinkComponent } from '@internal/playground';
 import { cn } from '@/lib/utils';
 
 export interface DataKeysAndValuesValueLinkProps {
