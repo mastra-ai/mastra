@@ -9,7 +9,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # CloudExporter
 
-Sends tracing spans, logs, metrics, scores, and feedback to Mastra Cloud for online visualization and monitoring.
+Sends tracing spans, logs, metrics, scores, and feedback to the Mastra platform for online visualization and monitoring.
 
 ## Constructor
 
@@ -209,7 +209,7 @@ Every `FeedbackEvent` passed to this handler is buffered and exported to the Clo
 async flush(): Promise<void>
 ```
 
-Force flushes any buffered events to Mastra Cloud without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
+Force flushes any buffered events to the Mastra platform without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
 
 ### shutdown
 
@@ -301,17 +301,17 @@ const customExporter = new CloudExporter({
 
 ### Documentation
 
-- [Tracing Overview](/docs/observability/tracing/overview) - Complete guide
-- [Exporters](/docs/observability/tracing/overview#exporters) - Exporter concepts
+- [Tracing Overview](/docs/observability/tracing/overview): Complete guide
+- [Exporters](/docs/observability/tracing/overview#exporters): Exporter concepts
 
 ### Other Exporters
 
-- [DefaultExporter](/reference/observability/tracing/exporters/default-exporter) - Storage persistence
-- [ConsoleExporter](/reference/observability/tracing/exporters/console-exporter) - Debug output
-- [Langfuse](/reference/observability/tracing/exporters/langfuse) - Langfuse integration
-- [Braintrust](/reference/observability/tracing/exporters/braintrust) - Braintrust integration
+- [DefaultExporter](/reference/observability/tracing/exporters/default-exporter): Storage persistence
+- [ConsoleExporter](/reference/observability/tracing/exporters/console-exporter): Debug output
+- [Langfuse](/reference/observability/tracing/exporters/langfuse): Langfuse integration
+- [Braintrust](/reference/observability/tracing/exporters/braintrust): Braintrust integration
 
 ### Reference
 
-- [Configuration](/reference/observability/tracing/configuration) - Configuration options
-- [Interfaces](/reference/observability/tracing/interfaces) - Type definitions
+- [Configuration](/reference/observability/tracing/configuration): Configuration options
+- [Interfaces](/reference/observability/tracing/interfaces): Type definitions
