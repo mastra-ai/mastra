@@ -2,7 +2,7 @@ import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { useMergedRequestContext } from '@/domains/request-context';
 
-export interface EvaluationScorerSummary {
+export interface ScorerSummary {
   scorer: string;
   avg: number;
   min: number;
@@ -10,17 +10,17 @@ export interface EvaluationScorerSummary {
   count: number;
 }
 
-export interface EvaluationScoresOverTimePoint {
+export interface ScoresOverTimePoint {
   time: string;
   [scorer: string]: string | number;
 }
 
-export function useEvaluationScoreMetrics() {
+export function useScoreMetrics() {
   const client = useMastraClient();
   const requestContext = useMergedRequestContext();
 
   return useQuery({
-    queryKey: ['evaluation-score-metrics', requestContext],
+    queryKey: ['score-metrics', requestContext],
     queryFn: async () => {
       const scorersMap = await client.listScorers(requestContext);
       const scorerIds = Object.keys(scorersMap ?? {});
@@ -69,7 +69,7 @@ export function useEvaluationScoreMetrics() {
         byScorer.get(s.scorerId)!.push(s.score);
       }
 
-      const summaryData: EvaluationScorerSummary[] = Array.from(byScorer.entries()).map(([scorer, vals]) => ({
+      const summaryData: ScorerSummary[] = Array.from(byScorer.entries()).map(([scorer, vals]) => ({
         scorer,
         avg: vals.reduce((a, b) => a + b, 0) / vals.length,
         min: Math.min(...vals),
@@ -124,7 +124,7 @@ export function useEvaluationScoreMetrics() {
       const maxTs = sortedBuckets.length > 0 ? sortedBuckets[sortedBuckets.length - 1][0] : 0;
       const spanDays = (maxTs - minTs) / 86_400_000;
 
-      const overTimeData: EvaluationScoresOverTimePoint[] = sortedBuckets.map(([bucket, scorerMap]) => {
+      const overTimeData: ScoresOverTimePoint[] = sortedBuckets.map(([bucket, scorerMap]) => {
         const d = new Date(bucket);
         let timeLabel: string;
         if (spanDays > 1) {
@@ -137,7 +137,7 @@ export function useEvaluationScoreMetrics() {
           // Single day: just show time
           timeLabel = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
         }
-        const point: EvaluationScoresOverTimePoint = { time: timeLabel };
+        const point: ScoresOverTimePoint = { time: timeLabel };
         for (const name of scorerNames) {
           const vals = scorerMap.get(name);
           if (vals && vals.length > 0) {

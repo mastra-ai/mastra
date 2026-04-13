@@ -80,12 +80,12 @@ function DatasetPage() {
   }
 
   const handleExperimentSuccess = (experimentId: string) => {
-    void navigate(`/evaluation/datasets/${datasetId}/experiments/${experimentId}`);
+    void navigate(`/datasets/${datasetId}/experiments/${experimentId}`);
   };
 
   const handleDeleteSuccess = () => {
     // Navigate back to datasets list
-    void navigate('/evaluation?tab=datasets');
+    void navigate('/datasets');
   };
 
   // Version selection handler for contextual run button
@@ -97,7 +97,7 @@ function DatasetPage() {
     <MainContentLayout>
       <Header>
         <Breadcrumb>
-          <Crumb as={Link} to="/evaluation?tab=datasets">
+          <Crumb as={Link} to="/datasets">
             <Icon>
               <Database />
             </Icon>

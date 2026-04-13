@@ -1,27 +1,34 @@
 import type { GetScorerResponse } from '@mastra/client-js';
+import { WorkflowIcon } from 'lucide-react';
 import { useMemo } from 'react';
-import { NoScorersInfo } from './no-scorers-info';
+import { Badge } from '@/ds/components/Badge';
+import { Chip } from '@/ds/components/Chip';
 import { EntityList, EntityListSkeleton } from '@/ds/components/EntityList';
-import { ErrorState } from '@/ds/components/ErrorState';
-import { PermissionDenied } from '@/ds/components/PermissionDenied';
+import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { useLinkComponent } from '@/lib/framework';
-import { is403ForbiddenError } from '@/lib/query-utils';
-import { truncateString } from '@/lib/truncate-string';
 
 export interface ScorersListProps {
   scorers: Record<string, GetScorerResponse>;
   isLoading: boolean;
-  error?: Error | null;
   search?: string;
+  sourceFilter?: string;
 }
 
-export function ScorersList({ scorers, isLoading, error, search = '' }: ScorersListProps) {
+export const SCORER_SOURCE_OPTIONS = [
+  { value: 'all', label: 'All sources' },
+  { value: 'code', label: 'Code' },
+  { value: 'stored', label: 'Stored' },
+] as const;
+
+const COLUMNS = 'auto 1fr auto auto auto';
+
+export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'all' }: ScorersListProps) {
   const { paths } = useLinkComponent();
 
-  const scorersData = useMemo(
+  const scorerData = useMemo(
     () =>
-      Object.keys(scorers).map(key => ({
-        ...scorers[key],
+      Object.entries(scorers).map(([key, scorer]) => ({
+        ...scorer,
         id: key,
       })),
     [scorers],
@@ -29,50 +36,65 @@ export function ScorersList({ scorers, isLoading, error, search = '' }: ScorersL
 
   const filteredData = useMemo(() => {
     const term = search.toLowerCase();
-    return scorersData.filter(
-      s => s.scorer.config?.id?.toLowerCase().includes(term) || s.scorer.config?.name?.toLowerCase().includes(term),
-    );
-  }, [scorersData, search]);
-
-  if (error && is403ForbiddenError(error)) {
-    return <PermissionDenied resource="scorers" />;
-  }
-
-  if (error) {
-    return <ErrorState title="Failed to load scorers" message={error.message} />;
-  }
-
-  if (scorersData.length === 0 && !isLoading) {
-    return <NoScorersInfo />;
-  }
+    return scorerData.filter(s => {
+      const matchesSearch =
+        !term ||
+        s.scorer.config?.id?.toLowerCase().includes(term) ||
+        s.scorer.config?.name?.toLowerCase().includes(term);
+      const matchesSource = sourceFilter === 'all' || s.source === sourceFilter;
+      return matchesSearch && matchesSource;
+    });
+  }, [scorerData, search, sourceFilter]);
 
   if (isLoading) {
-    return <EntityListSkeleton columns="auto 1fr auto auto" />;
+    return <EntityListSkeleton columns={COLUMNS} />;
   }
 
   return (
-    <EntityList columns="auto 1fr auto auto">
+    <EntityList columns={COLUMNS}>
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>
-        <EntityList.TopCell className="text-center">Agents</EntityList.TopCell>
-        <EntityList.TopCell className="text-center">Workflows</EntityList.TopCell>
+        <EntityList.TopCell>Source</EntityList.TopCell>
+        <EntityList.TopCellSmart
+          long="Agents"
+          short={<AgentIcon />}
+          tooltip="Number of attached Agents"
+          className="text-center"
+        />
+        <EntityList.TopCellSmart
+          long="Workflows"
+          short={<WorkflowIcon />}
+          tooltip="Number of attached Workflows"
+          className="text-center"
+        />
       </EntityList.Top>
 
-      {filteredData.length === 0 && search ? <EntityList.NoMatch message="No Scorers match your search" /> : null}
-
       {filteredData.map(scorer => {
-        const name = truncateString(scorer.scorer.config?.name ?? scorer.id, 50);
-        const description = truncateString(scorer.scorer.config?.description ?? '', 200);
-        const agentsCount = scorer.agentIds?.length ?? 0;
-        const workflowsCount = scorer.workflowIds?.length ?? 0;
+        const name = scorer.scorer.config?.name || scorer.id;
+        const description = scorer.scorer.config?.description || '';
+        const agentCount = scorer.agentIds?.length ?? 0;
+        const workflowCount = scorer.workflowIds?.length ?? 0;
+        const isTrajectory = scorer.scorer.config?.type === 'trajectory';
 
         return (
           <EntityList.RowLink key={scorer.id} to={paths.scorerLink(scorer.id)}>
-            <EntityList.NameCell>{name}</EntityList.NameCell>
+            <EntityList.NameCell>
+              <span className="flex items-center gap-1.5">
+                {name}
+                {isTrajectory && (
+                  <Chip size="small" color="purple">
+                    trajectory
+                  </Chip>
+                )}
+              </span>
+            </EntityList.NameCell>
             <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
-            <EntityList.TextCell className="text-center">{agentsCount || ''}</EntityList.TextCell>
-            <EntityList.TextCell className="text-center">{workflowsCount || ''}</EntityList.TextCell>
+            <EntityList.Cell>
+              <Badge variant={scorer.source === 'code' ? 'info' : 'default'}>{scorer.source}</Badge>
+            </EntityList.Cell>
+            <EntityList.TextCell className="text-center">{agentCount || ''}</EntityList.TextCell>
+            <EntityList.TextCell className="text-center">{workflowCount || ''}</EntityList.TextCell>
           </EntityList.RowLink>
         );
       })}

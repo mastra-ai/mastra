@@ -1,13 +1,11 @@
 import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
-import { FlaskConical } from 'lucide-react';
 import { useMemo } from 'react';
 import { Badge } from '@/ds/components/Badge';
-import { EmptyState } from '@/ds/components/EmptyState';
 import { EntityList, EntityListSkeleton } from '@/ds/components/EntityList';
 import { StatusBadge } from '@/ds/components/StatusBadge';
 import { useLinkComponent } from '@/lib/framework';
 
-export interface EvaluationExperimentsListProps {
+export interface ExperimentsListProps {
   experiments: DatasetExperiment[];
   datasets?: DatasetRecord[];
   reviewByExperiment?: Map<string, { needsReview: number; complete: number; total: number }>;
@@ -17,7 +15,7 @@ export interface EvaluationExperimentsListProps {
   datasetFilter?: string;
 }
 
-export const EVALUATION_EXPERIMENT_STATUS_OPTIONS = [
+export const EXPERIMENT_STATUS_OPTIONS = [
   { value: 'all', label: 'All statuses' },
   { value: 'completed', label: 'Completed' },
   { value: 'running', label: 'Running' },
@@ -40,7 +38,7 @@ const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'error' | 'neutral'
   pending: 'neutral',
 };
 
-export function EvaluationExperimentsList({
+export function ExperimentsList({
   experiments,
   datasets,
   reviewByExperiment,
@@ -48,7 +46,7 @@ export function EvaluationExperimentsList({
   search = '',
   statusFilter = 'all',
   datasetFilter = 'all',
-}: EvaluationExperimentsListProps) {
+}: ExperimentsListProps) {
   const { paths } = useLinkComponent();
 
   const datasetMap = useMemo(() => {
@@ -79,18 +77,6 @@ export function EvaluationExperimentsList({
       return matchesSearch && matchesStatus && matchesDataset;
     });
   }, [sortedExperiments, search, datasetMap, statusFilter, datasetFilter]);
-
-  if (experiments.length === 0 && !isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <EmptyState
-          iconSlot={<FlaskConical className="size-10 text-neutral3" />}
-          titleSlot="No Experiments Yet"
-          descriptionSlot="Run experiments against your datasets to see results here."
-        />
-      </div>
-    );
-  }
 
   if (isLoading) {
     return <EntityListSkeleton columns={COLUMNS} />;
@@ -165,6 +151,6 @@ export function EvaluationExperimentsList({
   );
 }
 
-export function getEvaluationExperimentDatasetOptions(datasets?: DatasetRecord[]) {
+export function getExperimentDatasetOptions(datasets?: DatasetRecord[]) {
   return [{ value: 'all', label: 'All datasets' }, ...(datasets ?? []).map(ds => ({ value: ds.id, label: ds.name }))];
 }
