@@ -65,6 +65,38 @@ function buildResponseModelMetadata(runState: AgenticRunState): { metadata: Reco
   return modelId ? { metadata: { modelId } } : undefined;
 }
 
+function flushReasoningBuffer({
+  buffer,
+  messageId,
+  messageList,
+  runState,
+}: {
+  buffer: { deltas: string[]; providerMetadata: Record<string, any> | undefined };
+  messageId: string;
+  messageList: MessageList;
+  runState: AgenticRunState;
+}) {
+  const message: MastraDBMessage = {
+    id: messageId,
+    role: 'assistant',
+    content: {
+      format: 2,
+      parts: [
+        {
+          type: 'reasoning' as const,
+          reasoning: '',
+          details: [{ type: 'text', text: buffer.deltas.join('') }],
+          providerMetadata: buffer.providerMetadata,
+        },
+      ],
+      ...buildResponseModelMetadata(runState),
+    },
+    createdAt: new Date(),
+  };
+
+  messageList.add(message, 'response');
+}
+
 async function processOutputStream<OUTPUT = undefined>({
   tools,
   messageId,
@@ -156,7 +188,7 @@ async function processOutputStream<OUTPUT = undefined>({
 
     // Only reset reasoning state for truly unexpected chunk types.
     // Some providers (e.g., ZAI/glm-4.6) send text-start before reasoning-end,
-    // so we must allow text-start to pass through without clearing reasoningDeltas.
+    // so we must allow text-start to pass through without clearing buffered reasoning deltas.
     if (
       chunk.type !== 'reasoning-start' &&
       chunk.type !== 'reasoning-delta' &&
@@ -170,33 +202,22 @@ async function processOutputStream<OUTPUT = undefined>({
       // Flush reasoning deltas before clearing, same pattern as textDeltas above.
       // Some providers (e.g., OpenAI-compatible reasoning models like kimi-k2.5, DeepSeek-R1)
       // emit tool-input-start before reasoning-end (which arrives from flush()).
-      // Without this flush, reasoningDeltas are lost and reasoning_content becomes empty,
-      // causing 400 errors on subsequent turns that require reasoning_content echo-back.
+      // Without this flush, reasoning_content becomes empty, causing 400 errors on
+      // subsequent turns that require reasoning_content echo-back.
       // See: https://github.com/mastra-ai/mastra/issues/13635
-      if (runState.state.reasoningDeltas.length) {
-        const message: MastraDBMessage = {
-          id: messageId,
-          role: 'assistant',
-          content: {
-            format: 2,
-            parts: [
-              {
-                type: 'reasoning' as const,
-                reasoning: '',
-                details: [{ type: 'text', text: runState.state.reasoningDeltas.join('') }],
-                providerMetadata: runState.state.providerOptions,
-              },
-            ],
-            ...buildResponseModelMetadata(runState),
-          },
-          createdAt: new Date(),
-        };
-        messageList.add(message, 'response');
+      for (const buffer of runState.state.reasoningBuffers.values()) {
+        flushReasoningBuffer({
+          buffer,
+          messageId,
+          messageList,
+          runState,
+        });
       }
 
       runState.setState({
         isReasoning: false,
-        reasoningDeltas: [],
+        reasoningBuffers: new Map(),
+        providerOptions: undefined,
       });
     }
 
@@ -297,9 +318,15 @@ async function processOutputStream<OUTPUT = undefined>({
       }
 
       case 'reasoning-start': {
+        const reasoningBuffers = new Map(runState.state.reasoningBuffers);
+        reasoningBuffers.set(chunk.payload.id, {
+          deltas: reasoningBuffers.get(chunk.payload.id)?.deltas ?? [],
+          providerMetadata: chunk.payload.providerMetadata ?? reasoningBuffers.get(chunk.payload.id)?.providerMetadata,
+        });
+
         runState.setState({
           isReasoning: true,
-          reasoningDeltas: [],
+          reasoningBuffers,
           providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
         });
 
@@ -330,11 +357,17 @@ async function processOutputStream<OUTPUT = undefined>({
       }
 
       case 'reasoning-delta': {
-        const reasoningDeltasFromState = runState.state.reasoningDeltas;
-        reasoningDeltasFromState.push(chunk.payload.text);
+        const reasoningBuffers = new Map(runState.state.reasoningBuffers);
+        const existingBuffer = reasoningBuffers.get(chunk.payload.id);
+        const buffer = {
+          deltas: [...(existingBuffer?.deltas ?? []), chunk.payload.text],
+          providerMetadata: chunk.payload.providerMetadata ?? existingBuffer?.providerMetadata,
+        };
+
+        reasoningBuffers.set(chunk.payload.id, buffer);
         runState.setState({
           isReasoning: true,
-          reasoningDeltas: reasoningDeltasFromState,
+          reasoningBuffers,
           providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
         });
         safeEnqueue(controller, chunk);
@@ -351,34 +384,35 @@ async function processOutputStream<OUTPUT = undefined>({
           break;
         }
 
+        const reasoningBuffers = new Map(runState.state.reasoningBuffers);
+        const buffer = reasoningBuffers.get(chunk.payload.id);
+
+        if (!buffer) {
+          safeEnqueue(controller, chunk);
+          break;
+        }
+
         // Always store reasoning, even if empty - OpenAI requires item_reference for tool calls
         // See: https://github.com/mastra-ai/mastra/issues/9005
-        const message: MastraDBMessage = {
-          id: messageId,
-          role: 'assistant',
-          content: {
-            format: 2,
-            parts: [
-              {
-                type: 'reasoning' as const,
-                reasoning: '',
-                details: [{ type: 'text', text: runState.state.reasoningDeltas.join('') }],
-                providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
-              },
-            ],
-            ...buildResponseModelMetadata(runState),
+        flushReasoningBuffer({
+          buffer: {
+            deltas: buffer.deltas,
+            providerMetadata: chunk.payload.providerMetadata ?? buffer.providerMetadata,
           },
-          createdAt: new Date(),
-        };
+          messageId,
+          messageList,
+          runState,
+        });
 
-        messageList.add(message, 'response');
+        reasoningBuffers.delete(chunk.payload.id);
+        const nextProviderOptions = Array.from(reasoningBuffers.values()).at(-1)?.providerMetadata;
 
         // Reset reasoning state - clear providerOptions to prevent reasoning metadata
         // (like openai.itemId) from leaking into subsequent text parts
         runState.setState({
-          isReasoning: false,
-          reasoningDeltas: [],
-          providerOptions: undefined,
+          isReasoning: reasoningBuffers.size > 0,
+          reasoningBuffers,
+          providerOptions: nextProviderOptions,
         });
 
         safeEnqueue(controller, chunk);

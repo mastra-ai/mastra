@@ -1,7 +1,7 @@
 {
   "name": "@internal/playground",
   "private": true,
-  "version": "1.5.0-alpha.2",
+  "version": "1.5.1-alpha.1",
   "type": "module",
   "homepage": "https://mastra.ai",
   "files": [
@@ -39,8 +39,8 @@
     "date-fns": "^4.1.0",
     "lucide-react": "^0.522.0",
     "posthog-js": "^1.360.2",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
     "react-router": "^7.13.1"
   },
   "devDependencies": {

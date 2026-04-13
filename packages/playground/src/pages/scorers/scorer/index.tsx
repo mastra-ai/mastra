@@ -188,7 +188,7 @@ export default function Scorer() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to={`/evaluation?tab=scorers`}>
+            <Crumb as={Link} to={`/scorers`}>
               <Icon>
                 <GaugeIcon />
               </Icon>
@@ -212,7 +212,7 @@ export default function Scorer() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to={`/evaluation?tab=scorers`}>
+            <Crumb as={Link} to={`/scorers`}>
               <Icon>
                 <GaugeIcon />
               </Icon>
@@ -264,7 +264,7 @@ export default function Scorer() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to={`/evaluation?tab=scorers`}>
+            <Crumb as={Link} to={`/scorers`}>
               <Icon>
                 <GaugeIcon />
               </Icon>
@@ -292,12 +292,17 @@ export default function Scorer() {
         </Header>
 
         <div className={cn(`grid overflow-y-auto h-full`)}>
-          <div className={cn('max-w-[100rem] w-full px-12 mx-auto grid content-start gap-8 h-full')}>
-            <PageHeader
-              title={scorer?.scorer?.config?.name || 'loading'}
-              description={scorer?.scorer?.config?.description || 'loading'}
-              icon={<GaugeIcon />}
-            />
+          <div className={cn('max-w-400 w-full px-12 mx-auto grid content-start gap-8 h-full')}>
+            <PageHeader>
+              <PageHeader.Title isLoading={isScorerLoading}>
+                <GaugeIcon /> {scorer?.scorer?.config?.name}
+              </PageHeader.Title>
+              {(isScorerLoading || scorer?.scorer?.config?.description) && (
+                <PageHeader.Description isLoading={isScorerLoading}>
+                  {scorer?.scorer?.config?.description}
+                </PageHeader.Description>
+              )}
+            </PageHeader>
 
             <KeyValueList data={scoreInfo} LinkComponent={Link} isLoading={isLoadingAgents || isLoadingWorkflows} />
 

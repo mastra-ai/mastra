@@ -1,5 +1,4 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
-import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import { parseMemoryRequestContext } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { Processor, ProcessInputStepArgs, ProcessOutputResultArgs } from '@mastra/core/processors';
@@ -56,9 +55,9 @@ function getOmObservabilityContext(
 /** Key used to store gateway detection result in per-processor state. */
 const GATEWAY_STATE_KEY = '__isGatewayModel';
 
-/** Check if the model is routed through a Mastra gateway. */
+/** Check if the model is routed through a Mastra gateway (duck-type check to avoid cross-package instanceof issues). */
 function isMastraGatewayModel(model: ProcessInputStepArgs['model']): boolean {
-  return model instanceof ModelRouterLanguageModel && model.gatewayId === 'mastra';
+  return typeof model === 'object' && model !== null && 'gatewayId' in model && (model as any).gatewayId === 'mastra';
 }
 
 export class ObservationalMemoryProcessor implements Processor<'observational-memory'> {

@@ -12,7 +12,6 @@ import { TraceDataPanel } from './trace-data-panel';
 import { useScorers } from '@/domains/scores';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
 import { TracesDataList, DataListSkeleton } from '@/ds/components/DataList';
-import { ErrorState } from '@/ds/components/ErrorState';
 
 import { cn } from '@/lib/utils';
 
@@ -39,7 +38,6 @@ export interface ObservabilityTracesListProps {
   isFetchingNextPage?: boolean;
   hasNextPage?: boolean;
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
-  error?: string | null;
   filtersApplied?: boolean;
   selectedTraceId?: string;
   initialSpanId?: string;
@@ -59,7 +57,6 @@ export function ObservabilityTracesList({
   isFetchingNextPage,
   hasNextPage,
   setEndOfListElement,
-  error,
   filtersApplied,
   selectedTraceId,
   initialSpanId,
@@ -266,10 +263,6 @@ export function ObservabilityTracesList({
         }
       : undefined;
 
-  if (error) {
-    return <ErrorState title="Failed to load traces" message={error} />;
-  }
-
   if (isLoading) {
     return <DataListSkeleton columns={COLUMNS} />;
   }
@@ -302,68 +295,66 @@ export function ObservabilityTracesList({
 
   return (
     <div
-      className={cn('grid h-full min-h-0 gap-4 items-start', hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]')}
+      className={cn('grid h-full min-h-0 gap-4 items-start ', hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]')}
     >
-      <div className="h-full overflow-auto">
-        <TracesDataList columns={COLUMNS} className="min-w-0">
-          <TracesDataList.Top>
-            <TracesDataList.TopCell>ID</TracesDataList.TopCell>
-            <TracesDataList.TopCell>Date</TracesDataList.TopCell>
-            <TracesDataList.TopCell>Time</TracesDataList.TopCell>
-            <TracesDataList.TopCell>Name</TracesDataList.TopCell>
-            <TracesDataList.TopCell>Input</TracesDataList.TopCell>
-            <TracesDataList.TopCell>Entity</TracesDataList.TopCell>
-            <TracesDataList.TopCell>Status</TracesDataList.TopCell>
-          </TracesDataList.Top>
+      <TracesDataList columns={COLUMNS} className="min-w-0">
+        <TracesDataList.Top>
+          <TracesDataList.TopCell>ID</TracesDataList.TopCell>
+          <TracesDataList.TopCell>Date</TracesDataList.TopCell>
+          <TracesDataList.TopCell>Time</TracesDataList.TopCell>
+          <TracesDataList.TopCell>Name</TracesDataList.TopCell>
+          <TracesDataList.TopCell>Input</TracesDataList.TopCell>
+          <TracesDataList.TopCell>Entity</TracesDataList.TopCell>
+          <TracesDataList.TopCell>Status</TracesDataList.TopCell>
+        </TracesDataList.Top>
 
-          {traces.length === 0 ? (
-            <TracesDataList.NoMatch
-              message={filtersApplied ? 'No traces found for applied filters' : 'No traces found yet'}
-            />
-          ) : groupByThread ? (
-            (() => {
-              const { groups, ungrouped } = groupTracesByThread(traces);
-              return (
-                <>
-                  {groups.map(group => (
-                    <React.Fragment key={group.threadId}>
-                      <TracesDataList.Subheader>
-                        <TracesDataList.SubHeading className="flex gap-2">
-                          <span className="uppercase">Thread</span>
-                          {threadTitles?.[group.threadId] && <b>'{threadTitles[group.threadId]}'</b>}
-                          <b># {group.threadId}</b>
-                          <span className="text-neutral2">({group.traces.length})</span>
-                        </TracesDataList.SubHeading>
-                      </TracesDataList.Subheader>
-                      {renderTraceRows(group.traces)}
-                    </React.Fragment>
-                  ))}
-                  {ungrouped.length > 0 && (
-                    <>
-                      <TracesDataList.Subheader>
-                        <TracesDataList.SubHeading className="flex gap-2 uppercase">
-                          <span>No thread</span>
-                          <span className="text-neutral2">({ungrouped.length})</span>
-                        </TracesDataList.SubHeading>
-                      </TracesDataList.Subheader>
-                      {renderTraceRows(ungrouped)}
-                    </>
-                  )}
-                </>
-              );
-            })()
-          ) : (
-            renderTraceRows(traces)
-          )}
-          {traces.length > 0 && (
-            <TracesDataList.NextPageLoading
-              isLoading={isFetchingNextPage}
-              hasMore={hasNextPage}
-              setEndOfListElement={setEndOfListElement}
-            />
-          )}
-        </TracesDataList>
-      </div>
+        {traces.length === 0 ? (
+          <TracesDataList.NoMatch
+            message={filtersApplied ? 'No traces found for applied filters' : 'No traces found yet'}
+          />
+        ) : groupByThread ? (
+          (() => {
+            const { groups, ungrouped } = groupTracesByThread(traces);
+            return (
+              <>
+                {groups.map(group => (
+                  <React.Fragment key={group.threadId}>
+                    <TracesDataList.Subheader>
+                      <TracesDataList.SubHeading className="flex gap-2">
+                        <span className="uppercase">Thread</span>
+                        {threadTitles?.[group.threadId] && <b>'{threadTitles[group.threadId]}'</b>}
+                        <b># {group.threadId}</b>
+                        <span className="text-neutral2">({group.traces.length})</span>
+                      </TracesDataList.SubHeading>
+                    </TracesDataList.Subheader>
+                    {renderTraceRows(group.traces)}
+                  </React.Fragment>
+                ))}
+                {ungrouped.length > 0 && (
+                  <>
+                    <TracesDataList.Subheader>
+                      <TracesDataList.SubHeading className="flex gap-2 uppercase">
+                        <span>No thread</span>
+                        <span className="text-neutral2">({ungrouped.length})</span>
+                      </TracesDataList.SubHeading>
+                    </TracesDataList.Subheader>
+                    {renderTraceRows(ungrouped)}
+                  </>
+                )}
+              </>
+            );
+          })()
+        ) : (
+          renderTraceRows(traces)
+        )}
+        {traces.length > 0 && (
+          <TracesDataList.NextPageLoading
+            isLoading={isFetchingNextPage}
+            hasMore={hasNextPage}
+            setEndOfListElement={setEndOfListElement}
+          />
+        )}
+      </TracesDataList>
 
       {featuredTraceId && (
         <div

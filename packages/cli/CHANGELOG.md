@@ -1,5 +1,43 @@
 # mastra
 
+## 1.5.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`8fad147`](https://github.com/mastra-ai/mastra/commit/8fad14759804179c8e080ce4d9dec6ef1a808b31), [`582644c`](https://github.com/mastra-ai/mastra/commit/582644c4a87f83b4f245a84d72b9e8590585012e), [`5d84914`](https://github.com/mastra-ai/mastra/commit/5d84914e0e520c642a40329b210b413fcd139898), [`fd2f314`](https://github.com/mastra-ai/mastra/commit/fd2f31473d3449b6b97e837ef8641264377f41a7), [`e80fead`](https://github.com/mastra-ai/mastra/commit/e80fead1412cc0d1b2f7d6a1ce5017d9e0098ff7), [`0287b64`](https://github.com/mastra-ai/mastra/commit/0287b644a5c3272755cf3112e71338106664103b)]:
+  - @mastra/core@1.25.0-alpha.1
+  - @mastra/deployer@1.25.0-alpha.1
+
+## 1.5.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`87df955`](https://github.com/mastra-ai/mastra/commit/87df955c028660c075873fd5d74af28233ce32eb), [`075e91a`](https://github.com/mastra-ai/mastra/commit/075e91a4549baf46ad7a42a6a8ac8dfa78cc09e6)]:
+  - @mastra/core@1.24.2-alpha.0
+  - @mastra/deployer@1.24.2-alpha.0
+
+## 1.5.0
+
+### Minor Changes
+
+- Added `mastra server env` CLI commands for managing environment variables on deployed servers. New subcommands: `list`, `set`, `unset`, and `import` allow pushing env vars to production without using the UI. ([#15159](https://github.com/mastra-ai/mastra/pull/15159))
+
+### Patch Changes
+
+- Added documentation links to Evaluation page header for datasets, scorers, and experiments tabs. Moved Create Dataset button to header and simplified toolbar layout. ([#15180](https://github.com/mastra-ai/mastra/pull/15180))
+
+- - Added span type color legend and color indicators to trace timeline ([#15175](https://github.com/mastra-ai/mastra/pull/15175))
+  - Added missing memory and workspace span type support
+  - Fixed scroll-into-view when navigating spans with Next/Prev
+  - Fixed traceId URL deep-linking on click and page reload
+  - Moved timeline span components from logs domain to traces domain
+
+- Added 401 and 403 error handling to the Logs page for session expired and permission denied states ([#15178](https://github.com/mastra-ai/mastra/pull/15178))
+
+- Updated dependencies [[`ef94400`](https://github.com/mastra-ai/mastra/commit/ef9440049402596b31f2ab976c5e4508f6cb6c91), [`3db852b`](https://github.com/mastra-ai/mastra/commit/3db852bff74e29f60d415a7b0f1583d6ce2bad92)]:
+  - @mastra/core@1.24.1
+  - @mastra/deployer@1.24.1
+
 ## 1.5.0-alpha.2
 
 ### Patch Changes
