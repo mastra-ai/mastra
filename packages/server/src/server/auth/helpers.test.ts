@@ -1,9 +1,11 @@
+import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import type { MastraAuthConfig } from '@mastra/core/server';
 import { describe, expect, it } from 'vitest';
 
 import {
   canAccessPublicly,
   checkRules,
+  coreAuthMiddleware,
   isCustomRoutePublic,
   isDevPlaygroundRequest,
   isProtectedCustomRoute,
@@ -546,6 +548,162 @@ describe('auth helpers', () => {
       } finally {
         process.env.MASTRA_DEV = originalEnv;
       }
+    });
+  });
+
+  describe('coreAuthMiddleware - mapUserToResourceId', () => {
+    function createMockMastra() {
+      return {
+        getServer: () => ({}),
+        getLogger: () => null,
+      } as any;
+    }
+
+    function createRequestContext() {
+      const store = new Map<string, unknown>();
+      return {
+        get: (key: string) => store.get(key),
+        set: (key: string, value: unknown) => store.set(key, value),
+        _store: store,
+      };
+    }
+
+    const baseCtx = {
+      path: '/api/agents',
+      method: 'GET',
+      getHeader: () => undefined,
+      rawRequest: {},
+      token: 'valid-token',
+      buildAuthorizeContext: () => null,
+    };
+
+    it('should set resource ID when mapUserToResourceId is provided', async () => {
+      const user = { id: 'user-123', orgId: 'org-456' };
+      const requestContext = createRequestContext();
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => user,
+          mapUserToResourceId: (u: any) => u.id,
+        },
+        requestContext,
+      });
+
+      expect(result.action).toBe('next');
+      expect(requestContext.get('user')).toBe(user);
+      expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('user-123');
+    });
+
+    it('should support composite resource IDs', async () => {
+      const user = { id: 'user-123', orgId: 'org-456' };
+      const requestContext = createRequestContext();
+
+      await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => user,
+          mapUserToResourceId: (u: any) => `${u.orgId}:${u.id}`,
+        },
+        requestContext,
+      });
+
+      expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('org-456:user-123');
+    });
+    it('should not set resource ID when mapUserToResourceId returns null', async () => {
+      const requestContext = createRequestContext();
+
+      await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => ({ id: 'user-123' }),
+          mapUserToResourceId: () => null,
+        },
+        requestContext,
+      });
+
+      expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
+    });
+
+    it('should not set resource ID when mapUserToResourceId returns undefined', async () => {
+      const requestContext = createRequestContext();
+
+      await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => ({ id: 'user-123' }),
+          mapUserToResourceId: () => undefined,
+        },
+        requestContext,
+      });
+
+      expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
+    });
+
+    it('should not set resource ID when mapUserToResourceId is not provided', async () => {
+      const requestContext = createRequestContext();
+
+      await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => ({ id: 'user-123' }),
+        },
+        requestContext,
+      });
+
+      expect(requestContext.get('user')).toEqual({ id: 'user-123' });
+      expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
+    });
+
+    it('should not set resource ID when authentication fails', async () => {
+      const requestContext = createRequestContext();
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => null,
+          mapUserToResourceId: (u: any) => u?.id,
+        },
+        requestContext,
+      });
+
+      expect(result.action).toBe('error');
+      expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
+    });
+    it('should reject the request when mapUserToResourceId throws', async () => {
+      const requestContext = createRequestContext();
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => ({ id: 'user-123' }),
+          mapUserToResourceId: () => {
+            throw new Error('mapping failed');
+          },
+        },
+        requestContext,
+      });
+
+      expect(result).toEqual({
+        action: 'error',
+        status: 500,
+        body: { error: 'Failed to map authenticated user to a resource ID' },
+      });
+      expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
     });
   });
 });

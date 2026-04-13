@@ -32,9 +32,11 @@ import { withOmTracingSpan } from './tracing';
 import type {
   ObservationDebugEvent,
   ObservationMarkerConfig,
+  ObserveHookUsage,
   ObserveHooks,
   ResolvedObservationConfig,
   ResolvedReflectionConfig,
+  ThresholdRange,
 } from './types';
 
 type ConcreteReflectionModel = Exclude<ResolvedReflectionConfig['model'], ModelByInputTokens>;
@@ -124,12 +126,31 @@ export class ReflectorRunner {
     });
   }
 
-  private getObservationMarkerConfig(): ObservationMarkerConfig {
+  private getObservationMarkerConfig(record?: ObservationalMemoryRecord): ObservationMarkerConfig {
     return {
       messageTokens: getMaxThreshold(this.observationConfig.messageTokens),
-      observationTokens: getMaxThreshold(this.reflectionConfig.observationTokens),
+      observationTokens: getMaxThreshold(
+        record ? this.getEffectiveReflectionTokens(record) : this.reflectionConfig.observationTokens,
+      ),
       scope: this.scope,
     };
+  }
+
+  /**
+   * Resolve the effective reflection observationTokens for a record.
+   * Only explicit per-record overrides (stored under `_overrides`) win;
+   * the initial config snapshot is ignored so instance-level changes
+   * still take effect for existing records.
+   */
+  private getEffectiveReflectionTokens(record: ObservationalMemoryRecord): number | ThresholdRange {
+    const overrides = (
+      record.config as { _overrides?: { reflection?: { observationTokens?: number | ThresholdRange } } }
+    )?._overrides;
+    const recordTokens = overrides?.reflection?.observationTokens;
+    if (recordTokens) {
+      return recordTokens;
+    }
+    return this.reflectionConfig.observationTokens;
   }
 
   /**
@@ -324,6 +345,7 @@ export class ReflectorRunner {
     writer?: ProcessorStreamWriter,
     requestContext?: RequestContext,
     observabilityContext?: ObservabilityContext,
+    reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>,
   ): void {
     const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
 
@@ -338,7 +360,11 @@ export class ReflectorRunner {
       omError('[OM] Failed to set buffering reflection flag', err);
     });
 
+    reflectionHooks?.onReflectionStart?.();
     const asyncOp = this.doAsyncBufferedReflection(record, bufferKey, writer, requestContext, observabilityContext)
+      .then(usage => {
+        reflectionHooks?.onReflectionEnd?.({ usage });
+      })
       .catch(async error => {
         if (writer) {
           const failedMarker = createBufferingFailedMarker({
@@ -354,6 +380,10 @@ export class ReflectorRunner {
           await this.persistMarkerToStorage(failedMarker, record.threadId ?? '', record.resourceId ?? undefined);
         }
         omError('[OM] Async buffered reflection failed', error);
+        reflectionHooks?.onReflectionEnd?.({
+          usage: undefined,
+          error: error instanceof Error ? error : new Error(String(error)),
+        });
         // Clear the boundary so a failed reflection doesn't permanently block
         // future async reflection attempts (line 554 checks this map).
         BufferingCoordinator.lastBufferedBoundary.delete(bufferKey);
@@ -379,11 +409,11 @@ export class ReflectorRunner {
     writer?: ProcessorStreamWriter,
     requestContext?: RequestContext,
     observabilityContext?: ObservabilityContext,
-  ): Promise<void> {
+  ): Promise<{ inputTokens?: number; outputTokens?: number; totalTokens?: number } | undefined> {
     const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
     const currentRecord = freshRecord ?? record;
     const observationTokens = currentRecord.observationTokenCount ?? 0;
-    const reflectThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
+    const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(currentRecord));
     const bufferActivation = this.reflectionConfig.bufferActivation ?? 0.5;
     const startedAt = new Date().toISOString();
     const cycleId = `reflect-buf-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
@@ -420,7 +450,7 @@ export class ReflectorRunner {
         recordId: record.id,
         threadId: record.threadId ?? '',
         threadIds: record.threadId ? [record.threadId] : [],
-        config: this.getObservationMarkerConfig(),
+        config: this.getObservationMarkerConfig(currentRecord),
       });
       void writer.custom(startMarker).catch(() => {});
     }
@@ -468,6 +498,8 @@ export class ReflectorRunner {
       void writer.custom(endMarker).catch(() => {});
       await this.persistMarkerToStorage(endMarker, currentRecord.threadId ?? '', currentRecord.resourceId ?? undefined);
     }
+
+    return reflectResult.usage;
   }
 
   /**
@@ -550,7 +582,7 @@ export class ReflectorRunner {
         threadId: freshRecord.threadId ?? '',
         generationCount: afterRecord?.generationCount ?? freshRecord.generationCount ?? 0,
         observations: afterRecord?.activeObservations,
-        config: this.getObservationMarkerConfig(),
+        config: this.getObservationMarkerConfig(freshRecord),
       });
       void writer.custom(activationMarker).catch(() => {});
       await this.persistMarkerToMessage(
@@ -593,7 +625,7 @@ export class ReflectorRunner {
       observabilityContext,
     } = opts;
     const lockKey = this.buffering.getLockKey(record.threadId, record.resourceId);
-    const reflectThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
+    const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
 
     // ════════════════════════════════════════════════════════════════════════
     // ASYNC BUFFERING: Trigger background reflection at bufferActivation ratio
@@ -621,6 +653,7 @@ export class ReflectorRunner {
           writer,
           requestContext,
           observabilityContext,
+          reflectionHooks,
         );
       }
     }
@@ -664,6 +697,7 @@ export class ReflectorRunner {
           writer,
           requestContext,
           observabilityContext,
+          reflectionHooks,
         );
         return;
       }
@@ -688,7 +722,7 @@ export class ReflectorRunner {
         recordId: record.id,
         threadId,
         threadIds: [threadId],
-        config: this.getObservationMarkerConfig(),
+        config: this.getObservationMarkerConfig(record),
       });
       await writer.custom(startMarker).catch(() => {});
     }
@@ -712,6 +746,8 @@ export class ReflectorRunner {
         }
       : undefined;
 
+    let reflectionUsage: ObserveHookUsage | undefined;
+    let reflectionError: Error | undefined;
     try {
       const compressionStartLevel = await this.getCompressionStartLevel(requestContext);
       const reflectResult = await this.call(
@@ -725,6 +761,7 @@ export class ReflectorRunner {
         requestContext,
         observabilityContext,
       );
+      reflectionUsage = reflectResult.usage;
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
       await this.storage.createReflectionGeneration({
@@ -770,13 +807,14 @@ export class ReflectorRunner {
         });
         await writer.custom(failedMarker).catch(() => {});
       }
+      reflectionError = error instanceof Error ? error : new Error(String(error));
       if (abortSignal?.aborted) {
         throw error;
       }
       omError('[OM] Reflection failed', error);
     } finally {
       await this.storage.setReflectingFlag(record.id, false);
-      reflectionHooks?.onReflectionEnd?.();
+      reflectionHooks?.onReflectionEnd?.({ usage: reflectionUsage, error: reflectionError });
       unregisterOp(record.id, 'reflecting');
     }
   }

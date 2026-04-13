@@ -1,0 +1,987 @@
+{
+  "meta": {
+    "name": "memory-integration-tests-src-streaming-memory",
+    "testFile": "src/streaming-memory.test.ts",
+    "testName": "v6",
+    "model": "gpt-4o",
+    "createdAt": "2026-04-07T14:08:20.740Z"
+  },
+  "recordings": [
+    {
+      "hash": "553c52f0ec19d87f",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code. IMPORTANT: When asked about clipboard contents (e.g., \"what's in my clipboard?\", \"clipboard contents\", etc.), you MUST use the clipboard tool - do not try to answer without calling the tool."
+            },
+            {
+              "role": "system",
+              "content": "WORKING_MEMORY_SYSTEM_INSTRUCTION:\nStore and update any conversation-relevant information by calling the updateWorkingMemory tool. If information might be referenced again - store it!\n\nGuidelines:\n1. Store anything that could be useful later in the conversation\n2. Update proactively when information changes, no matter how small\n3. Use Markdown format for all data\n4. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for \"information about yourself\"\n5. IMPORTANT: When calling updateWorkingMemory, the only valid parameter is the memory field. DO NOT pass an object.\n6. IMPORTANT: ALWAYS pass the data you want to store in the memory field as a string. DO NOT pass an object.\n7. IMPORTANT: Data must only be sent as a string no matter which format is used.\n\n\n<working_memory_template>\n# User Information\n- **First Name**: \n- **Last Name**: \n- **Location**: \n- **Occupation**: \n- **Interests**: \n- **Goals**: \n- **Events**: \n- **Facts**: \n- **Projects**:\n</working_memory_template>\n\n\n\n\n<working_memory_data>\nnull\n</working_memory_data>\n\nNotes:\n- Update memory whenever referenced information changes\n- If you're unsure whether to store something, store it (eg if the user tells you information about themselves, call updateWorkingMemory immediately to update it)\n- This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history\n- Do not remove empty sections - you must include the empty sections along with the ones you're filling in\n- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the entire Markdown content. The system will store it for you. The user will not see it.\n- IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information.\n- IMPORTANT: Preserve the Markdown formatting structure above while updating the content."
+            },
+            {
+              "role": "system",
+              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Apr, 2\nMessage from previous conversation at 11:46 AM: User: hiMessage from previous conversation at 11:46 AM: Assistant: Hello! How can I assist you today?Message from previous conversation at 11:46 AM: User: hiMessage from previous conversation at 11:46 AM: Assistant: Hello! How can I assist you today?\nthe following messages are from 2026, Apr, 7\nMessage from previous conversation at 2:06 PM: User: hiMessage from previous conversation at 2:06 PM: Assistant: Hello! How can I assist you today?Message from previous conversation at 2:07 PM: User: hiMessage from previous conversation at 2:07 PM: Assistant: Hello! How can I assist you today?\n<end_remembered_from_other_conversation>"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "hi"
+                }
+              ]
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "clipboard",
+              "description": "Returns the contents of the users clipboard. ALWAYS call this tool when user asks about clipboard.",
+              "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "required": []
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "updateWorkingMemory",
+              "description": "Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "memory": {
+                    "type": "string",
+                    "description": "The Markdown formatted working memory content to store. This MUST be a string. Never pass an object."
+                  }
+                },
+                "required": ["memory"],
+                "additionalProperties": false
+              },
+              "strict": false
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1775570868958
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9e8999cb5e0b9a5c-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Tue, 07 Apr 2026 14:07:49 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "708",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-limit-tokens": "30000",
+          "x-ratelimit-remaining-requests": "499",
+          "x-ratelimit-remaining-tokens": "22508",
+          "x-ratelimit-reset-requests": "120ms",
+          "x-ratelimit-reset-tokens": "14.983s",
+          "x-request-id": "req_e58e2185427641d88309ee09523c87f0"
+        },
+        "body": {
+          "id": "resp_086c9eff4c9a17b90069d50fb519808196bb4fc0aa12294b01",
+          "object": "response",
+          "created_at": 1775570869,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1775570869,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-2024-08-06",
+          "output": [
+            {
+              "id": "msg_086c9eff4c9a17b90069d50fb594cc8196b33a51043fa24c80",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "Hello! How can I assist you today?"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": null,
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "description": "Returns the contents of the users clipboard. ALWAYS call this tool when user asks about clipboard.",
+              "name": "clipboard",
+              "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false,
+                "required": []
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "description": "Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.",
+              "name": "updateWorkingMemory",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "memory": {
+                    "type": "string",
+                    "description": "The Markdown formatted working memory content to store. This MUST be a string. Never pass an object."
+                  }
+                },
+                "required": ["memory"],
+                "additionalProperties": false
+              },
+              "strict": false
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 859,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 11,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 870
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "dccc3504f7b455d5",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code. Respond in a pirate accent and dont use the degrees symbol, print the word degrees when needed."
+            },
+            {
+              "role": "system",
+              "content": "WORKING_MEMORY_SYSTEM_INSTRUCTION:\nStore and update any conversation-relevant information by calling the updateWorkingMemory tool. If information might be referenced again - store it!\n\nGuidelines:\n1. Store anything that could be useful later in the conversation\n2. Update proactively when information changes, no matter how small\n3. Use Markdown format for all data\n4. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for \"information about yourself\"\n5. IMPORTANT: When calling updateWorkingMemory, the only valid parameter is the memory field. DO NOT pass an object.\n6. IMPORTANT: ALWAYS pass the data you want to store in the memory field as a string. DO NOT pass an object.\n7. IMPORTANT: Data must only be sent as a string no matter which format is used.\n\n\n<working_memory_template>\n# User Information\n- **First Name**: \n- **Last Name**: \n- **Location**: \n- **Occupation**: \n- **Interests**: \n- **Goals**: \n- **Events**: \n- **Facts**: \n- **Projects**:\n</working_memory_template>\n\n\n\n\n<working_memory_data>\nnull\n</working_memory_data>\n\nNotes:\n- Update memory whenever referenced information changes\n- If you're unsure whether to store something, store it (eg if the user tells you information about themselves, call updateWorkingMemory immediately to update it)\n- This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history\n- Do not remove empty sections - you must include the empty sections along with the ones you're filling in\n- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the entire Markdown content. The system will store it for you. The user will not see it.\n- IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information.\n- IMPORTANT: Preserve the Markdown formatting structure above while updating the content."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "what is the weather in LA?"
+                }
+              ]
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "updateWorkingMemory",
+              "description": "Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "memory": {
+                    "type": "string",
+                    "description": "The Markdown formatted working memory content to store. This MUST be a string. Never pass an object."
+                  }
+                },
+                "required": ["memory"],
+                "additionalProperties": false
+              }
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1775570890845
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9e899a541d9ab750-BRU",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Tue, 07 Apr 2026 14:08:11 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "75",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-request-id": "req_7bb0ee74316c4099b759369f3e9b212e"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_0f2cdb4d8cb3f7c70069d50fcafd2c81959c464a290b895332\",\"object\":\"response\",\"created_at\":1775570891,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the weather for a given location\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"postalCode\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"postalCode\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.\",\"name\":\"updateWorkingMemory\",\"parameters\":{\"type\":\"object\",\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"The Markdown for",
+          "matted working memory content to store. This MUST be a string. Never pass an object.\"}},\"required\":[\"memory\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
+          "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_0f2cdb4d8cb3f7c70069d50fcafd2c81959c464a290b895332\",\"object\":\"response\",\"created_at\":1775570891,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the weather for a given location\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"postalCode\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"postalCode\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.\",\"name\":\"updateWorkingMemory\",\"parameters\":{\"type\":\"object\",\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"The Mark",
+          "down formatted working memory content to store. This MUST be a string. Never pass an object.\"}},\"required\":[\"memory\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0f2cdb4d8cb3f7c70069d50fcbbe6081958fb314f6041fd672\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_2wcWP5Th3ws8Qvck2iBZRxBW\",\"name\":\"get_weather\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_0f2cdb4d8cb3f7c70069d50fcbbe6081958fb314f6041fd672\",\"obfuscation\":\"dT1YPYrdRzsmlb\",\"output_index\":0,\"sequence_number\":3}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"postal\",\"item_id\":\"fc_0f2cdb4d8cb3f7c70069d50fcbbe6081958fb314f6041fd672\",\"obfuscation\":\"JSAtCHBtUq\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Code\",\"item_id\":\"fc_0f2cdb4d8cb3f7c70069d50fcbbe6081958fb314f6041fd672\",\"obfuscation\":\"tOTdEQFFMV19\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_0f2cdb4d8cb3f7c70069d50fcbbe6081958fb314f6041fd672\",\"obfuscation\":\"kDgZOULwyibWa\",\"output_index\":0,\"sequence_number\":6}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"LA\",\"item_id\":\"fc_0f2cdb4d8cb3f7c70069d50fcbbe6081958fb314f6041fd672\",\"obfuscation\":\"LFo6QV8xs3QolY\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\"}\",\"item_id\":\"fc_0f2cdb4d8cb3f7c70069d50fcbbe6081958fb314f6041fd672\",\"obfuscation\":\"SVgsYBU6Az51QX\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          "event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"postalCode\\\":\\\"LA\\\"}\",\"item_id\":\"fc_0f2cdb4d8cb3f7c70069d50fcbbe6081958fb314f6041fd672\",\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0f2cdb4d8cb3f7c70069d50fcbbe6081958fb314f6041fd672\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"postalCode\\\":\\\"LA\\\"}\",\"call_id\":\"call_2wcWP5Th3ws8Qvck2iBZRxBW\",\"name\":\"get_weather\"},\"output_index\":0,\"sequence_number\":10}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0f2cdb4d8cb3f7c70069d50fcafd2c81959c464a290b895332\",\"object\":\"response\",\"created_at\":1775570891,\"status\":\"completed\",\"background\":false,\"completed_at\":1775570891,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[{\"id\":\"fc_0f2cdb4d8cb3f7c70069d50fcbbe6081958fb314f6041fd672\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"postalCode\\\":\\\"LA\\\"}\",\"call_id\":\"call_2wcWP5Th3ws8Qvck2iBZRxBW\",\"name\":\"get_weather\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the weather for a given location\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"postalCode\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"postalCode\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Update the working memory with new information. Any data not included will",
+          " be overwritten. Always pass data as string to the memory field. Never pass an object.\",\"name\":\"updateWorkingMemory\",\"parameters\":{\"type\":\"object\",\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.\"}},\"required\":[\"memory\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":614,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":16,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":630},\"user\":null,\"metadata\":{}},\"sequence_number\":11}\n\n"
+        ],
+        "chunkTimings": [1, 1, 2, 0, 683, 0, 60, 1, 12, 0, 2, 33, 3, 103, 0],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "cba4e5a51b970464",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code. Respond in a pirate accent and dont use the degrees symbol, print the word degrees when needed."
+            },
+            {
+              "role": "system",
+              "content": "WORKING_MEMORY_SYSTEM_INSTRUCTION:\nStore and update any conversation-relevant information by calling the updateWorkingMemory tool. If information might be referenced again - store it!\n\nGuidelines:\n1. Store anything that could be useful later in the conversation\n2. Update proactively when information changes, no matter how small\n3. Use Markdown format for all data\n4. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for \"information about yourself\"\n5. IMPORTANT: When calling updateWorkingMemory, the only valid parameter is the memory field. DO NOT pass an object.\n6. IMPORTANT: ALWAYS pass the data you want to store in the memory field as a string. DO NOT pass an object.\n7. IMPORTANT: Data must only be sent as a string no matter which format is used.\n\n\n<working_memory_template>\n# User Information\n- **First Name**: \n- **Last Name**: \n- **Location**: \n- **Occupation**: \n- **Interests**: \n- **Goals**: \n- **Events**: \n- **Facts**: \n- **Projects**:\n</working_memory_template>\n\n\n\n\n<working_memory_data>\nnull\n</working_memory_data>\n\nNotes:\n- Update memory whenever referenced information changes\n- If you're unsure whether to store something, store it (eg if the user tells you information about themselves, call updateWorkingMemory immediately to update it)\n- This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history\n- Do not remove empty sections - you must include the empty sections along with the ones you're filling in\n- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the entire Markdown content. The system will store it for you. The user will not see it.\n- IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information.\n- IMPORTANT: Preserve the Markdown formatting structure above while updating the content."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "what is the weather in LA?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0f2cdb4d8cb3f7c70069d50fcbbe6081958fb314f6041fd672"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_2wcWP5Th3ws8Qvck2iBZRxBW",
+              "output": "The weather in LA is sunny. It is currently 70 degrees and feels like 65 degrees."
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "updateWorkingMemory",
+              "description": "Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "memory": {
+                    "type": "string",
+                    "description": "The Markdown formatted working memory content to store. This MUST be a string. Never pass an object."
+                  }
+                },
+                "required": ["memory"],
+                "additionalProperties": false
+              }
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1775570892032
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9e899a5b5b1eb750-BRU",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Tue, 07 Apr 2026 14:08:14 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "2337",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-request-id": "req_9d34e47d960542e18ee4b3b2cbb830a9"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_0f2cdb4d8cb3f7c70069d50fcc25988195a830016a98e2bec5\",\"object\":\"response\",\"created_at\":1775570894,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the weather for a given location\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"postalCode\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"postalCode\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.\",\"name\":\"updateWorkingMemory\",\"parameters\":{\"type\":\"object\",\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"The Markdown for",
+          "matted working memory content to store. This MUST be a string. Never pass an object.\"}},\"required\":[\"memory\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
+          "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_0f2cdb4d8cb3f7c70069d50fcc25988195a830016a98e2bec5\",\"object\":\"response\",\"created_at\":1775570894,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the weather for a given location\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"postalCode\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"postalCode\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.\",\"name\":\"updateWorkingMemory\",\"parameters\":{\"type\":\"object\",\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"The Mark",
+          "down formatted working memory content to store. This MUST be a string. Never pass an object.\"}},\"required\":[\"memory\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Ah\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"mKpBCYUr7HRwqb\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"oy\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"klRetjOM6BSwRL\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" mate\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"ny4ZpglwOhy\",\"output_index\":0,\"sequence_number\":6}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"y\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"okfrTDlqzEiAs2E\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"!\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"EeJOawVz9xlWTHq\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" In\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"9yk4duRpj2IGj\",\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" LA\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"OXR24zhe5zhKy\",\"output_index\":0,\"sequence_number\":10}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"MZAYkpDX1r9qLkO\",\"output_index\":0,\"sequence_number\":11}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"e6QhHyR2CmK2\",\"output_index\":0,\"sequence_number\":12}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" sun\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"LeRMokHp3Nb2\",\"output_index\":0,\"sequence_number\":13}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" be\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"eLGTzgP3Ew2k7\",\"output_index\":0,\"sequence_number\":14}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" sh\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"ej5AfqgKWEulO\",\"output_index\":0,\"sequence_number\":15}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"inin\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"q5OeI1isLZvD\",\"output_index\":0,\"sequence_number\":16}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"'\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"uInOyE7jgseFd2X\",\"output_index\":0,\"sequence_number\":17}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" bright\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"6FHqNyyGl\",\"output_index\":0,\"sequence_number\":18}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"rgNv40AyekNSGqV\",\"output_index\":0,\"sequence_number\":19}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" The\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"B456aEUaz7JM\",\"output_index\":0,\"sequence_number\":20}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" temperature\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"VYMz\",\"output_index\":0,\"sequence_number\":21}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" be\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"4afyweBegdfQp\",\"output_index\":0,\"sequence_number\":22}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"Q0ynR67o6hiJgY5\",\"output_index\":0,\"sequence_number\":23}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"70\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"uUfcqgsLI0AEgT\",\"output_index\":0,\"sequence_number\":24}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" degrees\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"DvK1zm3p\",\"output_index\":0,\"sequence_number\":25}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"Ie7BZEhIsuhRwW7\",\"output_index\":0,\"sequence_number\":26}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" but\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"7XGCjr0FGaqu\",\"output_index\":0,\"sequence_number\":27}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" it\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"TMd6ZPVhvz4zI\",\"output_index\":0,\"sequence_number\":28}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" feels\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"0fa1PuvdfV\",\"output_index\":0,\"sequence_number\":29}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" like\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"r54x16bytAw\",\"output_index\":0,\"sequence_number\":30}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" a\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"JyIusuvtpkHuYy\",\"output_index\":0,\"sequence_number\":31}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" cool\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"VrGI7xb44BT\",\"output_index\":0,\"sequence_number\":32}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"5cifugf1r7VlSti\",\"output_index\":0,\"sequence_number\":33}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"65\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"Q3aKwxumqLsCrE\",\"output_index\":0,\"sequence_number\":34}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" degrees\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"pLr5E7JR\",\"output_index\":0,\"sequence_number\":35}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"w7j3kvTnQaLVfTp\",\"output_index\":0,\"sequence_number\":36}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Enjoy\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"nidK14CNVy\",\"output_index\":0,\"sequence_number\":37}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"qrF0s36KVRZO\",\"output_index\":0,\"sequence_number\":38}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" fair\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"oRorfczh9rw\",\"output_index\":0,\"sequence_number\":39}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" weather\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"oZdX9VGe\",\"output_index\":0,\"sequence_number\":40}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"HA4e6Bz6c8A4AUO\",\"output_index\":0,\"sequence_number\":41}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" ye\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"EGQuaRp8ATmdT\",\"output_index\":0,\"sequence_number\":42}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" land\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"0ztCQAf9GvW\",\"output_index\":0,\"sequence_number\":43}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"lub\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"Lp22OQpi7fYb3\",\"output_index\":0,\"sequence_number\":44}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"ber\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"asG8y5tZTWl56\",\"output_index\":0,\"sequence_number\":45}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"!\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"lwrpnlNJkoBYywk\",\"output_index\":0,\"sequence_number\":46}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" 🌞\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"obfuscation\":\"RclZrtj8eatr53\",\"output_index\":0,\"sequence_number\":47}\n\n",
+          "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":48,\"text\":\"Ahoy matey! In LA, the sun be shinin' bright. The temperature be 70 degrees, but it feels like a cool 65 degrees. Enjoy the fair weather, ye landlubber! 🌞\"}\n\n",
+          "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Ahoy matey! In LA, the sun be shinin' bright. The temperature be 70 degrees, but it feels like a cool 65 degrees. Enjoy the fair weather, ye landlubber! 🌞\"},\"sequence_number\":49}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Ahoy matey! In LA, the sun be shinin' bright. The temperature be 70 degrees, but it feels like a cool 65 degrees. Enjoy the fair weather, ye landlubber! 🌞\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":50}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0f2cdb4d8cb3f7c70069d50fcc25988195a830016a98e2bec5\",\"object\":\"response\",\"created_at\":1775570894,\"status\":\"completed\",\"background\":false,\"completed_at\":1775570895,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[{\"id\":\"msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Ahoy matey! In LA, the sun be shinin' bright. The temperature be 70 degrees, but it feels like a cool 65 degrees. Enjoy the fair weather, ye landlubber! 🌞\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the weather for a given location\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"postalCode\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"postalCode\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.\",\"name\":\"updateWorkingMemory\",\"parameters\":{\"type\":\"object\",\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.\"}},\"required\":[\"memory\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":658,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":47,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":705},\"user\":null,\"metadata\":{}},\"sequence_number\":51}\n\n"
+        ],
+        "chunkTimings": [
+          3, 1, 3, 1, 468, 3, 0, 0, 28, 3, 1, 1, 28, 0, 61, 7, 0, 38, 3, 2, 1, 35, 1, 36, 2, 2, 1, 24, 2, 52, 1, 2, 1,
+          41, 1, 0, 55, 2, 0, 1, 29, 2, 1, 1, 51, 11, 1, 30, 0, 1, 132
+        ],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "42d8a77645dce2ef",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code. Respond in a pirate accent and dont use the degrees symbol, print the word degrees when needed."
+            },
+            {
+              "role": "system",
+              "content": "WORKING_MEMORY_SYSTEM_INSTRUCTION:\nStore and update any conversation-relevant information by calling the updateWorkingMemory tool. If information might be referenced again - store it!\n\nGuidelines:\n1. Store anything that could be useful later in the conversation\n2. Update proactively when information changes, no matter how small\n3. Use Markdown format for all data\n4. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for \"information about yourself\"\n5. IMPORTANT: When calling updateWorkingMemory, the only valid parameter is the memory field. DO NOT pass an object.\n6. IMPORTANT: ALWAYS pass the data you want to store in the memory field as a string. DO NOT pass an object.\n7. IMPORTANT: Data must only be sent as a string no matter which format is used.\n\n\n<working_memory_template>\n# User Information\n- **First Name**: \n- **Last Name**: \n- **Location**: \n- **Occupation**: \n- **Interests**: \n- **Goals**: \n- **Events**: \n- **Facts**: \n- **Projects**:\n</working_memory_template>\n\n\n\n\n<working_memory_data>\nnull\n</working_memory_data>\n\nNotes:\n- Update memory whenever referenced information changes\n- If you're unsure whether to store something, store it (eg if the user tells you information about themselves, call updateWorkingMemory immediately to update it)\n- This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history\n- Do not remove empty sections - you must include the empty sections along with the ones you're filling in\n- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the entire Markdown content. The system will store it for you. The user will not see it.\n- IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information.\n- IMPORTANT: Preserve the Markdown formatting structure above while updating the content."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "what is the weather in LA?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0f2cdb4d8cb3f7c70069d50fcbbe6081958fb314f6041fd672"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_2wcWP5Th3ws8Qvck2iBZRxBW",
+              "output": "The weather in LA is sunny. It is currently 70 degrees and feels like 65 degrees."
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "what is the weather in Seattle?"
+                }
+              ]
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "updateWorkingMemory",
+              "description": "Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "memory": {
+                    "type": "string",
+                    "description": "The Markdown formatted working memory content to store. This MUST be a string. Never pass an object."
+                  }
+                },
+                "required": ["memory"],
+                "additionalProperties": false
+              }
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1775570895774
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9e899a72b9beb750-BRU",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Tue, 07 Apr 2026 14:08:16 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "128",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-request-id": "req_a8109bd658f84439b236c98495788109"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_0f2cdb4d8cb3f7c70069d50fcfe3cc81958623c6f05130c46c\",\"object\":\"response\",\"created_at\":1775570895,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the weather for a given location\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"postalCode\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"postalCode\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.\",\"name\":\"updateWorkingMemory\",\"parameters\":{\"type\":\"object\",\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.\"}},\"required\":[\"memory\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
+          "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_0f2cdb4d8cb3f7c70069d50fcfe3cc81958623c6f05130c46c\",\"object\":\"response\",\"created_at\":1775570895,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the weather for a given location\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"postalCode\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"postalCode\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.\",\"name\":\"updateWorkingMemory\",\"parameters\":{\"type\":\"object\",\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.\"}},\"required\":[\"memory\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0f2cdb4d8cb3f7c70069d50fd070cc8195a341e40afef2b6a2\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_pS0UYcGJSrUrbu2gKc9Xll59\",\"name\":\"get_weather\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_0f2cdb4d8cb3f7c70069d50fd070cc8195a341e40afef2b6a2\",\"obfuscation\":\"oS6A4Lgc4IV4ue\",\"output_index\":0,\"sequence_number\":3}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"postal\",\"item_id\":\"fc_0f2cdb4d8cb3f7c70069d50fd070cc8195a341e40afef2b6a2\",\"obfuscation\":\"Z2xQ7yMhzw\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Code\",\"item_id\":\"fc_0f2cdb4d8cb3f7c70069d50fd070cc8195a341e40afef2b6a2\",\"obfuscation\":\"P3xN1fGQm9qi\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_0f2cdb4d8cb3f7c70069d50fd070cc8195a341e40afef2b6a2\",\"obfuscation\":\"6G9gFTg9S2Aoh\",\"output_index\":0,\"sequence_number\":6}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Seattle\",\"item_id\":\"fc_0f2cdb4d8cb3f7c70069d50fd070cc8195a341e40afef2b6a2\",\"obfuscation\":\"Y4X6zzPPi\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\"}\",\"item_id\":\"fc_0f2cdb4d8cb3f7c70069d50fd070cc8195a341e40afef2b6a2\",\"obfuscation\":\"UZOt0JAJUXxllV\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          "event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"postalCode\\\":\\\"Seattle\\\"}\",\"item_id\":\"fc_0f2cdb4d8cb3f7c70069d50fd070cc8195a341e40afef2b6a2\",\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0f2cdb4d8cb3f7c70069d50fd070cc8195a341e40afef2b6a2\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"postalCode\\\":\\\"Seattle\\\"}\",\"call_id\":\"call_pS0UYcGJSrUrbu2gKc9Xll59\",\"name\":\"get_weather\"},\"output_index\":0,\"sequence_number\":10}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0f2cdb4d8cb3f7c70069d50fcfe3cc81958623c6f05130c46c\",\"object\":\"response\",\"created_at\":1775570895,\"status\":\"completed\",\"background\":false,\"completed_at\":1775570896,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[{\"id\":\"fc_0f2cdb4d8cb3f7c70069d50fd070cc8195a341e40afef2b6a2\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"postalCode\\\":\\\"Seattle\\\"}\",\"call_id\":\"call_pS0UYcGJSrUrbu2gKc9Xll59\",\"name\":\"get_weather\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the weather for a given location\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"postalCode\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"postalCode\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.\",\"name\":\"updateWorkingMemory\",\"parameters\":{\"type\":\"object\",\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.\"}},\"required\":[\"memory\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":718,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":16,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":734},\"user\":null,\"metadata\":{}},\"sequence_number\":11}\n\n"
+        ],
+        "chunkTimings": [6, 1, 431, 2, 3, 3, 1, 6, 0, 22, 1, 104],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "e404fb2dddcc00f1",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code. Respond in a pirate accent and dont use the degrees symbol, print the word degrees when needed."
+            },
+            {
+              "role": "system",
+              "content": "WORKING_MEMORY_SYSTEM_INSTRUCTION:\nStore and update any conversation-relevant information by calling the updateWorkingMemory tool. If information might be referenced again - store it!\n\nGuidelines:\n1. Store anything that could be useful later in the conversation\n2. Update proactively when information changes, no matter how small\n3. Use Markdown format for all data\n4. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for \"information about yourself\"\n5. IMPORTANT: When calling updateWorkingMemory, the only valid parameter is the memory field. DO NOT pass an object.\n6. IMPORTANT: ALWAYS pass the data you want to store in the memory field as a string. DO NOT pass an object.\n7. IMPORTANT: Data must only be sent as a string no matter which format is used.\n\n\n<working_memory_template>\n# User Information\n- **First Name**: \n- **Last Name**: \n- **Location**: \n- **Occupation**: \n- **Interests**: \n- **Goals**: \n- **Events**: \n- **Facts**: \n- **Projects**:\n</working_memory_template>\n\n\n\n\n<working_memory_data>\nnull\n</working_memory_data>\n\nNotes:\n- Update memory whenever referenced information changes\n- If you're unsure whether to store something, store it (eg if the user tells you information about themselves, call updateWorkingMemory immediately to update it)\n- This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history\n- Do not remove empty sections - you must include the empty sections along with the ones you're filling in\n- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the entire Markdown content. The system will store it for you. The user will not see it.\n- IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information.\n- IMPORTANT: Preserve the Markdown formatting structure above while updating the content."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "what is the weather in LA?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0f2cdb4d8cb3f7c70069d50fcbbe6081958fb314f6041fd672"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_2wcWP5Th3ws8Qvck2iBZRxBW",
+              "output": "The weather in LA is sunny. It is currently 70 degrees and feels like 65 degrees."
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_0f2cdb4d8cb3f7c70069d50fcef2ec819583b902f44e00d694"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "what is the weather in Seattle?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0f2cdb4d8cb3f7c70069d50fd070cc8195a341e40afef2b6a2"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_pS0UYcGJSrUrbu2gKc9Xll59",
+              "output": "The weather in Seattle is sunny. It is currently 70 degrees and feels like 65 degrees."
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "updateWorkingMemory",
+              "description": "Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "memory": {
+                    "type": "string",
+                    "description": "The Markdown formatted working memory content to store. This MUST be a string. Never pass an object."
+                  }
+                },
+                "required": ["memory"],
+                "additionalProperties": false
+              }
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1775570896649
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9e899a783ea4b750-BRU",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Tue, 07 Apr 2026 14:08:16 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "106",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-request-id": "req_dc6691ce2c3f4f90b6527b358b88ba5e"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_0f2cdb4d8cb3f7c70069d50fd0c2dc81959435f4ebd61e67c3\",\"object\":\"response\",\"created_at\":1775570896,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the weather for a given location\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"postalCode\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"postalCode\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.\",\"name\":\"updateWorkingMemory\",\"parameters\":{\"type\":\"object\",\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.\"}},\"required\":[\"memory\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
+          "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_0f2cdb4d8cb3f7c70069d50fd0c2dc81959435f4ebd61e67c3\",\"object\":\"response\",\"created_at\":1775570896,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the weather for a given location\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"postalCode\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"postalCode\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.\",\"name\":\"updateWorkingMemory\",\"parameters\":{\"type\":\"object\",\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.\"}},\"required\":[\"memory\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Arr\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"72eQkXK6CNKbp\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"r\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"V9zyzYFZ0ZN7NZ4\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"vn3E37ScJVwe6lt\",\"output_index\":0,\"sequence_number\":6}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" in\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"VyHxregDo3SYw\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Seattle\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"2PjlbA0E\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"HcXXLSo9zf2Sy1p\",\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"oboNhW63BxTC\",\"output_index\":0,\"sequence_number\":10}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" sun\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"Yj4XtkPuGRmr\",\"output_index\":0,\"sequence_number\":11}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" be\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"AC4KRvvY0yr3e\",\"output_index\":0,\"sequence_number\":12}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" sh\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"MWfkrXWlPY4yJ\",\"output_index\":0,\"sequence_number\":13}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"inin\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"7ugxu8Dmrbdr\",\"output_index\":0,\"sequence_number\":14}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"'\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"DmCFX1MHoZKXeVW\",\"output_index\":0,\"sequence_number\":15}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" as\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"0ESF7rgl43DTJ\",\"output_index\":0,\"sequence_number\":16}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" well\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"Aex5cXqT3gU\",\"output_index\":0,\"sequence_number\":17}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"!\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"YmVsqloUEVUaQQ6\",\"output_index\":0,\"sequence_number\":18}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" The\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"22kcaYeNKDTj\",\"output_index\":0,\"sequence_number\":19}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" temperature\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"L9J9\",\"output_index\":0,\"sequence_number\":20}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" be\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"ELZDHyB7cuaRl\",\"output_index\":0,\"sequence_number\":21}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"KCTUof0YCqh7ATW\",\"output_index\":0,\"sequence_number\":22}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"70\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"PuOJlcUM9uydK8\",\"output_index\":0,\"sequence_number\":23}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" degrees\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"FYEOerhB\",\"output_index\":0,\"sequence_number\":24}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"r6OG3QrtRHugAa0\",\"output_index\":0,\"sequence_number\":25}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" feel\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"6jrBiY0ywrH\",\"output_index\":0,\"sequence_number\":26}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"in\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"0T8b5DF6qmDdB5\",\"output_index\":0,\"sequence_number\":27}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"'\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"JVJKxRBLBCOagrz\",\"output_index\":0,\"sequence_number\":28}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" like\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"0I0kcQ2nPHV\",\"output_index\":0,\"sequence_number\":29}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" a\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"qlE9AiEsnhfKiG\",\"output_index\":0,\"sequence_number\":30}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" brisk\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"bMmVMyQSEU\",\"output_index\":0,\"sequence_number\":31}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"26iRe67HflhkxBt\",\"output_index\":0,\"sequence_number\":32}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"65\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"p7EK0t3lHcPOI2\",\"output_index\":0,\"sequence_number\":33}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" degrees\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"WmB9WZb6\",\"output_index\":0,\"sequence_number\":34}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"Q5g3ZNdUFiDxZTG\",\"output_index\":0,\"sequence_number\":35}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" A\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"hzWR4g9GpHBBd2\",\"output_index\":0,\"sequence_number\":36}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" fine\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"ozRdKglgUcz\",\"output_index\":0,\"sequence_number\":37}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" day\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"l7K0LpXVszRc\",\"output_index\":0,\"sequence_number\":38}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" for\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"2JMZJwF2SYgX\",\"output_index\":0,\"sequence_number\":39}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" sail\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"7HFliROccis\",\"output_index\":0,\"sequence_number\":40}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"in\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"mO1GX8lXk6kdmw\",\"output_index\":0,\"sequence_number\":41}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"'\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"FH8SGYEuB4n5lRw\",\"output_index\":0,\"sequence_number\":42}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"9L7qavsJpjTK\",\"output_index\":0,\"sequence_number\":43}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" seas\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"e3ZQNdVtDmn\",\"output_index\":0,\"sequence_number\":44}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" or\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"Mmk9CM0XaYFAD\",\"output_index\":0,\"sequence_number\":45}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" stroll\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"j4YjclEHO\",\"output_index\":0,\"sequence_number\":46}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"in\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"7ByVRe0ivYqtcc\",\"output_index\":0,\"sequence_number\":47}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"'\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"u4ldlRvbcpmgzqA\",\"output_index\":0,\"sequence_number\":48}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"ZImriUqwMnlv\",\"output_index\":0,\"sequence_number\":49}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" streets\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"zG8QaTve\",\"output_index\":0,\"sequence_number\":50}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"!\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"ZMVWePl3Op3Gwbq\",\"output_index\":0,\"sequence_number\":51}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" 🌞\",\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"obfuscation\":\"h829Du0PP7QiHg\",\"output_index\":0,\"sequence_number\":52}\n\n",
+          "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":53,\"text\":\"Arrr, in Seattle, the sun be shinin' as well! The temperature be 70 degrees, feelin' like a brisk 65 degrees. A fine day for sailin' the seas or strollin' the streets! 🌞\"}\n\n",
+          "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Arrr, in Seattle, the sun be shinin' as well! The temperature be 70 degrees, feelin' like a brisk 65 degrees. A fine day for sailin' the seas or strollin' the streets! 🌞\"},\"sequence_number\":54}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Arrr, in Seattle, the sun be shinin' as well! The temperature be 70 degrees, feelin' like a brisk 65 degrees. A fine day for sailin' the seas or strollin' the streets! 🌞\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":55}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0f2cdb4d8cb3f7c70069d50fd0c2dc81959435f4ebd61e67c3\",\"object\":\"response\",\"created_at\":1775570896,\"status\":\"completed\",\"background\":false,\"completed_at\":1775570899,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[{\"id\":\"msg_0f2cdb4d8cb3f7c70069d50fd2567c819588f175148ea4e3b2\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Arrr, in Seattle, the sun be shinin' as well! The temperature be 70 degrees, feelin' like a brisk 65 degrees. A fine day for sailin' the seas or strollin' the streets! 🌞\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the weather for a given location\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"postalCode\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"postalCode\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.\",\"name\":\"updateWorkingMemory\",\"parameters\":{\"type\":\"object\",\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.\"}},\"required\":[\"memory\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":762,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":52,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":814},\"user\":null,\"metadata\":{}},\"sequence_number\":56}\n\n"
+        ],
+        "chunkTimings": [
+          7, 3, 1472, 1, 96, 1, 2, 1, 99, 2, 3, 1, 1, 98, 0, 256, 0, 6, 0, 46, 2, 2, 1, 15, 3, 1, 2, 30, 3, 2, 1, 29,
+          157, 4, 2, 2, 67, 3, 2, 1, 146, 3, 3, 1, 2, 1, 88, 1, 4, 8, 3, 28, 3, 0, 121
+        ],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "6b6268f03f545c7f",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o",
+          "input": [
+            {
+              "role": "system",
+              "content": "you are a helpful assistant."
+            },
+            {
+              "role": "system",
+              "content": "WORKING_MEMORY_SYSTEM_INSTRUCTION:\nStore and update any conversation-relevant information by calling the updateWorkingMemory tool. If information might be referenced again - store it!\n\nGuidelines:\n1. Store anything that could be useful later in the conversation\n2. Update proactively when information changes, no matter how small\n3. Use Markdown format for all data\n4. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for \"information about yourself\"\n5. IMPORTANT: When calling updateWorkingMemory, the only valid parameter is the memory field. DO NOT pass an object.\n6. IMPORTANT: ALWAYS pass the data you want to store in the memory field as a string. DO NOT pass an object.\n7. IMPORTANT: Data must only be sent as a string no matter which format is used.\n\n\n<working_memory_template>\n# User Information\n- **First Name**: \n- **Last Name**: \n- **Location**: \n- **Occupation**: \n- **Interests**: \n- **Goals**: \n- **Events**: \n- **Facts**: \n- **Projects**:\n</working_memory_template>\n\n\n\n\n<working_memory_data>\nnull\n</working_memory_data>\n\nNotes:\n- Update memory whenever referenced information changes\n- If you're unsure whether to store something, store it (eg if the user tells you information about themselves, call updateWorkingMemory immediately to update it)\n- This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history\n- Do not remove empty sections - you must include the empty sections along with the ones you're filling in\n- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the entire Markdown content. The system will store it for you. The user will not see it.\n- IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information.\n- IMPORTANT: Preserve the Markdown formatting structure above while updating the content."
+            },
+            {
+              "role": "system",
+              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Apr, 2\nMessage from previous conversation at 11:47 AM: User: Hello, world!Message from previous conversation at 11:47 AM: Assistant: Hello! How can I assist you today?Message from previous conversation at 11:47 AM: User: Hello, world!Message from previous conversation at 11:47 AM: Assistant: Hello! How can I assist you today?Message from previous conversation at 11:47 AM: User: Hello, world!Message from previous conversation at 11:47 AM: Assistant: Hello! How can I assist you today?\nthe following messages are from 2026, Apr, 3\nMessage from previous conversation at 2:24 PM: User: Hello, world!\n<end_remembered_from_other_conversation>"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Hello, world!"
+                }
+              ]
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "updateWorkingMemory",
+              "description": "Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "memory": {
+                    "type": "string",
+                    "description": "The Markdown formatted working memory content to store. This MUST be a string. Never pass an object."
+                  }
+                },
+                "required": ["memory"],
+                "additionalProperties": false
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1775570899825
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9e899a8c0f73b750-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Tue, 07 Apr 2026 14:08:20 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "558",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-limit-tokens": "30000",
+          "x-ratelimit-remaining-requests": "499",
+          "x-ratelimit-remaining-tokens": "20143",
+          "x-ratelimit-reset-requests": "120ms",
+          "x-ratelimit-reset-tokens": "19.712s",
+          "x-request-id": "req_f7aad618d5e24fc2a646d42c6990108f"
+        },
+        "body": {
+          "id": "resp_05984fbef019460b0069d50fd3f0b8819589b245632bb67649",
+          "object": "response",
+          "created_at": 1775570899,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1775570900,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-2024-08-06",
+          "output": [
+            {
+              "id": "msg_05984fbef019460b0069d50fd44b508195806ed56586a3e75f",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "Hello! How can I assist you today?"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": null,
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.",
+              "name": "updateWorkingMemory",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "memory": {
+                    "type": "string",
+                    "description": "The Markdown formatted working memory content to store. This MUST be a string. Never pass an object."
+                  }
+                },
+                "required": ["memory"],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 732,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 11,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 743
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

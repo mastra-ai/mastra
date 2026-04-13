@@ -1,4 +1,4 @@
-import fs, { existsSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path, { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +7,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 import type { LSPConfig } from '@mastra/core/workspace';
+import type { z } from 'zod';
 import { loadSettings } from '../onboarding/settings.js';
 import type { stateSchema } from '../schema';
 import { TOOL_NAME_OVERRIDES } from '../tool-names.js';
@@ -18,68 +19,33 @@ import { TOOL_NAME_OVERRIDES } from '../tool-names.js';
 // We support multiple skill locations for compatibility:
 // 1. Project-local: .mastracode/skills (project-specific mastracode skills)
 // 2. Project-local: .claude/skills (Claude Code compatible skills)
-// 3. Global: ~/.mastracode/skills (user-wide mastracode skills)
-// 4. Global: ~/.claude/skills (user-wide Claude Code skills)
+// 3. Project-local: .agents/skills (Agent Skills spec compatible)
+// 4. Global: ~/.mastracode/skills (user-wide mastracode skills)
+// 5. Global: ~/.claude/skills (user-wide Claude Code skills)
+// 6. Global: ~/.agents/skills (user-wide Agent Skills spec compatible)
 
 const mastraCodeLocalSkillsPath = path.join(process.cwd(), '.mastracode', 'skills');
 
 const claudeLocalSkillsPath = path.join(process.cwd(), '.claude', 'skills');
 
+const agentSkillsLocalPath = path.join(process.cwd(), '.agents', 'skills');
+
 const mastraCodeGlobalSkillsPath = path.join(os.homedir(), '.mastracode', 'skills');
 
 const claudeGlobalSkillsPath = path.join(os.homedir(), '.claude', 'skills');
 
-// Mastra's LocalSkillSource.readdir uses Node's Dirent.isDirectory() which
-// returns false for symlinks. Tools like `npx skills add` install skills as
-// symlinks, so we need to resolve them. For each symlinked skill directory,
-// we add the real (resolved) parent path as an additional skill scan path.
-function collectSkillPaths(skillsDirs: string[]): string[] {
-  const paths: string[] = [];
-  const seen = new Set<string>();
+const agentSkillsGlobalPath = path.join(os.homedir(), '.agents', 'skills');
 
-  for (const skillsDir of skillsDirs) {
-    if (!fs.existsSync(skillsDir)) continue;
-
-    // Always add the directory itself
-    const resolved = fs.realpathSync(skillsDir);
-    if (!seen.has(resolved)) {
-      seen.add(resolved);
-      paths.push(skillsDir);
-    }
-
-    // Check for symlinked skill subdirectories and add their real parents
-    try {
-      const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isSymbolicLink()) {
-          const linkPath = path.join(skillsDir, entry.name);
-          const realPath = fs.realpathSync(linkPath);
-          const stat = fs.statSync(realPath);
-          if (stat.isDirectory()) {
-            // Add the real parent directory as a skill path
-            // so Mastra discovers it as a regular directory
-            const realParent = path.dirname(realPath);
-            if (!seen.has(realParent)) {
-              seen.add(realParent);
-              paths.push(realParent);
-            }
-          }
-        }
-      }
-    } catch {
-      // Ignore errors during symlink resolution
-    }
-  }
-
-  return paths;
-}
-
-export const skillPaths = collectSkillPaths([
+export const skillPaths = [
   mastraCodeLocalSkillsPath,
   claudeLocalSkillsPath,
+  agentSkillsLocalPath,
   mastraCodeGlobalSkillsPath,
   claudeGlobalSkillsPath,
-]);
+  agentSkillsGlobalPath,
+];
+
+export const allowedSkillPaths = skillPaths;
 
 const WORKSPACE_ID_PREFIX = 'mastra-code-workspace';
 
@@ -95,9 +61,11 @@ function detectPackageRunner(projectPath: string): string | undefined {
   return 'npx --yes';
 }
 
+type MastraCodeState = z.infer<typeof stateSchema>;
+
 export function getDynamicWorkspace({ requestContext, mastra }: { requestContext: RequestContext; mastra?: Mastra }) {
-  const ctx = requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined;
-  const state = ctx?.getState?.();
+  const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
+  const state = ctx?.getState();
   const modeId = ctx?.modeId ?? 'build';
   const rawProjectPath = state?.projectPath;
 
@@ -108,7 +76,7 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
   const projectPath = path.resolve(rawProjectPath);
   const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}`;
   const sandboxPaths = state?.sandboxAllowedPaths ?? [];
-  const allowedPaths = [...skillPaths, ...sandboxPaths.map((p: string) => path.resolve(p))];
+  const allowedPaths = [...allowedSkillPaths, ...sandboxPaths.map((p: string) => path.resolve(p))];
   const isPlanMode = modeId === 'plan';
 
   const planModeTools = {

@@ -367,6 +367,25 @@ export class Agent<
   }
 
   /**
+   * Sets or updates the browser instance for this agent.
+   * This allows hot-swapping browser configuration without recreating the agent.
+   * Browser tools will be automatically updated on the next execution.
+   *
+   * @param browser - The new browser instance, or undefined to disable browser tools
+   */
+  setBrowser(browser: MastraBrowser | undefined): void {
+    this.#browser = browser;
+  }
+
+  /**
+   * Returns true if this agent was configured with its own browser instance.
+   * Used by Harness to avoid overwriting agent-level browser configuration.
+   */
+  hasOwnBrowser(): boolean {
+    return Boolean(this.#browser);
+  }
+
+  /**
    * Gets the skills processors to add to input processors when workspace has skills.
    * @internal
    */
@@ -4473,7 +4492,11 @@ export class Agent<
     })) as MastraLLMVNext;
 
     const resolvedModel = llm.getModel();
-    const isGatewayModel = resolvedModel instanceof ModelRouterLanguageModel && resolvedModel.gatewayId === 'mastra';
+    const isGatewayModel =
+      typeof resolvedModel === 'object' &&
+      resolvedModel !== null &&
+      'gatewayId' in resolvedModel &&
+      resolvedModel.gatewayId === 'mastra';
     if (resourceId && threadFromArgs && !this.hasOwnMemory() && !isGatewayModel) {
       this.logger.warn('No memory is configured but resourceId and threadId were passed in args', { agent: this.name });
     }
@@ -4556,6 +4579,7 @@ export class Agent<
       getMemory: this.getMemory.bind(this),
       getModel: this.getModel.bind(this),
       generateMessageId: this.#mastra?.generateId?.bind(this.#mastra) || (() => randomUUID()),
+      mastra: this.#mastra,
       _agentNetworkAppend:
         '_agentNetworkAppend' in this
           ? Boolean((this as unknown as { _agentNetworkAppend: unknown })._agentNetworkAppend)
@@ -4781,6 +4805,8 @@ export class Agent<
       requestContext,
       structuredOutput,
       overrideScorers,
+      threadId,
+      resourceId,
       ...observabilityContext,
     });
 
