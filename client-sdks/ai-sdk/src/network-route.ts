@@ -292,7 +292,17 @@ export function networkRoute<OUTPUT = undefined>({
 
       // Resolve agent version from query params, falling back to static option
       const queryVersionId = c.req.query('versionId');
-      const queryStatus = c.req.query('status') as 'draft' | 'published' | undefined;
+      const rawStatus = c.req.query('status');
+
+      if (queryVersionId && rawStatus) {
+        throw new Error('Query parameters "versionId" and "status" are mutually exclusive');
+      }
+
+      if (rawStatus && rawStatus !== 'draft' && rawStatus !== 'published') {
+        throw new Error('Query parameter "status" must be "draft" or "published"');
+      }
+
+      const queryStatus = rawStatus as 'draft' | 'published' | undefined;
       const effectiveAgentVersion: AgentVersionOptions | undefined = queryVersionId
         ? { versionId: queryVersionId }
         : queryStatus
