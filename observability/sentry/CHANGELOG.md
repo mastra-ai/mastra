@@ -1,5 +1,23 @@
 # @mastra/sentry
 
+## 1.0.16-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`4ba3bb1`](https://github.com/mastra-ai/mastra/commit/4ba3bb1e465ad2ddaba3bbf2bc47e0faec32985e)]:
+  - @mastra/observability@1.9.1-alpha.0
+  - @mastra/core@1.25.0-alpha.2
+  - @mastra/otel-exporter@1.0.16-alpha.0
+
+## 1.0.15
+
+### Patch Changes
+
+- Updated dependencies [[`ef94400`](https://github.com/mastra-ai/mastra/commit/ef9440049402596b31f2ab976c5e4508f6cb6c91), [`3db852b`](https://github.com/mastra-ai/mastra/commit/3db852bff74e29f60d415a7b0f1583d6ce2bad92), [`194ef1c`](https://github.com/mastra-ai/mastra/commit/194ef1c069a182fb816c4cfe799debe2001b710b)]:
+  - @mastra/core@1.24.1
+  - @mastra/observability@1.9.0
+  - @mastra/otel-exporter@1.0.15
+
 ## 1.0.15-alpha.0
 
 ### Patch Changes

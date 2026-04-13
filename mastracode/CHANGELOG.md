@@ -1,5 +1,55 @@
 # mastracode
 
+## 0.13.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`4ba3bb1`](https://github.com/mastra-ai/mastra/commit/4ba3bb1e465ad2ddaba3bbf2bc47e0faec32985e)]:
+  - @mastra/core@1.25.0-alpha.2
+  - @mastra/mcp@1.4.2
+  - @mastra/memory@1.15.1-alpha.1
+
+## 0.13.1-alpha.1
+
+### Patch Changes
+
+- Fixed symlinked skill paths so workspace skills resolve consistently and allowed path checks work through both symlink and real paths. ([#15228](https://github.com/mastra-ai/mastra/pull/15228))
+
+- Updated dependencies [[`8fad147`](https://github.com/mastra-ai/mastra/commit/8fad14759804179c8e080ce4d9dec6ef1a808b31), [`582644c`](https://github.com/mastra-ai/mastra/commit/582644c4a87f83b4f245a84d72b9e8590585012e), [`5d84914`](https://github.com/mastra-ai/mastra/commit/5d84914e0e520c642a40329b210b413fcd139898), [`fd2f314`](https://github.com/mastra-ai/mastra/commit/fd2f31473d3449b6b97e837ef8641264377f41a7), [`e80fead`](https://github.com/mastra-ai/mastra/commit/e80fead1412cc0d1b2f7d6a1ce5017d9e0098ff7), [`0287b64`](https://github.com/mastra-ai/mastra/commit/0287b644a5c3272755cf3112e71338106664103b)]:
+  - @mastra/core@1.25.0-alpha.1
+
+## 0.13.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`87df955`](https://github.com/mastra-ai/mastra/commit/87df955c028660c075873fd5d74af28233ce32eb), [`075e91a`](https://github.com/mastra-ai/mastra/commit/075e91a4549baf46ad7a42a6a8ac8dfa78cc09e6)]:
+  - @mastra/core@1.24.2-alpha.0
+  - @mastra/memory@1.15.1-alpha.0
+
+## 0.13.0
+
+### Minor Changes
+
+- Added --thread, --title, and --clone-thread CLI options to headless mode for thread control. The most recent thread is now automatically resumed by default, and --continue is deprecated. ([#14962](https://github.com/mastra-ai/mastra/pull/14962))
+
+### Patch Changes
+
+- Fixed task list leaking across threads when switching conversations. Tasks from the previous thread no longer appear in the new thread. ([#15192](https://github.com/mastra-ai/mastra/pull/15192))
+
+- Added collapsible output for shell passthrough (! commands). Output now defaults to 20 lines with Ctrl+E to expand/collapse, matching the existing tool call output behavior. ([#15092](https://github.com/mastra-ai/mastra/pull/15092))
+
+- Updated dependencies [[`ef94400`](https://github.com/mastra-ai/mastra/commit/ef9440049402596b31f2ab976c5e4508f6cb6c91), [`3db852b`](https://github.com/mastra-ai/mastra/commit/3db852bff74e29f60d415a7b0f1583d6ce2bad92)]:
+  - @mastra/core@1.24.1
+
+## 0.13.0-alpha.2
+
+### Patch Changes
+
+- Fixed task list leaking across threads when switching conversations. Tasks from the previous thread no longer appear in the new thread. ([#15192](https://github.com/mastra-ai/mastra/pull/15192))
+
+- Updated dependencies [[`3db852b`](https://github.com/mastra-ai/mastra/commit/3db852bff74e29f60d415a7b0f1583d6ce2bad92)]:
+  - @mastra/core@1.24.1-alpha.1
+
 ## 0.13.0-alpha.1
 
 ### Minor Changes

@@ -191,12 +191,152 @@ The port of the Mastra API server to connect to. Defaults to `4111`.
 
 The protocol of the Mastra API server to connect to. Defaults to `http`.
 
+#### `--server-api-prefix`
+
+The API route prefix of the Mastra API server. Defaults to `/api`.
+
 #### `--request-context-presets`
 
 Path to a JSON file containing named [request context](/docs/server/request-context) presets. Works the same as the [`mastra dev` flag](#--request-context-presets).
 
 ```bash
 mastra studio --request-context-presets ./presets.json
+```
+
+## `mastra studio deploy`
+
+Builds and deploys your project to Mastra platform. Requires authentication via [`mastra auth login`](#mastra-auth-login) or a `MASTRA_API_TOKEN` environment variable.
+
+```bash
+mastra studio deploy
+```
+
+The command runs `mastra build`, zips the output, reads environment variables from `.env`, `.env.local`, and `.env.production`, and uploads everything to the platform. After uploading, it polls the deploy status and streams build logs until the deploy reaches a terminal state.
+
+Organization and project are resolved in order from: Environment variable flag, `.mastra-project.json` config file, current org from credentials, and lastly interactive prompt. On first deploy, the CLI saves the resolved IDs to `.mastra-project.json` so subsequent deploys skip the prompts.
+
+### Arguments
+
+#### `[dir]`
+
+Project directory. Defaults to the current directory.
+
+### Flags
+
+#### `--org`
+
+Organization ID. Can also be set via the `MASTRA_ORG_ID` environment variable.
+
+#### `--project`
+
+Project ID. Can also be set via the `MASTRA_PROJECT_ID` environment variable.
+
+#### `-y, --yes`
+
+Auto-accept defaults without confirmation prompts.
+
+#### `-c, --config`
+
+Path to the project config file. Defaults to `.mastra-project.json`.
+
+#### `--skip-build`
+
+Skip the build step and deploy the existing `.mastra/output` directory.
+
+### CI/CD usage
+
+Set `MASTRA_API_TOKEN`, `MASTRA_ORG_ID`, and `MASTRA_PROJECT_ID` as environment variables for headless deploys. Interactive prompts are skipped automatically when `MASTRA_API_TOKEN` is set.
+
+### `mastra studio deploy list`
+
+Lists all projects with their latest deploy status and URL.
+
+### `mastra studio deploy status`
+
+Shows the status of a specific deploy.
+
+```bash
+mastra studio deploy status <deploy-id>
+```
+
+#### `--watch, -w`
+
+Poll for status changes until the deploy reaches a terminal state.
+
+### `mastra studio deploy logs`
+
+Shows logs for a specific deploy.
+
+```bash
+mastra studio deploy logs <deploy-id>
+```
+
+#### `--follow, -f`
+
+Stream logs in real time.
+
+#### `--tail`
+
+Number of recent log lines to show.
+
+### `mastra studio projects`
+
+Lists all projects in the current organization.
+
+### `mastra studio projects create`
+
+Creates a new project through an interactive prompt.
+
+## `mastra server deploy`
+
+Builds and deploys your project to Server on Mastra platform. Works the same as [`mastra studio deploy`](#mastra-studio-deploy) with the same flags, arguments, and resolution logic.
+
+```bash
+mastra server deploy [dir]
+```
+
+## `mastra auth`
+
+Manages authentication for Mastra platform. Credentials are stored in `~/.mastra/credentials.json`. You can also set the `MASTRA_API_TOKEN` environment variable as an alternative to interactive login.
+
+### `mastra auth login`
+
+Opens a browser for login and stores the credentials locally.
+
+### `mastra auth logout`
+
+Removes stored credentials. If `MASTRA_API_TOKEN` is still set in the environment, the CLI warns that it will continue to be used.
+
+### `mastra auth whoami`
+
+Shows the current user email, user ID, and active organization.
+
+### `mastra auth orgs`
+
+Lists all organizations with your role in each. The current organization is marked.
+
+#### `mastra auth orgs switch`
+
+Switches the active organization through an interactive prompt. Cannot be used when `MASTRA_API_TOKEN` or `MASTRA_ORG_ID` environment variables are set.
+
+### `mastra auth tokens`
+
+Lists all API tokens with their last-used date.
+
+#### `mastra auth tokens create`
+
+Creates a new API token. The secret is displayed once and cannot be retrieved again.
+
+```bash
+mastra auth tokens create <name>
+```
+
+#### `mastra auth tokens revoke`
+
+Revokes an API token.
+
+```bash
+mastra auth tokens revoke <token-id>
 ```
 
 ## `mastra lint`
