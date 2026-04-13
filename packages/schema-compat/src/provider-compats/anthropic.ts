@@ -126,7 +126,7 @@ export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
   }
 
   #traverse(value: unknown, schema: Record<string, unknown>): unknown {
-    const resolved = this.#resolveAnyOf(schema);
+    const resolved = this.#resolveSchemaForValue(schema, value);
 
     if (resolved['x-date'] === true && typeof value === 'string') {
       return new Date(value);
@@ -162,14 +162,35 @@ export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
     return obj;
   }
 
-  #resolveAnyOf(schema: Record<string, unknown>): Record<string, unknown> {
-    if (Array.isArray(schema.anyOf)) {
-      const nonNull = (schema.anyOf as Record<string, unknown>[]).find(s => s.type !== 'null');
-      if (nonNull) {
-        return nonNull;
-      }
+  // #resolveAnyOf(schema: Record<string, unknown>): Record<string, unknown> {
+  //   if (Array.isArray(schema.anyOf)) {
+  //     const nonNull = (schema.anyOf as Record<string, unknown>[]).find(s => s.type !== 'null');
+  //     if (nonNull) {
+  //       return nonNull;
+  //     }
+  //   }
+
+  //   return schema;
+  // }
+
+  #resolveSchemaForValue(schema: Record<string, unknown>, value: unknown): Record<string, unknown> {
+    if (!Array.isArray(schema.anyOf)) {
+      return schema;
     }
 
-    return schema;
+    const variants = schema.anyOf as Record<string, unknown>[];
+    const nonNullVariants = variants.filter(variant => variant.type !== 'null');
+    // fast-path only for nullable wrappers
+    if (variants.length === 2 && nonNullVariants.length === 1) {
+      return nonNullVariants[0]!;
+    }
+    // otherwise choose a branch from the runtime value, or recurse each branch
+    const keys = value && typeof value === 'object' ? Object.keys(value as Record<string, unknown>) : [];
+    return (
+      nonNullVariants.find(variant => {
+        const properties = variant.properties as Record<string, unknown> | undefined;
+        return !!properties && keys.some(key => key in properties);
+      }) ?? schema
+    );
   }
 }

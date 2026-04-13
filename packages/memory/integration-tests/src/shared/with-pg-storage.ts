@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { anthropic as anthropicV6 } from '@ai-sdk/anthropic-v6';
+import { createGatewayMock } from '@internal/test-utils';
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
@@ -10,6 +11,7 @@ import { Memory } from '@mastra/memory';
 import { PostgresStore, PgVector } from '@mastra/pg';
 import { afterAll, describe, it, expect, beforeAll, beforeEach, onTestFinished } from 'vitest';
 import { z } from 'zod';
+import { transformRequest } from '../transform-request';
 
 import { getResuableTests } from './reusable-tests';
 
