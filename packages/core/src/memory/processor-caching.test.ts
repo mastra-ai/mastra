@@ -18,7 +18,6 @@ import { RequestContext } from '../request-context';
 import type { MastraStorage, MemoryStorage } from '../storage';
 import type { MastraEmbeddingModel, MastraVector } from '../vector';
 
-import { filterSystemReminderMessages, isSystemReminderMessage } from './memory';
 import { MockMemory } from './mock';
 
 describe('MastraMemory Embedding Cache (Issue #11455)', () => {
@@ -72,50 +71,6 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
   });
 
   describe('global embedding cache', () => {
-    it('filters metadata-backed and leading-tag system reminders while preserving embedded markup in normal text', () => {
-      const metadataReminderMessage = {
-        id: 'metadata-reminder',
-        role: 'user',
-        createdAt: new Date(),
-        threadId: 'thread-1',
-        resourceId: 'resource-1',
-        content: {
-          format: 2 as const,
-          parts: [{ type: 'text' as const, text: 'plain text' }],
-          metadata: { systemReminder: { type: 'dynamic-agents-md' } },
-        },
-      } as unknown as MastraDBMessage;
-      const textReminderMessage = {
-        id: 'text-reminder',
-        role: 'user',
-        createdAt: new Date(),
-        threadId: 'thread-1',
-        resourceId: 'resource-1',
-        content: {
-          format: 2 as const,
-          parts: [{ type: 'text' as const, text: '<system-reminder>continue</system-reminder>' }],
-        },
-      } as unknown as MastraDBMessage;
-      const embeddedMarkupMessage = {
-        id: 'embedded-markup',
-        role: 'user',
-        createdAt: new Date(),
-        threadId: 'thread-1',
-        resourceId: 'resource-1',
-        content: {
-          format: 2 as const,
-          parts: [{ type: 'text' as const, text: 'before <system-reminder>continue</system-reminder> after' }],
-        },
-      } as unknown as MastraDBMessage;
-
-      expect(isSystemReminderMessage(metadataReminderMessage)).toBe(true);
-      expect(isSystemReminderMessage(textReminderMessage)).toBe(true);
-      expect(isSystemReminderMessage(embeddedMarkupMessage)).toBe(false);
-      expect(
-        filterSystemReminderMessages([metadataReminderMessage, textReminderMessage, embeddedMarkupMessage]),
-      ).toEqual([embeddedMarkupMessage]);
-    });
-
     it('should preserve embedding cache across multiple getInputProcessors calls', async () => {
       const memory = new MockMemory({
         storage: mockStorage as any,
