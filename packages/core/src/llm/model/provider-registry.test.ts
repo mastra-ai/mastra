@@ -616,6 +616,57 @@ describe('GatewayRegistry Auto-Refresh', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  it('should skip syncGateways when MASTRA_OFFLINE is set to true', async () => {
+    process.env.MASTRA_OFFLINE = 'true';
+
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+
+    // Mock fetchProviders to detect if network calls are attempted
+    const fetchSpy = vi.spyOn(ModelsDevGateway.prototype, 'fetchProviders');
+
+    await registry.syncGateways(true);
+
+    // fetchProviders should never be called — syncGateways bails out early
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('should skip syncGateways when MASTRA_OFFLINE is set to 1', async () => {
+    process.env.MASTRA_OFFLINE = '1';
+
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+
+    const fetchSpy = vi.spyOn(ModelsDevGateway.prototype, 'fetchProviders');
+
+    await registry.syncGateways(true);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('should not skip syncGateways when MASTRA_OFFLINE is set to false', async () => {
+    process.env.MASTRA_OFFLINE = 'false';
+
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+
+    // Mock fetchProviders to avoid actual network calls but verify it's called
+    const fetchSpy = vi.spyOn(ModelsDevGateway.prototype, 'fetchProviders').mockResolvedValue({});
+    vi.spyOn(NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({});
+
+    await registry.syncGateways(true);
+
+    expect(fetchSpy).toHaveBeenCalled();
+  });
+
+  it('should skip startAutoRefresh when MASTRA_OFFLINE is set', () => {
+    process.env.MASTRA_OFFLINE = 'true';
+
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+
+    registry.startAutoRefresh(100);
+
+    // @ts-expect-error - accessing private property for testing
+    expect(registry.refreshInterval).toBeNull();
+  });
+
   it('should write .d.ts file to correct dist subdirectory path', async () => {
     const tmpDir = path.join(os.tmpdir(), `mastra-test-${Date.now()}`);
     fs.mkdirSync(tmpDir, { recursive: true });

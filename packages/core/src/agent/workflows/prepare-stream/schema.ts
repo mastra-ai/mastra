@@ -14,6 +14,7 @@ export type AgentCapabilities = {
   getMemory: Agent['getMemory'];
   getModel: Agent['getModel'];
   generateMessageId: Mastra['generateId'];
+  mastra?: Mastra;
   _agentNetworkAppend?: boolean;
   saveStepMessages: Agent['saveStepMessages'];
   convertTools: Agent['convertTools'];

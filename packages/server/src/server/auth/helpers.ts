@@ -3,6 +3,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { MastraAuthConfig } from '@mastra/core/server';
 import type { HonoRequest } from 'hono';
 
+import { MASTRA_RESOURCE_ID_KEY } from '../constants';
 import { defaultAuthConfig } from './defaults';
 import { parse } from './path-pattern';
 
@@ -305,6 +306,20 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     }
 
     requestContext.set('user', user);
+
+    if (typeof authConfig.mapUserToResourceId === 'function') {
+      try {
+        const resourceId = authConfig.mapUserToResourceId(user);
+        if (resourceId) {
+          requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+        }
+      } catch (mapError) {
+        mastra.getLogger()?.error('mapUserToResourceId failed', {
+          error: mapError instanceof Error ? { message: mapError.message, stack: mapError.stack } : mapError,
+        });
+        return { action: 'error', status: 500, body: { error: 'Failed to map authenticated user to a resource ID' } };
+      }
+    }
 
     try {
       const serverConfig = mastra.getServer();

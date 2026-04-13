@@ -77,6 +77,7 @@ import { ObserverRunner } from './observer-runner';
 import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-registry';
 import type { CompressionLevel } from './reflector-agent';
 import { ReflectorRunner } from './reflector-runner';
+import { isOmReproCaptureEnabled, writeObserverExchangeReproCapture } from './repro-capture';
 import {
   calculateDynamicThreshold,
   calculateProjectedMessageRemoval,
@@ -799,6 +800,55 @@ export class ObservationalMemory {
   }
 
   /**
+   * Resolve the effective messageTokens for a record.
+   * Only explicit per-record overrides (stored under `_overrides`) win;
+   * the initial config snapshot written by getOrCreateRecord() is ignored
+   * so that later instance-level changes still take effect.
+   *
+   * Overrides that fall below the instance-level buffering floor
+   * (bufferTokens / absolute bufferActivation) are clamped to the
+   * instance threshold to preserve buffering invariants.
+   */
+  private getEffectiveMessageTokens(record: ObservationalMemoryRecord): number | ThresholdRange {
+    const overrides = (record.config as { _overrides?: { observation?: { messageTokens?: number | ThresholdRange } } })
+      ?._overrides;
+    const recordTokens = overrides?.observation?.messageTokens;
+    if (recordTokens) {
+      const maxOverride = getMaxThreshold(recordTokens);
+
+      // Clamp: override must not violate instance-level buffering invariants
+      const bufferTokens = this.observationConfig.bufferTokens;
+      if (bufferTokens && maxOverride <= bufferTokens) {
+        return this.observationConfig.messageTokens;
+      }
+      const bufferActivation = this.observationConfig.bufferActivation;
+      if (bufferActivation && bufferActivation >= 1000 && maxOverride <= bufferActivation) {
+        return this.observationConfig.messageTokens;
+      }
+
+      return recordTokens;
+    }
+    return this.observationConfig.messageTokens;
+  }
+
+  /**
+   * Resolve the effective reflection observationTokens for a record.
+   * Only explicit per-record overrides (stored under `_overrides`) win;
+   * the initial config snapshot is ignored so instance-level changes
+   * still take effect for existing records.
+   */
+  private getEffectiveReflectionTokens(record: ObservationalMemoryRecord): number | ThresholdRange {
+    const overrides = (
+      record.config as { _overrides?: { reflection?: { observationTokens?: number | ThresholdRange } } }
+    )?._overrides;
+    const recordTokens = overrides?.reflection?.observationTokens;
+    if (recordTokens) {
+      return recordTokens;
+    }
+    return this.reflectionConfig.observationTokens;
+  }
+
+  /**
    * Check whether the unobserved message tokens meet the observation threshold.
    */
   private meetsObservationThreshold(opts: {
@@ -809,7 +859,7 @@ export class ObservationalMemory {
     const { record, unobservedTokens, extraTokens = 0 } = opts;
     const pendingTokens = (record.pendingMessageTokens ?? 0) + unobservedTokens + extraTokens;
     const currentObservationTokens = record.observationTokenCount ?? 0;
-    const threshold = calculateDynamicThreshold(this.observationConfig.messageTokens, currentObservationTokens);
+    const threshold = calculateDynamicThreshold(this.getEffectiveMessageTokens(record), currentObservationTokens);
     return pendingTokens >= threshold;
   }
 
@@ -2376,7 +2426,7 @@ ${formattedMessages}
       const projectedMessageRemoval = calculateProjectedMessageRemoval(
         bufferedChunks,
         this.observationConfig.bufferActivation ?? 1,
-        getMaxThreshold(this.observationConfig.messageTokens),
+        getMaxThreshold(this.getEffectiveMessageTokens(record)),
         pendingTokens,
       );
 
@@ -2488,8 +2538,8 @@ ${formattedMessages}
     }
     const pendingTokens = Math.max(0, contextWindowTokens + otherThreadTokens);
 
-    // Calculate observation threshold
-    const threshold = calculateDynamicThreshold(this.observationConfig.messageTokens, currentObservationTokens);
+    // Calculate observation threshold (use per-record override if set)
+    const threshold = calculateDynamicThreshold(this.getEffectiveMessageTokens(record), currentObservationTokens);
 
     // Buffering status
     const bufferedChunks = getBufferedChunks(record);
@@ -2513,16 +2563,17 @@ ${formattedMessages}
     // Should observe?
     const shouldObserve = pendingTokens >= threshold;
 
-    // Should reflect?
-    const reflectThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
+    // Should reflect? (use per-record override if set)
+    const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
     const shouldReflect = currentObservationTokens >= reflectThreshold;
 
     // Can activate?
     const canActivate = bufferedChunkCount > 0;
 
     // Effective observation tokens threshold (for shared budget UI display)
-    const isSharedBudget = typeof this.observationConfig.messageTokens !== 'number';
-    const totalBudget = isSharedBudget ? (this.observationConfig.messageTokens as { min: number; max: number }).max : 0;
+    const effectiveMessageTokens = this.getEffectiveMessageTokens(record);
+    const isSharedBudget = typeof effectiveMessageTokens !== 'number';
+    const totalBudget = isSharedBudget ? (effectiveMessageTokens as { min: number; max: number }).max : 0;
     const effectiveObservationTokensThreshold = isSharedBudget
       ? Math.max(totalBudget - threshold, 1000)
       : reflectThreshold;
@@ -2831,6 +2882,24 @@ ${formattedMessages}
         observabilityContext,
       }).run();
 
+      if (isOmReproCaptureEnabled()) {
+        writeObserverExchangeReproCapture({
+          threadId,
+          resourceId: record.resourceId ?? undefined,
+          label: `buffer-${cycleId}`,
+          observerExchange: this.observer.lastExchange,
+          details: {
+            cycleId,
+            startedAt,
+            buffered: true,
+            candidateMessageIds: candidateMessages.map(message => message.id),
+            candidateMessageCount: candidateMessages.length,
+            pendingTokens: currentTokens,
+            newTokens,
+          },
+        });
+      }
+
       // Update the boundary tokens in storage + in-memory cache for interval tracking
       await this.storage.setBufferingObservationFlag(record.id, false, newTokens).catch(() => {});
       flagCleared = true;
@@ -2962,8 +3031,8 @@ ${formattedMessages}
       return { activated: false, record };
     }
 
-    // Calculate activation parameters
-    const messageTokensThreshold = getMaxThreshold(this.observationConfig.messageTokens);
+    // Calculate activation parameters (use per-record override if set)
+    const messageTokensThreshold = getMaxThreshold(this.getEffectiveMessageTokens(freshRecord));
     const bufferActivation = this.observationConfig.bufferActivation ?? 0.7;
     const activationRatio = resolveActivationRatio(bufferActivation, messageTokensThreshold);
 
@@ -3167,7 +3236,7 @@ ${formattedMessages}
     registerOp(record.id, 'reflecting');
 
     try {
-      const reflectThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
+      const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
       const reflectResult = await this.reflector.call(
         record.activeObservations,
         prompt,
@@ -3217,6 +3286,41 @@ ${formattedMessages}
   async getRecord(threadId: string, resourceId?: string): Promise<ObservationalMemoryRecord | null> {
     const ids = this.getStorageIds(threadId, resourceId);
     return this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
+  }
+
+  /**
+   * Update per-record config overrides for observation and/or reflection thresholds.
+   * The provided config is deep-merged into the record's `_overrides` key,
+   * so you only need to specify the fields you want to change.
+   *
+   * Overrides that violate buffering invariants (e.g. messageTokens below
+   * bufferTokens) are silently ignored at read time — the helpers fall back
+   * to the instance-level config.
+   *
+   * @example
+   * ```ts
+   * await om.updateRecordConfig('thread-1', undefined, {
+   *   observation: { messageTokens: 2000 },
+   *   reflection: { observationTokens: 8000 },
+   * });
+   * ```
+   */
+  async updateRecordConfig(
+    threadId: string,
+    resourceId: string | undefined,
+    config: Record<string, unknown>,
+  ): Promise<void> {
+    const ids = this.getStorageIds(threadId, resourceId);
+    const record = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
+    if (!record) {
+      throw new Error(`No observational memory record found for thread ${ids.threadId}`);
+    }
+    // Write under _overrides so getEffectiveMessageTokens / getEffectiveReflectionTokens
+    // pick up the override values, distinct from the initial config snapshot.
+    await this.storage.updateObservationalMemoryConfig({
+      id: record.id,
+      config: { _overrides: config },
+    });
   }
 
   /**

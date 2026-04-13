@@ -144,6 +144,7 @@ async function streamDeployLogs(deployId: string, token: string, orgId: string, 
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let skipNextUrlMeta = false;
 
   while (!signal.aborted) {
     const { done, value } = await reader.read();
@@ -157,9 +158,18 @@ async function streamDeployLogs(deployId: string, token: string, orgId: string, 
     for (const line of lines) {
       if (line.startsWith('data:')) {
         const data = line.slice(5).trim();
-        if (data) {
-          process.stdout.write(`${data}\n`);
+        if (!data) continue;
+        // Filter internal server startup logs — the public URL is shown by the CLI after deploy
+        if (data.includes('Mastra API running') || data.includes('Studio available')) {
+          skipNextUrlMeta = true;
+          continue;
         }
+        // Skip the pino-pretty "url:" continuation line that follows a filtered startup log
+        if (skipNextUrlMeta) {
+          skipNextUrlMeta = false;
+          if (/^(\x1b\[\d+m)*url(\x1b\[\d+m)*:/.test(data)) continue;
+        }
+        process.stdout.write(`${data}\n`);
       }
     }
   }
