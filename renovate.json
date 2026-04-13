@@ -25,6 +25,12 @@
   "vulnerabilityAlerts": {
     "schedule": []
   },
+  "osvVulnerabilityAlerts": true,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 6am on wednesday"],
+    "automerge": true
+  },
   "ignorePaths": ["docs/**", "explorations/**", ".github/scripts", "templates/**", "**/examples/**", "**/_examples/**"],
   "packageRules": [
     {
@@ -52,6 +58,23 @@
     },
     {
       "groupName": "AI SDK",
+      "description": "Disable major AI SDK updates outside examples",
+      "matchFileNames": ["**/package.json", "!examples/**", "!docs/**"],
+      "matchSourceUrls": ["https://github.com/vercel/ai"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      "groupName": "AI SDK",
+      "description": "Allow minor and patch AI SDK updates outside examples",
+      "matchFileNames": ["**/package.json", "!examples/**", "!docs/**"],
+      "matchSourceUrls": ["https://github.com/vercel/ai"],
+      "matchUpdateTypes": ["minor", "patch"]
+    },
+    {
+      "groupName": "AI SDK Examples",
+      "description": "Leave example apps eligible for all AI SDK update types",
+      "matchFileNames": ["examples/**/package.json"],
       "matchSourceUrls": ["https://github.com/vercel/ai"]
     },
     {
