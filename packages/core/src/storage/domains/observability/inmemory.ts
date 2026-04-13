@@ -369,6 +369,14 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.entityName !== undefined && rootSpan.entityName !== filters.entityName) {
       return false;
     }
+    if (filters.entityVersionId !== undefined && rootSpan.entityVersionId !== filters.entityVersionId) {
+      return false;
+    }
+
+    // Experimentation
+    if (filters.experimentId !== undefined && rootSpan.experimentId !== filters.experimentId) {
+      return false;
+    }
 
     // Identity & Tenancy filters
     if (filters.userId !== undefined && rootSpan.userId !== filters.userId) {
@@ -554,6 +562,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       if (filters.costUnit !== undefined && m.costUnit !== filters.costUnit) return false;
       if (filters.entityType !== undefined && m.entityType !== filters.entityType) return false;
       if (filters.entityName !== undefined && m.entityName !== filters.entityName) return false;
+      if (filters.entityVersionId !== undefined && m.entityVersionId !== filters.entityVersionId) return false;
       if (filters.userId !== undefined && m.userId !== filters.userId) return false;
       if (filters.organizationId !== undefined && m.organizationId !== filters.organizationId) return false;
       if (filters.resourceId !== undefined && m.resourceId !== filters.resourceId) return false;
@@ -1036,6 +1045,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.spanId !== undefined && log.spanId !== filters.spanId) return false;
     if (filters.entityType !== undefined && log.entityType !== filters.entityType) return false;
     if (filters.entityName !== undefined && log.entityName !== filters.entityName) return false;
+    if (filters.entityVersionId !== undefined && log.entityVersionId !== filters.entityVersionId) return false;
     if (filters.userId !== undefined && log.userId !== filters.userId) return false;
     if (filters.organizationId !== undefined && log.organizationId !== filters.organizationId) return false;
     if (filters.resourceId !== undefined && log.resourceId !== filters.resourceId) return false;
@@ -1123,6 +1133,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.spanId !== undefined && score.spanId !== filters.spanId) return false;
     if (filters.entityType !== undefined && score.entityType !== filters.entityType) return false;
     if (filters.entityName !== undefined && score.entityName !== filters.entityName) return false;
+    if (filters.entityVersionId !== undefined && score.entityVersionId !== filters.entityVersionId) return false;
     if (filters.userId !== undefined && score.userId !== filters.userId) return false;
     if (filters.organizationId !== undefined && score.organizationId !== filters.organizationId) return false;
     if (filters.resourceId !== undefined && score.resourceId !== filters.resourceId) return false;
@@ -1655,6 +1666,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.spanId !== undefined && fb.spanId !== filters.spanId) return false;
     if (filters.entityType !== undefined && fb.entityType !== filters.entityType) return false;
     if (filters.entityName !== undefined && fb.entityName !== filters.entityName) return false;
+    if (filters.entityVersionId !== undefined && fb.entityVersionId !== filters.entityVersionId) return false;
     if (filters.userId !== undefined && fb.userId !== filters.userId) return false;
     if (filters.organizationId !== undefined && fb.organizationId !== filters.organizationId) return false;
     if (filters.resourceId !== undefined && fb.resourceId !== filters.resourceId) return false;

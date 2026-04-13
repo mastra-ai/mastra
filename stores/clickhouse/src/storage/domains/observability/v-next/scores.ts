@@ -36,6 +36,7 @@ const SCORE_TYPED_COLUMNS = new Set([
   'entityType',
   'entityId',
   'entityName',
+  'entityVersionId',
   'parentEntityType',
   'parentEntityId',
   'parentEntityName',

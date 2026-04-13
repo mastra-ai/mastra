@@ -291,6 +291,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       entityType: this.entityType,
       entityId: this.entityId,
       entityName: this.entityName,
+      entityVersionId: getMetadataString('entityVersionId'),
       parentEntityType: parentSpan?.entityType,
       parentEntityId: parentSpan?.entityId,
       parentEntityName: parentSpan?.entityName,

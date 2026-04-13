@@ -49,6 +49,7 @@ export interface CorrelationContext {
   entityType?: EntityType;
   entityId?: string;
   entityName?: string;
+  entityVersionId?: string;
   parentEntityType?: EntityType;
   parentEntityId?: string;
   parentEntityName?: string;

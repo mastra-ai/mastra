@@ -174,6 +174,11 @@ export const rootEntityTypeField = z.nativeEnum(EntityType).describe('Entity typ
 export const rootEntityIdField = z.string().describe('ID of the root entity');
 export const rootEntityNameField = z.string().describe('Name of the root entity');
 
+// Entity versioning
+export const entityVersionIdField = z
+  .string()
+  .describe('Version ID of the entity that produced this signal (e.g., agent version, workflow version)');
+
 // Experimentation
 export const experimentIdField = z.string().describe('Experiment or eval run identifier');
 
@@ -226,6 +231,9 @@ const contextFieldsBase = {
   serviceName: serviceNameField.nullish(),
   scope: scopeField.nullish(),
 
+  // Entity versioning
+  entityVersionId: entityVersionIdField.nullish(),
+
   // Experimentation
   experimentId: experimentIdField.nullish(),
 } as const;
@@ -259,6 +267,7 @@ export const commonFilterFields = {
   spanId: z.string().optional().describe('Filter by span ID'),
   entityType: entityTypeField.optional(),
   entityName: entityNameField.optional(),
+  entityVersionId: entityVersionIdField.optional(),
   userId: userIdField.optional(),
   organizationId: organizationIdField.optional(),
   experimentId: experimentIdField.optional(),

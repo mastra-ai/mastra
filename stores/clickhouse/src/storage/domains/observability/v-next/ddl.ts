@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   entityType         LowCardinality(Nullable(String)),
   entityId           Nullable(String),
   entityName         Nullable(String),
+  entityVersionId    Nullable(String),
 
   -- Parent entity
   parentEntityType   LowCardinality(Nullable(String)),
@@ -128,6 +129,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   entityType         LowCardinality(Nullable(String)),
   entityId           Nullable(String),
   entityName         Nullable(String),
+  entityVersionId    Nullable(String),
 
   -- Parent entity
   parentEntityType   LowCardinality(Nullable(String)),
@@ -208,6 +210,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_METRIC_EVENTS} (
   entityType         LowCardinality(Nullable(String)),
   entityId           Nullable(String),
   entityName         Nullable(String),
+  entityVersionId    Nullable(String),
   parentEntityType   LowCardinality(Nullable(String)),
   parentEntityId     Nullable(String),
   parentEntityName   Nullable(String),
@@ -267,6 +270,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_LOG_EVENTS} (
   entityType         LowCardinality(Nullable(String)),
   entityId           Nullable(String),
   entityName         Nullable(String),
+  entityVersionId    Nullable(String),
   parentEntityType   LowCardinality(Nullable(String)),
   parentEntityId     Nullable(String),
   parentEntityName   Nullable(String),
@@ -323,6 +327,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
   entityType         LowCardinality(Nullable(String)),
   entityId           Nullable(String),
   entityName         Nullable(String),
+  entityVersionId    Nullable(String),
   parentEntityType   LowCardinality(Nullable(String)),
   parentEntityId     Nullable(String),
   parentEntityName   Nullable(String),
@@ -384,6 +389,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS} (
   entityType         LowCardinality(Nullable(String)),
   entityId           Nullable(String),
   entityName         Nullable(String),
+  entityVersionId    Nullable(String),
   parentEntityType   LowCardinality(Nullable(String)),
   parentEntityId     Nullable(String),
   parentEntityName   Nullable(String),
