@@ -124,8 +124,12 @@ export function killProcessGroup(
   try {
     process.kill(-pid, 'SIGKILL');
     logger?.debug?.(`Killed process group for PID ${pid}`);
-  } catch {
+  } catch (err) {
     // ESRCH = process already gone — expected
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== 'ESRCH') {
+      logger?.warn?.(`Failed to kill process group ${pid}: ${code ?? err}`);
+    }
   }
 }
 
