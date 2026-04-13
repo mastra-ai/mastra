@@ -11,6 +11,7 @@ import { getStagehandChromePid } from '../utils';
 
 const stagehandFactory: BrowserFactory = {
   name: 'Stagehand',
+  patchesExitType: true,
   create: ({ profile, scope, headless, executablePath }) =>
     new StagehandBrowser({ headless, scope, profile, executablePath }),
   navigate: async (browser, url, threadId) => {

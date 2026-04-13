@@ -4,7 +4,7 @@
  * Exports config matrix and test generators that each provider imports.
  * Each provider runs its own lifecycle tests using createProviderTests().
  */
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -24,6 +24,8 @@ export interface BrowserTestConfig {
 export interface BrowserFactory {
   /** Human-readable name (e.g. "Stagehand", "AgentBrowser") */
   name: string;
+  /** Whether this provider patches exit_type on close (Stagehand does, AgentBrowser doesn't) */
+  patchesExitType: boolean;
   /** Create a browser instance with the given config */
   create(config: {
     profile?: string;
@@ -147,6 +149,21 @@ function hasLockFiles(profilePath: string): boolean {
   return readdirSync(profilePath).some(f => CHROME_LOCK_FILES.includes(f));
 }
 
+/**
+ * Seed a profile with a Preferences file containing exit_type: Crashed.
+ * This simulates what happens after a real crash / SIGKILL — Chrome leaves
+ * this sentinel behind. Our cleanup code must patch it to Normal on close.
+ */
+function seedCrashedPreferences(profilePath: string): void {
+  const defaultDir = join(profilePath, 'Default');
+  mkdirSync(defaultDir, { recursive: true });
+  writeFileSync(
+    join(defaultDir, 'Preferences'),
+    JSON.stringify({ profile: { exit_type: 'Crashed' } }),
+    'utf-8',
+  );
+}
+
 function getExitType(profilePath: string): string | undefined {
   const prefsPath = join(profilePath, 'Default', 'Preferences');
   if (!existsSync(prefsPath)) return undefined;
@@ -190,6 +207,14 @@ export function createProviderTests(factory: BrowserFactory) {
           const profileDir = config.profile ? mkdtempSync(join(tmpdir(), 'browser-test-')) : undefined;
 
           try {
+            // Seed a Preferences file with exit_type: Crashed.
+            // Chrome only creates this after extended use (e.g. logging in),
+            // so short-lived test sessions never trigger it organically.
+            // Seeding it lets us verify that close() patches it to Normal.
+            if (profileDir) {
+              seedCrashedPreferences(profileDir);
+            }
+
             const browser = factory.create({
               profile: profileDir,
               scope: config.scope,
@@ -222,9 +247,10 @@ export function createProviderTests(factory: BrowserFactory) {
             // Verify profile cleanup
             if (profileDir) {
               expect(hasLockFiles(profileDir)).toBe(false);
-              const exitType = getExitType(profileDir);
-              if (exitType !== undefined) {
-                expect(exitType).toBe('Normal');
+              // We seeded exit_type: Crashed before launch.
+              // Providers that patch exit_type (Stagehand) must set it to Normal.
+              if (factory.patchesExitType) {
+                expect(getExitType(profileDir)).toBe('Normal');
               }
             }
 
@@ -245,6 +271,11 @@ export function createProviderTests(factory: BrowserFactory) {
           const profileDir = config.profile ? mkdtempSync(join(tmpdir(), 'browser-test-')) : undefined;
 
           try {
+            // Seed exit_type: Crashed so we can verify cleanup patches it.
+            if (profileDir) {
+              seedCrashedPreferences(profileDir);
+            }
+
             const browser = factory.create({
               profile: profileDir,
               scope: config.scope,
@@ -275,9 +306,10 @@ export function createProviderTests(factory: BrowserFactory) {
               // Give disconnect handler time to clean up
               await sleep(1000);
               expect(hasLockFiles(profileDir)).toBe(false);
-              const exitType = getExitType(profileDir);
-              if (exitType !== undefined) {
-                expect(exitType).toBe('Normal');
+              // We seeded exit_type: Crashed before launch.
+              // Providers that patch exit_type (Stagehand) must set it to Normal.
+              if (factory.patchesExitType) {
+                expect(getExitType(profileDir)).toBe('Normal');
               }
             }
 

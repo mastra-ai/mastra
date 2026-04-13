@@ -47,6 +47,7 @@ async function getAgentBrowserPid(browser: AgentBrowser, threadId?: string): Pro
 
 const agentBrowserFactory: BrowserFactory = {
   name: 'AgentBrowser',
+  patchesExitType: false,
   create: ({ profile, scope, headless, executablePath }) =>
     new AgentBrowser({ headless, scope, profile, executablePath }),
   navigate: async (browser, url, threadId) => {
