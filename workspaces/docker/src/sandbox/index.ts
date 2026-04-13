@@ -133,7 +133,10 @@ export class DockerSandbox extends MastraSandbox {
   private readonly _instructionsOverride?: InstructionsOption;
 
   constructor(options: DockerSandboxOptions = {}) {
-    const processManager = new DockerProcessManager({ env: options.env ?? {} });
+    const processManager = new DockerProcessManager({
+      env: options.env ?? {},
+      defaultTimeout: options.timeout ?? 300_000,
+    });
 
     super({
       ...options,
@@ -416,8 +419,7 @@ function isContainerNotFoundError(error: unknown): boolean {
 
 function isImageNotFoundError(error: unknown): boolean {
   if (error instanceof Error) {
-    const msg = error.message.toLowerCase();
-    return msg.includes('no such image') || msg.includes('404');
+    return error.message.toLowerCase().includes('no such image');
   }
   return false;
 }

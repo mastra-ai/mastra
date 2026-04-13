@@ -172,6 +172,12 @@ class DockerProcessHandle extends ProcessHandle {
  */
 export class DockerProcessManager extends SandboxProcessManager {
   private _container: Container | null = null;
+  private readonly _defaultTimeout: number;
+
+  constructor(options: { env: Record<string, string>; defaultTimeout?: number }) {
+    super(options);
+    this._defaultTimeout = options.defaultTimeout ?? 0;
+  }
 
   /** @internal Called by DockerSandbox after container is ready */
   setContainer(container: Container): void {
@@ -308,9 +314,11 @@ export class DockerProcessManager extends SandboxProcessManager {
       });
     });
 
-    // Wire up timeout: kill the process and destroy the stream after the timeout period
-    if (options.timeout && options.timeout > 0) {
-      const timeoutMs = options.timeout;
+    // Wire up timeout: kill the process and destroy the stream after the timeout period.
+    // Per-spawn timeout takes precedence; falls back to the sandbox-level default.
+    const resolvedTimeout = options.timeout ?? this._defaultTimeout;
+    if (resolvedTimeout > 0) {
+      const timeoutMs = resolvedTimeout;
       const timer = setTimeout(() => {
         if (handle.exitCode === undefined) {
           handle._killed = true;
