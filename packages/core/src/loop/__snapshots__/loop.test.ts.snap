@@ -270,6 +270,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -387,6 +388,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -590,6 +592,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -697,6 +700,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -990,6 +994,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": true,
         "reason": "stop",
@@ -1278,6 +1283,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -1528,6 +1534,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -1759,6 +1766,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -1918,6 +1926,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -2450,6 +2459,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -2702,6 +2712,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -2907,6 +2918,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -3024,6 +3036,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -3173,6 +3186,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -3262,6 +3276,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -3558,6 +3573,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "tool-calls",
@@ -3717,6 +3733,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "tool-calls",
@@ -3866,6 +3883,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -3955,6 +3973,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -4274,6 +4293,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": true,
         "reason": "tool-calls",
@@ -4562,6 +4582,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -4812,6 +4833,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -4961,6 +4983,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -5050,6 +5073,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -5807,6 +5831,7 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": true,
         "reason": "tool-calls",
@@ -6119,6 +6144,7 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -6393,6 +6419,7 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -6523,6 +6550,7 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -6620,6 +6648,7 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -6834,6 +6863,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -6951,6 +6981,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -7154,6 +7185,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -7261,6 +7293,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -7554,6 +7587,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": true,
         "reason": "stop",
@@ -7842,6 +7876,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -8092,6 +8127,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -8323,6 +8359,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -8482,6 +8519,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -9014,6 +9052,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -9266,6 +9305,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -9471,6 +9511,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -9588,6 +9629,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -9737,6 +9779,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -9826,6 +9869,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -10122,6 +10166,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "tool-calls",
@@ -10281,6 +10326,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "tool-calls",
@@ -10430,6 +10476,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -10519,6 +10566,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -10838,6 +10886,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": true,
         "reason": "tool-calls",
@@ -11126,6 +11175,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -11376,6 +11426,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -11525,6 +11576,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -11614,6 +11666,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
         },
       },
       "processorRetryCount": 0,
+      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",

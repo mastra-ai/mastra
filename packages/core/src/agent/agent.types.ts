@@ -488,7 +488,11 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   outputProcessors?: OutputProcessorOrWorkflow[];
   /** Error processors to use for this execution (overrides agent's default) */
   errorProcessors?: ErrorProcessorOrWorkflow[];
-  /** Maximum number of consecutive processor-triggered retries allowed for this execution. */
+  /**
+   * Maximum number of times processors can trigger a retry for this generation.
+   * Overrides agent's default maxProcessorRetries.
+   * If not set, defaults to the agent's maxProcessorRetries (which defaults to no retries if also unset).
+   */
   maxProcessorRetries?: number;
 
   /** Additional tool sets that can be used for this execution */

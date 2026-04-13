@@ -1682,6 +1682,7 @@ describe('New Processor Features', () => {
         instructions: 'You are a helpful assistant.',
         model: mockModel,
         outputProcessors: [retryTriggeringProcessor],
+        maxProcessorRetries: 3,
       });
 
       const result = await agent.generate('Hello');
@@ -1739,6 +1740,7 @@ describe('New Processor Features', () => {
         instructions: 'You are a helpful assistant.',
         model: mockModel,
         outputProcessors: [retryCountTrackingProcessor],
+        maxProcessorRetries: 5,
       });
 
       await agent.generate('Hello');
@@ -1904,6 +1906,7 @@ describe('New Processor Features', () => {
         instructions: 'You are a helpful assistant.',
         model: mockModel,
         outputProcessors: [fabricationDetector],
+        maxProcessorRetries: 3,
       });
 
       const result = await agent.generate('What is the capital of France?');
@@ -1975,6 +1978,7 @@ describe('New Processor Features', () => {
         instructions: 'You are a helpful assistant.',
         model: mockModel,
         outputProcessors: [fabricationDetector],
+        maxProcessorRetries: 3,
       });
 
       const stream = await agent.stream('What is the capital of France?');
