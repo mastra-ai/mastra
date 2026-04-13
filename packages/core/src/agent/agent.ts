@@ -166,6 +166,7 @@ export class Agent<
   model: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
   #originalModel: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
   maxRetries?: number;
+  maxProcessorRetries?: number;
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory, TRequestContext>;
   #skillsFormat?: SkillFormat;
@@ -262,6 +263,7 @@ export class Agent<
     }
 
     this.maxRetries = config.maxRetries ?? 0;
+    this.maxProcessorRetries = config.maxProcessorRetries ?? 10;
 
     if (config.workflows) {
       this.#workflows = config.workflows;
@@ -5097,10 +5099,13 @@ export class Agent<
     const defaultOptions = await this.getDefaultOptions({
       requestContext: options?.requestContext,
     });
-    const mergedOptions = deepMerge(
-      defaultOptions as Record<string, unknown>,
-      (options ?? {}) as Record<string, unknown>,
-    ) as AgentExecutionOptions<any> & { model?: DynamicArgument<MastraModelConfig> };
+    const mergedOptions = {
+      ...deepMerge(defaultOptions as Record<string, unknown>, (options ?? {}) as Record<string, unknown>),
+      maxProcessorRetries:
+        (options as AgentExecutionOptionsBase<any> | undefined)?.maxProcessorRetries ??
+        (defaultOptions as AgentExecutionOptions<any> | undefined)?.maxProcessorRetries ??
+        this.maxProcessorRetries,
+    } as AgentExecutionOptions<any> & { model?: DynamicArgument<MastraModelConfig> };
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
@@ -5212,10 +5217,13 @@ export class Agent<
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
     });
-    const mergedOptions = deepMerge(
-      defaultOptions as Record<string, unknown>,
-      (streamOptions ?? {}) as Record<string, unknown>,
-    ) as AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> };
+    const mergedOptions = {
+      ...deepMerge(defaultOptions as Record<string, unknown>, (streamOptions ?? {}) as Record<string, unknown>),
+      maxProcessorRetries:
+        streamOptions?.maxProcessorRetries ??
+        (defaultOptions as AgentExecutionOptionsBase<any> | undefined)?.maxProcessorRetries ??
+        this.maxProcessorRetries,
+    } as AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> };
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
@@ -5333,10 +5341,13 @@ export class Agent<
       requestContext: streamOptions?.requestContext,
     });
 
-    let mergedStreamOptions = deepMerge(
-      defaultOptions as Record<string, unknown>,
-      (streamOptions ?? {}) as Record<string, unknown>,
-    ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
+    let mergedStreamOptions = {
+      ...deepMerge(defaultOptions as Record<string, unknown>, (streamOptions ?? {}) as Record<string, unknown>),
+      maxProcessorRetries:
+        streamOptions?.maxProcessorRetries ??
+        (defaultOptions as AgentExecutionOptions<any> | undefined)?.maxProcessorRetries ??
+        this.maxProcessorRetries,
+    } as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
 
     const llm = await this.getLLM({
       requestContext: mergedStreamOptions.requestContext,
@@ -5455,10 +5466,13 @@ export class Agent<
       requestContext: options?.requestContext,
     });
 
-    const mergedOptions = deepMerge(
-      defaultOptions as Record<string, unknown>,
-      (options ?? {}) as Record<string, unknown>,
-    ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
+    const mergedOptions = {
+      ...deepMerge(defaultOptions as Record<string, unknown>, (options ?? {}) as Record<string, unknown>),
+      maxProcessorRetries:
+        options?.maxProcessorRetries ??
+        (defaultOptions as AgentExecutionOptions<any> | undefined)?.maxProcessorRetries ??
+        this.maxProcessorRetries,
+    } as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,

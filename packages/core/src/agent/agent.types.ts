@@ -488,6 +488,8 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   outputProcessors?: OutputProcessorOrWorkflow[];
   /** Error processors to use for this execution (overrides agent's default) */
   errorProcessors?: ErrorProcessorOrWorkflow[];
+  /** Maximum number of consecutive processor-triggered retries allowed for this execution. */
+  maxProcessorRetries?: number;
 
   /** Additional tool sets that can be used for this execution */
   toolsets?: ToolsetsInput;
@@ -617,8 +619,6 @@ export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptions
   outputWriter?: OutputWriter;
   messages: MessageListInput;
   methodType: AgentMethodType;
-  /** Internal-only loop retry cap; not part of the public Agent API surface. */
-  maxProcessorRetries?: number;
   /** Internal: Model override for when structuredOutput.model is used with maxSteps=1 */
   model?: MastraLanguageModel;
   /** Internal: Whether the execution is a resume */

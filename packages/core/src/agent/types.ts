@@ -234,6 +234,12 @@ export interface AgentConfig<
    */
   maxRetries?: number;
   /**
+   * Maximum number of consecutive processor-triggered retries allowed for a single generation.
+   * Applies to input, output, and error processors that request `{ retry: true }`.
+   * @defaultValue 10
+   */
+  maxProcessorRetries?: number;
+  /**
    * Tools that the agent can access. Can be provided statically or resolved dynamically.
    */
   tools?: DynamicArgument<TTools, TRequestContext>;
