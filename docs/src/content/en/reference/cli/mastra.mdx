@@ -321,7 +321,7 @@ Fails if the instance is not running.
 
 ## `mastra server restart`
 
-Restarts a paused server instance for the linked project. After the platform accepts the restart, the CLI resolves the deploy id (from the API response or by polling project metadata until `latestDeployId` updates), then streams build and deploy logs the same way as [`mastra server deploy`](#mastra-server-deploy) until the deploy reaches a terminal state.
+Restarts a paused or stopped server instance for the linked project. After the platform accepts the restart, the CLI resolves the deploy id (from the API response or by polling project and deploy metadata when the response omits an id), then streams build and deploy logs the same way as [`mastra server deploy`](#mastra-server-deploy) until the deploy reaches a terminal state.
 
 ### Flags
 
@@ -331,7 +331,7 @@ Same flags as [`mastra server pause`](#mastra-server-pause): **`--org`**, **`--p
 mastra server restart
 ```
 
-Fails if a deployment is still active (running, building, deploying, etc.).
+Fails if a deployment is still active for this project (running, building, deploying, etc.); that is a platform restriction so you cannot restart while another deploy is in progress.
 
 ## `mastra server env`
 
