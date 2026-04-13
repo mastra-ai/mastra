@@ -273,6 +273,7 @@ serverCommand
 serverCommand
   .command('pause')
   .description('Pause the linked Mastra Server project instance')
+  .option('--org <id>', 'Organization ID')
   .option('--project <id>', 'Project ID or slug (overrides linked project when MASTRA_PROJECT_ID is unset)')
   .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
   .action(wrapAction(serverPauseAction));
@@ -280,6 +281,7 @@ serverCommand
 serverCommand
   .command('restart')
   .description('Restart the linked Mastra Server project instance')
+  .option('--org <id>', 'Organization ID')
   .option('--project <id>', 'Project ID or slug (overrides linked project when MASTRA_PROJECT_ID is unset)')
   .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
   .action(wrapAction(serverRestartAction));

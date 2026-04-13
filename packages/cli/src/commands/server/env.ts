@@ -10,9 +10,9 @@ import { fetchServerProjects, getServerProjectEnv, updateServerProjectEnv } from
 /*  Shared helpers                                                     */
 /* ------------------------------------------------------------------ */
 
-export async function resolveAuth(): Promise<{ token: string; orgId: string }> {
+export async function resolveAuth(cliOrg?: string): Promise<{ token: string; orgId: string }> {
   const token = await getToken();
-  const orgId = process.env.MASTRA_ORG_ID ?? (await getCurrentOrgId());
+  const orgId = process.env.MASTRA_ORG_ID ?? cliOrg ?? (await getCurrentOrgId());
   if (!orgId) {
     throw new Error('No organization selected. Run: mastra auth orgs switch');
   }

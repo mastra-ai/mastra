@@ -3473,13 +3473,16 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Restart initiated */
+      /** @description Restart initiated; may include the new deploy id when a deploy is queued */
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          'application/json': Record<string, never>;
+          'application/json': {
+            id?: string;
+            status?: string;
+          };
         };
       };
       /** @description Conflict — server running or deploy active */

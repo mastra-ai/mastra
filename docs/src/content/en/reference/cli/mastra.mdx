@@ -305,6 +305,10 @@ mastra server pause
 
 ### Flags
 
+#### `--org`
+
+Organization ID. Can also be set via the `MASTRA_ORG_ID` environment variable.
+
 #### `--project`
 
 Project ID or slug when `MASTRA_PROJECT_ID` is not set. Slugs are resolved against projects in the current organization.
@@ -317,11 +321,11 @@ Fails if the instance is not running.
 
 ## `mastra server restart`
 
-Restarts a paused server instance for the linked project.
+Restarts a paused server instance for the linked project. After the platform accepts the restart, the CLI resolves the deploy id (from the API response or by polling project metadata until `latestDeployId` updates), then streams build and deploy logs the same way as [`mastra server deploy`](#mastra-server-deploy) until the deploy reaches a terminal state.
 
 ### Flags
 
-Same flags as [`mastra server pause`](#mastra-server-pause): **`--project`** and **`-c` / `--config`** only, with the same defaults and behavior.
+Same flags as [`mastra server pause`](#mastra-server-pause): **`--org`**, **`--project`**, and **`-c` / `--config`**, with the same defaults and behavior.
 
 ```bash
 mastra server restart

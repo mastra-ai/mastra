@@ -209,6 +209,19 @@ export async function updateServerProjectEnv(
   }
 }
 
+export async function fetchServerProjectDetail(token: string, orgId: string, projectId: string) {
+  const client = createApiClient(token, orgId);
+  const { data, error, response } = await client.GET('/v1/server/projects/{id}', {
+    params: { path: { id: projectId } },
+  });
+
+  if (error) {
+    throwApiError('Failed to fetch server project', response.status);
+  }
+
+  return data;
+}
+
 export async function pauseServerProject(token: string, orgId: string, projectId: string): Promise<void> {
   const client = createApiClient(token, orgId);
   const { error, response } = await client.POST('/v1/server/projects/{id}/pause', {
@@ -217,20 +230,24 @@ export async function pauseServerProject(token: string, orgId: string, projectId
 
   if (error) {
     if (response.status === 409) {
-      throwApiError(
-        'Failed to pause server',
-        response.status,
-        'Pause failed: the server is not running, or a deployment is still in progress.',
-      );
+      throwApiError('Failed to pause server', response.status, 'Pause failed: the server is not running.');
     }
     const detail = apiErrorDetail(error);
     throwApiError('Failed to pause server', response.status, detail);
   }
 }
 
-export async function restartServerProject(token: string, orgId: string, projectId: string): Promise<void> {
+/**
+ * Triggers a platform restart and returns the deploy id to pass to {@link pollServerDeploy}.
+ * Uses `id` from the restart response when present; otherwise polls project details until `latestDeployId` changes.
+ */
+export async function restartServerProject(token: string, orgId: string, projectId: string): Promise<string> {
   const client = createApiClient(token, orgId);
-  const { error, response } = await client.POST('/v1/server/projects/{id}/restart', {
+
+  const before = await fetchServerProjectDetail(token, orgId, projectId);
+  const previousLatestDeployId = before.project.latestDeployId;
+
+  const { data, error, response } = await client.POST('/v1/server/projects/{id}/restart', {
     params: { path: { id: projectId } },
   });
 
@@ -239,12 +256,30 @@ export async function restartServerProject(token: string, orgId: string, project
       throwApiError(
         'Failed to restart server',
         response.status,
-        'Restart failed: the server is running, or a deployment is still in progress.',
+        'Restart failed: a deployment for this project is currently active. Run `mastra server pause` to pause the server before restarting.',
       );
     }
     const detail = apiErrorDetail(error);
     throwApiError('Failed to restart server', response.status, detail);
   }
+
+  if (data?.id) {
+    return data.id;
+  }
+
+  const deadline = Date.now() + 45000;
+  while (Date.now() < deadline) {
+    const snap = await fetchServerProjectDetail(token, orgId, projectId);
+    const latest = snap.project.latestDeployId;
+    if (latest && latest !== previousLatestDeployId) {
+      return latest;
+    }
+    await new Promise(r => setTimeout(r, 2000));
+  }
+
+  throw new Error(
+    'Restart was accepted but no new deploy ID appeared. Check the Mastra platform for deployment status.',
+  );
 }
 
 /**
