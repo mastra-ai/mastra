@@ -3,6 +3,7 @@ import type {
   BackgroundTaskResultPayload,
   BackgroundTaskStartedPayload,
   BackgroundTaskProgressPayload,
+  AgentChunkType,
 } from '../stream/types';
 
 export type BackgroundTaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
@@ -37,6 +38,12 @@ export interface BackgroundTask {
 
   // Timeout
   timeoutMs: number;
+}
+
+export type BackgroundTaskOutputChunk = Extract<AgentChunkType, { type: 'tool-output' }>;
+
+export interface BackgroundTaskEvent extends BackgroundTask {
+  chunk?: BackgroundTaskOutputChunk;
 }
 
 export type UpdateBackgroundTask = Partial<
@@ -171,6 +178,14 @@ export type AgentBackgroundToolConfig = boolean | { enabled: boolean; timeoutMs?
 
 export interface AgentBackgroundConfig {
   /**
+   * When true, background task dispatch is disabled for this agent — every tool
+   * call runs synchronously in the loop. Useful when this agent is invoked as a
+   * sub-agent and the parent has wrapped the entire sub-agent invocation as the
+   * background task; you don't want the sub-agent's own tools to also dispatch
+   * separate background tasks.
+   */
+  disabled?: boolean;
+  /**
    * Which tools should run in the background.
    * - `true`: use the tool's own background config
    * - `false`: always foreground, even if tool says background
@@ -225,19 +240,6 @@ export interface BackgroundTaskProgressChunk {
 
 export type BackgroundTaskResultChunk = BackgroundTaskCompletedChunk | BackgroundTaskFailedChunk;
 
-// --- Progress ---
-
-/**
- * An intermediate progress chunk emitted during background task execution.
- * Tools can emit these to provide visibility into long-running operations.
- */
-export interface BackgroundTaskProgressData {
-  /** Application-defined progress type (e.g., 'fetching', 'processing', 'step-complete') */
-  type: string;
-  /** Arbitrary progress data */
-  data: unknown;
-}
-
 // --- Tool executor ---
 
 /**
@@ -254,7 +256,7 @@ export interface ToolExecutor {
        * Called by tools that support streaming progress from background execution.
        * Each call produces a `background-task-progress` chunk on the SSE stream.
        */
-      onProgress?: (progress: BackgroundTaskProgressData) => void;
+      onProgress?: (chunk: BackgroundTaskProgressChunk) => Promise<void>;
     },
   ): Promise<unknown>;
 }
@@ -292,7 +294,7 @@ export interface TaskContext {
   /** Emits stream chunks (background-task-completed/failed) to the caller's stream */
   onChunk?: (chunk: BackgroundTaskResultChunk) => void;
   /** Receives intermediate progress data from the executor during execution */
-  onProgress?: (taskId: string, progress: BackgroundTaskProgressData) => void;
+  // onProgress?: (taskId: string, progress: BackgroundTaskProgressData) => void;
   /** Injects tool results into the caller's message list */
   onResult?: ResultInjector;
   /** Per-task callback on completion */

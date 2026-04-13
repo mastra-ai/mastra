@@ -5,7 +5,6 @@ import type { Event, EventCallback } from '../events/types';
 import type {
   BackgroundTask,
   BackgroundTaskManagerConfig,
-  BackgroundTaskProgressData,
   BackgroundTaskStatus,
   EnqueueResult,
   TaskContext,
@@ -13,6 +12,8 @@ import type {
   TaskPayload,
   TaskListResult,
   ToolExecutor,
+  BackgroundTaskEvent,
+  BackgroundTaskProgressChunk,
 } from './types';
 
 const TOPIC_DISPATCH = 'background-tasks';
@@ -348,6 +349,7 @@ export class BackgroundTaskManager {
 
     const EVENT_STATUS_MAP: Record<string, BackgroundTaskStatus> = {
       'task.running': 'running',
+      'task.output': 'running',
       'task.completed': 'completed',
       'task.failed': 'failed',
       'task.cancelled': 'cancelled',
@@ -387,6 +389,7 @@ export class BackgroundTaskManager {
               result: data.result,
               error: data.error,
               args: data.args,
+              chunk: data.chunk,
             });
           } catch {
             // Controller closed
@@ -518,9 +521,12 @@ export class BackgroundTaskManager {
 
     try {
       // Build onProgress callback that forwards to the task context hook
-      const onProgress = ctx.onProgress
-        ? (progress: BackgroundTaskProgressData) => ctx.onProgress!(taskId, progress)
-        : undefined;
+      const onProgress = async (chunk: any) => {
+        await this.publishLifecycleEvent('task.output', {
+          ...task,
+          chunk,
+        });
+      };
 
       const result = await this.executeWithTimeout(taskId, ctx.executor, args, timeoutMs, onProgress);
 
@@ -672,7 +678,7 @@ export class BackgroundTaskManager {
     executor: ToolExecutor,
     args: Record<string, unknown>,
     timeoutMs: number,
-    onProgress?: (progress: BackgroundTaskProgressData) => void,
+    onProgress?: (chunk: BackgroundTaskProgressChunk) => Promise<void>,
   ): Promise<unknown> {
     const abortController = new AbortController();
     this.activeAbortControllers.set(taskId, abortController);
@@ -689,8 +695,8 @@ export class BackgroundTaskManager {
   }
 
   private async publishLifecycleEvent(
-    type: 'task.running' | 'task.completed' | 'task.failed' | 'task.cancelled',
-    task: BackgroundTask,
+    type: 'task.running' | 'task.completed' | 'task.failed' | 'task.cancelled' | 'task.output',
+    task: BackgroundTaskEvent,
   ): Promise<void> {
     await this.pubsub.publish(TOPIC_RESULT, {
       type,
@@ -705,6 +711,7 @@ export class BackgroundTaskManager {
         args: task.args,
         result: task.result,
         error: task.error,
+        chunk: task.chunk,
       },
       runId: task.id,
     });

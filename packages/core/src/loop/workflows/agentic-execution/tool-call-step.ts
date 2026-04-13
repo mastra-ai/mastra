@@ -3,7 +3,7 @@ import type { ToolSet } from '@internal/ai-sdk-v5';
 import z from 'zod/v4';
 import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
-import type { ToolBackgroundConfig } from '../../../background-tasks/types';
+import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
 import type { MastraDBMessage } from '../../../memory';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { ChunkFrom } from '../../../stream/types';
@@ -555,9 +555,12 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         // --- Background task dispatch ---
         const backgroundTaskManager = _internal?.backgroundTaskManager;
-        if (backgroundTaskManager && typeof args === 'object' && args !== null) {
+        const agentBgConfigCheck = _internal?.agentBackgroundConfig;
+        // Skip background dispatch entirely when disabled (e.g., for sub-agents whose
+        // entire invocation is itself dispatched as a background task by the parent)
+        if (backgroundTaskManager && !agentBgConfigCheck?.disabled && typeof args === 'object' && args !== null) {
           const toolBgConfig = (tool as any).backgroundConfig as ToolBackgroundConfig | undefined;
-          const agentBgConfig = _internal?.agentBackgroundConfig;
+          const agentBgConfig = agentBgConfigCheck;
           const managerConfig = _internal?.backgroundTaskManagerConfig;
 
           const bgResolved = resolveBackgroundConfig({
@@ -592,8 +595,22 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               context: {
                 // Executor — uses the tool from the current closure
                 executor: {
-                  execute: (bgArgs: Record<string, unknown>, opts?: { abortSignal?: AbortSignal }) =>
-                    resolvedTool.execute!(bgArgs, { ...toolOptions, abortSignal: opts?.abortSignal } as any),
+                  execute: (
+                    bgArgs: Record<string, unknown>,
+                    opts?: {
+                      abortSignal?: AbortSignal;
+                      onProgress?: (chunk: BackgroundTaskProgressChunk) => Promise<void>;
+                    },
+                  ) => {
+                    return resolvedTool.execute!(bgArgs, {
+                      ...toolOptions,
+                      outputWriter: async (chunk: any) => {
+                        await opts?.onProgress?.(chunk);
+                        return toolOptions.outputWriter?.(chunk);
+                      },
+                      abortSignal: opts?.abortSignal,
+                    } as any);
+                  },
                 },
 
                 // Stream chunk emitter — background task chunks appear on THIS stream

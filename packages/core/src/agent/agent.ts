@@ -6,7 +6,7 @@ import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema, z as z3 } from 'zod/v3';
 import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
-import type { AgentBackgroundConfig } from '../background-tasks';
+import type { AgentBackgroundConfig, ToolBackgroundConfig } from '../background-tasks';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type {
@@ -329,6 +329,82 @@ export class Agent<
 
   getMastraInstance() {
     return this.#mastra;
+  }
+
+  /**
+   * Returns the background tasks configuration for this agent.
+   */
+  getBackgroundTasksConfig(): AgentBackgroundConfig | undefined {
+    return this.#backgroundTasks;
+  }
+
+  /**
+   * Disables background task dispatch for this agent. Every tool call will run
+   * synchronously in the agentic loop, regardless of the agent's or tools'
+   * background configuration.
+   *
+   * Useful when this agent is invoked as a sub-agent and the parent has wrapped
+   * the entire sub-agent invocation as a background task — you don't want the
+   * sub-agent's own tools to also dispatch separate background tasks inside it.
+   */
+  disableBackgroundTasks(): void {
+    this.#backgroundTasks = { ...(this.#backgroundTasks ?? {}), disabled: true };
+  }
+
+  /**
+   * Re-enables background task dispatch after it has been disabled.
+   */
+  enableBackgroundTasks(): void {
+    if (this.#backgroundTasks) {
+      this.#backgroundTasks = { ...this.#backgroundTasks, disabled: false };
+    }
+  }
+
+  /**
+   * Inspects a sub-agent (a child agent invoked as a tool) and derives a
+   * ToolBackgroundConfig if any of its tools are background-eligible OR if the
+   * sub-agent itself has a background tasks config that enables tools.
+   *
+   * Returns undefined when no background dispatch is warranted, so the parent
+   * runs the sub-agent synchronously.
+   *
+   * @internal
+   */
+  private async deriveSubAgentBackgroundConfig(
+    subAgent: Agent<any, any, any, any>,
+    requestContext: RequestContext,
+  ): Promise<ToolBackgroundConfig | undefined> {
+    try {
+      const subAgentBgConfig = subAgent.getBackgroundTasksConfig?.();
+
+      // 1. Sub-agent has its own backgroundTasks config that enables tools
+      if (subAgentBgConfig?.disabled !== true && subAgentBgConfig?.tools) {
+        if (subAgentBgConfig.tools === 'all') {
+          return { enabled: true, waitTimeoutMs: subAgentBgConfig.waitTimeoutMs };
+        }
+        const hasEnabledTool = Object.values(subAgentBgConfig.tools).some(t => {
+          if (typeof t === 'boolean') return t;
+          return t?.enabled === true;
+        });
+        if (hasEnabledTool) {
+          return { enabled: true, waitTimeoutMs: subAgentBgConfig.waitTimeoutMs };
+        }
+      }
+
+      // 2. Any of the sub-agent's tools has background.enabled === true
+      const subAgentTools = await subAgent.listTools({ requestContext });
+      if (subAgentTools && typeof subAgentTools === 'object') {
+        for (const tool of Object.values(subAgentTools)) {
+          const bg = (tool as any)?.background as ToolBackgroundConfig | undefined;
+          if (bg?.enabled === true) {
+            return { enabled: true, waitTimeoutMs: subAgentBgConfig?.waitTimeoutMs };
+          }
+        }
+      }
+    } catch {
+      // If anything fails (e.g., dynamic tools throw), skip background derivation
+    }
+    return undefined;
   }
 
   /**
@@ -2812,6 +2888,9 @@ export class Agent<
             // see the correct context on subsequent steps.
             const savedMastraMemory = requestContext.get('MastraMemory');
 
+            //disable background tasks for the sub-agent
+            agent.disableBackgroundTasks();
+
             if (
               (methodType === 'generate' ||
                 methodType === 'generateLegacy' ||
@@ -3423,6 +3502,11 @@ export class Agent<
           },
         });
 
+        // Derive a ToolBackgroundConfig from the sub-agent's tools/config so the
+        // parent can dispatch the entire sub-agent invocation as a background task
+        // when appropriate.
+        const subAgentBackgroundConfig = await this.deriveSubAgentBackgroundConfig(agent, requestContext);
+
         const options: ToolOptions = {
           name: `agent-${agentName}`,
           runId,
@@ -3436,7 +3520,13 @@ export class Agent<
           model: await this.getModel({ requestContext }),
           ...observabilityContext,
           tracingPolicy: this.#options?.tracingPolicy,
+          backgroundConfig: subAgentBackgroundConfig,
         };
+
+        // Mark the wrapper tool so tool-call-step picks up the background config
+        if (subAgentBackgroundConfig) {
+          (toolObj as any).backgroundConfig = subAgentBackgroundConfig;
+        }
 
         // TODO; fix recursion type
         convertedAgentTools[`agent-${agentName}`] = makeCoreTool(

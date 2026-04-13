@@ -2,10 +2,10 @@ import type { ReadableStreamDefaultReader } from 'node:stream/web';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMastraClient } from '@mastra/react';
 import type { StreamBackgroundTasksParams } from '@mastra/client-js';
-import { BackgroundTaskStatus } from '@mastra/core/background-tasks';
+import { BackgroundTaskStatus, BackgroundTaskOutputChunk } from '@mastra/core/background-tasks';
 
 export interface BackgroundTaskEvent {
-  type: 'task.completed' | 'task.failed' | 'task.running' | 'task.cancelled';
+  type: 'task.completed' | 'task.failed' | 'task.running' | 'task.cancelled' | 'task.output';
   taskId: string;
   toolName: string;
   toolCallId: string;
@@ -15,6 +15,7 @@ export interface BackgroundTaskEvent {
   error?: { message: string; stack?: string };
   status: BackgroundTaskStatus;
   args: Record<string, unknown>;
+  chunk?: BackgroundTaskOutputChunk;
 }
 
 export interface UseBackgroundTaskStreamOptions extends StreamBackgroundTasksParams {
@@ -113,6 +114,7 @@ export function useBackgroundTaskStream(options: UseBackgroundTaskStreamOptions 
         if (done) break;
 
         const event = value as BackgroundTaskEvent;
+        console.log({ event });
         setTasks(prev => ({ ...prev, [event.taskId]: { ...prev.taskId, ...event } }));
       }
     } catch (err: any) {

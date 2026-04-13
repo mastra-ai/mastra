@@ -1574,12 +1574,13 @@ export class MastraClient extends BaseResource {
             const decoded = new TextDecoder().decode(chunk);
 
             // Split by record separator
-            const chunks = decoded.substring('data: '.length).split('\n\n');
+            const chunks = decoded.split('\n\n');
 
             // Process each chunk
             for (const chunk of chunks) {
               if (chunk) {
-                const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
+                const cleanChunk = chunk.substring('data: '.length);
+                const newChunk: string = failedChunk ? failedChunk + cleanChunk : cleanChunk;
                 try {
                   const parsedChunk = JSON.parse(newChunk);
                   controller.enqueue(parsedChunk);
