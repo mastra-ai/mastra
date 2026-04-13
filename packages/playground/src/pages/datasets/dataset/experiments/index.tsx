@@ -1,19 +1,6 @@
-import {
-  Header,
-  MainContentLayout,
-  MainContentContent,
-  Icon,
-  Button,
-  Breadcrumb,
-  Crumb,
-  MainHeader,
-  DatasetExperimentsComparison,
-  useDataset,
-  PermissionDenied,
-  SessionExpired,
-  is403ForbiddenError,
-  is401UnauthorizedError,
-} from '@mastra/playground-ui';
+import { Breadcrumb, Button, Crumb, Header, Icon, MainContentContent, MainContentLayout, MainHeader, PermissionDenied, SessionExpired, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { DatasetExperimentsComparison } from '@/domains/datasets';
+import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 import { Database, GitCompare, ArrowLeft } from 'lucide-react';
 import { useParams, useSearchParams, Link } from 'react-router';
 

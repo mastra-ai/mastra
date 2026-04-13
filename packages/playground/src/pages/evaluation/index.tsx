@@ -1,26 +1,13 @@
-import {
-  ButtonWithTooltip,
-  computeReviewTotals,
-  DatasetHealthCard,
-  ErrorState,
-  EvaluationKpiCards,
-  ExperimentStatusCard,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-  MetricsFlexGrid,
-  NoDataPageLayout,
-  PageHeader,
-  PageLayout,
-  PermissionDenied,
-  ReviewPipelineCard,
-  ScoresOverTimeCard,
-  SessionExpired,
-  useDatasets,
-  useExperiments,
-  useReviewSummary,
-  useScoreMetrics,
-  useScorers,
-} from '@mastra/playground-ui';
+import { ButtonWithTooltip, ErrorState, MetricsFlexGrid, NoDataPageLayout, PageHeader, PageLayout, PermissionDenied, SessionExpired, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { DatasetHealthCard } from '@/domains/datasets';
+import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
+import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
+import { EvaluationKpiCards } from '@/domains/evaluation/components/evaluation-kpi-cards';
+import { ExperimentStatusCard } from '@/domains/experiments';
+import { ReviewPipelineCard, useReviewSummary } from '@/domains/review';
+import { computeReviewTotals } from '@/domains/review/review-maps';
+import { useScoreMetrics, useScorers } from '@/domains/scores';
+import { ScoresOverTimeCard } from '@/domains/scores/components/scores-over-time-card';
 import { BookIcon, FlaskConicalIcon } from 'lucide-react';
 import { useMemo } from 'react';
 

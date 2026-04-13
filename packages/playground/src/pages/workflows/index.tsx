@@ -1,19 +1,7 @@
-import {
-  ButtonWithTooltip,
-  WorkflowsList,
-  WorkflowIcon,
-  NoWorkflowsInfo,
-  ListSearch,
-  NoDataPageLayout,
-  PageLayout,
-  PageHeader,
-  PermissionDenied,
-  SessionExpired,
-  ErrorState,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-  useWorkflows,
-} from '@mastra/playground-ui';
+import { ButtonWithTooltip, ErrorState, ListSearch, NoDataPageLayout, PageHeader, PageLayout, PermissionDenied, SessionExpired, WorkflowIcon, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { NoWorkflowsInfo } from '@/domains/workflows/components/workflows-list/no-workflows-info';
+import { WorkflowsList } from '@/domains/workflows/components/workflows-list/workflows-list';
+import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import { BookIcon } from 'lucide-react';
 import { useState } from 'react';
 

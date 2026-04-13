@@ -1,29 +1,9 @@
+import { Alert, AlertDescription, AlertTitle, Badge, Header, HeaderAction, HeaderTitle, Icon, MainContentLayout, Skeleton, Spinner, toast } from '@mastra/playground-ui';
+import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
+import { useStoredPromptBlock, useStoredPromptBlockMutations, usePromptBlockVersions, usePromptBlockVersion, PromptBlockEditMain, PromptBlockEditSidebar, PromptBlockVersionCombobox, usePromptBlockEditForm } from '@/domains/prompt-blocks';
+import type { PromptBlockFormValues } from '@/domains/prompt-blocks';
+import { useLinkComponent } from '@/lib/framework';
 import type { UpdateStoredPromptBlockParams } from '@mastra/client-js';
-import {
-  toast,
-  useLinkComponent,
-  useStoredPromptBlock,
-  useStoredPromptBlockMutations,
-  usePromptBlockVersions,
-  usePromptBlockVersion,
-  PromptBlockEditMain,
-  PromptBlockEditSidebar,
-  PromptBlockVersionCombobox,
-  AgentEditLayout,
-  usePromptBlockEditForm,
-  Header,
-  HeaderTitle,
-  HeaderAction,
-  Icon,
-  Spinner,
-  MainContentLayout,
-  Skeleton,
-  Badge,
-  Alert,
-  AlertTitle,
-  AlertDescription,
-} from '@mastra/playground-ui';
-import type { PromptBlockFormValues } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { BookIcon } from 'lucide-react';

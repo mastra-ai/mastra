@@ -1,4 +1,4 @@
-import { usePlaygroundStore } from '@mastra/playground-ui';
+import { usePlaygroundStore } from '@/store/playground-store';
 import { createContext, useEffect } from 'react';
 
 type Theme = 'dark' | 'light' | 'system';

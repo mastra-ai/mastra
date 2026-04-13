@@ -1,19 +1,8 @@
-import type { LogRecord, FeaturedIds, LogsDatePreset } from '@mastra/playground-ui';
-import {
-  LogsList,
-  LogsToolbar,
-  isValidLogsDatePreset,
-  useLogsFilters,
-  NoDataPageLayout,
-  NoLogsInfo,
-  PageLayout,
-  PageHeader,
-  PermissionDenied,
-  SessionExpired,
-  ErrorState,
-  is403ForbiddenError,
-  is401UnauthorizedError,
-} from '@mastra/playground-ui';
+import { ErrorState, NoDataPageLayout, PageHeader, PageLayout, PermissionDenied, SessionExpired, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { NoLogsInfo } from '@/domains/logs/components/no-logs-info';
+import { LogsList, LogsToolbar, isValidLogsDatePreset, useLogsFilters } from '@/domains/logs';
+import type { FeaturedIds, LogsDatePreset } from '@/domains/logs';
+import type { LogRecord } from '@/domains/logs/types';
 import { LogsIcon } from 'lucide-react';
 import { useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router';

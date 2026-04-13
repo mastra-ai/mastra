@@ -1,20 +1,8 @@
-import {
-  Header,
-  MainContentLayout,
-  Icon,
-  Breadcrumb,
-  Crumb,
-  Spinner,
-  useDatasetExperiment,
-  useDatasetExperimentResults,
-  useExperiments,
-  ExperimentPageContent,
-  ExperimentPageHeader,
-  PermissionDenied,
-  SessionExpired,
-  is403ForbiddenError,
-  is401UnauthorizedError,
-} from '@mastra/playground-ui';
+import { Breadcrumb, Crumb, Header, Icon, MainContentLayout, PermissionDenied, SessionExpired, Spinner, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { useDatasetExperiment, useDatasetExperimentResults } from '@/domains/datasets/hooks/use-dataset-experiments';
+import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
+import { ExperimentPageContent } from '@/domains/experiments/components/experiment-page-content';
+import { ExperimentPageHeader } from '@/domains/experiments/components/experiment-page-header';
 import { FlaskConical } from 'lucide-react';
 import { useParams, Link } from 'react-router';
 

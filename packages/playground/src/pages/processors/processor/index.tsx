@@ -1,21 +1,7 @@
-import {
-  Header,
-  Breadcrumb,
-  Crumb,
-  Icon,
-  HeaderAction,
-  Button,
-  DocsIcon,
-  ProcessorPanel,
-  ProcessorCombobox,
-  ProcessorIcon,
-  useProcessor,
-  Skeleton,
-  PermissionDenied,
-  SessionExpired,
-  is403ForbiddenError,
-  is401UnauthorizedError,
-} from '@mastra/playground-ui';
+import { Breadcrumb, Button, Crumb, DocsIcon, Header, HeaderAction, Icon, PermissionDenied, ProcessorIcon, SessionExpired, Skeleton, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { ProcessorCombobox } from '@/domains/processors/components/processor-combobox';
+import { ProcessorPanel } from '@/domains/processors/components/processor-panel';
+import { useProcessor } from '@/domains/processors/hooks/use-processors';
 import { Link, useParams, Navigate } from 'react-router';
 
 export function Processor() {

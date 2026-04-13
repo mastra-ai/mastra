@@ -1,33 +1,10 @@
-import {
-  MainContentLayout,
-  MainContentContent,
-  useDatasetItemVersions,
-  useDatasetMutations,
-  useLinkComponent,
-  DatasetItemContent,
-  DatasetItemVersionsPanel,
-  EditModeContent,
-  AlertDialog,
-  Button,
-  Icon,
-  Header,
-  Breadcrumb,
-  Crumb,
-  MainHeader,
-  ButtonsGroup,
-  toast,
-  TextAndIcon,
-  useDataset,
-  CopyButton,
-  Columns,
-  Column,
-  Notice,
-  PermissionDenied,
-  SessionExpired,
-  is403ForbiddenError,
-  is401UnauthorizedError,
-} from '@mastra/playground-ui';
-import type { DatasetItemVersion } from '@mastra/playground-ui';
+import { AlertDialog, Breadcrumb, Button, ButtonsGroup, Column, Columns, CopyButton, Crumb, Header, Icon, MainContentContent, MainContentLayout, MainHeader, Notice, PermissionDenied, SessionExpired, TextAndIcon, is401UnauthorizedError, is403ForbiddenError, toast } from '@mastra/playground-ui';
+import { DatasetItemContent, DatasetItemVersionsPanel, EditModeContent } from '@/domains/datasets';
+import { useDatasetItemVersions } from '@/domains/datasets/hooks/use-dataset-item-versions';
+import type { DatasetItemVersion } from '@/domains/datasets/hooks/use-dataset-item-versions';
+import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
+import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+import { useLinkComponent } from '@/lib/framework';
 import { format } from 'date-fns';
 import {
   AlertTriangleIcon,

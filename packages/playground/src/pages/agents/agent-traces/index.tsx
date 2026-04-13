@@ -1,4 +1,4 @@
-import { AgentTracesPanel } from '@mastra/playground-ui';
+import { AgentTracesPanel } from '@/domains/agents/components/agent-traces-panel';
 import { useParams, useSearchParams } from 'react-router';
 
 function AgentTraces() {

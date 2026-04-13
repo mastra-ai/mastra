@@ -1,29 +1,14 @@
+import { Alert, AlertDescription, AlertTitle, Badge, Header, HeaderAction, HeaderTitle, Icon, MainContentLayout, Skeleton, Spinner, toast } from '@mastra/playground-ui';
+import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
+import { useStoredScorer, useStoredScorerMutations } from '@/domains/scores';
+import { ScorerEditMain } from '@/domains/scores/components/scorer-edit-page/scorer-edit-main';
+import { ScorerEditSidebar } from '@/domains/scores/components/scorer-edit-page/scorer-edit-sidebar';
+import { useScorerEditForm } from '@/domains/scores/components/scorer-edit-page/use-scorer-edit-form';
+import type { ScorerFormValues } from '@/domains/scores/components/scorer-edit-page/utils/form-validation';
+import { ScorerVersionCombobox } from '@/domains/scores/components/scorer-version-combobox';
+import { useScorerVersions, useScorerVersion } from '@/domains/scores/hooks/use-scorer-versions';
+import { useLinkComponent } from '@/lib/framework';
 import type { UpdateStoredScorerParams } from '@mastra/client-js';
-import {
-  toast,
-  useLinkComponent,
-  useStoredScorer,
-  useStoredScorerMutations,
-  useScorerVersions,
-  useScorerVersion,
-  ScorerEditMain,
-  ScorerEditSidebar,
-  ScorerVersionCombobox,
-  AgentEditLayout,
-  useScorerEditForm,
-  Header,
-  HeaderTitle,
-  HeaderAction,
-  Icon,
-  Spinner,
-  MainContentLayout,
-  Skeleton,
-  Badge,
-  Alert,
-  AlertTitle,
-  AlertDescription,
-} from '@mastra/playground-ui';
-import type { ScorerFormValues } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { GaugeIcon } from 'lucide-react';

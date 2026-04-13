@@ -1,18 +1,16 @@
 import { coreFeatures } from '@mastra/core/features';
-import {
-  MainContentLayout,
-  AgentPageTabs,
-  AgentTopBarControls,
-  useIsCmsAvailable,
-  useHasObservability,
-  useAgent,
-  cleanProviderId,
-  SchemaRequestContextProvider,
-  PlaygroundModelProvider,
-  ReviewQueueProvider,
-  GenerationProvider,
-} from '@mastra/playground-ui';
-import type { AgentPageTab } from '@mastra/playground-ui';
+import { MainContentLayout } from '@mastra/playground-ui';
+import { AgentPageTabs } from '@/domains/agents/components/agent-page-tabs';
+import { AgentTopBarControls } from '@/domains/agents/components/agent-top-bar-controls';
+import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
+import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
+import { useAgent } from '@/domains/agents/hooks/use-agent';
+import { cleanProviderId } from '@/domains/llm/utils';
+import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
+import { PlaygroundModelProvider } from '@/domains/agents/context/playground-model-context';
+import { ReviewQueueProvider } from '@/domains/agents/context/review-queue-context';
+import { GenerationProvider } from '@/domains/datasets/context/generation-context';
+import type { AgentPageTab } from '@/domains/agents/components/agent-page-tabs';
 import { useParams, useLocation } from 'react-router';
 
 import { AgentHeader } from './agent-header';

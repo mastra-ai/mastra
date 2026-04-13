@@ -1,20 +1,8 @@
-import {
-  ToolsIcon,
-  ButtonWithTooltip,
-  ToolsList,
-  NoToolsInfo,
-  ListSearch,
-  NoDataPageLayout,
-  PageLayout,
-  PageHeader,
-  PermissionDenied,
-  SessionExpired,
-  ErrorState,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-  useAgents,
-  useTools,
-} from '@mastra/playground-ui';
+import { ButtonWithTooltip, ErrorState, ListSearch, NoDataPageLayout, PageHeader, PageLayout, PermissionDenied, SessionExpired, ToolsIcon, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { NoToolsInfo } from '@/domains/tools/components/tools-list/no-tools-info';
+import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { ToolsList } from '@/domains/tools/components/tools-list/tools-list';
+import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { BookIcon } from 'lucide-react';
 import { useState } from 'react';
 

@@ -1,12 +1,8 @@
-import {
-  useStudioConfig,
-  StudioConfigForm,
-  PageLayout,
-  PageHeader,
-  SettingsIcon,
-  SelectField,
-  usePlaygroundStore,
-} from '@mastra/playground-ui';
+import { PageHeader, PageLayout, SettingsIcon } from '@mastra/playground-ui';
+import { StudioConfigForm } from '@/domains/configuration/components/studio-config-form';
+import { useStudioConfig } from '@/domains/configuration/context/studio-config-context';
+import { SelectField } from '@/lib/form/components/select-field';
+import { usePlaygroundStore } from '@/store/playground-store';
 import { useEffect, useRef, useState } from 'react';
 
 const THEME_OPTIONS = [

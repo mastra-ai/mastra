@@ -1,22 +1,8 @@
-import {
-  MainContentLayout,
-  Header,
-  HeaderAction,
-  Icon,
-  Button,
-  DocsIcon,
-  Breadcrumb,
-  Crumb,
-  SkillDetail,
-  ReferenceViewerDialog,
-  useWorkspaceSkill,
-  useWorkspaceSkillReference,
-  useWorkspaceFile,
-  PermissionDenied,
-  SessionExpired,
-  is403ForbiddenError,
-  is401UnauthorizedError,
-} from '@mastra/playground-ui';
+import { Breadcrumb, Button, Crumb, DocsIcon, Header, HeaderAction, Icon, MainContentLayout, PermissionDenied, SessionExpired, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { ReferenceViewerDialog } from '@/domains/workspace/components/reference-viewer-dialog';
+import { SkillDetail } from '@/domains/workspace/components/skill-detail';
+import { useWorkspaceFile } from '@/domains/workspace/hooks/use-workspace';
+import { useWorkspaceSkill, useWorkspaceSkillReference } from '@/domains/workspace/hooks/use-workspace-skills';
 import { useQueryClient } from '@tanstack/react-query';
 import { Bot, Folder, Wand2 } from 'lucide-react';
 import { useState } from 'react';

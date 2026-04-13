@@ -1,13 +1,7 @@
-import {
-  AgentPlaygroundReview,
-  Spinner,
-  PermissionDenied,
-  SessionExpired,
-  is403ForbiddenError,
-  is401UnauthorizedError,
-  useLinkComponent,
-  useAgent,
-} from '@mastra/playground-ui';
+import { PermissionDenied, SessionExpired, Spinner, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { AgentPlaygroundReview } from '@/domains/agents/components/agent-playground';
+import { useAgent } from '@/domains/agents/hooks/use-agent';
+import { useLinkComponent } from '@/lib/framework';
 import { useParams } from 'react-router';
 
 function AgentReview() {

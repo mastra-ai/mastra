@@ -1,3 +1,9 @@
+import { PlaygroundQueryClient } from '@mastra/playground-ui';
+import { createFetchWithRefresh } from '@/domains/auth/hooks/fetch-with-refresh';
+import { PlaygroundConfigGuard } from '@/domains/configuration/components/playground-config-guard';
+import { StudioConfigProvider, useStudioConfig } from '@/domains/configuration/context/studio-config-context';
+import { LinkComponentProvider } from '@/lib/framework';
+import type { LinkComponentProviderProps } from '@/lib/framework';
 import { v4 as uuid } from '@lukeed/uuid';
 import { coreFeatures } from '@mastra/core/features';
 
@@ -20,21 +26,12 @@ declare global {
   }
 }
 
-import type { LinkComponentProviderProps } from '@mastra/playground-ui';
-import {
-  LinkComponentProvider,
-  PlaygroundConfigGuard,
-  PlaygroundQueryClient,
-  StudioConfigProvider,
-  useStudioConfig,
-  createFetchWithRefresh,
-} from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { useMemo } from 'react';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
-import { Link } from './lib/framework';
+import { Link } from './lib/link';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';

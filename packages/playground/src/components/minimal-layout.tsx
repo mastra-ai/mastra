@@ -1,4 +1,5 @@
-import { AuthRequired, Toaster, TooltipProvider } from '@mastra/playground-ui';
+import { Toaster, TooltipProvider } from '@mastra/playground-ui';
+import { AuthRequired } from '@/domains/auth/components/auth-required';
 import { ThemeProvider } from './ui/theme-provider';
 
 export const MinimalLayout = ({ children }: { children: React.ReactNode }) => {

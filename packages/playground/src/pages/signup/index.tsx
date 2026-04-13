@@ -1,4 +1,4 @@
-import { LoginPage } from '@mastra/playground-ui';
+import { LoginPage } from '@/domains/auth/components/login-page';
 import { useSearchParams, useNavigate } from 'react-router';
 
 export function SignUp() {

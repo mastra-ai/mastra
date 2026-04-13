@@ -1,31 +1,10 @@
-import {
-  Header,
-  MainContentLayout,
-  MainContentContent,
-  Icon,
-  Button,
-  HeaderAction,
-  Breadcrumb,
-  Crumb,
-  MainHeader,
-  TextAndIcon,
-  useDataset,
-  useDatasetItemVersion,
-  useDatasetItemVersions,
-  DatasetItemContent,
-  CodeDiff,
-  SelectField,
-  useLinkComponent,
-  Columns,
-  Column,
-  ButtonsGroup,
-  Chip,
-  PermissionDenied,
-  SessionExpired,
-  is403ForbiddenError,
-  is401UnauthorizedError,
-} from '@mastra/playground-ui';
-import type { DatasetItemVersion } from '@mastra/playground-ui';
+import { Breadcrumb, Button, ButtonsGroup, Chip, CodeDiff, Column, Columns, Crumb, Header, HeaderAction, Icon, MainContentContent, MainContentLayout, MainHeader, PermissionDenied, SessionExpired, TextAndIcon, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { DatasetItemContent } from '@/domains/datasets';
+import { useDatasetItemVersion, useDatasetItemVersions } from '@/domains/datasets/hooks/use-dataset-item-versions';
+import type { DatasetItemVersion } from '@/domains/datasets/hooks/use-dataset-item-versions';
+import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+import { SelectField } from '@/lib/form/components/select-field';
+import { useLinkComponent } from '@/lib/framework';
 import { format } from 'date-fns';
 import {
   Database,

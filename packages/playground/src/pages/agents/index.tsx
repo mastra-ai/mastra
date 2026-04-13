@@ -1,21 +1,9 @@
-import {
-  ButtonWithTooltip,
-  useAgents,
-  AgentsList,
-  AgentIcon,
-  NoAgentsInfo,
-  ListSearch,
-  NoDataPageLayout,
-  PageLayout,
-  PageHeader,
-  PermissionDenied,
-  SessionExpired,
-  ErrorState,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-  useCanCreateAgent,
-  useLinkComponent,
-} from '@mastra/playground-ui';
+import { AgentIcon, ButtonWithTooltip, ErrorState, ListSearch, NoDataPageLayout, PageHeader, PageLayout, PermissionDenied, SessionExpired, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { NoAgentsInfo } from '@/domains/agents/components/agent-list/no-agents-info';
+import { AgentsList } from '@/domains/agents/components/agent-list/agents-list';
+import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { useCanCreateAgent } from '@/domains/agents/hooks/use-can-create-agent';
+import { useLinkComponent } from '@/lib/framework';
 import { BookIcon, Plus } from 'lucide-react';
 import { useState } from 'react';
 

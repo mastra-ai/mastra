@@ -1,28 +1,13 @@
-import {
-  useLinkComponent,
-  useAgent,
-  useStoredAgent,
-  useAgentVersion,
-  useAgentVersions,
-  useAgentCmsForm,
-  AgentCmsFormShell,
-  AgentVersionPanel,
-  Header,
-  HeaderTitle,
-  HeaderAction,
-  Icon,
-  AgentIcon,
-  Spinner,
-  MainContentLayout,
-  Skeleton,
-  Alert,
-  Button,
-  AlertTitle,
-  Badge,
-  mapAgentResponseToDataSource,
-  AlertDescription,
-} from '@mastra/playground-ui';
-import type { AgentDataSource } from '@mastra/playground-ui';
+import { AgentIcon, Alert, AlertDescription, AlertTitle, Badge, Button, Header, HeaderAction, HeaderTitle, Icon, MainContentLayout, Skeleton, Spinner } from '@mastra/playground-ui';
+import { AgentCmsFormShell } from '@/domains/agents/components/agent-cms-form-shell';
+import { AgentVersionPanel } from '@/domains/agents/components/agent-version-panel';
+import { useAgent } from '@/domains/agents/hooks/use-agent';
+import { useAgentCmsForm } from '@/domains/agents/hooks/use-agent-cms-form';
+import { useAgentVersion, useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
+import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
+import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
+import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
+import { useLinkComponent } from '@/lib/framework';
 import { Check, Save } from 'lucide-react';
 import { useCallback, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';

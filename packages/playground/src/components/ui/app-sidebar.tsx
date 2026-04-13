@@ -1,21 +1,12 @@
-import {
-  AgentIcon,
-  AuthStatus,
-  McpServerIcon,
-  ToolsIcon,
-  WorkflowIcon,
-  MainSidebar,
-  useMainSidebar,
-  LogoWithoutText,
-  SettingsIcon,
-  MastraVersionFooter,
-  useMastraPlatform,
-  useIsCmsAvailable,
-  useAuthCapabilities,
-  isAuthenticated,
-  usePermissions,
-} from '@mastra/playground-ui';
+import { AgentIcon, LogoWithoutText, MainSidebar, McpServerIcon, SettingsIcon, ToolsIcon, WorkflowIcon, useMainSidebar } from '@mastra/playground-ui';
 import type { NavLink, NavSection } from '@mastra/playground-ui';
+import { AuthStatus } from '@/domains/auth/components/auth-status';
+import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { isAuthenticated } from '@/domains/auth/types';
+import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
+import { MastraVersionFooter } from '@/domains/configuration/components/mastra-version-footer';
+import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 import {
   EyeIcon,
   GlobeIcon,
