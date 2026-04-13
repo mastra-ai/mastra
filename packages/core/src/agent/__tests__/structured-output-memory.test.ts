@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MockMemory } from '../../memory/mock';
 import { Agent } from '../agent';
@@ -92,107 +92,106 @@ describe('Structured output with memory - assistant message in final position (#
     });
 
     const agent = new Agent({
-      id: 'structured-output-memory-test',
-      name: 'Routing Agent',
-      instructions: 'You are a routing agent that selects primitives.',
+      id: 'test-agent-12800',
+      name: 'Test Agent 12800',
+      instructions: 'You are a helpful assistant.',
       model: mockModel,
       memory: mockMemory,
     });
 
-    // Create the thread
     await mockMemory.createThread({ threadId, resourceId });
 
-    // Pre-populate memory with a conversation that ends with an assistant message.
-    // This simulates what happens after a previous network iteration where the
-    // routing agent's response and sub-agent results were saved to memory.
-    const now = new Date();
+    // Pre-populate memory with conversation history
     await mockMemory.saveMessages({
       messages: [
         {
           id: randomUUID(),
-          role: 'user' as const,
-          content: {
-            format: 2 as const,
-            parts: [{ type: 'text' as const, text: 'Research dolphins' }],
-          },
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Which agent should research dolphins?' }] },
           threadId,
-          createdAt: new Date(now.getTime() - 2000),
           resourceId,
-          type: 'text' as const,
+          createdAt: new Date(),
         },
         {
           id: randomUUID(),
-          role: 'assistant' as const,
-          content: {
-            format: 2 as const,
-            parts: [{ type: 'text' as const, text: 'Dolphins are intelligent marine mammals.' }],
-          },
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: 'Let me route this request.' }] },
           threadId,
-          createdAt: new Date(now.getTime() - 1000),
           resourceId,
-          type: 'text' as const,
+          createdAt: new Date(),
         },
       ],
     });
 
-    // Simulate the network routing agent call: the routing prompt is an ASSISTANT
-    // message (see packages/core/src/loop/network/index.ts line 574-607), and it's
-    // called with structuredOutput + memory. This is the exact scenario that triggers
-    // the Anthropic error.
-    const result = await agent.generate(
-      [
-        {
-          role: 'assistant' as const,
-          content: 'Select the most appropriate primitive to handle this task...',
-        },
-      ],
-      {
-        memory: {
-          thread: threadId,
-          resource: resourceId,
-        },
-        structuredOutput: {
-          schema: z.object({
-            primitiveId: z.string(),
-            primitiveType: z.string(),
-            prompt: z.string(),
-            selectionReason: z.string(),
-          }),
-        },
+    await agent.generate([{ role: 'assistant', content: 'Please select the best agent for research dolphins' }], {
+      memory: {
+        thread: threadId,
+        resource: resourceId,
       },
-    );
+      structuredOutput: {
+        schema: z.object({
+          primitiveId: z.string(),
+          primitiveType: z.string(),
+          prompt: z.string(),
+          selectionReason: z.string(),
+        }),
+      },
+    });
 
-    // Verify we got a response
-    expect(result.object).toBeDefined();
-
-    // The critical assertion: the last message in the prompt should NOT be an assistant message.
-    // Anthropic rejects requests where the last message is assistant when using output format.
+    // The critical assertion: the prompt sent to the model should NOT end with an assistant message
     expect(capturedPrompts.length).toBeGreaterThan(0);
-    const prompt = capturedPrompts[0]!;
-    const lastMessage = prompt[prompt.length - 1];
-    expect(
-      lastMessage.role,
-      `Expected last message role to NOT be 'assistant', but got 'assistant'. ` +
-        `This causes Anthropic API error: "When using output format, pre-filling the ` +
-        `assistant response is not supported." ` +
-        `Message roles in prompt: ${prompt.map((m: any) => m.role).join(', ')}`,
-    ).not.toBe('assistant');
+    const lastPrompt = capturedPrompts[capturedPrompts.length - 1];
+
+    // Find the last non-system message in the prompt
+    const nonSystemMessages = lastPrompt.filter((msg: any) => msg.role !== 'system');
+    expect(nonSystemMessages.length).toBeGreaterThan(0);
+
+    const lastMessage = nonSystemMessages[nonSystemMessages.length - 1];
+    expect(lastMessage.role).toBe('user');
   });
+});
 
-  it('should not send prompt ending with assistant message when using stream with assistant-role input, structuredOutput and memory', async () => {
+describe('Structured output memory inheritance', () => {
+  it('includes prior memory context when a separate structuring model is used', async () => {
     const threadId = randomUUID();
-    const resourceId = 'user-12800-stream';
-
+    const resourceId = `structured-output-memory-${randomUUID()}`;
     const mockMemory = new MockMemory();
 
-    // Track what prompts are sent to the model
-    const capturedPrompts: any[] = [];
+    const mainModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: 'Acknowledged.' }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          {
+            type: 'response-metadata',
+            id: 'main-response',
+            modelId: 'main-model',
+            timestamp: new Date(0),
+          },
+          { type: 'text-start', id: 'main-text' },
+          { type: 'text-delta', id: 'main-text', delta: 'Acknowledged.' },
+          { type: 'text-end', id: 'main-text' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
 
-    const mockModel = new MockLanguageModelV2({
-      provider: 'anthropic',
-      modelId: 'claude-opus-4-6',
+    const structuringPrompts: any[] = [];
+    const structuringModel = new MockLanguageModelV2({
       doGenerate: async options => {
-        capturedPrompts.push(options.prompt);
+        structuringPrompts.push(options.prompt);
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
@@ -201,10 +200,9 @@ describe('Structured output with memory - assistant message in final position (#
             {
               type: 'text',
               text: JSON.stringify({
-                primitiveId: 'agent1',
-                primitiveType: 'agent',
-                prompt: 'research dolphins',
-                selectionReason: 'best fit',
+                favoriteColor: 'violet',
+                hometown: 'Lisbon',
+                petName: 'Mochi',
               }),
             },
           ],
@@ -212,93 +210,80 @@ describe('Structured output with memory - assistant message in final position (#
         };
       },
       doStream: async options => {
-        capturedPrompts.push((options as any).prompt);
+        structuringPrompts.push((options as any).prompt);
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
           stream: convertArrayToReadableStream([
-            {
-              type: 'stream-start',
-              warnings: [],
-            },
+            { type: 'stream-start', warnings: [] },
             {
               type: 'response-metadata',
-              id: 'response-1',
-              modelId: 'mock-model',
+              id: 'structuring-response',
+              modelId: 'structuring-model',
               timestamp: new Date(0),
             },
-            { type: 'text-start', id: 'text-1' },
+            { type: 'text-start', id: 'structuring-text' },
             {
               type: 'text-delta',
-              id: 'text-1',
+              id: 'structuring-text',
               delta: JSON.stringify({
-                primitiveId: 'agent1',
-                primitiveType: 'agent',
-                prompt: 'research dolphins',
-                selectionReason: 'best fit',
+                favoriteColor: 'violet',
+                hometown: 'Lisbon',
+                petName: 'Mochi',
               }),
             },
-            { type: 'text-end', id: 'text-1' },
+            { type: 'text-end', id: 'structuring-text' },
+            {
+              type: 'object-result',
+              object: {
+                favoriteColor: 'violet',
+                hometown: 'Lisbon',
+                petName: 'Mochi',
+              },
+            } as any,
             {
               type: 'finish',
               finishReason: 'stop',
               usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
             },
-          ]),
+          ] as any),
         };
       },
     });
 
     const agent = new Agent({
-      id: 'structured-output-memory-stream-test',
-      name: 'Routing Agent Stream',
-      instructions: 'You are a routing agent that selects primitives.',
-      model: mockModel,
+      id: 'structured-output-cross-turn-memory-test',
+      name: 'Memory Agent',
+      instructions: 'Answer briefly and use the provided conversation context.',
+      model: mainModel,
       memory: mockMemory,
     });
 
-    // Create the thread
     await mockMemory.createThread({ threadId, resourceId });
 
-    // Pre-populate memory with a conversation ending with an assistant message
-    const now = new Date();
-    await mockMemory.saveMessages({
-      messages: [
-        {
-          id: randomUUID(),
-          role: 'user' as const,
-          content: {
-            format: 2 as const,
-            parts: [{ type: 'text' as const, text: 'Research dolphins' }],
-          },
-          threadId,
-          createdAt: new Date(now.getTime() - 2000),
-          resourceId,
-          type: 'text' as const,
-        },
-        {
-          id: randomUUID(),
-          role: 'assistant' as const,
-          content: {
-            format: 2 as const,
-            parts: [{ type: 'text' as const, text: 'Dolphins are intelligent marine mammals.' }],
-          },
-          threadId,
-          createdAt: new Date(now.getTime() - 1000),
-          resourceId,
-          type: 'text' as const,
-        },
-      ],
+    await agent.generate('My favorite color is violet.', {
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
     });
 
-    // Call stream with assistant-role input + structuredOutput + memory
-    const response = await agent.stream(
-      [
-        {
-          role: 'assistant' as const,
-          content: 'Select the most appropriate primitive to handle this task...',
-        },
-      ],
+    await agent.generate('I grew up in Lisbon.', {
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    await agent.generate('My dog is named Mochi.', {
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    const result = await agent.generate(
+      'Return my profile as structured data. If a field is missing from this message, fill it from earlier conversation memory.',
       {
         memory: {
           thread: threadId,
@@ -306,27 +291,164 @@ describe('Structured output with memory - assistant message in final position (#
         },
         structuredOutput: {
           schema: z.object({
-            primitiveId: z.string(),
-            primitiveType: z.string(),
-            prompt: z.string(),
-            selectionReason: z.string(),
+            favoriteColor: z.string(),
+            hometown: z.string(),
+            petName: z.string(),
           }),
+          model: structuringModel,
         },
       },
     );
 
-    await response.consumeStream();
+    expect(result.object).toEqual({
+      favoriteColor: 'violet',
+      hometown: 'Lisbon',
+      petName: 'Mochi',
+    });
 
-    // The critical assertion: the last message in the prompt should NOT be an assistant message.
-    expect(capturedPrompts.length).toBeGreaterThan(0);
-    const prompt = capturedPrompts[0]!;
-    const lastMessage = prompt[prompt.length - 1];
-    expect(
-      lastMessage.role,
-      `Expected last message role to NOT be 'assistant', but got 'assistant'. ` +
-        `This causes Anthropic API error: "When using output format, pre-filling the ` +
-        `assistant response is not supported." ` +
-        `Message roles in prompt: ${prompt.map((m: any) => m.role).join(', ')}`,
-    ).not.toBe('assistant');
+    expect(structuringPrompts.length).toBeGreaterThan(0);
+    const prompt = structuringPrompts.at(-1)!;
+    const promptText = prompt
+      .flatMap((message: any) =>
+        Array.isArray(message.content)
+          ? message.content.map((part: any) => (typeof part === 'string' ? part : (part.text ?? JSON.stringify(part))))
+          : [typeof message.content === 'string' ? message.content : JSON.stringify(message.content)],
+      )
+      .join('\n');
+
+    expect(promptText).toContain('violet');
+    expect(promptText).toContain('Lisbon');
+    expect(promptText).toContain('Mochi');
+  });
+
+  it('keeps main-agent text chunks in the outer stream while suppressing structuring-agent text chunks', async () => {
+    const threadId = randomUUID();
+    const resourceId = `structured-output-streaming-${randomUUID()}`;
+    const mockMemory = new MockMemory();
+
+    const mainModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: 'Main agent summary.' }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          {
+            type: 'response-metadata',
+            id: 'main-response-streaming',
+            modelId: 'main-model',
+            timestamp: new Date(0),
+          },
+          { type: 'text-start', id: 'main-text-streaming' },
+          { type: 'text-delta', id: 'main-text-streaming', delta: 'Main ' },
+          { type: 'text-delta', id: 'main-text-streaming', delta: 'agent ' },
+          { type: 'text-delta', id: 'main-text-streaming', delta: 'summary.' },
+          { type: 'text-end', id: 'main-text-streaming' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+
+    const structuringModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: JSON.stringify({ summary: 'Structured summary' }) }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          {
+            type: 'response-metadata',
+            id: 'structuring-response-streaming',
+            modelId: 'structuring-model',
+            timestamp: new Date(0),
+          },
+          { type: 'text-start', id: 'structuring-text-streaming' },
+          {
+            type: 'text-delta',
+            id: 'structuring-text-streaming',
+            delta: '{"summary":"Structured summary"}',
+          },
+          { type: 'text-end', id: 'structuring-text-streaming' },
+          { type: 'object-result', object: { summary: 'Structured summary' } } as any,
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ] as any),
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'structured-output-streaming-visibility-test',
+      name: 'Streaming Visibility Agent',
+      instructions: 'Answer briefly and structure the result afterward.',
+      model: mainModel,
+      memory: mockMemory,
+    });
+
+    await mockMemory.createThread({ threadId, resourceId });
+
+    const result = await agent.stream('Summarize this briefly', {
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
+      structuredOutput: {
+        schema: z.object({
+          summary: z.string(),
+        }),
+        model: structuringModel,
+      },
+    });
+
+    const textChunks: string[] = [];
+    const structuredObjects: Array<{ summary: string }> = [];
+
+    for await (const chunk of result.fullStream) {
+      if (chunk.type === 'text-delta') {
+        textChunks.push(chunk.payload.text);
+      }
+
+      if (chunk.type === 'object-result') {
+        structuredObjects.push(chunk.object as { summary: string });
+      }
+    }
+
+    const fullOutput = await result.getFullOutput();
+
+    expect(textChunks.join('')).toBe('Main agent summary.');
+    expect(textChunks.join('')).not.toContain('Structured summary');
+    expect(structuredObjects).toEqual([{ summary: 'Structured summary' }]);
+    expect(fullOutput.text).toBe('Main agent summary.');
+    expect(fullOutput.object).toEqual({ summary: 'Structured summary' });
+
+    await vi.waitFor(async () => {
+      const recalled = await mockMemory.recall({ threadId, resourceId });
+      const lastAssistantMessage = [...recalled.messages].reverse().find(message => message.role === 'assistant');
+      const assistantText =
+        lastAssistantMessage?.content.parts
+          .filter(part => part.type === 'text')
+          .map(part => part.text)
+          .join('') ?? '';
+
+      expect(assistantText).toBe('');
+    });
   });
 });

@@ -102,7 +102,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
   ): Promise<ChunkType | null | undefined> {
     const { part, state, streamParts, abort, messageList, ...rest } = args;
     const observabilityContext = resolveObservabilityContext(rest);
-    const controller = state.controller as TransformStreamDefaultController<ChunkType<OUTPUT>>;
+    const controller = state.controller;
 
     switch (part.type) {
       case 'finish':
@@ -120,7 +120,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
 
   private async processAndEmitStructuredOutput(
     streamParts: ChunkType[],
-    controller: TransformStreamDefaultController<ChunkType<OUTPUT>>,
+    controller: TransformStreamDefaultController<ChunkType<OUTPUT>> | undefined,
     abort: (reason?: string) => never,
     observabilityContext?: ObservabilityContext,
     messageList?: MessageList,
@@ -166,7 +166,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
                 fallback: true,
               },
             };
-            controller.enqueue(fallbackChunk);
+            controller?.enqueue(fallbackChunk);
             break;
           }
         }
@@ -177,7 +177,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
             from: 'structured-output',
           },
         } as unknown as ChunkType<OUTPUT>;
-        controller.enqueue(newChunk);
+        controller?.enqueue(newChunk);
       }
     } catch (error) {
       this.handleError('Structured output processing failed', error, abort);

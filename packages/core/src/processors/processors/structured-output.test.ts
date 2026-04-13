@@ -41,6 +41,12 @@ describe('StructuredOutputProcessor', () => {
     }) as any;
   }
 
+  function createMockWriter() {
+    return {
+      custom: vi.fn(async () => undefined),
+    };
+  }
+
   beforeEach(() => {
     mockModel = new MockLanguageModelV2({
       doStream: async () => ({
@@ -338,6 +344,58 @@ describe('StructuredOutputProcessor', () => {
         }),
       );
       expect(fallbackStreamSpy).not.toHaveBeenCalled();
+    });
+
+    it('should emit structured output through writer when no controller is available', async () => {
+      const abort = createMockAbort();
+      const writer = createMockWriter();
+      const finishChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'finish' as const,
+        payload: {
+          stepResult: { reason: 'stop' as const },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
+
+      vi.spyOn(processor['structuringAgent'], 'stream').mockResolvedValue({
+        fullStream: convertArrayToReadableStream([
+          {
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            type: 'object-result',
+            object: { color: 'blue', intensity: 'bright' },
+          },
+        ]),
+      } as any);
+
+      const result = await processor.processOutputStream({
+        part: finishChunk,
+        streamParts: [
+          {
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            type: 'text-delta',
+            payload: { id: 'text-1', text: 'The answer is blue and bright' },
+          },
+        ],
+        state: {},
+        abort,
+        retryCount: 0,
+        writer,
+      });
+
+      expect(result).toBe(finishChunk);
+      expect(writer.custom).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'object-result',
+          object: { color: 'blue', intensity: 'bright' },
+          metadata: { from: 'structured-output' },
+        }),
+      );
     });
 
     it('should surface plain object error messages', async () => {
