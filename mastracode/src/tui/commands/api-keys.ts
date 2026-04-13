@@ -147,11 +147,14 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
           const info = providers.find(p => p.provider === currentSelection);
           if (info?.source === 'stored' && ctx.authStorage) {
             ctx.authStorage.remove(`apikey:${info.provider}`);
+            if (info.envVar) {
+              delete process.env[info.envVar];
+            }
             providers = getProviderList(ctx, models);
             ctx.showInfo(`API key removed for ${info.provider}`);
             rebuildList();
-            return;
           }
+          return;
         }
         originalHandleInput(data);
       };
