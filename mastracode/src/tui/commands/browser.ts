@@ -205,8 +205,31 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       return;
     }
 
-    if (!value) {
-      ctx.showError(`Missing value. Use: /browser set ${args[1]} <value>`);
+    // Handle clearing a setting (empty value or explicit "clear")
+    const isClear = !value || value.trim().toLowerCase() === 'clear';
+
+    if (isClear) {
+      switch (key) {
+        case 'profile':
+          delete settings.browser.profile;
+          if (settings.browser.stagehand) {
+            delete settings.browser.stagehand.preserveUserDataDir;
+          }
+          break;
+        case 'executablepath':
+          delete settings.browser.executablePath;
+          break;
+        case 'storagestate':
+          if (settings.browser.agentBrowser) {
+            delete settings.browser.agentBrowser.storageState;
+          }
+          break;
+        case 'cdpurl':
+          delete settings.browser.cdpUrl;
+          break;
+      }
+      saveSettings(settings);
+      ctx.showInfo(`Cleared ${args[1]}.\nRun /browser on to apply.`);
       return;
     }
 
@@ -221,9 +244,19 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
           env: settings.browser.stagehand?.env ?? 'LOCAL',
           preserveUserDataDir: true,
         };
+        // Profile is a launch option — incompatible with CDP connection
+        if (settings.browser.cdpUrl) {
+          delete settings.browser.cdpUrl;
+          ctx.showInfo(`Note: Cleared cdpUrl (incompatible with profile).`);
+        }
         break;
       case 'executablepath':
         settings.browser.executablePath = expandedValue;
+        // ExecutablePath is a launch option — incompatible with CDP connection
+        if (settings.browser.cdpUrl) {
+          delete settings.browser.cdpUrl;
+          ctx.showInfo(`Note: Cleared cdpUrl (incompatible with executablePath).`);
+        }
         break;
       case 'storagestate':
         if (browser.provider !== 'agent-browser') {
@@ -237,6 +270,15 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
         break;
       case 'cdpurl':
         settings.browser.cdpUrl = expandedValue;
+        // CDP connects to an existing browser — launch options are ignored
+        if (settings.browser.profile || settings.browser.executablePath) {
+          delete settings.browser.profile;
+          delete settings.browser.executablePath;
+          if (settings.browser.stagehand) {
+            delete settings.browser.stagehand.preserveUserDataDir;
+          }
+          ctx.showInfo(`Note: Cleared profile and executablePath (ignored when using cdpUrl).`);
+        }
         break;
     }
 

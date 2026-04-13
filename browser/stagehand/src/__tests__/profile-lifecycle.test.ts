@@ -13,7 +13,13 @@ const stagehandFactory: BrowserFactory = {
   name: 'Stagehand',
   patchesExitType: true,
   create: ({ profile, scope, headless, executablePath }) =>
-    new StagehandBrowser({ headless, scope, profile, executablePath }),
+    new StagehandBrowser({
+      headless,
+      scope,
+      profile,
+      executablePath,
+      preserveUserDataDir: Boolean(profile),
+    }),
   navigate: async (browser, url, threadId) => {
     const result = await (browser as StagehandBrowser).navigate({ url }, threadId);
     if ('error' in result) throw new Error(`Navigate failed: ${result.error}`);
