@@ -30,6 +30,6 @@ export async function initStudio(): Promise<AuthResult> {
     },
   });
 
-  console.log('[Auth] Using Mastra Cloud authentication');
+  console.log('[Auth] Using the Mastra platform authentication');
   return { mastraAuth, rbacProvider };
 }

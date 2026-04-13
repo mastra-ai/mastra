@@ -39,7 +39,7 @@ export const mastra = new Mastra({
         serviceName: 'mastra',
         exporters: [
           new DefaultExporter(), // Persists traces to storage for Studio
-          new CloudExporter(), // Sends observability data to Mastra platform (if MASTRA_CLOUD_ACCESS_TOKEN is set)
+          new CloudExporter(), // Sends observability data to hosted Mastra Studio (if MASTRA_CLOUD_ACCESS_TOKEN is set)
         ],
         spanOutputProcessors: [
           new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
@@ -60,7 +60,7 @@ This configuration includes:
 - **Sampling**: `"always"` by default (100% of traces)
 - **Exporters**:
   - `DefaultExporter` - Persists traces to your configured storage for Studio
-  - `CloudExporter` - Sends observability data to Mastra platform (requires `MASTRA_CLOUD_ACCESS_TOKEN`)
+  - `CloudExporter` - Sends observability data to hosted Mastra Studio (requires `MASTRA_CLOUD_ACCESS_TOKEN`)
 - **Span Output Processors**: `SensitiveDataFilter` - Redacts sensitive fields
 
 ## Exporters
@@ -72,7 +72,7 @@ Exporters determine where your trace data is sent and how it's stored. They inte
 Mastra provides two built-in exporters:
 
 - **[Default](/docs/observability/tracing/exporters/default)** - Persists traces to local storage for viewing in Studio
-- **[Cloud](/docs/observability/tracing/exporters/cloud)** - Sends observability data to Mastra platform for production monitoring and collaboration
+- **[Cloud](/docs/observability/tracing/exporters/cloud)** - Sends observability data to hosted Mastra Studio for production monitoring and collaboration
 
 ### External Exporters
 
