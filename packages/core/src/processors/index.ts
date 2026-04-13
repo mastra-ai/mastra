@@ -482,12 +482,10 @@ export type OutputProcessorOrWorkflow<TTripwireMetadata = unknown> =
   | ProcessorWorkflow;
 
 /**
- * Error processor config: can be a Processor or a Workflow.
- * Error processors only need processAPIError — they handle LLM API rejections.
+ * Error processor config: must be a processor with processAPIError.
+ * Workflows are not supported because LLM API rejection handling only invokes processor methods.
  */
-export type ErrorProcessorOrWorkflow<TTripwireMetadata = unknown> =
-  | ErrorProcessor<TTripwireMetadata>
-  | ProcessorWorkflow;
+export type ErrorProcessorOrWorkflow<TTripwireMetadata = unknown> = ErrorProcessor<TTripwireMetadata>;
 
 /**
  * Type guard to check if an object is a Workflow that can be used as a processor.

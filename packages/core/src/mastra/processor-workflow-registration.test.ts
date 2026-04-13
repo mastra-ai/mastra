@@ -83,7 +83,7 @@ describe('Processor Workflow Registration', () => {
       expect(workflow.id).toBe('test-agent-output-output-processor');
     });
 
-    it('should register input, output, and error processor workflows', async () => {
+    it('should register input and output processor workflows without registering error processors', async () => {
       const inputProcessor: InputProcessorOrWorkflow = {
         id: 'test-input',
         processInput: async ({ messages }) => messages,
@@ -117,14 +117,13 @@ describe('Processor Workflow Registration', () => {
       // Wait for async registration
       await waitForWorkflowRegistration();
 
-      // Should have registered all workflows
+      // Should only register workflow-backed input/output processors
       const inputWorkflow = mastra.getWorkflow('test-agent-both-input-processor');
       const outputWorkflow = mastra.getWorkflow('test-agent-both-output-processor');
-      const errorWorkflow = mastra.getWorkflow('test-agent-both-error-processor');
 
       expect(inputWorkflow).toBeDefined();
       expect(outputWorkflow).toBeDefined();
-      expect(errorWorkflow).toBeDefined();
+      expect(() => mastra.getWorkflow('test-agent-both-error-processor')).toThrow();
     });
 
     it('should not register workflows when agent has no processors', async () => {

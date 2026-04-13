@@ -909,21 +909,6 @@ export class Agent<
       }
     }
 
-    // Get error processors (static or from function)
-    if (this.#errorProcessors) {
-      const errorProcessors =
-        typeof this.#errorProcessors === 'function'
-          ? await this.#errorProcessors({ requestContext: new RequestContext() as RequestContext<TRequestContext> })
-          : this.#errorProcessors;
-
-      const combined = this.combineProcessorsIntoWorkflow(errorProcessors, `${this.id}-error-processor`);
-      for (const p of combined) {
-        if (isProcessorWorkflow(p)) {
-          workflows.push(p);
-        }
-      }
-    }
-
     return workflows;
   }
 

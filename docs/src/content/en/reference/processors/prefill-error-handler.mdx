@@ -54,7 +54,7 @@ export const agent = new Agent({
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
   model: 'anthropic:claude-sonnet-4-20250514',
-  inputProcessors: [customErrorHandler],
+  errorProcessors: [customErrorHandler],
 })
 ```
 

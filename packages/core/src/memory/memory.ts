@@ -110,7 +110,12 @@ export function isSystemReminderMessage(message: MastraDBMessage): boolean {
   }
 
   const metadata = message.content.metadata;
-  return isRecord(metadata) && (isRecord(metadata.systemReminder) || LEGACY_SYSTEM_REMINDER_METADATA_KEY in metadata);
+  if (isRecord(metadata) && (isRecord(metadata.systemReminder) || LEGACY_SYSTEM_REMINDER_METADATA_KEY in metadata)) {
+    return true;
+  }
+
+  const firstTextPart = message.content.parts.find(part => part.type === 'text');
+  return typeof firstTextPart?.text === 'string' && firstTextPart.text.startsWith('<system-reminder');
 }
 
 export function filterSystemReminderMessages(

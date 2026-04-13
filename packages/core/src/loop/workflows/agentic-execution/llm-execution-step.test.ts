@@ -580,6 +580,8 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(retryResult.fallbackModelIndex).toBe(1);
     expect(firstModelStream).toHaveBeenCalledTimes(1);
     expect(secondModelStream).toHaveBeenCalledTimes(1);
+    expect(retryResult.messages.nonUser).toEqual([]);
+    expect(retryResult.stepResult.isContinued).toBe(true);
 
     const retryInput = createIterationInput();
     retryInput.processorRetryCount = retryResult.processorRetryCount;
