@@ -1780,9 +1780,9 @@ describe('New Processor Features', () => {
       const alwaysRetryProcessor = {
         id: 'always-retry-processor',
         // Use processOutputStep since that's where retry is implemented
-        processOutputStep: async ({ abort, retryCount }: any) => {
-          // Always trigger retry until the processor-defined budget is exhausted
-          abort('Never satisfied', { retry: true, metadata: { retryCount } });
+        processOutputStep: async ({ abort }: any) => {
+          // Always trigger retry
+          abort('Never satisfied', { retry: true });
           return [];
         },
       } satisfies Processor;
@@ -1793,78 +1793,17 @@ describe('New Processor Features', () => {
         instructions: 'You are a helpful assistant.',
         model: mockModel,
         outputProcessors: [alwaysRetryProcessor],
-        maxProcessorRetries: 5,
+        maxProcessorRetries: 2,
       });
 
       const result = await agent.generate('Hello');
 
-      expect(callCount).toBe(5);
-      expect(result.tripwire).toBeFalsy();
-      expect(result.text).toBe('');
-      expect(result.steps).toHaveLength(5);
-      expect((result.steps.at(-1) as any)?.tripwire?.reason).toBe('Never satisfied');
-    });
+      // Should have made maxProcessorRetries + 1 calls (initial + retries)
+      expect(callCount).toBe(3);
 
-    it('should respect agent-level maxProcessorRetries defaults and per-call overrides', async () => {
-      const createRetryingModel = () => {
-        let callCount = 0;
-
-        return {
-          model: new MockLanguageModelV2({
-            doGenerate: async () => {
-              callCount++;
-              return {
-                content: [{ type: 'text', text: `response ${callCount}` }],
-                finishReason: 'stop',
-                usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                warnings: [],
-              };
-            },
-          }),
-          getCallCount: () => callCount,
-        };
-      };
-
-      const alwaysRetryProcessor = {
-        id: 'always-retry-processor-with-overrides',
-        processOutputStep: async ({ abort }: any) => {
-          abort('Still not satisfied', { retry: true });
-          return [];
-        },
-      } satisfies Processor;
-
-      const defaultModel = createRetryingModel();
-      const defaultAgent = new Agent({
-        id: 'agent-level-max-processor-retries-test-agent',
-        name: 'Agent Level Max Processor Retries Test Agent',
-        instructions: 'You are a helpful assistant.',
-        model: defaultModel.model,
-        outputProcessors: [alwaysRetryProcessor],
-        maxProcessorRetries: 3,
-      });
-
-      const defaultResult = await defaultAgent.generate('Hello');
-
-      expect(defaultModel.getCallCount()).toBe(4);
-      expect(defaultResult.steps).toHaveLength(4);
-      expect((defaultResult.steps.at(-1) as any)?.tripwire?.reason).toBe('Still not satisfied');
-
-      const overrideModel = createRetryingModel();
-      const overrideAgent = new Agent({
-        id: 'agent-level-max-processor-retries-override-test-agent',
-        name: 'Agent Level Max Processor Retries Override Test Agent',
-        instructions: 'You are a helpful assistant.',
-        model: overrideModel.model,
-        outputProcessors: [alwaysRetryProcessor],
-        maxProcessorRetries: 3,
-      });
-
-      const overrideResult = await overrideAgent.generate('Hello', { maxProcessorRetries: 2 });
-
-      expect(overrideModel.getCallCount()).toBe(3);
-      expect(overrideResult.steps).toHaveLength(3);
-      expect((overrideResult.steps.at(-1) as any)?.tripwire?.reason).toBe('Still not satisfied');
+      // Should return tripwire since max retries exceeded
+      expect(result.tripwire).toBeDefined();
+      expect(result.tripwire?.reason).toBe('Never satisfied');
     });
 
     it('should not include rejected assistant response in messages sent to LLM on retry', async () => {

@@ -187,29 +187,56 @@ describe('createLLMExecutionStep gateway provider tools', () => {
       },
       _internal: {
         generateId: () => 'generated-id',
-        threadId: 'thread-123',
-        resourceId: 'resource-456',
       },
       logger: {
         error: vi.fn(),
         warn: vi.fn(),
         debug: vi.fn(),
       } as any,
-    } as unknown as OuterLLMRun<{}>);
+    } as unknown as OuterLLMRun<typeof tools>);
 
-    const input = createIterationInput();
-    input.stepResult.isContinued = false;
+    const llmResult = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+    const toolCalls = llmResult.output.toolCalls ?? [];
+    const toolCallById = Object.fromEntries(toolCalls.map(toolCall => [toolCall.toolCallId, toolCall]));
 
-    const llmResult = await llmExecutionStep.execute(createExecuteParams(input));
-    const toolCallResult = llmResult.output.toolCalls;
+    // providerExecuted is inferred from the tool definition (type: 'provider')
+    // even though the raw model stream doesn't include it
+    expect(toolCallById['call-1']).toEqual(
+      expect.objectContaining({
+        toolCallId: 'call-1',
+        toolName: 'perplexity_search',
+        providerExecuted: true,
+      }),
+    );
+    expect(toolCallById['call-2']).toEqual(
+      expect.objectContaining({
+        toolCallId: 'call-2',
+        toolName: 'perplexity_search',
+        providerExecuted: true,
+      }),
+    );
+    // output is no longer merged onto toolCalls — results are handled inline
+    // via case 'tool-result' in processOutputStream
+    expect(toolCallById['call-1'].output).toBeUndefined();
+    expect(toolCallById['call-2'].output).toBeUndefined();
+
+    expect(llmResult.stepResult.isContinued).toBe(true);
+
+    // tool-call-step returns inputData as-is for provider-executed tools (no client execution)
     const toolCallStep = createToolCallStep({
+      agentId: 'test-agent',
+      controller,
+      messageList,
+      runId: 'test-run',
       tools,
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
       _internal: {
         stepTools: tools,
       },
-    } as OuterLLMRun<typeof tools>);
-
-    const toolCallById = Object.fromEntries(toolCallResult.map(call => [call.toolCallId, call]));
+    } as unknown as OuterLLMRun<typeof tools>);
 
     const toolResult = await toolCallStep.execute({
       ...createExecuteParams(createIterationInput()),
