@@ -992,6 +992,59 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               self.#closeTransportIfNeeded();
               break;
 
+            case 'abort': {
+              self.#finishReason = 'abort';
+              self.#streamFinished = true;
+
+              const abortReasoningText =
+                self.#bufferedReasoning.length > 0
+                  ? self.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join('')
+                  : undefined;
+
+              const abortUsage = {
+                inputTokens: self.#usageCount.inputTokens ?? 0,
+                outputTokens: self.#usageCount.outputTokens ?? 0,
+                totalTokens: self.#usageCount.totalTokens ?? 0,
+                ...(self.#usageCount.reasoningTokens !== undefined && {
+                  reasoningTokens: self.#usageCount.reasoningTokens,
+                }),
+                ...(self.#usageCount.cachedInputTokens !== undefined && {
+                  cachedInputTokens: self.#usageCount.cachedInputTokens,
+                }),
+              };
+
+              self.resolvePromises({
+                text: self.#bufferedText.join(''),
+                finishReason: 'abort',
+                object: undefined,
+                usage: abortUsage,
+                warnings: self.#warnings,
+                providerMetadata: undefined,
+                response: {
+                  dbMessages: self.messageList.get.response.db(),
+                },
+                request: self.#request || {},
+                reasoning: Object.values(self.#bufferedReasoningDetails || {}),
+                reasoningText: abortReasoningText,
+                sources: self.#bufferedSources,
+                files: self.#bufferedFiles,
+                toolCalls: self.#toolCalls,
+                toolResults: self.#toolResults,
+                steps: self.#bufferedSteps,
+                totalUsage: self.#getTotalUsage(),
+                content: self.messageList.get.response.aiV5.stepContent(),
+                suspendPayload: undefined,
+                resumeSchema: undefined,
+              });
+
+              self.#closeTransportIfNeeded();
+
+              self.#emitChunk(chunk);
+              controller.enqueue(chunk);
+              self.#emitter.emit('finish');
+              controller.terminate();
+              return;
+            }
             case 'error':
               const error = getErrorFromUnknown(chunk.payload.error, {
                 fallbackMessage: 'Unknown error chunk in stream',

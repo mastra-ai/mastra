@@ -511,6 +511,13 @@ export async function createNetworkLoop({
     primitiveId: string;
     iteration: number;
     task: string;
+    usage?: {
+      inputTokens?: number;
+      outputTokens?: number;
+      totalTokens?: number;
+      reasoningTokens?: number;
+      cachedInputTokens?: number;
+    };
   }) {
     await onAbort?.({
       primitiveType: opts.primitiveType,
@@ -524,6 +531,7 @@ export async function createNetworkLoop({
       payload: {
         primitiveType: opts.primitiveType,
         primitiveId: opts.primitiveId,
+        ...(opts.usage && { usage: opts.usage }),
       },
     });
     return {
@@ -716,6 +724,12 @@ export async function createNetworkLoop({
 
       // Check if signal was aborted during routing LLM call
       if (abortSignal?.aborted) {
+        let abortUsage: Awaited<typeof result.usage> | undefined;
+        try {
+          abortUsage = await result.usage;
+        } catch {
+          // Usage promise may reject if stream was interrupted before any usage was tracked
+        }
         const base = await handleAbort({
           writer,
           eventType: 'routing-agent-abort',
@@ -723,6 +737,7 @@ export async function createNetworkLoop({
           primitiveId: 'routing-agent',
           iteration: iterationCount,
           task: inputData.task,
+          usage: abortUsage,
         });
         return {
           ...base,
@@ -972,8 +987,14 @@ export async function createNetworkLoop({
       }
 
       // When the sub-agent was aborted, skip saving partial results to memory
-      // and return immediately with the abort event
+      // and return immediately with the abort event (including partial usage)
       if (agentCallAborted) {
+        let abortUsage: Awaited<typeof result.usage> | undefined;
+        try {
+          abortUsage = await result.usage;
+        } catch {
+          // Usage promise may reject if stream was interrupted before any usage was tracked
+        }
         return handleAbort({
           writer,
           eventType: 'agent-execution-abort',
@@ -981,6 +1002,7 @@ export async function createNetworkLoop({
           primitiveId: inputData.primitiveId,
           iteration: inputData.iteration,
           task: inputData.task,
+          usage: abortUsage,
         });
       }
 
@@ -1299,6 +1321,12 @@ export async function createNetworkLoop({
 
       // When the workflow was cancelled due to abort, skip saving results to memory
       if (workflowCancelled && abortSignal?.aborted) {
+        let abortUsage: Awaited<typeof stream.usage> | undefined;
+        try {
+          abortUsage = await stream.usage;
+        } catch {
+          // Usage promise may reject if the workflow was interrupted before any usage was tracked
+        }
         return handleAbort({
           writer,
           eventType: 'workflow-execution-abort',
@@ -1306,6 +1334,7 @@ export async function createNetworkLoop({
           primitiveId: inputData.primitiveId,
           iteration: inputData.iteration,
           task: inputData.task,
+          usage: abortUsage,
         });
       }
 

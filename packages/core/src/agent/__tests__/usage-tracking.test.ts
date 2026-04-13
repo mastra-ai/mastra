@@ -106,6 +106,83 @@ describe('Agent usage tracking', () => {
         expect((usage as any).promptTokens).toBeUndefined();
         expect((usage as any).completionTokens).toBeUndefined();
       });
+
+      it('should expose partial usage when stream is aborted', async () => {
+        const abortController = new AbortController();
+        const totalChunks = 20;
+        const abortAfterChunks = 5;
+
+        const model = new MockLanguageModelV2({
+          doStream: async () => {
+            const allChunks = [
+              { type: 'stream-start' as const, warnings: [] },
+              {
+                type: 'response-metadata' as const,
+                id: 'id-0',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              },
+              { type: 'text-start' as const, id: 'text-1' },
+              ...Array.from({ length: totalChunks }, (_, i) => ({
+                type: 'text-delta' as const,
+                id: 'text-1',
+                delta: `chunk-${i + 1} `,
+              })),
+              { type: 'text-end' as const, id: 'text-1' },
+              {
+                type: 'finish' as const,
+                finishReason: 'stop' as const,
+                usage: { inputTokens: 50, outputTokens: 100, totalTokens: 150 },
+              },
+            ];
+
+            let index = 0;
+            return {
+              stream: new ReadableStream({
+                pull(controller) {
+                  if (index < allChunks.length) {
+                    const chunk = allChunks[index++]!;
+                    const textDeltaCount = index - 3;
+                    if (chunk.type === 'text-delta' && textDeltaCount === abortAfterChunks) {
+                      abortController.abort();
+                    }
+                    controller.enqueue(chunk);
+                  } else {
+                    controller.close();
+                  }
+                },
+              }),
+            };
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-abort-usage',
+          name: 'Test Abort Usage',
+          model,
+          instructions: 'You are a helpful assistant',
+        });
+
+        const stream = await agent.stream('Hello', {
+          abortSignal: abortController.signal,
+        });
+
+        try {
+          await stream.consumeStream();
+        } catch {
+          // Expected - abort may throw
+        }
+
+        const usage = await stream.usage;
+
+        expect(usage).toBeDefined();
+        expect(typeof usage.inputTokens).toBe('number');
+        expect(typeof usage.outputTokens).toBe('number');
+        expect(typeof usage.totalTokens).toBe('number');
+        expect(usage.inputTokens).toBeGreaterThanOrEqual(0);
+        expect(usage.outputTokens).toBeGreaterThanOrEqual(0);
+        expect(usage.totalTokens).toBeGreaterThanOrEqual(0);
+      });
     });
   });
 

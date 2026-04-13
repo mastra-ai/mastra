@@ -5449,6 +5449,17 @@ describe('Agent - network - abort functionality', () => {
     // Abort chunk should be emitted
     const abortEvents = chunks.filter(c => c.type === 'routing-agent-abort');
     expect(abortEvents.length).toBeGreaterThan(0);
+    expect(abortEvents[0].payload.usage).toBeDefined();
+    expect(typeof abortEvents[0].payload.usage.inputTokens).toBe('number');
+    expect(typeof abortEvents[0].payload.usage.outputTokens).toBe('number');
+    expect(typeof abortEvents[0].payload.usage.totalTokens).toBe('number');
+
+    const usage = await anStream.usage;
+    expect(typeof usage.inputTokens).toBe('number');
+    expect(typeof usage.outputTokens).toBe('number');
+    expect(typeof usage.totalTokens).toBe('number');
+    expect(typeof usage.reasoningTokens).toBe('number');
+    expect(typeof usage.cachedInputTokens).toBe('number');
   });
 
   it('should call onAbort and emit abort event when abortSignal is triggered during workflow execution', async () => {
@@ -5558,6 +5569,11 @@ describe('Agent - network - abort functionality', () => {
     expect(abortEvents.length).toBeGreaterThan(0);
     expect(abortEvents[0].payload.primitiveType).toBe('workflow');
     expect(abortEvents[0].payload.primitiveId).toBe('abort-test-workflow');
+    expect(abortEvents[0].payload.usage).toMatchObject({
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+    });
   });
 
   it('should pass abortSignal to tool execute function', async () => {

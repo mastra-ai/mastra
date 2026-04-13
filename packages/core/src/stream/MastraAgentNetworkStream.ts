@@ -125,7 +125,10 @@ export class MastraAgentNetworkStream<OUTPUT = undefined> extends ReadableStream
               const innerChunk = getInnerChunk(chunk);
               if (
                 innerChunk.type === 'routing-agent-end' ||
+                innerChunk.type === 'routing-agent-abort' ||
                 innerChunk.type === 'agent-execution-end' ||
+                innerChunk.type === 'agent-execution-abort' ||
+                innerChunk.type === 'workflow-execution-abort' ||
                 innerChunk.type === 'workflow-execution-end'
               ) {
                 if (innerChunk.payload?.usage) {

@@ -572,16 +572,19 @@ interface NetworkValidationEndPayload {
 interface RoutingAgentAbortPayload {
   primitiveType: 'routing';
   primitiveId: string;
+  usage?: LanguageModelUsage;
 }
 
 interface AgentExecutionAbortPayload {
   primitiveType: 'agent';
   primitiveId: string;
+  usage?: LanguageModelUsage;
 }
 
 interface WorkflowExecutionAbortPayload {
   primitiveType: 'workflow';
   primitiveId: string;
+  usage?: LanguageModelUsage;
 }
 
 interface ToolExecutionAbortPayload {
