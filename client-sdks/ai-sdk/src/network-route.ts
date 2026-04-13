@@ -244,6 +244,14 @@ export function networkRoute<OUTPUT = undefined>({
           description: 'Streaming AI SDK UIMessage event stream for the agent network',
           content: { 'text/plain': { schema: { type: 'string', description: 'SSE stream' } } },
         },
+        '400': {
+          description: 'Bad request - invalid input',
+          content: {
+            'application/json': {
+              schema: { type: 'object', properties: { error: { type: 'string' } } },
+            },
+          },
+        },
         '404': {
           description: 'Agent not found',
           content: {
