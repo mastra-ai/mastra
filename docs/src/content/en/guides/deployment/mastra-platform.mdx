@@ -120,19 +120,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'pnpm'
-
+          cache: 'npm'
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
+        run: npm install
       - name: Deploy to Mastra platform
-        run: pnpm mastra server deploy --yes
+        run: npx mastra server deploy --yes
         env:
           MASTRA_API_TOKEN: ${{ secrets.MASTRA_API_TOKEN }}
 ```
@@ -156,12 +151,9 @@ deploy:
   only:
     - main
   before_script:
-    - corepack enable
-    - pnpm install --frozen-lockfile
+    - npm install
   script:
-    - pnpm mastra server deploy --yes
-  variables:
-    MASTRA_API_TOKEN: $MASTRA_API_TOKEN
+    - npx mastra server deploy --yes
 ```
 
 Add `MASTRA_API_TOKEN` as a CI/CD variable in **Settings → CI/CD → Variables**.
@@ -205,12 +197,6 @@ The CLI reads `organizationId` and `projectId` from `.mastra-project.json` by de
 | - | - |
 | `MASTRA_ORG_ID` | Overrides the organization ID from `.mastra-project.json`. |
 | `MASTRA_PROJECT_ID` | Overrides the project ID from `.mastra-project.json`. |
-
-### CI/CD troubleshooting
-
-**"No organizations found"**: The CLI cannot resolve the organization. Ensure your `.mastra-project.json` file is committed and contains a valid `organizationId`, or set `MASTRA_ORG_ID` as an environment variable.
-
-**CI job hangs**: The CLI is waiting for interactive input. Ensure you pass the `--yes` flag and that `MASTRA_API_TOKEN` is set.
 
 ## Related
 
