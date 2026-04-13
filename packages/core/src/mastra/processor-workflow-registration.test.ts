@@ -1,7 +1,7 @@
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
-import type { Processor, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
+import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcessorOrWorkflow } from '../processors';
 import { ProcessorStepSchema } from '../processors/step-schema';
 import { createWorkflow } from '../workflows';
 import { Mastra } from './index';
@@ -28,7 +28,7 @@ describe('Processor Workflow Registration', () => {
 
   describe('Static processor registration', () => {
     it('should register input processor workflow when agent has static inputProcessors', async () => {
-      const inputProcessor: Processor = {
+      const inputProcessor: InputProcessorOrWorkflow = {
         id: 'test-input-processor',
         processInput: async ({ messages }) => messages,
       };
@@ -56,7 +56,7 @@ describe('Processor Workflow Registration', () => {
     });
 
     it('should register output processor workflow when agent has static outputProcessors', async () => {
-      const outputProcessor: Processor = {
+      const outputProcessor: OutputProcessorOrWorkflow = {
         id: 'test-output-processor',
         processOutputResult: async ({ messages }) => messages,
       };
@@ -83,15 +83,20 @@ describe('Processor Workflow Registration', () => {
       expect(workflow.id).toBe('test-agent-output-output-processor');
     });
 
-    it('should register both input and output processor workflows', async () => {
-      const inputProcessor: Processor = {
+    it('should register input, output, and error processor workflows', async () => {
+      const inputProcessor: InputProcessorOrWorkflow = {
         id: 'test-input',
         processInput: async ({ messages }) => messages,
       };
 
-      const outputProcessor: Processor = {
+      const outputProcessor: OutputProcessorOrWorkflow = {
         id: 'test-output',
         processOutputResult: async ({ messages }) => messages,
+      };
+
+      const errorProcessor: ErrorProcessorOrWorkflow = {
+        id: 'test-error',
+        processAPIError: async () => ({ retry: false }),
       };
 
       const agent = new Agent({
@@ -101,6 +106,7 @@ describe('Processor Workflow Registration', () => {
         model: createMockModel(),
         inputProcessors: [inputProcessor],
         outputProcessors: [outputProcessor],
+        errorProcessors: [errorProcessor],
       });
 
       const mastra = new Mastra({
@@ -111,12 +117,14 @@ describe('Processor Workflow Registration', () => {
       // Wait for async registration
       await waitForWorkflowRegistration();
 
-      // Should have registered both workflows
+      // Should have registered all workflows
       const inputWorkflow = mastra.getWorkflow('test-agent-both-input-processor');
       const outputWorkflow = mastra.getWorkflow('test-agent-both-output-processor');
+      const errorWorkflow = mastra.getWorkflow('test-agent-both-error-processor');
 
       expect(inputWorkflow).toBeDefined();
       expect(outputWorkflow).toBeDefined();
+      expect(errorWorkflow).toBeDefined();
     });
 
     it('should not register workflows when agent has no processors', async () => {
@@ -143,7 +151,7 @@ describe('Processor Workflow Registration', () => {
 
   describe('Function-based processor registration', () => {
     it('should register workflow when inputProcessors is a function', async () => {
-      const inputProcessor: Processor = {
+      const inputProcessor: InputProcessorOrWorkflow = {
         id: 'dynamic-input-processor',
         processInput: async ({ messages }) => messages,
       };
@@ -175,7 +183,7 @@ describe('Processor Workflow Registration', () => {
     });
 
     it('should register workflow when outputProcessors is a function', async () => {
-      const outputProcessor: Processor = {
+      const outputProcessor: OutputProcessorOrWorkflow = {
         id: 'dynamic-output-processor',
         processOutputResult: async ({ messages }) => messages,
       };
@@ -247,17 +255,17 @@ describe('Processor Workflow Registration', () => {
 
   describe('Multiple processors chaining', () => {
     it('should chain multiple processors into a single workflow', async () => {
-      const processor1: Processor = {
+      const processor1: InputProcessorOrWorkflow = {
         id: 'processor-1',
         processInput: async ({ messages }) => messages,
       };
 
-      const processor2: Processor = {
+      const processor2: InputProcessorOrWorkflow = {
         id: 'processor-2',
         processInput: async ({ messages }) => messages,
       };
 
-      const processor3: Processor = {
+      const processor3: InputProcessorOrWorkflow = {
         id: 'processor-3',
         processInput: async ({ messages }) => messages,
       };
@@ -324,7 +332,7 @@ describe('Processor Workflow Registration', () => {
         logger: false,
       });
 
-      const inputProcessor: Processor = {
+      const inputProcessor: InputProcessorOrWorkflow = {
         id: 'late-added-processor',
         processInput: async ({ messages }) => messages,
       };

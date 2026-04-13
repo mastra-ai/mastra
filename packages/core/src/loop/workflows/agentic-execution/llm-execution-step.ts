@@ -599,14 +599,15 @@ async function processOutputStream<OUTPUT = undefined>({
 function executeStreamWithFallbackModels<T>(
   models: ModelManagerModelConfig[],
   logger?: IMastraLogger,
+  startIndex = 0,
 ): ExecuteStreamModelManager<T> {
   return async callback => {
-    let index = 0;
+    let index = startIndex;
     let finalResult: T | undefined;
 
     let done = false;
     let lastError: unknown;
-    for (const modelConfig of models) {
+    for (const modelConfig of models.slice(startIndex)) {
       index++;
 
       if (done) {
@@ -701,6 +702,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let warnings: any;
       let request: any;
       let rawResponse: any;
+      let activeFallbackModelIndex = inputData.fallbackModelIndex || 0;
       const { outputStream, callBail, runState, stepTools, stepWorkspace, processAPIErrorRetry } =
         await executeStreamWithFallbackModels<{
           outputStream: MastraModelOutput<OUTPUT>;
@@ -712,7 +714,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         }>(
           models,
           logger,
+          activeFallbackModelIndex,
         )(async (modelConfig, isLastModel) => {
+          activeFallbackModelIndex = models.findIndex(candidate => candidate.id === modelConfig.id);
           const model = modelConfig.model;
           const modelHeaders = modelConfig.headers;
           // Reset system messages to original before each step execution
@@ -1376,6 +1380,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           },
           messages,
           processorRetryCount: nextProcessorRetryCount,
+          fallbackModelIndex: activeFallbackModelIndex,
         };
       }
 
@@ -1558,6 +1563,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // If shouldRetry is true, we continue the loop instead of triggering tripwire
       const stepReason = shouldRetry ? 'retry' : tripwireTriggered ? 'tripwire' : hasErrored ? 'error' : finishReason;
 
+      const nextFallbackModelIndex = shouldRetry ? activeFallbackModelIndex : 0;
+
       // isContinued should be true if:
       // - shouldRetry is true (processor requested retry)
       // - OR there are non-provider-executed tool calls to process (some LLMs return finishReason 'stop' even with tool calls)
@@ -1605,6 +1612,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         messages,
         // Track processor retry count for next iteration
         processorRetryCount: nextProcessorRetryCount,
+        fallbackModelIndex: nextFallbackModelIndex,
       };
     },
   });

@@ -543,7 +543,7 @@ export class ErrorRecoveryProcessor implements Processor {
       const messages = messageList.get.all.db()
       if (messages.length > 4) {
         messageList.removeByIds([messages[1]!.id, messages[2]!.id])
-        return { retry: true, feedback: 'Trimmed message history to fit context window.' }
+        return { retry: true }
       }
     }
   }

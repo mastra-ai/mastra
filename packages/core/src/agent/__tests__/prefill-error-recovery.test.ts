@@ -234,13 +234,77 @@ describe('PrefillErrorHandler Recovery', () => {
         errorProcessors: [{ id: 'retry-cap-observer', processAPIError: exhaustedHandler }],
       });
 
-      await expect(agent.generate('Continue the conversation', { maxProcessorRetries: 1 })).rejects.toThrow(
-        'This model does not support assistant message prefill. The conversation must end with a user message.',
-      );
+      const result = await agent.generate('Continue the conversation');
 
-      expect(callCount).toBe(2);
-      expect(seenRetryCounts).toEqual([0, 1]);
-      expect(exhaustedHandler).toHaveBeenCalledTimes(2);
+      expect(result.text).toBe('');
+      expect(result.steps).toHaveLength(5);
+      expect(callCount).toBe(5);
+      expect(seenRetryCounts).toEqual([0, 1, 2, 3, 4]);
+      expect(exhaustedHandler).toHaveBeenCalledTimes(5);
+    });
+
+    it('should preserve fallback model position when an error processor retries', async () => {
+      const seenModels: string[] = [];
+      const exhaustedPrimary = new MockLanguageModelV2({
+        doGenerate: async () => {
+          seenModels.push('primary');
+          throw new APICallError({
+            message: 'Primary provider unavailable',
+            url: 'https://api.primary.example.com/v1/messages',
+            requestBodyValues: {},
+            statusCode: 503,
+            isRetryable: true,
+          });
+        },
+      });
+
+      let secondaryCallCount = 0;
+      const secondary = new MockLanguageModelV2({
+        doGenerate: async () => {
+          secondaryCallCount++;
+          seenModels.push('secondary');
+
+          if (secondaryCallCount === 1) {
+            throw new APICallError({
+              message: 'Secondary request needs recovery',
+              url: 'https://api.secondary.example.com/v1/messages',
+              requestBodyValues: {},
+              statusCode: 400,
+              isRetryable: false,
+            });
+          }
+
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            text: 'Recovered on secondary model',
+            content: [{ type: 'text' as const, text: 'Recovered on secondary model' }],
+            warnings: [],
+          };
+        },
+      });
+
+      const processAPIError = vi.fn(async ({ error }) => ({
+        retry: error.message === 'Secondary request needs recovery',
+      }));
+
+      const agent = new Agent({
+        id: 'fallback-retry-preservation',
+        name: 'Fallback Retry Preservation',
+        instructions: 'You are a test agent',
+        model: [
+          { model: exhaustedPrimary, maxRetries: 0, id: 'primary' },
+          { model: secondary, maxRetries: 0, id: 'secondary' },
+        ],
+        errorProcessors: [{ id: 'retry-secondary-error', processAPIError }],
+      });
+
+      const result = await agent.generate('Hello');
+
+      expect(result.text).toBe('Recovered on secondary model');
+      expect(seenModels).toEqual(['primary', 'secondary', 'secondary']);
+      expect(processAPIError).toHaveBeenCalledTimes(2);
     });
 
     it('should NOT retry for non-prefill API errors', async () => {

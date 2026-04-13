@@ -81,6 +81,11 @@ export interface LLMIterationData<Tools extends ToolSet = ToolSet, OUTPUT = unde
    * Used to enforce the processor retry safety cap.
    */
   processorRetryCount?: number;
+  /**
+   * Current fallback model index for the active generation.
+   * Preserved across processor-triggered retries so retries resume on the same fallback model.
+   */
+  fallbackModelIndex?: number;
 }
 
 // Zod schemas for common types used in validation
@@ -145,6 +150,7 @@ export const llmIterationOutputSchema = z.object({
   }),
   stepResult: llmIterationStepResultSchema,
   processorRetryCount: z.number().optional(),
+  fallbackModelIndex: z.number().optional(),
   isTaskCompleteCheckFailed: z.boolean().optional(), //true if the isTaskComplete check failed and LLM has to run again
 });
 

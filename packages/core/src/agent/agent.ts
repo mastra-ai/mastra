@@ -832,13 +832,13 @@ export class Agent<
   }
 
   /**
-   * Returns the IDs of the raw configured input and output processors,
+   * Returns the IDs of the raw configured input, output, and error processors,
    * without combining them into workflows. Used by the editor to clone
    * agent processor configuration to storage.
    */
   public async getConfiguredProcessorIds(
     requestContext?: RequestContext,
-  ): Promise<{ inputProcessorIds: string[]; outputProcessorIds: string[] }> {
+  ): Promise<{ inputProcessorIds: string[]; outputProcessorIds: string[]; errorProcessorIds: string[] }> {
     const ctx = requestContext || new RequestContext();
 
     let inputProcessorIds: string[] = [];
@@ -859,7 +859,16 @@ export class Agent<
       outputProcessorIds = processors.map(p => p.id).filter(Boolean);
     }
 
-    return { inputProcessorIds, outputProcessorIds };
+    let errorProcessorIds: string[] = [];
+    if (this.#errorProcessors) {
+      const processors =
+        typeof this.#errorProcessors === 'function'
+          ? await this.#errorProcessors({ requestContext: ctx as RequestContext<TRequestContext> })
+          : this.#errorProcessors;
+      errorProcessorIds = processors.map(p => p.id).filter(Boolean);
+    }
+
+    return { inputProcessorIds, outputProcessorIds, errorProcessorIds };
   }
 
   /**
@@ -893,6 +902,21 @@ export class Agent<
           : this.#outputProcessors;
 
       const combined = this.combineProcessorsIntoWorkflow(outputProcessors, `${this.id}-output-processor`);
+      for (const p of combined) {
+        if (isProcessorWorkflow(p)) {
+          workflows.push(p);
+        }
+      }
+    }
+
+    // Get error processors (static or from function)
+    if (this.#errorProcessors) {
+      const errorProcessors =
+        typeof this.#errorProcessors === 'function'
+          ? await this.#errorProcessors({ requestContext: new RequestContext() as RequestContext<TRequestContext> })
+          : this.#errorProcessors;
+
+      const combined = this.combineProcessorsIntoWorkflow(errorProcessors, `${this.id}-error-processor`);
       for (const p of combined) {
         if (isProcessorWorkflow(p)) {
           workflows.push(p);
