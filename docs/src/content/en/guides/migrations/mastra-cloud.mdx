@@ -153,13 +153,11 @@ Mastra Cloud auto-deployed on push. The Mastra platform uses CLI-driven deploys,
 
 1. Commit `.mastra-project.json` to your repo (generated on your first manual deploy).
 
-1. Store `MASTRA_ORG_ID` and `MASTRA_PROJECT_ID` as GitHub Actions secrets. You can copy these values from `.mastra-project.json`.
-
 When `MASTRA_API_TOKEN` is set, the CLI runs in headless mode and skips all interactive prompts.
 
 ### Deploy Server on push to main
 
-Server deploy requires `MASTRA_ORG_ID` and `MASTRA_PROJECT_ID` as env vars in headless mode, even when `--config` is provided:
+Server deploy can use `.mastra-project.json` in headless mode, so no extra env vars are required beyond the token:
 
 ```yaml title=".github/workflows/deploy-server.yml"
 name: Deploy to Mastra Server
@@ -181,8 +179,6 @@ jobs:
       - run: pnpm mastra server deploy --yes --config .mastra-project.json
         env:
           MASTRA_API_TOKEN: ${{ secrets.MASTRA_API_TOKEN }}
-          MASTRA_ORG_ID: ${{ secrets.MASTRA_ORG_ID }}
-          MASTRA_PROJECT_ID: ${{ secrets.MASTRA_PROJECT_ID }}
 ```
 
 ### Deploy Studio on push to main
