@@ -41,7 +41,7 @@ export function ItemDetailToolbar({
       <ButtonsGroup>
         {!isEditing && (
           <>
-            <Button href={`/evaluation/datasets/${datasetId}/items/${itemId}`} as={Link}>
+            <Button href={`/datasets/${datasetId}/items/${itemId}`} as={Link}>
               <History />
               Versions
             </Button>

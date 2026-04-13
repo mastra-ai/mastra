@@ -155,12 +155,12 @@ export function DatasetPageContent({
 
   // Handler for Compare Items action from selection
   const handleCompareItemsClick = (itemIds: string[]) => {
-    navigate(`/evaluation/datasets/${datasetId}/items?items=${itemIds.join(',')}`);
+    navigate(`/datasets/${datasetId}/items?items=${itemIds.join(',')}`);
   };
 
   // Handler for Compare Versions action from versions panel
   const handleCompareVersionsClick = (versionNumbers: string[]) => {
-    navigate(`/evaluation/datasets/${datasetId}/versions?ids=${versionNumbers.join(',')}`);
+    navigate(`/datasets/${datasetId}/versions?ids=${versionNumbers.join(',')}`);
   };
 
   // Handler for bulk delete action from selection

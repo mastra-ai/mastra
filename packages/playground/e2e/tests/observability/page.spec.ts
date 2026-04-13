@@ -59,7 +59,7 @@ test.skip('scorer links from observability open the scorer detail page focused o
 
   await scoreDialog.getByRole('link', { name: 'Response Quality Scorer' }).click();
 
-  const expectedUrl = new RegExp(`/evaluation/scorers/response-quality\\?entity=.*&scoreId=${scoreId}`);
+  const expectedUrl = new RegExp(`/scorers/response-quality\\?entity=.*&scoreId=${scoreId}`);
   await expect(page).toHaveURL(expectedUrl);
   await expect(page.getByRole('dialog', { name: 'Scorer Score' })).toBeVisible();
   await expect(page.getByText(scoreId!, { exact: true })).toBeVisible();

@@ -107,7 +107,7 @@ function DatasetItemVersionsComparePage() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to="/evaluation?tab=datasets">
+            <Crumb as={Link} to="/datasets">
               <Icon>
                 <Database />
               </Icon>
@@ -131,13 +131,13 @@ function DatasetItemVersionsComparePage() {
     <MainContentLayout>
       <Header>
         <Breadcrumb>
-          <Crumb as={Link} to="/evaluation?tab=datasets">
+          <Crumb as={Link} to="/datasets">
             <Icon>
               <Database />
             </Icon>
             Datasets
           </Crumb>
-          <Crumb as={Link} to={`/evaluation/datasets/${datasetId}`}>
+          <Crumb as={Link} to={`/datasets/${datasetId}`}>
             {dataset?.name}
           </Crumb>
           <Crumb as={Link} to={`/datasets/${datasetId}/items/${itemId}`}>
