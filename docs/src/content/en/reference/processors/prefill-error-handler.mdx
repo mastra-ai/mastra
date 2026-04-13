@@ -53,7 +53,7 @@ const customErrorHandler: Processor = {
 export const agent = new Agent({
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
-  model: 'anthropic:claude-sonnet-4-20250514',
+  model: 'anthropic/claude-opus-4-6',
   errorProcessors: [customErrorHandler],
 })
 ```
