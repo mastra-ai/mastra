@@ -194,11 +194,10 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
           '  executablePath <path> - Browser executable path\n' +
           '  storageState <path>  - Playwright storage state file (agent-browser only)\n' +
           '  cdpUrl <url>         - CDP WebSocket URL\n\n' +
-          'Use "clear" as value to remove a setting.\n\n' +
+          'To remove a setting, use: /browser clear <key>\n\n' +
           'Examples:\n' +
           '  /browser set profile ~/.mastracode/browser-profile-stagehand\n' +
-          '  /browser set executablePath /Applications/Google Chrome.app/Contents/MacOS/Google Chrome\n' +
-          '  /browser set profile clear',
+          '  /browser set executablePath /Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
       );
       return;
     }
@@ -209,31 +208,8 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       return;
     }
 
-    // Handle clearing a setting (empty value or explicit "clear")
-    const isClear = !value || value.trim().toLowerCase() === 'clear';
-
-    if (isClear) {
-      switch (key) {
-        case 'profile':
-          delete settings.browser.profile;
-          if (settings.browser.stagehand) {
-            delete settings.browser.stagehand.preserveUserDataDir;
-          }
-          break;
-        case 'executablepath':
-          delete settings.browser.executablePath;
-          break;
-        case 'storagestate':
-          if (settings.browser.agentBrowser) {
-            delete settings.browser.agentBrowser.storageState;
-          }
-          break;
-        case 'cdpurl':
-          delete settings.browser.cdpUrl;
-          break;
-      }
-      saveSettings(settings);
-      ctx.showInfo(`Cleared ${args[1]}.\nRun /browser on to apply.`);
+    if (!value) {
+      ctx.showError(`Missing value. Use: /browser set ${args[1]} <value>\nTo remove a setting, use: /browser clear ${args[1]}`);
       return;
     }
 
