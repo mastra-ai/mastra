@@ -157,7 +157,7 @@ When `MASTRA_API_TOKEN` is set, the CLI runs in headless mode and skips all inte
 
 ### Deploy Server on push to main
 
-Server deploy can use `.mastra-project.json` in headless mode, so no extra env vars are required beyond the token:
+Server deploy accepts org and project from `.mastra-project.json`, so no extra env vars are needed beyond the token:
 
 ```yaml title=".github/workflows/deploy-server.yml"
 name: Deploy to Mastra Server
