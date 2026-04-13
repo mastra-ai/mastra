@@ -406,6 +406,17 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     this.emitObservabilityEvent(event);
   }
 
+  /**
+   * Internal hook used by the client observability proxy (`client/`)
+   * to route already-validated events through the normal bus without
+   * going through the live span lifecycle. The caller is responsible
+   * for constructing well-formed `ExportedSpan`s/`ExportedLog`s and
+   * for any validation needed.
+   */
+  __receiveExternalEvent(event: ObservabilityEvent): void {
+    this.emitObservabilityEvent(event);
+  }
+
   // ============================================================================
   // Span Lifecycle Management
   // ============================================================================

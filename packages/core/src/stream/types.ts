@@ -17,7 +17,7 @@ import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { ScorerResult } from '../loop';
-import type { ObservabilityContext } from '../observability';
+import type { ClientObservabilityCarrier, ObservabilityContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
@@ -166,6 +166,16 @@ export interface ToolCallPayload<TArgs = unknown, TOutput = unknown> {
   providerMetadata?: ProviderMetadata;
   output?: TOutput;
   dynamic?: boolean;
+  /**
+   * W3C trace context carrier for client-side tool execution.
+   *
+   * Populated by the server when emitting a tool call that will be
+   * executed in the client (`providerExecuted: false` and the tool has
+   * no server-side execute function). The client SDK extracts the
+   * carrier, parents any child spans/logs underneath it, and echoes it
+   * back in the next request body for cross-request trace correlation.
+   */
+  observability?: ClientObservabilityCarrier;
 }
 
 export interface ToolResultPayload<TResult = unknown, TArgs = unknown> {

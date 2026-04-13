@@ -27,6 +27,31 @@ export type VercelToolV5 = ToolV5;
 export type ToolInvocationOptions = ToolExecutionOptions | ToolCallOptions;
 
 /**
+ * Observability helpers available on the tool execution context.
+ * Wraps child span creation and structured log emission in a
+ * null-safe API that callers never need to check — when no tracing
+ * context is active, `span` runs the function directly and `log` is
+ * a no-op.
+ */
+export interface ToolObserve {
+  span<T>(name: string, fn: () => Promise<T> | T, attributes?: Record<string, unknown>): Promise<T>;
+  log(level: 'debug' | 'info' | 'warn' | 'error' | 'fatal', message: string, data?: Record<string, unknown>): void;
+}
+
+/**
+ * A no-op ToolObserve implementation. `span` runs the function
+ * directly; `log` does nothing. Used as the default when no
+ * collector/tracing context is active, so user code never needs to
+ * null-check `observe`.
+ */
+export const noopObserve: ToolObserve = {
+  async span<T>(_name: string, fn: () => Promise<T> | T): Promise<T> {
+    return fn();
+  },
+  log(): void {},
+};
+
+/**
  * MCP-specific context properties available during tool execution in MCP environments.
  */
 // Agent tool execution context - properties specific when tools are executed by agents
@@ -337,6 +362,21 @@ export interface ToolExecutionContext<
 
   // MCP (Model Context Protocol) specific context
   mcp?: MCPToolExecutionContext;
+
+  /**
+   * Observability helpers for recording child spans and structured logs
+   * from inside a tool's execute function. Always provided — when no
+   * tracing context is active, `span` runs the function directly and
+   * `log` is a no-op. No null-checking needed.
+   *
+   * ```ts
+   * execute: async ({ userId }, { observe }) => {
+   *   observe.log('info', 'fetching user', { userId })
+   *   return observe.span('fetch user', () => fetch(`/api/users/${userId}`))
+   * }
+   * ```
+   */
+  observe?: ToolObserve;
 }
 
 export interface ToolAction<

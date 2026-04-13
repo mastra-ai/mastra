@@ -15,9 +15,11 @@ import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { FullOutput, MastraModelOutput } from '@mastra/core/stream';
-import type { Tool } from '@mastra/core/tools';
+import type { Tool, ToolObserve } from '@mastra/core/tools';
+import { noopObserve } from '@mastra/core/tools';
 import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
+import { createObservabilityCollector } from '../observability/collector';
 import type {
   ZodSchema,
   GenerateLegacyParams,
@@ -78,7 +80,14 @@ async function executeToolCallAndRespond<OUTPUT>({
   if (response.finishReason === 'tool-calls') {
     const toolCalls = (
       response as unknown as {
-        toolCalls: { payload: { toolName: string; args: any; toolCallId: string } }[];
+        toolCalls: {
+          payload: {
+            toolName: string;
+            args: any;
+            toolCallId: string;
+            observability?: { traceparent: string; tracestate?: string; baggage?: string };
+          };
+        }[];
         messages: CoreMessage[];
       }
     ).toolCalls;
@@ -91,18 +100,68 @@ async function executeToolCallAndRespond<OUTPUT>({
       const clientTool = params.clientTools?.[toolCall.payload.toolName] as Tool;
 
       if (clientTool && clientTool.execute) {
-        const result = await clientTool.execute(toolCall?.payload.args, {
-          requestContext: requestContext as RequestContext,
-          tracingContext: { currentSpan: undefined },
-          agent: {
-            agentId,
-            messages: (response as unknown as { messages: CoreMessage[] }).messages,
-            toolCallId: toolCall?.payload.toolCallId,
-            suspend: async () => {},
-            threadId,
-            resourceId,
-          },
-        });
+        // The server attaches a W3C carrier to the tool-call chunk's
+        // `observability` field when client-tool tracing is enabled.
+        // When present, the collector wraps the tool's execute in a
+        // tracing context so users can call span()/log() inside their
+        // tool code, and ships buffered telemetry + duration back in
+        // the next request body. When absent (old server, or no
+        // @mastra/observability configured), execution proceeds
+        // without tracing overhead.
+        const parentContext = toolCall.payload.observability as
+          | { traceparent: string; tracestate?: string; baggage?: string }
+          | undefined;
+        const collector = parentContext ? createObservabilityCollector(parentContext) : undefined;
+
+        // Build `observe` from the collector so users get a clean API
+        // on the execute context: { observe } destructures directly.
+        // When no collector is active (old server, no observability),
+        // the noop just passes through the function / drops logs.
+        const observe: ToolObserve = collector
+          ? {
+              span: collector.span.bind(collector),
+              log: collector.log.bind(collector),
+            }
+          : noopObserve;
+
+        const runExecute = () =>
+          clientTool.execute!(toolCall?.payload.args, {
+            requestContext: requestContext as RequestContext,
+            tracingContext: { currentSpan: undefined },
+            observe,
+            agent: {
+              agentId,
+              messages: (response as unknown as { messages: CoreMessage[] }).messages,
+              toolCallId: toolCall?.payload.toolCallId,
+              suspend: async () => {},
+              threadId,
+              resourceId,
+            },
+          });
+
+        const result = collector ? await collector.withContext(runExecute) : await runExecute();
+
+        // Build the tool-result content block. If we have observability
+        // data (carrier + buffered spans/logs), attach it directly on
+        // the result so it travels with the specific tool call it
+        // belongs to, not on the top-level request body.
+        const toolResultContent: Record<string, unknown> = {
+          type: 'tool-result',
+          toolCallId: toolCall.payload.toolCallId,
+          toolName: toolCall.payload.toolName,
+          result,
+        };
+
+        if (parentContext) {
+          const flushed = collector ? (collector.flush() as Record<string, unknown>) : undefined;
+          if (flushed) {
+            flushed.toolName = toolCall.payload.toolName;
+          }
+          toolResultContent.__mastraObservability = {
+            parentContext,
+            ...(flushed ? { payload: flushed } : {}),
+          };
+        }
 
         // Build updated messages from the response, adding the tool result
         // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
@@ -111,14 +170,7 @@ async function executeToolCallAndRespond<OUTPUT>({
           ...(response.response.messages || []),
           {
             role: 'tool',
-            content: [
-              {
-                type: 'tool-result',
-                toolCallId: toolCall.payload.toolCallId,
-                toolName: toolCall.payload.toolName,
-                result,
-              },
-            ],
+            content: [toolResultContent],
           },
         ];
 

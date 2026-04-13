@@ -4,6 +4,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { RegisteredLogger } from '@mastra/core/logger';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type {
+  ClientObservabilityProxy,
   CorrelationContext,
   ConfigSelector,
   ConfigSelectorOptions,
@@ -17,6 +18,7 @@ import type {
 } from '@mastra/core/observability';
 import type { ObservabilityStorage } from '@mastra/core/storage';
 import { routeToHandler } from './bus/route-event';
+import { createClientObservabilityProxy } from './client';
 import { SamplingStrategyType, observabilityRegistryConfigSchema, observabilityConfigValueSchema } from './config';
 import type { ObservabilityInstanceConfig, ObservabilityRegistryConfig } from './config';
 import { CloudExporter, DefaultExporter } from './exporters';
@@ -47,6 +49,7 @@ function isInstance(
 export class Observability extends MastraBase implements ObservabilityEntrypoint {
   #registry = new ObservabilityRegistry();
   #mastra?: Mastra;
+  #clientObservabilityProxy?: ClientObservabilityProxy;
 
   constructor(config: ObservabilityRegistryConfig) {
     super({
@@ -342,6 +345,25 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
   /** Shut down all registered instances, flushing any pending data. */
   async shutdown(): Promise<void> {
     await this.#registry.shutdown();
+  }
+
+  /**
+   * Returns the proxy responsible for client observability (W3C trace
+   * context injection + OTLP/JSON payload reception for spans/logs
+   * returned from client-side execution).
+   *
+   * Lazily constructed on first call. Resolves the target observability
+   * instance per receive call so config selection works the same way
+   * as for server-side spans.
+   */
+  getClientObservabilityProxy(): ClientObservabilityProxy | undefined {
+    if (!this.#clientObservabilityProxy) {
+      this.#clientObservabilityProxy = createClientObservabilityProxy({
+        resolveInstance: () => this.getDefaultInstance(),
+        logger: this.logger,
+      });
+    }
+    return this.#clientObservabilityProxy;
   }
 
   async #getObservabilityStorage(): Promise<ObservabilityStorage | null> {

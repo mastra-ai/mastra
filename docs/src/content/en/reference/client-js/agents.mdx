@@ -315,6 +315,37 @@ response.processDataStream({
 })
 ```
 
+### Tracing client tools
+
+When a client-side tool runs, the server automatically records a `CLIENT_TOOL_CALL` event span as a child of the current `AGENT_RUN` span. Event spans occur at a point in time (no end time) and mark "this client tool was deferred to the client at this moment in the trace." This happens for every user with no extra configuration.
+
+The client SDK also automatically measures the wall-clock duration of each client tool's `execute` function and ships it back to the server, where it's emitted as a `mastra_client_tool_duration_ms` metric.
+
+For richer telemetry from inside your tool's `execute` function, use the `observe` helper on the execution context to add child spans and structured logs:
+
+```typescript
+import { createTool } from '@mastra/client-js'
+import { z } from 'zod'
+
+const fetchUserTool = createTool({
+  id: 'fetchUser',
+  description: 'Fetches the current user profile',
+  inputSchema: z.object({ userId: z.string() }),
+  execute: async ({ userId }, { observe }) => {
+    observe.log('info', 'fetching user', { userId })
+    const user = await observe.span('http GET /users', async () => {
+      const res = await fetch(`/api/users/${userId}`)
+      return res.json()
+    })
+    return user
+  },
+})
+```
+
+`observe` is always available — when no tracing context is active (e.g. running outside a traced agent), `span` runs the function directly and `log` is a no-op. No null-checking needed.
+
+The SDK serializes everything the collector buffered as OTLP/JSON and ships it back in the next request body. The server's `@mastra/observability` package validates that the spans belong to the correct trace (preventing cross-trace injection) and forwards each span/log into the same observability bus that server-side telemetry uses. Your existing exporters pick them up automatically.
+
 ## Stored agents
 
 Stored agents are agent configurations stored in a database that can be created, updated, and deleted at runtime. They reference primitives (tools, workflows, other agents, scorers) by key, which are resolved from the Mastra registry when the agent is instantiated. Memory is configured inline as a `SerializedMemoryConfig` object with options such as `lastMessages` and `semanticRecall`.
