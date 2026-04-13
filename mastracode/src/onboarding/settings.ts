@@ -335,10 +335,7 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
       width: typeof rawViewport.width === 'number' ? rawViewport.width : DEFAULTS.browser.viewport!.width,
       height: typeof rawViewport.height === 'number' ? rawViewport.height : DEFAULTS.browser.viewport!.height,
     },
-    scope:
-      typeof raw.scope === 'string' && (raw.scope === 'shared' || raw.scope === 'thread')
-        ? raw.scope
-        : undefined,
+    scope: typeof raw.scope === 'string' && (raw.scope === 'shared' || raw.scope === 'thread') ? raw.scope : undefined,
     stagehand: {
       env:
         typeof rawStagehand.env === 'string' && STAGEHAND_ENVS.has(rawStagehand.env as StagehandEnv)
