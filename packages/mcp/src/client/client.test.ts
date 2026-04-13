@@ -2337,8 +2337,10 @@ describe('MastraMCPClient - requireToolApproval', () => {
     serverTransport: StreamableHTTPServerTransport;
     baseUrl: URL;
   };
+  let client: InternalMastraMCPClient;
 
   afterEach(async () => {
+    await client?.disconnect().catch(() => {});
     await testServer?.mcpServer.close().catch(() => {});
     await testServer?.serverTransport?.close().catch(() => {});
     testServer?.httpServer.close();
@@ -2346,7 +2348,7 @@ describe('MastraMCPClient - requireToolApproval', () => {
 
   it('should set requireApproval=true on all tools when requireToolApproval is true', async () => {
     testServer = await setupTestServer(false);
-    const client = new InternalMastraMCPClient({
+    client = new InternalMastraMCPClient({
       name: 'approval-bool-client',
       server: {
         url: testServer.baseUrl,
@@ -2360,12 +2362,11 @@ describe('MastraMCPClient - requireToolApproval', () => {
     expect(greetTool.requireApproval).toBe(true);
     // No needsApprovalFn when boolean
     expect((greetTool as any).needsApprovalFn).toBeUndefined();
-    await client.disconnect();
   });
 
   it('should not set requireApproval when requireToolApproval is false', async () => {
     testServer = await setupTestServer(false);
-    const client = new InternalMastraMCPClient({
+    client = new InternalMastraMCPClient({
       name: 'approval-false-client',
       server: {
         url: testServer.baseUrl,
@@ -2378,12 +2379,11 @@ describe('MastraMCPClient - requireToolApproval', () => {
     expect(greetTool).toBeDefined();
     expect(greetTool.requireApproval).toBe(false);
     expect((greetTool as any).needsApprovalFn).toBeUndefined();
-    await client.disconnect();
   });
 
   it('should not set requireApproval when requireToolApproval is omitted', async () => {
     testServer = await setupTestServer(false);
-    const client = new InternalMastraMCPClient({
+    client = new InternalMastraMCPClient({
       name: 'approval-omitted-client',
       server: {
         url: testServer.baseUrl,
@@ -2395,13 +2395,12 @@ describe('MastraMCPClient - requireToolApproval', () => {
     expect(greetTool).toBeDefined();
     expect(greetTool.requireApproval).toBe(false);
     expect((greetTool as any).needsApprovalFn).toBeUndefined();
-    await client.disconnect();
   });
 
   it('should set requireApproval=true and needsApprovalFn when requireToolApproval is a function', async () => {
     testServer = await setupTestServer(false);
     const approvalFn = vi.fn().mockReturnValue(true);
-    const client = new InternalMastraMCPClient({
+    client = new InternalMastraMCPClient({
       name: 'approval-fn-client',
       server: {
         url: testServer.baseUrl,
@@ -2414,13 +2413,12 @@ describe('MastraMCPClient - requireToolApproval', () => {
     expect(greetTool).toBeDefined();
     expect(greetTool.requireApproval).toBe(true);
     expect((greetTool as any).needsApprovalFn).toBeTypeOf('function');
-    await client.disconnect();
   });
 
   it('should pass toolName and args to the wrapped needsApprovalFn', async () => {
     testServer = await setupTestServer(false);
     const approvalFn = vi.fn().mockReturnValue(false);
-    const client = new InternalMastraMCPClient({
+    client = new InternalMastraMCPClient({
       name: 'approval-fn-args-client',
       server: {
         url: testServer.baseUrl,
@@ -2442,7 +2440,6 @@ describe('MastraMCPClient - requireToolApproval', () => {
       args: testArgs,
       requestContext: { userId: '123' },
     });
-    await client.disconnect();
   });
 
   it('should support async approval functions', async () => {
@@ -2450,7 +2447,7 @@ describe('MastraMCPClient - requireToolApproval', () => {
     const approvalFn = vi.fn().mockImplementation(async ({ toolName }) => {
       return toolName === 'greet';
     });
-    const client = new InternalMastraMCPClient({
+    client = new InternalMastraMCPClient({
       name: 'approval-async-client',
       server: {
         url: testServer.baseUrl,
@@ -2463,6 +2460,5 @@ describe('MastraMCPClient - requireToolApproval', () => {
 
     const result = await (greetTool as any).needsApprovalFn({ name: 'test' }, {});
     expect(result).toBe(true);
-    await client.disconnect();
   });
 });
