@@ -157,11 +157,7 @@ function hasLockFiles(profilePath: string): boolean {
 function seedCrashedPreferences(profilePath: string): void {
   const defaultDir = join(profilePath, 'Default');
   mkdirSync(defaultDir, { recursive: true });
-  writeFileSync(
-    join(defaultDir, 'Preferences'),
-    JSON.stringify({ profile: { exit_type: 'Crashed' } }),
-    'utf-8',
-  );
+  writeFileSync(join(defaultDir, 'Preferences'), JSON.stringify({ profile: { exit_type: 'Crashed' } }), 'utf-8');
 }
 
 function getExitType(profilePath: string): string | undefined {

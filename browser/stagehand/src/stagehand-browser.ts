@@ -327,8 +327,6 @@ export class StagehandBrowser extends MastraBrowser {
     patchProfileExitType(this.config.profile, this.logger);
   }
 
-
-
   /**
    * Check if the browser is still alive by verifying the context and pages exist.
    * Called by base class ensureReady() to detect externally closed browsers.
