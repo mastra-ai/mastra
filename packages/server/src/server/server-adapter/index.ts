@@ -9,6 +9,7 @@ import { z } from 'zod/v4';
 
 import type { InMemoryTaskStore } from '../a2a/store';
 import { coreAuthMiddleware } from '../auth/helpers';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../constants';
 import { formatZodError } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
@@ -325,6 +326,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     return !excludePaths.some((excluded: string) => path === excluded || path.startsWith(excluded + '/'));
   }
 
+  private static readonly RESERVED_CONTEXT_KEYS = new Set([MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY]);
+
   protected mergeRequestContext({
     paramsRequestContext,
     bodyRequestContext,
@@ -335,11 +338,13 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     const requestContext = new RequestContext();
     if (bodyRequestContext) {
       for (const [key, value] of Object.entries(bodyRequestContext)) {
+        if (MastraServer.RESERVED_CONTEXT_KEYS.has(key)) continue;
         requestContext.set(key, value);
       }
     }
     if (paramsRequestContext) {
       for (const [key, value] of Object.entries(paramsRequestContext)) {
+        if (MastraServer.RESERVED_CONTEXT_KEYS.has(key)) continue;
         requestContext.set(key, value);
       }
     }

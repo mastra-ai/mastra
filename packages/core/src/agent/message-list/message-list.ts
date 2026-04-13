@@ -6,7 +6,7 @@ import { v4 as randomUUID } from '@lukeed/uuid';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { IMastraLogger } from '../../logger';
 import type { IdGeneratorContext } from '../../types';
-import { AIV4Adapter, AIV5Adapter } from './adapters';
+import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from './adapters';
 import { CacheKeyGenerator } from './cache/CacheKeyGenerator';
 import {
   aiV4CoreMessageToV1PromptMessage,
@@ -35,8 +35,9 @@ import type {
   UIMessageWithMetadata,
   SerializedMessageListState,
 } from './state';
-import type { AIV5Type, AIV5ResponseMessage, MessageInput, MessageListInput } from './types';
+import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
 import { ensureGeminiCompatibleMessages } from './utils/provider-compat';
+import { stampPart } from './utils/stamp-part';
 
 export class MessageList {
   private messages: MastraDBMessage[] = [];
@@ -497,6 +498,9 @@ export class MessageList {
           );
       },
     },
+    aiV6: {
+      ui: () => this.all.db().map(AIV6Adapter.toUIMessage),
+    },
 
     /* @deprecated use list.get.all.aiV4.prompt() instead */
     prompt: () => this.all.aiV4.prompt(),
@@ -538,6 +542,9 @@ export class MessageList {
       model: () => convertAIV5UIToModelMessages(this.remembered.aiV5.ui(), this.messages),
       ui: (): AIV5Type.UIMessage[] => this.remembered.db().map(AIV5Adapter.toUIMessage),
     },
+    aiV6: {
+      ui: () => this.remembered.db().map(AIV6Adapter.toUIMessage),
+    },
 
     /* @deprecated use list.get.remembered.aiV4.ui() */
     ui: (): UIMessageWithMetadata[] => this.remembered.db().map(AIV4Adapter.toUIMessage),
@@ -555,6 +562,9 @@ export class MessageList {
     aiV5: {
       model: () => convertAIV5UIToModelMessages(this.rememberedPersisted.aiV5.ui(), this.messages),
       ui: (): AIV5Type.UIMessage[] => this.rememberedPersisted.db().map(AIV5Adapter.toUIMessage),
+    },
+    aiV6: {
+      ui: () => this.rememberedPersisted.db().map(AIV6Adapter.toUIMessage),
     },
 
     /* @deprecated use list.getPersisted.remembered.aiV4.ui() */
@@ -575,6 +585,9 @@ export class MessageList {
       model: () => convertAIV5UIToModelMessages(this.input.aiV5.ui(), this.messages),
       ui: (): AIV5Type.UIMessage[] => this.input.db().map(AIV5Adapter.toUIMessage),
     },
+    aiV6: {
+      ui: () => this.input.db().map(AIV6Adapter.toUIMessage),
+    },
 
     /* @deprecated use list.get.input.aiV4.ui() instead */
     ui: () => this.input.db().map(AIV4Adapter.toUIMessage),
@@ -592,6 +605,9 @@ export class MessageList {
     aiV5: {
       model: () => convertAIV5UIToModelMessages(this.inputPersisted.aiV5.ui(), this.messages),
       ui: (): AIV5Type.UIMessage[] => this.inputPersisted.db().map(AIV5Adapter.toUIMessage),
+    },
+    aiV6: {
+      ui: () => this.inputPersisted.db().map(AIV6Adapter.toUIMessage),
     },
 
     /* @deprecated use list.getPersisted.input.aiV4.ui() */
@@ -633,6 +649,9 @@ export class MessageList {
         );
       },
     },
+    aiV6: {
+      ui: () => this.response.db().map(AIV6Adapter.toUIMessage),
+    },
 
     aiV4: {
       ui: (): UIMessageWithMetadata[] => this.response.db().map(AIV4Adapter.toUIMessage),
@@ -645,6 +664,9 @@ export class MessageList {
     aiV5: {
       model: () => convertAIV5UIToModelMessages(this.responsePersisted.aiV5.ui(), this.messages),
       ui: (): AIV5Type.UIMessage[] => this.responsePersisted.db().map(AIV5Adapter.toUIMessage),
+    },
+    aiV6: {
+      ui: () => this.responsePersisted.db().map(AIV6Adapter.toUIMessage),
     },
 
     /* @deprecated use list.getPersisted.response.aiV4.ui() */
@@ -764,7 +786,7 @@ export class MessageList {
       return false;
     }
 
-    lastMsg.content.parts.push({ type: 'step-start' as const });
+    lastMsg.content.parts.push(stampPart({ type: 'step-start' as const }));
 
     // Ensure the mutated message is persisted
     if (!this.stateManager.isResponseMessage(lastMsg)) {
@@ -827,6 +849,8 @@ export class MessageList {
     messages:
       | CoreMessageV4
       | CoreMessageV4[]
+      | AIV6Type.ModelMessage
+      | AIV6Type.ModelMessage[]
       | AIV5Type.ModelMessage
       | AIV5Type.ModelMessage[]
       | MastraDBMessage
@@ -843,7 +867,10 @@ export class MessageList {
     return this;
   }
 
-  private addOneSystem(message: CoreMessageV4 | AIV5Type.ModelMessage | MastraDBMessage | string, tag?: string) {
+  private addOneSystem(
+    message: CoreMessageV4 | AIV6Type.ModelMessage | AIV5Type.ModelMessage | MastraDBMessage | string,
+    tag?: string,
+  ) {
     const coreMessage = systemMessageToAIV4Core(message);
 
     if (coreMessage.role !== `system`) {
@@ -939,6 +966,7 @@ export class MessageList {
       // Check if the message is in a supported format for system messages
       const isSupportedSystemFormat =
         TypeDetector.isAIV4CoreMessage(message) ||
+        TypeDetector.isAIV6CoreMessage(message) ||
         TypeDetector.isAIV5CoreMessage(message) ||
         TypeDetector.isMastraDBMessage(message);
 

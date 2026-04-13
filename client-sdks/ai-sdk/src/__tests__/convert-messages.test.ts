@@ -1,7 +1,10 @@
+import type { UIMessage as UIMessageV5 } from '@internal/ai-sdk-v5';
+import type { UIMessage as UIMessageV6 } from '@internal/ai-v6';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { MessageList } from '@mastra/core/agent/message-list';
 import type { MastraModelOutput } from '@mastra/core/stream';
-import { describe, expect, it } from 'vitest';
-import { toAISdkV4Messages, toAISdkV5Messages } from '../convert-messages';
+import { describe, expect, expectTypeOf, it } from 'vitest';
+import { toAISdkMessages, toAISdkV4Messages, toAISdkV5Messages } from '../convert-messages';
 import { toAISdkV5Stream } from '../convert-streams';
 
 describe('toAISdkFormat', () => {
@@ -34,6 +37,27 @@ describe('toAISdkFormat', () => {
     it('should handle empty array', () => {
       const result = toAISdkV5Messages([]);
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('toAISdkMessages', () => {
+    it('should default to AI SDK V5 UI message types', () => {
+      const result = toAISdkMessages(sampleMessages);
+
+      expectTypeOf(result).toEqualTypeOf<UIMessageV5[]>();
+      expect(result).toEqual(toAISdkV5Messages(sampleMessages));
+    });
+
+    it('should support AI SDK V6 UI message types when version is v6', () => {
+      const result = toAISdkMessages(sampleMessages, { version: 'v6' });
+
+      expectTypeOf(result).toEqualTypeOf<UIMessageV6[]>();
+      expect(result).toEqual(new MessageList().add(sampleMessages, 'memory').get.all.aiV6.ui());
+    });
+
+    it('should handle empty arrays for both versions', () => {
+      expect(toAISdkMessages([])).toEqual([]);
+      expect(toAISdkMessages([], { version: 'v6' })).toEqual([]);
     });
   });
 

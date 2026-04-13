@@ -121,6 +121,9 @@ export function setupKeyboardShortcuts(
     for (const reminder of state.allSystemReminderComponents) {
       reminder.setExpanded(state.toolOutputExpanded);
     }
+    for (const shell of state.allShellComponents) {
+      shell.setExpanded(state.toolOutputExpanded);
+    }
     state.ui.requestRender();
   });
 

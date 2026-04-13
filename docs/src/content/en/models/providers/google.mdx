@@ -460,7 +460,7 @@ for await (const chunk of stream) {
     "outputCost": null
   },
   {
-    "model": "google/gemma-4-26b",
+    "model": "google/gemma-4-26b-it",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -472,7 +472,7 @@ for await (const chunk of stream) {
     "outputCost": null
   },
   {
-    "model": "google/gemma-4-31b",
+    "model": "google/gemma-4-31b-it",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -513,7 +513,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "google/gemma-4-31b"
+      ? "google/gemma-4-31b-it"
       : "google/gemini-1.5-flash";
   }
 });

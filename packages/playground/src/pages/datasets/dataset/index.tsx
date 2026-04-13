@@ -1,25 +1,29 @@
 import {
-  MainContentLayout,
+  Breadcrumb,
+  Button,
+  Crumb,
+  Header,
+  Icon,
   MainContentContent,
+  MainContentLayout,
+  PermissionDenied,
+  SessionExpired,
+  is401UnauthorizedError,
+  is403ForbiddenError,
+} from '@mastra/playground-ui';
+import { Database, Play } from 'lucide-react';
+import { useState } from 'react';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router';
+import {
   DatasetPageContent,
   ExperimentTriggerDialog,
   AddItemDialog,
   EditDatasetDialog,
   DeleteDatasetDialog,
-  useDataset,
-  Button,
-  Header,
-  Breadcrumb,
-  Crumb,
-  Icon,
   DatasetCombobox,
-  PermissionDenied,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
-import type { DatasetVersion } from '@mastra/playground-ui';
-import { Database, Play } from 'lucide-react';
-import { useState } from 'react';
-import { useParams, useNavigate, useSearchParams, Link } from 'react-router';
+} from '@/domains/datasets';
+import type { DatasetVersion } from '@/domains/datasets/hooks/use-dataset-versions';
+import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 
 type DatasetTab = 'items' | 'experiments' | 'review';
 const VALID_TABS = new Set<string>(['items', 'experiments', 'review']);
@@ -57,6 +61,16 @@ function DatasetPage() {
     );
   }
 
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
   if (error && is403ForbiddenError(error)) {
     return (
       <MainContentLayout>
@@ -68,12 +82,12 @@ function DatasetPage() {
   }
 
   const handleExperimentSuccess = (experimentId: string) => {
-    void navigate(`/evaluation/datasets/${datasetId}/experiments/${experimentId}`);
+    void navigate(`/datasets/${datasetId}/experiments/${experimentId}`);
   };
 
   const handleDeleteSuccess = () => {
     // Navigate back to datasets list
-    void navigate('/evaluation?tab=datasets');
+    void navigate('/datasets');
   };
 
   // Version selection handler for contextual run button
@@ -85,7 +99,7 @@ function DatasetPage() {
     <MainContentLayout>
       <Header>
         <Breadcrumb>
-          <Crumb as={Link} to="/evaluation?tab=datasets">
+          <Crumb as={Link} to="/datasets">
             <Icon>
               <Database />
             </Icon>

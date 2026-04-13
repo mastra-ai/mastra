@@ -1,3 +1,4 @@
+import { createObservabilityContext, SpanType } from '@mastra/core/observability';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -39,7 +40,12 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
     outputSchema,
     description: toolDescription,
     execute: async (inputData, context) => {
-      const { requestContext, mastra } = context || {};
+      // See vector-query.ts for the same pattern: `context` from `createTool`
+      // is loosely typed; cast is safe because `createObservabilityContext`
+      // falls back to `noOpTracingContext` when `tracingContext` is undefined.
+      const { requestContext, mastra, tracingContext } = (context as any) || {};
+      const observabilityContext = createObservabilityContext(tracingContext);
+      const parentSpan = observabilityContext.tracingContext?.currentSpan;
       const indexName: string = requestContext?.get('indexName') ?? options.indexName;
       const vectorStoreName: string =
         'vectorStore' in options ? storeName : (requestContext?.get('vectorStoreName') ?? storeName);
@@ -86,6 +92,7 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
           topK: topKValue,
           includeVectors: true,
           providerOptions,
+          observabilityContext,
         });
         if (logger) {
           logger.debug('vectorQuerySearch returned results', { count: results.length });
@@ -105,19 +112,52 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
           if (logger) {
             logger.debug('Initializing graph', { chunkCount: chunks.length, embeddingCount: embeddings.length });
           }
-          graphRag.createGraph(chunks, embeddings);
+          const buildSpan = parentSpan?.createChildSpan({
+            type: SpanType.GRAPH_ACTION,
+            name: 'graph build',
+            input: { nodeCount: chunks.length },
+            attributes: {
+              action: 'build',
+              nodeCount: chunks.length,
+              threshold: graphOptions.threshold,
+            },
+          });
+          try {
+            graphRag.createGraph(chunks, embeddings);
+          } catch (err) {
+            buildSpan?.error({ error: err as Error, endSpan: true });
+            throw err;
+          }
+          buildSpan?.end();
           isInitialized = true;
         } else if (logger) {
           logger.debug('Graph already initialized, skipping graph construction');
         }
 
         // Get reranked results using GraphRAG
-        const rerankedResults = graphRag.query({
-          query: queryEmbedding,
-          topK: topKValue,
-          randomWalkSteps,
-          restartProb,
+        const traverseSpan = parentSpan?.createChildSpan({
+          type: SpanType.GRAPH_ACTION,
+          name: 'graph traverse',
+          input: { topK: topKValue, randomWalkSteps, restartProb },
+          attributes: {
+            action: 'traverse',
+            startNodes: 1,
+            maxDepth: randomWalkSteps,
+          },
         });
+        let rerankedResults;
+        try {
+          rerankedResults = graphRag.query({
+            query: queryEmbedding,
+            topK: topKValue,
+            randomWalkSteps,
+            restartProb,
+          });
+        } catch (err) {
+          traverseSpan?.error({ error: err as Error, endSpan: true });
+          throw err;
+        }
+        traverseSpan?.end({ output: { returned: rerankedResults.length } });
         if (logger) {
           logger.debug('GraphRAG query returned results', { count: rerankedResults.length });
         }

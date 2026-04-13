@@ -1,34 +1,34 @@
 import { EntityType } from '@mastra/core/observability';
-import type { EntityOptions, TraceDatePreset } from '@mastra/playground-ui';
 import {
-  EntityListPageLayout,
-  MainHeader,
   ButtonWithTooltip,
-  TracesList,
-  tracesListColumns,
-  TracesTools,
-  CONTEXT_FIELD_IDS,
-  TraceDialog,
-  parseError,
+  EntityListPageLayout,
   EntryListSkeleton,
+  MainHeader,
+  PermissionDenied,
+  SessionExpired,
   getToNextEntryFn,
   getToPreviousEntryFn,
-  groupTracesByThread,
-  useAgents,
-  useWorkflows,
-  useScorers,
-  useTags,
-  useEnvironments,
-  useServiceNames,
-  PermissionDenied,
+  is401UnauthorizedError,
   is403ForbiddenError,
+  parseError,
 } from '@mastra/playground-ui';
-
 import { BookIcon, EyeIcon } from 'lucide-react';
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
+import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { TraceDialog } from '@/domains/observability/components/trace-dialog';
+import { TracesList, tracesListColumns } from '@/domains/observability/components/traces-list';
+import { TracesTools } from '@/domains/observability/components/traces-tools';
+import { useEnvironments } from '@/domains/observability/hooks/use-environments';
+import { useServiceNames } from '@/domains/observability/hooks/use-service-names';
+import { useTags } from '@/domains/observability/hooks/use-tags';
 import { useTrace } from '@/domains/observability/hooks/use-trace';
 import { useTraces } from '@/domains/observability/hooks/use-traces';
+import { useScorers } from '@/domains/scores';
+import { CONTEXT_FIELD_IDS } from '@/domains/traces/types';
+import type { EntityOptions, TraceDatePreset } from '@/domains/traces/types';
+import { groupTracesByThread } from '@/domains/traces/utils/group-traces-by-thread';
+import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 export default function Observability() {
   const navigate = useNavigate();
@@ -311,6 +311,39 @@ export default function Observability() {
     }
     return ordered;
   }, [traces, groupByThread]);
+
+  // 401 check - session expired, needs re-authentication
+  if (TracesError && is401UnauthorizedError(TracesError)) {
+    return (
+      <EntityListPageLayout>
+        <EntityListPageLayout.Top>
+          <MainHeader withMargins={false}>
+            <MainHeader.Column>
+              <MainHeader.Title>
+                <EyeIcon /> Observability
+              </MainHeader.Title>
+              <MainHeader.Description>Explore observability traces for your entities</MainHeader.Description>
+            </MainHeader.Column>
+            <MainHeader.Column className="flex justify-end gap-2">
+              <ButtonWithTooltip
+                as="a"
+                href="https://mastra.ai/en/docs/observability/tracing/overview"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Observability documentation"
+                tooltipContent="Go to Observability documentation"
+              >
+                <BookIcon />
+              </ButtonWithTooltip>
+            </MainHeader.Column>
+          </MainHeader>
+        </EntityListPageLayout.Top>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </EntityListPageLayout>
+    );
+  }
 
   // 403 check - permission denied for traces
   if (TracesError && is403ForbiddenError(TracesError)) {

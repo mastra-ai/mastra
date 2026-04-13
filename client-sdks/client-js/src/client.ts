@@ -308,15 +308,23 @@ export class MastraClient extends BaseResource {
    */
   public listThreadMessages(
     threadId: string,
-    opts: { agentId?: string; networkId?: string; requestContext?: RequestContext | Record<string, any> } = {},
+    opts: {
+      agentId?: string;
+      networkId?: string;
+      requestContext?: RequestContext | Record<string, any>;
+      includeSystemReminders?: boolean;
+    } = {},
   ): Promise<ListMemoryThreadMessagesResponse> {
     let url = '';
+    const includeSystemRemindersQuery =
+      opts.includeSystemReminders === undefined ? '' : `includeSystemReminders=${opts.includeSystemReminders}`;
+
     if (opts.networkId) {
-      url = `/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}${requestContextQueryString(opts.requestContext, '&')}`;
+      url = `/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}${includeSystemRemindersQuery ? `&${includeSystemRemindersQuery}` : ''}${requestContextQueryString(opts.requestContext, includeSystemRemindersQuery ? '&' : '&')}`;
     } else if (opts.agentId) {
-      url = `/memory/threads/${threadId}/messages?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`;
+      url = `/memory/threads/${threadId}/messages?agentId=${opts.agentId}${includeSystemRemindersQuery ? `&${includeSystemRemindersQuery}` : ''}${requestContextQueryString(opts.requestContext, '&')}`;
     } else {
-      url = `/memory/threads/${threadId}/messages${requestContextQueryString(opts.requestContext, '?')}`;
+      url = `/memory/threads/${threadId}/messages${includeSystemRemindersQuery ? `?${includeSystemRemindersQuery}` : ''}${requestContextQueryString(opts.requestContext, includeSystemRemindersQuery ? '&' : '?')}`;
     }
     return this.request(url);
   }

@@ -13,6 +13,7 @@ import {
   modelWithSources,
   testUsage,
   createMessageListWithUserMessage,
+  stripMastraCreatedAt,
 } from './utils';
 import {
   createTestModelsV3,
@@ -299,7 +300,7 @@ export function resultObjectTests({
 
       await result.consumeStream();
 
-      expect(await result.response).toMatchSnapshot();
+      expect(stripMastraCreatedAt(await result.response)).toMatchSnapshot();
     });
   });
 

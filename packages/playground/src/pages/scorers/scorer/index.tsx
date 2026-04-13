@@ -2,34 +2,35 @@ import type { ClientScoreRowData } from '@mastra/client-js';
 import type { ScoreRowData } from '@mastra/core/evals';
 import {
   Breadcrumb,
+  Button,
   Crumb,
-  ScoresList,
+  DocsIcon,
   Header,
+  HeaderAction,
+  Icon,
+  KeyValueList,
   MainContentLayout,
   PageHeader,
-  ScoresTools,
-  ScoreDialog,
-  KeyValueList,
-  useScorer,
-  useScoresByScorerId,
-  Icon,
-  HeaderAction,
-  Button,
-  DocsIcon,
+  PermissionDenied,
+  SessionExpired,
+  Spinner,
   getToNextEntryFn,
   getToPreviousEntryFn,
-  useAgents,
-  useWorkflows,
-  ScorerCombobox,
-  toast,
-  Spinner,
-  PermissionDenied,
+  is401UnauthorizedError,
   is403ForbiddenError,
+  toast,
 } from '@mastra/playground-ui';
-import type { ScoreEntityOption as EntityOptions } from '@mastra/playground-ui';
 import { GaugeIcon, PencilIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router';
+import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { useScorer, useScoresByScorerId } from '@/domains/scores';
+import { ScoreDialog } from '@/domains/scores/components/score-dialog';
+import { ScorerCombobox } from '@/domains/scores/components/scorer-combobox';
+import { ScoresList } from '@/domains/scores/components/scores-list';
+import { ScoresTools } from '@/domains/scores/components/scores-tools';
+import type { ScoreEntityOption as EntityOptions } from '@/domains/scores/components/scores-tools';
+import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import { cn } from '@/lib/utils';
 
 export default function Scorer() {
@@ -177,12 +178,40 @@ export default function Scorer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, scores]);
 
+  if (
+    is401UnauthorizedError(scorerError) ||
+    is401UnauthorizedError(agentsError) ||
+    is401UnauthorizedError(workflowsError)
+  ) {
+    return (
+      <MainContentLayout>
+        <Header>
+          <Breadcrumb>
+            <Crumb as={Link} to={`/scorers`}>
+              <Icon>
+                <GaugeIcon />
+              </Icon>
+              Scorers
+            </Crumb>
+            <Crumb as="span" to="" isCurrent>
+              {scorerId}
+            </Crumb>
+          </Breadcrumb>
+        </Header>
+
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
   if (scorerError && is403ForbiddenError(scorerError)) {
     return (
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to={`/evaluation?tab=scorers`}>
+            <Crumb as={Link} to={`/scorers`}>
               <Icon>
                 <GaugeIcon />
               </Icon>
@@ -234,7 +263,7 @@ export default function Scorer() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to={`/evaluation?tab=scorers`}>
+            <Crumb as={Link} to={`/scorers`}>
               <Icon>
                 <GaugeIcon />
               </Icon>
@@ -262,12 +291,17 @@ export default function Scorer() {
         </Header>
 
         <div className={cn(`grid overflow-y-auto h-full`)}>
-          <div className={cn('max-w-[100rem] w-full px-12 mx-auto grid content-start gap-8 h-full')}>
-            <PageHeader
-              title={scorer?.scorer?.config?.name || 'loading'}
-              description={scorer?.scorer?.config?.description || 'loading'}
-              icon={<GaugeIcon />}
-            />
+          <div className={cn('max-w-400 w-full px-12 mx-auto grid content-start gap-8 h-full')}>
+            <PageHeader>
+              <PageHeader.Title isLoading={isScorerLoading}>
+                <GaugeIcon /> {scorer?.scorer?.config?.name}
+              </PageHeader.Title>
+              {(isScorerLoading || scorer?.scorer?.config?.description) && (
+                <PageHeader.Description isLoading={isScorerLoading}>
+                  {scorer?.scorer?.config?.description}
+                </PageHeader.Description>
+              )}
+            </PageHeader>
 
             <KeyValueList data={scoreInfo} LinkComponent={Link} isLoading={isLoadingAgents || isLoadingWorkflows} />
 
