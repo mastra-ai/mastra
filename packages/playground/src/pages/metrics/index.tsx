@@ -1,23 +1,21 @@
 import {
-  MetricsDashboard,
-  DateRangeSelector,
-  MetricsProvider,
-  useAgentRunsKpiMetrics,
+  ButtonWithTooltip,
+  ErrorState,
   NoDataPageLayout,
-  PageLayout,
   PageHeader,
+  PageLayout,
   PermissionDenied,
   SessionExpired,
-  ErrorState,
   is401UnauthorizedError,
   is403ForbiddenError,
-  isValidPreset,
-  ButtonWithTooltip,
 } from '@mastra/playground-ui';
-import type { DatePreset } from '@mastra/playground-ui';
 import { BarChart3Icon, BookIcon } from 'lucide-react';
 import { useCallback } from 'react';
 import { useSearchParams } from 'react-router';
+import { MetricsProvider, useAgentRunsKpiMetrics, isValidPreset } from '@/domains/metrics/components';
+import { DateRangeSelector } from '@/domains/metrics/components/date-range-selector';
+import { MetricsDashboard } from '@/domains/metrics/components/metrics-dashboard';
+import type { DatePreset } from '@/domains/metrics/hooks/use-metrics';
 
 const PERIOD_PARAM = 'period';
 

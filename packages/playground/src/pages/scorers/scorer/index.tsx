@@ -2,36 +2,35 @@ import type { ClientScoreRowData } from '@mastra/client-js';
 import type { ScoreRowData } from '@mastra/core/evals';
 import {
   Breadcrumb,
+  Button,
   Crumb,
-  ScoresList,
+  DocsIcon,
   Header,
+  HeaderAction,
+  Icon,
+  KeyValueList,
   MainContentLayout,
   PageHeader,
-  ScoresTools,
-  ScoreDialog,
-  KeyValueList,
-  useScorer,
-  useScoresByScorerId,
-  Icon,
-  HeaderAction,
-  Button,
-  DocsIcon,
-  getToNextEntryFn,
-  getToPreviousEntryFn,
-  useAgents,
-  useWorkflows,
-  ScorerCombobox,
-  toast,
-  Spinner,
   PermissionDenied,
   SessionExpired,
-  is403ForbiddenError,
+  Spinner,
+  getToNextEntryFn,
+  getToPreviousEntryFn,
   is401UnauthorizedError,
+  is403ForbiddenError,
+  toast,
 } from '@mastra/playground-ui';
-import type { ScoreEntityOption as EntityOptions } from '@mastra/playground-ui';
 import { GaugeIcon, PencilIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router';
+import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { useScorer, useScoresByScorerId } from '@/domains/scores';
+import { ScoreDialog } from '@/domains/scores/components/score-dialog';
+import { ScorerCombobox } from '@/domains/scores/components/scorer-combobox';
+import { ScoresList } from '@/domains/scores/components/scores-list';
+import { ScoresTools } from '@/domains/scores/components/scores-tools';
+import type { ScoreEntityOption as EntityOptions } from '@/domains/scores/components/scores-tools';
+import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import { cn } from '@/lib/utils';
 
 export default function Scorer() {

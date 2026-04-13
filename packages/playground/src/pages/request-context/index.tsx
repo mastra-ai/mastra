@@ -1,5 +1,6 @@
-import { PageLayout, PageHeader, RequestContext, RequestContextWrapper } from '@mastra/playground-ui';
+import { PageHeader, PageLayout } from '@mastra/playground-ui';
 import { Globe } from 'lucide-react';
+import { RequestContext, RequestContextWrapper } from '@/domains/agents/components/request-context';
 
 export default function RequestContextPage() {
   return (
