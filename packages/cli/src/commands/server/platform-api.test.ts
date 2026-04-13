@@ -265,6 +265,76 @@ describe('restartServerProject', () => {
     const { restartServerProject } = await import('./platform-api.js');
     await expect(restartServerProject('tok', 'org-1', 'proj-1')).resolves.toBe('dep-same');
   });
+
+  it('returns same deploy id when API reports unknown status (in-progress family)', async () => {
+    mockGET.mockImplementation(async (path: string) => {
+      const p = String(path);
+      if (p.includes('/deploys/') && !p.includes('/logs')) {
+        return {
+          data: { id: 'dep-same', status: 'unknown', instanceUrl: null, error: null },
+          error: undefined,
+          response: { status: 200 },
+        };
+      }
+      return {
+        data: {
+          project: {
+            latestDeployId: 'dep-same',
+            id: 'proj-1',
+            name: 'N',
+            slug: 'n',
+            organizationId: 'org-1',
+          },
+          deploys: [],
+        },
+        error: undefined,
+        response: { status: 200 },
+      };
+    });
+    mockPOST.mockResolvedValue({ data: {}, error: undefined, response: { status: 200 } });
+
+    const { restartServerProject } = await import('./platform-api.js');
+    await expect(restartServerProject('tok', 'org-1', 'proj-1')).resolves.toBe('dep-same');
+  });
+
+  it('keeps polling when same deploy id stays stopped until deadline', async () => {
+    mockGET.mockImplementation(async (path: string) => {
+      const p = String(path);
+      if (p.includes('/deploys/') && !p.includes('/logs')) {
+        return {
+          data: { id: 'dep-same', status: 'stopped', instanceUrl: null, error: null },
+          error: undefined,
+          response: { status: 200 },
+        };
+      }
+      return {
+        data: {
+          project: {
+            latestDeployId: 'dep-same',
+            id: 'proj-1',
+            name: 'N',
+            slug: 'n',
+            organizationId: 'org-1',
+          },
+          deploys: [],
+        },
+        error: undefined,
+        response: { status: 200 },
+      };
+    });
+    mockPOST.mockResolvedValue({ data: {}, error: undefined, response: { status: 200 } });
+
+    vi.useFakeTimers();
+    try {
+      const { restartServerProject } = await import('./platform-api.js');
+      const p = restartServerProject('tok', 'org-1', 'proj-1');
+      const rejection = expect(p).rejects.toThrow('no deploy ID could be resolved');
+      await vi.advanceTimersByTimeAsync(50_000);
+      await rejection;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('pollServerDeploy', () => {

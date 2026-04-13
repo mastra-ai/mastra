@@ -271,7 +271,8 @@ export async function restartServerProject(token: string, orgId: string, project
     return data.id;
   }
 
-  const deployLooksActive = (status: string) => status === 'queued' || status === 'starting' || status === 'running';
+  const deployIndicatesAcceptedRestart = (status: string | undefined) =>
+    Boolean(status && !['failed', 'crashed', 'cancelled', 'stopped'].includes(status));
 
   const deadline = Date.now() + 45000;
   while (Date.now() < deadline) {
@@ -283,7 +284,7 @@ export async function restartServerProject(token: string, orgId: string, project
     if (latest) {
       try {
         const st = await fetchServerDeployStatus(latest, token, orgId);
-        if (deployLooksActive(st.status)) {
+        if (deployIndicatesAcceptedRestart(st.status)) {
           return latest;
         }
       } catch {
