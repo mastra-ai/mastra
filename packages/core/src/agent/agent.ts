@@ -357,8 +357,10 @@ export class Agent<
   }
 
   /**
-   * Returns the browser toolset for this agent, if configured.
-   * Used by server-side code to access browser features like screencast streaming.
+   * Returns the browser instance for this agent, if configured.
+   * Browser tools are automatically added at execution time via `convertTools()`.
+   * This getter is primarily used by server-side code to access browser features
+   * like screencast streaming and input injection.
    */
   get browser(): MastraBrowser | undefined {
     return this.#browser;
@@ -2430,6 +2432,7 @@ export class Agent<
           logger: this.logger,
           mastra: mastraProxy as MastraUnion | undefined,
           agentName: this.name,
+          agentId: this.id,
           requestContext,
           ...observabilityContext,
           model: await this.getModel({ requestContext }),
@@ -4473,17 +4476,26 @@ export class Agent<
     // Inject browser context for BrowserContextProcessor
     if (this.#browser && !requestContext.has('browser')) {
       // Get threadId early for browser context - can come from requestContext, options, or snapshot
+      // Normalize memory.thread which can be a string or { id, ... } object
+      const memoryThread = options.memory?.thread;
+      const memoryThreadId = typeof memoryThread === 'string' ? memoryThread : memoryThread?.id;
       const browserThreadId =
         (requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined) ||
-        options.memory?.thread ||
+        memoryThreadId ||
         snapshotMemoryInfo?.threadId;
+
+      // Use thread-aware running check to avoid cross-thread state leakage
+      // In thread scope, only report running if this specific thread has a session
+      const isThreadRunning = browserThreadId
+        ? this.#browser.hasThreadSession(browserThreadId) && this.#browser.isBrowserRunning()
+        : this.#browser.isBrowserRunning();
 
       const browserCtx: BrowserContext = {
         provider: this.#browser.provider,
-        sessionId: this.#browser.id,
-        headless: (this.#browser as any).config?.headless,
+        sessionId: this.#browser.getSessionId(browserThreadId),
+        headless: this.#browser.headless,
         currentUrl: (await this.#browser.getCurrentUrl(browserThreadId)) ?? undefined,
-        isRunning: this.#browser.isBrowserRunning(),
+        isRunning: isThreadRunning,
       };
       requestContext.set('browser', browserCtx);
     }
