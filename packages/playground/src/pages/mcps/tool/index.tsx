@@ -1,8 +1,8 @@
 import { Breadcrumb, Button, Crumb, DocsIcon, Header, HeaderAction, Icon, McpServerIcon } from '@mastra/playground-ui';
+import { Link, useParams } from 'react-router';
 import { MCPToolPanel } from '@/domains/mcps/components/MCPToolPanel';
 import { useMCPServerTool } from '@/domains/mcps/hooks/use-mcp-server-tool';
 import { useMCPServers } from '@/domains/mcps/hooks/use-mcp-servers';
-import { Link, useParams } from 'react-router';
 
 const MCPServerToolExecutor = () => {
   const { data: mcpServers } = useMCPServers();

@@ -10,7 +10,6 @@ export type EntityListRowLinkProps = {
 };
 
 export function EntityListRowLink({ children, to, className, LinkComponent: Link }: EntityListRowLinkProps) {
-
   return (
     <Link
       href={to}

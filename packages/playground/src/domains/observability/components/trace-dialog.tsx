@@ -1,6 +1,17 @@
-import { Button, ButtonsGroup, KeyValueList, Section, Sections, SideDialog, TextAndIcon, getShortId, Icon, cn } from '@mastra/playground-ui';
 import type { GetScorerResponse } from '@mastra/client-js';
 import type { SpanRecord } from '@mastra/core/storage';
+import {
+  Button,
+  ButtonsGroup,
+  KeyValueList,
+  Section,
+  Sections,
+  SideDialog,
+  TextAndIcon,
+  getShortId,
+  Icon,
+  cn,
+} from '@mastra/playground-ui';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import {
   PanelLeftIcon,

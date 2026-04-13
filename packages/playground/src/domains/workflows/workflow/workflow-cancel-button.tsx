@@ -1,7 +1,6 @@
 import { Button, Icon } from '@mastra/playground-ui';
 import { Loader2, StopCircle } from 'lucide-react';
 
-
 export interface WorkflowCancelButtonProps {
   status?: string;
   cancelMessage: string | null;

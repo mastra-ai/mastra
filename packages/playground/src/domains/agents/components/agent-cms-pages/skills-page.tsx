@@ -1,5 +1,15 @@
-import { Button, EmptyState, Entity, EntityContent, EntityName, EntityDescription, ScrollArea, Searchbar, Switch } from '@mastra/playground-ui';
 import type { StoredSkillResponse } from '@mastra/client-js';
+import {
+  Button,
+  EmptyState,
+  Entity,
+  EntityContent,
+  EntityName,
+  EntityDescription,
+  ScrollArea,
+  Searchbar,
+  Switch,
+} from '@mastra/playground-ui';
 import { Plus, Drill } from 'lucide-react';
 import { useState } from 'react';
 import { useWatch } from 'react-hook-form';

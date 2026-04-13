@@ -1,5 +1,5 @@
-import { useCodemirrorTheme, Txt } from '@mastra/playground-ui';
 import { jsonLanguage } from '@codemirror/lang-json';
+import { useCodemirrorTheme, Txt } from '@mastra/playground-ui';
 import CodeMirror from '@uiw/react-codemirror';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { WorkflowRunOptions } from '@/domains/workflows/workflow/workflow-run-options';

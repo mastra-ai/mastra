@@ -1,6 +1,16 @@
-import { AgentIcon, Breadcrumb, Button, Crumb, DocsIcon, Header, HeaderAction, Icon, MainContentLayout } from '@mastra/playground-ui';
-import { AgentToolPanel } from '@/domains/agents/components/AgentToolPanel';
+import {
+  AgentIcon,
+  Breadcrumb,
+  Button,
+  Crumb,
+  DocsIcon,
+  Header,
+  HeaderAction,
+  Icon,
+  MainContentLayout,
+} from '@mastra/playground-ui';
 import { Link, useParams } from 'react-router';
+import { AgentToolPanel } from '@/domains/agents/components/AgentToolPanel';
 
 const AgentTool = () => {
   const { toolId, agentId } = useParams();

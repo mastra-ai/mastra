@@ -1,5 +1,13 @@
-import { EntityList, EntityListSkeleton, TextAndIcon, WorkflowIcon, AgentIcon, ToolsIcon, truncateString } from '@mastra/playground-ui';
 import type { GetAgentResponse } from '@mastra/client-js';
+import {
+  EntityList,
+  EntityListSkeleton,
+  TextAndIcon,
+  WorkflowIcon,
+  AgentIcon,
+  ToolsIcon,
+  truncateString,
+} from '@mastra/playground-ui';
 import { useMemo } from 'react';
 import { extractPrompt } from '../../utils/extractPrompt';
 import { ProviderLogo } from '../agent-metadata/provider-logo';

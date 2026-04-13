@@ -2,8 +2,9 @@ import { TooltipProvider, complexSchema } from '@mastra/playground-ui';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 
+import { createInstructionBlock } from '../agent-edit-page/utils/form-validation';
+import type { InstructionBlock } from '../agent-edit-page/utils/form-validation';
 import { AgentCMSBlocks } from './agent-cms-blocks';
-import { createInstructionBlock, type InstructionBlock } from '../agent-edit-page/utils/form-validation';
 
 const meta: Meta<typeof AgentCMSBlocks> = {
   title: 'Domain/Agents/AgentCMSBlocks',

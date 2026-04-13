@@ -1,5 +1,21 @@
-import { useCodemirrorTheme, Collapsible, CollapsibleContent, CollapsibleTrigger, Input, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, Txt, Icon, useCopyToClipboard, formatJSON, isValidJson, cn } from '@mastra/playground-ui';
 import { jsonLanguage } from '@codemirror/lang-json';
+import {
+  useCodemirrorTheme,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  Input,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+  Txt,
+  Icon,
+  useCopyToClipboard,
+  formatJSON,
+  isValidJson,
+  cn,
+} from '@mastra/playground-ui';
 import CodeMirror from '@uiw/react-codemirror';
 import { ChevronDown, Braces, CopyIcon, SaveIcon, CheckIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';

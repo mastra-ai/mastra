@@ -1,4 +1,19 @@
-import { useMaybeSidebar, AgentIcon, McpServerIcon, SettingsIcon, ToolsIcon, WorkflowIcon } from '@mastra/playground-ui';
+import {
+  useMaybeSidebar,
+  AgentIcon,
+  McpServerIcon,
+  SettingsIcon,
+  ToolsIcon,
+  WorkflowIcon,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+  CommandShortcut,
+} from '@mastra/playground-ui';
 import { Cpu, EyeIcon, GaugeIcon, PackageIcon, PanelLeftIcon } from 'lucide-react';
 import React from 'react';
 
@@ -9,16 +24,6 @@ import { useProcessors } from '@/domains/processors/hooks/use-processors';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
-import {
-  CommandDialog,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-  CommandShortcut,
-} from '@mastra/playground-ui';
 import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform';
 

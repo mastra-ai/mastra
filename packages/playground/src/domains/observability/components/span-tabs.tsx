@@ -1,16 +1,15 @@
-import { Tabs, TabList, Tab, TabContent } from '@mastra/playground-ui';
 import type { GetScorerResponse } from '@mastra/client-js';
 import type { ListScoresResponse } from '@mastra/core/evals';
 import { EntityType } from '@mastra/core/observability';
 import type { SpanRecord } from '@mastra/core/storage';
+import type { KeyValueListItemData } from '@mastra/playground-ui';
+import { Tabs, TabList, Tab, TabContent, KeyValueList, Section, Sections } from '@mastra/playground-ui';
 import { CircleGaugeIcon } from 'lucide-react';
 import { SpanDetails } from './span-details';
 import { TraceSpanUsage } from './trace-span-usage';
 import type { TokenUsage } from './trace-span-usage';
-import type { KeyValueListItemData } from '@mastra/playground-ui';
-import { KeyValueList, Section, Sections } from '@mastra/playground-ui';
-import { SpanScoring } from '@/domains/traces/components/span-scoring';
 import { SpanScoreList } from '@/domains/observability/components/span-score-list';
+import { SpanScoring } from '@/domains/traces/components/span-scoring';
 import { useLinkComponent } from '@/lib/framework';
 
 type SpanTabsProps = {

@@ -1,5 +1,19 @@
-import { Badge, Button, useCodemirrorTheme, CopyButton, MainContentContent, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Skeleton, Txt, toast } from '@mastra/playground-ui';
 import { jsonLanguage } from '@codemirror/lang-json';
+import {
+  Badge,
+  Button,
+  useCodemirrorTheme,
+  CopyButton,
+  MainContentContent,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Skeleton,
+  Txt,
+  toast,
+} from '@mastra/playground-ui';
 import CodeMirror from '@uiw/react-codemirror';
 import { useState, useId, useEffect } from 'react';
 import type {

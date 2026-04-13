@@ -14,7 +14,12 @@ function isExternalUrl(href: string) {
   return /^https?:\/\//.test(href);
 }
 
-export function DataKeysAndValuesValueLink({ className, children, href, LinkComponent: Link }: DataKeysAndValuesValueLinkProps) {
+export function DataKeysAndValuesValueLink({
+  className,
+  children,
+  href,
+  LinkComponent: Link,
+}: DataKeysAndValuesValueLinkProps) {
   const isExternal = isExternalUrl(href);
 
   const linkClassName = cn(

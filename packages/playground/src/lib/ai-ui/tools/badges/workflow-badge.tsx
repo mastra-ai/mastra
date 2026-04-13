@@ -1,5 +1,5 @@
-import { Button, CodeEditor, WorkflowIcon } from '@mastra/playground-ui';
 import type { GetWorkflowResponse } from '@mastra/client-js';
+import { Button, CodeEditor, WorkflowIcon } from '@mastra/playground-ui';
 
 import type { MastraUIMessage } from '@mastra/react';
 import { useContext, useEffect } from 'react';

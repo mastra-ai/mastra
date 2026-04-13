@@ -1,5 +1,5 @@
-import { IconButton, cn } from '@mastra/playground-ui';
 import { ActionBarPrimitive, MessagePrimitive, useMessage } from '@assistant-ui/react';
+import { IconButton, cn } from '@mastra/playground-ui';
 import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
 
 import { ToolFallback } from '../tools/tool-fallback';

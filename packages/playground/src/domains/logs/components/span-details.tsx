@@ -1,5 +1,5 @@
-import { DataDetailsPanel } from '@mastra/playground-ui';
 import type { SpanRecord } from '@mastra/core/storage';
+import { DataDetailsPanel } from '@mastra/playground-ui';
 import { format } from 'date-fns';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 

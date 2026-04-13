@@ -1,13 +1,17 @@
-import { Button, CodeEditor, IconButton, Label, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Spinner, Icon, toast } from '@mastra/playground-ui';
 import { useMessage } from '@assistant-ui/react';
-import { useMastraClient } from '@mastra/react';
-import { DatabaseIcon, Save } from 'lucide-react';
-import { useState, useCallback, useEffect } from 'react';
-
-import { useDatasetSaveContext } from '../context/dataset-save-context';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
-import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import {
+  Button,
+  CodeEditor,
+  IconButton,
+  Label,
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+  Spinner,
+  Icon,
+  toast,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -16,6 +20,13 @@ import {
   DialogBody,
   DialogFooter,
 } from '@mastra/playground-ui';
+import { useMastraClient } from '@mastra/react';
+import { DatabaseIcon, Save } from 'lucide-react';
+import { useState, useCallback, useEffect } from 'react';
+
+import { useDatasetSaveContext } from '../context/dataset-save-context';
+import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
+import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 
 /** Extract text content from a thread message's content parts */
 function extractTextFromParts(content: readonly { type: string; text?: string }[]): string {

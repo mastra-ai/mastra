@@ -1,13 +1,6 @@
+import { Dialog, DialogTitle, DialogContent, DialogHeader, DialogDescription, DialogBody } from '@mastra/playground-ui';
 import { FileText } from 'lucide-react';
 import { useState } from 'react';
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogHeader,
-  DialogDescription,
-  DialogBody,
-} from '@mastra/playground-ui';
 
 interface PdfEntryProps {
   data: string;

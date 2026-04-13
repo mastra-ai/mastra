@@ -1,5 +1,5 @@
-import { Txt, Icon } from '@mastra/playground-ui';
 import type { MCPToolType } from '@mastra/core/mcp';
+import { Txt, Icon } from '@mastra/playground-ui';
 import { ToolIconMap } from '@/domains/tools/components/ToolIcon';
 
 export interface ToolInformationProps {

@@ -1,7 +1,7 @@
 import { PermissionDenied, SessionExpired, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { useParams } from 'react-router';
 import { WorkflowGraph } from '@/domains/workflows/workflow/workflow-graph';
 import { useWorkflow } from '@/hooks/use-workflows';
-import { useParams } from 'react-router';
 
 export const Workflow = () => {
   const { workflowId } = useParams();

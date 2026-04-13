@@ -1,4 +1,21 @@
-import { Button, EmptyState, Entity, EntityContent, EntityName, EntityDescription, Input, Label, ScrollArea, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, MemoryIcon } from '@mastra/playground-ui';
+import {
+  Button,
+  EmptyState,
+  Entity,
+  EntityContent,
+  EntityName,
+  EntityDescription,
+  Input,
+  Label,
+  ScrollArea,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Switch,
+  MemoryIcon,
+} from '@mastra/playground-ui';
 import { Controller, useWatch } from 'react-hook-form';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';

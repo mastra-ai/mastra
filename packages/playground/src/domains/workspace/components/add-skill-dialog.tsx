@@ -1,10 +1,10 @@
-import { Button, Input, MarkdownRenderer, ScrollArea, SkillIcon, cn } from '@mastra/playground-ui';
-import { Search, Download, ExternalLink, Loader2, Package, Github, Check, Folder } from 'lucide-react';
-import { useState, useCallback, useMemo } from 'react';
-import { useDebouncedCallback } from 'use-debounce';
-import { useSearchSkillsSh, usePopularSkillsSh, useSkillPreview, parseSkillSource } from '../hooks/use-skills-sh';
-import type { SkillsShSkill } from '../types';
 import {
+  Button,
+  Input,
+  MarkdownRenderer,
+  ScrollArea,
+  SkillIcon,
+  cn,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -12,6 +12,11 @@ import {
   DialogDescription,
   DialogBody,
 } from '@mastra/playground-ui';
+import { Search, Download, ExternalLink, Loader2, Package, Github, Check, Folder } from 'lucide-react';
+import { useState, useCallback, useMemo } from 'react';
+import { useDebouncedCallback } from 'use-debounce';
+import { useSearchSkillsSh, usePopularSkillsSh, useSkillPreview, parseSkillSource } from '../hooks/use-skills-sh';
+import type { SkillsShSkill } from '../types';
 
 export interface WritableMount {
   path: string;

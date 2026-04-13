@@ -1,6 +1,6 @@
-import { useCodemirrorTheme, CopyButton, MainContentContent, Tabs, Tab, TabList, cn } from '@mastra/playground-ui';
 import { jsonLanguage } from '@codemirror/lang-json';
 import type { MCPToolType } from '@mastra/core/mcp';
+import { useCodemirrorTheme, CopyButton, MainContentContent, Tabs, Tab, TabList, cn } from '@mastra/playground-ui';
 import CodeMirror from '@uiw/react-codemirror';
 import { useState } from 'react';
 import type { ZodType } from 'zod';

@@ -1,5 +1,8 @@
+import { v4 as uuid } from '@lukeed/uuid';
 import { MainContentLayout } from '@mastra/playground-ui';
-import type { AgentSettingsType } from '@/types';
+import { useEffect, useMemo } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
+import { SessionHeader } from '@/components/session-header';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
@@ -12,11 +15,8 @@ import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputC
 import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
-import { v4 as uuid } from '@lukeed/uuid';
-import { useEffect, useMemo } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router';
 
-import { SessionHeader } from '@/components/session-header';
+import type { AgentSettingsType } from '@/types';
 
 function AgentSession() {
   const { agentId, threadId } = useParams();

@@ -1,5 +1,5 @@
-import { Alert, AlertDescription, AlertTitle } from '@mastra/playground-ui';
 import type { Provider } from '@mastra/client-js';
+import { Alert, AlertDescription, AlertTitle } from '@mastra/playground-ui';
 
 export interface ProviderNotConnectedAlertProps {
   provider: Provider;

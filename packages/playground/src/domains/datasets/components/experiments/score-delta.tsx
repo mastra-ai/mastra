@@ -1,6 +1,5 @@
-import { cn } from '@mastra/playground-ui';
+import { cn, Chip } from '@mastra/playground-ui';
 import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react';
-import { Chip } from '@mastra/playground-ui';
 
 interface ScoreDeltaProps {
   /** Difference between scores (B - A) */

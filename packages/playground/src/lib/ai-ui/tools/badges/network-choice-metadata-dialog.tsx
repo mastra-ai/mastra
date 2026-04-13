@@ -1,7 +1,7 @@
-import { CodeEditor, IconButton, Txt } from '@mastra/playground-ui';
-import { Share2 } from 'lucide-react';
-import { useState } from 'react';
 import {
+  CodeEditor,
+  IconButton,
+  Txt,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -9,6 +9,8 @@ import {
   DialogTitle,
   DialogBody,
 } from '@mastra/playground-ui';
+import { Share2 } from 'lucide-react';
+import { useState } from 'react';
 
 interface NetworkChoiceMetadataProps {
   selectionReason: string;

@@ -1,5 +1,11 @@
-import { EntryList, EntryListSkeleton, getToNextEntryFn, getToPreviousEntryFn, getShortId } from '@mastra/playground-ui';
 import type { ListScoresResponse, ScoreRowData } from '@mastra/core/evals';
+import {
+  EntryList,
+  EntryListSkeleton,
+  getToNextEntryFn,
+  getToPreviousEntryFn,
+  getShortId,
+} from '@mastra/playground-ui';
 import { isToday, format } from 'date-fns';
 import { useEffect, useState } from 'react';
 import { ScoreDialog } from '@/domains/scores';

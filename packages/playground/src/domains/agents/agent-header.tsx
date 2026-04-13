@@ -1,6 +1,6 @@
 import { Header, Breadcrumb, Crumb, Button, HeaderAction, Icon, DocsIcon, AgentIcon } from '@mastra/playground-ui';
-import { AgentCombobox } from '@/domains/agents/components/agent-combobox';
 import { Link } from 'react-router';
+import { AgentCombobox } from '@/domains/agents/components/agent-combobox';
 
 export function AgentHeader({ agentId }: { agentId: string }) {
   return (

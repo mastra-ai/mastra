@@ -1,9 +1,9 @@
 import { PageHeader, PageLayout, SettingsIcon } from '@mastra/playground-ui';
+import { useEffect, useRef, useState } from 'react';
 import { StudioConfigForm } from '@/domains/configuration/components/studio-config-form';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-context';
 import { SelectField } from '@/lib/form/components/select-field';
 import { usePlaygroundStore } from '@/store/playground-store';
-import { useEffect, useRef, useState } from 'react';
 
 const THEME_OPTIONS = [
   { value: 'dark', label: 'Dark' },

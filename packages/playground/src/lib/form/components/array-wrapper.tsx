@@ -1,8 +1,7 @@
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, Txt, Icon } from '@mastra/playground-ui';
 import type { ArrayWrapperProps } from '@autoform/react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, Txt, Icon } from '@mastra/playground-ui';
 import { Brackets, PlusIcon } from 'lucide-react';
 import React from 'react';
-
 
 export const ArrayWrapper: React.FC<ArrayWrapperProps> = ({ label, children, onAddItem }) => {
   return (

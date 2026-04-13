@@ -1,5 +1,5 @@
-import { Button, CombinedButtons, SearchFieldBlock, Icon } from '@mastra/playground-ui';
 import type { SpanRecord } from '@mastra/core/storage';
+import { Button, CombinedButtons, SearchFieldBlock, Icon } from '@mastra/playground-ui';
 import { XIcon, CircleDashedIcon } from 'lucide-react';
 import { Fragment, useEffect, useState } from 'react';
 import { useThrottledCallback } from 'use-debounce';

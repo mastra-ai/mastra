@@ -1,10 +1,11 @@
-import { Button, Input, Label, Txt, Icon, getFileContentType } from '@mastra/playground-ui';
 import { useComposerRuntime } from '@assistant-ui/react';
-
-import { CloudUpload, Link } from 'lucide-react';
-import type { FormEvent } from 'react';
-import { useComposerAddAttachment } from '../hooks/use-composer-add-attachment';
 import {
+  Button,
+  Input,
+  Label,
+  Txt,
+  Icon,
+  getFileContentType,
   Dialog,
   DialogHeader,
   DialogTitle,
@@ -12,6 +13,10 @@ import {
   DialogDescription,
   DialogBody,
 } from '@mastra/playground-ui';
+
+import { CloudUpload, Link } from 'lucide-react';
+import type { FormEvent } from 'react';
+import { useComposerAddAttachment } from '../hooks/use-composer-add-attachment';
 
 export interface AttachFileDialogProps {
   onOpenChange: (open: boolean) => void;

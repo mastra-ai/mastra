@@ -1,9 +1,7 @@
-import { Spinner, Txt, cn } from '@mastra/playground-ui';
-import { FileText, Search } from 'lucide-react';
-import { useState } from 'react';
-
-import { useStoredPromptBlocks } from '@/domains/prompt-blocks';
 import {
+  Spinner,
+  Txt,
+  cn,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -11,6 +9,10 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@mastra/playground-ui';
+import { FileText, Search } from 'lucide-react';
+import { useState } from 'react';
+
+import { useStoredPromptBlocks } from '@/domains/prompt-blocks';
 
 interface PromptBlockPickerDialogProps {
   open: boolean;

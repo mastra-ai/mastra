@@ -1,5 +1,5 @@
-import { Badge, Chip, EntityList, EntityListSkeleton, AgentIcon } from '@mastra/playground-ui';
 import type { GetScorerResponse } from '@mastra/client-js';
+import { Badge, Chip, EntityList, EntityListSkeleton, AgentIcon } from '@mastra/playground-ui';
 import { WorkflowIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLinkComponent } from '@/lib/framework';

@@ -1,5 +1,5 @@
-import { Cell, EntryCell } from '@mastra/playground-ui';
 import type { DatasetRecord } from '@mastra/client-js';
+import { Cell, EntryCell } from '@mastra/playground-ui';
 import type { ColumnDef } from '@tanstack/react-table';
 
 import { useLinkComponent } from '@/lib/framework';

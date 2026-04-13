@@ -1,4 +1,17 @@
-import { Collapsible, CollapsibleTrigger, CollapsibleContent, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, MemoryIcon } from '@mastra/playground-ui';
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+  Input,
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Switch,
+  MemoryIcon,
+} from '@mastra/playground-ui';
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { Controller, useWatch } from 'react-hook-form';

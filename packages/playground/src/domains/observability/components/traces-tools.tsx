@@ -1,11 +1,21 @@
-import { Button, DatePicker, TimePicker, DropdownMenu, Popover, PopoverTrigger, PopoverContent, Searchbar, Switch, cn } from '@mastra/playground-ui';
 import type { EntityType } from '@mastra/core/observability';
+import {
+  Button,
+  DatePicker,
+  TimePicker,
+  DropdownMenu,
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  Searchbar,
+  Switch,
+  cn,
+} from '@mastra/playground-ui';
 import { Portal as DropdownMenuPortal, SubContent as DropdownMenuSubContent } from '@radix-ui/react-dropdown-menu';
 import { isValid, parse } from 'date-fns';
 import { CalendarIcon, FilterIcon, XIcon, SearchIcon } from 'lucide-react';
 import type { ComponentPropsWithoutRef } from 'react';
 import { useState, useMemo, useCallback } from 'react';
-
 
 // UI-specific entity options that map to API EntityType values
 // Using the enum values (lowercase strings) for the type field

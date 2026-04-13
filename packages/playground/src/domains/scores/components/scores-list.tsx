@@ -1,5 +1,5 @@
-import { EntityList, Txt, cn } from '@mastra/playground-ui';
 import type { ClientScoreRowData } from '@mastra/client-js';
+import { EntityList, Txt, cn } from '@mastra/playground-ui';
 import { format, isToday } from 'date-fns';
 import { ArrowLeftIcon, ArrowRightIcon } from 'lucide-react';
 

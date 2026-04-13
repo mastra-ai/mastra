@@ -1,9 +1,8 @@
-import { Button, ButtonWithTooltip, CopyButton, DataDetailsPanel, cn } from '@mastra/playground-ui';
+import { Button, ButtonWithTooltip, CopyButton, DataDetailsPanel, cn, ButtonsGroup } from '@mastra/playground-ui';
 import { format } from 'date-fns';
 import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, ChevronsDownUpIcon, ChevronsUpDownIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import type { LogRecord } from '../types';
-import { ButtonsGroup } from '@mastra/playground-ui';
 
 const KV = DataDetailsPanel.KeyValueList;
 

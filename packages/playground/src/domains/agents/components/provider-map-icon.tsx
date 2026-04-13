@@ -1,4 +1,17 @@
-import { GoogleIcon, AmazonIcon, AnthropicChatIcon, AnthropicMessagesIcon, AzureIcon, CohereIcon, GroqIcon, MastraIcon, MistralIcon, NetlifyIcon, OpenaiChatIcon, XGroqIcon } from '@mastra/playground-ui';
+import {
+  GoogleIcon,
+  AmazonIcon,
+  AnthropicChatIcon,
+  AnthropicMessagesIcon,
+  AzureIcon,
+  CohereIcon,
+  GroqIcon,
+  MastraIcon,
+  MistralIcon,
+  NetlifyIcon,
+  OpenaiChatIcon,
+  XGroqIcon,
+} from '@mastra/playground-ui';
 
 export const providerMapToIcon = {
   'openai.chat': <OpenaiChatIcon />,

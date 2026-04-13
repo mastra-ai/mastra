@@ -1,8 +1,17 @@
-import { Breadcrumb, Button, Crumb, DocsIcon, Header, HeaderAction, Icon, MainContentLayout, PermissionDenied, SessionExpired, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
-import { ReferenceViewerDialog } from '@/domains/workspace/components/reference-viewer-dialog';
-import { SkillDetail } from '@/domains/workspace/components/skill-detail';
-import { useWorkspaceFile } from '@/domains/workspace/hooks/use-workspace';
-import { useWorkspaceSkill, useWorkspaceSkillReference } from '@/domains/workspace/hooks/use-workspace-skills';
+import {
+  Breadcrumb,
+  Button,
+  Crumb,
+  DocsIcon,
+  Header,
+  HeaderAction,
+  Icon,
+  MainContentLayout,
+  PermissionDenied,
+  SessionExpired,
+  is401UnauthorizedError,
+  is403ForbiddenError,
+} from '@mastra/playground-ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { Bot, Folder, Wand2 } from 'lucide-react';
 import { useState } from 'react';
@@ -10,6 +19,10 @@ import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 
 import { validateAgentId } from './validate-agent-id';
+import { ReferenceViewerDialog } from '@/domains/workspace/components/reference-viewer-dialog';
+import { SkillDetail } from '@/domains/workspace/components/skill-detail';
+import { useWorkspaceFile } from '@/domains/workspace/hooks/use-workspace';
+import { useWorkspaceSkill, useWorkspaceSkillReference } from '@/domains/workspace/hooks/use-workspace-skills';
 
 export default function WorkspaceSkillDetailPage() {
   const { skillName, workspaceId } = useParams<{ skillName: string; workspaceId: string }>();

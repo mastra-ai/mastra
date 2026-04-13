@@ -1,6 +1,14 @@
-import { IconButton, Spinner, Tooltip, TooltipContent, TooltipTrigger, Icon, fileToBase64 } from '@mastra/playground-ui';
 import type { AttachmentState } from '@assistant-ui/react';
 import { AttachmentPrimitive, ComposerPrimitive, useAttachment } from '@assistant-ui/react';
+import {
+  IconButton,
+  Spinner,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  Icon,
+  fileToBase64,
+} from '@mastra/playground-ui';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
 import { CircleXIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -9,7 +17,6 @@ import { useAttachmentSrc } from '../hooks/use-attachment-src';
 import { useHasAttachments } from '../hooks/use-has-attachments';
 import { useLoadBrowserFile } from '../hooks/use-load-browser-file';
 import { ImageEntry, TxtEntry, PdfEntry } from './attachment-preview-dialog';
-
 
 const ComposerTxtAttachment = ({ document }: { document: AttachmentState }) => {
   const { isLoading, text } = useLoadBrowserFile(document.file);

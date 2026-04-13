@@ -1,5 +1,5 @@
-import { AgentTracesPanel } from '@/domains/agents/components/agent-traces-panel';
 import { useParams, useSearchParams } from 'react-router';
+import { AgentTracesPanel } from '@/domains/agents/components/agent-traces-panel';
 
 function AgentTraces() {
   const { agentId } = useParams();

@@ -1,6 +1,18 @@
 'use client';
 
-import { Button, CodeEditor, Label, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SideDialog, TextAndIcon, toast } from '@mastra/playground-ui';
+import {
+  Button,
+  CodeEditor,
+  Label,
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+  SideDialog,
+  TextAndIcon,
+  toast,
+} from '@mastra/playground-ui';
 import type { SideDialogRootProps } from '@mastra/playground-ui';
 import { DatabaseIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';

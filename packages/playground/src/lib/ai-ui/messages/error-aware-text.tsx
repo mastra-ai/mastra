@@ -1,5 +1,5 @@
-import { Alert, AlertDescription, AlertTitle, Badge, Icon, cn } from '@mastra/playground-ui';
 import { useAssistantState } from '@assistant-ui/react';
+import { Alert, AlertDescription, AlertTitle, Badge, Icon, cn } from '@mastra/playground-ui';
 import type { MastraUIMessageMetadata } from '@mastra/react';
 import { CheckCircleIcon, ChevronUpIcon } from 'lucide-react';
 import { useState } from 'react';

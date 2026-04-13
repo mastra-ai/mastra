@@ -1,4 +1,12 @@
-import { ScrollArea, Skeleton, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, useCopyToClipboard } from '@mastra/playground-ui';
+import {
+  ScrollArea,
+  Skeleton,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+  useCopyToClipboard,
+} from '@mastra/playground-ui';
 import { ChevronRight, ChevronDown, Brain, ExternalLink, Info } from 'lucide-react';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useObservationalMemoryContext } from '@/domains/agents/context';

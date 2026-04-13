@@ -1,5 +1,5 @@
-import { toast } from '@mastra/playground-ui';
 import type { CreateStoredPromptBlockParams } from '@mastra/client-js';
+import { toast } from '@mastra/playground-ui';
 
 import { useStoredPromptBlockMutations } from '../hooks/use-stored-prompt-blocks';
 import { PromptBlockEditMain } from './prompt-block-edit-page/prompt-block-edit-main';

@@ -1,4 +1,19 @@
-import { Button, EntityName, EntityDescription, EntityContent, Entity, Popover, PopoverTrigger, PopoverContent, ScrollArea, Section, SubSectionRoot, Icon, ToolsIcon, cn } from '@mastra/playground-ui';
+import {
+  Button,
+  EntityName,
+  EntityDescription,
+  EntityContent,
+  Entity,
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  ScrollArea,
+  Section,
+  SubSectionRoot,
+  Icon,
+  ToolsIcon,
+  cn,
+} from '@mastra/playground-ui';
 import type { RuleGroup } from '@mastra/playground-ui';
 import { PlusIcon, XIcon } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
@@ -10,7 +25,6 @@ import { SubSectionHeader } from '@/domains/cms/components/section/section-heade
 import { MCPClientList } from '@/domains/mcps/components/mcp-client-list';
 import { IntegrationToolsSection } from '@/domains/tool-providers/components';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
-
 
 export function ToolsPage() {
   const { form, readOnly } = useAgentEditFormContext();

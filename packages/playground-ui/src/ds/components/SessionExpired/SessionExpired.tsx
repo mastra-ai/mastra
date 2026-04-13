@@ -1,6 +1,6 @@
+import { useMastraClient } from '@mastra/react';
 import { LogIn } from 'lucide-react';
 import { useState, useCallback } from 'react';
-import { useMastraClient } from '@mastra/react';
 
 import { Icon } from '../../icons/Icon';
 import { Button } from '../Button';

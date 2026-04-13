@@ -1,5 +1,5 @@
-import { Badge, Button, Chip, Switch, Txt, Icon } from '@mastra/playground-ui';
 import type { GetScorerResponse } from '@mastra/client-js';
+import { Badge, Button, Chip, Switch, Txt, Icon } from '@mastra/playground-ui';
 import { Pencil } from 'lucide-react';
 
 interface LinkedDataset {

@@ -10,7 +10,6 @@ export type ItemListLinkCellProps = {
 };
 
 export function ItemListLinkCell({ children, href, className, LinkComponent: Link }: ItemListLinkCellProps) {
-
   return (
     <Link
       href={href}

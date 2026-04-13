@@ -1,5 +1,5 @@
-import { EntityList, EntityListSkeleton, truncateString } from '@mastra/playground-ui';
 import type { StoredPromptBlockResponse } from '@mastra/client-js';
+import { EntityList, EntityListSkeleton, truncateString } from '@mastra/playground-ui';
 import { CheckIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLinkComponent } from '@/lib/framework';

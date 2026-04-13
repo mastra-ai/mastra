@@ -1,6 +1,6 @@
-import type { LinkComponent, LinkComponentProps } from '@/lib/framework';
 import { forwardRef } from 'react';
 import { Link as RouterLink } from 'react-router';
+import type { LinkComponent, LinkComponentProps } from '@/lib/framework';
 
 // Routes served by the Hono server, not the React Router SPA.
 // These need full-page navigation via a plain <a> tag.

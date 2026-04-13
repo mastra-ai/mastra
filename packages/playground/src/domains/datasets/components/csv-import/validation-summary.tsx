@@ -1,6 +1,5 @@
 import { Alert, AlertTitle } from '@mastra/playground-ui';
-'use client';
-
+('use client');
 
 export interface ValidationError {
   row: number;

@@ -1,8 +1,6 @@
+import { Input, Popover, PopoverTrigger, PopoverContent, Txt } from '@mastra/playground-ui';
 import { Plus, X } from 'lucide-react';
 import { useState, useRef } from 'react';
-import { Input } from '@mastra/playground-ui';
-import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui';
-import { Txt } from '@mastra/playground-ui';
 
 export function TagPicker({
   tags,

@@ -1,6 +1,6 @@
-import type { JsonSchema } from '@mastra/playground-ui';
 import { v4 as uuid } from '@lukeed/uuid';
 import type { RuleGroup, RuleGroupDepth1, RuleGroupDepth2 } from '@mastra/core/storage';
+import type { JsonSchema } from '@mastra/playground-ui';
 import { z } from 'zod';
 
 export type InMemoryFileNode = {

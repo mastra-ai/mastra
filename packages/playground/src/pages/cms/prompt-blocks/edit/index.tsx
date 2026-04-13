@@ -1,14 +1,36 @@
-import { Alert, AlertDescription, AlertTitle, Badge, Header, HeaderAction, HeaderTitle, Icon, MainContentLayout, Skeleton, Spinner, toast } from '@mastra/playground-ui';
-import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
-import { useStoredPromptBlock, useStoredPromptBlockMutations, usePromptBlockVersions, usePromptBlockVersion, PromptBlockEditMain, PromptBlockEditSidebar, PromptBlockVersionCombobox, usePromptBlockEditForm } from '@/domains/prompt-blocks';
-import type { PromptBlockFormValues } from '@/domains/prompt-blocks';
-import { useLinkComponent } from '@/lib/framework';
 import type { UpdateStoredPromptBlockParams } from '@mastra/client-js';
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Badge,
+  Header,
+  HeaderAction,
+  HeaderTitle,
+  Icon,
+  MainContentLayout,
+  Skeleton,
+  Spinner,
+  toast,
+} from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { BookIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
+import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
+import type { PromptBlockFormValues } from '@/domains/prompt-blocks';
+import {
+  useStoredPromptBlock,
+  useStoredPromptBlockMutations,
+  usePromptBlockVersions,
+  usePromptBlockVersion,
+  PromptBlockEditMain,
+  PromptBlockEditSidebar,
+  PromptBlockVersionCombobox,
+  usePromptBlockEditForm,
+} from '@/domains/prompt-blocks';
+import { useLinkComponent } from '@/lib/framework';
 
 type StoredPromptBlockData = NonNullable<ReturnType<typeof useStoredPromptBlock>['data']>;
 

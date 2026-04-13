@@ -1,9 +1,8 @@
 'use client';
 
-import { Button, Column, MainHeader, PrevNextNav, SideDialog } from '@mastra/playground-ui';
 import type { ClientScoreRowData } from '@mastra/client-js';
+import { Button, Column, MainHeader, PrevNextNav, SideDialog, Sections } from '@mastra/playground-ui';
 import { GaugeIcon, FileCodeIcon, FileOutputIcon, ReceiptText, XIcon } from 'lucide-react';
-import { Sections } from '@mastra/playground-ui';
 
 export type ExperimentScorePanelProps = {
   score: ClientScoreRowData;

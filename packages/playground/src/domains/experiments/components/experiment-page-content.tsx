@@ -1,8 +1,8 @@
 'use client';
 
-import { Column, Columns, MultiColumn, Tabs, Tab, TabList, TabContent } from '@mastra/playground-ui';
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
+import { Column, Columns, MultiColumn, Tabs, Tab, TabList, TabContent } from '@mastra/playground-ui';
 import { useState, useMemo } from 'react';
 
 import { useExperimentTrace } from '../hooks/use-experiment-trace';

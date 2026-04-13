@@ -1,4 +1,16 @@
-import { Badge, Cell, EntryCell, Tooltip, TooltipContent, TooltipTrigger, ToolsIcon, WorkflowIcon, ProcessorIcon, AgentIcon, OpenAIIcon } from '@mastra/playground-ui';
+import {
+  Badge,
+  Cell,
+  EntryCell,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  ToolsIcon,
+  WorkflowIcon,
+  ProcessorIcon,
+  AgentIcon,
+  OpenAIIcon,
+} from '@mastra/playground-ui';
 import type { ColumnDef, Row } from '@tanstack/react-table';
 import { extractPrompt } from '../../utils/extractPrompt';
 import { providerMapToIcon } from '../provider-map-icon';

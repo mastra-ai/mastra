@@ -1,5 +1,5 @@
-import { SideDialog } from '@mastra/playground-ui';
 import type { SpanRecord } from '@mastra/core/storage';
+import { SideDialog } from '@mastra/playground-ui';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 
 interface ExperimentTraceSpanDetailsProps {

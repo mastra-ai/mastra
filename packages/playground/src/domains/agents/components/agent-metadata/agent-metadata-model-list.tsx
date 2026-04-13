@@ -1,7 +1,7 @@
-import { Switch, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, Icon } from '@mastra/playground-ui';
 import type { DropResult } from '@hello-pangea/dnd';
 import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import type { GetAgentResponse, ReorderModelListParams, UpdateModelInModelListParams } from '@mastra/client-js';
+import { Switch, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, Icon } from '@mastra/playground-ui';
 import { GripVertical } from 'lucide-react';
 import { useState } from 'react';
 import { AgentMetadataModelSwitcher } from './agent-metadata-model-switcher';

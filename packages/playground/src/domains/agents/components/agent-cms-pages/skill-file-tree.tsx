@@ -1,5 +1,5 @@
-import { IconButton, TooltipProvider, Tree } from '@mastra/playground-ui';
 import { v4 as uuid } from '@lukeed/uuid';
+import { IconButton, TooltipProvider, Tree } from '@mastra/playground-ui';
 import { File, FileCode, FileJson, FileText, Folder, FolderOpen, FolderPlus, Image, Plus, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useCallback, useRef, useState } from 'react';

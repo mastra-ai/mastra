@@ -1,4 +1,15 @@
-import { Badge, Button, EntityHeader, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, AgentIcon, Icon, useCopyToClipboard } from '@mastra/playground-ui';
+import {
+  Badge,
+  Button,
+  EntityHeader,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+  AgentIcon,
+  Icon,
+  useCopyToClipboard,
+} from '@mastra/playground-ui';
 import { CopyIcon, Link2, Check, Pencil } from 'lucide-react';
 import { useAgent } from '../hooks/use-agent';
 import { useCanCreateAgent } from '../hooks/use-can-create-agent';

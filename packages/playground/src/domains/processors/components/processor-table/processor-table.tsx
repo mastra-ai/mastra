@@ -1,4 +1,22 @@
-import { Button, EmptyState, PermissionDenied, ScrollableContainer, Searchbar, SearchbarWrapper, Skeleton, Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation, TooltipProvider, Icon, is403ForbiddenError } from '@mastra/playground-ui';
+import {
+  Button,
+  EmptyState,
+  PermissionDenied,
+  ScrollableContainer,
+  Searchbar,
+  SearchbarWrapper,
+  Skeleton,
+  Cell,
+  Row,
+  Table,
+  Tbody,
+  Th,
+  Thead,
+  useTableKeyboardNavigation,
+  TooltipProvider,
+  Icon,
+  is403ForbiddenError,
+} from '@mastra/playground-ui';
 import type { ColumnDef } from '@tanstack/react-table';
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import { Cpu } from 'lucide-react';

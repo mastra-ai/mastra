@@ -4,7 +4,6 @@ import type { ColumnDef, Row } from '@tanstack/react-table';
 import { useMCPServerTools } from '../../hooks/useMCPServerTools';
 import type { MCPTableColumn } from './types';
 
-
 import { useLinkComponent } from '@/lib/framework';
 
 const NameCell = ({ row }: { row: Row<MCPTableColumn> }) => {

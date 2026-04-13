@@ -1,6 +1,17 @@
 'use client';
 
-import { Button, Spinner, toast } from '@mastra/playground-ui';
+import {
+  Button,
+  Spinner,
+  toast,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogBody,
+  DialogFooter,
+} from '@mastra/playground-ui';
 import { useCallback, useState } from 'react';
 import type { ColumnMapping, FieldType } from '../../hooks/use-column-mapping';
 import { useColumnMapping } from '../../hooks/use-column-mapping';
@@ -16,15 +27,6 @@ import { CSVUploadStep } from './csv-upload-step';
 import { ValidationReport } from './validation-report';
 import type { ValidationError } from './validation-summary';
 import { ValidationSummary } from './validation-summary';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogBody,
-  DialogFooter,
-} from '@mastra/playground-ui';
 
 export interface CSVImportDialogProps {
   datasetId: string;

@@ -1,9 +1,8 @@
-import { Button, DatePicker, Popover, PopoverContent, PopoverTrigger, cn } from '@mastra/playground-ui';
 import type { AutoFormFieldProps } from '@autoform/react';
+import { Button, DatePicker, Popover, PopoverContent, PopoverTrigger, cn } from '@mastra/playground-ui';
 import { format, isValid } from 'date-fns';
 import { CalendarIcon } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
-
 
 export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field, error, id }) => {
   const { key, ...props } = inputProps;

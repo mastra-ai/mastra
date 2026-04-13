@@ -1,9 +1,17 @@
-import { Badge, Button, Combobox, CopyButton, DropdownMenu, Input, Label, HoverPopover, PopoverTrigger, PopoverContent, Spinner, Txt, Icon } from '@mastra/playground-ui';
-import { Check, ChevronDown, Clock, Info, MessageSquare, Save } from 'lucide-react';
-import { useMemo, useState, useCallback } from 'react';
-
-import { useAgentVersions } from '../../hooks/use-agent-versions';
 import {
+  Badge,
+  Button,
+  Combobox,
+  CopyButton,
+  DropdownMenu,
+  Input,
+  Label,
+  HoverPopover,
+  PopoverTrigger,
+  PopoverContent,
+  Spinner,
+  Txt,
+  Icon,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -12,6 +20,10 @@ import {
   DialogBody,
   DialogFooter,
 } from '@mastra/playground-ui';
+import { Check, ChevronDown, Clock, Info, MessageSquare, Save } from 'lucide-react';
+import { useMemo, useState, useCallback } from 'react';
+
+import { useAgentVersions } from '../../hooks/use-agent-versions';
 
 interface AgentPlaygroundVersionBarProps {
   agentId: string;

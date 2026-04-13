@@ -1,4 +1,23 @@
-import { Alert, AlertDescription, AlertTitle, Badge, Header, HeaderAction, HeaderTitle, Icon, MainContentLayout, Skeleton, Spinner, toast } from '@mastra/playground-ui';
+import type { UpdateStoredScorerParams } from '@mastra/client-js';
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Badge,
+  Header,
+  HeaderAction,
+  HeaderTitle,
+  Icon,
+  MainContentLayout,
+  Skeleton,
+  Spinner,
+  toast,
+} from '@mastra/playground-ui';
+import { useMastraClient } from '@mastra/react';
+import { useQueryClient } from '@tanstack/react-query';
+import { GaugeIcon } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useParams, useSearchParams } from 'react-router';
 import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
 import { useStoredScorer, useStoredScorerMutations } from '@/domains/scores';
 import { ScorerEditMain } from '@/domains/scores/components/scorer-edit-page/scorer-edit-main';
@@ -8,12 +27,6 @@ import type { ScorerFormValues } from '@/domains/scores/components/scorer-edit-p
 import { ScorerVersionCombobox } from '@/domains/scores/components/scorer-version-combobox';
 import { useScorerVersions, useScorerVersion } from '@/domains/scores/hooks/use-scorer-versions';
 import { useLinkComponent } from '@/lib/framework';
-import type { UpdateStoredScorerParams } from '@mastra/client-js';
-import { useMastraClient } from '@mastra/react';
-import { useQueryClient } from '@tanstack/react-query';
-import { GaugeIcon } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router';
 
 type StoredScorerData = NonNullable<ReturnType<typeof useStoredScorer>['data']>;
 

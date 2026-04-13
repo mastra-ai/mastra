@@ -3,7 +3,6 @@ import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
 import { CircleCheck, CircleX } from 'lucide-react';
 
-
 export type LoopResultNode = Node<
   {
     result: boolean;

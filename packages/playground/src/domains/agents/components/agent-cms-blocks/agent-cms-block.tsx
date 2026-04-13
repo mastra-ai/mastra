@@ -1,15 +1,18 @@
-import { Button, CodeEditor, ContentBlock, IconButton, Input, Label, Tooltip, TooltipContent, TooltipTrigger, Txt, Icon, cn } from '@mastra/playground-ui';
-import type { RuleGroup, JsonSchema } from '@mastra/playground-ui';
 import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
-import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
-import { GripVertical, X, BookmarkPlus } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
-
-import type { InstructionBlock, InlineInstructionBlock } from '../agent-edit-page/utils/form-validation';
-import { AgentCMSRefBlock } from './agent-cms-ref-block';
-import { DisplayConditionsDialog } from '@/domains/cms';
-import { useStoredPromptBlockMutations } from '@/domains/prompt-blocks';
+import type { RuleGroup, JsonSchema } from '@mastra/playground-ui';
 import {
+  Button,
+  CodeEditor,
+  ContentBlock,
+  IconButton,
+  Input,
+  Label,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  Txt,
+  Icon,
+  cn,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -18,6 +21,14 @@ import {
   DialogBody,
   DialogFooter,
 } from '@mastra/playground-ui';
+import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
+import { GripVertical, X, BookmarkPlus } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+import type { InstructionBlock, InlineInstructionBlock } from '../agent-edit-page/utils/form-validation';
+import { AgentCMSRefBlock } from './agent-cms-ref-block';
+import { DisplayConditionsDialog } from '@/domains/cms';
+import { useStoredPromptBlockMutations } from '@/domains/prompt-blocks';
 
 export interface AgentCMSBlockProps {
   index: number;

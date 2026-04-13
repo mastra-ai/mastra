@@ -1,5 +1,20 @@
-import { Button, CodeEditor, ScrollArea, Skeleton, Txt, Icon, isObjectEmpty, toast } from '@mastra/playground-ui';
 import type { GetWorkflowResponse } from '@mastra/client-js';
+import {
+  Button,
+  CodeEditor,
+  ScrollArea,
+  Skeleton,
+  Txt,
+  Icon,
+  isObjectEmpty,
+  toast,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogHeader,
+  DialogDescription,
+  DialogBody,
+} from '@mastra/playground-ui';
 import { Braces, Loader2 } from 'lucide-react';
 import { useState, useEffect, useContext } from 'react';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
@@ -12,14 +27,6 @@ import type { ResumeStepParams } from './workflow-suspended-steps';
 import { WorkflowTriggerForm } from './workflow-trigger-form';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogHeader,
-  DialogDescription,
-  DialogBody,
-} from '@mastra/playground-ui';
 
 export interface WorkflowTriggerProps {
   workflowId: string;

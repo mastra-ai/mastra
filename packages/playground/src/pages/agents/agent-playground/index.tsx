@@ -1,4 +1,12 @@
-import { PermissionDenied, SessionExpired, Spinner, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import {
+  PermissionDenied,
+  SessionExpired,
+  Spinner,
+  is401UnauthorizedError,
+  is403ForbiddenError,
+} from '@mastra/playground-ui';
+import { useCallback, useMemo, useState } from 'react';
+import { useParams } from 'react-router';
 import { AgentPlaygroundView } from '@/domains/agents/components/agent-playground/agent-playground-view';
 import { AgentEditFormProvider } from '@/domains/agents/context/agent-edit-form-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
@@ -8,8 +16,6 @@ import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import { useMemory } from '@/domains/memory/hooks/use-memory';
-import { useCallback, useMemo, useState } from 'react';
-import { useParams } from 'react-router';
 
 function AgentPlayground() {
   const { agentId } = useParams();

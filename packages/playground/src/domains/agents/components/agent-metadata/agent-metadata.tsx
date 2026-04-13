@@ -1,7 +1,24 @@
-import { Alert, AlertTitle, AlertDescription, Badge, useCodemirrorTheme, Skeleton, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, AgentIcon, MemoryIcon, ProcessorIcon, SkillIcon, ToolsIcon, WorkflowIcon } from '@mastra/playground-ui';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import type { GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
+import {
+  Alert,
+  AlertTitle,
+  AlertDescription,
+  Badge,
+  useCodemirrorTheme,
+  Skeleton,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+  AgentIcon,
+  MemoryIcon,
+  ProcessorIcon,
+  SkillIcon,
+  ToolsIcon,
+  WorkflowIcon,
+} from '@mastra/playground-ui';
 import CodeMirror, { EditorView } from '@uiw/react-codemirror';
 import { GaugeIcon, Folder, Globe } from 'lucide-react';
 import { useActivatedSkills } from '../../context/activated-skills-context';

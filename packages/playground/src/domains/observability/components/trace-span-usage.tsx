@@ -1,6 +1,6 @@
-import { cn } from '@mastra/playground-ui';
 import type { InputTokenDetails, OutputTokenDetails } from '@mastra/core/observability';
 import type { SpanRecord } from '@mastra/core/storage';
+import { cn } from '@mastra/playground-ui';
 import { ArrowRightIcon, ArrowRightToLineIcon, CoinsIcon } from 'lucide-react';
 
 // V5 format (AI SDK v5)

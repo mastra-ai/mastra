@@ -1,6 +1,5 @@
 import { Table, Thead, Tbody, Th, Row, Cell } from '@mastra/playground-ui';
-'use client';
-
+('use client');
 
 export interface CSVPreviewTableProps {
   headers: string[];

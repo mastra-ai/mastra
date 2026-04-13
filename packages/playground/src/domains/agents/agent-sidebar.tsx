@@ -1,7 +1,7 @@
 import type { StorageThreadType } from '@mastra/core/memory';
-import { useLinkComponent } from '@/lib/framework';
 import { ChatThreads } from '@/domains/agents/components/chat-threads';
 import { useDeleteThread } from '@/domains/memory/hooks/use-memory';
+import { useLinkComponent } from '@/lib/framework';
 
 export function AgentSidebar({
   agentId,

@@ -1,9 +1,8 @@
-import { toast } from '@mastra/playground-ui';
 import type { WorkflowRuns } from '@mastra/core/storage';
+import { toast, useInView } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { useInView } from '@mastra/playground-ui';
 
 export const PER_PAGE = 20;
 

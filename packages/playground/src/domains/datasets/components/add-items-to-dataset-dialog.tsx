@@ -1,7 +1,21 @@
 'use client';
 
-import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, Label, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, toast } from '@mastra/playground-ui';
 import type { DatasetItem, DatasetRecord } from '@mastra/client-js';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogBody,
+  Label,
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+  toast,
+} from '@mastra/playground-ui';
 import { useState } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { useDatasets } from '../hooks/use-datasets';

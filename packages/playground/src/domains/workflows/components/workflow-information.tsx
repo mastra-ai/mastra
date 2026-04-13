@@ -1,4 +1,17 @@
-import { Badge, EntityHeader, Tabs, TabList, Tab, TabContent, Tooltip, TooltipContent, TooltipTrigger, WorkflowIcon, useCopyToClipboard, toast } from '@mastra/playground-ui';
+import {
+  Badge,
+  EntityHeader,
+  Tabs,
+  TabList,
+  Tab,
+  TabContent,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  WorkflowIcon,
+  useCopyToClipboard,
+  toast,
+} from '@mastra/playground-ui';
 import { CopyIcon, Cpu } from 'lucide-react';
 import { useState, useEffect, useContext, useMemo } from 'react';
 

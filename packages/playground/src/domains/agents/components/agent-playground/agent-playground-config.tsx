@@ -1,4 +1,14 @@
-import { Badge, HoverPopover, PopoverTrigger, PopoverContent, ScrollArea, Spinner, Txt, Icon, cn } from '@mastra/playground-ui';
+import {
+  Badge,
+  HoverPopover,
+  PopoverTrigger,
+  PopoverContent,
+  ScrollArea,
+  Spinner,
+  Txt,
+  Icon,
+  cn,
+} from '@mastra/playground-ui';
 import type { JsonSchema, JsonSchemaProperty } from '@mastra/playground-ui';
 import { Braces, ChevronDown, ChevronRight, Wrench, Cpu, Eye, Pencil } from 'lucide-react';
 import { useState, useMemo } from 'react';

@@ -1,11 +1,11 @@
 import { JSONSchemaForm, jsonSchemaToFields, ScrollArea } from '@mastra/playground-ui';
 import type { JsonSchema } from '@mastra/playground-ui';
-import type { SchemaField } from '@/domains/datasets/components/schema-settings/schema-field';
 import { Plus, PlusIcon } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import type { SchemaField } from '@/domains/datasets/components/schema-settings/schema-field';
 
 function RecursiveFieldRenderer({
   field,

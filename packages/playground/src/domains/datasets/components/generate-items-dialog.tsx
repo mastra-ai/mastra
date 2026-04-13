@@ -1,4 +1,21 @@
-import { Button, Checkbox, Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter, Input, Label, ScrollArea, Spinner, Textarea, Txt, Icon, toast } from '@mastra/playground-ui';
+import {
+  Button,
+  Checkbox,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogBody,
+  DialogFooter,
+  Input,
+  Label,
+  ScrollArea,
+  Spinner,
+  Textarea,
+  Txt,
+  Icon,
+  toast,
+} from '@mastra/playground-ui';
 import { Sparkles, Trash2, Plus } from 'lucide-react';
 import { useState, useCallback, useRef } from 'react';
 

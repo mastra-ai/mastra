@@ -1,6 +1,6 @@
-import { Icon } from '@mastra/playground-ui';
 import type { DropResult } from '@hello-pangea/dnd';
 import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
+import { Icon } from '@mastra/playground-ui';
 import { GripVertical } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import type { ColumnMapping, FieldType } from '../../hooks/use-column-mapping';

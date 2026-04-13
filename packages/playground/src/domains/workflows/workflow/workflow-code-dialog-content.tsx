@@ -1,7 +1,7 @@
-import { useCodemirrorTheme, CopyButton } from '@mastra/playground-ui';
 import { javascript } from '@codemirror/lang-javascript';
 import { jsonLanguage } from '@codemirror/lang-json';
 import { EditorView } from '@codemirror/view';
+import { useCodemirrorTheme, CopyButton } from '@mastra/playground-ui';
 import CodeMirror from '@uiw/react-codemirror';
 
 export const CodeDialogContent = ({

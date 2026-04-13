@@ -1,4 +1,15 @@
-import { AlertDialog, Button, CopyButton, Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, AmazonIcon, AzureIcon, GoogleIcon } from '@mastra/playground-ui';
+import {
+  AlertDialog,
+  Button,
+  CopyButton,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+  AmazonIcon,
+  AzureIcon,
+  GoogleIcon,
+} from '@mastra/playground-ui';
 import {
   File,
   Folder,

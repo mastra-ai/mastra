@@ -1,12 +1,14 @@
-import { AgentIcon, LogoWithoutText, MainSidebar, McpServerIcon, SettingsIcon, ToolsIcon, WorkflowIcon, useMainSidebar } from '@mastra/playground-ui';
+import {
+  AgentIcon,
+  LogoWithoutText,
+  MainSidebar,
+  McpServerIcon,
+  SettingsIcon,
+  ToolsIcon,
+  WorkflowIcon,
+  useMainSidebar,
+} from '@mastra/playground-ui';
 import type { NavLink, NavSection } from '@mastra/playground-ui';
-import { AuthStatus } from '@/domains/auth/components/auth-status';
-import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { isAuthenticated } from '@/domains/auth/types';
-import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
-import { MastraVersionFooter } from '@/domains/configuration/components/mastra-version-footer';
-import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 import {
   EyeIcon,
   GlobeIcon,
@@ -21,7 +23,14 @@ import {
   GaugeIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
+import { AuthStatus } from '@/domains/auth/components/auth-status';
+import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { isAuthenticated } from '@/domains/auth/types';
+import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
+import { MastraVersionFooter } from '@/domains/configuration/components/mastra-version-footer';
 import { useLinkComponent } from '@/lib/framework';
+import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 
 type SidebarLink = NavLink & {
   requiredPermission?: string;
@@ -293,7 +302,15 @@ export function AppSidebar() {
               <MainSidebar.NavList>
                 {filteredLinks.map(link => {
                   const isActive = getIsLinkActive(link, pathname);
-                  return <MainSidebar.NavLink key={link.name} LinkComponent={Link} state={state} link={link} isActive={isActive} />;
+                  return (
+                    <MainSidebar.NavLink
+                      key={link.name}
+                      LinkComponent={Link}
+                      state={state}
+                      link={link}
+                      isActive={isActive}
+                    />
+                  );
                 })}
               </MainSidebar.NavList>
             </MainSidebar.NavSection>

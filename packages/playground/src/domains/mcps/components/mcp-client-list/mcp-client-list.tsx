@@ -1,5 +1,18 @@
-import { Button, EmptyState, Entity, EntityContent, EntityDescription, EntityName, Section, SubSectionRoot, SideDialog, Icon, McpServerIcon, stringToColor } from '@mastra/playground-ui';
 import type { StoredMCPServerConfig } from '@mastra/client-js';
+import {
+  Button,
+  EmptyState,
+  Entity,
+  EntityContent,
+  EntityDescription,
+  EntityName,
+  Section,
+  SubSectionRoot,
+  SideDialog,
+  Icon,
+  McpServerIcon,
+  stringToColor,
+} from '@mastra/playground-ui';
 import { LaptopMinimal, PlusIcon, XIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';

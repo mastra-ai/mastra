@@ -1,5 +1,5 @@
-import { HorizontalBars, MetricsCard } from '@mastra/playground-ui';
 import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
+import { HorizontalBars, MetricsCard } from '@mastra/playground-ui';
 import { useMemo } from 'react';
 
 const STATUS_COLORS = {

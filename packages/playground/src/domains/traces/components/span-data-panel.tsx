@@ -1,8 +1,19 @@
-import { Alert, AlertTitle, AlertDescription, DataKeysAndValues, DataPanel, Tabs, TabList, Tab, TabContent } from '@mastra/playground-ui';
 import type { GetScorerResponse } from '@mastra/client-js';
 import type { ListScoresResponse, ScoreRowData } from '@mastra/core/evals';
 import { EntityType } from '@mastra/core/observability';
 import type { SpanRecord } from '@mastra/core/storage';
+import {
+  Alert,
+  AlertTitle,
+  AlertDescription,
+  DataKeysAndValues,
+  DataPanel,
+  Tabs,
+  TabList,
+  Tab,
+  TabContent,
+  ButtonsGroup,
+} from '@mastra/playground-ui';
 import { format } from 'date-fns';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import { isTokenLimitExceeded, getTokenLimitMessage } from '../utils/span-utils';
@@ -10,7 +21,6 @@ import { SpanScoresList } from './span-scores-list';
 import { SpanScoring } from './span-scoring';
 import { SpanTokenUsage } from './span-token-usage';
 import type { TokenUsage } from './span-token-usage';
-import { ButtonsGroup } from '@mastra/playground-ui';
 
 function buildDialogTitle(sectionTitle: string, icon: React.ReactNode, span: SpanRecord) {
   return (

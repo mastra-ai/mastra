@@ -1,6 +1,6 @@
-import { Button, KeyValueList, SideDialog, TextAndIcon, getShortId, Icon } from '@mastra/playground-ui';
-import type { SideDialogRootProps } from '@mastra/playground-ui';
 import type { ScoreRowData } from '@mastra/core/evals';
+import type { SideDialogRootProps } from '@mastra/playground-ui';
+import { Button, KeyValueList, SideDialog, TextAndIcon, getShortId, Icon, Sections } from '@mastra/playground-ui';
 import { format } from 'date-fns/format';
 import {
   HashIcon,
@@ -16,7 +16,6 @@ import {
 import { useState } from 'react';
 import { ScoreAsItemDialog } from './score-as-item-dialog';
 
-import { Sections } from '@mastra/playground-ui';
 import { useLinkComponent } from '@/lib/framework';
 
 function isCodeBasedScorer(score?: ScoreRowData): boolean {

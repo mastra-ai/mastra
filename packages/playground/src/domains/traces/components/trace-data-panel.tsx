@@ -1,5 +1,5 @@
-import { Button, ButtonWithTooltip, DataKeysAndValues, DataPanel, Icon } from '@mastra/playground-ui';
 import type { SpanRecord } from '@mastra/core/storage';
+import { Button, ButtonWithTooltip, DataKeysAndValues, DataPanel, Icon, ButtonsGroup } from '@mastra/playground-ui';
 import { format } from 'date-fns';
 import { CircleGaugeIcon, ChevronsDownUpIcon, ChevronsUpDownIcon, SaveIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -8,7 +8,6 @@ import { useTraceSpans } from '../hooks/use-trace-spans';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
 import { TraceTimeline } from './trace-timeline';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
-import { ButtonsGroup } from '@mastra/playground-ui';
 
 export interface TraceDataPanelProps {
   traceId: string;

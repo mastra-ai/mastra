@@ -1,9 +1,18 @@
-import { AgentIcon, Button, Header, HeaderAction, HeaderTitle, Icon, MainContentLayout, Spinner } from '@mastra/playground-ui';
+import {
+  AgentIcon,
+  Button,
+  Header,
+  HeaderAction,
+  HeaderTitle,
+  Icon,
+  MainContentLayout,
+  Spinner,
+} from '@mastra/playground-ui';
+import { Check } from 'lucide-react';
+import { Outlet, useLocation } from 'react-router';
 import { AgentCmsFormShell } from '@/domains/agents/components/agent-cms-form-shell';
 import { useAgentCmsForm } from '@/domains/agents/hooks/use-agent-cms-form';
 import { useLinkComponent } from '@/lib/framework';
-import { Check } from 'lucide-react';
-import { Outlet, useLocation } from 'react-router';
 
 function CreateLayoutWrapper() {
   const { navigate, paths } = useLinkComponent();

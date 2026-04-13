@@ -1,6 +1,19 @@
-import { CodeEditor, ContentBlock, Popover, PopoverTrigger, PopoverContent, Spinner, Tooltip, TooltipContent, TooltipTrigger, Txt, Icon, cn } from '@mastra/playground-ui';
-import type { JsonSchema } from '@mastra/playground-ui';
 import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
+import {
+  CodeEditor,
+  ContentBlock,
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  Spinner,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  Txt,
+  Icon,
+  cn,
+} from '@mastra/playground-ui';
+import type { JsonSchema } from '@mastra/playground-ui';
 import { GripVertical, X, ExternalLink, ChevronDown } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';

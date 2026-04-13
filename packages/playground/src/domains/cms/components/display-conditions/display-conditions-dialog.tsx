@@ -1,8 +1,8 @@
-import { IconButton, RuleBuilder, countLeafRules } from '@mastra/playground-ui';
 import type { JsonSchema, RuleGroup } from '@mastra/playground-ui';
-import { Ruler } from 'lucide-react';
-
 import {
+  IconButton,
+  RuleBuilder,
+  countLeafRules,
   Dialog,
   DialogTrigger,
   DialogContent,
@@ -11,6 +11,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@mastra/playground-ui';
+import { Ruler } from 'lucide-react';
 
 interface DisplayConditionsDialogProps {
   entityName: string;

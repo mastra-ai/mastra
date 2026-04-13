@@ -1,7 +1,6 @@
 import { Checkbox, ScrollArea, Txt, cn } from '@mastra/playground-ui';
 import { useMemo } from 'react';
 
-
 interface SelectedToolListProps {
   providerId: string;
   selectedTools: Map<string, string>;

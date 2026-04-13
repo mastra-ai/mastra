@@ -1,4 +1,24 @@
-import { Badge, Button, Checkbox, Columns, Column, DropdownMenu, EntityList, Label, Spinner, Textarea, Txt, Icon, cn } from '@mastra/playground-ui';
+import {
+  Badge,
+  Button,
+  Checkbox,
+  Columns,
+  Column,
+  DropdownMenu,
+  EntityList,
+  Label,
+  Spinner,
+  Textarea,
+  Txt,
+  Icon,
+  cn,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { Portal as DropdownMenuPortal, SubContent as DropdownMenuSubContent } from '@radix-ui/react-dropdown-menu';
 import {
@@ -22,14 +42,6 @@ import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutati
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 import { LLMProviders, LLMModels } from '@/domains/llm';
 import { BulkTagPicker } from '@/domains/shared/components/bulk-tag-picker';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@mastra/playground-ui';
 
 function truncateInput(value: unknown, max: number): string {
   if (typeof value === 'string') return value.length > max ? value.slice(0, max) + '...' : value;

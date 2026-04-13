@@ -1,13 +1,13 @@
 import { MainSidebarProvider, Toaster, TooltipProvider } from '@mastra/playground-ui';
+import { AppSidebar } from './ui/app-sidebar';
+import { ThemeProvider } from './ui/theme-provider';
 import { AuthRequired } from '@/domains/auth/components/auth-required';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { isAuthenticated } from '@/domains/auth/types';
-import { NavigationCommand } from '@/lib/command';
-import { AppSidebar } from './ui/app-sidebar';
-import { ThemeProvider } from './ui/theme-provider';
 import { ExperimentalUIProvider } from '@/domains/experimental-ui/experimental-ui-context';
 import { UI_EXPERIMENTS } from '@/domains/experimental-ui/experiments';
 import { useExperimentalUIEnabled } from '@/domains/experimental-ui/use-experimental-ui-enabled';
+import { NavigationCommand } from '@/lib/command';
 import { cn } from '@/lib/utils';
 
 function LayoutContent({ children }: { children: React.ReactNode }) {

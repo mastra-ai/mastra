@@ -1,6 +1,18 @@
 'use client';
 
-import { Alert, AlertTitle, AlertDescription, Collapsible, CollapsibleTrigger, CollapsibleContent, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui';
+import {
+  Alert,
+  AlertTitle,
+  AlertDescription,
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@mastra/playground-ui';
 import type { JSONSchema7 } from 'json-schema';
 import { ChevronRight } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';

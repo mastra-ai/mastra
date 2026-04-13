@@ -1,7 +1,6 @@
-import { Txt } from '@mastra/playground-ui';
 import type { FieldWrapperProps } from '@autoform/react';
+import { Txt } from '@mastra/playground-ui';
 import React from 'react';
-
 
 const DISABLED_LABELS = ['boolean', 'object', 'array'];
 

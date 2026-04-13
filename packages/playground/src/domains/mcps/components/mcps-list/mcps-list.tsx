@@ -1,5 +1,12 @@
-import { EntityList, EntityListSkeleton, ToolsIcon, WorkflowIcon, AgentIcon, truncateString } from '@mastra/playground-ui';
 import type { McpServerListResponse } from '@mastra/client-js';
+import {
+  EntityList,
+  EntityListSkeleton,
+  ToolsIcon,
+  WorkflowIcon,
+  AgentIcon,
+  truncateString,
+} from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useMemo } from 'react';
 import { useMCPServerTools } from '../../hooks/useMCPServerTools';

@@ -1,19 +1,37 @@
-import { ButtonWithTooltip, ErrorState, NoDataPageLayout, PageHeader, PageLayout, PermissionDenied, SessionExpired, Spinner, is401UnauthorizedError, is403ForbiddenError, toast } from '@mastra/playground-ui';
-import { AddSkillDialog } from '@/domains/workspace/components';
+import {
+  ButtonWithTooltip,
+  ErrorState,
+  NoDataPageLayout,
+  PageHeader,
+  PageLayout,
+  PermissionDenied,
+  SessionExpired,
+  Spinner,
+  is401UnauthorizedError,
+  is403ForbiddenError,
+  toast,
+} from '@mastra/playground-ui';
+import { BookIcon, Folder, FileText, Wand2, Search, ChevronDown, Bot, Server } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { useSearchParams, useParams, useNavigate } from 'react-router';
 import { isWorkspaceNotSupportedError } from '@/domains/workspace/compatibility';
-import { FileBrowser, FileViewer, SkillsTable } from '@/domains/workspace/components';
+import { AddSkillDialog, FileBrowser, FileViewer, SkillsTable } from '@/domains/workspace/components';
 import { NoWorkspacesInfo } from '@/domains/workspace/components/no-workspaces-info';
 import { SearchWorkspacePanel, SearchSkillsPanel } from '@/domains/workspace/components/search-panel';
 import { WorkspaceNotConfigured } from '@/domains/workspace/components/workspace-not-configured';
 import { WorkspaceNotSupported } from '@/domains/workspace/components/workspace-not-supported';
 import { useInstallSkill, useUpdateSkills, useRemoveSkill } from '@/domains/workspace/hooks';
-import { useWorkspaceInfo, useWorkspaces, useWorkspaceFiles, useSearchWorkspace, useDeleteWorkspaceFile, useCreateWorkspaceDirectory, useWorkspaceFile } from '@/domains/workspace/hooks/use-workspace';
+import {
+  useWorkspaceInfo,
+  useWorkspaces,
+  useWorkspaceFiles,
+  useSearchWorkspace,
+  useDeleteWorkspaceFile,
+  useCreateWorkspaceDirectory,
+  useWorkspaceFile,
+} from '@/domains/workspace/hooks/use-workspace';
 import { useWorkspaceSkills, useSearchWorkspaceSkills } from '@/domains/workspace/hooks/use-workspace-skills';
 import type { WorkspaceItem } from '@/domains/workspace/types';
-import { BookIcon, Folder, FileText, Wand2, Search, ChevronDown, Bot, Server } from 'lucide-react';
-import { useState, useCallback } from 'react';
-
-import { useSearchParams, useParams, useNavigate } from 'react-router';
 
 type TabType = 'files' | 'skills';
 

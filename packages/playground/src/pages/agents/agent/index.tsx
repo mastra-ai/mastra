@@ -1,8 +1,11 @@
+import { v4 as uuid } from '@lukeed/uuid';
 import { PermissionDenied, SessionExpired, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
-import type { AgentSettingsType } from '@/types';
-import { AgentLayout } from '@/domains/agents/agent-layout';
+import { useEffect, useMemo } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
+import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
 import { AgentInformation } from '@/domains/agents/components/agent-information/agent-information';
+import { AgentLayout } from '@/domains/agents/components/agent-layout';
 import { BrowserViewPanel } from '@/domains/agents/components/browser-view';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
@@ -15,11 +18,8 @@ import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputC
 import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
-import { v4 as uuid } from '@lukeed/uuid';
-import { useEffect, useMemo } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router';
 
-import { AgentSidebar } from '@/domains/agents/agent-sidebar';
+import type { AgentSettingsType } from '@/types';
 
 function Agent() {
   const { agentId, threadId } = useParams();

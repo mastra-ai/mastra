@@ -1,6 +1,6 @@
-import { TracesDataList, DataListSkeleton, cn } from '@mastra/playground-ui';
 import type { ScoreRowData } from '@mastra/core/evals';
 import type { SpanRecord } from '@mastra/core/storage';
+import { TracesDataList, DataListSkeleton, cn } from '@mastra/playground-ui';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
 import { useTraceSpans } from '../hooks/use-trace-spans';
@@ -12,7 +12,6 @@ import { SpanDataPanel } from './span-data-panel';
 import { TraceDataPanel } from './trace-data-panel';
 import { useScorers } from '@/domains/scores';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
-
 
 type Trace = {
   traceId: string;

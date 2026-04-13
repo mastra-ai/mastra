@@ -1,4 +1,19 @@
-import { Button, Checkbox, Entry, Label, RadioGroup, RadioGroupItem, Skeleton, Slider, Tooltip, TooltipTrigger, TooltipContent, Txt, Icon, cn } from '@mastra/playground-ui';
+import {
+  Button,
+  Checkbox,
+  Entry,
+  Label,
+  RadioGroup,
+  RadioGroupItem,
+  Skeleton,
+  Slider,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  Txt,
+  Icon,
+  cn,
+} from '@mastra/playground-ui';
 import { RefreshCw, Info } from 'lucide-react';
 
 import { useAgentSettings } from '../context/agent-context';

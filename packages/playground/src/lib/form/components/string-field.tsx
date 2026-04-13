@@ -1,5 +1,5 @@
-import { Input } from '@mastra/playground-ui';
 import type { AutoFormFieldProps } from '@autoform/react';
+import { Input } from '@mastra/playground-ui';
 import React from 'react';
 
 export const StringField: React.FC<AutoFormFieldProps> = ({ inputProps, error, field, id }) => {

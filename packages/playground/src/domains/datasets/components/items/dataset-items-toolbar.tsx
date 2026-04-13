@@ -1,6 +1,16 @@
 'use client';
 
-import { Button, ButtonsGroup, Chip, Column, DropdownMenu, SearchFieldBlock, Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui';
+import {
+  Button,
+  ButtonsGroup,
+  Chip,
+  Column,
+  DropdownMenu,
+  SearchFieldBlock,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@mastra/playground-ui';
 import {
   Plus,
   Upload,
@@ -15,7 +25,6 @@ import {
   GitCompareIcon,
   AmpersandIcon,
 } from 'lucide-react';
-
 
 interface ActionsMenuProps {
   onExportClick: () => void;

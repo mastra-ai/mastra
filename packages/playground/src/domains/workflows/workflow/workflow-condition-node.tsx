@@ -1,4 +1,19 @@
-import { Badge, Collapsible, CollapsibleContent, CollapsibleTrigger, ScrollArea, Txt, Icon, cn } from '@mastra/playground-ui';
+import {
+  Badge,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  ScrollArea,
+  Txt,
+  Icon,
+  cn,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogHeader,
+  DialogDescription,
+  DialogBody,
+} from '@mastra/playground-ui';
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
 import { ChevronDown } from 'lucide-react';
@@ -9,15 +24,6 @@ import { useCurrentRun } from '../context/use-current-run';
 import type { Condition } from './utils';
 import { getConditionIconAndColor } from './workflow-node-badges';
 import { WorkflowStepActionBar } from './workflow-step-action-bar';
-
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogHeader,
-  DialogDescription,
-  DialogBody,
-} from '@mastra/playground-ui';
 
 export type ConditionNode = Node<
   {

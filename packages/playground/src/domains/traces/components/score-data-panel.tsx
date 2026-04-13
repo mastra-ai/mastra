@@ -1,8 +1,7 @@
-import { DataKeysAndValues, DataPanel } from '@mastra/playground-ui';
 import type { ScoreRowData } from '@mastra/core/evals';
+import { DataKeysAndValues, DataPanel, ButtonsGroup } from '@mastra/playground-ui';
 import { format } from 'date-fns/format';
 import { FileInputIcon, FileOutputIcon, GaugeIcon, ReceiptText } from 'lucide-react';
-import { ButtonsGroup } from '@mastra/playground-ui';
 
 function isCodeBasedScorer(score?: ScoreRowData): boolean {
   if (!score) return false;

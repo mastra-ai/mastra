@@ -1,10 +1,12 @@
-import { SelectField, Spinner, Tooltip, TooltipContent, TooltipTrigger, Txt, useCopyToClipboard, cn } from '@mastra/playground-ui';
-import { Copy, Check, MoveRight, Info, ExternalLink } from 'lucide-react';
-import { useState } from 'react';
-import { useMastraPackages } from '../hooks/use-mastra-packages';
-import { usePackageUpdates } from '../hooks/use-package-updates';
-import type { PackageUpdateInfo } from '../hooks/use-package-updates';
 import {
+  SelectField,
+  Spinner,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  Txt,
+  useCopyToClipboard,
+  cn,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -13,6 +15,11 @@ import {
   DialogDescription,
   DialogBody,
 } from '@mastra/playground-ui';
+import { Copy, Check, MoveRight, Info, ExternalLink } from 'lucide-react';
+import { useState } from 'react';
+import { useMastraPackages } from '../hooks/use-mastra-packages';
+import { usePackageUpdates } from '../hooks/use-package-updates';
+import type { PackageUpdateInfo } from '../hooks/use-package-updates';
 
 export interface MastraVersionFooterProps {
   collapsed?: boolean;

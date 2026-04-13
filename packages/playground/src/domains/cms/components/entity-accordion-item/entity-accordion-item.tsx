@@ -1,8 +1,17 @@
-import { Collapsible, CollapsibleContent, CollapsibleTrigger, IconButton, Textarea, Icon, RuleBuilder, countLeafRules, cn } from '@mastra/playground-ui';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  IconButton,
+  Textarea,
+  Icon,
+  RuleBuilder,
+  countLeafRules,
+  cn,
+} from '@mastra/playground-ui';
 import type { JsonSchema, RuleGroup } from '@mastra/playground-ui';
 import { ChevronRight, Ruler, Trash2 } from 'lucide-react';
 import { useState } from 'react';
-
 
 export interface EntityAccordionItemProps {
   id: string;

@@ -1,5 +1,5 @@
-import { Badge, IconButton, Icon, cn } from '@mastra/playground-ui';
 import { useAuiState } from '@assistant-ui/react';
+import { Badge, IconButton, Icon, cn } from '@mastra/playground-ui';
 import type { MastraUIMessage } from '@mastra/react';
 import { CheckIcon, ChevronUpIcon, CopyIcon, TerminalSquare } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';

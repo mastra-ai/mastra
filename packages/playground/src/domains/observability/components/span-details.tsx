@@ -1,5 +1,5 @@
-import { SideDialog } from '@mastra/playground-ui';
 import type { SpanRecord } from '@mastra/core/storage';
+import { SideDialog } from '@mastra/playground-ui';
 import { AlertTriangleIcon, BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import { isTokenLimitExceeded, getTokenLimitMessage } from '../utils/span-utils';
 

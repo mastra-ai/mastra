@@ -1,7 +1,17 @@
 'use client';
 
-import { Column, ItemList, MainHeader, PrevNextNav, SideDialog, TextAndIcon } from '@mastra/playground-ui';
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
+import {
+  Column,
+  ItemList,
+  MainHeader,
+  PrevNextNav,
+  SideDialog,
+  TextAndIcon,
+  Button,
+  ButtonsGroup,
+  Notice,
+} from '@mastra/playground-ui';
 import { format } from 'date-fns/format';
 import {
   FileOutputIcon,
@@ -13,7 +23,6 @@ import {
   TagIcon,
   XIcon,
 } from 'lucide-react';
-import { Button, ButtonsGroup, Notice } from '@mastra/playground-ui';
 
 const scoreColumns = [
   { name: 'scorer', label: 'Scorer', size: '1fr' },

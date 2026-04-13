@@ -1,5 +1,15 @@
-import { AlertDialog, Skeleton, ThreadDeleteButton, ThreadItem, ThreadLink, ThreadList, Threads, Txt, Icon } from '@mastra/playground-ui';
 import type { StorageThreadType } from '@mastra/core/memory';
+import {
+  AlertDialog,
+  Skeleton,
+  ThreadDeleteButton,
+  ThreadItem,
+  ThreadLink,
+  ThreadList,
+  Threads,
+  Txt,
+  Icon,
+} from '@mastra/playground-ui';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';

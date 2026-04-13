@@ -1,5 +1,5 @@
-import { Button, Icon } from '@mastra/playground-ui';
 import type { ArrayElementWrapperProps } from '@autoform/react';
+import { Button, Icon } from '@mastra/playground-ui';
 import { TrashIcon } from 'lucide-react';
 import React from 'react';
 

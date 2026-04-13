@@ -1,5 +1,5 @@
-import { Alert, AlertDescription, AlertTitle, Button, Spinner } from '@mastra/playground-ui';
 import type { UpdateModelParams } from '@mastra/client-js';
+import { Alert, AlertDescription, AlertTitle, Button, Spinner } from '@mastra/playground-ui';
 import { RotateCcw } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useModelReset } from '../../context/model-reset-context';

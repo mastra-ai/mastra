@@ -9,7 +9,8 @@
     ".": {
       "import": "./src/exports.ts",
       "types": "./src/exports.ts"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "homepage": "https://mastra.ai",
   "files": [
