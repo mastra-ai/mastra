@@ -48,6 +48,8 @@ export class AgentBrowser extends MastraBrowser {
   /** Shared browser manager instance (for 'shared' scope) - narrowed type from base class */
   declare protected sharedManager: BrowserManager | null;
   private defaultTimeout = 30000;
+  /** Pending PID lookups — awaited in disconnect handlers to avoid racing. */
+  private pidLookups: Promise<void>[] = [];
 
   /** Thread manager - narrowed type from base class */
   declare protected threadManager: AgentBrowserThreadManager;
@@ -187,15 +189,18 @@ export class AgentBrowser extends MastraBrowser {
     try {
       // Capture the Chrome process PID via CDP while the browser is alive.
       // The base class uses this to kill orphaned child processes on disconnect.
-      void getBrowserPid(manager).then(pid => {
+      const pidLookup = getBrowserPid(manager).then(pid => {
         if (pid) this.sharedBrowserPid = pid;
       });
+      this.pidLookups.push(pidLookup);
 
       let disconnectHandled = false;
       const handleDisconnect = () => {
         if (disconnectHandled) return;
         disconnectHandled = true;
-        this.handleBrowserDisconnected();
+        // Wait for PID lookup to complete before cleanup, so killProcessGroup
+        // has the actual PID instead of undefined.
+        void pidLookup.catch(() => undefined).then(() => this.handleBrowserDisconnected());
       };
 
       // Listen for context close (fires when browser window is closed)
@@ -220,6 +225,11 @@ export class AgentBrowser extends MastraBrowser {
   }
 
   protected override async doClose(): Promise<void> {
+    // Ensure all PID lookups have resolved before closing, so killProcessGroup
+    // (called by the base class after doClose) has the correct PID.
+    await Promise.allSettled(this.pidLookups);
+    this.pidLookups = [];
+
     // Close all thread sessions via ThreadManager
     await this.threadManager.destroyAllSessions();
     this.setCurrentThread(undefined); // Reset to default thread
@@ -322,15 +332,18 @@ export class AgentBrowser extends MastraBrowser {
     try {
       // Capture the Chrome process PID via CDP while the browser is alive.
       // The base class uses this to kill orphaned child processes on disconnect.
-      void getBrowserPid(manager).then(pid => {
+      const pidLookup = getBrowserPid(manager).then(pid => {
         if (pid) this.threadBrowserPids.set(threadId, pid);
       });
+      this.pidLookups.push(pidLookup);
 
       let disconnectHandled = false;
       const handleDisconnect = () => {
         if (disconnectHandled) return;
         disconnectHandled = true;
-        this.handleThreadBrowserDisconnected(threadId);
+        // Wait for PID lookup to complete before cleanup, so killProcessGroup
+        // has the actual PID instead of undefined.
+        void pidLookup.catch(() => undefined).then(() => this.handleThreadBrowserDisconnected(threadId));
       };
 
       // Listen for context close (fires when browser window is closed)
@@ -572,7 +585,11 @@ export class AgentBrowser extends MastraBrowser {
    * @param threadId - Optional thread ID (defaults to current thread)
    */
   async exportStorageState(path: string, threadId?: string): Promise<void> {
-    const manager = await this.getManagerForThread(threadId);
+    const effectiveThreadId = threadId ?? this.getCurrentThread();
+    const manager = this.threadManager.getExistingManagerForThread(effectiveThreadId);
+    if (!manager) {
+      throw new Error('No browser is running. Launch a browser first before exporting storage state.');
+    }
     const context = manager.getContext();
     if (!context) {
       throw new Error('Browser context not available');

@@ -34,12 +34,13 @@ async function getAgentBrowserPid(browser: AgentBrowser, threadId?: string): Pro
     if (!playwrightBrowser) return undefined;
 
     const cdp = await playwrightBrowser.newBrowserCDPSession();
-    const info = await cdp.send('SystemInfo.getProcessInfo');
-    await cdp.detach();
-
-    // Find the browser process (type: 'browser')
-    const browserProcess = info.processInfo?.find((p: any) => p.type === 'browser');
-    return browserProcess?.id;
+    try {
+      const info = await cdp.send('SystemInfo.getProcessInfo');
+      const browserProcess = info.processInfo?.find((p: any) => p.type === 'browser');
+      return browserProcess?.id;
+    } finally {
+      await cdp.detach().catch(() => undefined);
+    }
   } catch {
     return undefined;
   }

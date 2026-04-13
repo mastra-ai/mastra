@@ -20,12 +20,13 @@ export async function getBrowserPid(manager: BrowserManager): Promise<number | u
     if (!browser) return undefined;
 
     const cdp = await browser.newBrowserCDPSession();
-    const info = await cdp.send('SystemInfo.getProcessInfo');
-    await cdp.detach();
-
-    // Find the browser process (type: 'browser')
-    const browserProcess = info.processInfo?.find((p: { type: string }) => p.type === 'browser');
-    return browserProcess?.id;
+    try {
+      const info = await cdp.send('SystemInfo.getProcessInfo');
+      const browserProcess = info.processInfo?.find((p: { type: string }) => p.type === 'browser');
+      return browserProcess?.id;
+    } finally {
+      await cdp.detach().catch(() => undefined);
+    }
   } catch {
     return undefined;
   }
