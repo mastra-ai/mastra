@@ -1962,6 +1962,15 @@ export class Agent<
       rawConfig: this.toRawConfig(),
     });
 
+    // Preserve runtime registrations that may have been applied after construction
+    // (e.g. when Mastra registers agents via __registerMastra / __registerPrimitives)
+    if (this.#mastra && !this.#config.mastra) {
+      fork.__registerMastra(this.#mastra);
+    }
+    if (this.#primitives) {
+      fork.__registerPrimitives(this.#primitives);
+    }
+
     fork.source = this.source;
     fork._agentNetworkAppend = this._agentNetworkAppend;
 
