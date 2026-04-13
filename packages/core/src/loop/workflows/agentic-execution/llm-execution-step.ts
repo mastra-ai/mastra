@@ -1380,7 +1380,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           },
           messages,
           processorRetryCount: nextProcessorRetryCount,
-          fallbackModelIndex: activeFallbackModelIndex,
+          ...(activeFallbackModelIndex > 0 ? { fallbackModelIndex: activeFallbackModelIndex } : {}),
         };
       }
 
@@ -1612,7 +1612,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         messages,
         // Track processor retry count for next iteration
         processorRetryCount: nextProcessorRetryCount,
-        fallbackModelIndex: nextFallbackModelIndex,
+        ...(nextFallbackModelIndex > 0 ? { fallbackModelIndex: nextFallbackModelIndex } : {}),
       };
     },
   });
