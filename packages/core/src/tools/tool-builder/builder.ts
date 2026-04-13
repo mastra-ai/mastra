@@ -84,7 +84,7 @@ export class CoreToolBuilder extends MastraBase {
       }
 
       if (isZodObject(schema)) {
-        schema = schema.extend({
+        let nextSchema = schema.extend({
           _background: backgroundOverrideZodSchema,
         });
         if (
@@ -92,7 +92,7 @@ export class CoreToolBuilder extends MastraBase {
           (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-') ||
           (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('workflow-')
         ) {
-          this.originalTool.inputSchema = schema.extend({
+          nextSchema = nextSchema.extend({
             suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
             resumeData: z
               .any()
@@ -100,6 +100,7 @@ export class CoreToolBuilder extends MastraBase {
               .optional(),
           });
         }
+        this.originalTool.inputSchema = nextSchema;
       } else {
         // Non-Zod StandardSchemaWithJSON (e.g. JsonSchemaWrapper from JSONSchema7).
         // Extract JSON Schema, add suspend/resume fields, re-wrap.
@@ -782,6 +783,9 @@ export class CoreToolBuilder extends MastraBase {
       onInputDelta: 'onInputDelta' in this.originalTool ? this.originalTool.onInputDelta : undefined,
       onInputAvailable: 'onInputAvailable' in this.originalTool ? this.originalTool.onInputAvailable : undefined,
       onOutput: 'onOutput' in this.originalTool ? this.originalTool.onOutput : undefined,
+      // Preserve tool-level background config so the agentic loop can pick it up
+      // from the converted CoreTool at dispatch time.
+      backgroundConfig: this.options.backgroundConfig,
     } as unknown as CoreTool;
   }
 }

@@ -677,7 +677,9 @@ export class Mastra<
       const bgManager = new BackgroundTaskManager(config?.backgroundTasks);
       bgManager.__registerMastra(this);
       this.#backgroundTaskManager = bgManager;
-      void bgManager.init(this.#pubsub);
+      void bgManager.init(this.#pubsub).catch(error => {
+        this.#logger?.error('Failed to initialize background task manager', error);
+      });
     }
     // Initialize all primitive storage objects first, we need to do this before adding primitives to avoid circular dependencies
     this.#vectors = {} as TVectors;

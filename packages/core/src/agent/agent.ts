@@ -2235,7 +2235,7 @@ export class Agent<
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
-          backgroundConfig: (toolObj as any).backgroundConfig,
+          backgroundConfig: (toolObj as any).background,
         };
         const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
         convertedMemoryTools[toolName] = convertedToCoreTool;
@@ -2304,7 +2304,7 @@ export class Agent<
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
-          backgroundConfig: (toolObj as any).backgroundConfig,
+          backgroundConfig: (toolObj as any).background,
           workspace,
         };
         const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
@@ -2429,7 +2429,7 @@ export class Agent<
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: false, // Skill tools never require approval
-          backgroundConfig: (toolObj as any).backgroundConfig,
+          backgroundConfig: (toolObj as any).background,
           workspace,
         };
         const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
@@ -2494,6 +2494,7 @@ export class Agent<
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
+          backgroundConfig: (toolObj as any).background,
         };
         const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
         convertedBrowserTools[toolName] = convertedToCoreTool;
@@ -2811,7 +2812,7 @@ export class Agent<
           outputWriter,
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
-          backgroundConfig: (tool as any).backgroundConfig,
+          backgroundConfig: (tool as any).background,
         };
         return [k, makeCoreTool(tool, options, undefined, autoResumeSuspendedTools)];
       }),
@@ -2880,7 +2881,7 @@ export class Agent<
             model: await this.getModel({ requestContext }),
             tracingPolicy: this.#options?.tracingPolicy,
             requireApproval: (toolObj as any).requireApproval,
-            backgroundConfig: (toolObj as any).backgroundConfig,
+            backgroundConfig: (toolObj as any).background,
           };
           const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset', autoResumeSuspendedTools);
           toolsForRequest[toolName] = convertedToCoreTool;
@@ -2937,7 +2938,7 @@ export class Agent<
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
-          backgroundConfig: (tool as any).backgroundConfig,
+          backgroundConfig: (tool as any).background,
         };
         const convertedToCoreTool = makeCoreTool(toolRest, options, 'client-tool', autoResumeSuspendedTools);
         toolsForRequest[toolName] = convertedToCoreTool;

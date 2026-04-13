@@ -29,7 +29,7 @@ export const backgroundOverrideJsonSchema = {
 
 export const backgroundOverrideZodSchema = z
   .object({
-    enabled: z.boolean().describe('Force background (true) or foreground (false) execution for this call.'),
+    enabled: z.boolean().optional().describe('Force background (true) or foreground (false) execution for this call.'),
     timeoutMs: z.number().optional().describe('Override timeout in milliseconds for this call.'),
     maxRetries: z.number().optional().describe('Override maximum retry attempts for this call.'),
   })

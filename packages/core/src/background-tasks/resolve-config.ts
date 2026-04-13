@@ -40,6 +40,18 @@ export function resolveBackgroundConfig({
   const llmOverride = args._background as LLMBackgroundOverride | undefined;
   delete args._background;
 
+  // If this agent has background tasks disabled, short-circuit so no tool can
+  // dispatch a background task even if its own config or the LLM override
+  // would otherwise enable it. Default timeoutMs/maxRetries are still returned
+  // so callers can use the shape safely.
+  if (agentConfig?.disabled) {
+    return {
+      runInBackground: false,
+      timeoutMs: managerConfig?.defaultTimeoutMs ?? 300_000,
+      maxRetries: managerConfig?.defaultRetries?.maxRetries ?? 0,
+    };
+  }
+
   // Resolve agent-level config for this specific tool
   const agentToolConfig = resolveAgentToolConfig(toolName, agentConfig);
 

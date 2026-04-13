@@ -141,7 +141,7 @@ describe('Background Tasks handlers', () => {
     });
 
     it('throws when background task manager is not available', async () => {
-      const noTasksMastra = new Mastra({ logger: false, storage });
+      const noTasksMastra = new Mastra({ logger: false, storage, backgroundTasks: { enabled: false } });
 
       await expect(
         LIST_BACKGROUND_TASKS_ROUTE.handler({
@@ -185,7 +185,7 @@ describe('Background Tasks handlers', () => {
     });
 
     it('throws when background task manager is not available', async () => {
-      const noTasksMastra = new Mastra({ logger: false, storage });
+      const noTasksMastra = new Mastra({ logger: false, storage, backgroundTasks: { enabled: false } });
 
       await expect(
         GET_BACKGROUND_TASK_ROUTE.handler({
@@ -229,9 +229,13 @@ describe('Background Tasks handlers', () => {
       );
       await tick();
 
-      const { value, done } = await reader.read();
-      expect(done).toBe(false);
-      expect(value).toMatchObject({
+      // Stream emits running lifecycle event first, then the completed event.
+      const first = await reader.read();
+      expect(first.done).toBe(false);
+      expect(first.value).toMatchObject({ type: 'task.running', toolName: 'tool' });
+
+      const second = await reader.read();
+      expect(second.value).toMatchObject({
         type: 'task.completed',
         toolName: 'tool',
         result: 'stream-result',
@@ -256,6 +260,9 @@ describe('Background Tasks handlers', () => {
         ctx(vi.fn().mockRejectedValue(new Error('oops'))),
       );
       await tick();
+
+      // Skip running event
+      await reader.read();
 
       const { value } = await reader.read();
       expect(value).toMatchObject({
@@ -291,6 +298,10 @@ describe('Background Tasks handlers', () => {
       );
       await tick();
 
+      // Running event for target-agent first, then completed.
+      const running = await reader.read();
+      expect(running.value).toMatchObject({ type: 'task.running', agentId: 'target-agent' });
+
       const { value } = await reader.read();
       expect(value).toMatchObject({
         type: 'task.completed',
@@ -302,7 +313,7 @@ describe('Background Tasks handlers', () => {
     });
 
     it('throws when background task manager is not available', async () => {
-      const noTasksMastra = new Mastra({ logger: false, storage });
+      const noTasksMastra = new Mastra({ logger: false, storage, backgroundTasks: { enabled: false } });
 
       await expect(
         BACKGROUND_TASK_STREAM_ROUTE.handler({

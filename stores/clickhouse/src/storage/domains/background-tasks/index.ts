@@ -148,6 +148,23 @@ export class BackgroundTasksStorageClickhouse extends BackgroundTasksStorage {
       params.var_tool = filter.toolName;
     }
 
+    // Push date range filtering into SQL so total count and LIMIT/OFFSET
+    // agree with the in-memory Date objects `rowToTask` returns.
+    const dateCol =
+      filter.dateFilterBy === 'startedAt'
+        ? 'startedAt'
+        : filter.dateFilterBy === 'completedAt'
+          ? 'completedAt'
+          : 'createdAt';
+    if (filter.fromDate) {
+      conditions.push(`${dateCol} >= parseDateTimeBestEffort({var_from_date:String})`);
+      params.var_from_date = filter.fromDate.toISOString();
+    }
+    if (filter.toDate) {
+      conditions.push(`${dateCol} < parseDateTimeBestEffort({var_to_date:String})`);
+      params.var_to_date = filter.toDate.toISOString();
+    }
+
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     // Count total matching rows (before pagination)
@@ -155,6 +172,7 @@ export class BackgroundTasksStorageClickhouse extends BackgroundTasksStorage {
       query: `SELECT count() as count FROM ${TABLE_BACKGROUND_TASKS} FINAL ${where}`,
       query_params: params,
       format: 'JSONEachRow',
+      clickhouse_settings: { date_time_input_format: 'best_effort' },
     });
     const countRows = (await countResult.json()) as any[];
     const total = Number(countRows[0]?.count ?? 0);
@@ -172,21 +190,13 @@ export class BackgroundTasksStorageClickhouse extends BackgroundTasksStorage {
       }
     }
 
-    const result = await this.client.query({ query: sql, query_params: params, format: 'JSONEachRow' });
-    let tasks = (await result.json<Record<string, any>[]>()).map(rowToTask);
-
-    // Date range filters in-memory (ClickHouse timestamp comparison with parameterized dates is tricky)
-    const dateCol = filter.dateFilterBy ?? 'createdAt';
-    if (filter.fromDate)
-      tasks = tasks.filter(t => {
-        const val = t[dateCol];
-        return val != null && val >= filter.fromDate!;
-      });
-    if (filter.toDate)
-      tasks = tasks.filter(t => {
-        const val = t[dateCol];
-        return val != null && val < filter.toDate!;
-      });
+    const result = await this.client.query({
+      query: sql,
+      query_params: params,
+      format: 'JSONEachRow',
+      clickhouse_settings: { date_time_input_format: 'best_effort' },
+    });
+    const tasks = (await result.json<Record<string, any>[]>()).map(rowToTask);
 
     return { tasks, total };
   }

@@ -112,8 +112,10 @@ export class StoreBackgroundTasksLance extends BackgroundTasksStorage {
 
     const merged = { ...existing };
     if ('status' in update) merged.status = update.status!;
-    if ('result' in update) merged.result = serializeJson(update.result);
-    if ('error' in update) merged.error = serializeJson(update.error);
+    // Keep `result`/`error` raw — `toRecord(merged)` below serializes once.
+    // Serializing twice would double-encode (e.g. `"\"value\""`).
+    if ('result' in update) merged.result = update.result;
+    if ('error' in update) merged.error = update.error;
     if ('retryCount' in update) merged.retryCount = update.retryCount!;
     if ('startedAt' in update) merged.startedAt = update.startedAt;
     if ('completedAt' in update) merged.completedAt = update.completedAt;

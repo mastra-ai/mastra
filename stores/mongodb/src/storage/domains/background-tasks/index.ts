@@ -217,7 +217,10 @@ export class BackgroundTasksStorageMongoDB extends BackgroundTasksStorage {
       query[dateCol] = { ...(query[dateCol] || {}), $lt: filter.toDate.toISOString() };
     }
     if (filter.agentId) query.agent_id = filter.agentId;
+    if (filter.threadId) query.thread_id = filter.threadId;
+    if (filter.resourceId) query.resource_id = filter.resourceId;
     if (filter.runId) query.run_id = filter.runId;
+    if (filter.toolName) query.tool_name = filter.toolName;
 
     if (Object.keys(query).length === 0) return; // Safety: don't delete everything
 

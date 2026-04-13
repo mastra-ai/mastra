@@ -18,8 +18,10 @@ export class EventEmitterPubSub extends PubSub {
   // Track delivery attempts per message id
   private deliveryAttempts: Map<string, number> = new Map();
 
-  // Map original callback → wrapped listener for fan-out (non-group) subscribers
-  private fanoutWrappers: Map<EventCallback, (event: Event) => void> = new Map();
+  // topic → (original callback → wrapped listener) for fan-out (non-group) subscribers.
+  // Nested keying so the same callback registered on multiple topics keeps
+  // a distinct wrapper per topic.
+  private fanoutWrappers: Map<string, Map<EventCallback, (event: Event) => void>> = new Map();
 
   constructor(existingEmitter?: EventEmitter) {
     super();
@@ -48,7 +50,12 @@ export class EventEmitterPubSub extends PubSub {
           async () => {},
         );
       };
-      this.fanoutWrappers.set(cb, wrapper);
+      let byCb = this.fanoutWrappers.get(topic);
+      if (!byCb) {
+        byCb = new Map();
+        this.fanoutWrappers.set(topic, byCb);
+      }
+      byCb.set(cb, wrapper);
       this.emitter.on(topic, wrapper);
     }
   }
@@ -81,10 +88,12 @@ export class EventEmitterPubSub extends PubSub {
     }
 
     // Not in a group — remove as fan-out listener
-    const wrapper = this.fanoutWrappers.get(cb);
-    if (wrapper) {
+    const byCb = this.fanoutWrappers.get(topic);
+    const wrapper = byCb?.get(cb);
+    if (wrapper && byCb) {
       this.emitter.off(topic, wrapper);
-      this.fanoutWrappers.delete(cb);
+      byCb.delete(cb);
+      if (byCb.size === 0) this.fanoutWrappers.delete(topic);
     } else {
       this.emitter.off(topic, cb);
     }
@@ -159,8 +168,9 @@ export class EventEmitterPubSub extends PubSub {
     const idx = counter % currentMembers.length;
     this.groupCounters.set(listenerKey, counter + 1);
 
-    // Track delivery attempts
-    const attemptKey = event.id;
+    // Track delivery attempts scoped per group listener, so ack/nack in one
+    // group doesn't disturb another group's attempt counter for the same event.
+    const attemptKey = `${listenerKey}:${event.id}`;
     const attempt = this.deliveryAttempts.get(attemptKey) ?? 1;
     const eventWithAttempt = { ...event, deliveryAttempt: attempt };
 
