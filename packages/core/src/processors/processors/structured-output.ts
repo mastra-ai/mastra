@@ -195,10 +195,10 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
   ) {
     const memoryInfo = messageList?.getMemoryInfo();
 
-    // When a parent agent is available and we have thread/resource info,
+    // When a parent agent is available and we have thread info,
     // use the parent agent with a model override and read-only memory.
     // This gives the structuring model full conversation context.
-    if (this.parentAgent && memoryInfo?.threadId && memoryInfo?.resourceId) {
+    if (this.parentAgent && memoryInfo?.threadId) {
       return this.parentAgent.stream(prompt, {
         model: this.structuringModel,
         structuredOutput: {
@@ -207,7 +207,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         },
         memory: {
           thread: memoryInfo.threadId,
-          resource: memoryInfo.resourceId,
+          ...(memoryInfo.resourceId ? { resource: memoryInfo.resourceId } : {}),
           options: { readOnly: true },
         },
         providerOptions: this.providerOptions,

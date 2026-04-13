@@ -374,7 +374,7 @@ export interface AgentConfig<
 
 export type AgentMemoryOption = {
   thread: string | (Partial<StorageThreadType> & { id: string });
-  resource: string;
+  resource?: string;
   options?: MemoryConfigInternal;
 };
 

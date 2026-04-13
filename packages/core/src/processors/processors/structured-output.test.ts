@@ -266,6 +266,80 @@ describe('StructuredOutputProcessor', () => {
       expect(fallbackStreamSpy).not.toHaveBeenCalled();
     });
 
+    it('should use the parent agent with thread-only read-only memory when resource context is missing', async () => {
+      const { controller } = createMockController();
+      const abort = createMockAbort();
+      const parentAgent = {
+        stream: vi.fn().mockResolvedValue({
+          fullStream: convertArrayToReadableStream([
+            {
+              runId: 'test-run',
+              from: ChunkFrom.AGENT,
+              type: 'object-result',
+              object: { color: 'green', intensity: 'soft' },
+            },
+          ]),
+        }),
+      } as unknown as Agent;
+      const fallbackStreamSpy = vi.spyOn(processor['structuringAgent'], 'stream');
+
+      processor.setParentAgent(parentAgent);
+
+      const finishChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'finish' as const,
+        payload: {
+          stepResult: { reason: 'stop' as const },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
+
+      const messageList = new MessageList({ threadId: 'thread-123' });
+
+      await processor.processOutputStream({
+        part: finishChunk,
+        streamParts: [
+          {
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            type: 'text-delta',
+            payload: { id: 'text-1', text: 'The answer is green and soft' },
+          },
+        ],
+        state: { controller },
+        abort,
+        retryCount: 0,
+        messageList,
+      });
+
+      expect(parentAgent.stream).toHaveBeenCalledWith(
+        expect.stringContaining('# Assistant Response'),
+        expect.objectContaining({
+          model: mockModel,
+          structuredOutput: {
+            schema: testSchema,
+            jsonPromptInjection: undefined,
+          },
+          memory: {
+            thread: 'thread-123',
+            options: { readOnly: true },
+          },
+        }),
+      );
+      expect(parentAgent.stream).not.toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          memory: expect.objectContaining({
+            resource: expect.anything(),
+          }),
+        }),
+      );
+      expect(fallbackStreamSpy).not.toHaveBeenCalled();
+    });
+
     it('should surface plain object error messages', async () => {
       const upstreamError = { message: 'Schema failed' };
       const mockLogger = {
