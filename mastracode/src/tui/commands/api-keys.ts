@@ -35,12 +35,10 @@ function getProviderList(
     if (seen.has(model.provider)) continue;
 
     let source: ProviderInfo['source'] = 'none';
-    if (model.apiKeyEnvVar && process.env[model.apiKeyEnvVar]) {
-      if (ctx.authStorage?.hasStoredApiKey(model.provider)) {
-        source = 'stored';
-      } else {
-        source = 'env';
-      }
+    if (ctx.authStorage?.hasStoredApiKey(model.provider)) {
+      source = 'stored';
+    } else if (model.apiKeyEnvVar && process.env[model.apiKeyEnvVar]) {
+      source = 'env';
     } else if (model.hasApiKey) {
       source = 'env';
     }
@@ -147,8 +145,8 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
         // Delete or Backspace
         if (data === '\x7f' || data === '\x1b[3~') {
           const info = providers.find(p => p.provider === currentSelection);
-          if (info?.source === 'stored') {
-            ctx.authStorage?.remove(`apikey:${info.provider}`);
+          if (info?.source === 'stored' && ctx.authStorage) {
+            ctx.authStorage.remove(`apikey:${info.provider}`);
             providers = getProviderList(ctx, models);
             ctx.showInfo(`API key removed for ${info.provider}`);
             rebuildList();
@@ -187,10 +185,14 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
         apiKeyEnvVar: info.envVar,
         onSubmit: (key: string) => {
           ctx.state.ui.hideOverlay();
-          ctx.authStorage?.setStoredApiKey(info.provider, key, info.envVar);
-          ctx.showInfo(`API key saved for ${info.provider}`);
-          providers = getProviderList(ctx, models);
-          rebuildList();
+          if (ctx.authStorage) {
+            ctx.authStorage.setStoredApiKey(info.provider, key, info.envVar);
+            ctx.showInfo(`API key saved for ${info.provider}`);
+            providers = getProviderList(ctx, models);
+            rebuildList();
+          } else {
+            ctx.showError('Unable to save API key: storage unavailable');
+          }
         },
         onCancel: () => {
           ctx.state.ui.hideOverlay();
