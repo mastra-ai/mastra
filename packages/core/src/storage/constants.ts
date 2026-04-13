@@ -387,6 +387,10 @@ export const DATASETS_SCHEMA: Record<string, StorageColumn> = {
   inputSchema: { type: 'jsonb', nullable: true },
   groundTruthSchema: { type: 'jsonb', nullable: true },
   requestContextSchema: { type: 'jsonb', nullable: true },
+  tags: { type: 'jsonb', nullable: true },
+  targetType: { type: 'text', nullable: true },
+  targetIds: { type: 'jsonb', nullable: true },
+  scorerIds: { type: 'jsonb', nullable: true },
   version: { type: 'integer', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
@@ -402,6 +406,8 @@ export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
   groundTruth: { type: 'jsonb', nullable: true },
   requestContext: { type: 'jsonb', nullable: true },
   metadata: { type: 'jsonb', nullable: true },
+  source: { type: 'jsonb', nullable: true },
+  expectedTrajectory: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -430,6 +436,7 @@ export const EXPERIMENTS_SCHEMA: Record<string, StorageColumn> = {
   skippedCount: { type: 'integer', nullable: false },
   startedAt: { type: 'timestamp', nullable: true },
   completedAt: { type: 'timestamp', nullable: true },
+  agentVersion: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -447,6 +454,8 @@ export const EXPERIMENT_RESULTS_SCHEMA: Record<string, StorageColumn> = {
   completedAt: { type: 'timestamp', nullable: false },
   retryCount: { type: 'integer', nullable: false },
   traceId: { type: 'text', nullable: true },
+  status: { type: 'text', nullable: true },
+  tags: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
 };
 

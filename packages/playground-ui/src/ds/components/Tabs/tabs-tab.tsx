@@ -1,8 +1,7 @@
-import { cn } from '@/lib/utils';
 import * as RadixTabs from '@radix-ui/react-tabs';
 import { X } from 'lucide-react';
-import { transitions } from '@/ds/primitives/transitions';
-import { focusRing } from '@/ds/primitives/transitions';
+import { transitions, focusRing } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export type TabProps = {
   children: React.ReactNode;
@@ -17,11 +16,12 @@ export const Tab = ({ children, value, onClick, onClose, className }: TabProps) 
     <RadixTabs.Trigger
       value={value}
       className={cn(
-        'text-sm p-3 text-neutral3 whitespace-nowrap flex-shrink-0 flex items-center justify-center gap-1.5',
-        transitions.all,
+        'py-2 px-5 text-ui-md font-normal text-neutral3 border-b-2 border-transparent',
+        'whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 outline-none',
+        transitions.colors,
         focusRing.visible,
         'hover:text-neutral4',
-        'data-[state=active]:text-neutral5 data-[state=active]:border-b-2 data-[state=active]:border-white/50',
+        'data-[state=active]:text-neutral5 data-[state=active]:border-neutral3',
         className,
       )}
       onClick={onClick}

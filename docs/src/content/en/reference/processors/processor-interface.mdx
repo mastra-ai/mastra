@@ -101,6 +101,13 @@ interface Processor<TId extends string = string> {
     description: 'Optional display name for the processor. Falls back to id if not provided.',
     isOptional: true,
   },
+  {
+    name: 'processDataParts',
+    type: 'boolean',
+    description:
+      'When true, the processOutputStream method also receives `data-*` chunks emitted by tools via writer.custom(). Defaults to false.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -380,9 +387,9 @@ The method can return any combination of these properties:
 When multiple processors implement `processInputStep`, they run in order and changes chain through:
 
 ```
-Processor 1: receives { model: 'gpt-4o' } → returns { model: 'gpt-4o-mini' }
-Processor 2: receives { model: 'gpt-4o-mini' } → returns { toolChoice: 'none' }
-Final: model = 'gpt-4o-mini', toolChoice = 'none'
+Processor 1: receives { model: 'gpt-5.4' } → returns { model: 'gpt-5.4-mini' }
+Processor 2: receives { model: 'gpt-5.4-mini' } → returns { toolChoice: 'none' }
+Final: model = 'gpt-5.4-mini', toolChoice = 'none'
 ```
 
 #### System message isolation
@@ -827,6 +834,6 @@ export class WordCounter implements Processor {
 
 ## Related
 
-- [Processors overview](/docs/agents/processors) - Conceptual guide to processors
-- [Guardrails](/docs/agents/guardrails) - Security and validation processors
-- [Memory Processors](/docs/memory/memory-processors) - Memory-specific processors
+- [Processors overview](/docs/agents/processors): Conceptual guide to processors
+- [Guardrails](/docs/agents/guardrails): Security and validation processors
+- [Memory Processors](/docs/memory/memory-processors): Memory-specific processors

@@ -1,0 +1,178 @@
+---
+title: "Reference: VercelSandbox | Workspace"
+description: "API reference for VercelSandbox, a serverless sandbox provider that deploys and executes commands as Vercel Functions."
+packages:
+  - "@mastra/vercel"
+---
+
+# VercelSandbox
+
+Executes commands as [Vercel](https://vercel.com) serverless functions. Provides globally-distributed, zero-infrastructure execution with automatic scaling.
+
+:::info
+
+For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
+
+:::
+
+:::warning
+
+VercelSandbox is stateless. There is no persistent filesystem, no interactive shell, and no support for long-running or background processes. Only `/tmp` is writable and is ephemeral between invocations.
+
+:::
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/vercel
+```
+
+## Usage
+
+Add a `VercelSandbox` to a workspace and assign it to an agent:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { VercelSandbox } from '@mastra/vercel'
+
+const workspace = new Workspace({
+  sandbox: new VercelSandbox({
+    token: process.env.VERCEL_TOKEN,
+  }),
+})
+
+const agent = new Agent({
+  name: 'dev-agent',
+  model: 'anthropic/claude-sonnet-4-6',
+  workspace,
+})
+```
+
+### Team-scoped deployment with custom resources
+
+```typescript
+const workspace = new Workspace({
+  sandbox: new VercelSandbox({
+    token: process.env.VERCEL_TOKEN,
+    teamId: 'team_abc123',
+    regions: ['iad1', 'sfo1'],
+    maxDuration: 120,
+    memory: 3008,
+    env: {
+      NODE_ENV: 'production',
+    },
+  }),
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'token',
+    type: 'string',
+    description: 'Vercel API token. Falls back to `VERCEL_TOKEN` environment variable.',
+    isOptional: true,
+  },
+  {
+    name: 'teamId',
+    type: 'string',
+    description: 'Vercel team ID for team-scoped deployments.',
+    isOptional: true,
+  },
+  {
+    name: 'projectName',
+    type: 'string',
+    description: 'Existing Vercel project name. Auto-generated if omitted.',
+    isOptional: true,
+  },
+  {
+    name: 'regions',
+    type: 'string[]',
+    description: 'Deployment regions.',
+    isOptional: true,
+    defaultValue: "['iad1']",
+  },
+  {
+    name: 'maxDuration',
+    type: 'number',
+    description: 'Function maximum duration in seconds.',
+    isOptional: true,
+    defaultValue: '60',
+  },
+  {
+    name: 'memory',
+    type: 'number',
+    description: 'Function memory in MB.',
+    isOptional: true,
+    defaultValue: '1024',
+  },
+  {
+    name: 'env',
+    type: 'Record<string, string>',
+    description:
+      'Environment variables baked into the deployed function source. These are embedded at deploy time, not set dynamically.',
+    isOptional: true,
+  },
+  {
+    name: 'commandTimeout',
+    type: 'number',
+    description: 'Per-invocation command timeout in milliseconds.',
+    isOptional: true,
+    defaultValue: '55000',
+  },
+  {
+    name: 'instructions',
+    type: 'string | ((opts) => string)',
+    description:
+      'Custom instructions that override the default instructions returned by `getInstructions()`. Pass a string to fully replace, or a function to extend the defaults.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this sandbox instance.',
+  },
+  {
+    name: 'name',
+    type: "'VercelSandbox'",
+    description: 'Human-readable name.',
+  },
+  {
+    name: 'provider',
+    type: "'vercel'",
+    description: 'Provider type identifier.',
+  },
+  {
+    name: 'status',
+    type: 'ProviderStatus',
+    description:
+      "Current lifecycle status: `'pending'`, `'starting'`, `'running'`, `'stopping'`, `'stopped'`, `'destroying'`, `'destroyed'`, or `'error'`.",
+  },
+]}
+/>
+
+## Limitations
+
+VercelSandbox uses serverless functions under the hood, which means:
+
+- **No persistent filesystem**: Files written to `/tmp` are ephemeral and cleared between invocations.
+- **No interactive shell**: Commands run via `/bin/sh -c` with no stdin streaming.
+- **No background processes**: No process manager, PIDs, or long-running tasks.
+- **No mounting**: Cloud storage mounting (S3, GCS) is not supported.
+- **Timeout limits**: Maximum execution time is bounded by `maxDuration` (default 60s).
+
+## Related
+
+- [WorkspaceSandbox interface](/reference/workspace/sandbox)
+- [Workspace class](/reference/workspace/workspace-class)
+- [E2BSandbox](/reference/workspace/e2b-sandbox): Full-featured cloud sandbox with persistent filesystem and process management

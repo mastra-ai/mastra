@@ -1,14 +1,16 @@
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
 import { NoOpObservability } from '../../observability';
 import { RequestContext } from '../../request-context';
+import { createTool } from '../../tools';
 import { createWorkflow, createStep } from '../../workflows';
 import { createScorer } from '../base';
 import type { MastraScorer } from '../base';
+import type { AgentScorerConfig } from '.';
 import { runEvals } from '.';
 
 const createMockScorer = (name: string, score: number = 0.8): MastraScorer => {
@@ -898,6 +900,313 @@ describe('runEvals', () => {
       });
 
       expect(startSpy).toHaveBeenCalledWith(expect.objectContaining({ initialState: itemState }));
+    });
+  });
+
+  describe('Trajectory scoring with tool-calling agent', () => {
+    // Creates a mock agent that calls tools and returns a final text response.
+    // The mock model uses a call counter:
+    //   1st call → returns tool call for 'weatherTool'
+    //   2nd call → returns tool call for 'calendarTool'
+    //   3rd call → returns final text response
+    function createToolCallingAgent() {
+      let callCount = 0;
+
+      const model = new MockLanguageModelV2({
+        doGenerate: async () => {
+          callCount++;
+          if (callCount === 1) {
+            return {
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'call-weather-1',
+                  toolName: 'weatherTool',
+                  input: JSON.stringify({ city: 'London' }),
+                },
+              ],
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            };
+          }
+          if (callCount === 2) {
+            return {
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'call-calendar-1',
+                  toolName: 'calendarTool',
+                  input: JSON.stringify({ date: '2025-01-01' }),
+                },
+              ],
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            };
+          }
+          // Final call: text response
+          return {
+            content: [{ type: 'text' as const, text: 'The weather is sunny and your calendar is clear.' }],
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        },
+      });
+
+      const weatherTool = createTool({
+        id: 'weatherTool',
+        description: 'Get weather for a city',
+        inputSchema: z.object({ city: z.string() }),
+        outputSchema: z.object({ temperature: z.number(), condition: z.string() }),
+        execute: async () => {
+          return { temperature: 22, condition: 'sunny' };
+        },
+      });
+
+      const calendarTool = createTool({
+        id: 'calendarTool',
+        description: 'Get calendar events for a date',
+        inputSchema: z.object({ date: z.string() }),
+        outputSchema: z.object({ events: z.array(z.string()) }),
+        execute: async () => {
+          return { events: [] };
+        },
+      });
+
+      const agent = new Agent({
+        id: 'tool-calling-agent',
+        name: 'Tool Calling Agent',
+        instructions: 'You are a helpful agent that checks weather and calendar.',
+        model,
+        tools: { weatherTool, calendarTool },
+      });
+
+      return { agent, callCount: () => callCount };
+    }
+
+    it('should pass flat scorers with raw MastraDBMessage[] output', async () => {
+      const { agent } = createToolCallingAgent();
+
+      // Helper to extract tool names from MastraDBMessage[] output
+      function extractToolNames(output: any[]): string[] {
+        const names: string[] = [];
+        for (const msg of output) {
+          const invocations = msg.content?.toolInvocations ?? [];
+          for (const inv of invocations) {
+            names.push(inv.toolName);
+          }
+        }
+        return names;
+      }
+
+      // This scorer inspects the raw output to verify toolInvocations are present
+      const inspectorScorer = createScorer({
+        id: 'trajectory-inspector',
+        name: 'Trajectory Inspector',
+        description: 'Inspects output for toolInvocations',
+      }).generateScore(({ run }) => {
+        const output = run.output;
+        if (!Array.isArray(output)) return 0;
+
+        const toolNames = extractToolNames(output);
+        const hasWeather = toolNames.includes('weatherTool');
+        const hasCalendar = toolNames.includes('calendarTool');
+
+        return hasWeather && hasCalendar ? 1.0 : 0.5;
+      });
+
+      const result = await runEvals({
+        data: [{ input: 'What is the weather and my calendar for today?' }],
+        scorers: [inspectorScorer],
+        target: agent,
+      });
+
+      expect(result.scores['trajectory-inspector']).toBe(1.0);
+    });
+
+    it('should pre-extract trajectory for trajectory scorers in AgentScorerConfig', async () => {
+      const { agent } = createToolCallingAgent();
+
+      const agentLevelScorer = createMockScorer('agent-overall', 0.9);
+
+      // Trajectory scorers receive a Trajectory object with .steps, not raw messages
+      const trajectoryScorer = createScorer({
+        id: 'trajectory-steps',
+        name: 'Trajectory Steps',
+        description: 'Verifies trajectory steps are pre-extracted',
+      }).generateScore(({ run }: any) => {
+        const trajectory = run.output;
+
+        // Should be a Trajectory object, not an array of messages
+        if (Array.isArray(trajectory)) return 0;
+        if (!trajectory?.steps) return 0;
+
+        const stepNames = trajectory.steps.map((s: any) => s.name);
+        const hasWeather = stepNames.includes('weatherTool');
+        const hasCalendar = stepNames.includes('calendarTool');
+
+        return hasWeather && hasCalendar ? 1.0 : 0.0;
+      });
+
+      const scorerConfig: AgentScorerConfig = {
+        agent: [agentLevelScorer],
+        trajectory: [trajectoryScorer],
+      };
+
+      const result = await runEvals({
+        data: [{ input: 'What is the weather and my calendar?' }],
+        scorers: scorerConfig,
+        target: agent,
+      });
+
+      // Agent-level scorers should be under 'agent' key
+      expect(result.scores.agent).toBeDefined();
+      expect(result.scores.agent['agent-overall']).toBe(0.9);
+
+      // Trajectory scorers should be under 'trajectory' key
+      expect(result.scores.trajectory).toBeDefined();
+      expect(result.scores.trajectory['trajectory-steps']).toBe(1.0);
+    });
+
+    it('should preserve step ordering in the extracted trajectory', async () => {
+      const { agent } = createToolCallingAgent();
+
+      // Verify correct order: weatherTool first, calendarTool second
+      const orderScorer = createScorer({
+        id: 'step-order',
+        name: 'Step Order',
+        description: 'Checks trajectory step ordering',
+      }).generateScore(({ run }: any) => {
+        const trajectory = run.output;
+        if (!trajectory?.steps || trajectory.steps.length < 2) return 0;
+
+        const first = trajectory.steps[0]?.name;
+        const second = trajectory.steps[1]?.name;
+
+        return first === 'weatherTool' && second === 'calendarTool' ? 1.0 : 0.0;
+      });
+
+      // Wrong order scorer expects the opposite
+      const wrongOrderScorer = createScorer({
+        id: 'wrong-order',
+        name: 'Wrong Order',
+        description: 'Expects calendar before weather',
+      }).generateScore(({ run }: any) => {
+        const trajectory = run.output;
+        if (!trajectory?.steps || trajectory.steps.length < 2) return 0;
+
+        const first = trajectory.steps[0]?.name;
+        const second = trajectory.steps[1]?.name;
+
+        return first === 'calendarTool' && second === 'weatherTool' ? 1.0 : 0.0;
+      });
+
+      const result = await runEvals({
+        data: [{ input: 'Check weather and calendar' }],
+        scorers: { trajectory: [orderScorer, wrongOrderScorer] } satisfies AgentScorerConfig,
+        target: agent,
+      });
+
+      expect(result.scores.trajectory['step-order']).toBe(1.0);
+      expect(result.scores.trajectory['wrong-order']).toBe(0.0);
+    });
+
+    it('should pass groundTruth to trajectory scorers', async () => {
+      const { agent } = createToolCallingAgent();
+
+      const groundTruthScorer = createScorer({
+        id: 'gt-trajectory',
+        name: 'Ground Truth Trajectory',
+        description: 'Uses groundTruth to check trajectory',
+      }).generateScore(({ run }: any) => {
+        const gt = run.groundTruth;
+        if (!gt?.expectedTools) return 0;
+
+        const trajectory = run.output;
+        if (!trajectory?.steps) return 0;
+
+        const stepNames = trajectory.steps.map((s: any) => s.name);
+        const allPresent = gt.expectedTools.every((t: string) => stepNames.includes(t));
+        return allPresent ? 1.0 : 0.0;
+      });
+
+      const result = await runEvals({
+        data: [
+          {
+            input: 'What is the weather?',
+            groundTruth: { expectedTools: ['weatherTool', 'calendarTool'] },
+          },
+        ],
+        scorers: { trajectory: [groundTruthScorer] } satisfies AgentScorerConfig,
+        target: agent,
+      });
+
+      expect(result.scores.trajectory['gt-trajectory']).toBe(1.0);
+    });
+
+    it('should include step input/output data in trajectory steps', async () => {
+      const { agent } = createToolCallingAgent();
+
+      // Verifies the trajectory steps contain args and results from tool invocations
+      const detailScorer = createScorer({
+        id: 'step-detail',
+        name: 'Step Detail',
+        description: 'Checks trajectory step data',
+      }).generateScore(({ run }: any) => {
+        const trajectory = run.output;
+        if (!trajectory?.steps) return 0;
+
+        const weatherStep = trajectory.steps.find((s: any) => s.name === 'weatherTool');
+        if (!weatherStep) return 0;
+
+        // toolArgs should contain the tool call arguments
+        const toolArgs = weatherStep.toolArgs;
+        if (!toolArgs || toolArgs.city !== 'London') return 0;
+
+        // toolResult should contain the tool result
+        const toolResult = weatherStep.toolResult;
+        if (!toolResult || toolResult.temperature !== 22 || toolResult.condition !== 'sunny') return 0;
+
+        return 1.0;
+      });
+
+      const result = await runEvals({
+        data: [{ input: 'Check the London weather' }],
+        scorers: { trajectory: [detailScorer] } satisfies AgentScorerConfig,
+        target: agent,
+      });
+
+      expect(result.scores.trajectory['step-detail']).toBe(1.0);
+    });
+
+    it('should preserve rawOutput on trajectory for scorers that need message context', async () => {
+      const { agent } = createToolCallingAgent();
+
+      const rawOutputScorer = createScorer({
+        id: 'raw-output-check',
+        name: 'Raw Output Check',
+        description: 'Verifies rawOutput is available on trajectory',
+      }).generateScore(({ run }: any) => {
+        const trajectory = run.output;
+        if (!trajectory?.rawOutput) return 0;
+
+        // rawOutput should be the original MastraDBMessage[] array
+        if (!Array.isArray(trajectory.rawOutput)) return 0;
+        return trajectory.rawOutput.length > 0 ? 1.0 : 0.0;
+      });
+
+      const result = await runEvals({
+        data: [{ input: 'Check weather' }],
+        scorers: { trajectory: [rawOutputScorer] } satisfies AgentScorerConfig,
+        target: agent,
+      });
+
+      expect(result.scores.trajectory['raw-output-check']).toBe(1.0);
     });
   });
 });

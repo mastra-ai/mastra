@@ -103,7 +103,8 @@
                     "parts": [
                       {
                         "type": "text",
-                        "text": "  Hello! How are you?  "
+                        "text": "  Hello! How are you?  ",
+                        "createdAt": "<date>"
                       }
                     ],
                     "content": "  Hello! How are you?  "
@@ -165,7 +166,13 @@
                       "completionStartTime": "<date>",
                       "usage": {
                         "inputTokens": 15,
-                        "outputTokens": 25
+                        "outputTokens": 25,
+                        "inputDetails": {
+                          "text": 15
+                        },
+                        "outputDetails": {
+                          "text": 25
+                        }
                       }
                     },
                     "metadata": {
@@ -216,10 +223,17 @@
                           "messageId": "<messageId-1>",
                           "usage": {
                             "inputTokens": 15,
-                            "outputTokens": 25
+                            "outputTokens": 25,
+                            "inputDetails": {
+                              "text": 15
+                            },
+                            "outputDetails": {
+                              "text": 25
+                            }
                           },
                           "isContinued": false,
-                          "finishReason": "stop"
+                          "finishReason": "stop",
+                          "warnings": []
                         },
                         "metadata": {
                           "runId": "<runId-2>",
@@ -297,7 +311,13 @@
               "completionStartTime": "<date>",
               "usage": {
                 "inputTokens": 15,
-                "outputTokens": 25
+                "outputTokens": 25,
+                "inputDetails": {
+                  "text": 15
+                },
+                "outputDetails": {
+                  "text": 25
+                }
               }
             },
             "metadata": {
@@ -348,7 +368,13 @@
                   "messageId": "<messageId-2>",
                   "usage": {
                     "inputTokens": 15,
-                    "outputTokens": 25
+                    "outputTokens": 25,
+                    "inputDetails": {
+                      "text": 15
+                    },
+                    "outputDetails": {
+                      "text": 25
+                    }
                   },
                   "isContinued": false,
                   "finishReason": "stop"
@@ -443,7 +469,8 @@
                         "type": "text",
                         "text": {
                           "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                        }
+                        },
+                        "createdAt": "<date>"
                       }
                     ]
                   }
@@ -473,7 +500,15 @@
                   "role": "assistant",
                   "content": {
                     "format": 2,
-                    "parts": ["[Circular]"],
+                    "parts": [
+                      {
+                        "type": "text",
+                        "text": {
+                          "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                        },
+                        "createdAt": "<date>"
+                      }
+                    ],
                     "metadata": {
                       "modelId": "mock-model-id"
                     },
@@ -541,7 +576,13 @@
                       "completionStartTime": "<date>",
                       "usage": {
                         "inputTokens": 15,
-                        "outputTokens": 25
+                        "outputTokens": 25,
+                        "inputDetails": {
+                          "text": 15
+                        },
+                        "outputDetails": {
+                          "text": 25
+                        }
                       }
                     },
                     "metadata": {
@@ -594,10 +635,17 @@
                           "messageId": "<messageId-3>",
                           "usage": {
                             "inputTokens": 15,
-                            "outputTokens": 25
+                            "outputTokens": 25,
+                            "inputDetails": {
+                              "text": 15
+                            },
+                            "outputDetails": {
+                              "text": 25
+                            }
                           },
                           "isContinued": false,
-                          "finishReason": "stop"
+                          "finishReason": "stop",
+                          "warnings": []
                         },
                         "metadata": {
                           "runId": "<runId-3>",

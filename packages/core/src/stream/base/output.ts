@@ -7,7 +7,7 @@ import { MastraBase } from '../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
-import { resolveObservabilityContext } from '../../observability';
+import { getRootExportSpan, resolveObservabilityContext } from '../../observability';
 import type { OutputResult } from '../../processors';
 import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../../processors/processors/structured-output';
 import { ProcessorState, ProcessorRunner } from '../../processors/runner';
@@ -125,9 +125,9 @@ export type FullOutput<OUTPUT = undefined> = {
     input: Omit<ScorerRunInputForAgent, 'runId'>;
     output: ScorerRunOutputForAgent;
   };
-  /** Trace ID for observability */
+  /** Trace ID for this execution. */
   traceId: string | undefined;
-  /** Span ID for observability (root span ID for a top-level agent execution) */
+  /** Root span ID for this execution, identifying the top-level span in the trace. */
   spanId: string | undefined;
   /** Run ID for this execution */
   runId: string | undefined;
@@ -248,11 +248,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    */
   public messageList: MessageList;
   /**
-   * Trace ID used on the execution (if the execution was traced).
+   * Trace ID for this execution.
    */
   public traceId?: string;
   /**
-   * Span ID used on the execution (if the execution was traced).
+   * Root span ID for this execution, identifying the top-level span in the trace.
    */
   public spanId?: string;
   public messageId: string;
@@ -281,8 +281,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#transportRef = options.transportRef;
     this.#returnScorerData = !!options.returnScorerData;
     this.runId = options.runId;
-    this.traceId = options.tracingContext?.currentSpan?.externalTraceId;
-    this.spanId = options.tracingContext?.currentSpan?.id;
+    const resultSpan = getRootExportSpan(options.tracingContext?.currentSpan);
+    this.traceId = resultSpan?.externalTraceId;
+    this.spanId = resultSpan?.id;
 
     this.#model = _model;
 
@@ -653,7 +654,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // complicated to do this in this PR, it will require a much bigger change.
                   uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                 },
-                providerMetadata: providerMetadata,
+                providerMetadata: providerMetadata ?? chunk.payload.providerMetadata,
               };
 
               await options?.onStepFinish?.({
@@ -745,6 +746,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               if (chunk.payload.stepResult.reason) {
                 self.#finishReason = chunk.payload.stepResult.reason;
               }
+
+              // We can preserve finish metadata from whichever shape the upstream SDK emitted,
+              // but we cannot reconstruct providerMetadata if the provider omitted it entirely.
+              const finalProviderMetadata = chunk.payload.metadata?.providerMetadata ?? chunk.payload.providerMetadata;
 
               // Check if this is a tripwire case - set tripwire data
               // This can happen when max retries is exceeded or a processor triggers a tripwire
@@ -900,11 +905,21 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.#bufferedReasoning.length > 0
                   ? self.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join('')
                   : undefined;
+
+              const baseFinishStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
+              if (
+                baseFinishStep &&
+                baseFinishStep.providerMetadata === undefined &&
+                finalProviderMetadata !== undefined
+              ) {
+                baseFinishStep.providerMetadata = finalProviderMetadata;
+              }
+
               // Resolve all delayed promises with final values
               this.resolvePromises({
                 usage: self.#usageCount,
                 warnings: self.#warnings,
-                providerMetadata: chunk.payload.metadata?.providerMetadata,
+                providerMetadata: finalProviderMetadata,
                 response: { ...response, dbMessages: self.messageList.get.response.db() },
                 request: self.#request || {},
                 reasoningText,
@@ -920,12 +935,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 resumeSchema: undefined,
               });
 
-              const baseFinishStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
-
               if (baseFinishStep) {
                 const onFinishPayload: MastraOnFinishCallbackArgs<OUTPUT> = {
                   // StepResult properties from baseFinishStep
-                  providerMetadata: baseFinishStep.providerMetadata,
+                  providerMetadata: baseFinishStep.providerMetadata ?? finalProviderMetadata,
                   text: self.#bufferedText.join(''),
                   warnings: baseFinishStep.warnings ?? [],
                   finishReason: chunk.payload.stepResult.reason,

@@ -2,7 +2,7 @@ import { z } from 'zod/v4';
 import { scoreRowDataSchema } from '../../../evals/types';
 import { SpanType } from '../../../observability/types';
 import {
-  contextFields,
+  spanContextFields,
   dateRangeSchema,
   dbTimestamps,
   metadataField,
@@ -10,16 +10,11 @@ import {
   paginationInfoSchema,
   sortDirectionSchema,
   tagsField,
+  traceIdField,
+  spanIdField,
 } from '../shared';
-// ============================================================================
-// Shared Identifier Fields (also re-exported from types.ts)
-// ============================================================================
 
-/** Zod schema for trace ID field */
-export const traceIdField = z.string().describe('Unique trace identifier');
-
-/** Zod schema for span ID field */
-export const spanIdField = z.string().describe('Unique span identifier within a trace');
+export { traceIdField, spanIdField };
 
 // ============================================================================
 // Helper utilities for creating omit key objects from schema shapes
@@ -75,11 +70,11 @@ const hasChildErrorField = z
 
 /**
  * All optional fields shared between span records and trace filters.
- * Built from contextFields (shared across all signals) plus span-specific metadata/tags.
+ * Built from spanContextFields plus span-specific metadata/tags.
  * Note: When filtering traces, these fields are matched against the root span.
  */
 const sharedFields = {
-  ...contextFields,
+  ...spanContextFields,
   metadata: metadataField.nullish(),
   tags: tagsField.nullish(),
 } as const;

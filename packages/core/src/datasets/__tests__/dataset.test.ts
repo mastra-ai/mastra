@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { MastraError } from '../../error/index';
 import type { MastraScorer } from '../../evals/base';
 import type { Mastra } from '../../mastra';
@@ -361,6 +361,41 @@ describe('Dataset', () => {
 
     // Wait for fire-and-forget to complete
     await new Promise(r => setTimeout(r, 500));
+  });
+
+  it('startExperimentAsync forwards requestContext to agent.generate()', async () => {
+    await ds.addItem({ input: { prompt: 'Hello' } });
+
+    const mockAgent = createMockAgent('Response');
+    const localMastra = {
+      ...mastra,
+      getAgent: vi.fn().mockReturnValue(mockAgent),
+      getAgentById: vi.fn().mockReturnValue(mockAgent),
+    } as unknown as Mastra;
+
+    // Create a new dataset instance bound to localMastra
+    const localDs = new Dataset(datasetId, localMastra);
+
+    await localDs.startExperimentAsync({
+      targetType: 'agent',
+      targetId: 'test-agent',
+      requestContext: { userId: 'dev-user-123', environment: 'development' },
+    });
+
+    // Wait for fire-and-forget execution
+    await new Promise(r => setTimeout(r, 1000));
+
+    // agent.generate should have been called
+    expect(mockAgent.generate).toHaveBeenCalled();
+
+    // Verify requestContext was forwarded
+    const firstCallOptions = (mockAgent.generate as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    const { RequestContext } = await import('../../request-context');
+    expect(firstCallOptions.requestContext).toBeInstanceOf(RequestContext);
+    expect(firstCallOptions.requestContext.all).toEqual({
+      userId: 'dev-user-123',
+      environment: 'development',
+    });
   });
 
   // 23b. startExperimentAsync — throws on empty dataset

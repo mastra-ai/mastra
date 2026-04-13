@@ -1,10 +1,14 @@
-import { createGatewayMock } from '@internal/test-utils';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { MockMemory } from '../../memory/mock';
 import { createTool } from '../../tools';
 import { delay } from '../../utils';
 import { Agent } from '../agent';
+
+const MODE = getLLMTestMode();
+setupDummyApiKeys(MODE, ['openai']);
 
 const mock = createGatewayMock();
 beforeAll(() => mock.start());

@@ -466,9 +466,22 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
             };
           } else {
             const isWorkflow = Boolean((chunk.payload.result as any)?.result?.steps);
+            const isAgent = chunk?.from === 'AGENT';
             let output;
             if (isWorkflow) {
               output = (chunk.payload.result as any)?.result;
+            } else if (isAgent) {
+              const existingOutput = (parts[toolPartIndex] as any).output;
+              // Merge streaming childMessages with the backend result (which has
+              // subAgentToolResults, text, subAgentThreadId, etc.)
+              output = existingOutput
+                ? {
+                    ...(chunk.payload.result as any),
+                    childMessages: existingOutput.childMessages?.length
+                      ? existingOutput.childMessages
+                      : (chunk.payload.result as any)?.childMessages,
+                  }
+                : chunk.payload.result;
             } else {
               output = chunk.payload.result;
             }

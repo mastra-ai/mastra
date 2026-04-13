@@ -10,6 +10,7 @@ type ExperimentItem = {
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 };
+import type { DatasetRecord } from '../../storage/types';
 import { executeTarget } from './executor';
 import type { Target, ExecutionResult } from './executor';
 import { resolveScorers, runScorersForItem } from './scorer';
@@ -70,6 +71,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     description,
     metadata,
     requestContext: globalRequestContext,
+    agentVersion,
   } = config;
 
   const startedAt = new Date();
@@ -101,6 +103,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   // Phase A — Resolve items
   let items: ExperimentItem[];
   let datasetVersion: number | null;
+  let datasetRecord: DatasetRecord | null | undefined;
 
   try {
     if (config.data) {
@@ -123,8 +126,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         throw new Error('DatasetsStorage not configured. Configure storage in Mastra instance.');
       }
 
-      const dataset = await datasetsStore.getDatasetById({ id: datasetId });
-      if (!dataset) {
+      datasetRecord = await datasetsStore.getDatasetById({ id: datasetId });
+      if (!datasetRecord) {
         throw new MastraError({
           id: 'DATASET_NOT_FOUND',
           text: `Dataset not found: ${datasetId}`,
@@ -133,7 +136,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         });
       }
 
-      datasetVersion = version ?? dataset.version;
+      datasetVersion = version ?? datasetRecord.version;
       const versionItems = await datasetsStore.getItemsByVersion({
         datasetId,
         version: datasetVersion,
@@ -212,8 +215,27 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     throw err; // unreachable, but satisfies TS control flow
   }
 
+  // Merge dataset-attached scorers with explicitly provided scorers, then deduplicate
+  let mergedScorerInput = scorerInput;
+  const datasetScorerIds = datasetRecord?.scorerIds ?? [];
+  if (datasetScorerIds.length > 0) {
+    mergedScorerInput = [...(scorerInput ?? []), ...datasetScorerIds];
+  }
+  if (mergedScorerInput && mergedScorerInput.length > 0) {
+    const seen = new Set<string>();
+    mergedScorerInput = mergedScorerInput.filter(entry => {
+      if (typeof entry === 'string') {
+        if (seen.has(entry)) return false;
+        seen.add(entry);
+        return true;
+      }
+      // Keep all scorer instances — they are resolved by reference, not by ID
+      return true;
+    });
+  }
+
   // Resolve scorers
-  const scorers = resolveScorers(mastra, scorerInput);
+  const scorers = resolveScorers(mastra, mergedScorerInput);
 
   // 5. Create experiment record (if storage available and not pre-created)
   if (experimentsStore) {
@@ -229,6 +251,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         targetType: targetType ?? 'agent',
         targetId: targetId ?? 'inline',
         totalItems: items.length,
+        agentVersion,
       });
     }
     // Update status to running (both sync and async paths)

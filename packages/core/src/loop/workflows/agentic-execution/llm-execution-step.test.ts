@@ -99,7 +99,7 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     bail = vi.fn(data => data);
   });
 
-  it('should infer providerExecuted and merge streamed gateway tool results into tool calls', async () => {
+  it('should infer providerExecuted for gateway tools and not merge streamed results onto toolCalls', async () => {
     const executeSpy = vi.fn();
     const tools = {
       perplexitySearch: {
@@ -195,12 +195,13 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     const toolCalls = llmResult.output.toolCalls ?? [];
     const toolCallById = Object.fromEntries(toolCalls.map(toolCall => [toolCall.toolCallId, toolCall]));
 
+    // providerExecuted is inferred from the tool definition (type: 'provider')
+    // even though the raw model stream doesn't include it
     expect(toolCallById['call-1']).toEqual(
       expect.objectContaining({
         toolCallId: 'call-1',
         toolName: 'perplexity_search',
         providerExecuted: true,
-        output: { answer: 'fresh gateway result' },
       }),
     );
     expect(toolCallById['call-2']).toEqual(
@@ -208,11 +209,16 @@ describe('createLLMExecutionStep gateway provider tools', () => {
         toolCallId: 'call-2',
         toolName: 'perplexity_search',
         providerExecuted: true,
-        output: { answer: 'fresh gateway funding result' },
       }),
     );
+    // output is no longer merged onto toolCalls — results are handled inline
+    // via case 'tool-result' in processOutputStream
+    expect(toolCallById['call-1'].output).toBeUndefined();
+    expect(toolCallById['call-2'].output).toBeUndefined();
+
     expect(llmResult.stepResult.isContinued).toBe(true);
 
+    // tool-call-step returns inputData as-is for provider-executed tools (no client execution)
     const toolCallStep = createToolCallStep({
       agentId: 'test-agent',
       controller,
@@ -233,13 +239,250 @@ describe('createLLMExecutionStep gateway provider tools', () => {
       inputData: toolCallById['call-1'],
     });
 
-    expect(toolResult).toEqual(
-      expect.objectContaining({
-        toolCallId: 'call-1',
-        toolName: 'perplexity_search',
-        result: { answer: 'fresh gateway result' },
-      }),
-    );
+    expect(toolResult).toEqual(toolCallById['call-1']);
+    expect(toolResult.result).toBeUndefined();
     expect(executeSpy).not.toHaveBeenCalled();
+  });
+
+  it('merges model config headers with explicit modelSettings headers and lets modelSettings override duplicates', async () => {
+    const doStream = vi.fn(async () => ({
+      stream: convertArrayToReadableStream([
+        {
+          type: 'response-metadata',
+          id: 'resp-1',
+          modelId: 'mock-model-id',
+          timestamp: new Date(0),
+        },
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: testUsage,
+        },
+      ]),
+      request: {},
+      response: {
+        headers: undefined,
+      },
+      warnings: [],
+    }));
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      modelSettings: {
+        headers: {
+          authorization: 'Bearer settings-token',
+          'x-thread-id': 'thread-from-settings',
+          'x-resource-id': 'resource-from-settings',
+          'x-custom-header': 'settings-value',
+        },
+      },
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          headers: {
+            authorization: 'Bearer model-token',
+            'x-model-header': 'model-value',
+          },
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const input = createIterationInput();
+    input.stepResult.isContinued = false;
+
+    await llmExecutionStep.execute(createExecuteParams(input));
+
+    expect(doStream).toHaveBeenCalledOnce();
+    expect(doStream.mock.calls[0]?.[0]?.headers).toEqual({
+      authorization: 'Bearer settings-token',
+      'x-model-header': 'model-value',
+      'x-thread-id': 'thread-from-settings',
+      'x-resource-id': 'resource-from-settings',
+      'x-custom-header': 'settings-value',
+    });
+  });
+
+  it('preserves model config headers when modelSettings adds non-conflicting headers', async () => {
+    const doStream = vi.fn(async () => ({
+      stream: convertArrayToReadableStream([
+        {
+          type: 'response-metadata',
+          id: 'resp-1',
+          modelId: 'mock-model-id',
+          timestamp: new Date(0),
+        },
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: testUsage,
+        },
+      ]),
+      request: {},
+      response: {
+        headers: undefined,
+      },
+      warnings: [],
+    }));
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      modelSettings: {
+        headers: {
+          'x-custom-header': 'settings-value',
+        },
+      },
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          headers: {
+            authorization: 'Bearer model-token',
+          },
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const input = createIterationInput();
+    input.stepResult.isContinued = false;
+
+    await llmExecutionStep.execute(createExecuteParams(input));
+
+    expect(doStream).toHaveBeenCalledOnce();
+    expect(doStream.mock.calls[0]?.[0]?.headers).toEqual({
+      authorization: 'Bearer model-token',
+      'x-custom-header': 'settings-value',
+      'x-thread-id': 'thread-123',
+      'x-resource-id': 'resource-456',
+    });
+  });
+
+  it('should not create headers when neither model nor modelSettings provide them', async () => {
+    const doStream = vi.fn(async () => ({
+      stream: convertArrayToReadableStream([
+        {
+          type: 'response-metadata',
+          id: 'resp-1',
+          modelId: 'mock-model-id',
+          timestamp: new Date(0),
+        },
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: testUsage,
+        },
+      ]),
+      request: {},
+      response: {
+        headers: undefined,
+      },
+      warnings: [],
+    }));
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const input = createIterationInput();
+    input.stepResult.isContinued = false;
+
+    await llmExecutionStep.execute(createExecuteParams(input));
+
+    expect(doStream).toHaveBeenCalledOnce();
+    expect(doStream.mock.calls[0]?.[0]?.headers).toBeUndefined();
   });
 });

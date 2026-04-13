@@ -49,6 +49,7 @@ export default defineConfig({
     'src/utils.ts',
     '!src/action/index.ts',
     'src/*/index.ts',
+    'src/observability/context-storage.ts',
     'src/tools/is-vercel-tool.ts',
     'src/workflows/constants.ts',
     'src/storage/constants.ts',
@@ -79,7 +80,7 @@ export default defineConfig({
     await new Promise(resolve => setTimeout(resolve, 1000));
     await generateTypes(
       process.cwd(),
-      new Set(['@internal/ai-sdk-v4', '@internal/ai-sdk-v5', '@internal/external-types']),
+      new Set(['@internal/ai-sdk-v4', '@internal/ai-sdk-v5', '@internal/external-types', '@internal/core']),
     );
 
     // Copy provider-registry.json to dist folder

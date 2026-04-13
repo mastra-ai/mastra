@@ -2,7 +2,7 @@ import type { Mastra } from '@mastra/core';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, ValidationErrorHook } from '@mastra/core/server';
-import type z from 'zod';
+import type * as z from 'zod/v4';
 import type { InMemoryTaskStore } from '../../a2a/store';
 import type { OpenAPIRoute } from '../openapi-utils';
 import { A2A_ROUTES } from './a2a';
@@ -11,6 +11,7 @@ import { AGENTS_ROUTES } from './agents';
 import type { AgentRoutes } from './agents';
 import { AUTH_ROUTES } from './auth';
 import { BACKGROUND_TASK_ROUTES } from './background-tasks';
+import { CONVERSATIONS_ROUTES } from './conversations';
 import { DATASETS_ROUTES } from './datasets';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
@@ -19,6 +20,7 @@ import { MEMORY_ROUTES } from './memory';
 import { OBSERVABILITY_ROUTES } from './observability';
 import { PROCESSOR_PROVIDER_ROUTES } from './processor-providers';
 import { PROCESSORS_ROUTES } from './processors';
+import { RESPONSES_ROUTES } from './responses';
 import { SCORES_ROUTES } from './scorers';
 import { STORED_AGENTS_ROUTES } from './stored-agents';
 import type { StoredAgentRoutes } from './stored-agents';
@@ -145,6 +147,8 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...WORKFLOWS_ROUTES,
   ...TOOLS_ROUTES,
   ...PROCESSORS_ROUTES,
+  ...RESPONSES_ROUTES,
+  ...CONVERSATIONS_ROUTES,
   ...MEMORY_ROUTES,
   ...SCORES_ROUTES,
   ...OBSERVABILITY_ROUTES,
@@ -178,6 +182,8 @@ export type ServerRoutes = readonly [
   ...typeof WORKFLOWS_ROUTES,
   ...typeof TOOLS_ROUTES,
   ...typeof PROCESSORS_ROUTES,
+  ...typeof RESPONSES_ROUTES,
+  ...typeof CONVERSATIONS_ROUTES,
   ...typeof MEMORY_ROUTES,
   ...typeof SCORES_ROUTES,
   ...typeof OBSERVABILITY_ROUTES,

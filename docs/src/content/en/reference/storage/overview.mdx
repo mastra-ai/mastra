@@ -187,7 +187,7 @@ The schema definitions below cover the built-in database-backed tables documente
   {
     name: 'id',
     type: 'text',
-    description: 'Resource identifier (user or entity ID) - same as resourceId used in threads and agent calls',
+    description: 'Resource identifier (user or entity ID): same as resourceId used in threads and agent calls',
     constraints: [{ type: 'primaryKey' }, { type: 'nullable', value: false }],
   },
   {
@@ -224,7 +224,7 @@ The schema definitions below cover the built-in database-backed tables documente
   </TabItem>
 
   <TabItem value="workflows" label="Workflows">
-    When `suspend` is called on a workflow, its state is saved in the following format. When `resume` is called, that state is rehydrated.
+    When `suspend()` is called on a workflow, its state is saved in the following format. When `resume()` is called, that state is rehydrated.
 
     <SchemaTable
       columns={[

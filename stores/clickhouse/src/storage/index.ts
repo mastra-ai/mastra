@@ -6,6 +6,8 @@ import type { TABLE_NAMES, StorageDomains, TABLE_SCHEMAS } from '@mastra/core/st
 import { BackgroundTasksStorageClickhouse } from './domains/background-tasks';
 import { MemoryStorageClickhouse } from './domains/memory';
 import { ObservabilityStorageClickhouse } from './domains/observability';
+import { ObservabilityStorageClickhouseVNext } from './domains/observability/v-next';
+export type { VNextObservabilityConfig, RetentionConfig } from './domains/observability/v-next';
 import { ScoresStorageClickhouse } from './domains/scores';
 import { WorkflowsStorageClickhouse } from './domains/workflows';
 
@@ -14,6 +16,7 @@ export {
   BackgroundTasksStorageClickhouse,
   MemoryStorageClickhouse,
   ObservabilityStorageClickhouse,
+  ObservabilityStorageClickhouseVNext,
   ScoresStorageClickhouse,
   WorkflowsStorageClickhouse,
 };

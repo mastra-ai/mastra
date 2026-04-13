@@ -23,9 +23,9 @@ describe('formatUsageMetrics', () => {
       inputTokens: 200,
       outputTokens: 100,
       totalTokens: 300,
-      cachedInputTokens: 100,
-      cachedOutputTokens: 50,
-      reasoningTokens: 20,
+      cacheReadTokens: 100,
+      cacheWriteTokens: 50,
+      reasoningOutputTokens: 20,
     });
   });
 
@@ -75,7 +75,7 @@ describe('formatUsageMetrics', () => {
       inputTokens: 100,
       outputTokens: 50,
       totalTokens: 150,
-      reasoningTokens: 20,
+      reasoningOutputTokens: 20,
     });
   });
 
@@ -92,7 +92,7 @@ describe('formatUsageMetrics', () => {
       inputTokens: 100,
       outputTokens: 50,
       totalTokens: 150,
-      cachedInputTokens: 30,
+      cacheReadTokens: 30,
     });
   });
 });

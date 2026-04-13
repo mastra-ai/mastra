@@ -6,6 +6,8 @@ import { resolveMongoDBConfig } from './db';
 import { MongoDBAgentsStorage } from './domains/agents';
 import { BackgroundTasksStorageMongoDB } from './domains/background-tasks';
 import { MongoDBBlobStore } from './domains/blobs';
+import { MongoDBDatasetsStorage } from './domains/datasets';
+import { MongoDBExperimentsStorage } from './domains/experiments';
 import { MongoDBMCPClientsStorage } from './domains/mcp-clients';
 import { MongoDBMCPServersStorage } from './domains/mcp-servers';
 import { MemoryStorageMongoDB } from './domains/memory';
@@ -23,6 +25,8 @@ export {
   BackgroundTasksStorageMongoDB,
   MongoDBAgentsStorage,
   MongoDBBlobStore,
+  MongoDBDatasetsStorage,
+  MongoDBExperimentsStorage,
   MongoDBMCPClientsStorage,
   MongoDBMCPServersStorage,
   MemoryStorageMongoDB,
@@ -94,6 +98,12 @@ export class MongoDBStore extends MastraCompositeStore {
 
     const blobs = new MongoDBBlobStore(domainConfig);
 
+    const datasets = new MongoDBDatasetsStorage(domainConfig);
+
+    const experiments = new MongoDBExperimentsStorage(domainConfig);
+
+    const backgroundTasks = new BackgroundTasksStorageMongoDB(domainConfig);
+
     this.stores = {
       memory,
       scores,
@@ -107,7 +117,9 @@ export class MongoDBStore extends MastraCompositeStore {
       workspaces,
       skills,
       blobs,
-      backgroundTasks: new BackgroundTasksStorageMongoDB(domainConfig),
+      backgroundTasks,
+      datasets,
+      experiments,
     };
   }
 

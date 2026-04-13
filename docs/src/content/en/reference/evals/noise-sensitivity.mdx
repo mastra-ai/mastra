@@ -242,7 +242,7 @@ Checks if noise causes the agent to generate false or fabricated information tha
 ### Formula
 
 ```
-Final Score = max(0, min(llm_score, calculated_score) - issues_penalty)
+Final Score = max(0, min(llm_score, calculated_score): issues_penalty)
 ```
 
 Where:
@@ -673,9 +673,9 @@ import { createNoiseSensitivityScorerLLM } from '@mastra/evals'
 
 async function compareModelRobustness() {
   const models = [
-    { name: 'GPT-5.1', model: 'openai/gpt-5.4' },
-    { name: 'GPT-4.1', model: 'openai/gpt-4.1' },
-    { name: 'Claude', model: 'anthropic/claude-sonnet-4-6' },
+    { name: 'GPT-5.4', model: 'openai/gpt-5.4' },
+    { name: 'GPT-5.4-mini', model: 'openai/gpt-5.4-mini' },
+    { name: 'Claude', model: 'anthropic/claude-opus-4-6' },
   ]
 
   const testScenario = {
@@ -788,7 +788,7 @@ jobs:
       - run: npm run test:noise-sensitivity
       - name: Check robustness threshold
         run: |
-          if [ $(npm run test:noise-sensitivity -- --json | jq '.score') -lt 0.8 ]; then
+          if [ $(npm run test:noise-sensitivity -- --json | jq '.score'):lt 0.8 ]; then
             echo "Agent failed noise sensitivity threshold"
             exit 1
           fi
@@ -796,7 +796,7 @@ jobs:
 
 ## Related
 
-- [Scorers Overview](/docs/evals/overview) - Setting up scorer pipelines
-- [Hallucination Scorer](/reference/evals/hallucination) - Evaluates fabricated content
-- [Answer Relevancy Scorer](/reference/evals/answer-relevancy) - Measures response focus
-- [Custom Scorers](/docs/evals/custom-scorers) - Creating your own evaluation metrics
+- [Scorers Overview](/docs/evals/overview): Setting up scorer pipelines
+- [Hallucination Scorer](/reference/evals/hallucination): Evaluates fabricated content
+- [Answer Relevancy Scorer](/reference/evals/answer-relevancy): Measures response focus
+- [Custom Scorers](/docs/evals/custom-scorers): Creating your own evaluation metrics

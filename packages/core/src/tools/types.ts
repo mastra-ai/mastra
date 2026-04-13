@@ -12,6 +12,7 @@ import type { ElicitRequest, ElicitResult } from '@modelcontextprotocol/sdk/type
 
 import type { MastraUnion } from '../action';
 import type { ToolBackgroundConfig } from '../background-tasks';
+import type { MastraBrowser } from '../browser/browser';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
@@ -32,6 +33,7 @@ export type ToolInvocationOptions = ToolExecutionOptions | ToolCallOptions;
 // Agent tool execution context - properties specific when tools are executed by agents
 export interface AgentToolExecutionContext<TSuspend, TResume> {
   // Always present when called from agent context
+  agentId: string;
   toolCallId: string;
   messages: any[];
   suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
@@ -317,6 +319,14 @@ export interface ToolExecutionContext<
    * This allows tools to work with the agent's configured workspace.
    */
   workspace?: Workspace;
+
+  /**
+   * Browser available for tool execution. When provided, tools can access
+   * browser capabilities for web automation, screenshots, and data extraction.
+   *
+   * The browser is lazily initialized - it will be launched on first use.
+   */
+  browser?: MastraBrowser;
 
   // Writer is created by Mastra for ALL contexts (agent, workflow, direct execution)
   // Wraps chunks with metadata (toolCallId, toolName, runId) before passing to underlying stream
