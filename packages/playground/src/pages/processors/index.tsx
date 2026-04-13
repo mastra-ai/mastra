@@ -1,21 +1,21 @@
 import {
   ButtonWithTooltip,
-  ProcessorsList,
-  ProcessorIcon,
-  NoProcessorsInfo,
+  ErrorState,
   ListSearch,
   NoDataPageLayout,
-  PageLayout,
   PageHeader,
+  PageLayout,
   PermissionDenied,
+  ProcessorIcon,
   SessionExpired,
-  ErrorState,
   is401UnauthorizedError,
   is403ForbiddenError,
-  useProcessors,
 } from '@mastra/playground-ui';
 import { BookIcon } from 'lucide-react';
 import { useState } from 'react';
+import { NoProcessorsInfo } from '@/domains/processors/components/processors-list/no-processors-info';
+import { ProcessorsList } from '@/domains/processors/components/processors-list/processors-list';
+import { useProcessors } from '@/domains/processors/hooks/use-processors';
 
 export function Processors() {
   const { data: processors = {}, isLoading, error } = useProcessors();

@@ -1,30 +1,30 @@
 import { EntityType } from '@mastra/core/observability';
-import type { EntityOptions, TraceDatePreset, SpanTab } from '@mastra/playground-ui';
 import {
-  TracesToolbar,
   ButtonWithTooltip,
-  CONTEXT_FIELD_IDS,
-  parseError,
-  ObservabilityTracesList,
-  useAgents,
-  useWorkflows,
-  useTags,
-  useEnvironments,
-  useServiceNames,
+  ErrorState,
   NoDataPageLayout,
-  PageLayout,
   PageHeader,
+  PageLayout,
   PermissionDenied,
   SessionExpired,
-  ErrorState,
-  is403ForbiddenError,
   is401UnauthorizedError,
+  is403ForbiddenError,
+  parseError,
 } from '@mastra/playground-ui';
-
 import { BookIcon, EyeIcon } from 'lucide-react';
 import { useCallback, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
+import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { useEnvironments } from '@/domains/observability/hooks/use-environments';
+import { useServiceNames } from '@/domains/observability/hooks/use-service-names';
+import { useTags } from '@/domains/observability/hooks/use-tags';
 import { useTraces } from '@/domains/observability/hooks/use-traces';
+import { ObservabilityTracesList } from '@/domains/traces/components/observability-traces-list';
+import type { SpanTab } from '@/domains/traces/components/observability-traces-list';
+import { TracesToolbar } from '@/domains/traces/components/traces-toolbar';
+import { CONTEXT_FIELD_IDS } from '@/domains/traces/types';
+import type { EntityOptions, TraceDatePreset } from '@/domains/traces/types';
+import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 export default function Traces() {
   const [searchParams, setSearchParams] = useSearchParams();
