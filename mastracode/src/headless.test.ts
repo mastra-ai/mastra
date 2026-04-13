@@ -100,7 +100,13 @@ describe('parseHeadlessArgs', () => {
       'main.js',
       '--prompt',
       'Run tests',
-      '--continue',
+      '--thread',
+      'my-thread',
+      '--title',
+      'My Title',
+      '--clone-thread',
+      '--resource-id',
+      'my-project',
       '--timeout',
       '600',
       '--format',
@@ -115,7 +121,10 @@ describe('parseHeadlessArgs', () => {
       './settings-ci.json',
     ]);
     expect(args.prompt).toBe('Run tests');
-    expect(args.continue_).toBe(true);
+    expect(args.thread).toBe('my-thread');
+    expect(args.title).toBe('My Title');
+    expect(args.cloneThread).toBe(true);
+    expect(args.resourceId).toBe('my-project');
     expect(args.timeout).toBe(600);
     expect(args.format).toBe('json');
     expect(args.model).toBe('anthropic/claude-sonnet-4-20250514');
@@ -196,6 +205,17 @@ describe('parseHeadlessArgs', () => {
   it('returns undefined settings when not provided', () => {
     const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task']);
     expect(args.settings).toBeUndefined();
+  });
+
+  it('parses --clone-thread hyphenated boolean flag', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--clone-thread']);
+    expect(args.cloneThread).toBe(true);
+  });
+
+  it('throws on --continue with --thread', () => {
+    expect(() => parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--continue', '--thread', 'abc123'])).toThrow(
+      '--continue and --thread cannot be used together',
+    );
   });
 });
 
