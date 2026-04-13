@@ -361,6 +361,16 @@ export class StagehandBrowser extends MastraBrowser {
     this.patchExitType();
   }
 
+  protected override handleThreadBrowserDisconnected(threadId: string): void {
+    super.handleThreadBrowserDisconnected(threadId);
+    this.patchExitType();
+  }
+
+  override async closeThreadSession(threadId: string): Promise<void> {
+    await super.closeThreadSession(threadId);
+    this.patchExitType();
+  }
+
   private patchExitType(): void {
     if (!this.config.profile) return;
     patchProfileExitType(this.config.profile, this.logger);
