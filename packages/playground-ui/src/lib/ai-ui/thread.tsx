@@ -32,9 +32,10 @@ export interface ThreadProps {
   threadId?: string;
   hasMemory?: boolean;
   hasModelList?: boolean;
+  hideModelSwitcher?: boolean;
 }
 
-export const Thread = ({ agentName, agentId, threadId, hasMemory, hasModelList }: ThreadProps) => {
+export const Thread = ({ agentName, agentId, threadId, hasMemory, hasModelList, hideModelSwitcher }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
@@ -67,7 +68,13 @@ export const Thread = ({ agentName, agentId, threadId, hasMemory, hasModelList }
         </ThreadPrimitive.If>
       </ThreadPrimitive.Viewport>
 
-      <Composer hasMemory={hasMemory} threadId={threadId} agentId={agentId} hasModelList={hasModelList} />
+      <Composer
+        hasMemory={hasMemory}
+        threadId={threadId}
+        agentId={agentId}
+        hasModelList={hasModelList}
+        hideModelSwitcher={hideModelSwitcher}
+      />
     </ThreadWrapper>
   );
 };
@@ -100,9 +107,10 @@ interface ComposerProps {
   threadId?: string;
   agentId?: string;
   hasModelList?: boolean;
+  hideModelSwitcher?: boolean;
 }
 
-const Composer = ({ hasMemory, threadId, agentId, hasModelList }: ComposerProps) => {
+const Composer = ({ hasMemory, threadId, agentId, hasModelList, hideModelSwitcher }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { canExecute } = usePermissions();
@@ -148,7 +156,7 @@ const Composer = ({ hasMemory, threadId, agentId, hasModelList }: ComposerProps)
           <ComposerPrimitive.Input asChild className="w-full">
             <textarea
               ref={textareaRef}
-              autoFocus={document.activeElement === document.body}
+              autoFocus={false}
               className="text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-none resize-none outline-none disabled:cursor-not-allowed disabled:opacity-50"
               placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
               name=""
@@ -158,7 +166,7 @@ const Composer = ({ hasMemory, threadId, agentId, hasModelList }: ComposerProps)
             />
           </ComposerPrimitive.Input>
           <div className="flex items-center justify-between gap-2">
-            {agentId && !hasModelList && <ComposerModelSwitcher agentId={agentId} />}
+            {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelSwitcher agentId={agentId} />}
             <div className="flex items-center gap-2 ml-auto">
               {canExecuteAgent && <SpeechInput agentId={agentId} />}
               <ComposerAction canExecute={canExecuteAgent} />

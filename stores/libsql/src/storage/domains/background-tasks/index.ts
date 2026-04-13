@@ -1,9 +1,20 @@
 import type { Client, InValue } from '@libsql/client';
-import type { BackgroundTask, BackgroundTaskStatus, TaskFilter, TaskListResult } from '@mastra/core/background-tasks';
+import type {
+  BackgroundTask,
+  BackgroundTaskStatus,
+  TaskFilter,
+  TaskListResult,
+  UpdateBackgroundTask,
+} from '@mastra/core/background-tasks';
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
+
+function serializeJson(v: unknown): any {
+  if (typeof v === 'object' && v != null) return JSON.stringify(v);
+  return v ?? null;
+}
 
 function parseJson(val: unknown): any {
   if (val == null) return undefined;
@@ -87,7 +98,7 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
     });
   }
 
-  async updateTask(taskId: string, update: Partial<BackgroundTask>): Promise<void> {
+  async updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void> {
     const setClauses: string[] = [];
     const params: InValue[] = [];
 
@@ -97,11 +108,11 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
     }
     if ('result' in update) {
       setClauses.push('result = jsonb(?)');
-      params.push(update.result != null ? JSON.stringify(update.result) : null);
+      params.push(serializeJson(update.result));
     }
     if ('error' in update) {
       setClauses.push('error = jsonb(?)');
-      params.push(update.error != null ? JSON.stringify(update.error) : null);
+      params.push(serializeJson(update.error));
     }
     if ('retryCount' in update) {
       setClauses.push('retry_count = ?');

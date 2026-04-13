@@ -1,0 +1,35 @@
+The ticket purchase workflow can build a quote, pause for approval, and simulate a charge. In this lesson, you'll extend it in two ways that show how tools and agents can each play a role inside a workflow, and when to reach for one over the other.
+
+You'll add a `validatePark` step upfront that uses the park lookup tool to confirm the submitted park name before anything else runs. After the charge, you'll add a `postPurchaseSummary` step that calls the theme park agent directly — it generates a short visit brief using its tools and streams it back as part of the final output.
+
+This matters because not every step in a workflow has the same requirements. Validation is strict and deterministic, so a tool call fits. Generating a useful visit brief needs context and judgment, so calling the agent makes sense. The workflow owns the sequence; each step uses whatever is right for that piece of work.
+
+> "A tool handles the strict lookup at the start. The agent handles the reasoning at the end. The workflow owns the sequence throughout."
+>
+> — Guil Hernandez
+
+## Mentioned in the lesson
+
+Code:
+
+- [Course GitHub repo](https://github.com/mastra-ai/mastra-agent-course)
+
+Relevant Mastra docs:
+
+- [Workflows overview](/docs/workflows/overview)
+- [createStep()](/reference/workflows/step)
+- [suspend and resume](/docs/workflows/suspend-and-resume)
+- [Using tools with agents](/docs/agents/using-tools)
+
+## Join the community
+
+Ask questions:
+
+- [Discord](https://discord.gg/mastra) — chat with other learners and the Mastra team
+- [Guil on LinkedIn](https://www.linkedin.com/in/guiljh/) — ask him questions directly
+
+Follow Mastra:
+
+- [X](https://x.com/mastra) — follow Mastra for updates
+- [YouTube](https://www.youtube.com/@mastra-ai) — watch more tutorials
+- [LinkedIn](https://www.linkedin.com/company/mastra-ai) — follow for updates

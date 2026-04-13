@@ -100,21 +100,39 @@ export function deepEqual(a: unknown, b: unknown): boolean {
   return false;
 }
 
-export function generateEmptyFromSchema(schema: string) {
+/**
+ * Generate an empty object from a JSON Schema definition.
+ * Accepts both a JSON string and a pre-parsed object.
+ * Recursively initializes nested object properties and respects default values.
+ */
+export function generateEmptyFromSchema(schema: string | Record<string, unknown>): Record<string, unknown> {
   try {
-    const parsedSchema = JSON.parse(schema);
+    const parsedSchema = typeof schema === 'string' ? JSON.parse(schema) : schema;
     if (!parsedSchema || parsedSchema.type !== 'object' || !parsedSchema.properties) return {};
-    const obj: Record<string, any> = {};
-    const TYPE_DEFAULTS = {
-      string: '',
-      array: [],
-      object: {},
-      number: 0,
-      integer: 0,
-      boolean: false,
-    };
-    for (const [key, prop] of Object.entries<any>(parsedSchema.properties)) {
-      obj[key] = TYPE_DEFAULTS[prop.type as keyof typeof TYPE_DEFAULTS] ?? null;
+    const obj: Record<string, unknown> = {};
+    for (const [key, prop] of Object.entries<Record<string, unknown>>(
+      parsedSchema.properties as Record<string, Record<string, unknown>>,
+    )) {
+      if (prop.default !== undefined) {
+        obj[key] =
+          typeof prop.default === 'object' && prop.default !== null
+            ? JSON.parse(JSON.stringify(prop.default))
+            : prop.default;
+      } else if (prop.type === 'object' && prop.properties) {
+        obj[key] = generateEmptyFromSchema(prop);
+      } else if (prop.type === 'object') {
+        obj[key] = {};
+      } else if (prop.type === 'string') {
+        obj[key] = '';
+      } else if (prop.type === 'array') {
+        obj[key] = [];
+      } else if (prop.type === 'number' || prop.type === 'integer') {
+        obj[key] = 0;
+      } else if (prop.type === 'boolean') {
+        obj[key] = false;
+      } else {
+        obj[key] = null;
+      }
     }
     return obj;
   } catch {
@@ -640,7 +658,7 @@ export async function fetchWithRetry(
         break;
       }
 
-      const delay = Math.min(1000 * Math.pow(2, retryCount) * 1000, 10000);
+      const delay = Math.min(1000 * Math.pow(2, retryCount), 10000);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }

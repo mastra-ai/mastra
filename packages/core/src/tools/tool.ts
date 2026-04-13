@@ -3,7 +3,7 @@ import { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON, InferPublicSchema } from '../schema';
 import type { SuspendOptions } from '../workflows';
-import type { MCPToolProperties, ToolAction, ToolExecutionContext } from './types';
+import type { McpMetadata, MCPToolProperties, ToolAction, ToolExecutionContext } from './types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData, validateRequestContext } from './validation';
 
 /**
@@ -207,6 +207,12 @@ export class Tool<
   inputExamples?: Array<{ input: Record<string, unknown> }>;
 
   /**
+   * Metadata identifying this tool as originating from an MCP server.
+   * Set automatically by the MCP client when creating tools.
+   */
+  mcpMetadata?: McpMetadata;
+
+  /**
    * Creates a new Tool instance with input validation wrapper.
    *
    * @param opts - Tool configuration and execute function
@@ -235,6 +241,7 @@ export class Tool<
     this.toModelOutput = opts.toModelOutput;
     this.inputExamples = opts.inputExamples;
     this.mcp = opts.mcp;
+    this.mcpMetadata = opts.mcpMetadata;
     this.onInputStart = opts.onInputStart;
     this.onInputDelta = opts.onInputDelta;
     this.onInputAvailable = opts.onInputAvailable;

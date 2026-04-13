@@ -1,4 +1,10 @@
-import type { BackgroundTask, BackgroundTaskStatus, TaskFilter, TaskListResult } from '@mastra/core/background-tasks';
+import type {
+  BackgroundTask,
+  BackgroundTaskStatus,
+  TaskFilter,
+  TaskListResult,
+  UpdateBackgroundTask,
+} from '@mastra/core/background-tasks';
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
@@ -117,7 +123,7 @@ export class BackgroundTasksStorageMongoDB extends BackgroundTasksStorage {
     await collection.insertOne(toDoc(task));
   }
 
-  async updateTask(taskId: string, update: Partial<BackgroundTask>): Promise<void> {
+  async updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void> {
     const $set: Record<string, any> = {};
 
     if ('status' in update) $set.status = update.status;

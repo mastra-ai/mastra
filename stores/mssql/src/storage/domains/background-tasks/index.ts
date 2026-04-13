@@ -1,10 +1,21 @@
-import type { BackgroundTask, BackgroundTaskStatus, TaskFilter, TaskListResult } from '@mastra/core/background-tasks';
+import type {
+  BackgroundTask,
+  BackgroundTaskStatus,
+  TaskFilter,
+  TaskListResult,
+  UpdateBackgroundTask,
+} from '@mastra/core/background-tasks';
 import type { CreateIndexOptions } from '@mastra/core/storage';
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { ConnectionPool } from 'mssql';
 import { MssqlDB, resolveMssqlConfig } from '../../db';
 import type { MssqlDomainConfig } from '../../db';
 import { getSchemaName, getTableName } from '../utils';
+
+function serializeJson(v: unknown): any {
+  if (typeof v === 'object' && v != null) return JSON.stringify(v);
+  return v ?? null;
+}
 
 function rowToTask(row: Record<string, any>): BackgroundTask {
   const parseJson = (val: unknown): any => {
@@ -148,9 +159,9 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
         resource_id: task.resourceId ?? null,
         run_id: task.runId,
         status: task.status,
-        args: JSON.stringify(task.args),
-        result: task.result != null ? JSON.stringify(task.result) : null,
-        error: task.error != null ? JSON.stringify(task.error) : null,
+        args: serializeJson(task.args),
+        result: serializeJson(task.result),
+        error: serializeJson(task.error),
         retry_count: task.retryCount,
         max_retries: task.maxRetries,
         timeout_ms: task.timeoutMs,
@@ -161,7 +172,7 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
     });
   }
 
-  async updateTask(taskId: string, update: Partial<BackgroundTask>): Promise<void> {
+  async updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void> {
     const setClauses: string[] = [];
     const params: Record<string, any> = {};
     let idx = 1;
@@ -172,11 +183,11 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
     }
     if ('result' in update) {
       setClauses.push(`[result] = @p${idx}`);
-      params[`p${idx++}`] = update.result != null ? JSON.stringify(update.result) : null;
+      params[`p${idx++}`] = serializeJson(update.result);
     }
     if ('error' in update) {
       setClauses.push(`[error] = @p${idx}`);
-      params[`p${idx++}`] = update.error != null ? JSON.stringify(update.error) : null;
+      params[`p${idx++}`] = serializeJson(update.error);
     }
     if ('retryCount' in update) {
       setClauses.push(`[retry_count] = @p${idx}`);

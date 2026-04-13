@@ -163,28 +163,27 @@ export class D1Store extends MastraCompositeStore {
     let scores: ScoresStorageD1;
     let workflows: WorkflowsStorageD1;
     let memory: MemoryStorageD1;
+    let backgroundTasks: BackgroundTasksStorageD1;
 
     if (this.binding) {
       const domainConfig = { binding: this.binding, tablePrefix: this.tablePrefix };
       scores = new ScoresStorageD1(domainConfig);
       workflows = new WorkflowsStorageD1(domainConfig);
       memory = new MemoryStorageD1(domainConfig);
+      backgroundTasks = new BackgroundTasksStorageD1(domainConfig);
     } else {
       const domainConfig = { client: this.client!, tablePrefix: this.tablePrefix };
       scores = new ScoresStorageD1(domainConfig);
       workflows = new WorkflowsStorageD1(domainConfig);
       memory = new MemoryStorageD1(domainConfig);
+      backgroundTasks = new BackgroundTasksStorageD1(domainConfig);
     }
-
-    const bgConfig = this.binding
-      ? { binding: this.binding, tablePrefix: this.tablePrefix }
-      : { client: this.client!, tablePrefix: this.tablePrefix };
 
     this.stores = {
       scores,
       workflows,
       memory,
-      backgroundTasks: new BackgroundTasksStorageD1(bgConfig as any),
+      backgroundTasks,
     };
   }
 

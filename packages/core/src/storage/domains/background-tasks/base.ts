@@ -1,4 +1,4 @@
-import type { BackgroundTask, TaskFilter, TaskListResult } from '../../../background-tasks/types';
+import type { BackgroundTask, TaskFilter, TaskListResult, UpdateBackgroundTask } from '../../../background-tasks/types';
 import { StorageDomain } from '../base';
 
 /**
@@ -24,7 +24,7 @@ export abstract class BackgroundTasksStorage extends StorageDomain {
    * Partial update of a task record.
    * Only the provided fields are updated; others are left unchanged.
    */
-  abstract updateTask(taskId: string, update: Partial<BackgroundTask>): Promise<void>;
+  abstract updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void>;
 
   /** Get a single task by ID. Returns null if not found. */
   abstract getTask(taskId: string): Promise<BackgroundTask | null>;

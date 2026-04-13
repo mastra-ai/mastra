@@ -1,8 +1,19 @@
 import type { ClickHouseClient } from '@clickhouse/client';
-import type { BackgroundTask, BackgroundTaskStatus, TaskFilter, TaskListResult } from '@mastra/core/background-tasks';
+import type {
+  BackgroundTask,
+  BackgroundTaskStatus,
+  TaskFilter,
+  TaskListResult,
+  UpdateBackgroundTask,
+} from '@mastra/core/background-tasks';
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import { ClickhouseDB, resolveClickhouseConfig } from '../../db';
 import type { ClickhouseDomainConfig } from '../../db';
+
+function serializeJson(v: unknown): any {
+  if (typeof v === 'object' && v != null) return JSON.stringify(v);
+  return v ?? '';
+}
 
 function rowToTask(row: Record<string, any>): BackgroundTask {
   const parseJson = (val: unknown): any => {
@@ -69,9 +80,9 @@ export class BackgroundTasksStorageClickhouse extends BackgroundTasksStorage {
           resource_id: task.resourceId ?? '',
           run_id: task.runId,
           status: task.status,
-          args: JSON.stringify(task.args),
-          result: task.result != null ? JSON.stringify(task.result) : '',
-          error: task.error != null ? JSON.stringify(task.error) : '',
+          args: serializeJson(task.args),
+          result: serializeJson(task.result),
+          error: serializeJson(task.error),
           retry_count: task.retryCount,
           max_retries: task.maxRetries,
           timeout_ms: task.timeoutMs,
@@ -85,7 +96,7 @@ export class BackgroundTasksStorageClickhouse extends BackgroundTasksStorage {
     });
   }
 
-  async updateTask(taskId: string, update: Partial<BackgroundTask>): Promise<void> {
+  async updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void> {
     const existing = await this.getTask(taskId);
     if (!existing) return;
     const merged = { ...existing };

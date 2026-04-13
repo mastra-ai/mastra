@@ -1,4 +1,10 @@
-import type { BackgroundTask, BackgroundTaskStatus, TaskFilter, TaskListResult } from '@mastra/core/background-tasks';
+import type {
+  BackgroundTask,
+  BackgroundTaskStatus,
+  TaskFilter,
+  TaskListResult,
+  UpdateBackgroundTask,
+} from '@mastra/core/background-tasks';
 import type { CreateIndexOptions } from '@mastra/core/storage';
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
@@ -14,6 +20,22 @@ function getTableName(schemaName?: string) {
   return schemaName ? `${schemaName}.${quoted}` : quoted;
 }
 
+function serializeJson(v: unknown): any {
+  if (typeof v === 'object' && v != null) return JSON.stringify(v);
+  return v ?? null;
+}
+
+function parseJson(v: unknown): any {
+  if (typeof v === 'string') {
+    try {
+      return JSON.parse(v);
+    } catch {
+      return v;
+    }
+  }
+  return v ?? undefined;
+}
+
 /** Convert a DB row (snake_case) to a BackgroundTask object (camelCase). */
 function rowToTask(row: Record<string, any>): BackgroundTask {
   return {
@@ -21,13 +43,13 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
     status: row.status as BackgroundTaskStatus,
     toolName: row.tool_name,
     toolCallId: row.tool_call_id,
-    args: typeof row.args === 'string' ? JSON.parse(row.args) : row.args,
+    args: parseJson(row.args),
     agentId: row.agent_id,
     threadId: row.thread_id ?? undefined,
     resourceId: row.resource_id ?? undefined,
     runId: row.run_id,
-    result: row.result != null ? (typeof row.result === 'string' ? JSON.parse(row.result) : row.result) : undefined,
-    error: row.error != null ? (typeof row.error === 'string' ? JSON.parse(row.error) : row.error) : undefined,
+    result: parseJson(row.result),
+    error: parseJson(row.error),
     retryCount: Number(row.retry_count),
     maxRetries: Number(row.max_retries),
     timeoutMs: Number(row.timeout_ms),
@@ -156,9 +178,9 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
         resource_id: task.resourceId ?? null,
         run_id: task.runId,
         status: task.status,
-        args: JSON.stringify(task.args),
-        result: task.result != null ? JSON.stringify(task.result) : null,
-        error: task.error != null ? JSON.stringify(task.error) : null,
+        args: serializeJson(task.args),
+        result: serializeJson(task.result),
+        error: serializeJson(task.error),
         retry_count: task.retryCount,
         max_retries: task.maxRetries,
         timeout_ms: task.timeoutMs,
@@ -169,7 +191,7 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
     });
   }
 
-  async updateTask(taskId: string, update: Partial<BackgroundTask>): Promise<void> {
+  async updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void> {
     const setClauses: string[] = [];
     const params: any[] = [];
     let paramIdx = 1;
@@ -180,11 +202,11 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
     }
     if ('result' in update) {
       setClauses.push(`"result" = $${paramIdx++}`);
-      params.push(update.result != null ? JSON.stringify(update.result) : null);
+      params.push(serializeJson(update.result));
     }
     if ('error' in update) {
       setClauses.push(`"error" = $${paramIdx++}`);
-      params.push(update.error != null ? JSON.stringify(update.error) : null);
+      params.push(serializeJson(update.error));
     }
     if ('retryCount' in update) {
       setClauses.push(`"retry_count" = $${paramIdx++}`);

@@ -717,7 +717,7 @@ export class Agent<
         ? await this.#inputProcessors({ requestContext: requestContext || new RequestContext() })
         : this.#inputProcessors;
 
-    return this.combineProcessorsIntoWorkflow(configuredProcessors, `${this.id}-configured-input-processor`);
+    return configuredProcessors;
   }
 
   /**
@@ -735,7 +735,7 @@ export class Agent<
         ? await this.#outputProcessors({ requestContext: requestContext || new RequestContext() })
         : this.#outputProcessors;
 
-    return this.combineProcessorsIntoWorkflow(configuredProcessors, `${this.id}-configured-output-processor`);
+    return configuredProcessors;
   }
 
   /**
@@ -2134,6 +2134,7 @@ export class Agent<
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
           backgroundConfig: (toolObj as any).backgroundConfig,
+          workspace,
         };
         const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
         convertedWorkspaceTools[toolName] = convertedToCoreTool;
@@ -2201,6 +2202,7 @@ export class Agent<
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: false, // Skill tools never require approval
           backgroundConfig: (toolObj as any).backgroundConfig,
+          workspace,
         };
         const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
         convertedSkillTools[toolName] = convertedToCoreTool;
@@ -2800,6 +2802,9 @@ export class Agent<
                   entityId: agentName,
                 }) || `${slugify.default(this.id)}-${agentName}`;
 
+            const subAgentDefaultOptions = await agent.getDefaultOptions?.({ requestContext });
+            const subAgentHasOwnMemoryConfig = subAgentDefaultOptions?.memory !== undefined;
+
             // Save the parent agent's MastraMemory before the sub-agent runs.
             // The sub-agent's prepare-memory-step will overwrite this key with
             // its own thread/resource identity. We restore it after the sub-agent
@@ -2997,7 +3002,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
-                      ...(resourceId && threadId
+                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
                         ? {
                             memory: {
                               resource: subAgentResourceId,
@@ -3012,7 +3017,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
-                      ...(resourceId && threadId
+                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
                         ? {
                             memory: {
                               resource: subAgentResourceId,
@@ -3097,7 +3102,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
-                      ...(resourceId && threadId
+                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
                         ? {
                             memory: {
                               resource: subAgentResourceId,
@@ -3114,7 +3119,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
-                      ...(resourceId && threadId
+                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
                         ? {
                             memory: {
                               resource: subAgentResourceId,
@@ -4127,14 +4132,13 @@ export class Agent<
     const resourceIdFromContext = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
     const threadIdFromContext = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
 
-    const threadFromArgs = threadIdFromContext
-      ? { id: threadIdFromContext }
-      : resolveThreadIdFromArgs({
-          memory: {
-            ...options.memory,
-            thread: options.memory?.thread || snapshotMemoryInfo?.threadId,
-          },
-        });
+    const threadFromArgs = resolveThreadIdFromArgs({
+      memory: {
+        ...options.memory,
+        thread: options.memory?.thread || snapshotMemoryInfo?.threadId,
+      },
+      overrideId: threadIdFromContext,
+    });
 
     const resourceId = resourceIdFromContext || options.memory?.resource || snapshotMemoryInfo?.resourceId;
     const memoryConfig = options.memory?.options;
@@ -4446,7 +4450,20 @@ export class Agent<
         text: result.text,
         object: result.object,
         files: result.files,
+        ...(result.tripwire ? { tripwire: result.tripwire } : {}),
       },
+      ...(result.tripwire
+        ? {
+            attributes: {
+              tripwireAbort: {
+                reason: result.tripwire.reason,
+                processorId: result.tripwire.processorId,
+                retry: result.tripwire.retry,
+                metadata: result.tripwire.metadata,
+              },
+            },
+          }
+        : {}),
     });
   }
 

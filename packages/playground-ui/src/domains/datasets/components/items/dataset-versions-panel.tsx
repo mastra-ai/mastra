@@ -79,12 +79,9 @@ export function DatasetVersionsPanel({
       {isSelectionActive ? (
         <Column.Toolbar className="grid justify-stretch gap-3 w-full">
           <ButtonsGroup>
-            <Button variant="standard" size="default" onClick={handleCancelSelection}>
-              Cancel
-            </Button>
+            <Button onClick={handleCancelSelection}>Cancel</Button>
             <ButtonWithTooltip
-              variant="cta"
-              size="default"
+              variant="primary"
               disabled={selectedKeys.size !== 2}
               onClick={handleExecuteCompare}
               tooltipContent={selectedKeys.size !== 2 ? 'Select two versions to enable comparison' : undefined}
@@ -96,10 +93,10 @@ export function DatasetVersionsPanel({
         </Column.Toolbar>
       ) : (
         <Column.Toolbar>
-          <Button variant="standard" size="default" onClick={handleCompareClick}>
+          <Button onClick={handleCompareClick}>
             <GitCompareIcon /> Compare Ver.
           </Button>
-          <ButtonWithTooltip variant="standard" size="default" onClick={onClose} tooltipContent="Hide Versions Panel">
+          <ButtonWithTooltip onClick={onClose} tooltipContent="Hide Versions Panel">
             <XIcon />
           </ButtonWithTooltip>
         </Column.Toolbar>
@@ -156,13 +153,7 @@ export function DatasetVersionsPanel({
                 })}
               </ItemList.Items>
               {hasNextPage && (
-                <Button
-                  variant="standard"
-                  size="default"
-                  onClick={() => fetchNextPage()}
-                  disabled={isFetchingNextPage}
-                  className="w-full mt-2"
-                >
+                <Button size="md" onClick={() => fetchNextPage()} disabled={isFetchingNextPage} className="w-full mt-2">
                   {isFetchingNextPage ? 'Loading...' : 'Load More'}
                 </Button>
               )}

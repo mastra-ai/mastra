@@ -1,6 +1,6 @@
 {
   "name": "@mastra/convex",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Convex provider for Mastra - includes both storage and vector adapters plus Convex server helpers",
   "type": "module",
   "main": "dist/index.js",
@@ -47,14 +47,14 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "convex": "^1.29.3"
+    "convex": "^1.33.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.13",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^17.3.1",

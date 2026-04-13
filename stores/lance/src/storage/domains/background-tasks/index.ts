@@ -1,8 +1,19 @@
 import type { Connection } from '@lancedb/lancedb';
-import type { BackgroundTask, BackgroundTaskStatus, TaskFilter, TaskListResult } from '@mastra/core/background-tasks';
+import type {
+  BackgroundTask,
+  BackgroundTaskStatus,
+  TaskFilter,
+  TaskListResult,
+  UpdateBackgroundTask,
+} from '@mastra/core/background-tasks';
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import { LanceDB, resolveLanceConfig } from '../../db';
 import type { LanceDomainConfig } from '../../db';
+
+function serializeJson(v: unknown): any {
+  if (typeof v === 'object' && v != null) return JSON.stringify(v);
+  return v ?? undefined;
+}
 
 function toRecord(task: BackgroundTask): Record<string, any> {
   return {
@@ -14,9 +25,9 @@ function toRecord(task: BackgroundTask): Record<string, any> {
     resource_id: task.resourceId ?? '',
     run_id: task.runId,
     status: task.status,
-    args: JSON.stringify(task.args),
-    result: task.result != null ? JSON.stringify(task.result) : '',
-    error: task.error != null ? JSON.stringify(task.error) : '',
+    args: serializeJson(task.args),
+    result: serializeJson(task.result),
+    error: serializeJson(task.error),
     retry_count: task.retryCount,
     max_retries: task.maxRetries,
     timeout_ms: task.timeoutMs,
@@ -95,14 +106,14 @@ export class StoreBackgroundTasksLance extends BackgroundTasksStorage {
     await table.add([toRecord(task)], { mode: 'append' });
   }
 
-  async updateTask(taskId: string, update: Partial<BackgroundTask>): Promise<void> {
+  async updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void> {
     const existing = await this.getTask(taskId);
     if (!existing) return;
 
     const merged = { ...existing };
     if ('status' in update) merged.status = update.status!;
-    if ('result' in update) merged.result = update.result;
-    if ('error' in update) merged.error = update.error;
+    if ('result' in update) merged.result = serializeJson(update.result);
+    if ('error' in update) merged.error = serializeJson(update.error);
     if ('retryCount' in update) merged.retryCount = update.retryCount!;
     if ('startedAt' in update) merged.startedAt = update.startedAt;
     if ('completedAt' in update) merged.completedAt = update.completedAt;

@@ -32,7 +32,7 @@ The `listen()` method is a core function available in all Mastra voice providers
 ]}
 />
 
-## Return Value
+## Return value
 
 Returns one of the following:
 
@@ -40,7 +40,7 @@ Returns one of the following:
 - `Promise<NodeJS.ReadableStream>`: A promise that resolves to a stream of transcribed text (for streaming transcription)
 - `Promise<void>`: For real-time providers that emit 'writing' events instead of returning text directly
 
-## Provider-Specific Options
+## Provider-specific options
 
 Each voice provider may support additional options specific to their implementation. Here are some examples:
 
@@ -151,7 +151,7 @@ Each voice provider may support additional options specific to their implementat
 ]}
 />
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { OpenAIVoice } from '@mastra/voice-openai'
@@ -186,7 +186,7 @@ const transcriptWithOptions = await voice.listen(audioStream, {
 })
 ```
 
-## Using with CompositeVoice
+## Using with `CompositeVoice`
 
 When using `CompositeVoice`, the `listen()` method delegates to the configured listening provider:
 
@@ -235,7 +235,7 @@ const transcriptWithOptions = await voice.listen(audioStream, {
 
 See the [CompositeVoice reference](/reference/voice/composite-voice) for more details on AI SDK integration.
 
-## Realtime Voice Providers
+## Realtime voice providers
 
 When using realtime voice providers like `OpenAIRealtimeVoice`, the `listen()` method behaves differently:
 
@@ -268,7 +268,7 @@ await voice.listen(microphoneStream)
 - Some providers support streaming transcription, where text is returned as it's transcribed
 - For best performance, consider closing or ending the audio stream when you're done with it
 
-## Related Methods
+## Related methods
 
 - [voice.speak()](./voice.speak) - Converts text to speech
 - [voice.send()](./voice.send) - Sends audio data to the voice provider in real-time

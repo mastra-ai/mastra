@@ -112,7 +112,6 @@ export function MCPClientFormSidebar({
                   placeholder="Select a server..."
                   searchPlaceholder="Search servers..."
                   emptyText="No servers found"
-                  variant="light"
                   container={containerRef}
                 />
               </div>

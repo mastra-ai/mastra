@@ -1,4 +1,4 @@
-import type { BackgroundTask, TaskFilter, TaskListResult } from '../../../background-tasks/types';
+import type { BackgroundTask, TaskFilter, TaskListResult, UpdateBackgroundTask } from '../../../background-tasks/types';
 import type { InMemoryDB } from '../inmemory-db';
 import { BackgroundTasksStorage } from './base';
 
@@ -18,7 +18,7 @@ export class BackgroundTasksInMemory extends BackgroundTasksStorage {
     this.db.backgroundTasks.set(task.id, { ...task });
   }
 
-  async updateTask(taskId: string, update: Partial<BackgroundTask>): Promise<void> {
+  async updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void> {
     const existing = this.db.backgroundTasks.get(taskId);
     if (!existing) return;
     this.db.backgroundTasks.set(taskId, { ...existing, ...update });

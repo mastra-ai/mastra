@@ -1,8 +1,19 @@
-import type { BackgroundTask, BackgroundTaskStatus, TaskFilter, TaskListResult } from '@mastra/core/background-tasks';
+import type {
+  BackgroundTask,
+  BackgroundTaskStatus,
+  TaskFilter,
+  TaskListResult,
+  UpdateBackgroundTask,
+} from '@mastra/core/background-tasks';
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import { D1DB, resolveD1Config } from '../../db';
 import type { D1DomainConfig } from '../../db';
 import { createSqlBuilder } from '../../sql-builder';
+
+function serializeJson(v: unknown): any {
+  if (typeof v === 'object' && v != null) return JSON.stringify(v);
+  return v ?? null;
+}
 
 function rowToTask(row: Record<string, any>): BackgroundTask {
   const parseJson = (val: unknown): any => {
@@ -55,9 +66,10 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
   }
 
   async createTask(task: BackgroundTask): Promise<void> {
+    const fullTableName = this.#db.getTableName(TABLE_BACKGROUND_TASKS);
     const { sql, params } = createSqlBuilder()
       .insert(
-        TABLE_BACKGROUND_TASKS,
+        fullTableName,
         [
           'id',
           'tool_call_id',
@@ -86,9 +98,9 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
           task.resourceId ?? null,
           task.runId,
           task.status,
-          JSON.stringify(task.args),
-          task.result != null ? JSON.stringify(task.result) : null,
-          task.error != null ? JSON.stringify(task.error) : null,
+          serializeJson(task.args),
+          serializeJson(task.result),
+          serializeJson(task.error),
           task.retryCount,
           task.maxRetries,
           task.timeoutMs,
@@ -101,7 +113,7 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
     await this.#db.executeQuery({ sql, params });
   }
 
-  async updateTask(taskId: string, update: Partial<BackgroundTask>): Promise<void> {
+  async updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void> {
     const sets: string[] = [];
     const params: any[] = [];
     if ('status' in update) {
@@ -110,11 +122,11 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
     }
     if ('result' in update) {
       sets.push('result = ?');
-      params.push(update.result != null ? JSON.stringify(update.result) : null);
+      params.push(serializeJson(update.result));
     }
     if ('error' in update) {
       sets.push('error = ?');
-      params.push(update.error != null ? JSON.stringify(update.error) : null);
+      params.push(serializeJson(update.error));
     }
     if ('retryCount' in update) {
       sets.push('retry_count = ?');
@@ -130,21 +142,24 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
     }
     if (sets.length === 0) return;
     params.push(taskId);
+    const fullTableName = this.#db.getTableName(TABLE_BACKGROUND_TASKS);
     await this.#db.executeQuery({
-      sql: `UPDATE ${TABLE_BACKGROUND_TASKS} SET ${sets.join(', ')} WHERE id = ?`,
+      sql: `UPDATE ${fullTableName} SET ${sets.join(', ')} WHERE id = ?`,
       params,
     });
   }
 
   async getTask(taskId: string): Promise<BackgroundTask | null> {
-    const { sql, params } = createSqlBuilder().select('*').from(TABLE_BACKGROUND_TASKS).where('id = ?', taskId).build();
+    const fullTableName = this.#db.getTableName(TABLE_BACKGROUND_TASKS);
+    const { sql, params } = createSqlBuilder().select('*').from(fullTableName).where('id = ?', taskId).build();
     const row = await this.#db.executeQuery({ sql, params, first: true });
     return row ? rowToTask(row as Record<string, any>) : null;
   }
 
   async listTasks(filter: TaskFilter): Promise<TaskListResult> {
-    let builder = createSqlBuilder().select('*').from(TABLE_BACKGROUND_TASKS);
-    let countBuilder = createSqlBuilder().select('COUNT(*) as count').from(TABLE_BACKGROUND_TASKS);
+    const fullTableName = this.#db.getTableName(TABLE_BACKGROUND_TASKS);
+    let builder = createSqlBuilder().select('*').from(fullTableName);
+    let countBuilder = createSqlBuilder().count().from(fullTableName);
     if (filter.status) {
       const statuses = Array.isArray(filter.status) ? filter.status : [filter.status];
       builder = builder.where(`status IN (${statuses.map(() => '?').join(',')})`, ...statuses);
@@ -203,7 +218,8 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
   }
 
   async deleteTask(taskId: string): Promise<void> {
-    await this.#db.executeQuery({ sql: `DELETE FROM ${TABLE_BACKGROUND_TASKS} WHERE id = ?`, params: [taskId] });
+    const fullTableName = this.#db.getTableName(TABLE_BACKGROUND_TASKS);
+    await this.#db.executeQuery({ sql: `DELETE FROM ${fullTableName} WHERE id = ?`, params: [taskId] });
   }
 
   async deleteTasks(filter: TaskFilter): Promise<void> {
@@ -238,15 +254,17 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
       params.push(filter.runId);
     }
     if (conditions.length === 0) return;
+    const fullTableName = this.#db.getTableName(TABLE_BACKGROUND_TASKS);
     await this.#db.executeQuery({
-      sql: `DELETE FROM ${TABLE_BACKGROUND_TASKS} WHERE ${conditions.join(' AND ')}`,
+      sql: `DELETE FROM ${fullTableName} WHERE ${conditions.join(' AND ')}`,
       params,
     });
   }
 
   async getRunningCount(): Promise<number> {
+    const fullTableName = this.#db.getTableName(TABLE_BACKGROUND_TASKS);
     const row = await this.#db.executeQuery({
-      sql: `SELECT COUNT(*) as count FROM ${TABLE_BACKGROUND_TASKS} WHERE status = 'running'`,
+      sql: `SELECT COUNT(*) as count FROM ${fullTableName} WHERE status = 'running'`,
       params: [],
       first: true,
     });
@@ -254,8 +272,9 @@ export class BackgroundTasksStorageD1 extends BackgroundTasksStorage {
   }
 
   async getRunningCountByAgent(agentId: string): Promise<number> {
+    const fullTableName = this.#db.getTableName(TABLE_BACKGROUND_TASKS);
     const row = await this.#db.executeQuery({
-      sql: `SELECT COUNT(*) as count FROM ${TABLE_BACKGROUND_TASKS} WHERE status = 'running' AND agent_id = ?`,
+      sql: `SELECT COUNT(*) as count FROM ${fullTableName} WHERE status = 'running' AND agent_id = ?`,
       params: [agentId],
       first: true,
     });

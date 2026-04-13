@@ -39,6 +39,13 @@ export interface BackgroundTask {
   timeoutMs: number;
 }
 
+export type UpdateBackgroundTask = Partial<
+  Omit<
+    BackgroundTask,
+    'id' | 'createdAt' | 'threadId' | 'resourceId' | 'runId' | 'agentId' | 'toolCallId' | 'toolName' | 'args'
+  >
+>;
+
 /**
  * Payload accepted by `BackgroundTaskManager.enqueue()`.
  */

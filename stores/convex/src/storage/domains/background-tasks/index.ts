@@ -1,4 +1,4 @@
-import type { BackgroundTask, TaskFilter, TaskListResult } from '@mastra/core/background-tasks';
+import type { BackgroundTask, TaskFilter, TaskListResult, UpdateBackgroundTask } from '@mastra/core/background-tasks';
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS } from '@mastra/core/storage';
 import { ConvexDB, resolveConvexConfig } from '../../db';
 import type { ConvexDomainConfig } from '../../db';
@@ -12,12 +12,17 @@ type StoredTask = Omit<BackgroundTask, 'createdAt' | 'startedAt' | 'completedAt'
   error?: string;
 };
 
+function serializeJson(v: unknown): any {
+  if (typeof v === 'object' && v != null) return JSON.stringify(v);
+  return v ?? undefined;
+}
+
 function toStored(task: BackgroundTask): StoredTask {
   return {
     ...task,
-    args: JSON.stringify(task.args),
-    result: task.result != null ? JSON.stringify(task.result) : undefined,
-    error: task.error != null ? JSON.stringify(task.error) : undefined,
+    args: serializeJson(task.args),
+    result: serializeJson(task.result),
+    error: serializeJson(task.error),
     createdAt: task.createdAt.toISOString(),
     startedAt: task.startedAt?.toISOString(),
     completedAt: task.completedAt?.toISOString(),
@@ -71,13 +76,13 @@ export class BackgroundTasksConvex extends BackgroundTasksStorage {
     await this.#db.insert({ tableName: TABLE_BACKGROUND_TASKS, record: toStored(task) });
   }
 
-  async updateTask(taskId: string, update: Partial<BackgroundTask>): Promise<void> {
+  async updateTask(taskId: string, update: UpdateBackgroundTask): Promise<void> {
     const existing = await this.getTask(taskId);
     if (!existing) return;
     const merged = { ...existing };
     if ('status' in update) merged.status = update.status!;
-    if ('result' in update) merged.result = update.result;
-    if ('error' in update) merged.error = update.error;
+    if ('result' in update) merged.result = serializeJson(update.result);
+    if ('error' in update) merged.error = serializeJson(update.error);
     if ('retryCount' in update) merged.retryCount = update.retryCount!;
     if ('startedAt' in update) merged.startedAt = update.startedAt;
     if ('completedAt' in update) merged.completedAt = update.completedAt;
@@ -140,9 +145,8 @@ export class BackgroundTasksConvex extends BackgroundTasksStorage {
 
   async deleteTasks(filter: TaskFilter): Promise<void> {
     const { tasks } = await this.listTasks(filter);
-    for (const task of tasks) {
-      await this.#db.deleteMany(TABLE_BACKGROUND_TASKS, [task.id]);
-    }
+    const taskIds = tasks.map(t => t.id);
+    await this.#db.deleteMany(TABLE_BACKGROUND_TASKS, taskIds);
   }
 
   async getRunningCount(): Promise<number> {
