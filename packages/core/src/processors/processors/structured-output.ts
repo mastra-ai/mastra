@@ -14,7 +14,7 @@ import type { StandardSchemaWithJSON } from '../../schema';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType } from '../../stream';
 import type { ToolCallChunk, ToolResultChunk } from '../../stream/types';
-import type { Processor } from '../index';
+import type { ProcessOutputStreamArgs, Processor } from '../index';
 
 export type { StructuredOutputOptions } from '../../agent/types';
 
@@ -91,21 +91,10 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     this.agent = agent;
   }
 
-  async processOutputStream(
-    args: {
-      part: ChunkType;
-      streamParts: ChunkType[];
-      state: Record<string, unknown> & {
-        controller?: TransformStreamDefaultController<ChunkType<OUTPUT>>;
-      };
-      abort: (reason?: string, options?: unknown) => never;
-      retryCount: number;
-      requestContext?: RequestContext;
-    } & Partial<ObservabilityContext>,
-  ): Promise<ChunkType | null | undefined> {
-    const { part, state, streamParts, abort, requestContext, ...rest } = args;
+  async processOutputStream(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined> {
+    const { part, state, streamParts, abort, requestContext, messageList, ...rest } = args;
     const observabilityContext = resolveObservabilityContext(rest);
-    const controller = state.controller;
+    const controller = state.controller as TransformStreamDefaultController<ChunkType<OUTPUT>> | undefined;
 
     switch (part.type) {
       case 'finish':
@@ -113,7 +102,14 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         // - enqueue the structuring agent stream chunks into the main stream
         // - when the structuring agent stream is finished, enqueue the final chunk into the main stream
 
-        await this.processAndEmitStructuredOutput(streamParts, controller, abort, observabilityContext, requestContext);
+        await this.processAndEmitStructuredOutput(
+          streamParts,
+          controller,
+          abort,
+          observabilityContext,
+          requestContext,
+          messageList,
+        );
         return part;
 
       default:
@@ -124,9 +120,10 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
   private async processAndEmitStructuredOutput(
     streamParts: ChunkType[],
     controller: TransformStreamDefaultController<ChunkType<OUTPUT>> | undefined,
-    abort: (reason?: string) => never,
+    abort: ProcessOutputStreamArgs['abort'],
     observabilityContext?: ObservabilityContext,
     requestContext?: RequestContext,
+    messageList?: ProcessOutputStreamArgs['messageList'],
   ): Promise<void> {
     if (this.isStructuringAgentStreamStarted) return;
     this.isStructuringAgentStreamStarted = true;
@@ -134,7 +131,12 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
       const structuringPrompt = this.buildStructuringPrompt(streamParts);
       const prompt = `Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n${structuringPrompt}`;
 
-      const structuringAgentStream = await this.getStructuringStream(prompt, requestContext, observabilityContext);
+      const structuringAgentStream = await this.getStructuringStream(
+        prompt,
+        requestContext,
+        messageList,
+        observabilityContext,
+      );
 
       const excludedChunkTypes = [
         'start',
@@ -194,12 +196,24 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
   private async getStructuringStream(
     prompt: string,
     requestContext?: RequestContext,
+    messageList?: ProcessOutputStreamArgs['messageList'],
     observabilityContext?: ObservabilityContext,
   ) {
     const requestThreadId = requestContext?.get(MASTRA_THREAD_ID_KEY);
     const requestResourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY);
-    const threadId = typeof requestThreadId === 'string' ? requestThreadId : undefined;
-    const resourceId = typeof requestResourceId === 'string' ? requestResourceId : undefined;
+    const serializedMemoryInfo = messageList?.serialize().memoryInfo;
+    const threadId =
+      typeof requestThreadId === 'string'
+        ? requestThreadId
+        : typeof serializedMemoryInfo?.threadId === 'string'
+          ? serializedMemoryInfo.threadId
+          : undefined;
+    const resourceId =
+      typeof requestResourceId === 'string'
+        ? requestResourceId
+        : typeof serializedMemoryInfo?.resourceId === 'string'
+          ? serializedMemoryInfo.resourceId
+          : undefined;
 
     // When opted in and an explicit agent is available with thread info,
     // use that agent with a model override and read-only memory.

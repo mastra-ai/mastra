@@ -69,6 +69,7 @@ describe('Structured output memory inheritance (e2e)', { timeout: 180_000 }, () 
           structuredOutput: {
             schema: profileSchema,
             model: 'openai/gpt-5.4-mini',
+            useAgent: true,
           },
         },
       );

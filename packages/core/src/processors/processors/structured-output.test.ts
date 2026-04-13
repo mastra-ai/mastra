@@ -355,6 +355,81 @@ describe('StructuredOutputProcessor', () => {
       expect(fallbackStreamSpy).not.toHaveBeenCalled();
     });
 
+    it('should fall back to serialized message list memory when request context is missing', async () => {
+      const { controller } = createMockController();
+      const abort = createMockAbort();
+      const agent = {
+        stream: vi.fn().mockResolvedValue({
+          fullStream: convertArrayToReadableStream([
+            {
+              runId: 'test-run',
+              from: ChunkFrom.AGENT,
+              type: 'object-result',
+              object: { color: 'violet', intensity: 'deep' },
+            },
+          ]),
+        }),
+      } as unknown as Agent;
+      const fallbackStreamSpy = vi.spyOn(processor['structuringAgent'], 'stream');
+
+      processor = new StructuredOutputProcessor({
+        schema: testSchema,
+        model: mockModel,
+        errorStrategy: 'strict',
+        useAgent: true,
+      });
+      processor.setAgent(agent);
+
+      const finishChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'finish' as const,
+        payload: {
+          stepResult: { reason: 'stop' as const },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
+
+      await processor.processOutputStream({
+        part: finishChunk,
+        streamParts: [
+          {
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            type: 'text-delta',
+            payload: { id: 'text-1', text: 'The answer is violet and deep' },
+          },
+        ],
+        state: { controller },
+        abort,
+        retryCount: 0,
+        messageList: {
+          serialize: () => ({
+            memoryInfo: { threadId: 'thread-123', resourceId: 'resource-456' },
+          }),
+        },
+      });
+
+      expect(agent.stream).toHaveBeenCalledWith(
+        expect.stringContaining('# Assistant Response'),
+        expect.objectContaining({
+          model: mockModel,
+          structuredOutput: {
+            schema: testSchema,
+            jsonPromptInjection: undefined,
+          },
+          memory: {
+            thread: 'thread-123',
+            resource: 'resource-456',
+            options: { readOnly: true },
+          },
+        }),
+      );
+      expect(fallbackStreamSpy).not.toHaveBeenCalled();
+    });
+
     it('should surface plain object error messages', async () => {
       const upstreamError = { message: 'Schema failed' };
       const mockLogger = {
