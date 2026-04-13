@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS metric_events (
   timestamp TIMESTAMP NOT NULL,
 
   -- IDs
-  metricId VARCHAR NOT NULL,
+  metricId VARCHAR NOT NULL PRIMARY KEY,
   traceId VARCHAR,
   spanId VARCHAR,
   experimentId VARCHAR,
@@ -121,7 +121,7 @@ CREATE TABLE IF NOT EXISTS log_events (
   timestamp TIMESTAMP NOT NULL,
 
   -- IDs
-  logId VARCHAR NOT NULL,
+  logId VARCHAR NOT NULL PRIMARY KEY,
   traceId VARCHAR,
   spanId VARCHAR,
   experimentId VARCHAR,
@@ -170,7 +170,7 @@ CREATE TABLE IF NOT EXISTS score_events (
   timestamp TIMESTAMP NOT NULL,
 
   -- IDs
-  scoreId VARCHAR NOT NULL,
+  scoreId VARCHAR NOT NULL PRIMARY KEY,
   traceId VARCHAR,
   spanId VARCHAR,
   experimentId VARCHAR,
@@ -223,7 +223,7 @@ CREATE TABLE IF NOT EXISTS feedback_events (
   timestamp TIMESTAMP NOT NULL,
 
   -- IDs
-  feedbackId VARCHAR NOT NULL,
+  feedbackId VARCHAR NOT NULL PRIMARY KEY,
   traceId VARCHAR,
   spanId VARCHAR,
   experimentId VARCHAR,
@@ -386,11 +386,16 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS source VARCHAR`,
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS feedbackSource VARCHAR`,
   `ALTER TABLE feedback_events ALTER COLUMN traceId DROP NOT NULL`,
+];
 
-  // Signal IDs for de-duplication (added in observability signal IDs feature)
-  // DEFAULT '' ensures existing rows get an empty string instead of failing NOT NULL.
-  `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS logId VARCHAR NOT NULL DEFAULT ''`,
-  `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS metricId VARCHAR NOT NULL DEFAULT ''`,
-  `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS scoreId VARCHAR NOT NULL DEFAULT ''`,
-  `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS feedbackId VARCHAR NOT NULL DEFAULT ''`,
+/**
+ * Signal tables that need to be migrated to add PRIMARY KEY on signal IDs.
+ * Used by init() to check if the constraint exists and drop+recreate if needed.
+ * DuckDB cannot add a PRIMARY KEY to an existing table when duplicate values exist.
+ */
+export const SIGNAL_TABLES_REQUIRING_PK_MIGRATION = [
+  { table: 'metric_events', pkColumn: 'metricId' },
+  { table: 'log_events', pkColumn: 'logId' },
+  { table: 'score_events', pkColumn: 'scoreId' },
+  { table: 'feedback_events', pkColumn: 'feedbackId' },
 ];
