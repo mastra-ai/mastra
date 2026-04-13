@@ -153,11 +153,13 @@ Mastra Cloud auto-deployed on push. The Mastra platform uses CLI-driven deploys,
 
 1. Commit `.mastra-project.json` to your repo (generated on your first manual deploy).
 
+1. Store `MASTRA_ORG_ID` and `MASTRA_PROJECT_ID` as GitHub Actions secrets. You can copy these values from `.mastra-project.json`.
+
 When `MASTRA_API_TOKEN` is set, the CLI runs in headless mode and skips all interactive prompts.
 
 ### Deploy Server on push to main
 
-Server deploy accepts org and project from `.mastra-project.json`, so no extra env vars are needed beyond the token:
+Server deploy requires `MASTRA_ORG_ID` and `MASTRA_PROJECT_ID` as env vars in headless mode, even when `--config` is provided:
 
 ```yaml title=".github/workflows/deploy-server.yml"
 name: Deploy to Mastra Server
@@ -171,16 +173,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
       - run: pnpm install
       - run: pnpm mastra server deploy --yes --config .mastra-project.json
         env:
           MASTRA_API_TOKEN: ${{ secrets.MASTRA_API_TOKEN }}
+          MASTRA_ORG_ID: ${{ secrets.MASTRA_ORG_ID }}
+          MASTRA_PROJECT_ID: ${{ secrets.MASTRA_PROJECT_ID }}
 ```
 
 ### Deploy Studio on push to main
@@ -199,12 +201,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
       - run: pnpm install
       - run: pnpm mastra studio deploy --yes --config .mastra-project.json
         env:
