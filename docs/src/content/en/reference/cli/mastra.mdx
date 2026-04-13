@@ -289,11 +289,19 @@ Creates a new project through an interactive prompt.
 
 ## `mastra server deploy`
 
-Builds and deploys your project to Server on Mastra platform. Works the same as [`mastra studio deploy`](#mastra-studio-deploy) with the same flags, arguments, and resolution logic.
+Builds and deploys your project to Server on Mastra platform. It uses the same `[dir]`, `--org`, `--project`, `--yes`, and `--config` options as [`mastra studio deploy`](#mastra-studio-deploy).
 
 ```bash
 mastra server deploy [dir]
 ```
+
+In interactive mode, organization and project resolution works the same way as `mastra studio deploy`. In headless mode, `mastra server deploy` also accepts `organizationId` and `projectId` from `.mastra-project.json`.
+
+### CI/CD usage
+
+Set `MASTRA_API_TOKEN` as an environment variable for headless deploys. If `.mastra-project.json` is committed to your repository, no extra environment variables are required.
+
+To override the linked project in CI, set `MASTRA_ORG_ID` and `MASTRA_PROJECT_ID`, or pass `--org` and `--project`.
 
 ## `mastra auth`
 
