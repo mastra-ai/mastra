@@ -1005,7 +1005,6 @@ export type ProviderModelsMap = {
     'sourceful/riverflow-v2-max-preview',
     'sourceful/riverflow-v2-standard-preview',
     'stepfun/step-3.5-flash',
-    'stepfun/step-3.5-flash:free',
     'x-ai/grok-3',
     'x-ai/grok-3-beta',
     'x-ai/grok-3-mini',
@@ -1247,6 +1246,7 @@ export type ProviderModelsMap = {
   readonly huggingface: readonly [
     'MiniMaxAI/MiniMax-M2.1',
     'MiniMaxAI/MiniMax-M2.5',
+    'MiniMaxAI/MiniMax-M2.7',
     'Qwen/Qwen3-235B-A22B-Thinking-2507',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct',
     'Qwen/Qwen3-Coder-Next',
@@ -2580,6 +2580,7 @@ export type ProviderModelsMap = {
     'hf:zai-org/GLM-4.7',
     'hf:zai-org/GLM-4.7-Flash',
     'hf:zai-org/GLM-5',
+    'hf:zai-org/GLM-5.1',
   ];
   readonly nvidia: readonly [
     'black-forest-labs/flux.1-dev',
@@ -3565,6 +3566,7 @@ export type ProviderModelsMap = {
   ];
   readonly togetherai: readonly [
     'MiniMaxAI/MiniMax-M2.5',
+    'MiniMaxAI/MiniMax-M2.7',
     'Qwen/Qwen3-235B-A22B-Instruct-2507-tput',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8',
     'Qwen/Qwen3-Coder-Next-FP8',
