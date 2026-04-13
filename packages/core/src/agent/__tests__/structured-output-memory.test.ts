@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MockMemory } from '../../memory/mock';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 import { MockLanguageModelV2, convertArrayToReadableStream } from './mock-model';
 
@@ -152,7 +153,7 @@ describe('Structured output with memory - assistant message in final position (#
 });
 
 describe('Structured output memory inheritance', () => {
-  it('includes prior memory context when a separate structuring model is used', async () => {
+  it('includes prior memory context when useAgent is true for a separate structuring model', async () => {
     const threadId = randomUUID();
     const resourceId = `structured-output-memory-${randomUUID()}`;
     const mockMemory = new MockMemory();
@@ -282,6 +283,10 @@ describe('Structured output memory inheritance', () => {
       },
     });
 
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+
     const result = await agent.generate(
       'Return my profile as structured data. If a field is missing from this message, fill it from earlier conversation memory.',
       {
@@ -289,6 +294,7 @@ describe('Structured output memory inheritance', () => {
           thread: threadId,
           resource: resourceId,
         },
+        requestContext,
         structuredOutput: {
           schema: z.object({
             favoriteColor: z.string(),
@@ -296,6 +302,7 @@ describe('Structured output memory inheritance', () => {
             petName: z.string(),
           }),
           model: structuringModel,
+          useAgent: true,
         },
       },
     );
@@ -319,6 +326,152 @@ describe('Structured output memory inheritance', () => {
     expect(promptText).toContain('violet');
     expect(promptText).toContain('Lisbon');
     expect(promptText).toContain('Mochi');
+  });
+
+  it('does not include prior memory context when useAgent is omitted for a separate structuring model', async () => {
+    const threadId = randomUUID();
+    const resourceId = `structured-output-memory-${randomUUID()}`;
+    const mockMemory = new MockMemory();
+
+    const mainModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: 'Acknowledged.' }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          {
+            type: 'response-metadata',
+            id: 'main-response-no-agent',
+            modelId: 'main-model',
+            timestamp: new Date(0),
+          },
+          { type: 'text-start', id: 'main-text-no-agent' },
+          { type: 'text-delta', id: 'main-text-no-agent', delta: 'Acknowledged.' },
+          { type: 'text-end', id: 'main-text-no-agent' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+
+    const structuringPrompts: any[] = [];
+    const structuringModel = new MockLanguageModelV2({
+      doGenerate: async options => {
+        structuringPrompts.push(options.prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: JSON.stringify({ summary: 'Structured summary' }) }],
+          warnings: [],
+        };
+      },
+      doStream: async options => {
+        structuringPrompts.push((options as any).prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          request: { body: undefined },
+          response: { headers: {}, body: undefined },
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            {
+              type: 'response-metadata',
+              id: 'structuring-response-no-agent',
+              modelId: 'structuring-model',
+              timestamp: new Date(0),
+            },
+            { type: 'text-start', id: 'structuring-text-no-agent' },
+            { type: 'text-delta', id: 'structuring-text-no-agent', delta: '{"summary":"Structured summary"}' },
+            { type: 'text-end', id: 'structuring-text-no-agent' },
+            { type: 'object-result', object: { summary: 'Structured summary' } } as any,
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ] as any),
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'structured-output-cross-turn-memory-disabled-test',
+      name: 'Memory Agent',
+      instructions: 'Answer briefly and use the provided conversation context.',
+      model: mainModel,
+      memory: mockMemory,
+    });
+
+    await mockMemory.createThread({ threadId, resourceId });
+
+    await agent.generate('My favorite color is violet.', {
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    await agent.generate('I grew up in Lisbon.', {
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    await agent.generate('My dog is named Mochi.', {
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+
+    const result = await agent.generate(
+      'Return my profile as structured data. If a field is missing from this message, fill it from earlier conversation memory.',
+      {
+        memory: {
+          thread: threadId,
+          resource: resourceId,
+        },
+        requestContext,
+        structuredOutput: {
+          schema: z.object({
+            summary: z.string(),
+          }),
+          model: structuringModel,
+        },
+      },
+    );
+
+    expect(result.object).toEqual({ summary: 'Structured summary' });
+
+    expect(structuringPrompts.length).toBeGreaterThan(0);
+    const prompt = structuringPrompts.at(-1)!;
+    const promptText = prompt
+      .flatMap((message: any) =>
+        Array.isArray(message.content)
+          ? message.content.map((part: any) => (typeof part === 'string' ? part : (part.text ?? JSON.stringify(part))))
+          : [typeof message.content === 'string' ? message.content : JSON.stringify(message.content)],
+      )
+      .join('\n');
+
+    expect(promptText).not.toContain('violet');
+    expect(promptText).not.toContain('Lisbon');
+    expect(promptText).not.toContain('Mochi');
   });
 
   it('keeps main-agent text chunks in the outer stream while suppressing structuring-agent text chunks', async () => {
@@ -448,7 +601,7 @@ describe('Structured output memory inheritance', () => {
           .map(part => part.text)
           .join('') ?? '';
 
-      expect(assistantText).toBe('');
+      expect(assistantText).toBe('Main agent summary.');
     });
   });
 });

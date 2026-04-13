@@ -230,6 +230,28 @@ const response = await testAgent.generate('Tell me about TypeScript.', {
 })
 ```
 
+If you want that structuring model to also see the current conversation history, set `useAgent: true`. Mastra will reuse the parent agent with the separate structuring model and attach read-only memory context when a thread is available.
+
+```typescript
+const response = await testAgent.generate('Return my profile as structured data.', {
+  memory: {
+    thread: 'thread-123',
+    resource: 'user-123',
+  },
+  structuredOutput: {
+    schema: z.object({
+      favoriteColor: z.string(),
+      hometown: z.string(),
+      petName: z.string(),
+    }),
+    model: 'openai/gpt-5.4',
+    useAgent: true,
+  },
+})
+```
+
+Leave `useAgent` unset if you want the separate structuring model to work only from the current response and not inherit prior conversation memory.
+
 ### Multi-step approach with `prepareStep`
 
 For models that don't support tools and structured outputs together, you can use `prepareStep` to handle them in separate steps.

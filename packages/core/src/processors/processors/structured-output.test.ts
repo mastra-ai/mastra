@@ -3,8 +3,8 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 import type { Agent } from '../../agent';
-import { MessageList } from '../../agent/message-list';
 import { Mastra } from '../../mastra';
+import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../../request-context';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { StructuredOutputProcessor } from './structured-output';
@@ -39,12 +39,6 @@ describe('StructuredOutputProcessor', () => {
     return vi.fn((reason?: string) => {
       throw new Error(reason || 'Aborted');
     }) as any;
-  }
-
-  function createMockWriter() {
-    return {
-      custom: vi.fn(async () => undefined),
-    };
   }
 
   beforeEach(() => {
@@ -205,10 +199,10 @@ describe('StructuredOutputProcessor', () => {
       );
     });
 
-    it('should use the parent agent with model override and read-only memory when memory context is available', async () => {
+    it('should use the explicit agent with model override and read-only memory when request context is available', async () => {
       const { controller } = createMockController();
       const abort = createMockAbort();
-      const parentAgent = {
+      const agent = {
         stream: vi.fn().mockResolvedValue({
           fullStream: convertArrayToReadableStream([
             {
@@ -222,7 +216,13 @@ describe('StructuredOutputProcessor', () => {
       } as unknown as Agent;
       const fallbackStreamSpy = vi.spyOn(processor['structuringAgent'], 'stream');
 
-      processor.setParentAgent(parentAgent);
+      processor = new StructuredOutputProcessor({
+        schema: testSchema,
+        model: mockModel,
+        errorStrategy: 'strict',
+        useAgent: true,
+      });
+      processor.setAgent(agent);
 
       const finishChunk: ChunkType = {
         runId: 'test-run',
@@ -236,7 +236,9 @@ describe('StructuredOutputProcessor', () => {
         },
       };
 
-      const messageList = new MessageList({ threadId: 'thread-123', resourceId: 'resource-456' });
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_THREAD_ID_KEY, 'thread-123');
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'resource-456');
 
       await processor.processOutputStream({
         part: finishChunk,
@@ -251,10 +253,10 @@ describe('StructuredOutputProcessor', () => {
         state: { controller },
         abort,
         retryCount: 0,
-        messageList,
+        requestContext,
       });
 
-      expect(parentAgent.stream).toHaveBeenCalledWith(
+      expect(agent.stream).toHaveBeenCalledWith(
         expect.stringContaining('# Assistant Response'),
         expect.objectContaining({
           model: mockModel,
@@ -272,10 +274,10 @@ describe('StructuredOutputProcessor', () => {
       expect(fallbackStreamSpy).not.toHaveBeenCalled();
     });
 
-    it('should use the parent agent with thread-only read-only memory when resource context is missing', async () => {
+    it('should use the explicit agent with thread-only read-only memory when resource context is missing', async () => {
       const { controller } = createMockController();
       const abort = createMockAbort();
-      const parentAgent = {
+      const agent = {
         stream: vi.fn().mockResolvedValue({
           fullStream: convertArrayToReadableStream([
             {
@@ -289,7 +291,13 @@ describe('StructuredOutputProcessor', () => {
       } as unknown as Agent;
       const fallbackStreamSpy = vi.spyOn(processor['structuringAgent'], 'stream');
 
-      processor.setParentAgent(parentAgent);
+      processor = new StructuredOutputProcessor({
+        schema: testSchema,
+        model: mockModel,
+        errorStrategy: 'strict',
+        useAgent: true,
+      });
+      processor.setAgent(agent);
 
       const finishChunk: ChunkType = {
         runId: 'test-run',
@@ -303,7 +311,8 @@ describe('StructuredOutputProcessor', () => {
         },
       };
 
-      const messageList = new MessageList({ threadId: 'thread-123' });
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_THREAD_ID_KEY, 'thread-123');
 
       await processor.processOutputStream({
         part: finishChunk,
@@ -318,10 +327,10 @@ describe('StructuredOutputProcessor', () => {
         state: { controller },
         abort,
         retryCount: 0,
-        messageList,
+        requestContext,
       });
 
-      expect(parentAgent.stream).toHaveBeenCalledWith(
+      expect(agent.stream).toHaveBeenCalledWith(
         expect.stringContaining('# Assistant Response'),
         expect.objectContaining({
           model: mockModel,
@@ -335,7 +344,7 @@ describe('StructuredOutputProcessor', () => {
           },
         }),
       );
-      expect(parentAgent.stream).not.toHaveBeenCalledWith(
+      expect(agent.stream).not.toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
           memory: expect.objectContaining({
@@ -344,58 +353,6 @@ describe('StructuredOutputProcessor', () => {
         }),
       );
       expect(fallbackStreamSpy).not.toHaveBeenCalled();
-    });
-
-    it('should emit structured output through writer when no controller is available', async () => {
-      const abort = createMockAbort();
-      const writer = createMockWriter();
-      const finishChunk: ChunkType = {
-        runId: 'test-run',
-        from: ChunkFrom.AGENT,
-        type: 'finish' as const,
-        payload: {
-          stepResult: { reason: 'stop' as const },
-          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
-          metadata: {},
-          messages: { all: [], user: [], nonUser: [] },
-        },
-      };
-
-      vi.spyOn(processor['structuringAgent'], 'stream').mockResolvedValue({
-        fullStream: convertArrayToReadableStream([
-          {
-            runId: 'test-run',
-            from: ChunkFrom.AGENT,
-            type: 'object-result',
-            object: { color: 'blue', intensity: 'bright' },
-          },
-        ]),
-      } as any);
-
-      const result = await processor.processOutputStream({
-        part: finishChunk,
-        streamParts: [
-          {
-            runId: 'test-run',
-            from: ChunkFrom.AGENT,
-            type: 'text-delta',
-            payload: { id: 'text-1', text: 'The answer is blue and bright' },
-          },
-        ],
-        state: {},
-        abort,
-        retryCount: 0,
-        writer,
-      });
-
-      expect(result).toBe(finishChunk);
-      expect(writer.custom).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'object-result',
-          object: { color: 'blue', intensity: 'bright' },
-          metadata: { from: 'structured-output' },
-        }),
-      );
     });
 
     it('should surface plain object error messages', async () => {

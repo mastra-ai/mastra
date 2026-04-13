@@ -14,12 +14,6 @@ const threadId = `one`;
 const resourceId = `user`;
 
 describe('MessageList', () => {
-  it('should expose memory info when configured', () => {
-    const messageList = new MessageList({ threadId: 'thread-123', resourceId: 'resource-456' });
-
-    expect(messageList.getMemoryInfo()).toEqual({ threadId: 'thread-123', resourceId: 'resource-456' });
-  });
-
   describe('Response message tracking', () => {
     it('should track all response messages including tool calls and results', () => {
       const messageList = new MessageList();

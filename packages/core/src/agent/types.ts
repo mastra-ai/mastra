@@ -84,6 +84,12 @@ export type StructuredOutputOptionsBase<OUTPUT = {}> = {
   instructions?: string;
 
   /**
+   * When true and a separate structuring model is provided, reuse the parent agent
+   * with read-only memory so the structuring model has full conversation context.
+   */
+  useAgent?: boolean;
+
+  /**
    * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
    */
   jsonPromptInjection?: boolean;
