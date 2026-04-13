@@ -66,7 +66,7 @@ MASTRA_PROJECT_ID=<your-project-id>
 
 Tokens created with `mastra auth tokens create` are organization-scoped, so `MASTRA_PROJECT_ID` is required.
 
-If you use a project-scoped token from Mastra Cloud instead, `CloudExporter` can route without `projectId`, but setting it explicitly is still supported.
+If you use a project-scoped token from the Mastra platform instead, `CloudExporter` can route without `projectId`, but setting it explicitly is still supported.
 
 Add both values to your environment:
 
@@ -137,7 +137,7 @@ If you prefer, rely entirely on environment variables:
 new CloudExporter()
 ```
 
-With `MASTRA_CLOUD_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` set, `CloudExporter` automatically sends data to the correct Mastra Cloud project.
+With `MASTRA_CLOUD_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` set, `CloudExporter` automatically sends data to the correct Mastra platform project.
 
 :::note
 
@@ -186,9 +186,9 @@ new CloudExporter({
 })
 ```
 
-## Viewing data in Mastra Cloud
+## Viewing data in Mastra Studio
 
-After you enable `CloudExporter`, open your project in [Mastra Cloud](https://cloud.mastra.ai) to inspect the exported data.
+After you enable `CloudExporter`, open your project in [Mastra Studio](https://projects.mastra.ai) to inspect the exported data.
 
 - Open your project and select **Open Studio**.
 - In Studio, go to **Traces** to inspect agent and workflow traces.
@@ -200,7 +200,7 @@ After you enable `CloudExporter`, open your project in [Mastra Cloud](https://cl
 If you use a project-scoped token, open the project that issued the token. If you use an organization-scoped token, open the project named by `MASTRA_PROJECT_ID`.
 :::
 
-When you deploy with Mastra Cloud, set **Deployment → Service Name** to a stable value and keep it aligned with the `serviceName` in your observability config. This makes traces easier to filter in Studio through **Deployments → Service Name** when multiple services or deployments send data to the same project.
+When you deploy with Mastra Studio, set **Deployment → Service Name** to a stable value and keep it aligned with the `serviceName` in your observability config. This makes traces easier to filter in Studio through **Deployments → Service Name** when multiple services or deployments send data to the same project.
 
 ## Performance
 
@@ -215,7 +215,7 @@ CloudExporter uses batching to optimize network usage. Events are buffered and s
 - Events are batched up to `maxBatchSize` (default: 1000).
 - Batches are sent when full or after `maxBatchWaitMs` (default: 5 seconds).
 - Failed batches are retried with exponential backoff.
-- The exporter degrades gracefully if Mastra Cloud is unreachable.
+- The exporter degrades gracefully if Mastra Studio is unreachable.
 
 ## Related
 
