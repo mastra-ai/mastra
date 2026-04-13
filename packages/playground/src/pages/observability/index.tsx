@@ -1,36 +1,34 @@
 import { EntityType } from '@mastra/core/observability';
-import type { EntityOptions, TraceDatePreset } from '@mastra/playground-ui';
 import {
-  EntityListPageLayout,
-  MainHeader,
   ButtonWithTooltip,
-  TracesList,
-  tracesListColumns,
-  TracesTools,
-  CONTEXT_FIELD_IDS,
-  TraceDialog,
-  parseError,
+  EntityListPageLayout,
   EntryListSkeleton,
-  getToNextEntryFn,
-  getToPreviousEntryFn,
-  groupTracesByThread,
-  useAgents,
-  useWorkflows,
-  useScorers,
-  useTags,
-  useEnvironments,
-  useServiceNames,
+  MainHeader,
   PermissionDenied,
   SessionExpired,
-  is403ForbiddenError,
+  getToNextEntryFn,
+  getToPreviousEntryFn,
   is401UnauthorizedError,
+  is403ForbiddenError,
+  parseError,
 } from '@mastra/playground-ui';
-
 import { BookIcon, EyeIcon } from 'lucide-react';
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
+import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { TraceDialog } from '@/domains/observability/components/trace-dialog';
+import { TracesList, tracesListColumns } from '@/domains/observability/components/traces-list';
+import { TracesTools } from '@/domains/observability/components/traces-tools';
+import { useEnvironments } from '@/domains/observability/hooks/use-environments';
+import { useServiceNames } from '@/domains/observability/hooks/use-service-names';
+import { useTags } from '@/domains/observability/hooks/use-tags';
 import { useTrace } from '@/domains/observability/hooks/use-trace';
 import { useTraces } from '@/domains/observability/hooks/use-traces';
+import { useScorers } from '@/domains/scores';
+import { CONTEXT_FIELD_IDS } from '@/domains/traces/types';
+import type { EntityOptions, TraceDatePreset } from '@/domains/traces/types';
+import { groupTracesByThread } from '@/domains/traces/utils/group-traces-by-thread';
+import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 export default function Observability() {
   const navigate = useNavigate();

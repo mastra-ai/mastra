@@ -1,19 +1,12 @@
 import {
   AgentIcon,
-  AuthStatus,
+  LogoWithoutText,
+  MainSidebar,
   McpServerIcon,
+  SettingsIcon,
   ToolsIcon,
   WorkflowIcon,
-  MainSidebar,
   useMainSidebar,
-  LogoWithoutText,
-  SettingsIcon,
-  MastraVersionFooter,
-  useMastraPlatform,
-  useIsCmsAvailable,
-  useAuthCapabilities,
-  isAuthenticated,
-  usePermissions,
 } from '@mastra/playground-ui';
 import type { NavLink, NavSection } from '@mastra/playground-ui';
 import {
@@ -30,6 +23,14 @@ import {
   GaugeIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
+import { AuthStatus } from '@/domains/auth/components/auth-status';
+import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { isAuthenticated } from '@/domains/auth/types';
+import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
+import { MastraVersionFooter } from '@/domains/configuration/components/mastra-version-footer';
+import { useLinkComponent } from '@/lib/framework';
+import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 
 type SidebarLink = NavLink & {
   requiredPermission?: string;
@@ -206,6 +207,7 @@ function getIsLinkActive(link: SidebarLink, pathname: string): boolean {
 }
 
 export function AppSidebar() {
+  const { Link } = useLinkComponent();
   const { state } = useMainSidebar();
 
   const location = useLocation();
@@ -291,7 +293,7 @@ export function AppSidebar() {
           return (
             <MainSidebar.NavSection key={section.key}>
               {section?.title ? (
-                <MainSidebar.NavHeader state={state} href={section.href} isActive={isHeaderActive}>
+                <MainSidebar.NavHeader LinkComponent={Link} state={state} href={section.href} isActive={isHeaderActive}>
                   {section.title}
                 </MainSidebar.NavHeader>
               ) : (
@@ -300,7 +302,15 @@ export function AppSidebar() {
               <MainSidebar.NavList>
                 {filteredLinks.map(link => {
                   const isActive = getIsLinkActive(link, pathname);
-                  return <MainSidebar.NavLink key={link.name} state={state} link={link} isActive={isActive} />;
+                  return (
+                    <MainSidebar.NavLink
+                      key={link.name}
+                      LinkComponent={Link}
+                      state={state}
+                      link={link}
+                      isActive={isActive}
+                    />
+                  );
                 })}
               </MainSidebar.NavList>
             </MainSidebar.NavSection>

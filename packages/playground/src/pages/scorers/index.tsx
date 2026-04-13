@@ -1,20 +1,19 @@
 import {
   ButtonWithTooltip,
   ErrorState,
-  is401UnauthorizedError,
-  is403ForbiddenError,
   NoDataPageLayout,
-  NoScorersInfo,
   PageHeader,
   PageLayout,
   PermissionDenied,
-  ScorersList,
-  ScorersToolbar,
   SessionExpired,
-  useScorers,
+  is401UnauthorizedError,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { BookIcon, GaugeIcon } from 'lucide-react';
 import { useState } from 'react';
+import { ScorersToolbar, useScorers } from '@/domains/scores';
+import { NoScorersInfo } from '@/domains/scores/components/scorers-list/no-scorers-info';
+import { ScorersList } from '@/domains/scores/components/scorers-list/scorers-list';
 
 export default function Scorers() {
   const { data: scorers = {}, isLoading, error } = useScorers();

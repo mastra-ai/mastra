@@ -1,44 +1,37 @@
 import {
-  PageLayout,
-  PageHeader,
-  NoDataPageLayout,
   ButtonWithTooltip,
+  ErrorState,
+  NoDataPageLayout,
+  PageHeader,
+  PageLayout,
+  PermissionDenied,
+  SessionExpired,
   Spinner,
+  is401UnauthorizedError,
+  is403ForbiddenError,
+  toast,
+} from '@mastra/playground-ui';
+import { BookIcon, Folder, FileText, Wand2, Search, ChevronDown, Bot, Server } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { useSearchParams, useParams, useNavigate } from 'react-router';
+import { isWorkspaceNotSupportedError } from '@/domains/workspace/compatibility';
+import { AddSkillDialog, FileBrowser, FileViewer, SkillsTable } from '@/domains/workspace/components';
+import { NoWorkspacesInfo } from '@/domains/workspace/components/no-workspaces-info';
+import { SearchWorkspacePanel, SearchSkillsPanel } from '@/domains/workspace/components/search-panel';
+import { WorkspaceNotConfigured } from '@/domains/workspace/components/workspace-not-configured';
+import { WorkspaceNotSupported } from '@/domains/workspace/components/workspace-not-supported';
+import { useInstallSkill, useUpdateSkills, useRemoveSkill } from '@/domains/workspace/hooks';
+import {
   useWorkspaceInfo,
   useWorkspaces,
   useWorkspaceFiles,
-  useWorkspaceSkills,
   useSearchWorkspace,
-  useSearchWorkspaceSkills,
   useDeleteWorkspaceFile,
   useCreateWorkspaceDirectory,
-  FileBrowser,
-  FileViewer,
-  SkillsTable,
-  SearchWorkspacePanel,
-  SearchSkillsPanel,
-  WorkspaceNotConfigured,
-  WorkspaceNotSupported,
-  NoWorkspacesInfo,
   useWorkspaceFile,
-  isWorkspaceNotSupportedError,
-  is403ForbiddenError,
-  is401UnauthorizedError,
-  PermissionDenied,
-  SessionExpired,
-  ErrorState,
-  // Skills.sh
-  AddSkillDialog,
-  useInstallSkill,
-  useUpdateSkills,
-  useRemoveSkill,
-  toast,
-} from '@mastra/playground-ui';
-import type { WorkspaceItem } from '@mastra/playground-ui';
-import { BookIcon, Folder, FileText, Wand2, Search, ChevronDown, Bot, Server } from 'lucide-react';
-import { useState, useCallback } from 'react';
-
-import { useSearchParams, useParams, useNavigate } from 'react-router';
+} from '@/domains/workspace/hooks/use-workspace';
+import { useWorkspaceSkills, useSearchWorkspaceSkills } from '@/domains/workspace/hooks/use-workspace-skills';
+import type { WorkspaceItem } from '@/domains/workspace/types';
 
 type TabType = 'files' | 'skills';
 

@@ -1,22 +1,22 @@
 import {
-  ToolsIcon,
   ButtonWithTooltip,
-  ToolsList,
-  NoToolsInfo,
+  ErrorState,
   ListSearch,
   NoDataPageLayout,
-  PageLayout,
   PageHeader,
+  PageLayout,
   PermissionDenied,
   SessionExpired,
-  ErrorState,
+  ToolsIcon,
   is401UnauthorizedError,
   is403ForbiddenError,
-  useAgents,
-  useTools,
 } from '@mastra/playground-ui';
 import { BookIcon } from 'lucide-react';
 import { useState } from 'react';
+import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { NoToolsInfo } from '@/domains/tools/components/tools-list/no-tools-info';
+import { ToolsList } from '@/domains/tools/components/tools-list/tools-list';
+import { useTools } from '@/domains/tools/hooks/use-all-tools';
 
 export default function Tools() {
   const { data: agentsRecord = {}, isLoading: isLoadingAgents, error: agentsError } = useAgents();
