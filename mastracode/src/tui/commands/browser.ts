@@ -376,7 +376,9 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
           settings.browser.enabled = false;
           saveSettings(settings);
           applyBrowserToAgents(ctx, undefined);
-          ctx.showError(`Browser settings reset, but failed to restart: ${err instanceof Error ? err.message : String(err)}`);
+          ctx.showError(
+            `Browser settings reset, but failed to restart: ${err instanceof Error ? err.message : String(err)}`,
+          );
           return;
         }
       } else {
