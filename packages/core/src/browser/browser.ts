@@ -679,6 +679,11 @@ export abstract class MastraBrowser extends MastraBase {
         await this.doClose();
         this.status = 'closed';
         this.notifyBrowserClosed();
+        // Clean up stale lock files only after confirmed shutdown.
+        // Removing them from a live profile (if doClose threw) could cause corruption.
+        if (this.config.profile) {
+          cleanupProfileLockFiles(this.config.profile, this.logger);
+        }
       } catch (err) {
         this.status = 'error';
         this.error = err instanceof Error ? err.message : String(err);
@@ -692,11 +697,6 @@ export abstract class MastraBrowser extends MastraBase {
           killProcessGroup(pid, this.logger);
         }
         this.threadBrowserPids.clear();
-        // Clean up any stale lock files in the profile directory
-        // This ensures the profile can be reused even after unclean shutdowns
-        if (this.config.profile) {
-          cleanupProfileLockFiles(this.config.profile, this.logger);
-        }
       }
     })();
 

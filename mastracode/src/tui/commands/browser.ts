@@ -159,6 +159,10 @@ function getBrowserConfigKey(settings: BrowserSettings): string {
     parts.push(settings.stagehand.env);
   }
   parts.push(settings.headless ? 'headless' : 'headed');
+  if (settings.profile) parts.push(`profile:${settings.profile}`);
+  if (settings.executablePath) parts.push(`exec:${settings.executablePath}`);
+  if (settings.cdpUrl) parts.push(`cdp:${settings.cdpUrl}`);
+  if (settings.agentBrowser?.storageState) parts.push(`storage:${settings.agentBrowser.storageState}`);
   return parts.join(':');
 }
 
@@ -312,6 +316,10 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       if (!activeIsBrowserbase) {
         lines.push(`  Headless: ${activeSettings.headless ? 'yes' : 'no'}`);
       }
+      if (activeSettings.executablePath) lines.push(`  Executable: ${activeSettings.executablePath}`);
+      if (activeSettings.profile) lines.push(`  Profile: ${activeSettings.profile}`);
+      if (activeSettings.agentBrowser?.storageState) lines.push(`  Storage State: ${activeSettings.agentBrowser.storageState}`);
+      if (activeSettings.cdpUrl) lines.push(`  CDP URL: ${activeSettings.cdpUrl}`);
 
       lines.push('');
 
@@ -326,6 +334,10 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       if (!fileIsBrowserbase) {
         lines.push(`  Headless: ${browser.headless ? 'yes' : 'no'}`);
       }
+      if (browser.executablePath) lines.push(`  Executable: ${browser.executablePath}`);
+      if (browser.profile) lines.push(`  Profile: ${browser.profile}`);
+      if (browser.agentBrowser?.storageState) lines.push(`  Storage State: ${browser.agentBrowser.storageState}`);
+      if (browser.cdpUrl) lines.push(`  CDP URL: ${browser.cdpUrl}`);
 
       lines.push('');
       lines.push('⚠️  /browser on to apply, /browser to reconfigure, or restart.');
