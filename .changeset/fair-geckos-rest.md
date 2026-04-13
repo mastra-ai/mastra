@@ -2,6 +2,6 @@
 '@mastra/observability': patch
 ---
 
-Fixed `MODEL_STEP` input previews to stay shallow so large multi-turn conversations no longer trigger expensive deep serialization during observability span creation.
+Reduced observability overhead for `MODEL_STEP` spans by storing a lightweight message preview of request bodies.
 
-`MODEL_STEP` spans now store a lightweight message preview for parsed request bodies instead of recursively walking the full request payload. This keeps exporter input readable while avoiding timeout-sized work when `serializationOptions.maxDepth` is set higher.
+This keeps span previews readable and avoids pulling large payloads into exporter input.

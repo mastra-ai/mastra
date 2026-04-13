@@ -147,20 +147,21 @@ function normalizeMessages(messages: unknown[]): Array<{ role: string; content: 
       return { role: 'user', content: summarizeMessageContent(message) };
     }
 
-    const role =
-      typeof (message as { role?: unknown }).role === 'string' ? (message as { role: string }).role : 'user';
+    const role = typeof (message as { role?: unknown }).role === 'string' ? (message as { role: string }).role : 'user';
 
     const baseContent = summarizeMessageContent((message as { content?: unknown }).content);
     const contentWithToolArrays = appendToolPreview(
       appendToolPreview(baseContent, (message as { toolCalls?: unknown }).toolCalls),
       (message as { tool_calls?: unknown }).tool_calls,
     );
+    const functionCall = (message as { functionCall?: unknown }).functionCall;
+    const functionCallPreview = functionCall === undefined ? '' : summarizePart({ functionCall });
+    const functionCallSnakeCase = (message as { function_call?: unknown }).function_call;
+    const functionCallSnakeCasePreview =
+      functionCallSnakeCase === undefined ? '' : summarizePart({ function_call: functionCallSnakeCase });
     const contentWithFunctionCall = appendPreview(
-      appendPreview(
-        contentWithToolArrays,
-        summarizePart({ functionCall: (message as { functionCall?: unknown }).functionCall }),
-      ),
-      summarizePart({ function_call: (message as { function_call?: unknown }).function_call }),
+      appendPreview(contentWithToolArrays, functionCallPreview),
+      functionCallSnakeCasePreview,
     );
 
     return { role, content: contentWithFunctionCall };

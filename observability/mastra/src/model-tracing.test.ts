@@ -1013,6 +1013,63 @@ describe('ModelSpanTracker', () => {
       expect(stepSpans[0]!.input).toEqual([{ role: 'assistant', content: '[tool: get_weather]' }]);
     });
 
+    it('should not append object placeholders when optional function call fields are absent', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            request: {
+              body: JSON.stringify({
+                model: 'gpt-4o',
+                messages: [
+                  {
+                    role: 'assistant',
+                    content: null,
+                    tool_calls: [
+                      {
+                        id: 'call_123',
+                        type: 'function',
+                        function: {
+                          name: 'get_weather',
+                          arguments: '{"city":"Austin"}',
+                        },
+                      },
+                    ],
+                  },
+                  {
+                    role: 'assistant',
+                    content: 'Plain response',
+                  },
+                ],
+              }),
+            },
+          },
+        },
+        { type: 'text-delta', payload: { text: 'Hi!' } },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      expect(stepSpans[0]!.input).toEqual([
+        { role: 'assistant', content: '[tool: get_weather]' },
+        { role: 'assistant', content: 'Plain response' },
+      ]);
+    });
+
     it('should summarize unrecognized request bodies instead of storing the full parsed object', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
