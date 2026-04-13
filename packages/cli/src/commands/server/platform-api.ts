@@ -274,21 +274,47 @@ export async function restartServerProject(token: string, orgId: string, project
   const deployIndicatesAcceptedRestart = (status: string | undefined) =>
     Boolean(status && !['failed', 'crashed', 'cancelled', 'stopped'].includes(status));
 
+  let currentToken = token;
+  let pollClient = createApiClient(currentToken, orgId);
   const deadline = Date.now() + 45000;
   while (Date.now() < deadline) {
-    const snap = await fetchServerProjectDetail(token, orgId, projectId);
+    const {
+      data: snap,
+      error: snapError,
+      response: snapResponse,
+    } = await pollClient.GET('/v1/server/projects/{id}', { params: { path: { id: projectId } } });
+
+    if (snapError) {
+      if (snapResponse.status === 401) {
+        currentToken = await getToken();
+        pollClient = createApiClient(currentToken, orgId);
+        continue;
+      }
+      throwApiError('Failed to fetch server project', snapResponse.status, apiErrorDetail(snapError));
+    }
+
     const latest = snap.project.latestDeployId;
     if (latest && latest !== previousLatestDeployId) {
       return latest;
     }
     if (latest) {
-      try {
-        const st = await fetchServerDeployStatus(latest, token, orgId);
-        if (deployIndicatesAcceptedRestart(st.status)) {
-          return latest;
+      const {
+        data: st,
+        error: statusError,
+        response: statusResponse,
+      } = await pollClient.GET('/v1/server/deploys/{id}', { params: { path: { id: latest } } });
+
+      if (statusError) {
+        if (statusResponse.status === 401) {
+          currentToken = await getToken();
+          pollClient = createApiClient(currentToken, orgId);
+          continue;
         }
-      } catch {
-        // Deploy record may lag the restart — keep polling project + status.
+        if (statusResponse.status !== 404) {
+          throwApiError('Failed to fetch server deploy status', statusResponse.status, apiErrorDetail(statusError));
+        }
+      } else if (deployIndicatesAcceptedRestart(st?.status)) {
+        return latest;
       }
     }
     await new Promise(r => setTimeout(r, 2000));

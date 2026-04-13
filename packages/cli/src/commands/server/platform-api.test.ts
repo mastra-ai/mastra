@@ -297,6 +297,84 @@ describe('restartServerProject', () => {
     await expect(restartServerProject('tok', 'org-1', 'proj-1')).resolves.toBe('dep-same');
   });
 
+  it('tolerates 404 on deploy status until the record exists', async () => {
+    let deployPolls = 0;
+    mockGET.mockImplementation(async (path: string) => {
+      const p = String(path);
+      if (p.includes('/deploys/') && !p.includes('/logs')) {
+        deployPolls++;
+        if (deployPolls < 3) {
+          return {
+            data: undefined,
+            error: { detail: 'Not found' },
+            response: { status: 404 },
+          };
+        }
+        return {
+          data: { id: 'dep-same', status: 'queued', instanceUrl: null, error: null },
+          error: undefined,
+          response: { status: 200 },
+        };
+      }
+      return {
+        data: {
+          project: {
+            latestDeployId: 'dep-same',
+            id: 'proj-1',
+            name: 'N',
+            slug: 'n',
+            organizationId: 'org-1',
+          },
+          deploys: [],
+        },
+        error: undefined,
+        response: { status: 200 },
+      };
+    });
+    mockPOST.mockResolvedValue({ data: {}, error: undefined, response: { status: 200 } });
+
+    vi.useFakeTimers();
+    try {
+      const { restartServerProject } = await import('./platform-api.js');
+      const pr = restartServerProject('tok', 'org-1', 'proj-1');
+      await vi.advanceTimersByTimeAsync(10_000);
+      await expect(pr).resolves.toBe('dep-same');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('propagates non-404 errors from deploy status polling', async () => {
+    mockGET.mockImplementation(async (path: string) => {
+      const p = String(path);
+      if (p.includes('/deploys/') && !p.includes('/logs')) {
+        return {
+          data: undefined,
+          error: { detail: 'Bad gateway' },
+          response: { status: 502 },
+        };
+      }
+      return {
+        data: {
+          project: {
+            latestDeployId: 'dep-same',
+            id: 'proj-1',
+            name: 'N',
+            slug: 'n',
+            organizationId: 'org-1',
+          },
+          deploys: [],
+        },
+        error: undefined,
+        response: { status: 200 },
+      };
+    });
+    mockPOST.mockResolvedValue({ data: {}, error: undefined, response: { status: 200 } });
+
+    const { restartServerProject } = await import('./platform-api.js');
+    await expect(restartServerProject('tok', 'org-1', 'proj-1')).rejects.toThrow('Bad gateway');
+  });
+
   it('keeps polling when same deploy id stays stopped until deadline', async () => {
     mockGET.mockImplementation(async (path: string) => {
       const p = String(path);
