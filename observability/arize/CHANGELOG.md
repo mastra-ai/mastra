@@ -1,5 +1,13 @@
 # @mastra/arize
 
+## 1.0.17-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`4ba3bb1`](https://github.com/mastra-ai/mastra/commit/4ba3bb1e465ad2ddaba3bbf2bc47e0faec32985e)]:
+  - @mastra/core@1.25.0-alpha.2
+  - @mastra/otel-exporter@1.0.16-alpha.0
+
 ## 1.0.16
 
 ### Patch Changes
