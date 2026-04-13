@@ -1,3 +1,4 @@
+import type { Schema } from '@internal/ai-v6';
 import type { ProviderDefinedTool, ToolExecutionOptions } from '@internal/external-types';
 import {
   OpenAIReasoningSchemaCompatLayer,
@@ -13,16 +14,28 @@ import {
 import { z } from 'zod/v4';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
-import { SpanType, wrapMastra, executeWithContext, EntityType, createObservabilityContext } from '../../observability';
+import type { Mastra } from '../../mastra';
+import { SpanType, wrapMastra, EntityType, getOrCreateSpan, createObservabilityContext } from '../../observability';
+import type { AnySpan } from '../../observability';
+import { executeWithContext } from '../../observability/utils';
 import { RequestContext } from '../../request-context';
 import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
-import { isVercelTool } from '../../tools/toolchecks';
+import type { StandardSchemaWithJSON } from '../../schema';
+import { isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
+import { safeStringify } from '../../utils';
 import { isZodObject } from '../../utils/zod-utils';
 
 import type { SuspendOptions } from '../../workflows';
 import { ToolStream } from '../stream';
-import type { CoreTool, MastraToolInvocationOptions, ToolAction, VercelTool, VercelToolV5 } from '../types';
+import type {
+  CoreTool,
+  McpMetadata,
+  MastraToolInvocationOptions,
+  ToolAction,
+  VercelTool,
+  VercelToolV5,
+} from '../types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from '../validation';
 
 /**
@@ -41,6 +54,7 @@ interface LogOptions {
 interface LogMessageOptions {
   start: string;
   error: string;
+  logData: Record<string, unknown>;
 }
 
 export class CoreToolBuilder extends MastraBase {
@@ -61,6 +75,7 @@ export class CoreToolBuilder extends MastraBase {
 
     if (
       !isVercelTool(this.originalTool) &&
+      !isProviderDefinedTool(this.originalTool) &&
       (input.autoResumeSuspendedTools ||
         (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-') ||
         (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('workflow-'))
@@ -218,7 +233,7 @@ export class CoreToolBuilder extends MastraBase {
         } else if (isStandardSchemaWithJSON(parameters)) {
           // StandardSchemaWithJSON - extract the JSON schema and wrap it
           // Use input since parameters represent tool input
-          const jsonSchema = standardSchemaToJSONSchema(parameters, { io: 'output' });
+          const jsonSchema = standardSchemaToJSONSchema(parameters, { io: 'input' });
           processedParameters = { jsonSchema };
         } else {
           // Assume Zod schema - convert to AI SDK Schema
@@ -275,20 +290,11 @@ export class CoreToolBuilder extends MastraBase {
   }
 
   private createLogMessageOptions({ agentName, toolName, type }: LogOptions): LogMessageOptions {
-    // If no agent name, use default format
-    if (!agentName) {
-      return {
-        start: `Executing tool ${toolName}`,
-        error: `Failed tool execution`,
-      };
-    }
-
-    const prefix = `[Agent:${agentName}]`;
     const toolType = type === 'toolset' ? 'toolset' : 'tool';
-
     return {
-      start: `${prefix} - Executing ${toolType} ${toolName}`,
-      error: `${prefix} - Failed ${toolType} execution`,
+      start: `Executing ${toolType}`,
+      error: `Failed ${toolType} execution`,
+      logData: { agent: agentName, tool: toolName },
     };
   }
 
@@ -310,34 +316,17 @@ export class CoreToolBuilder extends MastraBase {
       specificationVersion: model?.specificationVersion,
     };
 
-    const { start, error } = this.createLogMessageOptions({
+    const { start, logData } = this.createLogMessageOptions({
       agentName: options.agentName,
       toolName: options.name,
       type: logType,
     });
 
-    const execFunction = async (args: unknown, execOptions: MastraToolInvocationOptions) => {
-      // Prefer execution-time tracingContext (passed at runtime for VNext methods)
-      // Fall back to build-time context for Legacy methods (AI SDK v4 doesn't support passing custom options)
-      const tracingContext = execOptions.tracingContext || options.tracingContext;
+    // Extract MCP metadata once with proper typing to avoid repeated unsafe casts
+    const mcpMeta =
+      !isVercelTool(tool) && 'mcpMetadata' in tool ? (tool as { mcpMetadata?: McpMetadata }).mcpMetadata : undefined;
 
-      // Create tool span if we have a current span available
-      const toolRequestContext = execOptions.requestContext ?? options.requestContext;
-      const toolSpan = tracingContext?.currentSpan?.createChildSpan({
-        type: SpanType.TOOL_CALL,
-        name: `tool: '${options.name}'`,
-        input: args,
-        entityType: EntityType.TOOL,
-        entityId: options.name,
-        entityName: options.name,
-        attributes: {
-          toolDescription: options.description,
-          toolType: logType || 'tool',
-        },
-        tracingPolicy: options.tracingPolicy,
-        requestContext: toolRequestContext,
-      });
-
+    const execFunction = async (args: unknown, execOptions: MastraToolInvocationOptions, toolSpan?: AnySpan) => {
       try {
         let result;
         let suspendData = null;
@@ -383,6 +372,8 @@ export class CoreToolBuilder extends MastraBase {
             // Workspace for file operations and command execution
             // Execution-time workspace (from prepareStep/processInputStep) takes precedence over build-time workspace
             workspace: execOptions.workspace ?? options.workspace,
+            // Browser for web automation (lazily initialized on first use)
+            browser: options.browser,
             writer: new ToolStream(
               {
                 prefix: 'tool',
@@ -430,6 +421,7 @@ export class CoreToolBuilder extends MastraBase {
             toolContext = {
               ...restBaseContext,
               agent: {
+                agentId: options.agentId || '',
                 toolCallId: execOptions.toolCallId || '',
                 messages: execOptions.messages || [],
                 suspend,
@@ -520,8 +512,37 @@ export class CoreToolBuilder extends MastraBase {
 
     return async (args: unknown, execOptions?: MastraToolInvocationOptions) => {
       let logger = options.logger || this.logger;
+
+      // Create tool span early so validation failures are always observable.
+      // Prefer execution-time tracingContext (passed at runtime for VNext methods)
+      // Fall back to build-time context for Legacy methods (AI SDK v4 doesn't support passing custom options)
+      const tracingContext = execOptions?.tracingContext || options.tracingContext;
+      const toolRequestContext = execOptions?.requestContext ?? options.requestContext;
+      const toolSpan = getOrCreateSpan({
+        type: mcpMeta ? SpanType.MCP_TOOL_CALL : SpanType.TOOL_CALL,
+        name: mcpMeta ? `mcp_tool: '${options.name}' on '${mcpMeta.serverName}'` : `tool: '${options.name}'`,
+        input: args,
+        entityType: EntityType.TOOL,
+        entityId: options.name,
+        entityName: options.name,
+        attributes: mcpMeta
+          ? {
+              mcpServer: mcpMeta.serverName,
+              serverVersion: mcpMeta.serverVersion,
+              toolDescription: options.description,
+            }
+          : {
+              toolDescription: options.description,
+              toolType: logType || 'tool',
+            },
+        tracingPolicy: options.tracingPolicy,
+        tracingContext: tracingContext,
+        requestContext: toolRequestContext,
+        mastra: options.mastra && 'observability' in options.mastra ? (options.mastra as Mastra) : undefined,
+      });
+
       try {
-        logger.debug(start, { ...rest, model: logModelObject, args });
+        logger.debug(start, { ...logData, ...rest, model: logModelObject, args });
 
         // Validate input parameters if schema exists
         // Use the processed schema for validation if available, otherwise fall back to original
@@ -531,7 +552,8 @@ export class CoreToolBuilder extends MastraBase {
         const suspendedToolRunIdErrToIgnore =
           error?.message?.includes('suspendedToolRunId: Required') && !(args as Record<string, unknown>)?.resumeData;
         if (error && !suspendedToolRunIdErrToIgnore) {
-          logger.warn(error.message);
+          logger.warn('Tool input validation failed', { ...logData, validationError: error.message });
+          toolSpan?.end({ output: error, attributes: { success: false } });
           return error;
         }
         // Use validated/transformed data
@@ -541,7 +563,7 @@ export class CoreToolBuilder extends MastraBase {
         return await new Promise((resolve, reject) => {
           setImmediate(async () => {
             try {
-              const result = await execFunction(args, execOptions!);
+              const result = await execFunction(args, execOptions!, toolSpan);
               resolve(result);
             } catch (err) {
               reject(err);
@@ -556,14 +578,14 @@ export class CoreToolBuilder extends MastraBase {
             category: ErrorCategory.USER,
             details: {
               errorMessage: String(err),
-              argsJson: JSON.stringify(args),
+              argsJson: safeStringify(args),
               model: model?.modelId ?? '',
             },
           },
           err,
         );
-        logger.trackException(mastraError);
-        logger.error(error, { ...rest, model: logModelObject, error: mastraError, args });
+        toolSpan?.error({ error: mastraError, attributes: { success: false } });
+        logger.trackException(mastraError, { ...logData, ...rest, model: logModelObject, args });
         throw mastraError;
       }
     };
@@ -631,27 +653,58 @@ export class CoreToolBuilder extends MastraBase {
       );
     }
 
-    let processedInputSchema: any;
-
     const originalSchema = this.getParameters();
+    let processedInputSchema: Schema | undefined;
 
-    // Find the first applicable compatibility layer
-    const applicableLayer = schemaCompatLayers.find(layer => layer.shouldApply());
-    if (isStandardSchemaWithJSON(originalSchema)) {
-      const inputJsonSchema = applicableLayer
-        ? applicableLayer.toJSONSchema(originalSchema as any)
-        : standardSchemaToJSONSchema(originalSchema, { io: 'input' });
+    if (originalSchema) {
+      if (isStandardSchemaWithJSON(originalSchema)) {
+        // Find the first applicable compatibility layer
+        const applicableLayer = schemaCompatLayers.find(layer => layer.shouldApply());
 
-      processedInputSchema = jsonSchema(inputJsonSchema);
-    } else {
-      if (originalSchema) {
+        let schemaToUse: StandardSchemaWithJSON;
+        if (applicableLayer) {
+          schemaToUse = applicableLayer.processToCompatSchema(originalSchema as any);
+        } else {
+          schemaToUse = toStandardSchema(originalSchema);
+        }
+
+        processedInputSchema = jsonSchema(
+          standardSchemaToJSONSchema(schemaToUse, {
+            io: 'input',
+          }),
+          {
+            validate: (value: unknown) => {
+              const result = schemaToUse['~standard'].validate(value);
+              // standard-schema validate may return a Promise
+              if (result instanceof Promise) {
+                return result.then(r => {
+                  if ('issues' in r && r.issues) {
+                    return {
+                      success: false as const,
+                      error: new Error(r.issues.map((i: any) => i.message).join(', ')),
+                    };
+                  }
+                  return { success: true as const, value: (r as { value: unknown }).value };
+                });
+              }
+              // standard-schema returns { value } on success or { issues } on failure,
+              // but AI SDK expects { success: boolean, value/error }
+              if ('issues' in result && result.issues) {
+                return {
+                  success: false as const,
+                  error: new Error(result.issues.map((i: any) => i.message).join(', ')),
+                };
+              }
+              return { success: true as const, value: (result as { value: unknown }).value };
+            },
+          },
+        );
+      } else {
         processedInputSchema = applyCompatLayer({
           schema: originalSchema,
           compatLayers: schemaCompatLayers,
           mode: 'aiSdkSchema',
         });
-      } else {
-        processedInputSchema = undefined;
       }
     }
 

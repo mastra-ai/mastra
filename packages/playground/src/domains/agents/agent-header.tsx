@@ -1,20 +1,8 @@
-import {
-  Header,
-  Breadcrumb,
-  Crumb,
-  Button,
-  HeaderAction,
-  Icon,
-  DocsIcon,
-  AgentIcon,
-  AgentCombobox,
-  useIsCmsAvailable,
-} from '@mastra/playground-ui';
+import { Header, Breadcrumb, Crumb, Button, HeaderAction, Icon, DocsIcon, AgentIcon } from '@mastra/playground-ui';
 import { Link } from 'react-router';
+import { AgentCombobox } from '@/domains/agents/components/agent-combobox';
 
 export function AgentHeader({ agentId }: { agentId: string }) {
-  const { isCmsAvailable } = useIsCmsAvailable();
-
   return (
     <Header>
       <Breadcrumb>
@@ -25,15 +13,13 @@ export function AgentHeader({ agentId }: { agentId: string }) {
           Agents
         </Crumb>
         <Crumb as="span" to="" isCurrent>
-          <AgentCombobox value={agentId} variant="ghost" showSourceIcon={isCmsAvailable} />
+          <AgentCombobox value={agentId} variant="ghost" />
         </Crumb>
       </Breadcrumb>
 
       <HeaderAction>
-        <Button as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">
-          <Icon>
-            <DocsIcon />
-          </Icon>
+        <Button as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank" variant="ghost" size="md">
+          <DocsIcon />
           Agents documentation
         </Button>
       </HeaderAction>

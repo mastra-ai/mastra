@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import type { Stream } from 'node:stream';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
@@ -13,7 +14,15 @@ import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotoc
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-import type { GetPromptResult, ListPromptsResult, LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
+import type {
+  EmptyResult,
+  GetPromptResult,
+  ListPromptsResult,
+  ListResourcesResult,
+  ListResourceTemplatesResult,
+  LoggingLevel,
+  ReadResourceResult,
+} from '@modelcontextprotocol/sdk/types.js';
 import {
   CallToolResultSchema,
   ListResourcesResultSchema,
@@ -36,6 +45,7 @@ import { ElicitationClientActions } from './actions/elicitation';
 import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
 import { ResourceClientActions } from './actions/resource';
+import { isReconnectableMCPError } from './error-utils';
 import type {
   FetchLike,
   LogHandler,
@@ -107,6 +117,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private operationContextStore = new AsyncLocalStorage<RequestContext | null>();
   private exitHookUnsubscribe?: () => void;
   private sigTermHandler?: () => void;
+  private sigHupHandler?: () => void;
   private _roots: Root[];
 
   /** Provides access to resource operations (list, read, subscribe, etc.) */
@@ -277,6 +288,8 @@ export class InternalMastraMCPClient extends MastraBase {
         command,
         args: this.serverConfig.args,
         env: { ...getDefaultEnvironment(), ...(this.serverConfig.env || {}) },
+        stderr: this.serverConfig.stderr,
+        cwd: this.serverConfig.cwd,
       });
       await this.client.connect(this.transport, { timeout: this.serverConfig.timeout ?? this.timeout });
       this.log('debug', `Successfully connected to MCP server via Stdio`);
@@ -419,6 +432,11 @@ export class InternalMastraMCPClient extends MastraBase {
       process.on('SIGTERM', this.sigTermHandler);
     }
 
+    if (!this.sigHupHandler) {
+      this.sigHupHandler = () => gracefulExit();
+      process.on('SIGHUP', this.sigHupHandler);
+    }
+
     this.log('debug', `Successfully connected to MCP server`);
     return this.isConnected;
   }
@@ -437,6 +455,20 @@ export class InternalMastraMCPClient extends MastraBase {
       return this.transport.sessionId;
     }
     return undefined;
+  }
+
+  /**
+   * Gets the stderr stream of the child process, if using stdio transport with `stderr: 'pipe'`.
+   *
+   * Returns null if not connected, not using stdio transport, or stderr is not piped.
+   *
+   * @internal
+   */
+  get stderr(): Stream | null {
+    if (this.transport instanceof StdioClientTransport) {
+      return this.transport.stderr;
+    }
+    return null;
   }
 
   async disconnect() {
@@ -466,45 +498,11 @@ export class InternalMastraMCPClient extends MastraBase {
         process.off('SIGTERM', this.sigTermHandler);
         this.sigTermHandler = undefined;
       }
+      if (this.sigHupHandler) {
+        process.off('SIGHUP', this.sigHupHandler);
+        this.sigHupHandler = undefined;
+      }
     }
-  }
-
-  /**
-   * Checks if an error indicates a session invalidation that requires reconnection.
-   *
-   * Common session-related errors include:
-   * - "No valid session ID provided" (HTTP 400)
-   * - "Server not initialized" (HTTP 400)
-   * - "Not connected" (protocol state error)
-   * - Connection refused errors
-   *
-   * @param error - The error to check
-   * @returns true if the error indicates a session problem requiring reconnection
-   *
-   * @internal
-   */
-  private isSessionError(error: unknown): boolean {
-    if (!(error instanceof Error)) {
-      return false;
-    }
-
-    const errorMessage = error.message.toLowerCase();
-
-    // Check for session-related error patterns
-    return (
-      errorMessage.includes('no valid session') ||
-      errorMessage.includes('session') ||
-      errorMessage.includes('server not initialized') ||
-      errorMessage.includes('not connected') ||
-      errorMessage.includes('http 400') ||
-      errorMessage.includes('http 401') ||
-      errorMessage.includes('http 403') ||
-      errorMessage.includes('econnrefused') ||
-      errorMessage.includes('fetch failed') ||
-      errorMessage.includes('connection refused') ||
-      errorMessage.includes('sse stream disconnected') ||
-      errorMessage.includes('typeerror: terminated')
-    );
   }
 
   /**
@@ -541,35 +539,35 @@ export class InternalMastraMCPClient extends MastraBase {
     this.log('debug', 'Successfully reconnected to MCP server');
   }
 
-  async listResources() {
+  async listResources(): Promise<ListResourcesResult> {
     this.log('debug', `Requesting resources from MCP server`);
     return await this.client.request({ method: 'resources/list' }, ListResourcesResultSchema, {
       timeout: this.timeout,
     });
   }
 
-  async readResource(uri: string) {
+  async readResource(uri: string): Promise<ReadResourceResult> {
     this.log('debug', `Reading resource from MCP server: ${uri}`);
     return await this.client.request({ method: 'resources/read', params: { uri } }, ReadResourceResultSchema, {
       timeout: this.timeout,
     });
   }
 
-  async subscribeResource(uri: string) {
+  async subscribeResource(uri: string): Promise<EmptyResult> {
     this.log('debug', `Subscribing to resource on MCP server: ${uri}`);
     return await this.client.request({ method: 'resources/subscribe', params: { uri } }, EmptyResultSchema, {
       timeout: this.timeout,
     });
   }
 
-  async unsubscribeResource(uri: string) {
+  async unsubscribeResource(uri: string): Promise<EmptyResult> {
     this.log('debug', `Unsubscribing from resource on MCP server: ${uri}`);
     return await this.client.request({ method: 'resources/unsubscribe', params: { uri } }, EmptyResultSchema, {
       timeout: this.timeout,
     });
   }
 
-  async listResourceTemplates() {
+  async listResourceTemplates(): Promise<ListResourceTemplatesResult> {
     this.log('debug', `Requesting resource templates from MCP server`);
     return await this.client.request({ method: 'resources/templates/list' }, ListResourceTemplatesResultSchema, {
       timeout: this.timeout,
@@ -590,20 +588,11 @@ export class InternalMastraMCPClient extends MastraBase {
    * Get a prompt and its dynamic messages from the server.
    * @param name The prompt name
    * @param args Arguments for the prompt
-   * @param version (optional) The prompt version to retrieve
    */
-  async getPrompt({
-    name,
-    args,
-    version,
-  }: {
-    name: string;
-    args?: Record<string, any>;
-    version?: string;
-  }): Promise<GetPromptResult> {
+  async getPrompt({ name, args }: { name: string; args?: Record<string, any> }): Promise<GetPromptResult> {
     this.log('debug', `Requesting prompt from MCP server: ${name}`);
     return await this.client.request(
-      { method: 'prompts/get', params: { name, arguments: args, version } },
+      { method: 'prompts/get', params: { name, arguments: args } },
       GetPromptResultSchema,
       { timeout: this.timeout },
     );
@@ -680,39 +669,6 @@ export class InternalMastraMCPClient extends MastraBase {
     }
   }
 
-  private async convertOutputSchema(
-    outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'],
-  ): Promise<JSONSchema7 | undefined> {
-    if (!outputSchema) return;
-
-    try {
-      await $RefParser.dereference(outputSchema);
-      return ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema7;
-    } catch (error: unknown) {
-      let errorDetails: string | undefined;
-      if (error instanceof Error) {
-        errorDetails = error.stack;
-      } else {
-        try {
-          errorDetails = JSON.stringify(error);
-        } catch {
-          errorDetails = String(error);
-        }
-      }
-      this.log('error', 'Failed to dereference JSON schema', {
-        error: errorDetails,
-        originalJsonSchema: outputSchema,
-      });
-
-      throw new MastraError({
-        id: 'MCP_TOOL_OUTPUT_SCHEMA_CONVERSION_FAILED',
-        domain: ErrorDomain.MCP,
-        category: ErrorCategory.USER,
-        details: { error: errorDetails ?? 'Unknown error' },
-      });
-    }
-  }
-
   async tools(): Promise<Record<string, Tool<any, any, any, any>>> {
     this.log('debug', `Requesting tools from MCP server`);
     const { tools } = await this.client.listTools({}, { timeout: this.timeout });
@@ -724,24 +680,40 @@ export class InternalMastraMCPClient extends MastraBase {
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
           inputSchema: await this.convertInputSchema(tool.inputSchema),
-          outputSchema: await this.convertOutputSchema(tool.outputSchema),
+          // Don't pass outputSchema to createTool — the MCP SDK's Client.callTool()
+          // already validates structuredContent against the tool's outputSchema using AJV.
+          // Passing it here causes Zod to strip unrecognized keys from the CallToolResult
+          // envelope, returning {} for tools without structuredContent.
+          mcpMetadata: {
+            serverName: this.name,
+            serverVersion: this.client.getServerVersion()?.version,
+          },
           execute: async (
             input: any,
-            context?: { requestContext?: RequestContext | null; runId?: string; abortSignal?: AbortSignal },
+            context?: {
+              requestContext?: RequestContext | null;
+              runId?: string;
+              abortSignal?: AbortSignal;
+              _meta?: Record<string, unknown>;
+            },
           ) => {
             const operationContext = context?.requestContext ?? null;
 
             return this.operationContextStore.run(operationContext, async () => {
               const executeToolCall = async () => {
                 this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: input, runId: context?.runId });
+                const userMeta = context?._meta;
+                // progressMeta spreads last so Mastra-managed progressToken takes precedence over any user-supplied one
+                const progressMeta = this.enableProgressTracking
+                  ? { progressToken: context?.runId || crypto.randomUUID() }
+                  : undefined;
+                const combinedMeta = userMeta || progressMeta ? { ...userMeta, ...progressMeta } : undefined;
+
                 const res = await this.client.callTool(
                   {
                     name: tool.name,
                     arguments: input,
-                    // Use runId as progress token if available, otherwise generate a random UUID
-                    ...(this.enableProgressTracking
-                      ? { _meta: { progressToken: context?.runId || crypto.randomUUID() } }
-                      : {}),
+                    ...(combinedMeta ? { _meta: combinedMeta } : {}),
                   },
                   CallToolResultSchema,
                   {
@@ -758,28 +730,6 @@ export class InternalMastraMCPClient extends MastraBase {
                   return res.structuredContent;
                 }
 
-                // When the tool has an outputSchema but the server didn't return
-                // structuredContent (e.g. older MCP protocol versions that predate the
-                // structuredContent spec), extract the result from the content array.
-                // Without this, the raw CallToolResult envelope ({ content, isError,
-                // _meta }) gets validated against the outputSchema and Zod strips all
-                // unrecognised keys, producing {}.
-                if (tool.outputSchema && !res.isError) {
-                  const content = res.content as Array<{ type: string; text?: string }> | undefined;
-                  if (
-                    content &&
-                    content.length === 1 &&
-                    content[0]!.type === 'text' &&
-                    content[0]!.text !== undefined
-                  ) {
-                    try {
-                      return JSON.parse(content[0]!.text);
-                    } catch {
-                      return content[0]!.text;
-                    }
-                  }
-                }
-
                 return res;
               };
 
@@ -787,7 +737,7 @@ export class InternalMastraMCPClient extends MastraBase {
                 return await executeToolCall();
               } catch (e) {
                 // Check if this is a session-related error that requires reconnection
-                if (this.isSessionError(e)) {
+                if (isReconnectableMCPError(e)) {
                   this.log('debug', `Session error detected for tool ${tool.name}, attempting reconnection...`, {
                     error: e instanceof Error ? e.message : String(e),
                   });

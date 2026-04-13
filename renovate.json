@@ -1,5 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "gitAuthor": "Dane - AI (Mastra) <199639756+daneatmastra@users.noreply.github.com>",
   "rangeStrategy": "bump",
   "extends": [
     ":dependencyDashboard",
@@ -11,14 +12,24 @@
     "replacements:all",
     "workarounds:typesNodeVersioning",
     "group:monorepos",
-    "group:recommended",
-    ":prConcurrentLimit20"
+    "group:recommended"
   ],
+  "prConcurrentLimit": 30,
   "labels": ["automation"],
   "postUpdateOptions": ["pnpmDedupe"],
   "rebaseWhen": "conflicted",
   "major": {
     "dependencyDashboardApproval": true
+  },
+  "schedule": ["before 6am on monday"],
+  "vulnerabilityAlerts": {
+    "schedule": []
+  },
+  "osvVulnerabilityAlerts": true,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 6am on wednesday"],
+    "automerge": true
   },
   "ignorePaths": ["docs/**", "explorations/**", ".github/scripts", "templates/**", "**/examples/**", "**/_examples/**"],
   "packageRules": [
@@ -42,10 +53,28 @@
     },
     {
       "groupName": "Hono",
-      "matchSourceUrls": ["https://github.com/honojs/hono"]
+      "matchSourceUrls": ["https://github.com/honojs/hono"],
+      "matchPackageNames": ["@hono/*", "hono"]
     },
     {
       "groupName": "AI SDK",
+      "description": "Disable major AI SDK updates outside examples",
+      "matchFileNames": ["**/package.json", "!examples/**", "!docs/**"],
+      "matchSourceUrls": ["https://github.com/vercel/ai"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      "groupName": "AI SDK",
+      "description": "Allow minor and patch AI SDK updates outside examples",
+      "matchFileNames": ["**/package.json", "!examples/**", "!docs/**"],
+      "matchSourceUrls": ["https://github.com/vercel/ai"],
+      "matchUpdateTypes": ["minor", "patch"]
+    },
+    {
+      "groupName": "AI SDK Examples",
+      "description": "Leave example apps eligible for all AI SDK update types",
+      "matchFileNames": ["examples/**/package.json"],
       "matchSourceUrls": ["https://github.com/vercel/ai"]
     },
     {
@@ -117,6 +146,7 @@
         "@microsoft/api-extractor",
         "tsup",
         "rollup",
+        "@rollup/*",
         "@types/node",
         "dotenv",
         "vitest",
@@ -153,6 +183,70 @@
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false,
       "automerge": true
+    },
+    {
+      "groupName": "Upstash",
+      "commitMessageTopic": "Upstash",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["@upstash/*"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "CodeMirror",
+      "commitMessageTopic": "CodeMirror",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["@uiw/*", "codemirror", "@codemirror/*"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "Serve",
+      "commitMessageTopic": "Serve",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["serve", "serve-handler"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "Google Cloud",
+      "commitMessageTopic": "Google Cloud",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["@google-cloud/*", "google-auth-library"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "Inngest",
+      "commitMessageTopic": "Inngest",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["inngest", "inngest-cli"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "PostHog",
+      "commitMessageTopic": "PostHog",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["posthog-js", "@posthog/*"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "Vector Databases",
+      "commitMessageTopic": "Vector Databases",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["@qdrant/js-client-rest", "chromadb", "lancedb", "turbopuffer"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "Workflow Platforms",
+      "commitMessageTopic": "Workflow Platforms",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["convex", "@daytona-io/sdk", "electrodb"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
     }
   ]
 }

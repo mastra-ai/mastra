@@ -201,7 +201,7 @@ export interface WorkspaceConfig<
   /**
    * Paths to auto-index on init().
    * Files in these directories will be indexed for search.
-   * @example ['/docs', '/support']
+   * @example ['docs', 'support']
    */
   autoIndexPaths?: string[];
 
@@ -214,7 +214,7 @@ export interface WorkspaceConfig<
    *
    * @example Static paths
    * ```typescript
-   * skills: ['/skills', '/node_modules/@myorg/skills']
+   * skills: ['skills', 'node_modules/@myorg/skills']
    * ```
    *
    * @example Dynamic paths
@@ -222,8 +222,8 @@ export interface WorkspaceConfig<
    * skills: (ctx) => {
    *   const tier = ctx.requestContext?.get('userTier');
    *   return tier === 'premium'
-   *     ? ['/skills/basic', '/skills/premium']
-   *     : ['/skills/basic'];
+   *     ? ['skills/basic', 'skills/premium']
+   *     : ['skills/basic'];
    * }
    * ```
    */
@@ -241,7 +241,7 @@ export interface WorkspaceConfig<
    * import { VersionedSkillSource } from '@mastra/core/workspace';
    *
    * const workspace = new Workspace({
-   *   skills: ['/skills'],
+   *   skills: ['skills'],
    *   skillSource: new VersionedSkillSource(tree, blobStore, versionCreatedAt),
    * });
    * ```
@@ -416,6 +416,7 @@ export class Workspace<
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
   private _lsp?: LSPManager;
+  private _logger?: IMastraLogger;
 
   constructor(config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>) {
     this.id = config.id ?? this.generateId();
@@ -615,7 +616,7 @@ export class Workspace<
    * @example
    * ```typescript
    * const skills = await workspace.skills?.list();
-   * const skill = await workspace.skills?.get('brand-guidelines');
+   * const skill = await workspace.skills?.get('skills/brand-guidelines');
    * const results = await workspace.skills?.search('brand colors');
    * ```
    */
@@ -759,10 +760,7 @@ export class Workspace<
             continue;
           }
           // Skip directories already covered by a parent directory
-          const alreadyCovered = directoryRoots.some(
-            root =>
-              entry.path === root || (root === '/' ? entry.path.startsWith('/') : entry.path.startsWith(`${root}/`)),
-          );
+          const alreadyCovered = directoryRoots.some(root => entry.path === root || entry.path.startsWith(`${root}/`));
           if (!alreadyCovered) directoryRoots.push(entry.path);
         }
         // Index direct file matches first so they aren't lost if a directory scan fails
@@ -794,14 +792,18 @@ export class Workspace<
    * Index a single file for search. Skips files that can't be read as text.
    */
   private async indexFileForSearch(filePath: string): Promise<void> {
+    let content: string;
     try {
-      const content = await this._fs!.readFile(filePath, { encoding: 'utf-8' });
-      await this._searchEngine!.index({
-        id: filePath,
-        content: content as string,
-      });
+      content = (await this._fs!.readFile(filePath, { encoding: 'utf-8' })) as string;
     } catch {
-      // Skip files that can't be read as text
+      // Skip files that can't be read as text (e.g. binary files, invalid UTF-8)
+      return;
+    }
+
+    try {
+      await this._searchEngine!.index({ id: filePath, content });
+    } catch (error) {
+      this._logger?.warn(`Failed to index file "${filePath}" for search`, { error });
     }
   }
 
@@ -812,7 +814,7 @@ export class Workspace<
     const entries = await this._fs.readdir(dir);
 
     for (const entry of entries) {
-      const fullPath = dir === '/' ? `/${entry.name}` : `${dir}/${entry.name}`;
+      const fullPath = dir === '.' || dir === '' ? entry.name : `${dir}/${entry.name}`;
       if (entry.type === 'file') {
         files.push(fullPath);
       } else if (entry.type === 'directory' && !entry.isSymlink) {
@@ -916,7 +918,7 @@ export class Workspace<
 
       if (options?.includeFileCount) {
         try {
-          const files = await this.getAllFiles('/');
+          const files = await this.getAllFiles('.');
           info.filesystem.totalFiles = files.length;
         } catch {
           // Ignore errors - filesystem may not support listing
@@ -1041,6 +1043,8 @@ export class Workspace<
    * @internal
    */
   __setLogger(logger: IMastraLogger): void {
+    this._logger = logger;
+
     // Propagate logger to filesystem provider if it extends MastraFilesystem
     if (this._fs instanceof MastraFilesystem) {
       this._fs.__setLogger(logger);

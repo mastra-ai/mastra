@@ -21,7 +21,7 @@ export const mastra = new Mastra({
         serviceName: 'my-app',
         exporters: [
           new DefaultExporter(), // Persists traces for Mastra Studio
-          new CloudExporter(), // Sends to Mastra Cloud
+          new CloudExporter(), // Sends to Mastra platform
         ],
         spanOutputProcessors: [new SensitiveDataFilter()],
       },
@@ -33,7 +33,7 @@ export const mastra = new Mastra({
 ## Features
 
 - **Auto-instrumentation** - Traces agent runs, LLM calls, tool executions, and workflows
-- **Pluggable Exporters** - Exporters for Studio and Cloud, plus integrations for Arize, Braintrust, Langfuse, LangSmith, and OpenTelemetry
+- **Pluggable Exporters** - Exporters for Studio, plus integrations for Arize, Braintrust, Langfuse, LangSmith, and OpenTelemetry
 - **Sampling Strategies** - Always, ratio-based, or custom sampling
 - **Span Processors** - Transform or filter span data before export
 - **OpenTelemetry Compatible** - Standard trace/span ID formats for integration
@@ -50,15 +50,15 @@ Exporters register via `registerExporter()` and can optionally implement `onLogE
 
 Metrics are automatically extracted from span lifecycle events by `AutoExtractedMetrics`:
 
-- `mastra_agent_runs_started` / `mastra_agent_runs_ended` / `mastra_agent_duration_ms`
-- `mastra_tool_calls_started` / `mastra_tool_calls_ended` / `mastra_tool_duration_ms`
-- `mastra_model_requests_started` / `mastra_model_requests_ended` / `mastra_model_duration_ms`
-- `mastra_model_input_tokens` / `mastra_model_output_tokens` / `mastra_model_cache_read_tokens` / `mastra_model_cache_write_tokens`
-- `mastra_workflow_runs_started` / `mastra_workflow_runs_ended` / `mastra_workflow_duration_ms`
-- `mastra_scores_total` (from score events)
-- `mastra_feedback_total` (from feedback events)
+- `mastra_agent_duration_ms`
+- `mastra_tool_duration_ms`
+- `mastra_workflow_duration_ms`
+- `mastra_model_duration_ms`
+- `mastra_model_total_input_tokens` / `mastra_model_total_output_tokens`
+- `mastra_model_input_text_tokens` / `mastra_model_input_cache_read_tokens` / `mastra_model_input_cache_write_tokens` / `mastra_model_input_audio_tokens` / `mastra_model_input_image_tokens`
+- `mastra_model_output_text_tokens` / `mastra_model_output_reasoning_tokens` / `mastra_model_output_audio_tokens` / `mastra_model_output_image_tokens`
 
-Auto-extracted metrics carry labels: `entity_type`, `entity_name`, `status` (on `_ended` metrics), plus `model` and `provider` on model generation spans.
+Auto-extracted metrics carry labels: `entity_type`, `entity_name`, `status`, plus `model` and `provider` on model generation spans.
 
 ### Structured logging
 

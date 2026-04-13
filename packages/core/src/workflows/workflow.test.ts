@@ -8,7 +8,7 @@ import type {
   StreamEvent,
 } from '@internal/workflow-test-utils';
 import { describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-utils/MastraLanguageModelV2Mock';
 import { Mastra } from '../mastra';
@@ -564,6 +564,58 @@ describe('Workflow (Default Engine Specifics)', () => {
 
       // Clean up spy
       consoleErrorSpy.mockRestore();
+    });
+  });
+
+  describe('Tracing Context Persistence', () => {
+    it('should persist tracing context when workflow suspends', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+      });
+
+      const suspendStep = createStep({
+        id: 'tracing-suspend-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        suspendSchema: z.object({ message: z.string() }),
+        resumeSchema: z.object({ confirm: z.boolean() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          if (!resumeData?.confirm) {
+            await suspend({ message: 'Please confirm' });
+          }
+          return { result: `processed: ${inputData.value}` };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'tracing-context-persistence-test',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [suspendStep],
+      })
+        .then(suspendStep)
+        .commit();
+
+      workflow.__registerMastra(mastra);
+
+      const run = await workflow.createRun({ runId: 'tracing-persistence-test-run' });
+      const result = await run.start({ inputData: { value: 'test' } });
+
+      expect(result.status).toBe('suspended');
+
+      // Verify that the snapshot has the tracingContext field structure
+      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: 'tracing-context-persistence-test',
+        runId: 'tracing-persistence-test-run',
+      });
+
+      expect(snapshot).toBeDefined();
+      expect(snapshot?.status).toBe('suspended');
+      // The tracingContext should exist in the snapshot (may be undefined if no observability was configured)
+      // The key is that the field structure is preserved in the snapshot
+      expect('tracingContext' in (snapshot ?? {})).toBe(true);
     });
   });
 });

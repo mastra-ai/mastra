@@ -11,6 +11,7 @@ import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/proto
 import type { ElicitRequest, ElicitResult } from '@modelcontextprotocol/sdk/types.js';
 
 import type { MastraUnion } from '../action';
+import type { MastraBrowser } from '../browser/browser';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
@@ -31,6 +32,7 @@ export type ToolInvocationOptions = ToolExecutionOptions | ToolCallOptions;
 // Agent tool execution context - properties specific when tools are executed by agents
 export interface AgentToolExecutionContext<TSuspend, TResume> {
   // Always present when called from agent context
+  agentId: string;
   toolCallId: string;
   messages: any[];
   suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
@@ -110,6 +112,16 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
  * If not specified, it defaults to a regular tool.
  */
 export type MCPToolType = 'agent' | 'workflow';
+
+/**
+ * Metadata identifying a tool as originating from an MCP server.
+ * Set automatically by the MCP client when creating tools.
+ * Used by CoreToolBuilder to create MCP_TOOL_CALL spans instead of TOOL_CALL spans.
+ */
+export interface McpMetadata {
+  serverName: string;
+  serverVersion?: string;
+}
 
 /**
  * MCP Tool Annotations for describing tool behavior and UI presentation.
@@ -303,6 +315,14 @@ export interface ToolExecutionContext<
    */
   workspace?: Workspace;
 
+  /**
+   * Browser available for tool execution. When provided, tools can access
+   * browser capabilities for web automation, screenshots, and data extraction.
+   *
+   * The browser is lazily initialized - it will be launched on first use.
+   */
+  browser?: MastraBrowser;
+
   // Writer is created by Mastra for ALL contexts (agent, workflow, direct execution)
   // Wraps chunks with metadata (toolCallId, toolName, runId) before passing to underlying stream
   writer?: ToolStream;
@@ -374,6 +394,12 @@ export interface ToolAction<
    * ```
    */
   providerOptions?: Record<string, Record<string, unknown>>;
+  /**
+   * Metadata identifying this tool as originating from an MCP server.
+   * Set automatically by the MCP client when creating tools.
+   * Used by CoreToolBuilder to create MCP_TOOL_CALL spans instead of TOOL_CALL spans.
+   */
+  mcpMetadata?: McpMetadata;
   /**
    * Examples of valid tool inputs. Each example contains an `input` object
    * showing what valid arguments look like.

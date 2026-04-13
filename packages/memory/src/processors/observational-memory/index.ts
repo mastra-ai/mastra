@@ -11,20 +11,32 @@
  * - Reflector: Condenses observations when they exceed threshold
  */
 
-// Main processor
+// Engine
+export { ObservationalMemory } from './observational-memory';
+
+// Constants
 export {
-  ObservationalMemory,
   OBSERVATIONAL_MEMORY_DEFAULTS,
   OBSERVATION_CONTINUATION_HINT,
   OBSERVATION_CONTEXT_PROMPT,
   OBSERVATION_CONTEXT_INSTRUCTIONS,
-  type ObservationalMemoryConfig,
-  type ObservationDebugEvent,
-  type ObserveHooks,
-} from './observational-memory';
+} from './constants';
+
+// Processor adapter
+export { ObservationalMemoryProcessor } from './processor';
+export type { MemoryContextProvider } from './processor';
+
+// Observation utilities
+export { getObservationsAsOf } from './observation-utils';
 
 // Types
+export { ModelByInputTokens, type ModelByInputTokensConfig } from './model-by-input-tokens';
+
 export type {
+  ObservationalMemoryConfig,
+  ObservationDebugEvent,
+  ObserveHooks,
+  ObserveHookUsage,
   ObservationConfig,
   ReflectionConfig,
   ObserverResult,
@@ -65,3 +77,14 @@ export type {
 
 // Utilities
 export { TokenCounter } from './token-counter';
+export { injectAnchorIds, stripEphemeralAnchorIds, parseAnchorId } from './anchor-ids';
+export {
+  parseObservationGroups,
+  stripObservationGroups,
+  wrapInObservationGroup,
+  renderObservationGroupsForReflection,
+  reconcileObservationGroupsFromReflection,
+  deriveObservationGroupProvenance,
+  combineObservationGroupRanges,
+  type ObservationGroup,
+} from './observation-groups';

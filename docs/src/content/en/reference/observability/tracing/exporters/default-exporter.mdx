@@ -28,7 +28,7 @@ new DefaultExporter(config?: DefaultExporterConfig)
 ]}
 />
 
-## DefaultExporterConfig
+## `DefaultExporterConfig`
 
 ```typescript
 interface DefaultExporterConfig extends BaseExporterConfig {
@@ -57,7 +57,7 @@ Extends `BaseExporterConfig`, which includes:
 - `logger?: IMastraLogger` - Logger instance
 - `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
 
-## TracingStorageStrategy
+## `TracingStorageStrategy`
 
 ```typescript
 type TracingStorageStrategy = 'realtime' | 'batch-with-updates' | 'insert-only'
@@ -96,7 +96,7 @@ Initializes the exporter after dependencies are ready. Resolves tracing strategy
 ]}
 />
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
@@ -131,7 +131,7 @@ async shutdown(): Promise<void>
 
 Flushes remaining buffered events and performs cleanup.
 
-## Automatic Strategy Selection
+## Automatic strategy selection
 
 When `strategy: 'auto'` (default), the exporter queries the storage adapter for its capabilities:
 
@@ -151,7 +151,7 @@ The exporter will:
 1. Fall back to the first supported strategy if preferred isn't available
 1. Log a warning if a user-specified strategy isn't supported
 
-## Batching Behavior
+## Batching behavior
 
 ### Flush Triggers
 
@@ -196,21 +196,21 @@ const customExporter = new DefaultExporter({
 })
 ```
 
-## See Also
+## See also
 
 ### Documentation
 
-- [Tracing Overview](/docs/observability/tracing/overview) - Complete guide
-- [Exporters](/docs/observability/tracing/overview#exporters) - Exporter concepts
+- [Tracing Overview](/docs/observability/tracing/overview): Complete guide
+- [Exporters](/docs/observability/tracing/overview#exporters): Exporter concepts
 
 ### Other Exporters
 
-- [CloudExporter](/reference/observability/tracing/exporters/cloud-exporter) - Mastra Cloud
-- [ConsoleExporter](/reference/observability/tracing/exporters/console-exporter) - Debug output
-- [Langfuse](/reference/observability/tracing/exporters/langfuse) - Langfuse integration
-- [Braintrust](/reference/observability/tracing/exporters/braintrust) - Braintrust integration
+- [CloudExporter](/reference/observability/tracing/exporters/cloud-exporter): Mastra platform
+- [ConsoleExporter](/reference/observability/tracing/exporters/console-exporter): Debug output
+- [Langfuse](/reference/observability/tracing/exporters/langfuse): Langfuse integration
+- [Braintrust](/reference/observability/tracing/exporters/braintrust): Braintrust integration
 
 ### Reference
 
-- [Configuration](/reference/observability/tracing/configuration) - Configuration options
-- [Interfaces](/reference/observability/tracing/interfaces) - Type definitions
+- [Configuration](/reference/observability/tracing/configuration): Configuration options
+- [Interfaces](/reference/observability/tracing/interfaces): Type definitions

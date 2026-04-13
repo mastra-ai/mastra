@@ -657,10 +657,11 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       });
     }
 
-    // Add test thread and messages to Mastra's storage for memory routes without agentId
-    // This is needed because when agentId is not provided, the handler falls back to storage directly
-    const memoryStore = await storage.getStore('memory');
-    if (memoryStore) {
+    const saveStoredResponseFixtures = async (memoryStore: Awaited<ReturnType<InMemoryStore['getStore']>>) => {
+      if (!memoryStore) {
+        return;
+      }
+
       await memoryStore.saveThread({
         thread: {
           id: 'test-thread',
@@ -682,9 +683,43 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
             },
             createdAt: new Date(),
           },
+          {
+            id: 'test-response',
+            threadId: 'test-thread',
+            resourceId: 'test-resource',
+            role: 'assistant',
+            type: 'text',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Test stored response' }],
+              metadata: {
+                mastra: {
+                  response: {
+                    agentId: 'test-agent',
+                    model: 'openai/gpt-4o',
+                    createdAt: Math.floor(Date.now() / 1000),
+                    completedAt: Math.floor(Date.now() / 1000),
+                    status: 'completed',
+                    usage: null,
+                    tools: [],
+                    store: true,
+                    messageIds: ['test-message-1', 'test-response'],
+                  },
+                },
+              },
+            },
+            createdAt: new Date(),
+          },
         ],
       });
-    }
+    };
+
+    // Seed the root memory store for routes that resolve memory directly from Mastra storage.
+    await saveStoredResponseFixtures(await storage.getStore('memory'));
+
+    // Seed the agent memory store for Responses routes that now resolve stored responses
+    // through agent memory first and only inherit root storage via the agent-memory path.
+    await saveStoredResponseFixtures(await memory.storage.getStore('memory'));
   }
 
   return {
@@ -831,7 +866,7 @@ Follow these instructions for the test skill.
   const workspace = new Workspace({
     id: 'test-workspace',
     filesystem,
-    skills: ['/skills'],
+    skills: ['skills'],
     bm25: true, // Enable BM25 search for index/unindex operations
   });
 
@@ -963,6 +998,8 @@ function schemaExpectsDate(schema: any, path: string[] = []): boolean {
     } else if (typeName === 'ZodDefault') {
       schema = def.innerType;
     }
+    typeName = getZodTypeName(schema);
+    def = getZodDef(schema);
   }
 
   typeName = getZodTypeName(schema);
@@ -971,13 +1008,12 @@ function schemaExpectsDate(schema: any, path: string[] = []): boolean {
   // If we have a path, navigate to that field
   if (path.length > 0) {
     if (typeName === 'ZodObject') {
-      console.log('def', def);
       const shape = typeof def.shape === 'function' ? def.shape() : def.shape;
       const fieldSchema = shape[path[0]];
       return schemaExpectsDate(fieldSchema, path.slice(1));
     } else if (typeName === 'ZodArray') {
       // For arrays, check the element type (ignore the array index in path)
-      return schemaExpectsDate(typeName, path.slice(1));
+      return schemaExpectsDate(def.element, path.slice(1));
     }
     return false;
   }
@@ -1118,22 +1154,22 @@ function getRouteSpecificPathDefaults(route: ServerRoute): {
     routePath.includes('/fs/delete') ||
     routePath.includes('/fs/stat')
   ) {
-    return { query: { path: '/test-file.txt' }, body: { path: '/test-file.txt' } };
+    return { query: { path: 'test-file.txt' }, body: { path: 'test-file.txt' } };
   }
 
   // Directory operations need directory paths
   if (routePath.includes('/fs/list')) {
-    return { query: { path: '/' } };
+    return { query: { path: '.' } };
   }
 
   // mkdir needs a new path to create
   if (routePath.includes('/fs/mkdir')) {
-    return { body: { path: '/new-test-dir' } };
+    return { body: { path: 'new-test-dir' } };
   }
 
   // Index/unindex operations
   if (routePath.includes('/workspace/index') || routePath.includes('/workspace/unindex')) {
-    return { query: { path: '/test-file.txt' }, body: { path: '/test-file.txt' } };
+    return { query: { path: 'test-file.txt' }, body: { path: 'test-file.txt' } };
   }
 
   return {};

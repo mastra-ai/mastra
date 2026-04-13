@@ -16,35 +16,78 @@
       window.MASTRA_SERVER_PROTOCOL = '%%MASTRA_SERVER_PROTOCOL%%';
       window.MASTRA_CLOUD_API_ENDPOINT = '%%MASTRA_CLOUD_API_ENDPOINT%%';
       window.MASTRA_EXPERIMENTAL_FEATURES = '%%MASTRA_EXPERIMENTAL_FEATURES%%';
+      window.MASTRA_TEMPLATES = '%%MASTRA_TEMPLATES%%';
       window.MASTRA_AUTO_DETECT_URL = '%%MASTRA_AUTO_DETECT_URL%%';
       window.MASTRA_REQUEST_CONTEXT_PRESETS = '%%MASTRA_REQUEST_CONTEXT_PRESETS%%';
+      window.MASTRA_EXPERIMENTAL_UI = '%%MASTRA_EXPERIMENTAL_UI%%';
 
-      function connectSSE() {
-        const basePath = window.MASTRA_STUDIO_BASE_PATH || '';
-        const events = new EventSource(`${basePath}/refresh-events`);
+      try {
+        const storageValue = window.localStorage.getItem('mastra-playground-store');
+        const parsedStorage = storageValue ? JSON.parse(storageValue) : null;
+        const persistedTheme = parsedStorage?.state?.theme;
 
-        events.onmessage = event => {
-          if (event.data === 'refresh') {
-            window.location.reload();
-          }
-        };
+        const selectedTheme = persistedTheme === 'light' || persistedTheme === 'system' ? persistedTheme : 'dark';
 
-        events.onerror = () => {
-          events.close();
-          setTimeout(connectSSE, 1000);
-        };
+        const resolvedTheme =
+          selectedTheme === 'system'
+            ? window.matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : 'light'
+            : selectedTheme;
+
+        document.documentElement.className = resolvedTheme;
+      } catch {}
+
+      (function () {
+        let retryCount = 0;
+        let currentEvents = null;
+        const baseDelay = 1000;
+        const maxDelay = 30000;
+
+        function getRetryDelay() {
+          // Exponential backoff: 1s, 2s, 4s, 8s... capped at 30s
+          const exponentialDelay = Math.min(baseDelay * Math.pow(2, retryCount), maxDelay);
+          // Add jitter: random value between 0 and 50% of the delay
+          const jitter = Math.random() * exponentialDelay * 0.5;
+          return exponentialDelay + jitter;
+        }
+
+        function connectSSE() {
+          const basePath = window.MASTRA_STUDIO_BASE_PATH || '';
+          currentEvents = new EventSource(`${basePath}/refresh-events`);
+
+          currentEvents.onopen = () => {
+            // Reset retry count on successful connection
+            retryCount = 0;
+          };
+
+          currentEvents.onmessage = event => {
+            if (event.data === 'refresh') {
+              window.location.reload();
+            }
+          };
+
+          currentEvents.onerror = () => {
+            currentEvents.close();
+            const delay = getRetryDelay();
+            retryCount++;
+            setTimeout(connectSSE, delay);
+          };
+        }
 
         window.addEventListener('beforeunload', () => {
-          events.close();
+          if (currentEvents) {
+            currentEvents.close();
+          }
         });
-      }
 
-      connectSSE();
+        connectSSE();
+      })();
     </script>
   </head>
 
   <body class="overflow-hidden">
-    <div id="root" class="dark"></div>
+    <div id="root"></div>
     <script type="module">
       // Use relative import to work with any base path
       // Vite transforms this during build to reference compiled output with correct paths

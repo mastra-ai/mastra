@@ -8,12 +8,13 @@ import { UnicodeNormalizer, TokenLimiterProcessor } from '@mastra/core/processor
 import type { MastraStorage } from '@mastra/core/storage';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import {
   LIST_AGENTS_ROUTE,
   GET_AGENT_BY_ID_ROUTE,
   GENERATE_AGENT_ROUTE,
+  getSerializedAgentTools,
   UPDATE_AGENT_MODEL_ROUTE,
   REORDER_AGENT_MODEL_LIST_ROUTE,
   UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE,
@@ -110,6 +111,7 @@ describe('Agent Handlers', () => {
           workflows: {},
           skills: [],
           workspaceTools: [],
+          browserTools: [],
           workspaceId: undefined,
           inputProcessors: [],
           outputProcessors: [],
@@ -136,6 +138,7 @@ describe('Agent Handlers', () => {
           requestContextSchema: undefined,
           skills: [],
           workspaceTools: [],
+          browserTools: [],
           inputProcessors: [],
           outputProcessors: [],
           provider: 'openai.responses',
@@ -341,6 +344,49 @@ describe('Agent Handlers', () => {
       expect(typeof agent.tools.testTool.outputSchema).toBe('string');
     });
 
+    it('should serialize plain JSON Schema tool schemas', async () => {
+      const inputSchema = {
+        type: 'object',
+        properties: {
+          query: { type: 'string' },
+        },
+        required: ['query'],
+      };
+
+      const outputSchema = {
+        type: 'object',
+        properties: {
+          result: { type: 'string' },
+        },
+      };
+
+      const requestContextSchema = {
+        type: 'object',
+        properties: {
+          userId: { type: 'string' },
+        },
+      };
+
+      const tools = await getSerializedAgentTools({
+        composioTool: {
+          id: 'composio-tool',
+          inputSchema,
+          outputSchema,
+          requestContextSchema,
+        },
+      });
+
+      expect(tools.composioTool.inputSchema).toBeDefined();
+      expect(tools.composioTool.outputSchema).toBeDefined();
+      expect(tools.composioTool.requestContextSchema).toBeDefined();
+      expect(tools.composioTool.inputSchema).toContain('"query"');
+      expect(tools.composioTool.outputSchema).toContain('"result"');
+      expect(tools.composioTool.requestContextSchema).toContain('"userId"');
+      expect(tools.composioTool.inputSchema).toContain('https://json-schema.org/draft/2020-12/schema');
+      expect(tools.composioTool.outputSchema).toContain('https://json-schema.org/draft/2020-12/schema');
+      expect(tools.composioTool.requestContextSchema).toContain('https://json-schema.org/draft/2020-12/schema');
+    });
+
     it('should not expose a model list for agents with dynamic single-model selection', async () => {
       const dynamicSingleModelAgent = makeMockAgent({
         name: 'dynamic-single-model-agent',
@@ -437,6 +483,8 @@ describe('Agent Handlers', () => {
         },
         skills: [],
         workspaceTools: [],
+        browserTools: [],
+        workspaceId: undefined,
         inputProcessors: [],
         outputProcessors: [],
         provider: 'openai.chat',
@@ -446,6 +494,7 @@ describe('Agent Handlers', () => {
         defaultGenerateOptionsLegacy: {},
         defaultStreamOptionsLegacy: {},
         modelList: undefined,
+        requestContextSchema: undefined,
         source: 'code',
       });
     });
@@ -521,6 +570,33 @@ describe('Agent Handlers', () => {
           message: 'Agent with id non-existing not found',
         }),
       );
+    });
+
+    it('should return serialized agent with browser tools when browser is configured', async () => {
+      const mockBrowser = {
+        getTools: () => ({
+          navigate: { name: 'navigate' },
+          click: { name: 'click' },
+          screenshot: { name: 'screenshot' },
+        }),
+      };
+
+      const agentWithBrowser = makeMockAgent({
+        name: 'browser-agent',
+        browser: mockBrowser as any,
+      });
+
+      const mastraWithBrowser = makeMastraMock({
+        agents: { 'browser-agent': agentWithBrowser },
+      });
+
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithBrowser }),
+        agentId: 'browser-agent',
+        requestContext,
+      });
+
+      expect(result?.browserTools).toEqual(['navigate', 'click', 'screenshot']);
     });
   });
 

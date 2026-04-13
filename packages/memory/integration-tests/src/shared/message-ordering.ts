@@ -13,9 +13,7 @@
  *
  * Tests run with OpenAI models.
  */
-
-import { getLLMTestMode } from '@internal/llm-recorder';
-import { setupDummyApiKeys } from '@internal/test-utils';
+import { randomUUID } from 'node:crypto';
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import type { MastraModelConfig } from '@mastra/core/llm';
@@ -25,8 +23,6 @@ import { Memory } from '@mastra/memory';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-setupDummyApiKeys(getLLMTestMode(), ['openai']);
-
 type MessagePart = MastraMessageContentV2['parts'][number];
 type OrderEntry = { type: string; content?: string };
 
@@ -34,7 +30,6 @@ type OrderEntry = { type: string; content?: string };
 interface ModelConfig {
   name: string;
   model: MastraModelConfig;
-  envVar: string;
 }
 
 interface MessageOrderingTestConfig {
@@ -196,28 +191,19 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
   // Run tests for each model configuration
   for (const modelConfig of models) {
     describe(`Message Ordering with ${modelConfig.name} (${version}) (Issue #9909)`, () => {
-      const dbFile = `file:ordering-test-${version}.db`;
+      const createMemory = () => {
+        const testId = randomUUID();
 
-      const createMemory = () =>
-        new Memory({
+        return new Memory({
           options: { lastMessages: 20 },
           storage: new LibSQLStore({
-            id: `ordering-test-${version}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-            url: dbFile,
+            id: `ordering-test-${version}-${testId}`,
+            url: `file:ordering-test-${version}-${testId}.db`,
           }),
         });
-
-      const skipIfNoApiKey = () => {
-        if (!process.env[modelConfig.envVar]) {
-          console.info(`Skipping: ${modelConfig.envVar} not set`);
-          return true;
-        }
-        return false;
       };
 
       it('should preserve text ordering: stream -> raw storage -> recall', async () => {
-        if (skipIfNoApiKey()) return;
-
         const memory = createMemory();
         const tools = createWeatherTools();
 
@@ -230,8 +216,8 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
           tools,
         });
 
-        const threadId = '28f55d05-8b0b-447c-9d49-28e35cdd5db6';
-        const resourceId = 'ordering-test-user';
+        const threadId = randomUUID();
+        const resourceId = `ordering-test-user-${randomUUID()}`;
 
         console.info('\n========================================');
         console.info(`TEST: Stream -> Raw Storage -> Recall (${modelConfig.name} ${version})`);
@@ -364,8 +350,6 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
       }, 90000);
 
       it('should preserve ordering with multiple tool calls', async () => {
-        if (skipIfNoApiKey()) return;
-
         const memory = createMemory();
         const tools = createResearchTools();
 
@@ -378,8 +362,8 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
           tools,
         });
 
-        const threadId = '48f55d05-8b0b-447c-9d49-28e35cdd5db6';
-        const resourceId = 'multi-tool-test';
+        const threadId = randomUUID();
+        const resourceId = `multi-tool-test-${randomUUID()}`;
 
         console.info('\n========================================');
         console.info(`TEST: Multiple Tool Calls Ordering (${modelConfig.name} ${version})`);
@@ -463,8 +447,6 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
       }, 120000);
 
       it('should match stream order exactly in storage', async () => {
-        if (skipIfNoApiKey()) return;
-
         const memory = createMemory();
         const tools = createWeatherTools();
 
@@ -477,8 +459,8 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
           tools,
         });
 
-        const threadId = '38f55d05-8b0b-447c-9d49-28e35cdd5db6';
-        const resourceId = 'exact-match-test';
+        const threadId = randomUUID();
+        const resourceId = `exact-match-test-${randomUUID()}`;
 
         console.info('\n========================================');
         console.info(`TEST: Exact Stream-Storage Match (${modelConfig.name} ${version})`);

@@ -17,7 +17,7 @@ Sends Tracing data to Arize Phoenix, Arize AX, or any OpenTelemetry-compatible o
 new ArizeExporter(config: ArizeExporterConfig)
 ```
 
-## ArizeExporterConfig
+## `ArizeExporterConfig`
 
 ```typescript
 type ArizeExporterConfig = Omit<OtelExporterConfig, 'provider'> & {
@@ -106,7 +106,7 @@ Non-reserved span attributes are serialized into the OpenInference `metadata` pa
 
 ## Methods
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
@@ -174,11 +174,11 @@ const exporter = new ArizeExporter({
 })
 ```
 
-## OpenInference Semantic Conventions
+## `OpenInference` semantic conventions
 
 The ArizeExporter implements [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference/tree/main/spec) for generative AI applications, providing standardized trace structure across different observability platforms.
 
-## Tags Support
+## Tags support
 
 The ArizeExporter supports trace tagging for categorization and filtering. Tags are only applied to root spans and are mapped to the native OpenInference `tag.tags` semantic convention.
 

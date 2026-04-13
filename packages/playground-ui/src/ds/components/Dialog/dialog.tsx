@@ -44,8 +44,8 @@ const DialogContent = React.forwardRef<
         'data-[state=open]:animate-in data-[state=closed]:animate-out',
         'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
         'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
-        'data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%]',
-        'data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]',
+        'data-[state=closed]:slide-out-to-bottom-4',
+        'data-[state=open]:slide-in-from-bottom-4',
         className,
       )}
       {...props}
@@ -56,7 +56,7 @@ const DialogContent = React.forwardRef<
           'absolute right-4 top-4 rounded-md p-1',
           'text-neutral3 hover:text-neutral6 hover:bg-surface4',
           'transition-all duration-normal ease-out-custom',
-          'focus:outline-none focus:ring-1 focus:ring-accent1 focus:shadow-focus-ring',
+          'focus:outline-hidden focus:ring-1 focus:ring-accent1 focus:shadow-focus-ring',
           'disabled:pointer-events-none',
         )}
       >

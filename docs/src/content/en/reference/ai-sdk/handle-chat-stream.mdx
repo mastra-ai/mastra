@@ -13,6 +13,8 @@ Framework-agnostic handler for streaming agent chat in AI SDK-compatible format.
 
 `handleChatStream()` returns a `ReadableStream` that you can wrap with [`createUIMessageStreamResponse()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/create-ui-message-stream-response).
 
+`handleChatStream()` keeps the existing AI SDK v5/default behavior. If your app is typed against AI SDK v6, pass `version: 'v6'`.
+
 Use [`chatRoute()`](/reference/ai-sdk/chat-route) if you want to create a chat route inside a Mastra server.
 
 ## Usage example
@@ -30,6 +32,7 @@ export async function POST(req: Request) {
     mastra,
     agentId: 'weatherAgent',
     params,
+    messageMetadata: () => ({ createdAt: new Date().toISOString() }),
   })
   return createUIMessageStreamResponse({ stream })
 }
@@ -39,6 +42,14 @@ export async function POST(req: Request) {
 
 <PropertiesTable
   content={[
+  {
+    name: 'version',
+    type: "'v5' | 'v6'",
+    description:
+      "Selects the AI SDK stream contract to emit. Omit it or pass `'v5'` for the existing default behavior. Pass `'v6'` when your app is typed against AI SDK v6 response helpers.",
+    isOptional: true,
+    defaultValue: "'v5'",
+  },
   {
     name: 'mastra',
     type: 'Mastra',
@@ -50,6 +61,13 @@ export async function POST(req: Request) {
     type: 'string',
     description: 'The ID of the agent to use for chat.',
     isOptional: false,
+  },
+  {
+    name: 'agentVersion',
+    type: "{ versionId: string } | { status?: 'draft' | 'published' }",
+    description:
+      "Selects a specific agent version. Pass `{ versionId: '<id>' }` to target an exact version, or `{ status: 'draft' }` / `{ status: 'published' }` to resolve by status. Requires the [Editor](/docs/editor/overview) to be configured.",
+    isOptional: true,
   },
   {
     name: 'params',
@@ -122,6 +140,20 @@ export async function POST(req: Request) {
     description: 'Whether to include source citations in the stream.',
     isOptional: true,
     defaultValue: 'false',
+  },
+  {
+    name: 'onError',
+    type: '(error: unknown) => string',
+    description:
+      'Called when the stream encounters an error. Return the string that will be sent to the client as the error message. Use this to sanitize errors before they reach the client — for example, to prevent internal infrastructure details from leaking to end users.',
+    isOptional: true,
+  },
+  {
+    name: 'messageMetadata',
+    type: '(options: { part: UIMessageStreamPart }) => Record<string, unknown> | undefined',
+    description:
+      'A function that receives the current stream part and returns metadata to attach to start and finish chunks. See the [AI SDK message metadata docs](https://ai-sdk.dev/docs/ai-sdk-ui/message-metadata) for details.',
+    isOptional: true,
   },
 ]}
 />

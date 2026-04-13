@@ -3,6 +3,7 @@ import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
 import { applyTokenLimit } from './output-helpers';
+import { startWorkspaceSpan } from './tracing';
 import { formatAsTree } from './tree-formatter';
 
 export const listFilesTool = createTool({
@@ -12,15 +13,17 @@ Returns a compact tab-indented listing for efficient token usage.
 Options mirror common tree command flags for familiarity.
 
 Examples:
-- List root: { path: "./" }
-- Deep listing: { path: "./src", maxDepth: 5 }
-- Directories only: { path: "./", dirsOnly: true }
-- Exclude node_modules: { path: "./", exclude: "node_modules" }
-- Find TypeScript files: { path: "./src", pattern: "**/*.ts" }
-- Find config files: { path: "./", pattern: "*.config.{js,ts}" }
-- Multiple patterns: { path: "./", pattern: ["**/*.ts", "**/*.tsx"] }`,
+- List workspace root: { path: "." }
+- Deep listing: { path: "src", maxDepth: 5 }
+- Directories only: { path: ".", dirsOnly: true }
+- Exclude node_modules: { path: ".", exclude: "node_modules" }
+- Find TypeScript files: { path: "src", pattern: "**/*.ts" }
+- Find config files: { path: ".", pattern: "*.config.{js,ts}" }
+- Multiple patterns: { path: ".", pattern: ["**/*.ts", "**/*.tsx"] }
+
+To list ALL files, omit the pattern parameter — do NOT pass pattern: "*".`,
   inputSchema: z.object({
-    path: z.string().default('./').describe('Directory path to list'),
+    path: z.string().default('.').describe('Directory path to list'),
     maxDepth: z
       .number()
       .optional()
@@ -42,7 +45,7 @@ Examples:
       .union([z.string(), z.array(z.string())])
       .optional()
       .describe(
-        'Glob pattern(s) to filter files. Examples: "**/*.ts", "src/**/*.test.ts", "*.config.{js,ts}". Directories always pass through.',
+        'Glob pattern(s) to filter files. Omit this parameter to list all files (do NOT pass "*"). Use "**/*.ext" to match files recursively across directories. "*" only matches within a single directory level (standard glob). Glob patterns only filter files — directories are always shown to preserve tree structure. Examples: "**/*.ts", "src/**/*.test.ts", "*.config.{js,ts}".',
       ),
     respectGitignore: z
       .boolean()
@@ -51,26 +54,40 @@ Examples:
       .describe('Respect .gitignore in the listed directory (default: true).'),
   }),
   execute: async (
-    { path = './', maxDepth = 2, showHidden, dirsOnly, exclude, extension, pattern, respectGitignore },
+    { path = '.', maxDepth = 2, showHidden, dirsOnly, exclude, extension, pattern, respectGitignore },
     context,
   ) => {
     const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
 
-    const result = await formatAsTree(filesystem, path, {
-      maxDepth,
-      showHidden,
-      dirsOnly,
-      exclude: exclude || undefined,
-      extension: extension || undefined,
-      pattern: pattern || undefined,
-      respectGitignore,
+    const span = startWorkspaceSpan(context, workspace, {
+      category: 'filesystem',
+      operation: 'listFiles',
+      input: { path, maxDepth, pattern },
+      attributes: { filesystemProvider: filesystem.provider },
     });
 
-    return await applyTokenLimit(
-      `${result.tree}\n\n${result.summary}`,
-      workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]?.maxOutputTokens ?? 1_000,
-      'end',
-    );
+    try {
+      const result = await formatAsTree(filesystem, path, {
+        maxDepth,
+        showHidden,
+        dirsOnly,
+        exclude: exclude || undefined,
+        extension: extension || undefined,
+        pattern: pattern || undefined,
+        respectGitignore,
+      });
+
+      const output = await applyTokenLimit(
+        `${result.tree}\n\n${result.summary}`,
+        workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]?.maxOutputTokens ?? 1_000,
+        'end',
+      );
+      span.end({ success: true }, { resultCount: result.fileCount });
+      return output;
+    } catch (err) {
+      span.error(err);
+      throw err;
+    }
   },
 });

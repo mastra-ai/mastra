@@ -40,7 +40,7 @@ const workspace = new Workspace({
 
 const agent = new Agent({
   name: 'file-agent',
-  model: 'anthropic/claude-opus-4-5',
+  model: 'anthropic/claude-opus-4-6',
   workspace,
 })
 ```
@@ -221,7 +221,7 @@ const config = filesystem.getMountConfig()
 // { type: 'gcs', bucket: 'my-bucket', ... }
 ```
 
-## Mounting in E2B Sandboxes
+## Mounting in E2B sandboxes
 
 GCSFilesystem can be mounted into E2B sandboxes, making the bucket accessible as a local directory:
 

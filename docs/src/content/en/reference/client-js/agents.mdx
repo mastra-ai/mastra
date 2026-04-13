@@ -11,7 +11,7 @@ packages:
 
 The Agents API provides methods to interact with Mastra AI agents, including generating responses, streaming interactions, and managing agent tools.
 
-## Getting All Agents
+## Getting all agents
 
 Retrieve a list of all available agents:
 
@@ -21,7 +21,7 @@ const agents = await mastraClient.listAgents()
 
 Returns a record of agent IDs to their serialized agent configurations.
 
-## Working with a Specific Agent
+## Working with a specific agent
 
 Get an instance of a specific agent by its ID:
 
@@ -35,9 +35,9 @@ export const myAgent = new Agent({
 const agent = mastraClient.getAgent('my-agent')
 ```
 
-## Agent Methods
+## Agent methods
 
-### details()
+### `details()`
 
 Retrieve detailed information about an agent:
 
@@ -45,7 +45,7 @@ Retrieve detailed information about an agent:
 const details = await agent.details()
 ```
 
-### generate()
+### `generate()`
 
 Generate a response from the agent:
 
@@ -78,7 +78,7 @@ const response = await agent.generate('Hello, how are you?', {
 })
 ```
 
-### stream()
+### `stream()`
 
 Stream responses from the agent for real-time interactions:
 
@@ -160,7 +160,7 @@ for await (const part of uiMessageStream) {
 }
 ```
 
-### getTool()
+### `getTool()`
 
 Retrieve information about a specific tool available to the agent:
 
@@ -168,7 +168,7 @@ Retrieve information about a specific tool available to the agent:
 const tool = await agent.getTool('tool-id')
 ```
 
-### executeTool()
+### `executeTool()`
 
 Execute a specific tool for the agent:
 
@@ -178,7 +178,7 @@ const result = await agent.executeTool('tool-id', {
 })
 ```
 
-### network()
+### `network()`
 
 Stream responses from an agent network for multi-agent interactions:
 
@@ -192,7 +192,7 @@ response.processDataStream({
 })
 ```
 
-### approveToolCall()
+### `approveToolCall()`
 
 Approve a pending tool call that requires human confirmation:
 
@@ -209,7 +209,7 @@ response.processDataStream({
 })
 ```
 
-### declineToolCall()
+### `declineToolCall()`
 
 Decline a pending tool call that requires human confirmation:
 
@@ -226,7 +226,7 @@ response.processDataStream({
 })
 ```
 
-### approveToolCallGenerate()
+### `approveToolCallGenerate()`
 
 Approve a pending tool call when using `generate()` (non-streaming). Returns the complete response:
 
@@ -245,7 +245,7 @@ if (output.finishReason === 'suspended') {
 }
 ```
 
-### declineToolCallGenerate()
+### `declineToolCallGenerate()`
 
 Decline a pending tool call when using `generate()` (non-streaming). Returns the complete response:
 
@@ -264,7 +264,7 @@ if (output.finishReason === 'suspended') {
 }
 ```
 
-## Client Tools
+## Client tools
 
 Client-side tools allow you to execute custom functions on the client side when the agent requests them.
 
@@ -315,11 +315,11 @@ response.processDataStream({
 })
 ```
 
-## Stored Agents
+## Stored agents
 
-Stored agents are agent configurations stored in a database that can be created, updated, and deleted at runtime. They reference primitives (tools, workflows, other agents, memory, scorers) by key, which are resolved from the Mastra registry when the agent is instantiated.
+Stored agents are agent configurations stored in a database that can be created, updated, and deleted at runtime. They reference primitives (tools, workflows, other agents, scorers) by key, which are resolved from the Mastra registry when the agent is instantiated. Memory is configured inline as a `SerializedMemoryConfig` object with options such as `lastMessages` and `semanticRecall`.
 
-### listStoredAgents()
+### `listStoredAgents()`
 
 Retrieve a paginated list of all stored agents:
 
@@ -342,7 +342,7 @@ const result = await mastraClient.listStoredAgents({
 })
 ```
 
-### createStoredAgent()
+### `createStoredAgent()`
 
 Create a new stored agent:
 
@@ -353,7 +353,7 @@ const agent = await mastraClient.createStoredAgent({
   instructions: 'You are a helpful assistant.',
   model: {
     provider: 'openai',
-    name: 'gpt-4',
+    name: 'gpt-5.4',
   },
 })
 ```
@@ -368,12 +368,17 @@ const agent = await mastraClient.createStoredAgent({
   instructions: 'You are a helpful assistant.',
   model: {
     provider: 'openai',
-    name: 'gpt-4',
+    name: 'gpt-5.4',
   },
-  tools: ['calculator', 'weather'],
-  workflows: ['data-processing'],
-  agents: ['subagent-1'],
-  memory: 'my-memory',
+  tools: { calculator: {}, weather: {} },
+  workflows: { 'data-processing': {} },
+  agents: { 'subagent-1': {} },
+  memory: {
+    options: {
+      lastMessages: 20,
+      semanticRecall: false,
+    },
+  },
   scorers: {
     'quality-scorer': {
       sampling: { type: 'ratio', rate: 0.1 },
@@ -389,7 +394,7 @@ const agent = await mastraClient.createStoredAgent({
 })
 ```
 
-### getStoredAgent()
+### `getStoredAgent()`
 
 Get an instance of a specific stored agent:
 
@@ -397,9 +402,9 @@ Get an instance of a specific stored agent:
 const storedAgent = mastraClient.getStoredAgent('my-agent')
 ```
 
-## Stored Agent Methods
+## Stored agent methods
 
-### details()
+### `details()`
 
 Retrieve the stored agent configuration:
 
@@ -410,7 +415,7 @@ console.log(details.instructions)
 console.log(details.model)
 ```
 
-### update()
+### `update()`
 
 Update specific fields of a stored agent. All fields are optional:
 
@@ -424,7 +429,7 @@ const updated = await storedAgent.update({
 ```typescript
 // Update just the tools
 await storedAgent.update({
-  tools: ['new-tool-1', 'new-tool-2'],
+  tools: { 'new-tool-1': {}, 'new-tool-2': {} },
 })
 
 // Update metadata
@@ -436,11 +441,133 @@ await storedAgent.update({
 })
 ```
 
-### delete()
+### `delete()`
 
 Delete a stored agent:
 
 ```typescript
 const result = await storedAgent.delete()
 console.log(result.success) // true
+```
+
+## Version management
+
+Both `Agent` (code-defined) and `StoredAgent` instances have methods for managing configuration versions. See the [Editor overview](/docs/editor/overview#versioning) for an introduction to version management.
+
+### Getting an agent with a specific version
+
+Pass a version identifier when getting an agent:
+
+```typescript
+// Load the published version (default)
+const agent = mastraClient.getAgent('support-agent')
+
+// Load the latest draft
+const draftAgent = mastraClient.getAgent('support-agent', { status: 'draft' })
+
+// Load a specific version
+const versionedAgent = mastraClient.getAgent('support-agent', { versionId: 'abc-123' })
+```
+
+For stored agents, pass a status option to `details()`:
+
+```typescript
+const storedAgent = mastraClient.getStoredAgent('my-agent')
+const draft = await storedAgent.details(undefined, { status: 'draft' })
+```
+
+### `listVersions()`
+
+List all versions for an agent:
+
+```typescript
+const versions = await agent.listVersions()
+console.log(versions.items) // Array of version snapshots
+console.log(versions.total)
+```
+
+With pagination and sorting:
+
+```typescript
+const versions = await agent.listVersions({
+  page: 0,
+  perPage: 10,
+  orderBy: {
+    field: 'createdAt',
+    direction: 'DESC',
+  },
+})
+```
+
+### `createVersion()`
+
+Create a new version snapshot:
+
+```typescript
+const version = await agent.createVersion({
+  changeMessage: 'Updated tone to be more friendly',
+})
+```
+
+### `getVersion()`
+
+Get a specific version by ID:
+
+```typescript
+const version = await agent.getVersion('version-123')
+console.log(version.versionNumber)
+console.log(version.changedFields)
+console.log(version.createdAt)
+```
+
+### `activateVersion()`
+
+Set a version as the active published version:
+
+```typescript
+await agent.activateVersion('version-123')
+```
+
+### `restoreVersion()`
+
+Restore a previous version by creating a new version with the same configuration:
+
+```typescript
+await agent.restoreVersion('version-456')
+```
+
+### `deleteVersion()`
+
+Delete a version:
+
+```typescript
+await agent.deleteVersion('version-789')
+```
+
+### `compareVersions()`
+
+Compare two versions and return their differences:
+
+```typescript
+const diff = await agent.compareVersions('version-123', 'version-456')
+console.log(diff.changes) // Fields that changed between versions
+```
+
+### React SDK
+
+In the React SDK, pass an `agentVersionId` through `requestContext` when using the `useChat` hook:
+
+```typescript title="Version targeting with React SDK"
+import { useChat } from '@mastra/react'
+
+function Chat() {
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    agentId: 'support-agent',
+    requestContext: {
+      agentVersionId: 'abc-123',
+    },
+  })
+
+  // ... render chat UI
+}
 ```

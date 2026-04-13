@@ -199,6 +199,54 @@ describe('Memory Schema Query Parsing', () => {
 
         expect(result.success).toBe(false);
       });
+
+      it('should parse filter with endExclusive flag for cursor pagination', () => {
+        const filterObj = {
+          dateRange: {
+            end: '2024-03-09T13:10:42.748Z',
+            endExclusive: true,
+          },
+        };
+        const jsonString = JSON.stringify(filterObj);
+
+        const result = listMessagesQuerySchema.safeParse({
+          page: 0,
+          perPage: 20,
+          filter: jsonString,
+        });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+          expect(result.data.filter).toBeDefined();
+          expect(result.data.filter?.dateRange).toBeDefined();
+          expect(result.data.filter?.dateRange?.endExclusive).toBe(true);
+        }
+      });
+
+      it('should parse filter with both startExclusive and endExclusive flags', () => {
+        const filterObj = {
+          dateRange: {
+            start: '2024-01-01T00:00:00.000Z',
+            end: '2024-12-31T23:59:59.999Z',
+            startExclusive: true,
+            endExclusive: true,
+          },
+        };
+        const jsonString = JSON.stringify(filterObj);
+
+        const result = listMessagesQuerySchema.safeParse({
+          page: 0,
+          perPage: 50,
+          filter: jsonString,
+        });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+          expect(result.data.filter).toBeDefined();
+          expect(result.data.filter?.dateRange?.startExclusive).toBe(true);
+          expect(result.data.filter?.dateRange?.endExclusive).toBe(true);
+        }
+      });
     });
   });
 

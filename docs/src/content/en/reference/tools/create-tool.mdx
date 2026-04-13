@@ -80,7 +80,7 @@ The tool still returns the full `execute` result to your application, while the 
 - `type: 'json'`
 - `type: 'content'` with parts like `text`, `image-url`, `image-data`, `file-url`, `file-data`, `file-id`, `image-file-id`, or `custom`
 
-## Example with MCP Annotations
+## Example with MCP annotations
 
 When exposing tools via MCP (Model Context Protocol), you can add annotations to describe tool behavior and customize how clients display the tool. These MCP-specific properties are grouped under the `mcp` property:
 
@@ -212,40 +212,91 @@ export const weatherTool = createTool({
             description: 'Optional execution context containing metadata',
             properties: [
               {
-                name: 'requestContext',
-                type: 'RequestContext',
-                isOptional: true,
-                description: 'Request Context for accessing shared state and dependencies',
-              },
-              {
-                name: 'tracingContext',
-                type: 'TracingContext',
-                isOptional: true,
-                description: 'Tracing context for creating child spans and adding metadata',
-              },
-              {
-                name: 'abortSignal',
-                type: 'AbortSignal',
-                isOptional: true,
-                description: 'Signal for aborting the tool execution',
-              },
-              {
-                name: 'agent',
-                type: 'AgentToolExecutionContext',
-                isOptional: true,
-                description: 'Agent-specific context (messages, suspend, resumeData, etc.)',
-              },
-              {
-                name: 'workflow',
-                type: 'WorkflowToolExecutionContext',
-                isOptional: true,
-                description: 'Workflow-specific context (state, setState, suspend, etc.)',
-              },
-              {
-                name: 'mcp',
-                type: 'MCPToolExecutionContext',
-                isOptional: true,
-                description: 'MCP-specific context (elicitation, etc.)',
+                type: 'ToolExecutionContext',
+                parameters: [
+                  {
+                    name: 'requestContext',
+                    type: 'RequestContext',
+                    isOptional: true,
+                    description: 'Request Context for accessing shared state and dependencies',
+                  },
+                  {
+                    name: 'tracingContext',
+                    type: 'TracingContext',
+                    isOptional: true,
+                    description: 'Tracing context for creating child spans and adding metadata',
+                  },
+                  {
+                    name: 'abortSignal',
+                    type: 'AbortSignal',
+                    isOptional: true,
+                    description: 'Signal for aborting the tool execution',
+                  },
+                  {
+                    name: 'agent',
+                    type: 'AgentToolExecutionContext',
+                    isOptional: true,
+                    description: 'Agent-specific context, available when the tool is executed by an agent.',
+                    properties: [
+                      {
+                        name: 'agentId',
+                        type: 'string',
+                        description: 'The ID of the agent executing this tool.',
+                      },
+                      {
+                        name: 'toolCallId',
+                        type: 'string',
+                        description: 'Unique identifier for this tool call.',
+                      },
+                      {
+                        name: 'messages',
+                        type: 'CoreMessage[]',
+                        description: 'All messages in the current conversation.',
+                      },
+                      {
+                        name: 'suspend',
+                        type: '(payload, options?) => Promise<void>',
+                        description: 'Suspends tool execution, returning a payload to the caller.',
+                      },
+                      {
+                        name: 'resumeData',
+                        type: 'TResume',
+                        isOptional: true,
+                        description: 'Data provided when resuming a previously suspended tool.',
+                      },
+                      {
+                        name: 'threadId',
+                        type: 'string',
+                        isOptional: true,
+                        description: 'Thread ID for memory-enabled agents.',
+                      },
+                      {
+                        name: 'resourceId',
+                        type: 'string',
+                        isOptional: true,
+                        description: 'Resource ID for memory-enabled agents.',
+                      },
+                      {
+                        name: 'writableStream',
+                        type: 'WritableStream<any>',
+                        isOptional: true,
+                        description: 'Original WritableStream from the AI SDK for streaming tool outputs.',
+                      },
+                    ],
+                  },
+                  {
+                    name: 'workflow',
+                    type: 'WorkflowToolExecutionContext',
+                    isOptional: true,
+                    description: 'Workflow-specific context (state, setState, suspend, etc.)',
+                  },
+                  {
+                    name: 'mcp',
+                    type: 'MCPToolExecutionContext',
+                    isOptional: true,
+                    description: 'MCP-specific context (elicitation, etc.)',
+                  },
+                ],
               },
             ],
           },
@@ -298,13 +349,13 @@ The `createTool()` function returns a `Tool` object.
 ]}
 />
 
-## Tool Lifecycle Hooks
+## Tool lifecycle hooks
 
 Tools support lifecycle hooks that allow you to monitor and react to different stages of tool execution. These hooks are particularly useful for logging, analytics, validation, and real-time updates during streaming.
 
 ### Available Hooks
 
-#### onInputStart
+#### `onInputStart`
 
 Called when tool call input streaming begins, before any input data is received.
 
@@ -318,7 +369,7 @@ export const tool = createTool({
 })
 ```
 
-#### onInputDelta
+#### `onInputDelta`
 
 Called for each incremental chunk of input text as it streams in. Useful for showing real-time progress or parsing partial JSON.
 
@@ -332,7 +383,7 @@ export const tool = createTool({
 })
 ```
 
-#### onInputAvailable
+#### `onInputAvailable`
 
 Called when the complete tool input is available and has been parsed and validated against the `inputSchema`.
 
@@ -350,7 +401,7 @@ export const tool = createTool({
 })
 ```
 
-#### onOutput
+#### `onOutput`
 
 Called after the tool has successfully executed and returned output. Useful for logging results, triggering follow-up actions, or analytics.
 
@@ -375,11 +426,11 @@ export const tool = createTool({
 
 For a typical streaming tool call, the hooks are invoked in this order:
 
-1. **onInputStart** - Input streaming begins
-1. **onInputDelta** - Called multiple times as chunks arrive
-1. **onInputAvailable** - Complete input is parsed and validated
+1. **onInputStart**: Input streaming begins
+1. **onInputDelta**: Called multiple times as chunks arrive
+1. **onInputAvailable**: Complete input is parsed and validated
 1. Tool's **execute** function runs
-1. **onOutput** - Tool has completed successfully
+1. **onOutput**: Tool has completed successfully
 
 ### Hook Parameters
 
@@ -395,11 +446,11 @@ Additionally:
 - `onInputAvailable` receives `input`: The validated input data (typed according to `inputSchema`)
 - `onOutput` receives `output`: The tool's return value (typed according to `outputSchema`) and `toolName` (string): The name of the tool
 
-### Error Handling
+### Error handling
 
 Hook errors are caught and logged automatically, but don't prevent tool execution from continuing. If a hook throws an error, it will be logged to the console but won't fail the tool call.
 
-## MCP Tool Annotations
+## MCP tool annotations
 
 When exposing tools via the Model Context Protocol (MCP), you can provide annotations that describe tool behavior. These annotations help MCP clients like OpenAI Apps SDK understand how to present and handle your tools.
 
@@ -412,7 +463,7 @@ mcp: {
 }
 ```
 
-### ToolAnnotations Properties
+### `ToolAnnotations` Properties
 
 <PropertiesTable
   content={[

@@ -18,7 +18,6 @@ import type {
 import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { MastraAuthProvider } from '@mastra/core/server';
 
-import { isDevPlaygroundRequest } from '../auth/helpers';
 import { HTTPException } from '../http-exception';
 import {
   capabilitiesResponseSchema,
@@ -27,6 +26,7 @@ import {
   currentUserResponseSchema,
   credentialsSignInBodySchema,
   credentialsSignUpBodySchema,
+  refreshResponseSchema,
 } from '../schemas/auth';
 import { createPublicRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
@@ -110,17 +110,12 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createPublicRoute({
     try {
       const { mastra, request, routePrefix } = ctx as any;
 
-      // In dev playground mode, return auth as disabled so the UI doesn't show login gates.
-      // The server already bypasses auth for dev playground requests, so the UI should match.
-      const serverConfig = mastra.getServer?.();
-      const authConfig = serverConfig?.auth || {};
-      const getHeader = (name: string) => request.headers.get(name) ?? undefined;
+      const auth = getAuthProvider(mastra);
 
-      if (isDevPlaygroundRequest('/api/auth/capabilities', 'GET', getHeader, authConfig)) {
+      if (!auth) {
         return { enabled: false, login: null };
       }
 
-      const auth = getAuthProvider(mastra);
       const rbac = getRBACProvider(mastra);
 
       const buildCapabilities = await loadBuildCapabilities();
@@ -436,6 +431,64 @@ export const POST_LOGOUT_ROUTE = createPublicRoute({
 });
 
 // ============================================================================
+// POST /auth/refresh
+// ============================================================================
+
+export const POST_REFRESH_ROUTE = createPublicRoute({
+  method: 'POST',
+  path: '/auth/refresh',
+  responseType: 'datastream-response',
+  responseSchema: refreshResponseSchema,
+  summary: 'Refresh session',
+  description: 'Refreshes the current session, extending its expiry. Sets a new session cookie on success.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    const { mastra, request } = ctx as any;
+
+    try {
+      const auth = getAuthProvider(mastra);
+
+      if (
+        !auth ||
+        !implementsInterface<ISessionProvider>(auth, 'refreshSession') ||
+        !implementsInterface<ISessionProvider>(auth, 'getSessionIdFromRequest')
+      ) {
+        throw new HTTPException(404, { message: 'Session refresh not configured' });
+      }
+
+      // Get session ID from request
+      const sessionId = auth.getSessionIdFromRequest(request);
+      if (!sessionId) {
+        throw new HTTPException(401, { message: 'No session' });
+      }
+
+      // Refresh the session
+      const newSession = await auth.refreshSession(sessionId);
+      if (!newSession) {
+        throw new HTTPException(401, { message: 'Session expired' });
+      }
+
+      // Build response with new session headers
+      const headers = new Headers({ 'Content-Type': 'application/json' });
+      if (implementsInterface<ISessionProvider>(auth, 'getSessionHeaders')) {
+        const sessionHeaders = auth.getSessionHeaders(newSession);
+        for (const [key, value] of Object.entries(sessionHeaders)) {
+          headers.append(key, value);
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers,
+      });
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      return handleError(error, 'Error refreshing session');
+    }
+  },
+});
+
+// ============================================================================
 // POST /auth/credentials/sign-in
 // ============================================================================
 
@@ -560,6 +613,7 @@ export const AUTH_ROUTES = [
   GET_SSO_LOGIN_ROUTE,
   GET_SSO_CALLBACK_ROUTE,
   POST_LOGOUT_ROUTE,
+  POST_REFRESH_ROUTE,
   POST_CREDENTIALS_SIGN_IN_ROUTE,
   POST_CREDENTIALS_SIGN_UP_ROUTE,
-];
+] as const;

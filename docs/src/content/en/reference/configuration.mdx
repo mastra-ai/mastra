@@ -37,7 +37,7 @@ export const mastra = new Mastra({
       id: 'weather-agent',
       name: 'Weather Agent',
       instructions: 'You help with weather information',
-      model: 'openai/gpt-4o',
+      model: 'openai/gpt-5.4',
     }),
   },
 })
@@ -270,7 +270,7 @@ import { ModerationProcessor } from '@mastra/core/processors'
 export const mastra = new Mastra({
   processors: {
     moderation: new ModerationProcessor({
-      model: 'openai/gpt-4.1-nano',
+      model: 'openai/gpt-5-mini',
       categories: ['hate', 'harassment', 'violence'],
     }),
   },
@@ -317,7 +317,7 @@ import { createToxicityScorer } from '@mastra/evals/scorers/prebuilt'
 
 export const mastra = new Mastra({
   scorers: {
-    toxicity: createToxicityScorer({ model: 'openai/gpt-4.1-nano' }),
+    toxicity: createToxicityScorer({ model: 'openai/gpt-5-mini' }),
   },
 })
 ```
@@ -475,7 +475,7 @@ const mastra = new Mastra({
 
 When `mastra build` is run, Mastra bundles your project into the `.mastra/output` directory. This option controls which packages are excluded from the bundle (marked as "external") and installed separately through a package manager. This is useful when the internal Mastra bundler ([Rollup](https://rollupjs.org/configuration-options/#external)) has trouble bundling certain packages.
 
-By default, `mastra build` sets this option to `true`. If you deploy your project to [Mastra Cloud](/docs/mastra-cloud/overview), it also sets this option to `true`.
+By default, `mastra build` sets this option to `true`.
 
 Here's an overview of what the different values mean:
 
@@ -520,6 +520,8 @@ List of packages whose source code should be transpiled through esbuild during t
 You only need this option if you're importing uncompiled source code directly. If your packages are already compiled to CommonJS or ESM, they don't need to be listed here.
 
 Mastra automatically detects workspace packages in monorepo setups and adds them to this list, so you typically only need to specify external packages that require transpilation.
+
+Mastra also resolves `tsconfig.json` `baseUrl` and `paths` aliases during build. This includes ESM-style imports such as `~/utils/logger.js` that point to TypeScript source files.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -575,10 +577,13 @@ export const mastra = new Mastra({
   server: {
     auth: new MastraJwtAuth({
       secret: process.env.MASTRA_JWT_SECRET,
+      mapUserToResourceId: user => user.id,
     }),
   },
 })
 ```
+
+The `mapUserToResourceId` callback maps the authenticated user to a resource ID for memory/thread scoping. When provided, it's called after successful authentication and the returned value is set on the request context as `MASTRA_RESOURCE_ID_KEY`. See [Authorization (User Isolation)](/docs/server/middleware#authorization-user-isolation) for details.
 
 ### server.bodySizeLimit
 
@@ -597,6 +602,30 @@ export const mastra = new Mastra({
 })
 ```
 
+### server.mcpOptions
+
+**Type:** `object`\
+**Default:** `undefined`
+
+MCP transport options applied to all MCP HTTP and SSE routes. Use this to enable stateless mode for serverless environments (Cloudflare Workers, Vercel Edge, AWS Lambda, etc.) where persistent connections and in-memory session state are not available.
+
+| Property | Type | Default | Description |
+| - | - | - | - |
+| `serverless` | `boolean` | `false` | Run MCP in stateless mode without session management |
+| `sessionIdGenerator` | `() => string` | `undefined` | Custom session ID generator function |
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  server: {
+    mcpOptions: {
+      serverless: true,
+    },
+  },
+})
+```
+
 ### server.build
 
 Build-time configuration for server features. These options control development tools like Swagger UI and request logging, which are enabled during local development but disabled in production by default.
@@ -605,7 +634,7 @@ Build-time configuration for server features. These options control development 
 | - | - | - | - |
 | `swaggerUI` | `boolean` | `false` | Enable Swagger UI at `/swagger-ui` for interactive API exploration (requires `openAPIDocs` to be `true`) |
 | `apiReqLogs` | `boolean` | `false` | Enable API request logging to the console |
-| `openAPIDocs` | `boolean` | `false` | Enable OpenAPI specification at `/openapi.json` |
+| `openAPIDocs` | `boolean` | `false` | Enable OpenAPI specification at `/api/openapi.json`. Built-in Mastra routes use `servers: [{url: "/api"}]` while custom routes get a per-path `servers: [{url: "/"}]` override. |
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -654,9 +683,9 @@ export const mastra = new Mastra({
 ### server.host
 
 **Type:** `string`\
-**Default:** `localhost`
+**Default:** `localhost` (or `MASTRA_HOST` environment variable if set)
 
-Host address the Mastra development server binds to.
+Host address the Mastra development server binds to. If the `MASTRA_HOST` environment variable is set, it takes precedence over the default.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -756,9 +785,9 @@ Return a `{ status, body }` object to override the default `400` response, or `u
 
 The `context` parameter indicates which part of the request failed validation:
 
-- `'query'` — query parameters
-- `'body'` — request body
-- `'path'` — path parameters
+- `'query'`: query parameters
+- `'body'`: request body
+- `'path'`: path parameters
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -804,7 +833,7 @@ export const mastra = new Mastra({
 **Type:** `string`\
 **Default:** `/`
 
-Base path for hosting Mastra Studio. Use this to host the Studio on a sub-path of your existing application instead of the root.
+Base path for hosting [Studio](/docs/studio/overview). Use this to host the Studio on a sub-path of your existing application instead of the root.
 
 This is useful when integrating with existing applications, using authentication tools like Cloudflare Zero Trust that benefit from shared domains, or managing multiple services under a single domain.
 

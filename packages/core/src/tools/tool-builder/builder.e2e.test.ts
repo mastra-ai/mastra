@@ -6,7 +6,7 @@ import { createGatewayMock } from '@internal/test-utils';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import { SpanType } from '../../observability';
 import type { AnySpan } from '../../observability';
@@ -14,7 +14,7 @@ import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import { CoreToolBuilder } from './builder';
 
-const mock = createGatewayMock();
+const mock = createGatewayMock({ exactMatch: true });
 beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());
 
@@ -609,6 +609,8 @@ describe('Tool Tracing Context Injection', () => {
       entityType: 'tool',
       requestContext: new RequestContext(),
       tracingPolicy: undefined,
+      mastra: undefined,
+      metadata: {},
     });
 
     // Verify tracingContext was injected with the tool span
@@ -623,7 +625,7 @@ describe('Tool Tracing Context Injection', () => {
     expect(result).toEqual({ result: 'processed: test' });
   });
 
-  it('should not inject tracingContext when agentSpan is not available', async () => {
+  it('should not inject tracingContext when agentSpan is not available and no observability configured', async () => {
     let receivedTracingContext: any = undefined;
 
     const testTool = createTool({
@@ -655,7 +657,7 @@ describe('Tool Tracing Context Injection', () => {
     const builtTool = builder.build();
     const result = await builtTool.execute!({ message: 'test' }, { toolCallId: 'test-call-id', messages: [] });
 
-    // Verify tracingContext was injected but currentSpan is undefined
+    // Verify tracingContext was injected but currentSpan is undefined (no observability configured)
     expect(receivedTracingContext).toEqual({ currentSpan: undefined });
     expect(result).toEqual({ result: 'processed: test' });
   });
@@ -716,6 +718,8 @@ describe('Tool Tracing Context Injection', () => {
       entityType: 'tool',
       requestContext: new RequestContext(),
       tracingPolicy: undefined,
+      mastra: undefined,
+      metadata: {},
     });
 
     // Verify Vercel tool execute was called (without tracingContext)
@@ -785,6 +789,181 @@ describe('Tool Tracing Context Injection', () => {
     expect(mockToolSpan.end).not.toHaveBeenCalled(); // Should not call end() when error() is called
   });
 
+  it('should create and end span with error when input validation fails', async () => {
+    const testTool = createTool({
+      id: 'input-validation-span-tool',
+      description: 'Tool with strict input validation',
+      inputSchema: z.object({
+        name: z.string().min(3, 'Name must be at least 3 characters'),
+        age: z.number().min(0, 'Age must be positive'),
+      }),
+      execute: async inputData => ({ result: `Hello ${inputData.name}` }),
+    });
+
+    // Mock agent span
+    const mockToolSpan = {
+      end: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const mockAgentSpan = {
+      createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
+    } as unknown as AnySpan;
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'input-validation-span-tool',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        description: 'Tool with strict input validation',
+        requestContext: new RequestContext(),
+        tracingContext: { currentSpan: mockAgentSpan },
+      },
+    });
+
+    const builtTool = builder.build();
+
+    // Execute with invalid input (name too short)
+    const result: any = await builtTool.execute!({ name: 'A', age: 25 }, { toolCallId: 'test-call-id', messages: [] });
+
+    // Verify the result is a validation error
+    expect(result).toHaveProperty('error', true);
+    expect(result.message).toContain('Tool input validation failed');
+
+    // Verify tool span was still created despite validation failure
+    expect(mockAgentSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.TOOL_CALL,
+        name: "tool: 'input-validation-span-tool'",
+        input: { name: 'A', age: 25 },
+      }),
+    );
+
+    // Verify span was ended with failure attributes
+    expect(mockToolSpan.end).toHaveBeenCalledWith({
+      output: result,
+      attributes: { success: false },
+    });
+
+    // execute function's error path should NOT have been called
+    expect(mockToolSpan.error).not.toHaveBeenCalled();
+  });
+
+  it('should create and end span with error when input has missing required fields', async () => {
+    const testTool = createTool({
+      id: 'missing-fields-span-tool',
+      description: 'Tool that requires specific fields',
+      inputSchema: z.object({
+        required_field: z.string(),
+      }),
+      execute: async inputData => ({ result: inputData.required_field }),
+    });
+
+    const mockToolSpan = {
+      end: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const mockAgentSpan = {
+      createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
+    } as unknown as AnySpan;
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'missing-fields-span-tool',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        description: 'Tool that requires specific fields',
+        requestContext: new RequestContext(),
+        tracingContext: { currentSpan: mockAgentSpan },
+      },
+    });
+
+    const builtTool = builder.build();
+
+    // Execute with empty object (missing required field)
+    const result: any = await builtTool.execute!({}, { toolCallId: 'test-call-id', messages: [] });
+
+    expect(result).toHaveProperty('error', true);
+
+    // Span was created and ended with error
+    expect(mockAgentSpan.createChildSpan).toHaveBeenCalled();
+    expect(mockToolSpan.end).toHaveBeenCalledWith({
+      output: result,
+      attributes: { success: false },
+    });
+  });
+
+  it('should end span with error when Vercel tool output validation fails', async () => {
+    // Mock Vercel tool that returns data not matching its output schema
+    const vercelTool = {
+      description: 'Vercel tool with output schema',
+      parameters: z.object({ input: z.string() }),
+      outputSchema: z.object({
+        count: z.number(),
+        label: z.string(),
+      }),
+      execute: async () => {
+        // Return data that doesn't match the output schema
+        return { count: 'not-a-number', label: 123 };
+      },
+    };
+
+    const mockToolSpan = {
+      end: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const mockAgentSpan = {
+      createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
+    } as unknown as AnySpan;
+
+    const mockLogger = {
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      trackException: vi.fn(),
+    };
+
+    const builder = new CoreToolBuilder({
+      originalTool: vercelTool as any,
+      options: {
+        name: 'vercel-output-fail-tool',
+        logger: mockLogger as any,
+        description: 'Vercel tool with output schema',
+        requestContext: new RequestContext(),
+        tracingContext: { currentSpan: mockAgentSpan },
+      },
+    });
+
+    const builtTool = builder.build();
+    const result: any = await builtTool.execute!({ input: 'test' }, { toolCallId: 'test-call-id', messages: [] });
+
+    // Verify result is a validation error
+    expect(result).toHaveProperty('error', true);
+    expect(result.message).toContain('Tool output validation failed');
+
+    // Verify span was created
+    expect(mockAgentSpan.createChildSpan).toHaveBeenCalled();
+
+    // Verify span was ended with failure (not error, since output validation is a soft failure)
+    expect(mockToolSpan.end).toHaveBeenCalledWith({
+      output: result,
+      attributes: { success: false },
+    });
+    expect(mockToolSpan.error).not.toHaveBeenCalled();
+  });
+
   it('should create child span with correct logType attribute', async () => {
     const testTool = createTool({
       id: 'toolset-tool',
@@ -837,6 +1016,8 @@ describe('Tool Tracing Context Injection', () => {
       entityType: 'tool',
       requestContext: new RequestContext(),
       tracingPolicy: undefined,
+      mastra: undefined,
+      metadata: {},
     });
   });
 });

@@ -1,61 +1,144 @@
 import {
-  Header,
-  HeaderTitle,
-  MainContentLayout,
-  MainContentContent,
-  Icon,
-  Button,
-  HeaderAction,
-  useLinkComponent,
-  useDatasets,
-  DatasetsTable,
-  CreateDatasetDialog,
+  ButtonWithTooltip,
+  ErrorState,
+  NoDataPageLayout,
+  PageHeader,
+  PageLayout,
+  PermissionDenied,
+  SessionExpired,
+  is401UnauthorizedError,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { Plus, Database } from 'lucide-react';
-import { useState } from 'react';
+import { BookIcon, DatabaseIcon, Plus } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { CreateDatasetDialog, DatasetsList, DatasetsToolbar, getDatasetTagOptions } from '@/domains/datasets';
+import { NoDatasetsInfo } from '@/domains/datasets/components/datasets-list/no-datasets-info';
+import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
+import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
+import { useReviewSummary } from '@/domains/review';
+import { buildReviewByDatasetMap } from '@/domains/review/review-maps';
 
-function Datasets() {
+export default function Datasets() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const { navigate, paths } = useLinkComponent();
-  const { data, isLoading } = useDatasets();
-  const datasets = data?.datasets ?? [];
+  const [search, setSearch] = useState('');
+  const [targetFilter, setTargetFilter] = useState('all');
+  const [experimentFilter, setExperimentFilter] = useState('all');
+  const [tagFilter, setTagFilter] = useState('all');
 
-  const handleDatasetCreated = (datasetId: string) => {
-    setIsCreateDialogOpen(false);
-    navigate(paths.datasetLink(datasetId));
+  const { data: datasetsData, isLoading: isLoadingDatasets, error: errorDatasets } = useDatasets();
+  const { data: experimentsData, isLoading: isLoadingExperiments, error: errorExperiments } = useExperiments();
+  const { data: reviewSummary } = useReviewSummary();
+
+  const datasets = useMemo(() => datasetsData?.datasets ?? [], [datasetsData?.datasets]);
+  const experiments = useMemo(() => experimentsData?.experiments ?? [], [experimentsData?.experiments]);
+  const datasetTagOptions = useMemo(() => getDatasetTagOptions(datasets), [datasets]);
+  const reviewByDataset = useMemo(
+    () => buildReviewByDatasetMap(reviewSummary, experiments),
+    [reviewSummary, experiments],
+  );
+
+  const isLoading = isLoadingDatasets || isLoadingExperiments;
+  const error = errorDatasets || errorExperiments;
+
+  const openCreateDialog = () => setIsCreateDialogOpen(true);
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <NoDataPageLayout title="Datasets" icon={<DatabaseIcon />}>
+        <SessionExpired />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <NoDataPageLayout title="Datasets" icon={<DatabaseIcon />}>
+        <PermissionDenied resource="datasets" />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <NoDataPageLayout title="Datasets" icon={<DatabaseIcon />}>
+        <ErrorState title="Failed to load datasets" message={error.message} />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (datasets.length === 0 && !isLoading) {
+    return (
+      <>
+        <NoDataPageLayout title="Datasets" icon={<DatabaseIcon />}>
+          <NoDatasetsInfo onCreateClick={openCreateDialog} />
+        </NoDataPageLayout>
+        <CreateDatasetDialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen} />
+      </>
+    );
+  }
+
+  const hasFilters = targetFilter !== 'all' || experimentFilter !== 'all' || tagFilter !== 'all' || search !== '';
+
+  const resetFilters = () => {
+    setSearch('');
+    setTargetFilter('all');
+    setExperimentFilter('all');
+    setTagFilter('all');
   };
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>
-          <Icon>
-            <Database />
-          </Icon>
-          Datasets
-        </HeaderTitle>
-        <HeaderAction>
-          <Button variant="light" onClick={() => setIsCreateDialogOpen(true)}>
-            <Icon>
+    <PageLayout>
+      <PageLayout.TopArea>
+        <PageLayout.Row>
+          <PageLayout.Column>
+            <PageHeader>
+              <PageHeader.Title isLoading={isLoading}>
+                <DatabaseIcon /> Datasets
+              </PageHeader.Title>
+            </PageHeader>
+          </PageLayout.Column>
+          <PageLayout.Column className="flex justify-end gap-2">
+            <ButtonWithTooltip onClick={openCreateDialog} tooltipContent="Create a dataset">
               <Plus />
-            </Icon>
-            Create Dataset
-          </Button>
-        </HeaderAction>
-      </Header>
+            </ButtonWithTooltip>
+            <ButtonWithTooltip
+              as="a"
+              href="https://mastra.ai/en/docs/evals/datasets/overview"
+              target="_blank"
+              rel="noopener noreferrer"
+              tooltipContent="Go to Datasets documentation"
+            >
+              <BookIcon />
+            </ButtonWithTooltip>
+          </PageLayout.Column>
+        </PageLayout.Row>
+        <DatasetsToolbar
+          search={search}
+          onSearchChange={setSearch}
+          targetFilter={targetFilter}
+          onTargetFilterChange={setTargetFilter}
+          experimentFilter={experimentFilter}
+          onExperimentFilterChange={setExperimentFilter}
+          tagFilter={tagFilter}
+          onTagFilterChange={setTagFilter}
+          tagOptions={datasetTagOptions}
+          onReset={resetFilters}
+          hasActiveFilters={hasFilters}
+        />
+      </PageLayout.TopArea>
 
-      <MainContentContent isCentered={!isLoading && datasets.length === 0}>
-        <DatasetsTable datasets={datasets} isLoading={isLoading} onCreateClick={() => setIsCreateDialogOpen(true)} />
-      </MainContentContent>
-
-      <CreateDatasetDialog
-        open={isCreateDialogOpen}
-        onOpenChange={setIsCreateDialogOpen}
-        onSuccess={handleDatasetCreated}
+      <DatasetsList
+        datasets={datasets}
+        experiments={experiments}
+        reviewByDataset={reviewByDataset}
+        isLoading={isLoading}
+        search={search}
+        targetFilter={targetFilter}
+        experimentFilter={experimentFilter}
+        tagFilter={tagFilter}
       />
-    </MainContentLayout>
+
+      <CreateDatasetDialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen} />
+    </PageLayout>
   );
 }
-
-export { Datasets };
-export default Datasets;

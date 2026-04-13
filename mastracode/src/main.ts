@@ -2,12 +2,14 @@
 /**
  * Main entry point for Mastra Code TUI.
  */
+import fs from 'node:fs';
+
 import { isStreamDestroyedError } from './error-classification.js';
 import { hasHeadlessFlag, headlessMain } from './headless.js';
-import { loadSettings } from './onboarding/settings.js';
+import { createBrowserFromSettings, loadSettings } from './onboarding/settings.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
-import { applyThemeMode } from './tui/theme.js';
+import { applyThemeMode, restoreTerminalForeground } from './tui/theme.js';
 import { setupDebugLogging } from './utils/debug-log.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
 import { getCurrentVersion } from './utils/update-check.js';
@@ -31,31 +33,32 @@ process.on('unhandledRejection', reason => {
 });
 
 async function tuiMain() {
-  const result = await createMastraCode();
+  // Load browser from settings (before creating harness)
+  const settings = loadSettings();
+  const browser = await createBrowserFromSettings(settings.browser);
+
+  const result = await createMastraCode({ browser });
   harness = result.harness;
   mcpManager = result.mcpManager;
   hookManager = result.hookManager;
   authStorage = result.authStorage;
 
+  // Track the initial browser settings in harness state for config drift detection
+  if (browser) {
+    harness.setState({ activeBrowserSettings: settings.browser } as any);
+  }
+
   if (result.storageWarning) {
     console.info(`⚠ ${result.storageWarning}`);
   }
 
-  if (mcpManager?.hasServers()) {
-    await mcpManager.init();
-    const statuses = mcpManager.getServerStatuses();
-    const connected = statuses.filter(s => s.connected);
-    const failed = statuses.filter(s => !s.connected);
-    const totalTools = connected.reduce((sum, s) => sum + s.toolCount, 0);
-    console.info(`MCP: ${connected.length} server(s) connected, ${totalTools} tool(s)`);
-    for (const s of failed) {
-      console.info(`MCP: Failed to connect to "${s.name}": ${s.error}`);
-    }
-    const skipped = mcpManager.getSkippedServers();
-    for (const s of skipped) {
-      console.info(`MCP: Skipped "${s.name}": ${s.reason}`);
-    }
+  if (browser) {
+    console.info(`Browser: ${settings.browser.provider} (${settings.browser.headless ? 'headless' : 'visible'})`);
   }
+
+  // MCP connection is deferred to TUI.init() (after ui.start()) so that
+  // status messages use showInfo() instead of console.info(), which would
+  // corrupt the terminal.  Headless mode still inits from headless.ts.
 
   setupDebugLogging();
 
@@ -63,14 +66,21 @@ async function tuiMain() {
   // MASTRA_THEME env var is the highest-priority override
   const envTheme = process.env.MASTRA_THEME?.toLowerCase();
   let themeMode: 'dark' | 'light';
+  let detectedBgHex: string | undefined;
   if (envTheme === 'dark' || envTheme === 'light') {
     themeMode = envTheme;
   } else {
     const settings = loadSettings();
     const themePref = settings.preferences.theme;
-    themeMode = themePref === 'dark' || themePref === 'light' ? themePref : await detectTerminalTheme();
+    if (themePref === 'dark' || themePref === 'light') {
+      themeMode = themePref;
+    } else {
+      const detection = await detectTerminalTheme();
+      themeMode = detection.mode;
+      detectedBgHex = detection.detectedBgHex;
+    }
   }
-  applyThemeMode(themeMode);
+  applyThemeMode(themeMode, detectedBgHex);
 
   const tui = new MastraTUI({
     harness,
@@ -96,6 +106,7 @@ process.on('beforeExit', () => {
   void asyncCleanup();
 });
 process.on('exit', () => {
+  restoreTerminalForeground();
   releaseAllThreadLocks();
 });
 process.on('SIGINT', () => {
@@ -132,7 +143,16 @@ function handleFatalError(error: unknown): never {
     process.exit(1);
   }
 
-  write(`Fatal error: ${error instanceof Error ? error.message : String(error)}`);
+  const msg = `Fatal error: ${error instanceof Error ? error.message : String(error)}`;
+  write(msg);
+  // Write crash log to file so it persists even if terminal closes
+  try {
+    const crashLog = `[${new Date().toISOString()}] ${msg}\n${error instanceof Error && error.stack ? error.stack + '\n' : ''}`;
+    fs.appendFileSync('/tmp/mastra-crash.log', crashLog);
+  } catch {}
+  if (error instanceof Error && error.stack) {
+    write(error.stack);
+  }
   process.exit(1);
 }
 

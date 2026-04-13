@@ -1,5 +1,5 @@
 ---
-title: "Reference: Working Memory Processor | Processors"
+title: "Reference: WorkingMemory | Processors"
 description: "Documentation for the WorkingMemory processor in Mastra, which injects persistent user/context data as system instructions."
 packages:
   - "@mastra/core"
@@ -159,7 +159,7 @@ const storage = new PostgresStorage({
 export const agent = new Agent({
   name: 'personalized-agent',
   instructions: 'You are a helpful assistant that remembers user preferences',
-  model: 'openai:gpt-4o',
+  model: 'openai/gpt-5.4',
   inputProcessors: [
     new WorkingMemory({
       storage,
