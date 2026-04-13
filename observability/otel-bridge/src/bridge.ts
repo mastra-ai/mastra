@@ -23,7 +23,7 @@ import type {
 import { TracingEventType } from '@mastra/core/observability';
 import { BaseExporter, getExternalParentId } from '@mastra/observability';
 import { SpanConverter, getSpanKind } from '@mastra/otel-exporter';
-import { trace as otelTrace, context as otelContext } from '@opentelemetry/api';
+import { trace as otelTrace, context as otelContext, isSpanContextValid } from '@opentelemetry/api';
 import type { Span as OtelSpan, Context as OtelContext } from '@opentelemetry/api';
 
 /**
@@ -129,6 +129,17 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
 
       // Get OTEL span identifiers
       const otelSpanContext = otelSpan.spanContext();
+
+      // When no TracerProvider is registered, the OTEL API returns a noop tracer
+      // that creates NonRecordingSpans with all-zero spanId/traceId. Using these
+      // invalid IDs would cause every Mastra span to share the same identifier,
+      // silently corrupting storage (upsert collisions) and breaking the OTEL
+      // span map (key overwrites). Return undefined so DefaultSpan falls back to
+      // its own unique ID generation.
+      if (!isSpanContextValid(otelSpanContext)) {
+        return undefined;
+      }
+
       const spanId = otelSpanContext.spanId;
       const traceId = otelSpanContext.traceId;
 
@@ -170,11 +181,13 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
       // Remove from map immediately to prevent memory leak
       this.otelSpanMap.delete(mastraSpan.id);
 
+      const { otelSpan } = entry;
+
       if (!this.spanConverter) {
+        // Even without a converter, end the OTEL span to avoid orphaned spans
+        otelSpan.end(mastraSpan.endTime);
         return;
       }
-
-      const { otelSpan } = entry;
 
       this.logger.debug(`[OtelBridge] Ending OTEL span [mastraId=${mastraSpan.id}] [name=${mastraSpan.name}]`);
 

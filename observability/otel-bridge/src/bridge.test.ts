@@ -9,30 +9,111 @@
 
 import type { CreateSpanOptions } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
-import { describe, expect, it } from 'vitest';
+import { trace as otelTrace } from '@opentelemetry/api';
+import { BasicTracerProvider, SimpleSpanProcessor, InMemorySpanExporter } from '@opentelemetry/sdk-trace-base';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { OtelBridge } from './bridge.js';
+
+/**
+ * Helper: register a real TracerProvider so the bridge gets valid span IDs.
+ * Returns a cleanup function that unregisters the provider.
+ */
+function registerTracerProvider() {
+  const exporter = new InMemorySpanExporter();
+  const provider = new BasicTracerProvider({
+    spanProcessors: [new SimpleSpanProcessor(exporter)],
+  });
+  otelTrace.setGlobalTracerProvider(provider);
+  return {
+    exporter,
+    cleanup: async () => {
+      await provider.shutdown();
+      otelTrace.disable();
+    },
+  };
+}
 
 describe('OtelBridge', () => {
   describe('createSpan', () => {
-    it('should return spanIds with valid format when creating root span', () => {
-      const bridge = new OtelBridge();
+    describe('with TracerProvider', () => {
+      let cleanup: () => Promise<void>;
 
-      const options: CreateSpanOptions<SpanType.AGENT_RUN> = {
-        type: SpanType.AGENT_RUN,
-        name: 'test-agent',
-        attributes: { agentId: 'test' },
-      };
+      beforeEach(() => {
+        const tp = registerTracerProvider();
+        cleanup = tp.cleanup;
+      });
 
-      const result = bridge.createSpan(options);
+      afterEach(async () => {
+        await cleanup();
+      });
 
-      expect(result).toBeDefined();
-      expect(result?.spanId).toBeDefined();
-      expect(result?.traceId).toBeDefined();
-      // OTEL span IDs are 16 hex chars, trace IDs are 32 hex chars
-      expect(result?.spanId).toMatch(/^[0-9a-f]{16}$/);
-      expect(result?.traceId).toMatch(/^[0-9a-f]{32}$/);
+      it('should return spanIds with valid format when creating root span', () => {
+        const bridge = new OtelBridge();
 
-      bridge.shutdown();
+        const options: CreateSpanOptions<SpanType.AGENT_RUN> = {
+          type: SpanType.AGENT_RUN,
+          name: 'test-agent',
+          attributes: { agentId: 'test' },
+        };
+
+        const result = bridge.createSpan(options);
+
+        expect(result).toBeDefined();
+        expect(result?.spanId).toBeDefined();
+        expect(result?.traceId).toBeDefined();
+        // OTEL span IDs are 16 hex chars, trace IDs are 32 hex chars
+        expect(result?.spanId).toMatch(/^[0-9a-f]{16}$/);
+        expect(result?.traceId).toMatch(/^[0-9a-f]{32}$/);
+
+        bridge.shutdown();
+      });
+
+      it('should return unique spanIds for different spans', () => {
+        const bridge = new OtelBridge();
+
+        const result1 = bridge.createSpan({
+          type: SpanType.AGENT_RUN,
+          name: 'agent-1',
+          attributes: { agentId: 'a' },
+        });
+        const result2 = bridge.createSpan({
+          type: SpanType.AGENT_RUN,
+          name: 'agent-2',
+          attributes: { agentId: 'b' },
+        });
+
+        expect(result1).toBeDefined();
+        expect(result2).toBeDefined();
+        expect(result1!.spanId).not.toBe(result2!.spanId);
+
+        bridge.shutdown();
+      });
+    });
+
+    describe('without TracerProvider (noop tracer)', () => {
+      it('should return undefined when no TracerProvider is registered', () => {
+        // With no TracerProvider, OTEL creates NonRecordingSpans with all-zero
+        // IDs. The bridge should detect this and return undefined so DefaultSpan
+        // falls back to its own unique ID generation.
+        const bridge = new OtelBridge();
+
+        const options: CreateSpanOptions<SpanType.AGENT_RUN> = {
+          type: SpanType.AGENT_RUN,
+          name: 'test-agent',
+          attributes: { agentId: 'test' },
+        };
+
+        // Temporarily disable the global provider to ensure noop behavior.
+        // The global API may still have a provider from other tests, so we
+        // disable it to guarantee the noop path is exercised.
+        otelTrace.disable();
+
+        const result = bridge.createSpan(options);
+
+        expect(result).toBeUndefined();
+
+        bridge.shutdown();
+      });
     });
 
     it('should handle errors gracefully and return undefined on failure', () => {
@@ -48,6 +129,17 @@ describe('OtelBridge', () => {
   });
 
   describe('executeInContext', () => {
+    let cleanup: () => Promise<void>;
+
+    beforeEach(() => {
+      const tp = registerTracerProvider();
+      cleanup = tp.cleanup;
+    });
+
+    afterEach(async () => {
+      await cleanup();
+    });
+
     it('should execute function when span exists', async () => {
       const bridge = new OtelBridge();
 
@@ -89,6 +181,17 @@ describe('OtelBridge', () => {
   });
 
   describe('executeInContextSync', () => {
+    let cleanup: () => Promise<void>;
+
+    beforeEach(() => {
+      const tp = registerTracerProvider();
+      cleanup = tp.cleanup;
+    });
+
+    afterEach(async () => {
+      await cleanup();
+    });
+
     it('should execute sync function when span exists', () => {
       const bridge = new OtelBridge();
 
@@ -133,7 +236,7 @@ describe('OtelBridge', () => {
     it('should complete successfully', async () => {
       const bridge = new OtelBridge();
 
-      // Create a span
+      // Create a span (may or may not succeed depending on TracerProvider)
       const options: CreateSpanOptions<SpanType.AGENT_RUN> = {
         type: SpanType.AGENT_RUN,
         name: 'test-agent',
