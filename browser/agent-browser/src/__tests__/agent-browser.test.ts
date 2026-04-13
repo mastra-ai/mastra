@@ -1,3 +1,4 @@
+import { DEFAULT_THREAD_ID } from '@mastra/core/browser';
 import type { BrowserConfig } from '@mastra/core/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -270,6 +271,18 @@ describe('AgentBrowser', () => {
       await browser.ensureReady();
       // Should have re-launched
       expect(mockManager.launch).toHaveBeenCalledTimes(2);
+    });
+
+    it('supports the default thread after launch in thread scope', async () => {
+      browser = new AgentBrowser({ scope: 'thread' });
+
+      await browser.launch();
+
+      const result = await browser.tabs({ action: 'list' });
+
+      expect(result.success).toBe(true);
+      expect(browser['threadManager'].hasSession(DEFAULT_THREAD_ID)).toBe(true);
+      expect(mockManager.launch).toHaveBeenCalledOnce();
     });
   });
 

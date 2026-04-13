@@ -1,3 +1,4 @@
+import { DEFAULT_THREAD_ID } from '@mastra/core/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Create mocks BEFORE vi.mock using vi.hoisted so they're available in the mock
@@ -217,6 +218,16 @@ describe('StagehandBrowser', () => {
       await browser.ensureReady();
       // Should have re-launched
       expect(mockStagehand.init).toHaveBeenCalledTimes(2);
+    });
+
+    it('supports the default thread after launch in thread scope', async () => {
+      browser = new StagehandBrowser({ scope: 'thread' });
+
+      await browser.launch();
+      // Tools call ensureReady() before act/extract/observe, which creates the session
+      await browser.ensureReady();
+
+      expect(browser['threadManager'].hasSession(DEFAULT_THREAD_ID)).toBe(true);
     });
   });
 
