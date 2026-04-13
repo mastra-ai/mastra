@@ -344,6 +344,9 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
       ...(typeof rawStagehand.projectId === 'string' && rawStagehand.projectId.trim()
         ? { projectId: rawStagehand.projectId.trim() }
         : {}),
+      ...(typeof rawStagehand.preserveUserDataDir === 'boolean'
+        ? { preserveUserDataDir: rawStagehand.preserveUserDataDir }
+        : {}),
     },
     agentBrowser:
       typeof rawAgentBrowser.storageState === 'string' && rawAgentBrowser.storageState.trim()

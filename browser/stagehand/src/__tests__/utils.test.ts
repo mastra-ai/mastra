@@ -102,4 +102,9 @@ describe('getStagehandChromePid', () => {
   it('returns undefined when state is missing', () => {
     expect(getStagehandChromePid({} as any)).toBeUndefined();
   });
+
+  it('returns undefined for non-positive PIDs', () => {
+    expect(getStagehandChromePid({ state: { kind: 'LOCAL', chrome: { process: { pid: 0 } } } } as any)).toBeUndefined();
+    expect(getStagehandChromePid({ state: { kind: 'LOCAL', chrome: { pid: -1 } } } as any)).toBeUndefined();
+  });
 });
