@@ -1,10 +1,10 @@
 import deepEqual from 'fast-deep-equal';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
-import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
-import type { Span, SpanType } from '../../../observability';
+import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/types';
+import { resolveObservabilityContext } from '../../../observability';
 import type { ProcessorState } from '../../../processors/runner';
 import type { RequestContext } from '../../../request-context';
 import { createStep } from '../../../workflows';
@@ -40,11 +40,11 @@ interface PrepareMemoryStepOptions<OUTPUT = undefined> {
   resourceId?: string;
   runId: string;
   requestContext: RequestContext;
-  agentSpan: Span<SpanType.AGENT_RUN>;
   methodType: AgentMethodType;
   instructions: SystemMessage;
-  memoryConfig?: MemoryConfig;
+  memoryConfig?: MemoryConfigInternal;
   memory?: MastraMemory;
+  isResume?: boolean;
 }
 
 export function createPrepareMemoryStep<OUTPUT = undefined>({
@@ -52,22 +52,25 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
   options,
   threadFromArgs,
   resourceId,
-  runId,
+  runId: _runId,
   requestContext,
   instructions,
   memoryConfig,
   memory,
+  isResume,
 }: PrepareMemoryStepOptions<OUTPUT>) {
   return createStep({
     id: 'prepare-memory-step',
     inputSchema: z.object({}),
     outputSchema: prepareMemoryStepOutputSchema,
-    execute: async ({ tracingContext }) => {
+    execute: async ({ ...rest }) => {
+      const observabilityContext = resolveObservabilityContext(rest);
       const thread = threadFromArgs;
       const messageList = new MessageList({
         threadId: thread?.id,
         resourceId,
         generateMessageId: capabilities.generateMessageId,
+        logger: capabilities.logger,
         // @ts-expect-error Flag for agent network messages
         _agentNetworkAppend: capabilities._agentNetworkAppend,
       });
@@ -86,16 +89,25 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
 
       if (!memory || (!thread?.id && !resourceId)) {
         messageList.add(options.messages, 'input');
-        const { tripwire } = await capabilities.runInputProcessors({
-          requestContext,
-          tracingContext,
-          messageList,
-          inputProcessorOverrides: options.inputProcessors,
-          processorStates,
-        });
+
+        // Skip input processors during resume — the messageList has no user messages
+        // (resumeStream passes messages: []) and the real conversation state lives in the
+        // workflow snapshot. Running processors on an empty messageList would cause
+        // processors like TokenLimiterProcessor to throw a TripWire.
+        let tripwire;
+        if (!isResume) {
+          ({ tripwire } = await capabilities.runInputProcessors({
+            requestContext,
+            ...observabilityContext,
+            messageList,
+            inputProcessorOverrides: options.inputProcessors,
+            processorStates,
+          }));
+        }
+
         return {
           threadExists: false,
-          thread: undefined,
+          thread: thread as StorageThreadType | undefined,
           messageList,
           processorStates,
           tripwire,
@@ -114,21 +126,9 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
           },
           text: `A resourceId and a threadId must be provided when using Memory. Saw threadId "${thread?.id}" and resourceId "${resourceId}"`,
         });
-        capabilities.logger.error(mastraError.toString());
         capabilities.logger.trackException(mastraError);
         throw mastraError;
       }
-
-      const store = memory.constructor.name;
-      capabilities.logger.debug(
-        `[Agent:${capabilities.agentName}] - Memory persistence enabled: store=${store}, resourceId=${resourceId}`,
-        {
-          runId,
-          resourceId,
-          threadId: thread?.id,
-          memoryStore: store,
-        },
-      );
 
       let threadObject: StorageThreadType | undefined = undefined;
       const existingThread = await memory.getThreadById({ threadId: thread?.id });
@@ -170,13 +170,20 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
       // Add user messages - memory processors will handle history/semantic recall/working memory
       messageList.add(options.messages, 'input');
 
-      const { tripwire } = await capabilities.runInputProcessors({
-        requestContext,
-        tracingContext,
-        messageList,
-        inputProcessorOverrides: options.inputProcessors,
-        processorStates,
-      });
+      // Skip input processors during resume — the messageList has no user messages
+      // (resumeStream passes messages: []) and the real conversation state lives in the
+      // workflow snapshot. Running processors on an empty messageList would cause
+      // processors like TokenLimiterProcessor to throw a TripWire.
+      let tripwire;
+      if (!isResume) {
+        ({ tripwire } = await capabilities.runInputProcessors({
+          requestContext,
+          ...observabilityContext,
+          messageList,
+          inputProcessorOverrides: options.inputProcessors,
+          processorStates,
+        }));
+      }
 
       return {
         thread: threadObject,

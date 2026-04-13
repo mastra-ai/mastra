@@ -23,7 +23,7 @@ export const DEFAULT_OPTIONS: Omit<ResolvedOptions, 'siteUrl'> = {
   siteTitle: 'Mastra',
   siteDescription: `Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack. It includes everything you need to go from early prototypes to production-ready applications.`,
   contentSelectors: ['article', '.theme-doc-markdown', 'main'],
-  excludeRoutes: ['/404', '/showcase'],
+  excludeRoutes: ['/404'],
   enableCache: true,
 }
 

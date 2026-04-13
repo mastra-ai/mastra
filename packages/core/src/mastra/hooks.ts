@@ -3,7 +3,19 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { saveScorePayloadSchema } from '../evals';
 import type { ScoringHookInput } from '../evals/types';
 import type { Mastra } from '../mastra';
+import { EntityType } from '../observability';
 import type { MastraStorage } from '../storage';
+
+function toScorerTargetEntityType(entityType: string): EntityType | undefined {
+  switch (entityType) {
+    case 'AGENT':
+      return EntityType.AGENT;
+    case 'WORKFLOW':
+      return EntityType.WORKFLOW_RUN;
+    default:
+      return undefined;
+  }
+}
 
 export function createOnScorerHook(mastra: Mastra) {
   return async (hookData: ScoringHookInput) => {
@@ -41,19 +53,23 @@ export function createOnScorerHook(mastra: Mastra) {
 
       const { structuredOutput, ...rest } = hookData;
 
-      const runResult = await scorerToUse.scorer.run({
+      const currentSpan = hookData.tracingContext?.currentSpan;
+      const traceId = currentSpan?.isValid ? currentSpan.traceId : undefined;
+      const spanId = currentSpan?.isValid ? currentSpan.id : undefined;
+      const targetCorrelationContext = currentSpan?.isValid ? currentSpan.getCorrelationContext?.() : undefined;
+      const targetMetadata = currentSpan?.isValid && currentSpan.metadata ? { ...currentSpan.metadata } : undefined;
+      const runResult = (await scorerToUse.scorer.run({
         ...rest,
         input,
         output,
-      });
-
-      let spanId;
-      let traceId;
-      const currentSpan = hookData.tracingContext?.currentSpan;
-      if (currentSpan && currentSpan.isValid) {
-        spanId = currentSpan.id;
-        traceId = currentSpan.traceId;
-      }
+        scoreSource: 'live',
+        targetScope: 'span',
+        targetEntityType: toScorerTargetEntityType(entityType),
+        targetTraceId: traceId,
+        targetSpanId: spanId,
+        targetCorrelationContext,
+        targetMetadata,
+      } as any)) as Record<string, unknown>;
 
       const payload = {
         ...rest,
@@ -62,10 +78,15 @@ export function createOnScorerHook(mastra: Mastra) {
         scorerId: scorerId,
         spanId,
         traceId,
+        scorer: {
+          ...rest.scorer,
+          hasJudge: !!scorerToUse.scorer.judge,
+        },
         metadata: {
           structuredOutput: !!structuredOutput,
         },
       };
+      // Legacy score-store emission. This path is being deprecated.
       await validateAndSaveScore(storage, payload);
 
       if (currentSpan && spanId && traceId) {
@@ -109,11 +130,13 @@ export function createOnScorerHook(mastra: Mastra) {
       );
 
       mastra.getLogger()?.trackException(mastraError);
-      mastra.getLogger()?.error(mastraError.toString());
     }
   };
 }
 
+/**
+ * @deprecated Legacy scores-store path. New score emission should use `mastra.observability.addScore()`.
+ */
 export async function validateAndSaveScore(storage: MastraStorage, payload: unknown) {
   const scoresStore = await storage.getStore('scores');
   if (!scoresStore) {
@@ -144,7 +167,7 @@ async function findScorer(mastra: Mastra, entityId: string, entityType: string, 
     } catch {
       // Agent not found in code-defined agents, try stored agents via editor
       try {
-        const storedAgent = (await mastra.getEditor()?.getStoredAgentById(entityId)) ?? null;
+        const storedAgent = (await mastra.getEditor()?.agent.getById(entityId)) ?? null;
         if (storedAgent) {
           const scorers = await storedAgent.listScorers();
           for (const [_, scorer] of Object.entries(scorers) as [string, any][]) {

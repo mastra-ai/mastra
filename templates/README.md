@@ -1,97 +1,82 @@
-# How to Add a New Template
+# How to add a new template
 
 To add a new template to the `templates/` directory, follow these steps:
 
-## 1. Create a New Template Folder
+## 1. Create a new template folder
 
 - Inside the `templates/` directory, create a new folder named after your template (e.g., `my-new-template/`).
 
-## 2. Required Files
+## 2. Required files
 
 Your template folder **must** include the following files:
 
 ### a. `package.json`
 
-- Use `openai` as the LLM provider in your code/config.
+- Use OpenAI as the LLM provider in your code/config.
 - All `@mastra/*` dependencies should be set to `"latest"` in the `dependencies` section.
 - `mastra` devDependency should be set to `"latest"` in the `devDependencies` section.
 - The `description` field should clearly describe what the template does.
 
-**Example:**
-
-```json
-{
-  "name": "my-new-template",
-  "version": "1.0.0",
-  "description": "A template that demonstrates how to build an OpenAI-powered agent using Mastra.",
-  "main": "index.js",
-  "license": "Apache-2.0",
-  "type": "module",
-
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "mastra dev"
-  },
-  "dependencies": {
-    "@mastra/core": "latest",
-    "zod": "^3.25.67",
-    "@mastra/loggers": "latest"
-  },
-  "devDependencies": {
-    "@types/node": "^24.0.4",
-    "mastra": "latest",
-    "typescript": "^5.8.3"
-  }
-}
-```
-
 ### b. `.env.example`
 
 - List all required environment variables, such as API keys and configuration values.
-- Use `***` as the default value for secrets or required fields.
-
-**Example:**
-
-```
-OPENAI_API_KEY=***
-OTHER_REQUIRED_VARIABLE=***
-```
 
 ### c. `README.md`
 
-- Clearly explain what the template does, its overview, and any setup steps.
-- Mention that the template uses OpenAI as the LLM provider.
-- List all required environment variables and what they are for.
-
-**Example:**
+Follow this template for your `README.md`:
 
 ```markdown
-# My New Template
+# Title
 
-This template demonstrates how to build an agent using OpenAI as the LLM provider with Mastra.
+Introductory paragraph describing what this template does.
 
-## Overview
+## Why we built this
 
-The overview of the template.
+Explain the motivation behind creating this template and the problem it solves. And which features of Mastra it demonstrates.
 
-## Setup
+## Demo
 
-1. Copy `.env.example` to `.env` and fill in your API keys.
-2. Install dependencies: `pnpm install`
-3. Run the project: `pnpm dev`.
+This demo runs in Mastra Studio, but you can connect this workflow to your React, Next.js, or Vue app using the [Mastra Client SDK](https://mastra.ai/docs/server/mastra-client) or agentic UI libraries like [AI SDK UI](https://mastra.ai/guides/build-your-ui/ai-sdk-ui), [CopilotKit](https://mastra.ai/guides/build-your-ui/copilotkit), or [Assistant UI](https://mastra.ai/guides/build-your-ui/assistant-ui).
 
-## Environment Variables
+## Prerequisites
 
-- `OPENAI_API_KEY`: Your OpenAI API key. [https://platform.openai.com/api-keys](https://platform.openai.com/api-keys)
-- `OTHER_REQUIRED_VARIABLE`: Description of what this variable is for.
+- [OpenAI API key](https://platform.openai.com/api-keys): Used by default, but you can swap in any model
+
+## Quickstart 🚀
+
+1. **Clone the template**
+   - Run `npx create-mastra@latest --template TEMPLATE_NAME` to scaffold the project locally.
+2. **Add your API keys**
+   - Copy `.env.example` to `.env` and fill in your keys.
+3. **Start the dev server**
+   - Run `npm run dev` and open [localhost:4111](http://localhost:4111) to try it out.
+
+## Making it yours
+
+Explain how they can use it and how they can customize it for their needs.
+
+## About Mastra templates
+
+[Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show off what you can build — clone one, poke around, and make it yours. They live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are automatically synced to standalone repositories for easier cloning.
+
+Want to contribute? See [CONTRIBUTING.md](./CONTRIBUTING.md).
 ```
 
-## 3. Additional Recommendations
+### d. `CONTRIBUTING.md`
 
-- Include any scripts or configuration files needed to run the template.
-- Keep your code clean and well-commented.
-- Test your template before submitting.
+Create a `CONTRIBUTING.md` file:
 
----
+```markdown
+# Contributing
 
-By following these steps, you’ll ensure your template is easy to use and consistent with the rest of the repository.
+This repository is auto-generated from the [Mastra monorepo](https://github.com/mastra-ai/mastra). Pull requests opened here will be ignored.
+
+To contribute:
+
+1. Fork the [Mastra monorepo](https://github.com/mastra-ai/mastra)
+2. Find this template in `templates/TEMPLATE_NAME`
+3. Make your changes
+4. Open a pull request against the monorepo
+
+A bot syncs accepted changes to this repository.
+```

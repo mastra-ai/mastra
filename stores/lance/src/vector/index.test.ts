@@ -1150,7 +1150,9 @@ describe('Lance vector store tests', () => {
         expect(res).toHaveLength(1);
         expect(res[0].id).toBe(ids[0]);
         expect(res[0].metadata?.name).to.equal('test2');
-        expect(res[0].metadata?.details?.text).to.equal('test2');
+        // Metadata is flat when _metadata_json is not available (table created via createTable
+        // without _metadata_json column). Nested key 'details.text' becomes 'details_text'.
+        expect(res[0].metadata?.details_text).to.equal('test2');
       });
 
       it('should not throw error when filter is not provided', async () => {
@@ -1512,7 +1514,7 @@ describe('Lance vector store tests', () => {
       });
 
       it('should query with nested comparison and pattern matching', async () => {
-        const testTableName = 'test-nested-table';
+        const nestedTableName = 'test-nested-table-' + Date.now();
 
         const testVectors = [
           [0.7, 0.7, 0.7],
@@ -1521,7 +1523,7 @@ describe('Lance vector store tests', () => {
 
         const ids = await vectorDB.upsert({
           indexName: testTableIndexColumn,
-          tableName: testTableName,
+          tableName: nestedTableName,
           vectors: testVectors,
           metadata: [
             {
@@ -1545,7 +1547,7 @@ describe('Lance vector store tests', () => {
 
         const res = await vectorDB.query({
           indexName: testTableIndexColumn,
-          tableName: testTableName,
+          tableName: nestedTableName,
           queryVector: [0.75, 0.75, 0.75],
           topK: 10,
           includeAllColumns: true,
@@ -1560,6 +1562,9 @@ describe('Lance vector store tests', () => {
         const usernamesFound = res.map(item => item.metadata?.profile?.username);
         expect(usernamesFound).toContain('john_doe');
         expect(usernamesFound).toContain('jane_smith');
+
+        // Cleanup
+        await vectorDB.deleteTable(nestedTableName);
       });
     });
 
@@ -1937,6 +1942,42 @@ describe('Lance vector store tests', () => {
         await vectorDB.deleteTable(indexName);
       });
 
+      it('should handle empty recall with filter (query before any upsert, issue #12500)', async () => {
+        const indexName = 'memory_flow_empty_filter_' + Date.now();
+
+        // Memory flow: createIndex first (creates table with {id, vector, _metadata_json} only)
+        await vectorDB.createIndex({
+          indexName,
+          dimension: 3,
+          metric: 'cosine',
+        });
+
+        // Memory.recall() queries with resource_id filter BEFORE any saveMessages/upsert.
+        // The table has no metadata_resource_id column yet.
+        // This should return empty results, not throw a schema error.
+        const resourceResults = await vectorDB.query({
+          indexName,
+          queryVector: [0.1, 0.2, 0.3],
+          topK: 5,
+          filter: { resource_id: 'user-123' },
+        });
+
+        expect(resourceResults).toEqual([]);
+
+        // Same for thread_id filter
+        const threadResults = await vectorDB.query({
+          indexName,
+          queryVector: [0.1, 0.2, 0.3],
+          topK: 5,
+          filter: { thread_id: 'thread-456' },
+        });
+
+        expect(threadResults).toEqual([]);
+
+        // Cleanup
+        await vectorDB.deleteTable(indexName);
+      });
+
       it('should handle save then recall flow', async () => {
         const indexName = 'memory_flow_save_recall_' + Date.now();
 
@@ -1971,6 +2012,149 @@ describe('Lance vector store tests', () => {
 
         expect(results.length).toBe(2);
         expect(results[0].id).toBeDefined();
+
+        // Cleanup
+        await vectorDB.deleteTable(indexName);
+      });
+    });
+
+    describe('metadata round-trip with underscore keys (issue #12500)', () => {
+      it('should preserve flat underscore keys through upsert and query', async () => {
+        const indexName = 'roundtrip_flat_keys_' + Date.now();
+
+        // 1. createIndex (Memory does this first)
+        await vectorDB.createIndex({
+          indexName,
+          dimension: 3,
+          metric: 'cosine',
+        });
+
+        // 2. upsert with flat underscore keys (exactly what Memory does)
+        await vectorDB.upsert({
+          indexName,
+          vectors: [
+            [0.1, 0.2, 0.3],
+            [0.4, 0.5, 0.6],
+          ],
+          metadata: [
+            { message_id: 'msg1', thread_id: 'thread1', resource_id: 'user1' },
+            { message_id: 'msg2', thread_id: 'thread1', resource_id: 'user1' },
+          ],
+        });
+
+        // 3. query without filter — metadata should round-trip correctly
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [0.1, 0.2, 0.3],
+          topK: 2,
+        });
+
+        expect(results.length).toBe(2);
+
+        // BUG: unflattenObject splits on ALL underscores, so
+        // { resource_id: 'user1' } becomes { resource: { id: 'user1' } }
+        // This asserts the CORRECT behavior:
+        expect(results[0].metadata).toHaveProperty('resource_id');
+        expect(results[0].metadata).toHaveProperty('thread_id');
+        expect(results[0].metadata).toHaveProperty('message_id');
+        // These should NOT exist (but they do due to the bug):
+        expect(results[0].metadata).not.toHaveProperty('resource');
+        expect(results[0].metadata).not.toHaveProperty('thread');
+        expect(results[0].metadata).not.toHaveProperty('message');
+
+        // Cleanup
+        await vectorDB.deleteTable(indexName);
+      });
+
+      it('should filter by flat underscore keys in Memory-like recall flow', async () => {
+        const indexName = 'recall_filter_underscore_' + Date.now();
+
+        // 1. createIndex
+        await vectorDB.createIndex({
+          indexName,
+          dimension: 3,
+          metric: 'cosine',
+        });
+
+        // 2. upsert with Memory-style metadata
+        await vectorDB.upsert({
+          indexName,
+          vectors: [
+            [0.1, 0.2, 0.3],
+            [0.4, 0.5, 0.6],
+            [0.7, 0.8, 0.9],
+          ],
+          metadata: [
+            { message_id: 'msg1', thread_id: 'thread1', resource_id: 'user1' },
+            { message_id: 'msg2', thread_id: 'thread1', resource_id: 'user1' },
+            { message_id: 'msg3', thread_id: 'thread2', resource_id: 'user2' },
+          ],
+        });
+
+        // 3. query with resource_id filter (exactly what Memory.recall does with scope: "resource")
+        // This is the exact call path that triggers the reported error
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [0.1, 0.2, 0.3],
+          topK: 5,
+          filter: { resource_id: 'user1' },
+        });
+
+        // Should return only the 2 results for user1
+        expect(results.length).toBe(2);
+        for (const result of results) {
+          expect(result.metadata?.resource_id).toBe('user1');
+        }
+
+        // Also test thread_id filter (Memory.recall with scope: "thread")
+        const threadResults = await vectorDB.query({
+          indexName,
+          queryVector: [0.1, 0.2, 0.3],
+          topK: 5,
+          filter: { thread_id: 'thread2' },
+        });
+
+        expect(threadResults.length).toBe(1);
+        expect(threadResults[0].metadata?.thread_id).toBe('thread2');
+
+        // Cleanup
+        await vectorDB.deleteTable(indexName);
+      });
+
+      it('should not corrupt metadata when keys contain underscores mixed with nested objects', async () => {
+        const indexName = 'mixed_underscore_nested_' + Date.now();
+
+        // 1. createIndex
+        await vectorDB.createIndex({
+          indexName,
+          dimension: 3,
+          metric: 'cosine',
+        });
+
+        // 2. upsert with BOTH flat underscore keys and nested objects
+        await vectorDB.upsert({
+          indexName,
+          vectors: [[0.1, 0.2, 0.3]],
+          metadata: [
+            {
+              resource_id: 'user1',
+              details: { context: 'test' },
+            },
+          ],
+        });
+
+        // 3. query and check metadata structure
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [0.1, 0.2, 0.3],
+          topK: 1,
+        });
+
+        expect(results.length).toBe(1);
+        // resource_id should remain flat
+        expect(results[0].metadata?.resource_id).toBe('user1');
+        // details.context should be preserved as nested
+        expect(results[0].metadata?.details).toEqual({ context: 'test' });
 
         // Cleanup
         await vectorDB.deleteTable(indexName);

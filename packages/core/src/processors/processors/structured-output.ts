@@ -4,9 +4,12 @@ import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { IMastraLogger } from '../../logger';
-import type { TracingContext } from '../../observability';
+import type { Mastra } from '../../mastra';
+import type { ObservabilityContext } from '../../observability';
+import { resolveObservabilityContext } from '../../observability';
+import type { StandardSchemaWithJSON } from '../../schema';
 import { ChunkFrom } from '../../stream';
-import type { ChunkType, OutputSchema } from '../../stream';
+import type { ChunkType } from '../../stream';
 import type { ToolCallChunk, ToolResultChunk } from '../../stream/types';
 import type { Processor } from '../index';
 
@@ -30,7 +33,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
   readonly id = STRUCTURED_OUTPUT_PROCESSOR_NAME;
   readonly name = 'Structured Output';
 
-  public schema: NonNullable<OutputSchema<OUTPUT>>;
+  public schema: StandardSchemaWithJSON<OUTPUT>;
   private structuringAgent: Agent<any, any, undefined>;
   private errorStrategy: 'strict' | 'warn' | 'fallback';
   private fallbackValue?: OUTPUT;
@@ -72,17 +75,23 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     });
   }
 
-  async processOutputStream(args: {
-    part: ChunkType;
-    streamParts: ChunkType[];
-    state: Record<string, unknown> & {
-      controller?: TransformStreamDefaultController<ChunkType<OUTPUT>>;
-    };
-    abort: (reason?: string, options?: unknown) => never;
-    tracingContext?: TracingContext;
-    retryCount: number;
-  }): Promise<ChunkType | null | undefined> {
-    const { part, state, streamParts, abort, tracingContext } = args;
+  __registerMastra(mastra: Mastra) {
+    this.structuringAgent.__registerMastra(mastra);
+  }
+
+  async processOutputStream(
+    args: {
+      part: ChunkType;
+      streamParts: ChunkType[];
+      state: Record<string, unknown> & {
+        controller?: TransformStreamDefaultController<ChunkType<OUTPUT>>;
+      };
+      abort: (reason?: string, options?: unknown) => never;
+      retryCount: number;
+    } & Partial<ObservabilityContext>,
+  ): Promise<ChunkType | null | undefined> {
+    const { part, state, streamParts, abort, ...rest } = args;
+    const observabilityContext = resolveObservabilityContext(rest);
     const controller = state.controller as TransformStreamDefaultController<ChunkType<OUTPUT>>;
 
     switch (part.type) {
@@ -91,7 +100,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         // - enqueue the structuring agent stream chunks into the main stream
         // - when the structuring agent stream is finished, enqueue the final chunk into the main stream
 
-        await this.processAndEmitStructuredOutput(streamParts, controller, abort, tracingContext);
+        await this.processAndEmitStructuredOutput(streamParts, controller, abort, observabilityContext);
         return part;
 
       default:
@@ -103,7 +112,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     streamParts: ChunkType[],
     controller: TransformStreamDefaultController<ChunkType<OUTPUT>>,
     abort: (reason?: string) => never,
-    tracingContext?: TracingContext,
+    observabilityContext?: ObservabilityContext,
   ): Promise<void> {
     if (this.isStructuringAgentStreamStarted) return;
     this.isStructuringAgentStreamStarted = true;
@@ -114,11 +123,11 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
       // Use structuredOutput in 'direct' mode (no model) since this agent already has a model
       const structuringAgentStream = await this.structuringAgent.stream(prompt, {
         structuredOutput: {
-          schema: this.schema!,
+          schema: this.schema,
           jsonPromptInjection: this.jsonPromptInjection,
         },
         providerOptions: this.providerOptions,
-        tracingContext,
+        ...observabilityContext,
       });
 
       const excludedChunkTypes = [
@@ -137,7 +146,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
           continue;
         }
         if (chunk.type === 'error') {
-          this.handleError('Structuring failed', 'Internal agent did not generate structured output', abort);
+          this.handleError('Structuring failed', chunk.payload.error, abort);
 
           if (this.errorStrategy === 'warn') {
             // avoid enqueuing the error chunk to the main agent stream
@@ -159,20 +168,16 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
           }
         }
 
-        const newChunk: ChunkType<OUTPUT> = {
+        const newChunk = {
           ...chunk,
           metadata: {
             from: 'structured-output',
           },
-        } as const;
+        } as unknown as ChunkType<OUTPUT>;
         controller.enqueue(newChunk);
       }
     } catch (error) {
-      this.handleError(
-        'Structured output processing failed',
-        error instanceof Error ? error.message : 'Unknown error',
-        abort,
-      );
+      this.handleError('Structured output processing failed', error, abort);
     }
   }
 
@@ -262,20 +267,38 @@ The input text may be in any format (sentences, bullet points, paragraphs, etc.)
   /**
    * Handle errors based on the configured strategy
    */
-  private handleError(context: string, error: string, abort: (reason?: string) => never): void {
-    const message = `[StructuredOutputProcessor] ${context}: ${error}`;
+  private handleError(context: string, error: unknown, abort: (reason?: string) => never): void {
+    const errorMessage = this.getErrorMessage(error);
+    const message = `[StructuredOutputProcessor] ${context}: ${errorMessage}`;
 
     switch (this.errorStrategy) {
       case 'strict':
-        this.logger?.error(message);
+        this.logger?.error(message, error);
         abort(message);
         break;
       case 'warn':
-        this.logger?.warn(message);
+        this.logger?.warn(message, error);
         break;
       case 'fallback':
-        this.logger?.info(`${message} (using fallback)`);
+        this.logger?.info(`${message} (using fallback)`, error);
         break;
     }
+  }
+
+  private getErrorMessage(error: unknown): string {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'message' in error &&
+      typeof (error as { message?: unknown }).message === 'string'
+    ) {
+      return (error as { message: string }).message;
+    }
+
+    if (error instanceof Error) {
+      return error.message;
+    }
+
+    return String(error);
   }
 }

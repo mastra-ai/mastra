@@ -173,6 +173,74 @@ describe('MessageList sealed message handling', () => {
     expect(assistantMessage?.content.parts.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('should add text flushed independently to a sealed message as a new message', () => {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+
+    // Add user message
+    messageList.add({ role: 'user', content: 'Hello' }, 'input');
+
+    // Add sealed assistant message with tool-invocation parts (simulating async buffering seal)
+    const assistantMessageId = 'assistant-msg-1';
+    messageList.add(
+      {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'data-om-status', data: { windows: {} } } as MastraMessagePart,
+            {
+              type: 'tool-invocation',
+              toolInvocation: { toolCallId: 'call-1', toolName: 'view', state: 'result', args: {}, result: 'ok' },
+              metadata: { mastra: { sealedAt: Date.now() } },
+            } as MastraMessagePart,
+          ],
+          metadata: { mastra: { sealed: true } },
+        },
+        createdAt: new Date(),
+      } as MastraDBMessage,
+      'response',
+    );
+
+    // Text deltas are flushed independently in processOutputStream (llm-execution-step.ts:107)
+    // This creates a 1-part text message with the SAME messageId
+    messageList.add(
+      {
+        id: assistantMessageId, // Same ID as sealed message
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Here is my analysis of the codebase...' }],
+        },
+        createdAt: new Date(),
+      } as MastraDBMessage,
+      'response',
+    );
+
+    const allMessages = messageList.get.all.db();
+
+    // Should have 3 messages: user, sealed assistant, NEW text message
+    expect(allMessages.length).toBe(3);
+
+    // The sealed message should be unchanged
+    const sealedMessage = allMessages.find(m => m.id === assistantMessageId);
+    expect(sealedMessage).toBeDefined();
+    expect(sealedMessage?.content.parts).toHaveLength(2);
+
+    // The text should be in a new message (NOT discarded)
+    const textMessage = allMessages.find(m => m.id !== assistantMessageId && m.role === 'assistant');
+    expect(textMessage).toBeDefined();
+    expect(textMessage?.content.parts).toHaveLength(1);
+    expect((textMessage?.content.parts[0] as { type: string; text: string }).type).toBe('text');
+    expect((textMessage?.content.parts[0] as { type: string; text: string }).text).toBe(
+      'Here is my analysis of the codebase...',
+    );
+
+    // The text message should be tracked as a response message (so processOutputResult saves it)
+    const responseMessages = messageList.get.response.db();
+    expect(responseMessages.some(m => m.content.parts.some(p => p.type === 'text'))).toBe(true);
+  });
+
   it('should preserve observation markers in sealed messages', () => {
     const messageList = new MessageList({ threadId: 'test-thread' });
 

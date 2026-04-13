@@ -10,79 +10,153 @@ packages:
 
 A Logger instance is created using `new PinoLogger()` and provides methods to record events at various severity levels.
 
-When deploying to Mastra Cloud, logs are displayed on the [Logs](/docs/mastra-cloud/observability#logs) page. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
-
 ## Usage example
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { PinoLogger } from "@mastra/loggers";
+import { Mastra } from '@mastra/core'
+import { PinoLogger } from '@mastra/loggers'
 
 export const mastra = new Mastra({
   logger: new PinoLogger({
-    name: "Mastra",
-    level: "info",
+    name: 'Mastra',
+    level: 'info',
   }),
-});
+})
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "name",
-      type: "string",
-      description: "A label used to group and identify logs from this logger.",
-    },
-    {
-      name: "level",
-      type: `"debug" | "info" | "warn" | "error"`,
-      description:
-        "Sets the minimum log level. Messages below this level are ignored.",
-    },
-    {
-      name: "transports",
-      type: "Record<string, LoggerTransport>",
-      description: "A map of transport instances used to persist logs.",
-    },
-    {
-      name: "overrideDefaultTransports",
-      type: "boolean",
-      isOptional: true,
-      description: "If true, disables the default console transport.",
-    },
-    {
-      name: "formatters",
-      type: "pino.LoggerOptions['formatters']",
-      isOptional: true,
-      description: "Custom Pino formatters for log serialization.",
-    },
-  ]}
+  {
+    name: 'name',
+    type: 'string',
+    description: 'A label used to group and identify logs from this logger.',
+  },
+  {
+    name: 'level',
+    type: `"debug" | "info" | "warn" | "error"`,
+    description: 'Sets the minimum log level. Messages below this level are ignored.',
+  },
+  {
+    name: 'transports',
+    type: 'Record<string, LoggerTransport>',
+    description: 'A map of transport instances used to persist logs.',
+  },
+  {
+    name: 'overrideDefaultTransports',
+    type: 'boolean',
+    isOptional: true,
+    description: 'If true, disables the default console transport.',
+  },
+  {
+    name: 'formatters',
+    type: "pino.LoggerOptions['formatters']",
+    isOptional: true,
+    description: 'Custom Pino formatters for log serialization.',
+  },
+  {
+    name: 'redact',
+    type: "pino.LoggerOptions['redact']",
+    isOptional: true,
+    description: 'Paths or options for redacting sensitive fields from log output (Pino `redact`).',
+  },
+  {
+    name: 'prettyPrint',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description: 'When false, disables `pino-pretty` and writes raw JSON lines (useful for log aggregators).',
+  },
+  {
+    name: 'mixin',
+    type: 'pino.MixinFn',
+    isOptional: true,
+    description:
+      'Pino mixin function merged into every log object (for example request-scoped `traceId` or other shared metadata).',
+  },
+  {
+    name: 'customLevels',
+    type: 'Record<string, number>',
+    isOptional: true,
+    description:
+      'Custom log levels and numeric values, forwarded to Pino. Standard severity is still logged via `debug`, `info`, `warn`, and `error`; extra levels follow Pino’s custom-level behavior.',
+  },
+]}
 />
+
+## Log enrichment with `mixin`
+
+Use `mixin` when you want the same structured fields on every line (for correlation with the rest of your services):
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { PinoLogger } from '@mastra/loggers'
+
+function getTraceContext() {
+  return { traceId: 'abc-123' }
+}
+
+export const mastra = new Mastra({
+  logger: new PinoLogger({
+    name: 'Mastra',
+    level: 'info',
+    mixin() {
+      return getTraceContext()
+    },
+  }),
+})
+```
+
+## Custom levels
+
+`customLevels` is passed through to Pino. `PinoLogger` only exposes `debug`, `info`, `warn`, and `error`; for any extra level name (for example `audit`), subclass and forward to the underlying Pino instance:
+
+```typescript title="src/mastra/logger.ts"
+import { Mastra } from '@mastra/core'
+import { PinoLogger } from '@mastra/loggers'
+
+type AuditLevel = 'audit'
+
+class MastraPinoWithAudit extends PinoLogger<AuditLevel> {
+  audit(message: string, meta: Record<string, unknown> = {}) {
+    this.logger.audit(meta, message)
+  }
+}
+
+const logger = new MastraPinoWithAudit({
+  name: 'Mastra',
+  level: 'info',
+  customLevels: { audit: 35 },
+})
+
+export const mastra = new Mastra({ logger })
+```
+
+Numeric values follow Pino’s ordering (built-in levels use 10–60). A level of `35` sits between `info` (30) and `warn` (40), so with `level: 'info'` both `info` and `audit` lines are emitted.
 
 ## File transport (structured logs)
 
 Writes structured logs to a file using the `FileTransport`. The logger accepts a plain message as the first argument and structured metadata as the second argument. These are internally converted to a `BaseLogMessage` and persisted to the configured file path.
 
 ```typescript title="src/mastra/loggers/file-transport.ts"
-import { FileTransport } from "@mastra/loggers/file";
-import { PinoLogger } from "@mastra/loggers/pino";
+import { FileTransport } from '@mastra/loggers/file'
+import { PinoLogger } from '@mastra/loggers/pino'
 
 export const fileLogger = new PinoLogger({
-  name: "Mastra",
-  transports: { file: new FileTransport({ path: "test-dir/test.log" }) },
-  level: "warn",
-});
+  name: 'Mastra',
+  transports: { file: new FileTransport({ path: 'test-dir/test.log' }) },
+  level: 'warn',
+})
 ```
 
 ### File transport usage
 
 ```typescript
-fileLogger.warn("Low disk space", {
-  destinationPath: "system",
-  type: "WORKFLOW",
-});
+fileLogger.warn('Low disk space', {
+  destinationPath: 'system',
+  type: 'WORKFLOW',
+})
 ```
 
 ## Upstash transport (remote log drain)
@@ -90,30 +164,30 @@ fileLogger.warn("Low disk space", {
 Streams structured logs to a remote Redis list using the `UpstashTransport`. The logger accepts a string message and a structured metadata object. This enables centralized logging for distributed environments, supporting filtering by `destinationPath`, `type`, and `runId`.
 
 ```typescript title="src/mastra/loggers/upstash-transport.ts"
-import { UpstashTransport } from "@mastra/loggers/upstash";
-import { PinoLogger } from "@mastra/loggers/pino";
+import { UpstashTransport } from '@mastra/loggers/upstash'
+import { PinoLogger } from '@mastra/loggers/pino'
 
 export const upstashLogger = new PinoLogger({
-  name: "Mastra",
+  name: 'Mastra',
   transports: {
     upstash: new UpstashTransport({
-      listName: "production-logs",
+      listName: 'production-logs',
       upstashUrl: process.env.UPSTASH_URL!,
       upstashToken: process.env.UPSTASH_TOKEN!,
     }),
   },
-  level: "info",
-});
+  level: 'info',
+})
 ```
 
 ### Upstash transport usage
 
 ```typescript
-upstashLogger.info("User signed in", {
-  destinationPath: "auth",
-  type: "AGENT",
-  runId: "run_123",
-});
+upstashLogger.info('User signed in', {
+  destinationPath: 'auth',
+  type: 'AGENT',
+  runId: 'run_123',
+})
 ```
 
 ## Custom transport
@@ -125,24 +199,24 @@ You can create custom transports using the `createCustomTransport` utility to in
 Creates a custom transport using `createCustomTransport` and integrates it with a third-party logging stream such as `pino-sentry-transport`. This allows forwarding logs to an external system like Sentry for advanced monitoring and observability.
 
 ```typescript title="src/mastra/loggers/sentry-transport.ts"
-import { createCustomTransport } from "@mastra/core/loggers";
-import { PinoLogger } from "@mastra/loggers/pino";
-import pinoSentry from "pino-sentry-transport";
+import { createCustomTransport } from '@mastra/core/loggers'
+import { PinoLogger } from '@mastra/loggers/pino'
+import pinoSentry from 'pino-sentry-transport'
 
 const sentryStream = await pinoSentry({
   sentry: {
-    dsn: "YOUR_SENTRY_DSN",
+    dsn: 'YOUR_SENTRY_DSN',
     _experiments: {
       enableLogs: true,
     },
   },
-});
+})
 
-const customTransport = createCustomTransport(sentryStream);
+const customTransport = createCustomTransport(sentryStream)
 
 export const sentryLogger = new PinoLogger({
-  name: "Mastra",
-  level: "info",
+  name: 'Mastra',
+  level: 'info',
   transports: { sentry: customTransport },
-});
+})
 ```

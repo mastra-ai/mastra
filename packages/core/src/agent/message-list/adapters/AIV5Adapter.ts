@@ -3,8 +3,27 @@ import * as AIV5 from '@internal/ai-sdk-v5';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { categorizeFileData, createDataUri, parseDataUri } from '../prompt/image-utils';
-import type { MastraDBMessage, MastraMessageContentV2, MessageSource } from '../state/types';
+import type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart, MessageSource } from '../state/types';
 import type { AIV5Type } from '../types';
+import { sanitizeToolName } from '../utils/tool-name';
+
+/**
+ * Filter out empty text parts from message parts array.
+ * Empty text blocks are not allowed by Anthropic's API and cause request failures.
+ * This can happen during streaming when text-start/text-end events occur without actual content.
+ * However, if the only part is an empty text part, it is preserved as a legitimate placeholder
+ * (e.g. empty assistant messages between tool results and user messages).
+ */
+function filterEmptyTextParts(parts: MastraMessagePart[]): MastraMessagePart[] {
+  const hasNonEmptyParts = parts.some(part => !(part.type === 'text' && part.text === ''));
+  if (!hasNonEmptyParts) return parts;
+  return parts.filter(part => {
+    if (part.type === 'text') {
+      return part.text !== '';
+    }
+    return true;
+  });
+}
 
 /**
  * Extract tool name from AI SDK v5 tool type string
@@ -23,7 +42,7 @@ function getToolName(type: string | { type: string }): string {
 
   // Ensure type is a string
   if (typeof type !== 'string') {
-    return 'unknown';
+    return sanitizeToolName(type);
   }
 
   if (type === 'dynamic-tool') {
@@ -32,11 +51,35 @@ function getToolName(type: string | { type: string }): string {
 
   // Extract tool name from "tool-${toolName}" format
   if (type.startsWith('tool-')) {
-    return type.slice('tool-'.length); // Remove "tool-" prefix
+    return sanitizeToolName(type.slice('tool-'.length)); // Remove "tool-" prefix
   }
 
   // Fallback for unexpected formats
-  return type;
+  return sanitizeToolName(type);
+}
+
+function mergeMastraCreatedAt(metadata: AIV5Type.ProviderMetadata | undefined, createdAt?: number) {
+  if (createdAt == null) {
+    return metadata;
+  }
+
+  return {
+    ...(metadata || {}),
+    mastra: {
+      ...(((metadata || {}).mastra as Record<string, unknown> | undefined) || {}),
+      createdAt,
+    },
+  } satisfies AIV5Type.ProviderMetadata;
+}
+
+function getMastraCreatedAt(providerMetadata?: AIV5Type.ProviderMetadata): number | undefined {
+  const value = providerMetadata?.mastra;
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const createdAt = (value as Record<string, unknown>).createdAt;
+  return typeof createdAt === 'number' ? createdAt : undefined;
 }
 
 export interface AIV5AdapterContext {
@@ -131,7 +174,8 @@ export class AIV5Adapter {
               input: inv.args,
               output: inv.result,
               state: 'output-available',
-              callProviderMetadata: part.providerMetadata,
+              callProviderMetadata: mergeMastraCreatedAt(part.providerMetadata, part.createdAt),
+              providerExecuted: (part as { providerExecuted?: boolean }).providerExecuted,
             } satisfies AIV5Type.ToolUIPart);
           } else {
             parts.push({
@@ -139,7 +183,8 @@ export class AIV5Adapter {
               toolCallId: inv.toolCallId,
               input: inv.args,
               state: 'input-available',
-              callProviderMetadata: part.providerMetadata,
+              callProviderMetadata: mergeMastraCreatedAt(part.providerMetadata, part.createdAt),
+              providerExecuted: (part as { providerExecuted?: boolean }).providerExecuted,
             } satisfies AIV5Type.ToolUIPart);
           }
           continue;
@@ -160,9 +205,7 @@ export class AIV5Adapter {
               text: text || '',
               state: 'done' as const,
             };
-            if (part.providerMetadata) {
-              v5UIPart.providerMetadata = part.providerMetadata;
-            }
+            v5UIPart.providerMetadata = mergeMastraCreatedAt(part.providerMetadata, part.createdAt);
             parts.push(v5UIPart);
           }
           continue;
@@ -191,9 +234,7 @@ export class AIV5Adapter {
               url: part.data,
               mediaType: categorized.mimeType || 'image/png',
             };
-            if (part.providerMetadata) {
-              v5UIPart.providerMetadata = part.providerMetadata;
-            }
+            v5UIPart.providerMetadata = mergeMastraCreatedAt(part.providerMetadata, part.createdAt);
             parts.push(v5UIPart);
           } else {
             let filePartData: string;
@@ -228,9 +269,7 @@ export class AIV5Adapter {
               url: dataUri,
               mediaType: finalMimeType,
             };
-            if (part.providerMetadata) {
-              v5UIPart.providerMetadata = part.providerMetadata;
-            }
+            v5UIPart.providerMetadata = mergeMastraCreatedAt(part.providerMetadata, part.createdAt);
             parts.push(v5UIPart);
           }
         } else if (part.type === 'source') {
@@ -240,19 +279,17 @@ export class AIV5Adapter {
             sourceId: part.source.id,
             title: part.source.title,
           };
-          if (part.providerMetadata) {
-            v5UIPart.providerMetadata = part.providerMetadata;
-          }
+          v5UIPart.providerMetadata = mergeMastraCreatedAt(part.providerMetadata, part.createdAt);
 
           parts.push(v5UIPart);
+        } else if (part.type === 'source-document') {
+          continue;
         } else if (part.type === 'text') {
           const v5UIPart: AIV5Type.TextUIPart = {
             type: 'text' as const,
             text: part.text,
           };
-          if (part.providerMetadata) {
-            v5UIPart.providerMetadata = part.providerMetadata;
-          }
+          v5UIPart.providerMetadata = mergeMastraCreatedAt(part.providerMetadata, part.createdAt);
           parts.push(v5UIPart);
           hasNonToolReasoningParts = true;
         } else {
@@ -374,7 +411,8 @@ export class AIV5Adapter {
                 state: 'result' as const,
               },
               providerMetadata: callProviderMetadata,
-            } satisfies ToolInvocationUIPart & { providerMetadata?: AIV5Type.ProviderMetadata };
+              createdAt: getMastraCreatedAt(callProviderMetadata),
+            } satisfies ToolInvocationUIPart & { providerMetadata?: AIV5Type.ProviderMetadata; createdAt?: number };
           }
           return {
             type: 'tool-invocation' as const,
@@ -385,7 +423,8 @@ export class AIV5Adapter {
               state: 'call' as const,
             },
             providerMetadata: callProviderMetadata,
-          } satisfies ToolInvocationUIPart & { providerMetadata?: AIV5Type.ProviderMetadata };
+            createdAt: getMastraCreatedAt(callProviderMetadata),
+          } satisfies ToolInvocationUIPart & { providerMetadata?: AIV5Type.ProviderMetadata; createdAt?: number };
         }
 
         if (p.type === 'reasoning') {
@@ -399,6 +438,7 @@ export class AIV5Adapter {
               },
             ],
             providerMetadata: p.providerMetadata,
+            createdAt: getMastraCreatedAt(p.providerMetadata),
           };
         }
 
@@ -408,6 +448,8 @@ export class AIV5Adapter {
             mimeType: p.mediaType,
             data: p.url || '',
             providerMetadata: p.providerMetadata,
+            createdAt: getMastraCreatedAt(p.providerMetadata),
+            ...((p as { filename?: string }).filename ? { filename: (p as { filename?: string }).filename } : {}),
           };
         }
 
@@ -421,6 +463,7 @@ export class AIV5Adapter {
               providerMetadata: p.providerMetadata,
             },
             providerMetadata: p.providerMetadata,
+            createdAt: getMastraCreatedAt(p.providerMetadata),
           };
         }
 
@@ -429,11 +472,13 @@ export class AIV5Adapter {
             type: 'text';
             text: string;
             providerMetadata?: AIV5Type.ProviderMetadata;
+            createdAt?: number;
           };
           return {
             type: 'text' as const,
             text: p.text,
             providerMetadata: p.providerMetadata,
+            createdAt: getMastraCreatedAt(p.providerMetadata),
           } satisfies V2TextPart;
         }
 
@@ -453,6 +498,9 @@ export class AIV5Adapter {
       })
       .filter((p): p is NonNullable<typeof p> => p !== null);
 
+    // Filter out empty text parts to prevent Anthropic API errors
+    const filteredV2Parts = filterEmptyTextParts(v2Parts as MastraMessagePart[]);
+
     return {
       id: uiMsg.id,
       role: uiMsg.role,
@@ -461,7 +509,7 @@ export class AIV5Adapter {
       resourceId,
       content: {
         format: 2,
-        parts: v2Parts as MastraMessageContentV2['parts'],
+        parts: filteredV2Parts as MastraMessageContentV2['parts'],
         toolInvocations,
         reasoning,
         experimental_attachments,
@@ -483,6 +531,8 @@ export class AIV5Adapter {
     } else if ('image' in part) {
       mimeType = part.mediaType || 'image/jpeg';
       data = part.image;
+    } else if ('url' in part && typeof (part as any).url === 'string') {
+      return (part as any).url;
     } else {
       throw new MastraError({
         id: 'MASTRA_AIV5_DATA_PART_INVALID',
@@ -528,8 +578,6 @@ export class AIV5Adapter {
     const reasoningParts: string[] = [];
     const experimental_attachments: NonNullable<MastraDBMessage['content']['experimental_attachments']> = [];
 
-    let lastPartWasToolResult = false;
-
     for (const part of content) {
       if (part.type === 'text') {
         const textPart: MastraDBMessage['content']['parts'][number] = {
@@ -538,31 +586,31 @@ export class AIV5Adapter {
         };
         if (part.providerOptions) {
           textPart.providerMetadata = part.providerOptions;
+          textPart.createdAt = getMastraCreatedAt(part.providerOptions);
         }
         mastraDBParts.push(textPart);
-        lastPartWasToolResult = false;
       } else if (part.type === 'tool-call') {
         const toolCallPart = part as AIV5Type.ToolCallPart;
         const toolInvocationPart: MastraDBMessage['content']['parts'][number] = {
           type: 'tool-invocation' as const,
           toolInvocation: {
             toolCallId: toolCallPart.toolCallId,
-            toolName: toolCallPart.toolName,
+            toolName: sanitizeToolName(toolCallPart.toolName),
             args: toolCallPart.input,
             state: 'call',
           },
         };
         if (part.providerOptions) {
           toolInvocationPart.providerMetadata = part.providerOptions;
+          toolInvocationPart.createdAt = getMastraCreatedAt(part.providerOptions);
         }
         mastraDBParts.push(toolInvocationPart);
         toolInvocations.push({
           toolCallId: toolCallPart.toolCallId,
-          toolName: toolCallPart.toolName,
+          toolName: sanitizeToolName(toolCallPart.toolName),
           args: toolCallPart.input,
           state: 'call',
         });
-        lastPartWasToolResult = false;
       } else if (part.type === 'tool-result') {
         const toolResultPart = part;
         const matchingCall = toolInvocations.find(inv => inv.toolCallId === toolResultPart.toolCallId);
@@ -588,7 +636,7 @@ export class AIV5Adapter {
           const call: any = {
             state: 'call',
             toolCallId: toolResultPart.toolCallId,
-            toolName: toolResultPart.toolName || 'unknown',
+            toolName: sanitizeToolName(toolResultPart.toolName),
             args: {},
           };
           updateMatchingCallInvocationResult(toolResultPart, call);
@@ -597,20 +645,27 @@ export class AIV5Adapter {
 
         if (matchingV2Part && matchingV2Part.type === 'tool-invocation') {
           updateMatchingCallInvocationResult(toolResultPart, matchingV2Part.toolInvocation);
+          if (toolResultPart.providerOptions) {
+            matchingV2Part.providerMetadata = toolResultPart.providerOptions;
+            matchingV2Part.createdAt = getMastraCreatedAt(toolResultPart.providerOptions) ?? matchingV2Part.createdAt;
+          }
         } else {
           const toolInvocationPart: MastraDBMessage['content']['parts'][number] = {
             type: 'tool-invocation' as const,
             toolInvocation: {
               toolCallId: toolResultPart.toolCallId,
-              toolName: toolResultPart.toolName || 'unknown',
+              toolName: sanitizeToolName(toolResultPart.toolName),
               args: {},
               state: 'call',
             },
           };
           updateMatchingCallInvocationResult(toolResultPart, toolInvocationPart.toolInvocation);
+          if (toolResultPart.providerOptions) {
+            toolInvocationPart.providerMetadata = toolResultPart.providerOptions;
+            toolInvocationPart.createdAt = getMastraCreatedAt(toolResultPart.providerOptions);
+          }
           mastraDBParts.push(toolInvocationPart);
         }
-        lastPartWasToolResult = true;
       } else if (part.type === 'reasoning') {
         const v2ReasoningPart: MastraDBMessage['content']['parts'][number] = {
           type: 'reasoning',
@@ -619,10 +674,10 @@ export class AIV5Adapter {
         };
         if (part.providerOptions) {
           v2ReasoningPart.providerMetadata = part.providerOptions;
+          v2ReasoningPart.createdAt = getMastraCreatedAt(part.providerOptions);
         }
         mastraDBParts.push(v2ReasoningPart);
         reasoningParts.push(part.text);
-        lastPartWasToolResult = false;
       } else if (part.type === 'image') {
         const imagePart = part;
         const mimeType = imagePart.mediaType || 'image/jpeg';
@@ -635,13 +690,13 @@ export class AIV5Adapter {
         };
         if (part.providerOptions) {
           imageFilePart.providerMetadata = part.providerOptions;
+          imageFilePart.createdAt = getMastraCreatedAt(part.providerOptions);
         }
         mastraDBParts.push(imageFilePart);
         experimental_attachments.push({
           url: imageData,
           contentType: mimeType,
         });
-        lastPartWasToolResult = false;
       } else if (part.type === 'file') {
         const filePart = part;
         const mimeType = filePart.mediaType || 'application/octet-stream';
@@ -654,27 +709,24 @@ export class AIV5Adapter {
         };
         if (part.providerOptions) {
           v2FilePart.providerMetadata = part.providerOptions;
+          v2FilePart.createdAt = getMastraCreatedAt(part.providerOptions);
+        }
+        if ((filePart as { filename?: string }).filename) {
+          (v2FilePart as Record<string, unknown>).filename = (filePart as { filename?: string }).filename;
         }
         mastraDBParts.push(v2FilePart);
         experimental_attachments.push({
           url: fileData,
           contentType: mimeType,
         });
-        lastPartWasToolResult = false;
       }
     }
 
-    // Insert step-start if assistant message starts after tool result
-    if (modelMsg.role === 'assistant' && lastPartWasToolResult && mastraDBParts.length > 0) {
-      const lastPart = mastraDBParts[mastraDBParts.length - 1];
-      if (lastPart && lastPart.type !== 'text') {
-        const emptyTextPart: MastraDBMessage['content']['parts'][number] = { type: 'text', text: '' };
-        mastraDBParts.push(emptyTextPart);
-      }
-    }
+    // Filter out empty text parts to prevent Anthropic API errors
+    const filteredMastraDBParts = filterEmptyTextParts(mastraDBParts);
 
     // Build V2 content string
-    const contentString = mastraDBParts
+    const contentString = filteredMastraDBParts
       .filter(p => p.type === 'text')
       .map(p => p.text)
       .join('\n');
@@ -697,7 +749,7 @@ export class AIV5Adapter {
       createdAt: new Date(),
       content: {
         format: 2,
-        parts: mastraDBParts,
+        parts: filteredMastraDBParts,
         toolInvocations: toolInvocations.length > 0 ? toolInvocations : undefined,
         reasoning: reasoningParts.length > 0 ? reasoningParts.join('\n') : undefined,
         experimental_attachments: experimental_attachments.length > 0 ? experimental_attachments : undefined,

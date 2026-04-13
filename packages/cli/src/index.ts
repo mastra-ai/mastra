@@ -15,9 +15,29 @@ import { listScorers } from './commands/actions/list-scorers';
 import { migrate } from './commands/actions/migrate';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
+import { startStudio } from './commands/actions/start-studio';
+import { loginAction, logoutAction } from './commands/auth/login';
+import { listOrgsAction, switchOrgAction } from './commands/auth/orgs';
+import { createTokenAction, listTokensAction, revokeTokenAction } from './commands/auth/tokens';
+import { whoamiAction } from './commands/auth/whoami';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
-import { studio } from './commands/studio';
+import { serverDeployAction } from './commands/server/deploy';
+import { envListAction, envSetAction, envUnsetAction, envImportAction } from './commands/server/env';
+import { deployAction } from './commands/studio/deploy';
+import { deploysAction } from './commands/studio/deploy-list';
+import { logsAction } from './commands/studio/deploy-logs';
+import { statusAction } from './commands/studio/deploy-status';
+import { listProjectsAction, createProjectAction } from './commands/studio/projects';
 import { parseComponents, parseLlmProvider, parseMcp, parseSkills } from './commands/utils';
+
+function wrapAction(fn: (...args: any[]) => Promise<void>): (...args: any[]) => void {
+  return (...args: any[]) => {
+    fn(...args).catch((err: Error) => {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    });
+  };
+}
 
 const mastraPkg = pkgJson as PackageJson;
 export const version = mastraPkg.version;
@@ -127,6 +147,7 @@ program
     'Comma-separated list of custom arguments to pass to the dev server. IE: --experimental-transform-types',
   )
   .option('-s, --https', 'Enable local HTTPS')
+  .option('--request-context-presets <file>', 'Path to request context presets JSON file')
   .option('--debug', 'Enable debug logs', false)
   .action(startDevServer);
 
@@ -145,18 +166,55 @@ program
   .description('Start your built Mastra application')
   .option('-d, --dir <path>', 'Path to your built Mastra output directory (default: .mastra/output)')
   .option('-e, --env <env>', 'Custom env file to include in the start')
+  .option(
+    '-c, --custom-args <args>',
+    'Comma-separated list of custom arguments to pass to the Node.js process. IE: --require=newrelic',
+  )
   .action(startProject);
 
-program
+const studioCommand = program
   .command('studio')
-  .description('Start the Mastra studio')
+  .description('Manage Mastra Studio')
   .option('-p, --port <port>', 'Port to run the studio on (default: 3000)')
   .option('-e, --env <env>', 'Custom env file to include in the studio')
   .option('-h, --server-host <serverHost>', 'Host of the Mastra API server (default: localhost)')
   .option('-s, --server-port <serverPort>', 'Port of the Mastra API server (default: 4111)')
   .option('-x, --server-protocol <serverProtocol>', 'Protocol of the Mastra API server (default: http)')
   .option('--server-api-prefix <serverApiPrefix>', 'API route prefix of the Mastra server (default: /api)')
-  .action(studio);
+  .option('--request-context-presets <file>', 'Path to request context presets JSON file')
+  .action(startStudio);
+
+const deployCommand = studioCommand
+  .command('deploy [dir]')
+  .description('Deploy studio')
+  .option('--org <id>', 'Organization ID')
+  .option('--project <id>', 'Project ID')
+  .option('-y, --yes', 'Auto-accept defaults without confirmation')
+  .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .option('--skip-build', 'Skip the build step and use existing .mastra/output')
+  .action(wrapAction(deployAction));
+
+deployCommand.command('list').description('List deployed studios').action(wrapAction(deploysAction));
+
+deployCommand
+  .command('status <deploy-id>')
+  .description('Show deploy status')
+  .option('-w, --watch', 'Watch for status changes')
+  .action(wrapAction(statusAction));
+
+deployCommand
+  .command('logs <deploy-id>')
+  .description('Show deploy logs')
+  .option('-f, --follow', 'Stream logs in real time')
+  .option('--tail <n>', 'Number of recent log lines')
+  .action(wrapAction(logsAction));
+
+const studioProjects = studioCommand
+  .command('projects')
+  .description('Manage studio projects')
+  .action(wrapAction(listProjectsAction));
+
+studioProjects.command('create').description('Create a new project').action(wrapAction(createProjectAction));
 
 program
   .command('migrate')
@@ -177,6 +235,65 @@ scorersCommand
   .action(addScorer);
 
 scorersCommand.command('list').description('List available scorer templates').action(listScorers);
+
+// ---- Auth commands ----
+
+const authCommand = program.command('auth').description('Manage authentication');
+
+authCommand.command('login').description('Log in to Mastra').action(wrapAction(loginAction));
+
+authCommand.command('logout').description('Log out and clear credentials').action(wrapAction(logoutAction));
+
+authCommand.command('whoami').description('Show current user and organization').action(wrapAction(whoamiAction));
+
+const authOrgs = authCommand.command('orgs').description('Manage organizations').action(wrapAction(listOrgsAction));
+
+authOrgs.command('switch').description('Switch current organization').action(wrapAction(switchOrgAction));
+
+const authTokens = authCommand.command('tokens').description('Manage API tokens').action(wrapAction(listTokensAction));
+
+authTokens.command('create <name>').description('Create a new API token').action(wrapAction(createTokenAction));
+
+authTokens.command('revoke <token-id>').description('Revoke an API token').action(wrapAction(revokeTokenAction));
+
+// ---- Server commands ----
+
+const serverCommand = program.command('server').description('Manage Mastra Server deployments');
+
+serverCommand
+  .command('deploy [dir]')
+  .description('Deploy to Mastra Server')
+  .option('--org <id>', 'Organization ID')
+  .option('--project <id>', 'Project ID')
+  .option('-y, --yes', 'Auto-accept defaults without confirmation')
+  .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .action(wrapAction(serverDeployAction));
+
+const serverEnvCommand = serverCommand.command('env').description('Manage server environment variables');
+
+serverEnvCommand
+  .command('list')
+  .description('List environment variables for the linked project')
+  .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .action(wrapAction(envListAction));
+
+serverEnvCommand
+  .command('set <key> <value>')
+  .description('Set an environment variable')
+  .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .action(wrapAction(envSetAction));
+
+serverEnvCommand
+  .command('unset <key>')
+  .description('Remove an environment variable')
+  .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .action(wrapAction(envUnsetAction));
+
+serverEnvCommand
+  .command('import <file>')
+  .description('Import environment variables from a .env file')
+  .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .action(wrapAction(envImportAction));
 
 program.parse(process.argv);
 

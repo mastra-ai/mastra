@@ -1,5 +1,6 @@
+import { jsonSchema } from '@internal/ai-sdk-v5';
 import { describe, it, expect } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { createTool } from '../../../../tools/tool';
 import { prepareToolsAndToolChoice } from './prepare-tools';
 
@@ -341,6 +342,116 @@ describe('prepareToolsAndToolChoice', () => {
 
       expect(result.tools).toBeUndefined();
       expect(result.toolChoice).toEqual({ type: 'none' });
+    });
+    it('should strip tools when toolChoice is "none" even when tools are non-empty (#14459)', () => {
+      // Regression test: workflow tools injected via listWorkflowTools() were still
+      // being serialized in the HTTP request even when toolChoice was set to none.
+      // Gemini rejects requests combining tools + structured output (response_format: json_schema).
+      const workflowTool = createTool({
+        id: 'workflow-tool',
+        description: 'A workflow tool injected by listWorkflowTools()',
+        inputSchema: z.object({ input: z.string() }),
+        execute: async () => ({ result: 'ok' }),
+      });
+      const result = prepareToolsAndToolChoice({
+        tools: { workflowTool },
+        toolChoice: 'none',
+        activeTools: undefined,
+      });
+      expect(result.tools).toBeUndefined();
+      expect(result.toolChoice).toEqual({ type: 'none' });
+    });
+  });
+
+  describe('agent-as-tools schema serialization (#13324)', () => {
+    it('should produce valid JSON Schema with type keys for all properties including resumeData: z.any()', () => {
+      // Simulate what CoreToolBuilder does: inject resumeData and suspendedToolRunId
+      // into agent tool schemas. The resumeData field uses z.any() which serializes
+      // to {} (no type key) via Zod v4's toJSONSchema. OpenAI rejects schemas
+      // without a type key on every property.
+      const agentTool = createTool({
+        id: 'agent-subAgent',
+        description: 'A sub-agent tool',
+        inputSchema: z.object({
+          prompt: z.string().describe('The prompt for the agent'),
+          suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional().default(''),
+          resumeData: z
+            .any()
+            .describe('The resumeData object created from the resumeSchema of suspended tool')
+            .optional(),
+        }),
+        execute: async () => 'result',
+      });
+
+      const result = prepareToolsAndToolChoice({
+        tools: { 'agent-subAgent': agentTool as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v2',
+      });
+
+      expect(result.tools).toBeDefined();
+      expect(result.tools).toHaveLength(1);
+
+      const toolDef = result.tools![0] as { type: string; inputSchema: Record<string, any> };
+      expect(toolDef.type).toBe('function');
+
+      // The critical assertion: every property in the schema must have a 'type' key.
+      // OpenAI rejects schemas where properties lack a 'type' key.
+      const properties = toolDef.inputSchema.properties;
+      expect(properties).toBeDefined();
+
+      for (const [propName, propSchema] of Object.entries(properties)) {
+        const schema = propSchema as Record<string, any>;
+        const hasTypeKey = 'type' in schema;
+        const hasRef = '$ref' in schema;
+        const hasAnyOf = 'anyOf' in schema;
+        const hasOneOf = 'oneOf' in schema;
+        const hasAllOf = 'allOf' in schema;
+
+        expect(
+          hasTypeKey || hasRef || hasAnyOf || hasOneOf || hasAllOf,
+          `Property '${propName}' in agent tool schema must have a 'type', '$ref', 'anyOf', 'oneOf', or 'allOf' key. Got: ${JSON.stringify(schema)}`,
+        ).toBe(true);
+      }
+
+      const resumeDataSchema = properties.resumeData as Record<string, any>;
+      expect(Array.isArray(resumeDataSchema.type)).toBe(true);
+      expect(resumeDataSchema.type).not.toContain('array');
+      expect(resumeDataSchema.items).toBeUndefined();
+    });
+
+    it('should drop items for typeless properties when applying non-array fallback type', () => {
+      const toolWithTypelessItems = {
+        description: 'A tool with a typeless schema property that incorrectly includes items',
+        parameters: jsonSchema({
+          type: 'object',
+          properties: {
+            resumeData: {
+              description: 'Typeless schema with items that Gemini rejects',
+              items: {
+                type: 'string',
+              },
+            },
+          },
+        }),
+        execute: async () => 'ok',
+      };
+
+      const result = prepareToolsAndToolChoice({
+        tools: { testTool: toolWithTypelessItems as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v2',
+      });
+
+      const toolDef = result.tools![0] as { type: string; inputSchema: Record<string, any> };
+      expect(toolDef.type).toBe('function');
+
+      const resumeDataSchema = toolDef.inputSchema.properties.resumeData as Record<string, any>;
+      expect(Array.isArray(resumeDataSchema.type)).toBe(true);
+      expect(resumeDataSchema.type).not.toContain('array');
+      expect(resumeDataSchema.items).toBeUndefined();
     });
   });
 

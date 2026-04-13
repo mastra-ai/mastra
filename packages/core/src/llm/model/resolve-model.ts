@@ -104,7 +104,15 @@ export async function resolveModelConfig(
     if (modelConfig.specificationVersion === 'v3') {
       return new AISDKV6LanguageModel(modelConfig as LanguageModelV3);
     }
-    // V1 (legacy) models pass through without wrapping
+    if (modelConfig.specificationVersion === 'v1') {
+      return modelConfig;
+    }
+    // Unknown specificationVersion from a third-party provider (e.g. ollama-ai-provider-v2).
+    // If the model has doStream/doGenerate methods, wrap it as a modern model
+    // to prevent the stream()/streamLegacy() catch-22 where neither method accepts the model.
+    if (typeof (modelConfig as any).doStream === 'function' && typeof (modelConfig as any).doGenerate === 'function') {
+      return new AISDKV5LanguageModel(modelConfig as LanguageModelV2);
+    }
     return modelConfig;
   }
 

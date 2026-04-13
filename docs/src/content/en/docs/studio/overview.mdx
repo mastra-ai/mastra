@@ -1,0 +1,133 @@
+---
+title: "Studio"
+description: Learn how to use Studio to build, test, and manage your agents, workflows, and tools.
+packages:
+  - "@mastra/core"
+---
+
+import YouTube from "@site/src/components/YouTube-player";
+import { VideoPlayer } from "@site/src/components/video-player";
+
+# Studio
+
+Studio provides an interactive UI for building, testing, and managing your agents, workflows, and tools. Run it locally during development, add [authentication](/docs/studio/auth), or [deploy it](/docs/studio/deployment) to production so your team can manage agents, monitor performance, and gain insights through built-in observability.
+
+<YouTube id="ojGu6Bi4wYk" />
+
+## Start Studio
+
+If you created your application with `create mastra`, start the development server using the `dev` script. You can also run it directly with `mastra dev`.
+
+```bash npm2yarn
+npm run dev
+```
+
+Once the server is running, you can:
+
+- Open the Studio UI at [http://localhost:4111](http://localhost:4111/) to interact with your agents, workflows, and tools.
+- Visit [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui) to discover and interact with the underlying REST API.
+
+While Studio is running, you can edit your [agents](/docs/agents/overview), [workflows](/docs/workflows/overview), and other parts of your Mastra application in real time.
+
+## Primitives
+
+### Agents
+
+Chat with your agent directly, dynamically switch [models](/models), and tweak settings like temperature and top-p to understand how they affect the output.
+
+<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1773668516/agent_f8sq1u.mp4" />
+
+When you interact with your agent, you can follow each step of its reasoning, view tool call outputs, and [observe](#observability) traces and logs to see how responses are generated. You can also attach [scorers](#scorers) to measure and compare response quality over time.
+
+Use [Editor](/docs/editor/overview) to let non-technical team members iterate on agents, version every change, and run experiments without redeploying.
+
+### Workflows
+
+Visualize your workflow as a graph and run it step by step with a custom input. During execution, the interface updates in real time to show the active step and the path taken.
+
+<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1773668517/workflows_o4dmvm.mp4" />
+
+When running a workflow, you can also view detailed traces showing tool calls, raw JSON outputs, and any errors that might have occurred along the way.
+
+### Processors
+
+View the input and output processors attached to each agent. The agent detail panel lists every processor by name and type, so you can verify your guardrails, token limiters, and custom processors are wired up correctly before testing.
+
+<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1773668517/processors_ka0lov.mp4" />
+
+See [processors](/docs/agents/processors) and [guardrails](/docs/agents/guardrails) for configuration details.
+
+### MCP servers
+
+List the MCP servers attached to your Mastra instance and explore their available tools.
+
+<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1773668515/mcp_rynloj.mp4" />
+
+### Tools
+
+Run tools on their own to observe behavior and test them before assigning them to an agent. If something goes wrong, re-run a tool in isolation to debug the issue.
+
+<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1773668515/tools_ab07x7.mp4" />
+
+### Workspaces
+
+Browse the files in your agent's workspace filesystem using a built-in file browser. Switch between workspace mounts, create directories, and view file contents with syntax highlighting. Writable workspaces allow directory creation and file deletion; read-only workspaces are labeled accordingly. The Skills tab lists all discovered skills with their instructions, references, and metadata. Install community skills from [skills.sh](https://skills.sh) or remove existing ones.
+
+See [workspaces](/docs/workspace/overview) for configuration details.
+
+### Request context
+
+Set runtime variables that flow into your agent's instructions and tools through dependency injection. Edit request context as JSON or use a schema-driven form when your agent defines a `requestContextSchema`. Values persist across test chats and experiments, so you can trigger conditional flows without restarting.
+
+See [request context](/docs/server/request-context) for configuration details.
+
+## Evaluation
+
+### Scorers
+
+The Scorers tab displays the results of your agent's scorers as they run. When messages pass through your agent, the defined scorers evaluate each output asynchronously and render their results here. This allows you to understand how your scorers respond to different interactions, compare performance across test cases, and identify areas for improvement.
+
+<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1773668517/scorers_wc9wjk.mp4" />
+
+### Datasets
+
+Create and manage collections of test cases to evaluate your agents and workflows. Import items from CSV or JSON, define input and ground-truth schemas, and pin to specific versions so you can reproduce experiments exactly. Run experiments with [scorers](/docs/evals/overview) to compare quality across prompts, models, or code changes.
+
+<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1773668515/datasets_p35u2v.mp4" />
+
+See [datasets overview](/docs/evals/datasets/overview) for the full API and versioning details.
+
+### Experiments
+
+Run all items in a dataset against an agent, workflow, or scorer and collect the results in one place. Select a target, optionally attach scorers, and trigger the experiment. The results view shows each item's input, output, status, and individual score breakdowns. Compare two experiments side by side to measure the impact of prompt, model, or code changes.
+
+See [datasets overview](/docs/evals/datasets/overview) for setup details.
+
+## Observability
+
+Visit the [Studio observability](/docs/studio/observability) docs to learn more.
+
+## Settings
+
+Configure the connection between Studio and your Mastra server. The settings page includes:
+
+- **Mastra instance URL**: The base URL of your Mastra server (e.g. `http://localhost:4111`).
+- **API prefix**: Optional path prefix for all API requests (defaults to `/api`).
+- **Custom headers**: Add key-value pairs sent with every request, useful for authentication tokens or routing headers.
+- **Theme**: Switch between dark, light, or system theme.
+
+<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1774964365/settings_wp3gax.mp4" />
+
+## Code configuration
+
+In addition to the [settings](#settings) UI, you can configure the local development server and Studio also through the [`server`](/reference/configuration#server-options) option in your `src/mastra/index.ts`.
+
+By default, Studio runs at [http://localhost:4111](http://localhost:4111). You can change the [`host`](/reference/configuration#serverhost) and [`port`](/reference/configuration#serverport).
+
+Mastra also supports HTTPS development through the [`--https`](/reference/cli/mastra#--https) flag, which automatically creates and manages certificates for your project. When you run `mastra dev --https`, a private key and certificate are generated for localhost (or your configured host). Visit the [HTTPS reference](/reference/configuration#serverhttps) to learn more.
+
+## Next steps
+
+- Learn how to [deploy Studio](/docs/studio/deployment) for production use.
+- Add [authentication](/docs/studio/auth) to control access to your deployed Studio.
+- Explore [Studio observability](/docs/studio/observability) to monitor agent performance through metrics, traces, and logs.

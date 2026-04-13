@@ -1,15 +1,19 @@
+import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import type { MastraAuthConfig } from '@mastra/core/server';
 import { describe, expect, it } from 'vitest';
 
 import {
   canAccessPublicly,
   checkRules,
+  coreAuthMiddleware,
   isCustomRoutePublic,
   isDevPlaygroundRequest,
   isProtectedCustomRoute,
+  isProtectedPath,
   matchesOrIncludes,
   pathMatchesPattern,
   pathMatchesRule,
+  getAuthenticatedUser,
 } from './helpers';
 
 describe('auth helpers', () => {
@@ -150,6 +154,80 @@ describe('auth helpers', () => {
 
     it('should deny access when no rules match', async () => {
       expect(await checkRules(rules, '/api/other/resource', 'GET', {})).toBe(false);
+    });
+  });
+
+  describe('getAuthenticatedUser', () => {
+    it('returns null when the auth token is empty', async () => {
+      const user = await getAuthenticatedUser({
+        mastra: {
+          getServer: () => ({
+            auth: {
+              authenticateToken: async () => ({ id: 'user-123' }),
+            },
+          }),
+        } as any,
+        token: '',
+        request: new Request('http://localhost/api/test'),
+      });
+
+      expect(user).toBeNull();
+    });
+
+    it('returns null when auth is not configured', async () => {
+      const user = await getAuthenticatedUser({
+        mastra: {
+          getServer: () => ({}),
+        } as any,
+        token: 'valid-token',
+        request: new Request('http://localhost/api/test'),
+      });
+
+      expect(user).toBeNull();
+    });
+
+    it('resolves the user with the configured auth provider', async () => {
+      const request = new Request('http://localhost/api/test', {
+        headers: { Authorization: 'Bearer valid-token' },
+      });
+
+      const user = await getAuthenticatedUser<{ id: string; token: string; method: string }>({
+        mastra: {
+          getServer: () => ({
+            auth: {
+              authenticateToken: async (token: string, incomingRequest: Request) => ({
+                id: 'user-123',
+                token,
+                method: incomingRequest.method,
+              }),
+            },
+          }),
+        } as any,
+        token: 'valid-token',
+        request,
+      });
+
+      expect(user).toEqual({
+        id: 'user-123',
+        token: 'valid-token',
+        method: 'GET',
+      });
+    });
+
+    it('accepts an authorization header value with the bearer prefix', async () => {
+      const user = await getAuthenticatedUser<{ token: string }>({
+        mastra: {
+          getServer: () => ({
+            auth: {
+              authenticateToken: async (token: string) => ({ token }),
+            },
+          }),
+        } as any,
+        token: 'Bearer valid-token',
+        request: new Request('http://localhost/api/test'),
+      });
+
+      expect(user).toEqual({ token: 'valid-token' });
     });
   });
 
@@ -308,6 +386,79 @@ describe('auth helpers', () => {
     });
   });
 
+  describe('isProtectedPath', () => {
+    describe('studio UI routes should be accessible for login in production', () => {
+      /**
+       * When auth is configured and MASTRA_DEV is not set (production), users must
+       * be able to access the studio UI to see the login page.
+       *
+       * The auth config says `protected: ['/api/*']` - only API routes should require auth.
+       * Routes outside /api/* (like /, /agents, /assets/*) should NOT require auth
+       * so the login page can load.
+       */
+
+      const authConfig: MastraAuthConfig = {
+        protected: ['/api/*'],
+        public: ['/api', '/api/auth/*'],
+      };
+
+      it('should NOT protect studio root path "/" so login page can load', () => {
+        // "/" is not under /api/*, so it should not be protected
+        expect(isProtectedPath('/', 'GET', authConfig)).toBe(false);
+      });
+
+      it('should NOT protect studio route "/agents"', () => {
+        // "/agents" is not under /api/*, so it should not be protected
+        expect(isProtectedPath('/agents', 'GET', authConfig)).toBe(false);
+      });
+
+      it('should NOT protect studio assets "/assets/index-abc123.js"', () => {
+        // Static assets are not under /api/*, so they should not be protected
+        expect(isProtectedPath('/assets/index-abc123.js', 'GET', authConfig)).toBe(false);
+      });
+
+      it('should NOT protect other non-API paths like "/login" or "/callback"', () => {
+        expect(isProtectedPath('/login', 'GET', authConfig)).toBe(false);
+        expect(isProtectedPath('/oauth/callback', 'GET', authConfig)).toBe(false);
+      });
+
+      it('SHOULD protect API routes under /api/*', () => {
+        expect(isProtectedPath('/api/agents', 'GET', authConfig)).toBe(true);
+        expect(isProtectedPath('/api/agents/123', 'GET', authConfig)).toBe(true);
+        expect(isProtectedPath('/api/memory/threads', 'POST', authConfig)).toBe(true);
+      });
+    });
+
+    it('should protect API routes', () => {
+      const authConfig: MastraAuthConfig = {
+        protected: ['/api/*'],
+      };
+      expect(isProtectedPath('/api/agents', 'GET', authConfig)).toBe(true);
+    });
+
+    it('should not protect routes when customRouteAuthConfig marks them as public', () => {
+      const authConfig: MastraAuthConfig = {
+        protected: ['/api/*'],
+      };
+      const customRouteAuthConfig = new Map<string, boolean>();
+      customRouteAuthConfig.set('GET:/webhook', false); // Public webhook
+
+      // Non-API route marked as public custom route
+      expect(isProtectedPath('/webhook', 'GET', authConfig, customRouteAuthConfig)).toBe(false);
+    });
+
+    it('should protect routes when customRouteAuthConfig marks them as protected', () => {
+      const authConfig: MastraAuthConfig = {
+        protected: ['/api/*'],
+      };
+      const customRouteAuthConfig = new Map<string, boolean>();
+      customRouteAuthConfig.set('GET:/custom/protected', true); // Protected custom route
+
+      // Non-API route explicitly marked as protected
+      expect(isProtectedPath('/custom/protected', 'GET', authConfig, customRouteAuthConfig)).toBe(true);
+    });
+  });
+
   describe('isDevPlaygroundRequest', () => {
     const authConfig: MastraAuthConfig = {
       protected: ['/api/*'],
@@ -397,6 +548,162 @@ describe('auth helpers', () => {
       } finally {
         process.env.MASTRA_DEV = originalEnv;
       }
+    });
+  });
+
+  describe('coreAuthMiddleware - mapUserToResourceId', () => {
+    function createMockMastra() {
+      return {
+        getServer: () => ({}),
+        getLogger: () => null,
+      } as any;
+    }
+
+    function createRequestContext() {
+      const store = new Map<string, unknown>();
+      return {
+        get: (key: string) => store.get(key),
+        set: (key: string, value: unknown) => store.set(key, value),
+        _store: store,
+      };
+    }
+
+    const baseCtx = {
+      path: '/api/agents',
+      method: 'GET',
+      getHeader: () => undefined,
+      rawRequest: {},
+      token: 'valid-token',
+      buildAuthorizeContext: () => null,
+    };
+
+    it('should set resource ID when mapUserToResourceId is provided', async () => {
+      const user = { id: 'user-123', orgId: 'org-456' };
+      const requestContext = createRequestContext();
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => user,
+          mapUserToResourceId: (u: any) => u.id,
+        },
+        requestContext,
+      });
+
+      expect(result.action).toBe('next');
+      expect(requestContext.get('user')).toBe(user);
+      expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('user-123');
+    });
+
+    it('should support composite resource IDs', async () => {
+      const user = { id: 'user-123', orgId: 'org-456' };
+      const requestContext = createRequestContext();
+
+      await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => user,
+          mapUserToResourceId: (u: any) => `${u.orgId}:${u.id}`,
+        },
+        requestContext,
+      });
+
+      expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('org-456:user-123');
+    });
+    it('should not set resource ID when mapUserToResourceId returns null', async () => {
+      const requestContext = createRequestContext();
+
+      await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => ({ id: 'user-123' }),
+          mapUserToResourceId: () => null,
+        },
+        requestContext,
+      });
+
+      expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
+    });
+
+    it('should not set resource ID when mapUserToResourceId returns undefined', async () => {
+      const requestContext = createRequestContext();
+
+      await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => ({ id: 'user-123' }),
+          mapUserToResourceId: () => undefined,
+        },
+        requestContext,
+      });
+
+      expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
+    });
+
+    it('should not set resource ID when mapUserToResourceId is not provided', async () => {
+      const requestContext = createRequestContext();
+
+      await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => ({ id: 'user-123' }),
+        },
+        requestContext,
+      });
+
+      expect(requestContext.get('user')).toEqual({ id: 'user-123' });
+      expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
+    });
+
+    it('should not set resource ID when authentication fails', async () => {
+      const requestContext = createRequestContext();
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => null,
+          mapUserToResourceId: (u: any) => u?.id,
+        },
+        requestContext,
+      });
+
+      expect(result.action).toBe('error');
+      expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
+    });
+    it('should reject the request when mapUserToResourceId throws', async () => {
+      const requestContext = createRequestContext();
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => ({ id: 'user-123' }),
+          mapUserToResourceId: () => {
+            throw new Error('mapping failed');
+          },
+        },
+        requestContext,
+      });
+
+      expect(result).toEqual({
+        action: 'error',
+        status: 500,
+        body: { error: 'Failed to map authenticated user to a resource ID' },
+      });
+      expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
     });
   });
 });

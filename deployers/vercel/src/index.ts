@@ -1,25 +1,67 @@
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
+import type { Config } from '@mastra/core/mastra';
 import { Deployer } from '@mastra/deployer';
-import { move } from 'fs-extra/esm';
+import { injectStudioHtmlConfig } from '@mastra/deployer/build';
+import { copy, move } from 'fs-extra/esm';
 import type { VcConfig, VcConfigOverrides, VercelDeployerOptions } from './types';
 
 export class VercelDeployer extends Deployer {
   private vcConfigOverrides: VcConfigOverrides = {};
+  private studio: boolean;
 
   constructor(options: VercelDeployerOptions = {}) {
     super({ name: 'VERCEL' });
     this.outputDir = join('.vercel', 'output', 'functions', 'index.func');
+    this.studio = options.studio ?? false;
 
-    // Store all overrides centrally
-    this.vcConfigOverrides = { ...options };
+    const { studio, ...overrides } = options;
+    this.vcConfigOverrides = { ...overrides };
+  }
+
+  protected async getUserBundlerOptions(
+    mastraEntryFile: string,
+    outputDirectory: string,
+  ): Promise<NonNullable<Config['bundler']>> {
+    const bundlerOptions = await super.getUserBundlerOptions(mastraEntryFile, outputDirectory);
+
+    // Always force externals: true for Vercel deployments.
+    // Vercel serverless functions resolve dependencies from node_modules,
+    // so bundling them inline serves no purpose. Bundling inline can also cause
+    // circular module evaluation deadlocks when dynamic imports produce chunks
+    // that depend back on the entry module via static imports, resulting in
+    // "Detected unsettled top-level await" errors (Node.js exit code 13).
+    // See: https://github.com/mastra-ai/mastra/issues/14860
+    return {
+      ...bundlerOptions,
+      externals: true,
+    };
   }
 
   async prepare(outputDirectory: string): Promise<void> {
     await super.prepare(outputDirectory);
 
     this.writeVercelJSON(join(outputDirectory, this.outputDir, '..', '..'));
+
+    if (this.studio) {
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = dirname(__filename);
+
+      const studioSource = join(dirname(__dirname), 'dist', 'studio');
+      const staticDir = join(outputDirectory, '.vercel', 'output', 'static');
+
+      try {
+        await copy(studioSource, staticDir, { overwrite: true });
+      } catch (err) {
+        throw new Error(
+          `Failed to copy studio assets from "${studioSource}" to "${staticDir}": ${err instanceof Error ? err.message : err}`,
+        );
+      }
+
+      this.injectStudioConfig(staticDir);
+    }
   }
 
   private getEntry(): string {
@@ -46,19 +88,43 @@ export const HEAD = handle(app);
 `;
   }
 
+  private injectStudioConfig(staticDir: string) {
+    const indexPath = join(staticDir, 'index.html');
+    let html = readFileSync(indexPath, 'utf-8');
+
+    /**
+     * Use window.location expressions so the SPA constructs the correct same-origin endpoint.
+     * Port uses a ternary: window.location.port is '' for default ports (80/443), and the SPA falls back to 4111 for empty strings, so we return the default port explicitly instead.
+     */
+    html = injectStudioHtmlConfig(html, {
+      host: `window.location.hostname`,
+      port: `(window.location.port || (window.location.protocol === 'https:' ? '443' : '80'))`,
+      protocol: `window.location.protocol.replace(':', '')`,
+      apiPrefix: `'/api'`,
+      basePath: '',
+      hideCloudCta: `'true'`,
+      templates: `'false'`,
+      cloudApiEndpoint: `''`,
+      experimentalFeatures: `'false'`,
+      telemetryDisabled: `''`,
+      requestContextPresets: `''`,
+      experimentalUI: `'false'`,
+    });
+
+    writeFileSync(indexPath, html);
+  }
+
   private writeVercelJSON(outputDirectory: string) {
-    writeFileSync(
-      join(outputDirectory, 'config.json'),
-      JSON.stringify({
-        version: 3,
-        routes: [
-          {
-            src: '/(.*)',
-            dest: '/',
-          },
-        ],
-      }),
-    );
+    const routes = this.studio
+      ? [
+          { src: '/api/(.*)', dest: '/' },
+          { src: '/health', dest: '/' },
+          { handle: 'filesystem' as const },
+          { src: '/(.*)', dest: '/index.html', check: true },
+        ]
+      : [{ src: '/(.*)', dest: '/' }];
+
+    writeFileSync(join(outputDirectory, 'config.json'), JSON.stringify({ version: 3, routes }));
   }
 
   async bundle(

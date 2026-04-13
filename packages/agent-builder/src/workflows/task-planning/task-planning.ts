@@ -55,10 +55,11 @@ const planningIterationStep = createStep({
     // Update existing Q&A pairs with new answers
     if (Object.keys(newAnswers).length > 0) {
       storedQAPairs = storedQAPairs.map(pair => {
-        if (newAnswers[pair.question.id]) {
+        const answerValue = newAnswers[pair.question.id];
+        if (answerValue) {
           return {
             ...pair,
-            answer: newAnswers[pair.question.id] || null,
+            answer: String(answerValue) || null,
             answeredAt: new Date().toISOString(),
           };
         }

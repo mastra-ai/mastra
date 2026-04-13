@@ -1,4 +1,4 @@
-import z from 'zod';
+import { z } from 'zod/v4';
 
 // Path parameter schemas
 export const runIdSchema = z.object({
@@ -136,6 +136,24 @@ export const messageResponseSchema = z.object({
  */
 export const partialQuerySchema = z.object({
   partial: z.string().optional(),
+});
+
+// ============================================================================
+// Status Schemas
+// ============================================================================
+
+/**
+ * Status filter for get-by-id endpoints.
+ * Controls which version is resolved:
+ * - 'published' (default) — resolve with the active (published) version.
+ * - 'draft' — resolve with the latest version (which may be ahead of the published one).
+ */
+export const statusQuerySchema = z.object({
+  status: z
+    .enum(['draft', 'published', 'archived'])
+    .optional()
+    .default('published')
+    .describe('Which version to resolve: published (active version) or draft (latest version)'),
 });
 
 // ============================================================================

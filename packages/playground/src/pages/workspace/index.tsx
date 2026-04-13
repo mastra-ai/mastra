@@ -1,40 +1,37 @@
-import { useState, useCallback } from 'react';
 import {
-  MainContentLayout,
-  Header,
-  HeaderTitle,
-  HeaderAction,
-  Icon,
-  Button,
-  DocsIcon,
+  ButtonWithTooltip,
+  ErrorState,
+  NoDataPageLayout,
   PageHeader,
+  PageLayout,
+  PermissionDenied,
+  SessionExpired,
+  Spinner,
+  is401UnauthorizedError,
+  is403ForbiddenError,
+  toast,
+} from '@mastra/playground-ui';
+import { BookIcon, Folder, FileText, Wand2, Search, ChevronDown, Bot, Server } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { useSearchParams, useParams, useNavigate } from 'react-router';
+import { isWorkspaceNotSupportedError } from '@/domains/workspace/compatibility';
+import { AddSkillDialog, FileBrowser, FileViewer, SkillsTable } from '@/domains/workspace/components';
+import { NoWorkspacesInfo } from '@/domains/workspace/components/no-workspaces-info';
+import { SearchWorkspacePanel, SearchSkillsPanel } from '@/domains/workspace/components/search-panel';
+import { WorkspaceNotConfigured } from '@/domains/workspace/components/workspace-not-configured';
+import { WorkspaceNotSupported } from '@/domains/workspace/components/workspace-not-supported';
+import { useInstallSkill, useUpdateSkills, useRemoveSkill } from '@/domains/workspace/hooks';
+import {
   useWorkspaceInfo,
   useWorkspaces,
   useWorkspaceFiles,
-  useWorkspaceSkills,
   useSearchWorkspace,
-  useSearchWorkspaceSkills,
   useDeleteWorkspaceFile,
   useCreateWorkspaceDirectory,
-  FileBrowser,
-  FileViewer,
-  SkillsTable,
-  SearchWorkspacePanel,
-  SearchSkillsPanel,
-  WorkspaceNotConfigured,
   useWorkspaceFile,
-  isWorkspaceNotSupportedError,
-  // Skills.sh
-  AddSkillDialog,
-  useInstallSkill,
-  useUpdateSkills,
-  useRemoveSkill,
-  toast,
-  type WorkspaceItem,
-} from '@mastra/playground-ui';
-
-import { Link, useSearchParams, useParams, useNavigate } from 'react-router';
-import { Folder, FileText, Wand2, Search, ChevronDown, Bot, Server, AlertTriangle } from 'lucide-react';
+} from '@/domains/workspace/hooks/use-workspace';
+import { useWorkspaceSkills, useSearchWorkspaceSkills } from '@/domains/workspace/hooks/use-workspace-skills';
+import type { WorkspaceItem } from '@/domains/workspace/types';
 
 type TabType = 'files' | 'skills';
 
@@ -51,12 +48,11 @@ export default function Workspace() {
   const [hasUndiscoveredInstall, setHasUndiscoveredInstall] = useState(false);
 
   // Get state from URL query params (path, file, tab are still query params)
-  const pathFromUrl = searchParams.get('path') || '/';
   const fileFromUrl = searchParams.get('file');
   const tabFromUrl = searchParams.get('tab') as TabType | null;
 
   // List of all workspaces (global + agent workspaces) - used for workspace selector dropdown
-  const { data: workspacesData, error: workspacesError } = useWorkspaces();
+  const { data: workspacesData, error: workspacesError, isLoading: isLoadingWorkspaces } = useWorkspaces();
   const workspaces = workspacesData?.workspaces ?? [];
 
   // Use workspaceId from path directly if available, otherwise fall back to first workspace from list
@@ -68,6 +64,14 @@ export default function Workspace() {
     isLoading: isLoadingInfo,
     error: workspaceInfoError,
   } = useWorkspaceInfo(effectiveWorkspaceId);
+
+  // Check if 401 unauthorized (session expired)
+  const isSessionExpired = is401UnauthorizedError(workspacesError) || is401UnauthorizedError(workspaceInfoError);
+
+  // Check if 403 forbidden (permission denied)
+  const isPermissionDenied = is403ForbiddenError(workspacesError) || is403ForbiddenError(workspaceInfoError);
+
+  const pathFromUrl = searchParams.get('path') || '.';
 
   // Check if workspaces are not supported (501 error from server)
   const isWorkspaceNotSupported =
@@ -94,11 +98,12 @@ export default function Workspace() {
   // Navigate to a different workspace (changes path, resets query params)
   const setSelectedWorkspaceId = (id: string) => {
     setHasUndiscoveredInstall(false); // Reset warning when switching workspaces
-    navigate(`/workspaces/${id}`);
+    setShowSearch(false);
+    void navigate(`/workspaces/${id}`);
   };
 
   const setCurrentPath = (path: string) => {
-    updateSearchParams({ path, file: null });
+    updateSearchParams({ path: path === '.' || path === '' ? null : path, file: null });
   };
 
   const setSelectedFile = (file: string | null) => {
@@ -125,7 +130,6 @@ export default function Workspace() {
   });
   const deleteFile = useDeleteWorkspaceFile();
   const createDirectory = useCreateWorkspaceDirectory();
-  const searchWorkspace = useSearchWorkspace();
 
   // Selected file content - pass workspaceId
   const { data: fileContent, isLoading: isLoadingFileContent } = useWorkspaceFile(selectedFile ?? '', {
@@ -139,7 +143,6 @@ export default function Workspace() {
     isLoading: isLoadingSkills,
     refetch: refetchSkills,
   } = useWorkspaceSkills({ workspaceId: effectiveWorkspaceId });
-  const searchSkills = useSearchWorkspaceSkills();
 
   // Skills.sh hooks
   const installSkill = useInstallSkill();
@@ -158,9 +161,16 @@ export default function Workspace() {
   // None of these operations require sandbox - all are done via GitHub API + filesystem
   const canManageSkills = hasFilesystem && !isReadOnly;
 
+  // Derive writable mounts and mount paths for CompositeFilesystem
+  const mounts = workspaceInfo?.mounts;
+  const writableMounts = mounts
+    ?.filter(m => !m.readOnly)
+    .map(m => ({ path: m.path, displayName: m.displayName, icon: m.icon, provider: m.provider, name: m.name }));
+  const mountPaths = mounts && mounts.length > 1 ? mounts.map(m => m.path) : undefined;
+
   // Skills.sh handlers
   const handleInstallSkill = useCallback(
-    (params: { repository: string; skillName: string }) => {
+    (params: { repository: string; skillName: string; mount?: string }) => {
       if (!effectiveWorkspaceId) return;
 
       installSkill.mutate(
@@ -217,7 +227,7 @@ export default function Workspace() {
               const updated = result.updated[0];
               if (updated.success) {
                 toast.success(`Skill "${skillName}" updated successfully (${updated.filesWritten} files)`);
-                refetchSkills();
+                void refetchSkills();
               } else {
                 toast.error(`Failed to update skill: ${updated.error ?? 'Unknown error'}`);
               }
@@ -247,7 +257,7 @@ export default function Workspace() {
             setRemovingSkillName(null);
             if (result.success) {
               toast.success(`Skill "${result.skillName}" removed successfully`);
-              refetchSkills();
+              void refetchSkills();
             } else {
               toast.error(`Failed to remove skill "${result.skillName}"`);
             }
@@ -279,346 +289,317 @@ export default function Workspace() {
   const isSkillsConfigured = skillsData?.isSkillsConfigured ?? false;
   const files = filesData?.entries ?? [];
 
-  // If workspace v1 is not supported by the server's @mastra/core version
-  if (isWorkspaceNotSupported) {
+  // Whether any search functionality is actually available
+  const canSearchFiles = hasFilesystem && (canBM25 || canVector);
+  const canSearchSkills = hasSkills && isSkillsConfigured && skills.length > 0;
+  const hasSearchCapability = canSearchFiles || canSearchSkills;
+
+  // Show loading while fetching workspace list
+  if (isLoadingWorkspaces) {
     return (
-      <MainContentLayout>
-        <Header>
-          <HeaderTitle>
-            <Icon>
-              <Folder className="h-4 w-4" />
-            </Icon>
-            Workspace
-          </HeaderTitle>
-
-          <HeaderAction>
-            <Button as={Link} to="https://mastra.ai/en/docs/workspace/overview" target="_blank">
-              <Icon>
-                <DocsIcon />
-              </Icon>
-              Documentation
-            </Button>
-          </HeaderAction>
-        </Header>
-
-        <div className="grid overflow-y-auto h-full">
-          <div className="max-w-[100rem] px-[3rem] mx-auto grid content-start h-full w-full">
-            <PageHeader
-              title="Workspace"
-              description="Manage files, skills, and search your workspace"
-              icon={<Folder />}
-            />
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="flex items-center justify-center w-16 h-16 rounded-full bg-amber-500/10 mb-6">
-                <AlertTriangle className="h-8 w-8 text-amber-500" />
-              </div>
-              <h2 className="text-xl font-semibold text-icon6 mb-2">Workspace Not Supported</h2>
-              <p className="text-icon4 max-w-md mb-6">
-                The workspace feature requires a newer version of <code className="text-icon5">@mastra/core</code>.
-                Please upgrade your dependencies to enable workspace functionality.
-              </p>
-              <Button as={Link} to="https://mastra.ai/en/docs/workspace/overview" target="_blank">
-                <Icon>
-                  <DocsIcon />
-                </Icon>
-                Learn More
-              </Button>
-            </div>
-          </div>
-        </div>
-      </MainContentLayout>
+      <NoDataPageLayout title="Workspace" icon={<Folder />}>
+        <Spinner />
+      </NoDataPageLayout>
     );
   }
 
-  // If workspace is not configured, show the not configured message
-  if (!isLoadingInfo && !isWorkspaceConfigured) {
+  // If session expired (401 error)
+  if (isSessionExpired) {
     return (
-      <MainContentLayout>
-        <Header>
-          <HeaderTitle>
-            <Icon>
-              <Folder className="h-4 w-4" />
-            </Icon>
-            Workspace
-          </HeaderTitle>
+      <NoDataPageLayout title="Workspace" icon={<Folder />}>
+        <SessionExpired />
+      </NoDataPageLayout>
+    );
+  }
 
-          <HeaderAction>
-            <Button as={Link} to="https://mastra.ai/en/docs/workspace/overview" target="_blank">
-              <Icon>
-                <DocsIcon />
-              </Icon>
-              Documentation
-            </Button>
-          </HeaderAction>
-        </Header>
+  // If permission denied (403 error)
+  if (isPermissionDenied) {
+    return (
+      <NoDataPageLayout title="Workspace" icon={<Folder />}>
+        <PermissionDenied resource="workspaces" />
+      </NoDataPageLayout>
+    );
+  }
 
-        <div className="grid overflow-y-auto h-full">
-          <div className="max-w-[100rem] px-[3rem] mx-auto grid content-start h-full w-full">
-            <PageHeader
-              title="Workspace"
-              description="Manage files, skills, and search your workspace"
-              icon={<Folder />}
-            />
-            <WorkspaceNotConfigured />
-          </div>
-        </div>
-      </MainContentLayout>
+  // If workspace v1 is not supported by the server's @mastra/core version
+  if (isWorkspaceNotSupported) {
+    return (
+      <NoDataPageLayout title="Workspace" icon={<Folder />}>
+        <WorkspaceNotSupported />
+      </NoDataPageLayout>
+    );
+  }
+
+  // Surface any other backend/runtime errors from workspace or workspace info requests
+  const genericError = workspacesError || workspaceInfoError;
+  if (genericError) {
+    return (
+      <NoDataPageLayout title="Workspace" icon={<Folder />}>
+        <ErrorState title="Failed to load workspace" message={(genericError as Error).message} />
+      </NoDataPageLayout>
+    );
+  }
+
+  // If the workspace feature is configured but no workspaces exist yet, show empty state
+  if (!isLoadingWorkspaces && workspaces.length === 0) {
+    return (
+      <NoDataPageLayout title="Workspace" icon={<Folder />}>
+        <NoWorkspacesInfo />
+      </NoDataPageLayout>
+    );
+  }
+
+  // If the selected workspace is not configured, show the not configured message
+  // Also wait for workspaces list to load to avoid showing this before 403 is detected
+  if (!isLoadingInfo && !isLoadingWorkspaces && !isWorkspaceConfigured) {
+    return (
+      <NoDataPageLayout title="Workspace" icon={<Folder />}>
+        <WorkspaceNotConfigured />
+      </NoDataPageLayout>
     );
   }
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>
-          <Icon>
-            <Folder className="h-4 w-4" />
-          </Icon>
-          Workspace
-        </HeaderTitle>
-
-        <HeaderAction>
-          {(hasFilesystem || hasSkills) && (
-            <Button variant="light" onClick={() => setShowSearch(!showSearch)}>
-              <Icon>
-                <Search className="h-4 w-4" />
-              </Icon>
-              Search
-            </Button>
-          )}
-          <Button as={Link} to="https://mastra.ai/en/docs/workspace/overview" target="_blank">
-            <Icon>
-              <DocsIcon />
-            </Icon>
-            Documentation
-          </Button>
-        </HeaderAction>
-      </Header>
-
-      <div className="grid overflow-y-auto h-full">
-        <div className="max-w-[100rem] px-[3rem] mx-auto grid content-start gap-6 h-full w-full">
-          <PageHeader
-            title="Workspace"
-            description="Manage files, skills, and search your workspace"
-            icon={<Folder />}
-          />
-
-          {/* Workspace Selector - shown when multiple workspaces exist */}
-          {workspaces.length > 1 && (
-            <div className="relative">
-              <button
-                onClick={() => setShowWorkspaceDropdown(!showWorkspaceDropdown)}
-                className="flex items-center gap-2 px-3 py-2 text-sm border border-border1 rounded-lg bg-surface2 hover:bg-surface3 transition-colors w-full max-w-md"
+    <PageLayout>
+      <PageLayout.TopArea>
+        <PageLayout.Row>
+          <PageLayout.Column>
+            <PageHeader>
+              <PageHeader.Title>
+                <Folder /> Workspace
+              </PageHeader.Title>
+              <PageHeader.Description>Manage files, skills, and search your workspace</PageHeader.Description>
+            </PageHeader>
+          </PageLayout.Column>
+          <PageLayout.Column className="flex justify-end gap-2">
+            {hasSearchCapability && (
+              <ButtonWithTooltip
+                onClick={() => setShowSearch(!showSearch)}
+                tooltipContent="Search workspace"
+                aria-label="Search workspace"
               >
-                {selectedWorkspace?.source === 'agent' ? (
-                  <Bot className="h-4 w-4 text-accent1" />
-                ) : (
-                  <Server className="h-4 w-4 text-icon4" />
-                )}
-                <span className="flex-1 text-left truncate">
-                  {selectedWorkspace?.name ?? 'Select workspace'}
-                  {selectedWorkspace?.source === 'agent' && selectedWorkspace.agentName && (
-                    <span className="text-icon4 ml-1">({selectedWorkspace.agentName})</span>
-                  )}
-                </span>
-                <ChevronDown
-                  className={`h-4 w-4 text-icon4 transition-transform ${showWorkspaceDropdown ? 'rotate-180' : ''}`}
-                />
-              </button>
+                <Search />
+              </ButtonWithTooltip>
+            )}
+            <ButtonWithTooltip
+              as="a"
+              href="https://mastra.ai/en/docs/workspace/overview"
+              target="_blank"
+              rel="noopener noreferrer"
+              tooltipContent="Go to Workspaces documentation"
+              aria-label="Workspaces documentation"
+            >
+              <BookIcon />
+            </ButtonWithTooltip>
+          </PageLayout.Column>
+        </PageLayout.Row>
+      </PageLayout.TopArea>
 
-              {showWorkspaceDropdown && (
-                <div className="absolute z-50 mt-1 w-full max-w-md bg-surface2 border border-border1 rounded-lg shadow-lg overflow-hidden">
-                  {workspaces.map(workspace => (
-                    <button
-                      key={workspace.id}
-                      onClick={() => {
-                        setSelectedWorkspaceId(workspace.id);
-                        setShowWorkspaceDropdown(false);
-                      }}
-                      className={`flex items-center gap-3 px-3 py-2 w-full text-left hover:bg-surface3 transition-colors ${
-                        selectedWorkspace?.id === workspace.id ? 'bg-surface3' : ''
-                      }`}
-                    >
-                      {workspace.source === 'agent' ? (
-                        <Bot className="h-4 w-4 text-accent1 flex-shrink-0" />
-                      ) : (
-                        <Server className="h-4 w-4 text-icon4 flex-shrink-0" />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-icon6 truncate">{workspace.name}</div>
-                        <div className="text-xs text-icon4 truncate">
-                          {workspace.source === 'agent' ? `Agent: ${workspace.agentName}` : 'Global workspace'}
-                        </div>
-                      </div>
-                      <div className="flex gap-1 flex-shrink-0">
-                        {workspace.safety?.readOnly && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">
-                            Read-only
-                          </span>
-                        )}
-                        {workspace.capabilities.hasFilesystem && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-icon4">FS</span>
-                        )}
-                        {workspace.capabilities.hasSandbox && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-icon4">Sandbox</span>
-                        )}
-                        {workspace.capabilities.hasSkills && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-icon4">Skills</span>
-                        )}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Single workspace info badge - shown when only one workspace */}
-          {workspaces.length === 1 && selectedWorkspace && (
-            <div className="flex items-center gap-2 text-sm text-icon4">
-              {selectedWorkspace.source === 'agent' ? (
+      <PageLayout.MainArea className="grid content-start gap-6">
+        {/* Workspace Selector - shown when multiple workspaces exist */}
+        {workspaces.length > 1 && (
+          <div className="relative">
+            <button
+              onClick={() => setShowWorkspaceDropdown(!showWorkspaceDropdown)}
+              className="flex items-center gap-2 px-3 py-2 text-sm border border-border1 rounded-lg bg-surface2 hover:bg-surface3 transition-colors w-full max-w-md"
+            >
+              {selectedWorkspace?.source === 'agent' ? (
                 <Bot className="h-4 w-4 text-accent1" />
               ) : (
-                <Server className="h-4 w-4" />
+                <Server className="h-4 w-4 text-neutral4" />
               )}
-              <span>{selectedWorkspace.name}</span>
-              {selectedWorkspace.source === 'agent' && selectedWorkspace.agentName && (
-                <span className="text-icon3">({selectedWorkspace.agentName})</span>
-              )}
-              {isReadOnly && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">Read-only</span>
-              )}
-            </div>
-          )}
-
-          {/* Search Panel */}
-          {showSearch && (
-            <div className="border border-border1 rounded-lg p-4 bg-surface2 space-y-4">
-              {hasFilesystem && (canBM25 || canVector) && (
-                <div>
-                  <h3 className="text-sm font-medium text-icon5 mb-3 flex items-center gap-2">
-                    <FileText className="h-4 w-4" />
-                    Search Files
-                  </h3>
-                  <SearchWorkspacePanel
-                    onSearch={params => searchWorkspace.mutate({ ...params, workspaceId: effectiveWorkspaceId })}
-                    isSearching={searchWorkspace.isPending}
-                    searchResults={searchWorkspace.data}
-                    canBM25={canBM25}
-                    canVector={canVector}
-                    onViewResult={id => setSelectedFile(id)}
-                  />
-                </div>
-              )}
-
-              {hasSkills && isSkillsConfigured && skills.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-medium text-icon5 mb-3 flex items-center gap-2">
-                    <Wand2 className="h-4 w-4" />
-                    Search Skills
-                  </h3>
-                  <SearchSkillsPanel
-                    onSearch={params => searchSkills.mutate({ ...params, workspaceId: effectiveWorkspaceId })}
-                    results={searchSkills.data?.results ?? []}
-                    isSearching={searchSkills.isPending}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Tab Navigation */}
-          <div className="flex gap-2 border-b border-border1">
-            {hasFilesystem && (
-              <button
-                onClick={() => setActiveTab('files')}
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === 'files' ? 'border-accent1 text-icon6' : 'border-transparent text-icon4 hover:text-icon5'
-                }`}
-              >
-                <FileText className="h-4 w-4" />
-                Files
-              </button>
-            )}
-            {hasSkills && (
-              <button
-                onClick={() => setActiveTab('skills')}
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === 'skills'
-                    ? 'border-accent1 text-icon6'
-                    : 'border-transparent text-icon4 hover:text-icon5'
-                }`}
-              >
-                <Wand2 className="h-4 w-4" />
-                Skills
-                {isSkillsConfigured && skills.length > 0 && (
-                  <span className="text-xs px-1.5 py-0.5 rounded bg-surface4 text-icon4">{skills.length}</span>
+              <span className="flex-1 text-left truncate">
+                {selectedWorkspace?.name ?? 'Select workspace'}
+                {selectedWorkspace?.source === 'agent' && selectedWorkspace.agentName && (
+                  <span className="text-neutral4 ml-1">({selectedWorkspace.agentName})</span>
                 )}
-              </button>
-            )}
-          </div>
-
-          {/* Tab Content */}
-          <div className="pb-8">
-            {activeTab === 'files' && hasFilesystem && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <FileBrowser
-                    entries={files}
-                    currentPath={currentPath}
-                    isLoading={isLoadingFiles}
-                    error={filesError}
-                    onNavigate={setCurrentPath}
-                    onFileSelect={setSelectedFile}
-                    onRefresh={() => refetchFiles()}
-                    onCreateDirectory={
-                      isReadOnly
-                        ? undefined
-                        : path => createDirectory.mutate({ path, workspaceId: effectiveWorkspaceId })
-                    }
-                    onDelete={
-                      isReadOnly
-                        ? undefined
-                        : path =>
-                            deleteFile.mutate({ path, recursive: true, force: true, workspaceId: effectiveWorkspaceId })
-                    }
-                  />
-                  {selectedFile && (
-                    <FileViewer
-                      path={selectedFile}
-                      content={fileContent?.content ?? ''}
-                      isLoading={isLoadingFileContent}
-                      mimeType={fileContent?.mimeType}
-                      onClose={() => setSelectedFile(null)}
-                    />
-                  )}
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'skills' && hasSkills && (
-              <SkillsTable
-                skills={skills}
-                isLoading={isLoadingSkills}
-                isSkillsConfigured={isSkillsConfigured}
-                hasUndiscoveredAgentSkills={hasUndiscoveredInstall}
-                basePath={effectiveWorkspaceId ? `/workspaces/${effectiveWorkspaceId}/skills` : '/workspaces'}
-                onAddSkill={canManageSkills ? () => setShowAddSkillDialog(true) : undefined}
-                onUpdateSkill={canManageSkills ? handleUpdateSkill : undefined}
-                onRemoveSkill={canManageSkills ? handleRemoveSkill : undefined}
-                updatingSkillName={updatingSkillName ?? undefined}
-                removingSkillName={removingSkillName ?? undefined}
+              </span>
+              <ChevronDown
+                className={`h-4 w-4 text-neutral4 transition-transform ${showWorkspaceDropdown ? 'rotate-180' : ''}`}
               />
-            )}
+            </button>
 
-            {/* Show default tab if only one is available */}
-            {!hasFilesystem && !hasSkills && (
-              <div className="py-12 text-center text-icon4">
-                <p>No workspace capabilities are configured.</p>
+            {showWorkspaceDropdown && (
+              <div className="absolute z-50 mt-1 w-full max-w-md bg-surface2 border border-border1 rounded-lg shadow-lg overflow-hidden">
+                {workspaces.map(workspace => (
+                  <button
+                    key={workspace.id}
+                    onClick={() => {
+                      setSelectedWorkspaceId(workspace.id);
+                      setShowWorkspaceDropdown(false);
+                    }}
+                    className={`flex items-center gap-3 px-3 py-2 w-full text-left hover:bg-surface3 transition-colors ${
+                      selectedWorkspace?.id === workspace.id ? 'bg-surface3' : ''
+                    }`}
+                  >
+                    {workspace.source === 'agent' ? (
+                      <Bot className="h-4 w-4 text-accent1 shrink-0" />
+                    ) : (
+                      <Server className="h-4 w-4 text-neutral4 shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-neutral6 truncate">{workspace.name}</div>
+                      <div className="text-xs text-neutral4 truncate">
+                        {workspace.source === 'agent' ? `Agent: ${workspace.agentName}` : 'Global workspace'}
+                      </div>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      {workspace.safety?.readOnly && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">
+                          Read-only
+                        </span>
+                      )}
+                      {workspace.capabilities.hasFilesystem && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-neutral4">FS</span>
+                      )}
+                      {workspace.capabilities.hasSandbox && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-neutral4">Sandbox</span>
+                      )}
+                      {workspace.capabilities.hasSkills && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-neutral4">Skills</span>
+                      )}
+                    </div>
+                  </button>
+                ))}
               </div>
             )}
           </div>
+        )}
+
+        {/* Single workspace info badge - shown when only one workspace */}
+        {workspaces.length === 1 && selectedWorkspace && (
+          <div className="flex items-center gap-2 text-sm text-neutral4">
+            {selectedWorkspace.source === 'agent' ? (
+              <Bot className="h-4 w-4 text-accent1" />
+            ) : (
+              <Server className="h-4 w-4" />
+            )}
+            <span>{selectedWorkspace.name}</span>
+            {selectedWorkspace.source === 'agent' && selectedWorkspace.agentName && (
+              <span className="text-neutral3">({selectedWorkspace.agentName})</span>
+            )}
+            {isReadOnly && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">Read-only</span>
+            )}
+          </div>
+        )}
+
+        {/* Search Panel - keyed on workspace so hooks reset on switch */}
+        {showSearch && hasSearchCapability && effectiveWorkspaceId && (
+          <WorkspaceSearchPanel
+            key={effectiveWorkspaceId}
+            workspaceId={effectiveWorkspaceId}
+            canSearchFiles={canSearchFiles}
+            canSearchSkills={canSearchSkills}
+            canBM25={canBM25}
+            canVector={canVector}
+            showInitWarning={!isLoadingInfo && workspaceInfo?.status !== 'ready'}
+            onViewFileResult={id => {
+              updateSearchParams({ file: id, tab: 'files' });
+            }}
+            onViewSkillResult={(skillName, skillPath) => {
+              if (effectiveWorkspaceId) {
+                void navigate(
+                  `/workspaces/${effectiveWorkspaceId}/skills/${encodeURIComponent(skillName)}?path=${encodeURIComponent(skillPath)}`,
+                );
+              }
+            }}
+          />
+        )}
+
+        {/* Tab Navigation */}
+        <div className="flex gap-2 border-b border-border1">
+          {hasFilesystem && (
+            <button
+              onClick={() => setActiveTab('files')}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'files'
+                  ? 'border-accent1 text-neutral6'
+                  : 'border-transparent text-neutral4 hover:text-neutral5'
+              }`}
+            >
+              <FileText className="h-4 w-4" />
+              Files
+            </button>
+          )}
+          {hasSkills && (
+            <button
+              onClick={() => setActiveTab('skills')}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'skills'
+                  ? 'border-accent1 text-neutral6'
+                  : 'border-transparent text-neutral4 hover:text-neutral5'
+              }`}
+            >
+              <Wand2 className="h-4 w-4" />
+              Skills
+              {isSkillsConfigured && skills.length > 0 && (
+                <span className="text-xs px-1.5 py-0.5 rounded bg-surface4 text-neutral4">{skills.length}</span>
+              )}
+            </button>
+          )}
         </div>
-      </div>
+
+        {/* Tab Content */}
+        <div className="pb-8">
+          {activeTab === 'files' && hasFilesystem && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <FileBrowser
+                  entries={files}
+                  currentPath={currentPath}
+                  isLoading={isLoadingFiles}
+                  error={filesError}
+                  onNavigate={setCurrentPath}
+                  onFileSelect={setSelectedFile}
+                  onRefresh={() => refetchFiles()}
+                  onCreateDirectory={
+                    isReadOnly ? undefined : path => createDirectory.mutate({ path, workspaceId: effectiveWorkspaceId })
+                  }
+                  onDelete={
+                    isReadOnly
+                      ? undefined
+                      : path =>
+                          deleteFile.mutate({ path, recursive: true, force: true, workspaceId: effectiveWorkspaceId })
+                  }
+                />
+                {selectedFile && (
+                  <FileViewer
+                    path={selectedFile}
+                    content={fileContent?.content ?? ''}
+                    isLoading={isLoadingFileContent}
+                    mimeType={fileContent?.mimeType}
+                    onClose={() => setSelectedFile(null)}
+                  />
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'skills' && hasSkills && (
+            <SkillsTable
+              skills={skills}
+              isLoading={isLoadingSkills}
+              isSkillsConfigured={isSkillsConfigured}
+              hasUndiscoveredAgentSkills={hasUndiscoveredInstall}
+              basePath={effectiveWorkspaceId ? `/workspaces/${effectiveWorkspaceId}/skills` : '/workspaces'}
+              onAddSkill={canManageSkills ? () => setShowAddSkillDialog(true) : undefined}
+              onUpdateSkill={canManageSkills ? handleUpdateSkill : undefined}
+              onRemoveSkill={canManageSkills ? handleRemoveSkill : undefined}
+              updatingSkillName={updatingSkillName ?? undefined}
+              removingSkillName={removingSkillName ?? undefined}
+              mountPaths={mountPaths}
+            />
+          )}
+
+          {/* Show default tab if only one is available */}
+          {!hasFilesystem && !hasSkills && !isLoadingInfo && (
+            <div className="py-12 text-center text-neutral4">
+              <p>No workspace capabilities are configured.</p>
+            </div>
+          )}
+        </div>
+      </PageLayout.MainArea>
 
       {/* Add Skill Dialog */}
       {effectiveWorkspaceId && canManageSkills && (
@@ -634,8 +615,82 @@ export default function Workspace() {
             .map(s => `${s.skillsShSource!.owner}/${s.skillsShSource!.repo}/${s.name}`)}
           // Fallback to names for skills without source info
           installedSkillNames={skills.filter(s => !s.skillsShSource).map(s => s.name)}
+          writableMounts={writableMounts}
+          installedSkillPaths={Object.fromEntries(skills.filter(s => s.path).map(s => [s.name, s.path]))}
         />
       )}
-    </MainContentLayout>
+    </PageLayout>
+  );
+}
+
+function WorkspaceSearchPanel({
+  workspaceId,
+  canSearchFiles,
+  canSearchSkills,
+  canBM25,
+  canVector,
+  showInitWarning,
+  onViewFileResult,
+  onViewSkillResult,
+}: {
+  workspaceId: string;
+  canSearchFiles: boolean;
+  canSearchSkills: boolean;
+  canBM25: boolean;
+  canVector: boolean;
+  showInitWarning: boolean;
+  onViewFileResult: (id: string) => void;
+  onViewSkillResult: (skillName: string, skillPath: string) => void;
+}) {
+  const searchWorkspace = useSearchWorkspace();
+  const searchSkills = useSearchWorkspaceSkills();
+
+  return (
+    <div className="border border-border1 rounded-lg p-4 bg-surface2 space-y-4">
+      {canSearchFiles && (
+        <div>
+          <h3 className="text-sm font-medium text-neutral5 mb-3 flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Search Indexed Files
+          </h3>
+          {showInitWarning && (
+            <p className="text-xs text-amber-400 mb-3">
+              File search requires <code className="text-amber-300">workspace.init()</code> to index files from your
+              configured <code className="text-amber-300">autoIndexPaths</code>.
+            </p>
+          )}
+          <SearchWorkspacePanel
+            onSearch={params => searchWorkspace.mutate({ ...params, workspaceId })}
+            isSearching={searchWorkspace.isPending}
+            searchResults={
+              searchWorkspace.data
+                ? {
+                    ...searchWorkspace.data,
+                    results: searchWorkspace.data.results.filter(r => !r.id.startsWith('skill:')),
+                  }
+                : undefined
+            }
+            canBM25={canBM25}
+            canVector={canVector}
+            onViewResult={onViewFileResult}
+          />
+        </div>
+      )}
+
+      {canSearchSkills && (
+        <div>
+          <h3 className="text-sm font-medium text-neutral5 mb-3 flex items-center gap-2">
+            <Wand2 className="h-4 w-4" />
+            Search Skills
+          </h3>
+          <SearchSkillsPanel
+            onSearch={params => searchSkills.mutate({ ...params, workspaceId })}
+            results={searchSkills.data?.results ?? []}
+            isSearching={searchSkills.isPending}
+            onResultClick={result => onViewSkillResult(result.skillName, result.skillPath)}
+          />
+        </div>
+      )}
+    </div>
   );
 }

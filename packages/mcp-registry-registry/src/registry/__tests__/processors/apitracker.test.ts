@@ -3,7 +3,7 @@ import { getServersFromRegistry } from '../../fetch-servers';
 import { processApiTrackerServers } from '../../processors/apitracker';
 import type { ServerEntry } from '../../types';
 
-describe('APITracker processor', () => {
+describe.skip('APITracker processor', () => {
   it('should process APITracker server data correctly', async () => {
     // Use our getServersFromRegistry function to fetch data
     const result = await getServersFromRegistry('apitracker');

@@ -11,10 +11,18 @@ import type { WorkspacePackageInfo } from '../bundler/workspaceDependencies';
 import { validate, ValidationError } from '../validator/validate';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
-import { GLOBAL_EXTERNALS } from './analyze/constants';
+import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS } from './analyze/constants';
 import { checkConfigExport } from './babel/check-config-export';
+import { detectPinoTransports } from './babel/detect-pino-transports';
 import type { BundlerOptions, DependencyMetadata, ExternalDependencyInfo } from './types';
-import { getPackageName, isBuiltinModule, isDependencyPartOfPackage } from './utils';
+import {
+  getPackageName,
+  isBareModuleSpecifier,
+  isBuiltinModule,
+  isDependencyPartOfPackage,
+  isExternalProtocolImport,
+  slash,
+} from './utils';
 import type { BundlerPlatform } from './utils';
 
 type ErrorId =
@@ -163,11 +171,13 @@ async function validateFile(
     moduleResolveMapLocation,
     logger,
     workspaceMap,
+    stubbedExternals,
   }: {
     binaryMapData: Record<string, string[]>;
     moduleResolveMapLocation: string;
     logger: IMastraLogger;
     workspaceMap: Map<string, WorkspacePackageInfo>;
+    stubbedExternals: string[];
   },
 ) {
   try {
@@ -176,6 +186,7 @@ async function validateFile(
       await validate(join(root, file.fileName), {
         moduleResolveMapLocation,
         injectESMShim: false,
+        stubbedExternals,
       });
     }
   } catch (err) {
@@ -189,6 +200,7 @@ async function validateFile(
         await validate(join(root, file.fileName), {
           moduleResolveMapLocation,
           injectESMShim: true,
+          stubbedExternals,
         });
         errorToHandle = null;
       } catch (err) {
@@ -243,6 +255,10 @@ async function validateOutput(
   // we should resolve the version of the deps
   for (const deps of Object.values(usedExternals)) {
     for (const dep of Object.keys(deps)) {
+      if (isExternalProtocolImport(dep)) {
+        continue;
+      }
+
       const pkgName = getPackageName(dep);
       if (pkgName) {
         // Use version info from analysis if available
@@ -263,7 +279,7 @@ async function validateOutput(
       continue;
     }
 
-    logger.debug(`Validating if ${file.fileName} is a valid module.`);
+    logger.debug('Validating module', { fileName: file.fileName });
     if (file.isEntry && reverseVirtualReferenceMap.has(file.name)) {
       result.dependencies.set(reverseVirtualReferenceMap.get(file.name)!, file.fileName);
     }
@@ -274,6 +290,7 @@ async function validateOutput(
       moduleResolveMapLocation: join(outputDir, 'module-resolve-map.json'),
       logger,
       workspaceMap,
+      stubbedExternals: [...GLOBAL_EXTERNALS, ...DEPS_TO_IGNORE],
     });
   }
 
@@ -294,6 +311,7 @@ export async function analyzeBundle(
   {
     outputDir,
     projectRoot,
+    platform,
     isDev = false,
     bundlerOptions,
   }: {
@@ -301,7 +319,7 @@ export async function analyzeBundle(
     projectRoot: string;
     platform: BundlerPlatform;
     isDev?: boolean;
-    bundlerOptions?: Pick<BundlerOptions, 'externals' | 'enableSourcemap'> | null;
+    bundlerOptions?: Pick<BundlerOptions, 'externals' | 'enableSourcemap' | 'dynamicPackages'> | null;
   },
   logger: IMastraLogger,
 ) {
@@ -317,12 +335,10 @@ export async function analyzeBundle(
   });
 
   if (!mastraConfigResult.hasValidConfig) {
-    logger.warn(`Invalid Mastra config. Please make sure that your entry file looks like this:
-export const mastra = new Mastra({
-  // your options
-})
-
-If you think your configuration is valid, please open an issue.`);
+    logger.warn('Invalid Mastra config', {
+      details:
+        'Please make sure that your entry file looks like this:\nexport const mastra = new Mastra({\n  // your options\n})\n\nIf you think your configuration is valid, please open an issue.',
+    });
   }
 
   const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile: mastraEntry });
@@ -330,6 +346,7 @@ If you think your configuration is valid, please open an issue.`);
   let externalsPreset = false;
 
   const userExternals = Array.isArray(bundlerOptions?.externals) ? bundlerOptions?.externals : [];
+  const userDynamicPackages = bundlerOptions?.dynamicPackages ?? [];
   if (bundlerOptions?.externals === true) {
     externalsPreset = true;
   }
@@ -337,6 +354,9 @@ If you think your configuration is valid, please open an issue.`);
   let index = 0;
   const depsToOptimize = new Map<string, DependencyMetadata>();
   const allExternals: string[] = [...GLOBAL_EXTERNALS, ...userExternals].filter(Boolean) as string[];
+
+  // Collect pino transports detected across all entries
+  const detectedPinoTransports = new Set<string>();
 
   logger.info('Analyzing dependencies...');
 
@@ -350,6 +370,14 @@ If you think your configuration is valid, please open an issue.`);
       workspaceMap,
       projectRoot,
       shouldCheckTransitiveDependencies: isDev || externalsPreset,
+    });
+
+    // Detect pino transports in the bundled output
+    babel.transformSync(analyzeResult.output.code, {
+      filename: 'pino-detection.js',
+      plugins: [detectPinoTransports(detectedPinoTransports)],
+      configFile: false,
+      babelrc: false,
     });
 
     // Write the entry file to the output dir so that we can use it for workspace resolution stuff
@@ -395,7 +423,7 @@ If you think your configuration is valid, please open an issue.`);
 
   const sortedDeps = Array.from(depsToOptimize.keys()).sort();
   logger.info('Optimizing dependencies...');
-  logger.debug(`${sortedDeps.map(key => `- ${key}`).join('\n')}`);
+  logger.debug('Sorted dependencies', { deps: sortedDeps });
 
   const { output, fileNameToDependencyMap, usedExternals } = await bundleExternals(depsToOptimize, outputDir, {
     bundlerOptions: {
@@ -406,10 +434,14 @@ If you think your configuration is valid, please open an issue.`);
     projectRoot,
     workspaceRoot,
     workspaceMap,
+    platform,
   });
 
+  // Filesystem-relative workspace paths for filtering workspace imports from rollup output.
+  // Normalize to forward slashes so the startsWith check works on Windows where
+  // path.relative() produces backslashes but rollup uses forward slashes.
   const relativeWorkspaceFolderPaths = Array.from(workspaceMap.values()).map(pkgInfo =>
-    relative(workspaceRoot || projectRoot, pkgInfo.location),
+    slash(relative(workspaceRoot || projectRoot, pkgInfo.location)),
   );
 
   // Build a map of dependency versions from depsToOptimize for lookup
@@ -444,6 +476,10 @@ If you think your configuration is valid, please open an issue.`);
         continue;
       }
 
+      if (!isBareModuleSpecifier(i) || isExternalProtocolImport(i)) {
+        continue;
+      }
+
       // Do not include workspace packages
       if (relativeWorkspaceFolderPaths.some(workspacePath => i.startsWith(workspacePath))) {
         continue;
@@ -472,13 +508,36 @@ If you think your configuration is valid, please open an issue.`);
     logger,
   );
 
-  // Merge external dependencies from validateOutput and allUsedExternals
-  // Prefer entries with version info over entries without
+  /**
+   * Build the final set of external dependencies from four sources:
+   * 1. result.externalDependencies - externals discovered during bundle validation
+   * 2. allUsedExternals - packages detected via static analysis that matched the externals config
+   * 3. detectedPinoTransports - pino transports detected by the plugin during bundling
+   * 4. userDynamicPackages - user-specified packages loaded dynamically at runtime
+   *
+   * Prefer entries with version info over entries without
+   */
   const mergedExternalDeps = new Map<string, ExternalDependencyInfo>(result.externalDependencies);
   for (const [dep, info] of allUsedExternals) {
+    if (isExternalProtocolImport(dep)) {
+      continue;
+    }
+
     const existing = mergedExternalDeps.get(dep);
     if (!existing || (!existing.version && info.version)) {
       mergedExternalDeps.set(dep, info);
+    }
+  }
+
+  // Add pino transports and user dynamic packages (no version info needed)
+  for (const transport of detectedPinoTransports) {
+    if (!mergedExternalDeps.has(transport)) {
+      mergedExternalDeps.set(transport, {});
+    }
+  }
+  for (const pkg of userDynamicPackages) {
+    if (!mergedExternalDeps.has(pkg)) {
+      mergedExternalDeps.set(pkg, {});
     }
   }
 

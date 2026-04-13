@@ -1,32 +1,40 @@
-# Getting a Smithery GitHub MCP URL
+# Setting Up the GitHub MCP Server
 
-First, you'll need to get a Smithery GitHub MCP URL. This typically requires:
+To connect your agent to GitHub, we'll use the [official GitHub MCP server](https://github.com/github/github-mcp-server). GitHub hosts this server remotely at `https://api.githubcopilot.com/mcp/`, and authentication is done with a GitHub Personal Access Token passed in the request headers.
 
-1. Setting up a Smithery account
-2. Creating a personal access token with your GitHub account
-3. Getting your unique MCP URL via the Smithery packages
+## Creating a GitHub Personal Access Token
 
-For this example, we'll use an environment variable to store the Smithery API key and profile name which can be found in the Smithery interface.
+You'll need a GitHub Personal Access Token (PAT) to authenticate with the server.
+
+1. Go to [GitHub Settings > Developer settings > Personal access tokens > Fine-grained tokens](https://github.com/settings/personal-access-tokens/new)
+2. Give it a descriptive name (e.g., "Mastra Agent")
+3. Select the repositories you want your agent to access
+4. Under **Repository permissions**, grant at minimum:
+   - **Issues**: Read
+   - **Pull requests**: Read
+   - **Contents**: Read
+   - **Metadata**: Read (selected by default)
+5. Click **Generate token** and copy it
+
+Add the token to your `.env` file:
 
 ```bash
 # Add this to your .env file
-SMITHERY_API_KEY=your_smithery_api_key
-SMITHERY_PROFILE=your_smithery_profile_name
+GITHUB_PERSONAL_ACCESS_TOKEN=your_github_token
 ```
 
-Using an environment variable keeps your configuration secure and flexible. It also prevents sensitive information from being committed to your repository.
+Using an environment variable keeps your token secure and prevents it from being committed to your repository.
 
-We will use the Smithery packages to authenticate and create a streamable HTTP URL for the MCP server configuration
+:::note
+If you prefer to run the GitHub MCP server locally instead of using the hosted endpoint, you can use `npx` as a stdio transport:
 
-```bash
-pnpm install @smithery/sdk
+```typescript
+github: {
+  command: 'npx',
+  args: ['-y', '@modelcontextprotocol/server-github'],
+  env: { GITHUB_PERSONAL_ACCESS_TOKEN: process.env.GITHUB_PERSONAL_ACCESS_TOKEN },
+}
 ```
 
-```ts
-import { createSmitheryUrl } from '@smithery/sdk'
-
-const smitheryGithubMCPServerUrl = createSmitheryUrl('https://server.smithery.ai/@smithery-ai/github', {
-  apiKey: process.env.SMITHERY_API_KEY,
-  profile: process.env.SMITHERY_PROFILE,
-})
-```
+This does not require access to `api.githubcopilot.com` and works the same way as the hosted option.
+:::

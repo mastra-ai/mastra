@@ -41,7 +41,7 @@ export const DEFAULT_KEYS_TO_STRIP = new Set([
 ]);
 
 export interface DeepCleanOptions {
-  keysToStrip: Set<string>;
+  keysToStrip: Set<string> | string[] | Record<string, unknown>;
   maxDepth: number;
   maxStringLength: number;
   maxArrayLength: number;
@@ -87,6 +87,71 @@ export function truncateString(s: string, maxChars: number): string {
   }
 
   return s.slice(0, maxChars) + '…[truncated]';
+}
+
+export type SerializedMapEntry = [keyType: string, key: any, value: any];
+
+export interface SerializedMap {
+  __type: 'Map';
+  __map_entries: SerializedMapEntry[];
+  __truncated?: string;
+}
+
+function formatSerializationError(error: unknown): string {
+  return `[${error instanceof Error ? truncateString(error.message, 256) : 'unknown error'}]`;
+}
+
+function getMapKeyType(key: unknown): string {
+  if (key === null) {
+    return 'null';
+  }
+  if (key instanceof Date) {
+    return 'date';
+  }
+  if (Array.isArray(key)) {
+    return 'array';
+  }
+  if (key instanceof Map) {
+    return 'map';
+  }
+  if (key instanceof Set) {
+    return 'set';
+  }
+  if (key instanceof Error) {
+    return 'error';
+  }
+
+  return typeof key;
+}
+
+function restoreSerializedMapKey(keyType: string, key: any): unknown {
+  switch (keyType) {
+    case 'undefined':
+      return undefined;
+    case 'null':
+      return null;
+    case 'bigint':
+      return typeof key === 'string' && key.endsWith('n') ? BigInt(key.slice(0, -1)) : key;
+    case 'date':
+      return typeof key === 'string' ? new Date(key) : key;
+    default:
+      return key;
+  }
+}
+
+export function isSerializedMap(value: unknown): value is SerializedMap {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as SerializedMap).__type === 'Map' &&
+    Array.isArray((value as SerializedMap).__map_entries)
+  );
+}
+
+export function reconstructSerializedMap(value: SerializedMap): Map<unknown, unknown> {
+  return new Map(
+    value.__map_entries.map(([keyType, key, mapValue]) => [restoreSerializedMapKey(keyType, key), mapValue]),
+  );
 }
 
 /**
@@ -136,6 +201,21 @@ function compressJsonSchema(schema: any, depth: number = 0): any {
   // Limit recursion depth to avoid overly verbose output
   if (depth > 3) {
     return schema.type || 'object';
+  }
+
+  const compositionKeys = ['oneOf', 'anyOf', 'allOf'].filter(key => Array.isArray(schema[key]));
+  if (compositionKeys.length > 0) {
+    const compressed: Record<string, any> = {};
+
+    for (const key of compositionKeys) {
+      compressed[key] = schema[key].map((entry: any) => compressJsonSchema(entry, depth + 1));
+    }
+
+    if (typeof schema.type === 'string') {
+      compressed.type = schema.type;
+    }
+
+    return compressed;
   }
 
   if (schema.type !== 'object' || !schema.properties) {
@@ -196,7 +276,19 @@ function compressJsonSchema(schema: any, depth: number = 0): any {
 export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_CLEAN_OPTIONS): any {
   const { keysToStrip, maxDepth, maxStringLength, maxArrayLength, maxObjectKeys } = options;
 
-  const seen = new WeakSet<any>();
+  // Normalize to a Set once so lookups are always O(1).
+  // Bundlers can transform `new Set([...])` into a plain object or array,
+  // so we accept all three forms and coerce up front.
+  const stripSet =
+    keysToStrip instanceof Set
+      ? keysToStrip
+      : new Set(Array.isArray(keysToStrip) ? keysToStrip : Object.keys(keysToStrip));
+
+  // Track objects on the current ancestor path to detect true circular
+  // references (A → B → A) without false-flagging shared references
+  // (A → X, B → X).  A shared (non-circular) reference is simply
+  // serialized again in each location where it appears.
+  const ancestors = new WeakSet<any>();
 
   function helper(val: any, depth: number): any {
     if (depth > maxDepth) {
@@ -232,87 +324,227 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
       return val;
     }
 
-    // Handle Errors specially - preserve name and message
-    if (val instanceof Error) {
-      return {
-        name: val.name,
-        message: val.message ? truncateString(val.message, maxStringLength) : undefined,
-      };
-    }
-
-    // Handle circular references
+    // Handle circular references — only flag when the same object is an
+    // ancestor of the current node (true cycle), not merely seen elsewhere.
     if (typeof val === 'object') {
-      if (seen.has(val)) {
+      if (ancestors.has(val)) {
         return '[Circular]';
       }
-      seen.add(val);
+      ancestors.add(val);
     }
 
-    // Handle arrays - enforce length limit
-    if (Array.isArray(val)) {
-      const limitedArray = val.slice(0, maxArrayLength);
-      const cleaned = limitedArray.map(item => helper(item, depth + 1));
-      if (val.length > maxArrayLength) {
-        cleaned.push(`[…${val.length - maxArrayLength} more items]`);
+    try {
+      // Handle Errors specially - preserve name, message, stack, and cause.
+      // Done inside the try so the ancestor set is cleaned up in finally,
+      // which also means cycles via `cause` are caught.
+      if (val instanceof Error) {
+        let errorName: unknown;
+        let errorMessage: unknown;
+        let errorStack: unknown;
+        let rawCause: unknown;
+        let causeReadFailed = false;
+
+        try {
+          errorName = val.name;
+        } catch (error) {
+          errorName = formatSerializationError(error);
+        }
+
+        try {
+          errorMessage = val.message;
+        } catch (error) {
+          errorMessage = formatSerializationError(error);
+        }
+
+        try {
+          errorStack = val.stack;
+        } catch (error) {
+          errorStack = formatSerializationError(error);
+        }
+
+        try {
+          rawCause = (val as any).cause;
+        } catch (error) {
+          causeReadFailed = true;
+          rawCause = formatSerializationError(error);
+        }
+
+        const cleanedError: Record<string, any> = {
+          name: typeof errorName === 'string' ? truncateString(errorName, maxStringLength) : errorName,
+          message: typeof errorMessage === 'string' ? truncateString(errorMessage, maxStringLength) : errorMessage,
+        };
+        if (typeof errorStack === 'string') {
+          cleanedError.stack = truncateString(errorStack, maxStringLength);
+        } else if (errorStack !== undefined) {
+          cleanedError.stack = errorStack;
+        }
+        if (causeReadFailed) {
+          cleanedError.cause = rawCause;
+        } else if (rawCause !== undefined) {
+          try {
+            cleanedError.cause = helper(rawCause, depth + 1);
+          } catch (error) {
+            cleanedError.cause = formatSerializationError(error);
+          }
+        }
+        return cleanedError;
       }
-      return cleaned;
-    }
 
-    // Handle Buffer and typed arrays - don't serialize large binary data
-    if (typeof Buffer !== 'undefined' && Buffer.isBuffer(val)) {
-      return `[Buffer length=${val.length}]`;
-    }
+      // Handle Map - emit a tagged wrapper so key type/value identity is preserved.
+      if (val instanceof Map) {
+        const cleanedMap: SerializedMap = { __type: 'Map', __map_entries: [] };
+        let mapKeyCount = 0;
+        let omittedMapEntries = 0;
+        for (const [mapKey, mapVal] of val) {
+          if (typeof mapKey === 'string' && stripSet.has(mapKey)) {
+            continue;
+          }
 
-    if (ArrayBuffer.isView(val)) {
-      const ctor = (val as any).constructor?.name ?? 'TypedArray';
-      const byteLength = (val as any).byteLength ?? '?';
-      return `[${ctor} byteLength=${byteLength}]`;
-    }
+          if (mapKeyCount >= maxObjectKeys) {
+            omittedMapEntries++;
+            continue;
+          }
 
-    if (val instanceof ArrayBuffer) {
-      return `[ArrayBuffer byteLength=${val.byteLength}]`;
-    }
+          const mapKeyType = getMapKeyType(mapKey);
+          let cleanedMapKey: any;
+          let cleanedMapValue: any;
 
-    // Handle objects with serializeForSpan() method - use their custom trace serialization
-    if (typeof val.serializeForSpan === 'function') {
+          try {
+            cleanedMapKey = helper(mapKey, depth + 1);
+          } catch (error) {
+            cleanedMapKey = formatSerializationError(error);
+          }
+
+          try {
+            cleanedMapValue = helper(mapVal, depth + 1);
+          } catch (error) {
+            cleanedMapValue = formatSerializationError(error);
+          }
+
+          cleanedMap.__map_entries.push([mapKeyType, cleanedMapKey, cleanedMapValue]);
+          mapKeyCount++;
+        }
+        if (omittedMapEntries > 0) {
+          cleanedMap.__truncated = `${omittedMapEntries} more keys omitted`;
+        }
+        return cleanedMap;
+      }
+
+      // Handle Set - convert to an array.
+      if (val instanceof Set) {
+        const cleanedSet: any[] = [];
+        let i = 0;
+        const totalSetSize = val.size;
+        for (const item of val) {
+          if (i >= maxArrayLength) break;
+          try {
+            cleanedSet.push(helper(item, depth + 1));
+          } catch (error) {
+            cleanedSet.push(formatSerializationError(error));
+          }
+          i++;
+        }
+        if (totalSetSize > maxArrayLength) {
+          cleanedSet.push(`[…${totalSetSize - maxArrayLength} more items]`);
+        }
+        return cleanedSet;
+      }
+
+      // Handle arrays - enforce length limit
+      if (Array.isArray(val)) {
+        const cleaned = [];
+
+        for (let i = 0; i < Math.min(val.length, maxArrayLength); i++) {
+          try {
+            cleaned.push(helper(val[i], depth + 1));
+          } catch (error) {
+            cleaned.push(formatSerializationError(error));
+          }
+        }
+
+        if (val.length > maxArrayLength) {
+          cleaned.push(`[…${val.length - maxArrayLength} more items]`);
+        }
+        return cleaned;
+      }
+
+      // Handle Buffer and typed arrays - don't serialize large binary data
+      if (typeof Buffer !== 'undefined' && Buffer.isBuffer(val)) {
+        return `[Buffer length=${val.length}]`;
+      }
+
+      if (ArrayBuffer.isView(val)) {
+        const ctor = (val as any).constructor?.name ?? 'TypedArray';
+        const byteLength = (val as any).byteLength ?? '?';
+        return `[${ctor} byteLength=${byteLength}]`;
+      }
+
+      if (val instanceof ArrayBuffer) {
+        return `[ArrayBuffer byteLength=${val.byteLength}]`;
+      }
+
+      // Handle objects with serializeForSpan() method - use their custom trace serialization
+      let serializeForSpan;
       try {
-        return helper(val.serializeForSpan(), depth);
-      } catch {
-        // If serializeForSpan() fails, fall through to default object handling
-      }
-    }
-
-    // Handle JSON Schema objects - compress to a more readable format
-    // Pass the compressed result back through helper to apply size limits
-    if (isJsonSchema(val)) {
-      return helper(compressJsonSchema(val), depth);
-    }
-
-    // Handle objects - enforce key limit
-    const cleaned: Record<string, any> = {};
-    const entries = Object.entries(val);
-    let keyCount = 0;
-
-    for (const [key, v] of entries) {
-      if (keysToStrip.has(key)) {
-        continue;
-      }
-
-      if (keyCount >= maxObjectKeys) {
-        cleaned['__truncated'] = `${entries.length - keyCount} more keys omitted`;
-        break;
-      }
-
-      try {
-        cleaned[key] = helper(v, depth + 1);
-        keyCount++;
+        serializeForSpan = val.serializeForSpan;
       } catch (error) {
-        cleaned[key] = `[${error instanceof Error ? error.message : String(error)}]`;
-        keyCount++;
+        return `[serializeForSpan failed: ${error instanceof Error ? truncateString(error.message, 256) : 'unknown error'}]`;
+      }
+
+      if (typeof serializeForSpan === 'function') {
+        try {
+          return helper(serializeForSpan.call(val), depth);
+        } catch (error) {
+          return `[serializeForSpan failed: ${error instanceof Error ? truncateString(error.message, 256) : 'unknown error'}]`;
+        }
+      }
+
+      // Handle JSON Schema objects - compress to a more readable format
+      // Pass the compressed result back through helper to apply size limits
+      let looksLikeJsonSchema = false;
+      try {
+        looksLikeJsonSchema = isJsonSchema(val);
+      } catch {
+        looksLikeJsonSchema = false;
+      }
+
+      if (looksLikeJsonSchema) {
+        try {
+          const compressed = compressJsonSchema(val);
+          return compressed === val ? '[JSONSchema]' : helper(compressed, depth);
+        } catch {
+          // Fall back to guarded object traversal below.
+        }
+      }
+
+      // Handle objects - enforce key limit
+      const cleaned: Record<string, any> = {};
+      const keys = Object.keys(val).filter(key => !stripSet.has(key));
+      let keyCount = 0;
+
+      for (const key of keys) {
+        if (keyCount >= maxObjectKeys) {
+          cleaned['__truncated'] = `${keys.length - keyCount} more keys omitted`;
+          break;
+        }
+
+        try {
+          cleaned[key] = helper((val as Record<string, unknown>)[key], depth + 1);
+          keyCount++;
+        } catch (error) {
+          cleaned[key] = formatSerializationError(error);
+          keyCount++;
+        }
+      }
+
+      return cleaned;
+    } finally {
+      // Remove from ancestor set when leaving this node so parallel
+      // branches can serialize the same shared reference independently.
+      if (typeof val === 'object' && val !== null) {
+        ancestors.delete(val);
       }
     }
-
-    return cleaned;
   }
 
   return helper(value, 0);

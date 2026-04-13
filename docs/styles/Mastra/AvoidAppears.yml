@@ -1,0 +1,9 @@
+extends: substitution
+message: "Use 'opens' or 'displays' instead of '%s'."
+level: warning
+ignorecase: true
+swap:
+  appears: opens
+  will appear: will open
+  appeared: opened
+  appearing: opening

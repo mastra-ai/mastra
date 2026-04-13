@@ -1,25 +1,14 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import type { Schema, ModelMessage, ToolSet } from '@internal/ai-sdk-v5';
-import {
-  AnthropicSchemaCompatLayer,
-  applyCompatLayer,
-  DeepSeekSchemaCompatLayer,
-  GoogleSchemaCompatLayer,
-  MetaSchemaCompatLayer,
-  OpenAIReasoningSchemaCompatLayer,
-  OpenAISchemaCompatLayer,
-} from '@mastra/schema-compat';
-import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
+import type { ModelMessage, ToolSet } from '@internal/ai-sdk-v5';
 import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { loop } from '../../loop';
 import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
-import { SpanType } from '../../observability';
+import { SpanType, resolveObservabilityContext } from '../../observability';
+import { executeWithContextSync } from '../../observability/utils';
 import type { MastraModelOutput } from '../../stream/base/output';
-import type { OutputSchema } from '../../stream/base/schema';
 import type { ModelManagerModelConfig } from '../../stream/types';
 import { delay } from '../../utils';
 
@@ -59,7 +48,6 @@ export class MastraLLMVNext extends MastraBase {
         category: ErrorCategory.USER,
       });
       this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
       throw mastraError;
     } else {
       this.#models = models;
@@ -87,34 +75,6 @@ export class MastraLLMVNext extends MastraBase {
 
   getModel() {
     return this.#firstModel.model;
-  }
-
-  private _applySchemaCompat(schema: OutputSchema): Schema {
-    const model = this.#firstModel.model;
-
-    const schemaCompatLayers = [];
-
-    if (model) {
-      const modelInfo = {
-        modelId: model.modelId,
-        supportsStructuredOutputs: true,
-        provider: model.provider,
-      };
-      schemaCompatLayers.push(
-        new OpenAIReasoningSchemaCompatLayer(modelInfo),
-        new OpenAISchemaCompatLayer(modelInfo),
-        new GoogleSchemaCompatLayer(modelInfo),
-        new AnthropicSchemaCompatLayer(modelInfo),
-        new DeepSeekSchemaCompatLayer(modelInfo),
-        new MetaSchemaCompatLayer(modelInfo),
-      );
-    }
-
-    return applyCompatLayer({
-      schema: schema as any,
-      compatLayers: schemaCompatLayers,
-      mode: 'aiSdkSchema',
-    }) as unknown as Schema<ZodSchema | JSONSchema7>;
   }
 
   convertToMessages(messages: string | string[] | ModelMessage[]): ModelMessage[] {
@@ -154,7 +114,6 @@ export class MastraLLMVNext extends MastraBase {
     outputProcessors,
     returnScorerData,
     providerOptions,
-    tracingContext,
     messageList,
     requireToolApproval,
     toolCallConcurrency,
@@ -169,7 +128,12 @@ export class MastraLLMVNext extends MastraBase {
     maxProcessorRetries,
     processorStates,
     activeTools,
+    isTaskComplete,
+    onIterationComplete,
+    workspace,
+    ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
+    const observabilityContext = resolveObservabilityContext(rest);
     let stopWhenToUse;
 
     if (maxSteps && typeof maxSteps === 'number') {
@@ -181,19 +145,12 @@ export class MastraLLMVNext extends MastraBase {
     const messages = messageList.get.all.aiV5.model();
 
     const firstModel = this.#firstModel.model;
-    this.logger.debug(`[LLM] - Streaming text`, {
-      runId,
-      threadId,
-      resourceId,
-      messages,
-      tools: Object.keys(tools || {}),
-    });
 
-    const modelSpan = tracingContext?.currentSpan?.createChildSpan({
+    const modelSpan = observabilityContext.tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${firstModel.modelId}'`,
       type: SpanType.MODEL_GENERATION,
       input: {
-        messages: [...messageList.getSystemMessages(), ...messages],
+        messages: [...messageList.getAllSystemMessages(), ...messages],
       },
       attributes: {
         model: firstModel.modelId,
@@ -207,7 +164,22 @@ export class MastraLLMVNext extends MastraBase {
         resourceId,
       },
       tracingPolicy: this.#options?.tracingPolicy,
+      requestContext,
     });
+
+    if (modelSpan) {
+      executeWithContextSync({
+        span: modelSpan,
+        fn: () =>
+          this.logger.debug('Streaming text', {
+            runId,
+            threadId,
+            resourceId,
+            messages,
+            tools: Object.keys(tools || {}),
+          }),
+      });
+    }
 
     // Create model span tracker that will be shared across all LLM execution steps
     const modelSpanTracker = modelSpan?.createTracker();
@@ -220,6 +192,7 @@ export class MastraLLMVNext extends MastraBase {
         toolCallId,
         messageList,
         models: this.#models,
+        logger: this.logger,
         tools: tools as Tools,
         stopWhen: stopWhenToUse,
         toolChoice,
@@ -242,6 +215,10 @@ export class MastraLLMVNext extends MastraBase {
         maxProcessorRetries,
         processorStates,
         activeTools,
+        isTaskComplete,
+        onIterationComplete,
+        workspace,
+        ...observabilityContext,
         options: {
           ...options,
           onStepFinish: async props => {
@@ -272,7 +249,7 @@ export class MastraLLMVNext extends MastraBase {
               throw mastraError;
             }
 
-            this.logger.debug('[LLM] - Stream Step Change:', {
+            this.logger.debug('Stream step change', {
               text: props?.text,
               toolCalls: props?.toolCalls,
               toolResults: props?.toolResults,
@@ -338,7 +315,7 @@ export class MastraLLMVNext extends MastraBase {
               throw mastraError;
             }
 
-            this.logger.debug('[LLM] - Stream Finished:', {
+            this.logger.debug('Stream finished', {
               text: props?.text,
               toolCalls: props?.toolCalls,
               toolResults: props?.toolResults,
@@ -350,6 +327,7 @@ export class MastraLLMVNext extends MastraBase {
             });
           },
         },
+        maxSteps,
       };
 
       return loop(loopOptions);

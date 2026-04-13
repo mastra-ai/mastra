@@ -19,9 +19,18 @@ import { esmShim } from '../plugins/esm-shim';
 import { aliasHono } from '../plugins/hono-alias';
 import { moduleResolveMap } from '../plugins/module-resolve-map';
 import { nodeGypDetector } from '../plugins/node-gyp-detector';
+import { protocolExternalResolver } from '../plugins/protocol-external-resolver';
 import { subpathExternalsResolver } from '../plugins/subpath-externals-resolver';
+import { tsConfigPaths } from '../plugins/tsconfig-paths';
 import type { DependencyMetadata } from '../types';
-import { getCompiledDepCachePath, isDependencyPartOfPackage, rollupSafeName, slash } from '../utils';
+import {
+  getCompiledDepCachePath,
+  getNodeResolveOptions,
+  isDependencyPartOfPackage,
+  rollupSafeName,
+  slash,
+} from '../utils';
+import type { BundlerPlatform } from '../utils';
 import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS, DEPRECATED_EXTERNALS } from './constants';
 
 type VirtualDependency = {
@@ -133,12 +142,14 @@ async function getInputPlugins(
     bundlerOptions,
     rootDir,
     externals,
+    platform,
   }: {
     transpilePackages: Set<string>;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     bundlerOptions: { noBundling: boolean };
     rootDir: string;
     externals: string[];
+    platform: BundlerPlatform;
   },
 ) {
   const transpilePackagesMap = new Map<string, string>();
@@ -162,6 +173,8 @@ async function getInputPlugins(
         {} as Record<string, string>,
       ),
     ),
+    tsConfigPaths(),
+    protocolExternalResolver(),
     subpathExternalsResolver(externals),
     transpilePackagesMap.size
       ? esbuild({
@@ -226,12 +239,7 @@ async function getInputPlugins(
       transformMixedEsModules: true,
       ignoreTryCatch: false,
     }),
-    bundlerOptions.noBundling
-      ? null
-      : nodeResolve({
-          preferBuiltins: true,
-          exportConditions: ['node'],
-        }),
+    bundlerOptions.noBundling ? null : nodeResolve(getNodeResolveOptions(platform)),
     bundlerOptions.noBundling ? esmShim() : null,
     // hono is imported from deployer, so we need to resolve from here instead of the project root
     aliasHono(),
@@ -290,6 +298,7 @@ async function buildExternalDependencies(
     rootDir,
     outputDir,
     bundlerOptions,
+    platform,
   }: {
     externals: string[];
     packagesToTranspile: Set<string>;
@@ -300,6 +309,7 @@ async function buildExternalDependencies(
       isDev: boolean;
       externalsPreset: boolean;
     };
+    platform: BundlerPlatform;
   },
 ) {
   /**
@@ -319,6 +329,7 @@ async function buildExternalDependencies(
     },
     rootDir,
     externals,
+    platform,
   });
 
   const bundler = await rollup({
@@ -451,9 +462,16 @@ export async function bundleExternals(
     projectRoot?: string;
     workspaceRoot?: string;
     workspaceMap?: Map<string, WorkspacePackageInfo>;
+    platform?: BundlerPlatform;
   },
 ) {
-  const { workspaceRoot = null, workspaceMap = new Map(), projectRoot = outputDir, bundlerOptions = {} } = options;
+  const {
+    workspaceRoot = null,
+    workspaceMap = new Map(),
+    projectRoot = outputDir,
+    bundlerOptions = {},
+    platform = 'node',
+  } = options;
   const { externals: customExternals = [], transpilePackages = [], isDev = false } = bundlerOptions || {};
   /**
    * A user can set `externals: true` to indicate they want to externalize all dependencies. In this case, we set `externalsPreset` to true to skip bundling any externals.
@@ -507,6 +525,7 @@ export async function bundleExternals(
       isDev,
       externalsPreset,
     },
+    platform,
   });
 
   const moduleResolveMap = new Map<string, Map<string, string>>();

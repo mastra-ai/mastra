@@ -2,14 +2,11 @@ import * as SelectPrimitive from '@radix-ui/react-select';
 import { Check, ChevronDown } from 'lucide-react';
 import * as React from 'react';
 
-import { cn } from '@/lib/utils';
-import {
-  formElementSizes,
-  formElementFocus,
-  formElementRadius,
-  type FormElementSize,
-} from '@/ds/primitives/form-element';
+import type { ButtonProps } from '../Button';
+import { buttonVariants } from '../Button';
+import type { FormElementSize } from '@/ds/primitives/form-element';
 import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 const Select = SelectPrimitive.Root;
 
@@ -17,37 +14,26 @@ const SelectGroup = SelectPrimitive.Group;
 
 const SelectValue = SelectPrimitive.Value;
 
-const selectTriggerSizeClasses = {
-  sm: `${formElementSizes.sm} px-2 text-ui-sm`,
-  md: `${formElementSizes.md} px-3 text-ui-sm`,
-  lg: `${formElementSizes.lg} px-3 text-ui-sm`,
-};
-
 export type SelectTriggerProps = React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> & {
   size?: FormElementSize;
+  variant?: ButtonProps['variant'];
 };
 
 const SelectTrigger = React.forwardRef<React.ElementRef<typeof SelectPrimitive.Trigger>, SelectTriggerProps>(
-  ({ className, children, size = 'md', ...props }, ref) => (
-    <SelectPrimitive.Trigger
-      ref={ref}
-      className={cn(
-        'flex w-full items-center justify-between border border-border1 bg-transparent py-2 shadow-sm placeholder:text-neutral3 disabled:cursor-not-allowed disabled:opacity-50',
-        formElementRadius,
-        formElementFocus,
-        transitions.all,
-        'hover:border-neutral2',
-        selectTriggerSizeClasses[size],
-        className,
-      )}
-      {...props}
-    >
-      {children}
-      <SelectPrimitive.Icon asChild>
-        <ChevronDown className={cn('h-4 w-4 text-neutral3', transitions.colors)} />
-      </SelectPrimitive.Icon>
-    </SelectPrimitive.Trigger>
-  ),
+  ({ className, children, variant = 'inputLike', size = 'default', ...props }, ref) => {
+    return (
+      <SelectPrimitive.Trigger
+        ref={ref}
+        className={cn(buttonVariants({ variant, size }), 'justify-between [&>svg]:opacity-100', className)}
+        {...props}
+      >
+        {children}
+        <SelectPrimitive.Icon asChild>
+          <ChevronDown className={cn('h-4 w-4 text-neutral3', transitions.colors)} />
+        </SelectPrimitive.Icon>
+      </SelectPrimitive.Trigger>
+    );
+  },
 );
 SelectTrigger.displayName = SelectPrimitive.Trigger.displayName;
 
@@ -59,7 +45,7 @@ const SelectContent = React.forwardRef<
     <SelectPrimitive.Content
       ref={ref}
       className={cn(
-        'relative z-50 min-w-[8rem] max-h-dropdown-max-height overflow-y-auto overflow-x-hidden rounded-md border border-border1 bg-surface3 text-neutral5 shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
+        'relative z-50 min-w-32 max-h-dropdown-max-height overflow-y-auto overflow-x-hidden rounded-md border border-border1 bg-surface3 text-neutral5 shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
         position === 'popper' &&
           'data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1',
         className,
@@ -70,8 +56,7 @@ const SelectContent = React.forwardRef<
       <SelectPrimitive.Viewport
         className={cn(
           'p-1',
-          position === 'popper' &&
-            'h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]',
+          position === 'popper' && 'h-(--radix-select-trigger-height) w-full min-w-(--radix-select-trigger-width)',
         )}
       >
         {children}
@@ -93,7 +78,7 @@ const SelectItem = React.forwardRef<
       'hover:bg-surface5 hover:text-neutral5',
       'focus:bg-surface5 focus:text-neutral5',
       'data-[state=checked]:bg-accent1Dark data-[state=checked]:text-accent1',
-      'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      'data-disabled:pointer-events-none data-disabled:opacity-50',
       className,
     )}
     {...props}

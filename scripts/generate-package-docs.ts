@@ -375,6 +375,9 @@ function main(): void {
 try {
   main();
 } catch (error) {
-  console.error('Failed to generate package docs:', error);
-  process.exit(1);
+  if (process.env.REQUIRE_PACKAGE_DOCS) {
+    console.error('Failed to generate package docs:', error);
+    process.exit(1);
+  }
+  console.warn('Skipping package docs generation:', (error as Error).message);
 }

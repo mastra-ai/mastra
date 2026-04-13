@@ -9,6 +9,7 @@ import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
 import { PIIDetector, LanguageDetector, PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
 import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt';
+import { requestContextDemoAgent } from './request-context-demo-agent';
 
 // Export Dynamic Tools Agent
 export { dynamicToolsAgent } from './dynamic-tools-agent.js';
@@ -218,8 +219,6 @@ const answerRelevance = createAnswerRelevancyScorer({
   model: openai('gpt-4o'),
 });
 
-console.log(`answerRelevance`, answerRelevance);
-
 export const evalAgent = new Agent({
   id: 'eval-agent',
   name: 'Eval Agent',
@@ -243,3 +242,5 @@ export const evalAgent = new Agent({
     },
   },
 });
+
+export { requestContextDemoAgent };

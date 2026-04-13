@@ -1,23 +1,25 @@
-import { type ModelSettings } from './types';
-import { useMastraClient } from '@/mastra-client-context';
-import { type UIMessage } from '@ai-sdk/react';
-import { type ExtendedMastraUIMessage, type MastraUIMessage } from '../lib/ai-sdk';
-import { MastraClient } from '@mastra/client-js';
-import { type CoreUserMessage } from '@mastra/core/llm';
-import { type RequestContext } from '@mastra/core/request-context';
-import { type ChunkType, type NetworkChunkType } from '@mastra/core/stream';
-import { useRef, useState } from 'react';
-import { toUIMessage } from '@/lib/ai-sdk';
-import { AISdkNetworkTransformer } from '@/lib/ai-sdk/transformers/AISdkNetworkTransformer';
-import { resolveInitialMessages } from '@/lib/ai-sdk/memory/resolveInitialMessages';
-import { fromCoreUserMessageToUIMessage } from '@/lib/ai-sdk/utils/fromCoreUserMessageToUIMessage';
+import type { UIMessage } from '@ai-sdk/react';
 import { v4 as uuid } from '@lukeed/uuid';
-import { type TracingOptions } from '@mastra/core/observability';
+import { MastraClient } from '@mastra/client-js';
+import type { CoreUserMessage } from '@mastra/core/llm';
+import type { TracingOptions } from '@mastra/core/observability';
+import type { RequestContext } from '@mastra/core/request-context';
+import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
+import { useEffect, useRef, useState } from 'react';
+import type { ExtendedMastraUIMessage, MastraUIMessage } from '../lib/ai-sdk';
+import type { ModelSettings } from './types';
+import { toUIMessage } from '@/lib/ai-sdk';
+import { resolveInitialMessages } from '@/lib/ai-sdk/memory/resolveInitialMessages';
+import { AISdkNetworkTransformer } from '@/lib/ai-sdk/transformers/AISdkNetworkTransformer';
+import { fromCoreUserMessageToUIMessage } from '@/lib/ai-sdk/utils/fromCoreUserMessageToUIMessage';
+import { useMastraClient } from '@/mastra-client-context';
 
 export interface MastraChatProps {
   agentId: string;
   resourceId?: string;
-  initializeMessages?: () => MastraUIMessage[];
+  initialMessages?: MastraUIMessage[];
+  /** Persistent request context used for tool approval/decline calls (e.g. agentVersionId). */
+  requestContext?: RequestContext;
 }
 
 interface SharedArgs {
@@ -46,29 +48,32 @@ export type NetworkArgs = SharedArgs & {
   onNetworkChunk?: (chunk: NetworkChunkType) => Promise<void>;
 };
 
-export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatProps) => {
-  // Extract runId from any pending suspensions in initial messages
-  const extractRunIdFromMessages = (messages: ExtendedMastraUIMessage[]): string | undefined => {
-    for (const message of messages) {
-      const pendingToolApprovals = message.metadata?.pendingToolApprovals as Record<string, any> | undefined;
-      if (pendingToolApprovals && typeof pendingToolApprovals === 'object') {
-        const suspensionData = Object.values(pendingToolApprovals)[0];
-        if (suspensionData?.runId) {
-          return suspensionData.runId;
-        }
+// Extract runId from any pending suspensions in initial messages
+const extractRunIdFromMessages = (messages: ExtendedMastraUIMessage[]): string | undefined => {
+  for (const message of messages) {
+    const pendingToolApprovals = message.metadata?.pendingToolApprovals as Record<string, any> | undefined;
+    if (pendingToolApprovals && typeof pendingToolApprovals === 'object') {
+      const suspensionData = Object.values(pendingToolApprovals)[0];
+      if (suspensionData?.runId) {
+        return suspensionData.runId;
       }
     }
-    return undefined;
-  };
+  }
+  return undefined;
+};
 
-  const initialMessages = initializeMessages?.() || [];
-  const initialRunId = extractRunIdFromMessages(initialMessages);
-
-  const _currentRunId = useRef<string | undefined>(initialRunId);
+export const useChat = ({
+  agentId,
+  resourceId,
+  initialMessages,
+  requestContext: propsRequestContext,
+}: MastraChatProps) => {
+  const _currentRunId = useRef<string | undefined>(undefined);
   const _onChunk = useRef<((chunk: ChunkType) => Promise<void>) | undefined>(undefined);
   const _networkRunId = useRef<string | undefined>(undefined);
   const _onNetworkChunk = useRef<((chunk: NetworkChunkType) => Promise<void>) | undefined>(undefined);
-  const [messages, setMessages] = useState<MastraUIMessage[]>(() => resolveInitialMessages(initialMessages));
+  const _requestContext = useRef<RequestContext | undefined>(propsRequestContext);
+  const [messages, setMessages] = useState<MastraUIMessage[]>([]);
   const [toolCallApprovals, setToolCallApprovals] = useState<{
     [toolCallId: string]: { status: 'approved' | 'declined' };
   }>({});
@@ -78,6 +83,16 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
 
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
+
+  useEffect(() => {
+    const formattedMessages = resolveInitialMessages(initialMessages || []);
+    setMessages(formattedMessages);
+    _currentRunId.current = extractRunIdFromMessages(formattedMessages);
+  }, [initialMessages]);
+
+  useEffect(() => {
+    _requestContext.current = propsRequestContext;
+  }, [propsRequestContext]);
 
   const generate = async ({
     coreUserMessages,
@@ -101,6 +116,8 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
       maxSteps,
       requireToolApproval,
     } = modelSettings || {};
+    const resolvedRequestContext = requestContext ?? propsRequestContext;
+    _requestContext.current = resolvedRequestContext;
     setIsRunning(true);
 
     // Create a new client instance with the abort signal
@@ -128,7 +145,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
         topP,
       },
       instructions,
-      requestContext,
+      requestContext: resolvedRequestContext,
       ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
       providerOptions: providerOptions as any,
       tracingOptions,
@@ -167,7 +184,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
     setIsRunning(false);
 
     if (response && 'uiMessages' in response.response && response.response.uiMessages) {
-      onFinish?.(response.response.uiMessages);
+      void onFinish?.(response.response.uiMessages);
       const mastraUIMessages: MastraUIMessage[] = (response.response.uiMessages || []).map(message => ({
         ...message,
         metadata: {
@@ -202,6 +219,8 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
       requireToolApproval,
     } = modelSettings || {};
 
+    const resolvedRequestContext = requestContext ?? propsRequestContext;
+    _requestContext.current = resolvedRequestContext;
     setIsRunning(true);
 
     // Create a new client instance with the abort signal
@@ -228,7 +247,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
         topP,
       },
       instructions,
-      requestContext,
+      requestContext: resolvedRequestContext,
       ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
       providerOptions: providerOptions as any,
       requireToolApproval,
@@ -244,7 +263,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
 
         setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
 
-        onChunk?.(chunk);
+        void onChunk?.(chunk);
       },
     });
 
@@ -263,6 +282,8 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
     const { frequencyPenalty, presencePenalty, maxRetries, maxTokens, temperature, topK, topP, maxSteps } =
       modelSettings || {};
 
+    const resolvedRequestContext = requestContext ?? propsRequestContext;
+    _requestContext.current = resolvedRequestContext;
     setIsRunning(true);
 
     // Create a new client instance with the abort signal
@@ -288,7 +309,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
         topP,
       },
       runId,
-      requestContext,
+      requestContext: resolvedRequestContext,
       ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
       tracingOptions,
     });
@@ -301,7 +322,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
     await response.processDataStream({
       onChunk: async (chunk: NetworkChunkType) => {
         setMessages(prev => transformer.transform({ chunk, conversation: prev, metadata: { mode: 'network' } }));
-        onNetworkChunk?.(chunk);
+        void onNetworkChunk?.(chunk);
       },
     });
 
@@ -314,6 +335,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
     _onChunk.current = undefined;
     _networkRunId.current = undefined;
     _onNetworkChunk.current = undefined;
+    _requestContext.current = undefined;
   };
 
   const approveToolCall = async (toolCallId: string) => {
@@ -327,7 +349,11 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
 
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.approveToolCall({ runId: currentRunId, toolCallId });
+    const response = await agent.approveToolCall({
+      runId: currentRunId,
+      toolCallId,
+      requestContext: _requestContext.current,
+    });
 
     await response.processDataStream({
       onChunk: async (chunk: ChunkType) => {
@@ -335,7 +361,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
 
         setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
 
-        onChunk?.(chunk);
+        void onChunk?.(chunk);
       },
     });
     setIsRunning(false);
@@ -351,7 +377,11 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'declined' } }));
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.declineToolCall({ runId: currentRunId, toolCallId });
+    const response = await agent.declineToolCall({
+      runId: currentRunId,
+      toolCallId,
+      requestContext: _requestContext.current,
+    });
 
     await response.processDataStream({
       onChunk: async (chunk: ChunkType) => {
@@ -359,7 +389,7 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
 
         setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
 
-        onChunk?.(chunk);
+        void onChunk?.(chunk);
       },
     });
     setIsRunning(false);
@@ -377,7 +407,11 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
 
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.approveToolCallGenerate({ runId: currentRunId, toolCallId });
+    const response = await agent.approveToolCallGenerate({
+      runId: currentRunId,
+      toolCallId,
+      requestContext: _requestContext.current,
+    });
 
     if (response && 'uiMessages' in response.response && response.response.uiMessages) {
       const mastraUIMessages: MastraUIMessage[] = (response.response.uiMessages || []).map((message: any) => ({
@@ -405,7 +439,11 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'declined' } }));
 
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.declineToolCallGenerate({ runId: currentRunId, toolCallId });
+    const response = await agent.declineToolCallGenerate({
+      runId: currentRunId,
+      toolCallId,
+      requestContext: _requestContext.current,
+    });
 
     if (response && 'uiMessages' in response.response && response.response.uiMessages) {
       const mastraUIMessages: MastraUIMessage[] = (response.response.uiMessages || []).map((message: any) => ({
@@ -437,14 +475,17 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
     }));
 
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.approveNetworkToolCall({ runId: networkRunId });
+    const response = await agent.approveNetworkToolCall({
+      runId: networkRunId,
+      requestContext: _requestContext.current,
+    });
 
     const transformer = new AISdkNetworkTransformer();
 
     await response.processDataStream({
       onChunk: async (chunk: NetworkChunkType) => {
         setMessages(prev => transformer.transform({ chunk, conversation: prev, metadata: { mode: 'network' } }));
-        onNetworkChunk?.(chunk);
+        void onNetworkChunk?.(chunk);
       },
     });
 
@@ -467,14 +508,17 @@ export const useChat = ({ agentId, resourceId, initializeMessages }: MastraChatP
     }));
 
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.declineNetworkToolCall({ runId: networkRunId });
+    const response = await agent.declineNetworkToolCall({
+      runId: networkRunId,
+      requestContext: _requestContext.current,
+    });
 
     const transformer = new AISdkNetworkTransformer();
 
     await response.processDataStream({
       onChunk: async (chunk: NetworkChunkType) => {
         setMessages(prev => transformer.transform({ chunk, conversation: prev, metadata: { mode: 'network' } }));
-        onNetworkChunk?.(chunk);
+        void onNetworkChunk?.(chunk);
       },
     });
 

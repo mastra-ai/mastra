@@ -7,8 +7,10 @@ import type {
   ModelGenerationAttributes,
   ObservabilityInstance,
   ExportedSpan,
+  LogEvent,
+  MetricEvent,
 } from '@mastra/core/observability';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
 
 // Custom matchers for OpenTelemetry ID validation
@@ -70,21 +72,41 @@ const mockConsole = {
 
 vi.stubGlobal('console', mockConsole);
 
+afterAll(() => {
+  vi.unstubAllGlobals();
+});
+
 // Test exporter for capturing events
 class TestExporter implements ObservabilityExporter {
   name = 'test-exporter';
   events: TracingEvent[] = [];
+  logEvents: LogEvent[] = [];
+  metricEvents: MetricEvent[] = [];
 
   async exportTracingEvent(event: TracingEvent): Promise<void> {
     this.events.push(event);
+  }
+
+  async onLogEvent(event: LogEvent): Promise<void> {
+    this.logEvents.push(event);
+  }
+
+  async onMetricEvent(event: MetricEvent): Promise<void> {
+    this.metricEvents.push(event);
   }
 
   async shutdown(): Promise<void> {
     // no-op
   }
 
+  async flush(): Promise<void> {
+    // no-op
+  }
+
   reset(): void {
     this.events = [];
+    this.logEvents = [];
+    this.metricEvents = [];
   }
 }
 
@@ -519,8 +541,8 @@ describe('Tracing', () => {
         attributes: {},
       });
 
-      // Wait for async export to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      // Wait for fire-and-forget async export to complete
+      await Promise.resolve();
 
       // Should continue with other exporters despite failure
       expect(testExporter.events).toHaveLength(1);
@@ -531,6 +553,7 @@ describe('Tracing', () => {
       const mockExporter = {
         name: 'mock-exporter',
         exportTracingEvent: vi.fn(),
+        flush: vi.fn().mockResolvedValue(undefined),
         shutdown: vi.fn().mockResolvedValue(undefined),
       };
 
@@ -1359,6 +1382,153 @@ describe('Tracing', () => {
       expect(endedEvent.exportedSpan.tags).toEqual(['batch-processing', 'priority-high']);
     });
 
+    it('should include root tags in correlation context for root and child spans', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: 'root-workflow',
+        attributes: { workflowId: 'wf-123' },
+        tracingOptions: {
+          tags: ['batch-processing', 'priority-high'],
+        },
+      });
+
+      const childSpan = rootSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'child-tool',
+        attributes: { toolId: 'tool-1' },
+      });
+
+      expect(rootSpan.getCorrelationContext().tags).toEqual(['batch-processing', 'priority-high']);
+      expect(childSpan.getCorrelationContext().tags).toEqual(['batch-processing', 'priority-high']);
+
+      childSpan.end();
+      rootSpan.end();
+    });
+
+    it('getLoggerContext should emit logs with span correlation and root tags in correlationContext', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: 'root-workflow',
+        attributes: { workflowId: 'wf-123' },
+        tracingOptions: {
+          tags: ['batch-processing', 'priority-high'],
+        },
+      });
+
+      const childSpan = rootSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'child-tool',
+        attributes: { toolId: 'tool-1' },
+      });
+
+      observability.getLoggerContext(childSpan).info('tool running', { attempt: 1 });
+
+      expect(testExporter.logEvents).toHaveLength(1);
+      expect(testExporter.logEvents[0]!.log).toMatchObject({
+        traceId: childSpan.traceId,
+        spanId: childSpan.id,
+        message: 'tool running',
+        data: { attempt: 1 },
+        correlationContext: {
+          entityName: childSpan.entityName,
+          tags: ['batch-processing', 'priority-high'],
+        },
+      });
+
+      childSpan.end();
+      rootSpan.end();
+    });
+
+    it('getLoggerContext should respect logging.level config', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+        logging: { level: 'warn' },
+      });
+
+      const loggerCtx = observability.getLoggerContext();
+      loggerCtx.debug('should be filtered');
+      loggerCtx.info('should be filtered');
+      loggerCtx.warn('should pass');
+      loggerCtx.error('should pass');
+
+      expect(testExporter.logEvents).toHaveLength(2);
+      expect(testExporter.logEvents.map(e => e.log.level)).toEqual(['warn', 'error']);
+    });
+
+    it('getLoggerContext should return noOp when logging.enabled is false', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+        logging: { enabled: false },
+      });
+
+      const loggerCtx = observability.getLoggerContext();
+      loggerCtx.debug('should not emit');
+      loggerCtx.info('should not emit');
+      loggerCtx.warn('should not emit');
+      loggerCtx.error('should not emit');
+
+      expect(testExporter.logEvents).toHaveLength(0);
+    });
+
+    it('getMetricsContext should emit user metrics with correlationContext only', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'agent-run',
+        attributes: { agentId: 'agent-1' },
+      });
+
+      const modelSpan = rootSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'llm-call',
+        attributes: {
+          model: 'gpt-4o-mini',
+          provider: 'openai',
+        } satisfies Partial<ModelGenerationAttributes>,
+      });
+
+      observability.getMetricsContext(modelSpan).emit('user_metric', 1, { status: 'ok' });
+
+      expect(testExporter.metricEvents).toHaveLength(1);
+      expect(testExporter.metricEvents[0]!.metric).toMatchObject({
+        traceId: modelSpan.traceId,
+        spanId: modelSpan.id,
+        name: 'user_metric',
+        value: 1,
+        labels: { status: 'ok' },
+        correlationContext: {
+          entityName: modelSpan.entityName,
+        },
+      });
+      expect(testExporter.metricEvents[0]!.metric.costContext).toBeUndefined();
+      expect(testExporter.metricEvents[0]!.metric.labels.provider).toBeUndefined();
+      expect(testExporter.metricEvents[0]!.metric.labels.model).toBeUndefined();
+
+      modelSpan.end();
+      rootSpan.end();
+    });
+
     it('should not include tags in exported child spans', () => {
       const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',
@@ -1695,8 +1865,11 @@ describe('Tracing', () => {
         },
       });
 
-      // This child should NOT have extracted metadata
-      expect(childSpanNoContext.metadata).toBeUndefined();
+      // This child should inherit metadata from parent (even without requestContext)
+      expect(childSpanNoContext.metadata).toEqual({
+        userId: 'user-123',
+        sessionId: 'session-456',
+      });
       expect(childSpanNoContext.traceState).toEqual(rootSpan.traceState);
 
       rootSpan.end();
@@ -1782,6 +1955,180 @@ describe('Tracing', () => {
       // Should only include userId
       expect(span.metadata).toEqual({
         userId: 'user-123',
+      });
+
+      span.end();
+    });
+  });
+
+  describe('RequestContext Snapshot on Spans', () => {
+    it('should store serialized requestContext on root span', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+      requestContext.set('tenantId', 'tenant-456');
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {},
+        requestContext,
+      });
+
+      expect(span.requestContext).toEqual({
+        userId: 'user-123',
+        tenantId: 'tenant-456',
+      });
+
+      span.end();
+    });
+
+    it('should include requestContext in exported span', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {},
+        requestContext,
+      });
+
+      const exported = span.exportSpan();
+      expect(exported?.requestContext).toEqual({
+        userId: 'user-123',
+      });
+
+      span.end();
+    });
+
+    it('should store requestContext on child spans when passed', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {},
+        requestContext,
+      });
+
+      // Mutate requestContext before creating child
+      requestContext.set('stepData', 'step-specific');
+
+      const childSpan = rootSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'tool-call',
+        attributes: {},
+        requestContext,
+      });
+
+      // Child should capture the mutated state
+      expect(childSpan.requestContext).toEqual({
+        userId: 'user-123',
+        stepData: 'step-specific',
+      });
+
+      // Root should still have the original snapshot
+      expect(rootSpan.requestContext).toEqual({
+        userId: 'user-123',
+      });
+
+      rootSpan.end();
+    });
+
+    it('should not include requestContext on child spans when not passed', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {},
+        requestContext,
+      });
+
+      const childSpan = rootSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'llm-call',
+        attributes: {},
+        // No requestContext passed
+      });
+
+      expect(childSpan.requestContext).toBeUndefined();
+
+      rootSpan.end();
+    });
+
+    it('should not include requestContext when empty', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const requestContext = new RequestContext();
+      // Empty requestContext
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {},
+        requestContext,
+      });
+
+      expect(span.requestContext).toBeUndefined();
+
+      span.end();
+    });
+
+    it('should filter non-serializable values from requestContext', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+      requestContext.set('callback', () => {});
+      requestContext.set('nested', { data: 'value' });
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {},
+        requestContext,
+      });
+
+      // Functions should be replaced with '[Function]' by deepClean
+      expect(span.requestContext).toEqual({
+        userId: 'user-123',
+        callback: '[Function]',
+        nested: { data: 'value' },
       });
 
       span.end();

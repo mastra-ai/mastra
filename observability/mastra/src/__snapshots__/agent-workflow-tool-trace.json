@@ -24,7 +24,8 @@
         "entityType": "agent",
         "entityId": "workflow-agent",
         "attributes": {
-          "instructions": "You can execute workflows using the workflow executor tool"
+          "instructions": "You can execute workflows using the workflow executor tool",
+          "availableTools": ["workflowExecutor"]
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -33,7 +34,9 @@
         },
         "input": "Execute the simpleWorkflow with test input",
         "output": {
-          "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+          "text": {
+            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+          },
           "files": []
         }
       },
@@ -63,11 +66,19 @@
               "completionStartTime": "<date>",
               "usage": {
                 "inputTokens": 30,
-                "outputTokens": 35
+                "outputTokens": 35,
+                "inputDetails": {
+                  "text": 30
+                },
+                "outputDetails": {
+                  "text": 35
+                }
               }
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "id1": 123,
+              "id2": "tacos"
             },
             "input": {
               "messages": [
@@ -90,7 +101,9 @@
               "files": [],
               "reasoning": [],
               "sources": [],
-              "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+              "text": {
+                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+              },
               "warnings": []
             }
           },
@@ -112,12 +125,21 @@
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 15,
-                    "outputTokens": 10
+                    "outputTokens": 10,
+                    "inputDetails": {
+                      "text": 15
+                    },
+                    "outputDetails": {
+                      "text": 10
+                    }
                   },
                   "isContinued": true,
                   "finishReason": "tool-calls"
                 },
                 "metadata": {
+                  "runId": "<runId-1>",
+                  "id1": 123,
+                  "id2": "tacos",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -158,6 +180,11 @@
                       "chunkType": "tool-call",
                       "sequenceNumber": 0
                     },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "id1": 123,
+                      "id2": "tacos"
+                    },
                     "output": {
                       "toolName": "workflowExecutor",
                       "toolCallId": "call-workflow-1",
@@ -186,6 +213,11 @@
                       "toolDescription": "Executes a workflow",
                       "toolType": "tool",
                       "success": true
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "id1": 123,
+                      "id2": "tacos"
                     },
                     "input": {
                       "workflowId": "simpleWorkflow",
@@ -216,7 +248,9 @@
                           "status": "success"
                         },
                         "metadata": {
-                          "runId": "<runId-2>"
+                          "runId": "<runId-2>",
+                          "id1": 123,
+                          "id2": "tacos"
                         },
                         "input": {
                           "input": "test input"
@@ -240,6 +274,11 @@
                             "entityId": "simple-step",
                             "attributes": {
                               "status": "success"
+                            },
+                            "metadata": {
+                              "runId": "<runId-2>",
+                              "id1": 123,
+                              "id2": "tacos"
                             },
                             "input": {
                               "input": "test input"
@@ -270,6 +309,9 @@
                       "sequenceNumber": 1
                     },
                     "metadata": {
+                      "runId": "<runId-1>",
+                      "id1": 123,
+                      "id2": "tacos",
                       "toolCallId": "call-workflow-1",
                       "toolName": "workflowExecutor"
                     },
@@ -299,12 +341,21 @@
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 15,
-                    "outputTokens": 25
+                    "outputTokens": 25,
+                    "inputDetails": {
+                      "text": 15
+                    },
+                    "outputDetails": {
+                      "text": 25
+                    }
                   },
                   "isContinued": false,
                   "finishReason": "stop"
                 },
                 "metadata": {
+                  "runId": "<runId-1>",
+                  "id1": 123,
+                  "id2": "tacos",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -313,7 +364,9 @@
                 },
                 "input": {},
                 "output": {
-                  "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+                  "text": {
+                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                  },
                   "toolCalls": []
                 }
               },
@@ -334,8 +387,15 @@
                       "chunkType": "text",
                       "sequenceNumber": 0
                     },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "id1": 123,
+                      "id2": "tacos"
+                    },
                     "output": {
-                      "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] }
+                      "text": {
+                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                      }
                     }
                   }
                 }

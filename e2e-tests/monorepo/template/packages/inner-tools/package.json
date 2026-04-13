@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "type": "module",
-  "main": "src/index.mjs",
+  "main": "src/index.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -13,7 +13,7 @@
   "dependencies": {
     "@mastra/core": "monorepo-test",
     "@inner/lodash": "workspace:*",
-    "bcrypt": "^6.0.0",
-    "@inner/native-binding-package": "workspace:*"
+    "@inner/native-binding-package": "workspace:*",
+    "bcrypt": "^6.0.0"
   }
 }

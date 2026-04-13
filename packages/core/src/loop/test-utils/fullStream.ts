@@ -8,10 +8,18 @@ import {
 } from '@internal/ai-sdk-v5/test';
 import { convertArrayToReadableStream as convertArrayToReadableStreamV3 } from '@internal/ai-v6/test';
 import { describe, expect, it, vi } from 'vitest';
-import z from 'zod';
+import { z } from 'zod/v4';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
-import { createMessageListWithUserMessage, defaultSettings, mockDate, testUsage, testUsage2 } from './utils';
+import {
+  createMessageListWithUserMessage,
+  defaultSettings,
+  expectPromptWithoutMastraCreatedAt,
+  mockDate,
+  stripMastraCreatedAt,
+  testUsage,
+  testUsage2,
+} from './utils';
 import { testUsageV3, testUsageV3_2 } from './utils-v3';
 import { MastraLanguageModelV2Mock } from './MastraLanguageModelV2Mock';
 import { MastraLanguageModelV3Mock } from './MastraLanguageModelV3Mock';
@@ -83,7 +91,7 @@ export function fullStreamTests({
             id: 'test-model',
             model: new MockModel({
               doStream: async ({ prompt }: { prompt: unknown }) => {
-                expect(prompt).toStrictEqual([
+                expectPromptWithoutMastraCreatedAt(prompt, [
                   {
                     role: 'user',
                     content: [{ type: 'text', text: 'test-input' }],
@@ -129,7 +137,7 @@ export function fullStreamTests({
       });
 
       const data = await convertAsyncIterableToArray(result.fullStream);
-      expect(data).toMatchSnapshot();
+      expect(stripMastraCreatedAt(data)).toMatchSnapshot();
     });
 
     it('should send text deltas', async () => {
@@ -144,7 +152,7 @@ export function fullStreamTests({
             id: 'test-model',
             model: new MockModel({
               doStream: async ({ prompt }: { prompt: unknown }) => {
-                expect(prompt).toStrictEqual([
+                expectPromptWithoutMastraCreatedAt(prompt, [
                   {
                     role: 'user',
                     content: [{ type: 'text', text: 'test-input' }],
@@ -183,7 +191,7 @@ export function fullStreamTests({
       });
 
       const data = await convertAsyncIterableToArray(result.fullStream);
-      expect(data).toMatchSnapshot();
+      expect(stripMastraCreatedAt(data)).toMatchSnapshot();
     });
 
     it('should send reasoning deltas', async () => {
@@ -263,7 +271,7 @@ export function fullStreamTests({
         ...defaultSettings(),
       });
 
-      expect(await convertAsyncIterableToArray(result.fullStream)).toMatchSnapshot();
+      expect(stripMastraCreatedAt(await convertAsyncIterableToArray(result.fullStream))).toMatchSnapshot();
     });
 
     // https://github.com/mastra-ai/mastra/issues/9005
@@ -359,7 +367,7 @@ export function fullStreamTests({
         ...defaultSettings(),
       });
 
-      expect(await convertAsyncIterableToArray(result.fullStream)).toMatchSnapshot();
+      expect(stripMastraCreatedAt(await convertAsyncIterableToArray(result.fullStream))).toMatchSnapshot();
     });
 
     it('should send files', async () => {
@@ -393,7 +401,7 @@ export function fullStreamTests({
 
       const converted = await convertAsyncIterableToArray(result.fullStream);
 
-      expect(converted).toMatchSnapshot();
+      expect(stripMastraCreatedAt(converted)).toMatchSnapshot();
     });
 
     it('should use fallback response metadata when response metadata is not provided', async () => {
@@ -410,7 +418,7 @@ export function fullStreamTests({
             id: 'test-model',
             model: new MockModel({
               doStream: async ({ prompt }: { prompt: unknown }) => {
-                expect(prompt).toStrictEqual([
+                expectPromptWithoutMastraCreatedAt(prompt, [
                   {
                     role: 'user',
                     content: [{ type: 'text', text: 'test-input' }],
@@ -442,7 +450,7 @@ export function fullStreamTests({
         },
       });
 
-      expect(await convertAsyncIterableToArray(result.fullStream)).toMatchSnapshot();
+      expect(stripMastraCreatedAt(await convertAsyncIterableToArray(result.fullStream))).toMatchSnapshot();
     });
 
     it('should send tool calls', async () => {
@@ -485,7 +493,7 @@ export function fullStreamTests({
 
                 expect(toolChoice).toStrictEqual({ type: 'required' });
 
-                expect(prompt).toStrictEqual([
+                expectPromptWithoutMastraCreatedAt(prompt, [
                   {
                     role: 'user',
                     content: [{ type: 'text', text: 'test-input' }],
@@ -534,7 +542,7 @@ export function fullStreamTests({
         },
       });
 
-      expect(await convertAsyncIterableToArray(result.fullStream)).toMatchSnapshot();
+      expect(stripMastraCreatedAt(await convertAsyncIterableToArray(result.fullStream))).toMatchSnapshot();
     });
 
     it('should send tool call deltas', async () => {
@@ -631,12 +639,13 @@ export function fullStreamTests({
 
       const fullStream = await convertAsyncIterableToArray(result.fullStream);
 
-      expect(fullStream).toMatchSnapshot();
+      expect(stripMastraCreatedAt(fullStream)).toMatchSnapshot();
     });
 
     it('should send tool results', async () => {
       const messageList = createMessageListWithUserMessage();
 
+      let toolResultCallCount = 0;
       const result = loopFn({
         methodType: 'stream',
         runId,
@@ -646,27 +655,50 @@ export function fullStreamTests({
             id: 'test-model',
             maxRetries: 0,
             model: new MockModel({
-              doStream: async () => ({
-                stream: convertArrayToReadableStream([
-                  {
-                    type: 'response-metadata',
-                    id: 'id-0',
-                    modelId: 'mock-model-id',
-                    timestamp: new Date(0),
-                  },
-                  {
-                    type: 'tool-call',
-                    toolCallId: 'call-1',
-                    toolName: 'tool1',
-                    input: `{ "value": "value" }`,
-                  },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: testUsageForVersion,
-                  },
-                ] as any),
-              }),
+              doStream: async () => {
+                toolResultCallCount++;
+                if (toolResultCallCount === 1) {
+                  return {
+                    stream: convertArrayToReadableStream([
+                      {
+                        type: 'response-metadata',
+                        id: 'id-0',
+                        modelId: 'mock-model-id',
+                        timestamp: new Date(0),
+                      },
+                      {
+                        type: 'tool-call',
+                        toolCallId: 'call-1',
+                        toolName: 'tool1',
+                        input: `{ "value": "value" }`,
+                      },
+                      {
+                        type: 'finish',
+                        finishReason: 'stop',
+                        usage: testUsageForVersion,
+                      },
+                    ] as any),
+                  };
+                }
+                return {
+                  stream: convertArrayToReadableStream([
+                    {
+                      type: 'response-metadata',
+                      id: 'id-0',
+                      modelId: 'mock-model-id',
+                      timestamp: new Date(0),
+                    },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Done' },
+                    { type: 'text-end', id: 'text-1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: testUsageForVersion,
+                    },
+                  ] as any),
+                };
+              },
             } as any),
           },
         ],
@@ -677,7 +709,7 @@ export function fullStreamTests({
               // console.info('TOOL 1', inputData, options);
 
               expect(inputData).toStrictEqual({ value: 'value' });
-              expect(options.messages).toStrictEqual([
+              expectPromptWithoutMastraCreatedAt(options.messages, [
                 { role: 'user', content: [{ type: 'text', text: 'test-input' }] },
               ]);
               return `${inputData.value}-result`;
@@ -692,13 +724,14 @@ export function fullStreamTests({
 
       const fullStream = await convertAsyncIterableToArray(result.fullStream);
 
-      expect(fullStream).toMatchSnapshot();
+      expect(stripMastraCreatedAt(fullStream)).toMatchSnapshot();
     });
 
     it('should send delayed asynchronous tool results', async () => {
       vi.useRealTimers();
       const messageList = createMessageListWithUserMessage();
 
+      let delayedCallCount = 0;
       const result = loopFn({
         methodType: 'stream',
         runId,
@@ -708,27 +741,50 @@ export function fullStreamTests({
             id: 'test-model',
             maxRetries: 0,
             model: new MockModel({
-              doStream: async () => ({
-                stream: convertArrayToReadableStream([
-                  {
-                    type: 'response-metadata',
-                    id: 'id-0',
-                    modelId: 'mock-model-id',
-                    timestamp: new Date(0),
-                  },
-                  {
-                    type: 'tool-call',
-                    toolCallId: 'call-1',
-                    toolName: 'tool1',
-                    input: `{ "value": "value" }`,
-                  },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: testUsageForVersion,
-                  },
-                ] as any),
-              }),
+              doStream: async () => {
+                delayedCallCount++;
+                if (delayedCallCount === 1) {
+                  return {
+                    stream: convertArrayToReadableStream([
+                      {
+                        type: 'response-metadata',
+                        id: 'id-0',
+                        modelId: 'mock-model-id',
+                        timestamp: new Date(0),
+                      },
+                      {
+                        type: 'tool-call',
+                        toolCallId: 'call-1',
+                        toolName: 'tool1',
+                        input: `{ "value": "value" }`,
+                      },
+                      {
+                        type: 'finish',
+                        finishReason: 'stop',
+                        usage: testUsageForVersion,
+                      },
+                    ] as any),
+                  };
+                }
+                return {
+                  stream: convertArrayToReadableStream([
+                    {
+                      type: 'response-metadata',
+                      id: 'id-0',
+                      modelId: 'mock-model-id',
+                      timestamp: new Date(0),
+                    },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Done' },
+                    { type: 'text-end', id: 'text-1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: testUsageForVersion,
+                    },
+                  ] as any),
+                };
+              },
             } as any),
           },
         ],
@@ -749,7 +805,7 @@ export function fullStreamTests({
 
       const fullStream = await convertAsyncIterableToArray(result.fullStream);
 
-      expect(fullStream).toMatchSnapshot();
+      expect(stripMastraCreatedAt(fullStream)).toMatchSnapshot();
       vi.useFakeTimers();
       vi.setSystemTime(mockDate);
     });
@@ -801,7 +857,7 @@ export function fullStreamTests({
 
       const fullStream = await convertAsyncIterableToArray(result.fullStream);
 
-      expect(fullStream).toMatchSnapshot();
+      expect(stripMastraCreatedAt(fullStream)).toMatchSnapshot();
     });
   });
 }

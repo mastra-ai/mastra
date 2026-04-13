@@ -24,10 +24,16 @@ import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import type {
+  AgentInstructionBlock,
   PaginationInfo,
   WorkflowRuns,
   StorageListMessagesInput,
   ObservationalMemoryRecord,
+  Rule,
+  RuleGroup,
+  StorageConditionalVariant,
+  StorageConditionalField,
+  StoredProcessorGraph,
 } from '@mastra/core/storage';
 
 import type { QueryResult } from '@mastra/core/vector';
@@ -38,9 +44,13 @@ import type {
   WorkflowRunStatus,
   WorkflowState,
 } from '@mastra/core/workflows';
+import type { PublicSchema } from '@mastra/schema-compat/schema';
 
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
+import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
+import type { ZodType as ZodTypeV4 } from 'zod/v4';
+
+export type ZodSchema = ZodSchemaV3 | ZodTypeV4;
 
 export interface ClientOptions {
   /** Base URL for API requests */
@@ -63,6 +73,8 @@ export interface ClientOptions {
   fetch?: typeof fetch;
 }
 
+export type AgentVersionIdentifier = { versionId: string } | { status: 'draft' | 'published' };
+
 export interface RequestOptions {
   method?: string;
   headers?: Record<string, string>;
@@ -71,6 +83,264 @@ export interface RequestOptions {
   /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
   credentials?: 'omit' | 'same-origin' | 'include';
 }
+
+export type ResponseInputTextPart = {
+  type: 'input_text' | 'text' | 'output_text';
+  text: string;
+};
+
+export type ResponseInputMessage = {
+  role: 'system' | 'developer' | 'user' | 'assistant';
+  content: string | ResponseInputTextPart[];
+};
+
+export type ResponseTextFormat =
+  | {
+      type: 'json_object';
+    }
+  | {
+      type: 'json_schema';
+      name: string;
+      description?: string;
+      schema: Record<string, unknown>;
+      strict?: boolean;
+    };
+
+export type ResponseTextConfig = {
+  format: ResponseTextFormat;
+};
+
+export type ResponseOutputText = {
+  type: 'output_text';
+  text: string;
+  annotations?: unknown[];
+  logprobs?: unknown[];
+};
+
+export type ResponseOutputMessage = {
+  id: string;
+  type: 'message';
+  role: 'assistant';
+  status: 'in_progress' | 'completed' | 'incomplete';
+  content: ResponseOutputText[];
+};
+
+export type ResponseOutputFunctionCall = {
+  id: string;
+  type: 'function_call';
+  call_id: string;
+  name: string;
+  arguments: string;
+  status?: 'in_progress' | 'completed' | 'incomplete';
+};
+
+export type ResponseOutputFunctionCallOutput = {
+  id: string;
+  type: 'function_call_output';
+  call_id: string;
+  output: string;
+};
+
+export type ResponseUsage = {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  input_tokens_details?: {
+    cached_tokens: number;
+  };
+  output_tokens_details?: {
+    reasoning_tokens: number;
+  };
+};
+
+export type ResponseTool = {
+  type: 'function';
+  name: string;
+  description?: string;
+  parameters?: unknown;
+};
+
+export type ResponseOutputItem = ResponseOutputMessage | ResponseOutputFunctionCall | ResponseOutputFunctionCallOutput;
+
+export type ConversationItemInputText = {
+  type: 'input_text';
+  text: string;
+};
+
+export type ConversationItemMessage = {
+  id: string;
+  type: 'message';
+  role: 'system' | 'user' | 'assistant';
+  status: 'completed';
+  content: Array<ConversationItemInputText | ResponseOutputText>;
+};
+
+export type ConversationItem = ConversationItemMessage | ResponseOutputFunctionCall | ResponseOutputFunctionCallOutput;
+
+export type ConversationItemsPage = {
+  object: 'list';
+  data: ConversationItem[];
+  first_id: string | null;
+  last_id: string | null;
+  has_more: boolean;
+};
+
+export type ResponsesResponse = {
+  id: string;
+  object: 'response';
+  created_at: number;
+  completed_at?: number | null;
+  model: string;
+  status: 'in_progress' | 'completed' | 'incomplete';
+  output: ResponseOutputItem[];
+  usage: ResponseUsage | null;
+  error?: {
+    code?: string;
+    message?: string;
+  } | null;
+  incomplete_details?: {
+    reason?: string;
+  } | null;
+  instructions?: string | null;
+  text?: ResponseTextConfig | null;
+  previous_response_id?: string | null;
+  conversation_id?: string | null;
+  /** Provider-returned response state, such as `openai.responseId`, for provider-native continuation. */
+  providerOptions?: Record<string, Record<string, unknown> | undefined>;
+  tools?: ResponseTool[];
+  store?: boolean;
+  output_text: string;
+};
+
+export type ResponsesDeleteResponse = {
+  id: string;
+  object: 'response';
+  deleted: true;
+};
+
+export type CreateResponseParams = {
+  /** Optional model override, such as `openai/gpt-5`. When omitted, the agent default model is used. */
+  model?: string;
+  /** Mastra agent ID for the request. Required on initial requests; stored follow-ups can omit it when using `previous_response_id`. */
+  agent_id?: string;
+  /** Input text or message history for the current turn. */
+  input: string | ResponseInputMessage[];
+  /** Request-scoped instructions for the current response. */
+  instructions?: string;
+  /** Optional text output format. Supports `json_object` and `json_schema`. */
+  text?: ResponseTextConfig;
+  /** Optional conversation ID. In Mastra this is the raw threadId. */
+  conversation_id?: string;
+  /** Optional provider-specific options passed through to the underlying model call. */
+  providerOptions?: Record<string, Record<string, unknown> | undefined>;
+  /** When true, returns a streaming Responses API event stream. */
+  stream?: boolean;
+  /** Persists the response through the selected agent's memory. Requires a memory-backed agent. */
+  store?: boolean;
+  /** Continues a previously stored response chain. */
+  previous_response_id?: string;
+  requestContext?: RequestContext | Record<string, any>;
+};
+
+export type Conversation = {
+  id: string;
+  object: 'conversation';
+  thread: StorageThreadType;
+};
+
+export type ConversationDeleted = {
+  id: string;
+  object: 'conversation.deleted';
+  deleted: true;
+};
+
+export type CreateConversationParams = {
+  agent_id: string;
+  conversation_id?: string;
+  resource_id?: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+  requestContext?: RequestContext | Record<string, any>;
+};
+
+export type ResponsesCreatedEvent = {
+  type: 'response.created';
+  response: ResponsesResponse;
+  sequence_number?: number;
+};
+
+export type ResponsesInProgressEvent = {
+  type: 'response.in_progress';
+  response: ResponsesResponse;
+  sequence_number?: number;
+};
+
+export type ResponsesOutputItemAddedEvent = {
+  type: 'response.output_item.added';
+  output_index: number;
+  item: ResponseOutputItem;
+  sequence_number?: number;
+};
+
+export type ResponsesContentPartAddedEvent = {
+  type: 'response.content_part.added';
+  output_index: number;
+  content_index: number;
+  item_id: string;
+  part: ResponseOutputText;
+  sequence_number?: number;
+};
+
+export type ResponsesOutputTextDeltaEvent = {
+  type: 'response.output_text.delta';
+  output_index: number;
+  content_index: number;
+  item_id: string;
+  delta: string;
+  sequence_number?: number;
+};
+
+export type ResponsesOutputTextDoneEvent = {
+  type: 'response.output_text.done';
+  output_index: number;
+  content_index: number;
+  item_id: string;
+  text: string;
+  sequence_number?: number;
+};
+
+export type ResponsesContentPartDoneEvent = {
+  type: 'response.content_part.done';
+  output_index: number;
+  content_index: number;
+  item_id: string;
+  part: ResponseOutputText;
+  sequence_number?: number;
+};
+
+export type ResponsesOutputItemDoneEvent = {
+  type: 'response.output_item.done';
+  output_index: number;
+  item: ResponseOutputItem;
+  sequence_number?: number;
+};
+
+export type ResponsesCompletedEvent = {
+  type: 'response.completed';
+  response: ResponsesResponse;
+  sequence_number?: number;
+};
+
+export type ResponsesStreamEvent =
+  | ResponsesCreatedEvent
+  | ResponsesInProgressEvent
+  | ResponsesOutputItemAddedEvent
+  | ResponsesContentPartAddedEvent
+  | ResponsesOutputTextDeltaEvent
+  | ResponsesOutputTextDoneEvent
+  | ResponsesContentPartDoneEvent
+  | ResponsesOutputItemDoneEvent
+  | ResponsesCompletedEvent;
 
 type WithoutMethods<T> = {
   [K in keyof T as T[K] extends (...args: any[]) => any
@@ -82,10 +352,10 @@ type WithoutMethods<T> = {
         : K]: T[K];
 };
 
-export type NetworkStreamParams = {
+export type NetworkStreamParams<OUTPUT = undefined> = {
   messages: MessageListInput;
   tracingOptions?: TracingOptions;
-} & MultiPrimitiveExecutionOptions;
+} & MultiPrimitiveExecutionOptions<OUTPUT>;
 
 export interface GetAgentResponse {
   id: string;
@@ -97,6 +367,8 @@ export interface GetAgentResponse {
   agents: Record<string, { id: string; name: string }>;
   skills?: SkillMetadata[];
   workspaceTools?: string[];
+  /** Browser tool names available to this agent (if browser is configured) */
+  browserTools?: string[];
   /** ID of the agent's workspace (if configured) */
   workspaceId?: string;
   provider: string;
@@ -122,7 +394,9 @@ export interface GetAgentResponse {
   /** Serialized JSON schema for request context validation */
   requestContextSchema?: string;
   source?: 'code' | 'stored';
+  status?: 'draft' | 'published' | 'archived';
   activeVersionId?: string;
+  hasDraft?: boolean;
 }
 
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
@@ -132,7 +406,8 @@ export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined =
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
-  Omit<AgentGenerateOptions<T>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
+  // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
+  Omit<AgentGenerateOptions<any>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
 >;
 
 export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
@@ -142,9 +417,16 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
-  Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
+  // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
+  Omit<AgentStreamOptions<any>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
 >;
 
+export type StructuredOutputOptions<OUTPUT = undefined> = Omit<
+  SerializableStructuredOutputOptions<OUTPUT>,
+  'schema'
+> & {
+  schema: PublicSchema<OUTPUT>;
+};
 export type StreamParamsBase<OUTPUT = undefined> = {
   tracingOptions?: TracingOptions;
   requestContext?: RequestContext;
@@ -155,9 +437,7 @@ export type StreamParamsBase<OUTPUT = undefined> = {
 export type StreamParamsBaseWithoutMessages<OUTPUT = undefined> = StreamParamsBase<OUTPUT>;
 export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> & {
   messages: MessageListInput;
-} & (OUTPUT extends undefined
-    ? { structuredOutput?: never }
-    : { structuredOutput: SerializableStructuredOutputOptions<OUTPUT> });
+} & (OUTPUT extends undefined ? { structuredOutput?: never } : { structuredOutput: StructuredOutputOptions<OUTPUT> });
 
 export type UpdateModelParams = {
   modelId: string;
@@ -328,19 +608,7 @@ export interface GetMemoryConfigParams {
   requestContext?: RequestContext | Record<string, any>;
 }
 
-export type GetMemoryConfigResponse = {
-  config: MemoryConfig & {
-    observationalMemory?: {
-      enabled: boolean;
-      scope?: 'thread' | 'resource';
-      shareTokenBudget?: boolean;
-      messageTokens?: number | { min: number; max: number };
-      observationTokens?: number | { min: number; max: number };
-      observationModel?: string;
-      reflectionModel?: string;
-    };
-  };
-};
+export type GetMemoryConfigResponse = { config: MemoryConfig };
 
 export interface UpdateMemoryThreadParams {
   title: string;
@@ -349,7 +617,9 @@ export interface UpdateMemoryThreadParams {
   requestContext?: RequestContext | Record<string, any>;
 }
 
-export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'threadId'>;
+export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'threadId'> & {
+  includeSystemReminders?: boolean;
+};
 
 export type ListMemoryThreadMessagesResponse = {
   messages: MastraDBMessage[];
@@ -540,6 +810,7 @@ export type GetScorerResponse = MastraScorerEntry & {
   agentNames: string[];
   workflowIds: string[];
   isRegistered: boolean;
+  source: 'code' | 'stored';
 };
 
 export interface GetScorersResponse {
@@ -639,6 +910,37 @@ export type TitleGenerationConfig =
  *
  * Note: When semanticRecall is enabled, both `vector` (string, not false) and `embedder` must be configured.
  */
+/** Serializable observation step config for observational memory */
+export interface SerializedObservationConfig {
+  model?: string;
+  messageTokens?: number;
+  modelSettings?: Record<string, unknown>;
+  providerOptions?: Record<string, Record<string, unknown> | undefined>;
+  maxTokensPerBatch?: number;
+  bufferTokens?: number | false;
+  bufferActivation?: number;
+  blockAfter?: number;
+}
+
+/** Serializable reflection step config for observational memory */
+export interface SerializedReflectionConfig {
+  model?: string;
+  observationTokens?: number;
+  modelSettings?: Record<string, unknown>;
+  providerOptions?: Record<string, Record<string, unknown> | undefined>;
+  blockAfter?: number;
+  bufferActivation?: number;
+}
+
+/** Serializable observational memory configuration */
+export interface SerializedObservationalMemoryConfig {
+  model?: string;
+  scope?: 'resource' | 'thread';
+  shareTokenBudget?: boolean;
+  observation?: SerializedObservationConfig;
+  reflection?: SerializedReflectionConfig;
+}
+
 export interface SerializedMemoryConfig {
   /**
    * Vector database identifier. Required when semanticRecall is enabled.
@@ -665,6 +967,11 @@ export interface SerializedMemoryConfig {
    * Options to pass to the embedder
    */
   embedderOptions?: Record<string, unknown>;
+  /**
+   * Serialized observational memory configuration.
+   * `true` to enable with defaults, or a config object for customization.
+   */
+  observationalMemory?: boolean | SerializedObservationalMemoryConfig;
 }
 
 /**
@@ -703,11 +1010,62 @@ export interface DefaultOptions {
 }
 
 /**
+ * Per-tool config for stored agents (e.g., description overrides)
+ */
+export interface StoredAgentToolConfig {
+  description?: string;
+  rules?: RuleGroup;
+}
+
+/**
+ * Per-MCP-client/integration tool configuration stored in agent snapshots.
+ * Specifies which tools from an MCP client or integration provider are enabled and their overrides.
+ * When `tools` is omitted, all tools from the source are included.
+ */
+export interface StoredMCPClientToolsConfig {
+  /** When omitted, all tools from the source are included. */
+  tools?: Record<string, StoredAgentToolConfig>;
+}
+
+/**
  * Scorer config for stored agents
  */
 export interface StoredAgentScorerConfig {
+  description?: string;
   sampling?: { type: 'none' } | { type: 'ratio'; rate: number };
+  rules?: RuleGroup;
 }
+
+/**
+ * Per-skill config stored in agent snapshots.
+ * Allows overriding skill description and instructions for a specific agent context.
+ */
+export interface StoredAgentSkillConfig {
+  description?: string;
+  instructions?: string;
+  /** Pin to a specific version ID. Takes precedence over strategy. */
+  pin?: string;
+  /** Resolution strategy: 'latest' = latest published version, 'live' = read from filesystem */
+  strategy?: 'latest' | 'live';
+}
+
+/**
+ * Workspace reference stored in agent snapshots.
+ * Can reference a stored workspace by ID or provide inline workspace config.
+ */
+export type StoredWorkspaceRef =
+  | { type: 'id'; workspaceId: string }
+  | { type: 'inline'; config: Record<string, unknown> };
+
+// ============================================================================
+// Conditional Field Types (for rule-based dynamic agent configuration)
+// Re-exported from @mastra/core/storage for convenience
+// ============================================================================
+
+export type StoredAgentRule = Rule;
+export type StoredAgentRuleGroup = RuleGroup;
+export type ConditionalVariant<T> = StorageConditionalVariant<T>;
+export type ConditionalField<T> = StorageConditionalField<T>;
 
 /**
  * Stored agent data returned from API
@@ -724,21 +1082,25 @@ export interface StoredAgentResponse {
   // Version snapshot config fields (resolved from active version)
   name: string;
   description?: string;
-  instructions: string;
-  model: {
+  instructions: string | AgentInstructionBlock[];
+  model: ConditionalField<{
     provider: string;
     name: string;
     [key: string]: unknown;
-  };
-  tools?: string[];
-  defaultOptions?: DefaultOptions;
-  workflows?: string[];
-  agents?: string[];
-  integrationTools?: string[];
-  inputProcessors?: string[];
-  outputProcessors?: string[];
-  memory?: SerializedMemoryConfig;
-  scorers?: Record<string, StoredAgentScorerConfig>;
+  }>;
+  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  defaultOptions?: ConditionalField<DefaultOptions>;
+  workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  inputProcessors?: ConditionalField<StoredProcessorGraph>;
+  outputProcessors?: ConditionalField<StoredProcessorGraph>;
+  memory?: ConditionalField<SerializedMemoryConfig>;
+  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
+  workspace?: ConditionalField<StoredWorkspaceRef>;
+  requestContextSchema?: Record<string, unknown>;
 }
 
 /**
@@ -767,30 +1129,51 @@ export interface ListStoredAgentsResponse {
 }
 
 /**
+ * Parameters for cloning an agent to a stored agent
+ */
+export interface CloneAgentParams {
+  /** ID for the cloned agent. If not provided, derived from agent ID. */
+  newId?: string;
+  /** Name for the cloned agent. Defaults to "{name} (Clone)". */
+  newName?: string;
+  /** Additional metadata for the cloned agent. */
+  metadata?: Record<string, unknown>;
+  /** Author identifier for the cloned agent. */
+  authorId?: string;
+  /** Request context for resolving dynamic agent configuration (instructions, model, tools, etc.) */
+  requestContext?: RequestContext | Record<string, any>;
+}
+
+/**
  * Parameters for creating a stored agent.
  * Flat union of agent-record fields and config fields.
  */
 export interface CreateStoredAgentParams {
-  id: string;
+  /** Unique identifier for the agent. If not provided, derived from name via slugify. */
+  id?: string;
   authorId?: string;
   metadata?: Record<string, unknown>;
   name: string;
   description?: string;
-  instructions: string;
-  model: {
+  instructions: string | AgentInstructionBlock[];
+  model: ConditionalField<{
     provider: string;
     name: string;
     [key: string]: unknown;
-  };
-  tools?: string[];
-  defaultOptions?: DefaultOptions;
-  workflows?: string[];
-  agents?: string[];
-  integrationTools?: string[];
-  inputProcessors?: string[];
-  outputProcessors?: string[];
-  memory?: SerializedMemoryConfig;
-  scorers?: Record<string, StoredAgentScorerConfig>;
+  }>;
+  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  defaultOptions?: ConditionalField<DefaultOptions>;
+  workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  inputProcessors?: ConditionalField<StoredProcessorGraph>;
+  outputProcessors?: ConditionalField<StoredProcessorGraph>;
+  memory?: ConditionalField<SerializedMemoryConfig>;
+  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
+  workspace?: ConditionalField<StoredWorkspaceRef>;
+  requestContextSchema?: Record<string, unknown>;
 }
 
 /**
@@ -801,27 +1184,255 @@ export interface UpdateStoredAgentParams {
   metadata?: Record<string, unknown>;
   name?: string;
   description?: string;
-  instructions?: string;
-  model?: {
+  instructions?: string | AgentInstructionBlock[];
+  model?: ConditionalField<{
     provider: string;
     name: string;
     [key: string]: unknown;
-  };
-  tools?: string[];
-  defaultOptions?: DefaultOptions;
-  workflows?: string[];
-  agents?: string[];
-  integrationTools?: string[];
-  inputProcessors?: string[];
-  outputProcessors?: string[];
-  memory?: SerializedMemoryConfig;
-  scorers?: Record<string, StoredAgentScorerConfig>;
+  }>;
+  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  defaultOptions?: ConditionalField<DefaultOptions>;
+  workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  inputProcessors?: ConditionalField<StoredProcessorGraph>;
+  outputProcessors?: ConditionalField<StoredProcessorGraph>;
+  memory?: ConditionalField<SerializedMemoryConfig>;
+  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
+  workspace?: ConditionalField<StoredWorkspaceRef>;
+  requestContextSchema?: Record<string, unknown>;
+  /** Optional message describing the changes for the auto-created version */
+  changeMessage?: string;
 }
 
 /**
  * Response for deleting a stored agent
  */
 export interface DeleteStoredAgentResponse {
+  success: boolean;
+  message: string;
+}
+
+// ============================================================================
+// Stored Scorer Definition Types
+// ============================================================================
+
+/**
+ * Sampling configuration for scorers
+ */
+export type ScorerSamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
+
+/**
+ * Scorer type discriminator
+ */
+export type StoredScorerType =
+  | 'llm-judge'
+  | 'answer-relevancy'
+  | 'answer-similarity'
+  | 'bias'
+  | 'context-precision'
+  | 'context-relevance'
+  | 'faithfulness'
+  | 'hallucination'
+  | 'noise-sensitivity'
+  | 'prompt-alignment'
+  | 'tool-call-accuracy'
+  | 'toxicity';
+
+/**
+ * Stored scorer definition data returned from API
+ */
+export interface StoredScorerResponse {
+  id: string;
+  status: string;
+  activeVersionId?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  name: string;
+  description?: string;
+  type: StoredScorerType;
+  model?: {
+    provider: string;
+    name: string;
+    [key: string]: unknown;
+  };
+  instructions?: string;
+  scoreRange?: {
+    min?: number;
+    max?: number;
+  };
+  presetConfig?: Record<string, unknown>;
+  defaultSampling?: ScorerSamplingConfig;
+}
+
+/**
+ * Parameters for listing stored scorer definitions
+ */
+export interface ListStoredScorersParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for listing stored scorer definitions
+ */
+export interface ListStoredScorersResponse {
+  scorerDefinitions: StoredScorerResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating a stored scorer definition
+ */
+export interface CreateStoredScorerParams {
+  id?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name: string;
+  description?: string;
+  type: StoredScorerType;
+  model?: {
+    provider: string;
+    name: string;
+    [key: string]: unknown;
+  };
+  instructions?: string;
+  scoreRange?: {
+    min?: number;
+    max?: number;
+  };
+  presetConfig?: Record<string, unknown>;
+  defaultSampling?: ScorerSamplingConfig;
+}
+
+/**
+ * Parameters for updating a stored scorer definition
+ */
+export interface UpdateStoredScorerParams {
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name?: string;
+  description?: string;
+  type?: StoredScorerType;
+  model?: {
+    provider: string;
+    name: string;
+    [key: string]: unknown;
+  };
+  instructions?: string;
+  scoreRange?: {
+    min?: number;
+    max?: number;
+  };
+  presetConfig?: Record<string, unknown>;
+  defaultSampling?: ScorerSamplingConfig;
+}
+
+/**
+ * Response for deleting a stored scorer definition
+ */
+export interface DeleteStoredScorerResponse {
+  success: boolean;
+  message: string;
+}
+
+// ============================================================================
+// Stored MCP Client Types
+// ============================================================================
+
+/**
+ * MCP server transport configuration
+ */
+export interface StoredMCPServerConfig {
+  type: 'stdio' | 'http';
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  url?: string;
+  timeout?: number;
+}
+
+/**
+ * Stored MCP client data returned from API
+ */
+export interface StoredMCPClientResponse {
+  id: string;
+  status: string;
+  activeVersionId?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  name: string;
+  description?: string;
+  servers: Record<string, StoredMCPServerConfig>;
+}
+
+/**
+ * Parameters for listing stored MCP clients
+ */
+export interface ListStoredMCPClientsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for listing stored MCP clients
+ */
+export interface ListStoredMCPClientsResponse {
+  mcpClients: StoredMCPClientResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating a stored MCP client
+ */
+export interface CreateStoredMCPClientParams {
+  id?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name: string;
+  description?: string;
+  servers: Record<string, StoredMCPServerConfig>;
+}
+
+/**
+ * Parameters for updating a stored MCP client
+ */
+export interface UpdateStoredMCPClientParams {
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name?: string;
+  description?: string;
+  servers?: Record<string, StoredMCPServerConfig>;
+}
+
+/**
+ * Response for deleting a stored MCP client
+ */
+export interface DeleteStoredMCPClientResponse {
   success: boolean;
   message: string;
 }
@@ -836,21 +1447,23 @@ export interface AgentVersionResponse {
   versionNumber: number;
   name: string;
   description?: string;
-  instructions: string;
-  model: {
+  instructions: string | AgentInstructionBlock[];
+  model: ConditionalField<{
     provider: string;
     name: string;
     [key: string]: unknown;
-  };
-  tools?: string[];
-  defaultOptions?: DefaultOptions;
-  workflows?: string[];
-  agents?: string[];
-  integrationTools?: string[];
-  inputProcessors?: string[];
-  outputProcessors?: string[];
-  memory?: SerializedMemoryConfig;
-  scorers?: Record<string, StoredAgentScorerConfig>;
+  }>;
+  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  defaultOptions?: ConditionalField<DefaultOptions>;
+  workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  inputProcessors?: ConditionalField<StoredProcessorGraph>;
+  outputProcessors?: ConditionalField<StoredProcessorGraph>;
+  memory?: ConditionalField<SerializedMemoryConfig>;
+  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  requestContextSchema?: Record<string, unknown>;
   changedFields?: string[];
   changeMessage?: string;
   createdAt: string;
@@ -872,6 +1485,12 @@ export interface ListAgentVersionsResponse {
 }
 
 export interface CreateAgentVersionParams {
+  changeMessage?: string;
+}
+
+export interface CreateCodeAgentVersionParams {
+  instructions?: AgentVersionResponse['instructions'];
+  tools?: AgentVersionResponse['tools'];
   changeMessage?: string;
 }
 
@@ -911,6 +1530,70 @@ export interface CompareVersionsResponse {
   diffs: VersionDiff[];
 }
 
+// ============================================================================
+// Scorer Version Types
+// ============================================================================
+
+export interface ScorerVersionResponse {
+  id: string;
+  scorerDefinitionId: string;
+  versionNumber: number;
+  name: string;
+  description?: string;
+  type: StoredScorerType;
+  model?: {
+    provider: string;
+    name: string;
+    [key: string]: unknown;
+  };
+  instructions?: string;
+  scoreRange?: {
+    min?: number;
+    max?: number;
+  };
+  presetConfig?: Record<string, unknown>;
+  defaultSampling?: ScorerSamplingConfig;
+  changedFields?: string[];
+  changeMessage?: string;
+  createdAt: string;
+}
+
+export interface ListScorerVersionsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: 'versionNumber' | 'createdAt';
+  sortDirection?: 'ASC' | 'DESC';
+}
+
+export interface ListScorerVersionsResponse {
+  versions: ScorerVersionResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+export interface CreateScorerVersionParams {
+  changeMessage?: string;
+}
+
+export interface ActivateScorerVersionResponse {
+  success: boolean;
+  message: string;
+  activeVersionId: string;
+}
+
+export interface DeleteScorerVersionResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface CompareScorerVersionsResponse {
+  fromVersion: ScorerVersionResponse;
+  toVersion: ScorerVersionResponse;
+  diffs: VersionDiff[];
+}
+
 export interface ListAgentsModelProvidersResponse {
   providers: Provider[];
 }
@@ -935,6 +1618,10 @@ export interface MastraPackage {
 
 export interface GetSystemPackagesResponse {
   packages: MastraPackage[];
+  isDev: boolean;
+  cmsEnabled: boolean;
+  storageType?: string;
+  observabilityStorageType?: string;
 }
 
 // ============================================================================
@@ -1132,13 +1819,13 @@ export interface SkillMetadata {
   license?: string;
   compatibility?: string;
   metadata?: Record<string, string>;
+  path: string;
 }
 
 /**
  * Full skill data including instructions and file paths
  */
 export interface Skill extends SkillMetadata {
-  path: string;
   instructions: string;
   source: SkillSource;
   references: string[];
@@ -1206,6 +1893,98 @@ export interface GetSkillReferenceResponse {
   skillName: string;
   referencePath: string;
   content: string;
+}
+
+// ============================================================================
+// Stored Skill Types
+// ============================================================================
+
+/**
+ * File node for skill workspace
+ */
+export interface StoredSkillFileNode {
+  id: string;
+  name: string;
+  type: 'file' | 'folder';
+  content?: string;
+  children?: StoredSkillFileNode[];
+}
+
+/**
+ * Stored skill data returned from API
+ */
+export interface StoredSkillResponse {
+  id: string;
+  status: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  name: string;
+  description?: string;
+  instructions: string;
+  license?: string;
+  files?: StoredSkillFileNode[];
+}
+
+/**
+ * Parameters for listing stored skills
+ */
+export interface ListStoredSkillsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for listing stored skills
+ */
+export interface ListStoredSkillsResponse {
+  skills: StoredSkillResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating a stored skill
+ */
+export interface CreateStoredSkillParams {
+  id?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name: string;
+  description?: string;
+  instructions: string;
+  license?: string;
+  files?: StoredSkillFileNode[];
+}
+
+/**
+ * Parameters for updating a stored skill
+ */
+export interface UpdateStoredSkillParams {
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name?: string;
+  description?: string;
+  instructions?: string;
+  license?: string;
+  files?: StoredSkillFileNode[];
+}
+
+/**
+ * Response for deleting a stored skill
+ */
+export interface DeleteStoredSkillResponse {
+  success: boolean;
+  message: string;
 }
 
 // ============================================================================
@@ -1294,6 +2073,10 @@ export interface GetObservationalMemoryParams {
   agentId: string;
   resourceId?: string;
   threadId?: string;
+  from?: Date | string;
+  to?: Date | string;
+  offset?: number;
+  limit?: number;
   requestContext?: RequestContext | Record<string, any>;
 }
 
@@ -1306,10 +2089,28 @@ export interface GetObservationalMemoryResponse {
 }
 
 /**
+ * Parameters for awaiting buffer status
+ */
+export interface AwaitBufferStatusParams {
+  agentId: string;
+  resourceId?: string;
+  threadId?: string;
+  requestContext?: RequestContext;
+}
+
+/**
+ * Response for buffer status endpoint
+ */
+export interface AwaitBufferStatusResponse {
+  record: ObservationalMemoryRecord | null;
+}
+
+/**
  * Extended memory status response with OM info
  */
 export interface GetMemoryStatusResponse {
   result: boolean;
+  memoryType?: 'local' | 'gateway';
   observationalMemory?: {
     enabled: boolean;
     hasRecord?: boolean;
@@ -1326,6 +2127,7 @@ export interface GetMemoryStatusResponse {
  * Extended memory config response with OM config
  */
 export interface GetMemoryConfigResponseExtended {
+  memoryType?: 'local' | 'gateway';
   config: MemoryConfig & {
     observationalMemory?: {
       enabled: boolean;
@@ -1368,6 +2170,94 @@ export interface ListEmbeddersResponse {
 }
 
 // ============================================================================
+// Tool Provider Types
+// ============================================================================
+
+export interface ToolProviderInfo {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+export interface ToolProviderToolkit {
+  slug: string;
+  name: string;
+  description?: string;
+  icon?: string;
+}
+
+export interface ToolProviderToolInfo {
+  slug: string;
+  name: string;
+  description?: string;
+  toolkit?: string;
+}
+
+export interface ToolProviderPagination {
+  total?: number;
+  page?: number;
+  perPage?: number;
+  hasMore: boolean;
+}
+
+export interface ListToolProvidersResponse {
+  providers: ToolProviderInfo[];
+}
+
+export interface ListToolProviderToolkitsResponse {
+  data: ToolProviderToolkit[];
+  pagination?: ToolProviderPagination;
+}
+
+export interface ListToolProviderToolsParams {
+  toolkit?: string;
+  search?: string;
+  page?: number;
+  perPage?: number;
+}
+
+export interface ListToolProviderToolsResponse {
+  data: ToolProviderToolInfo[];
+  pagination?: ToolProviderPagination;
+}
+
+export type GetToolProviderToolSchemaResponse = Record<string, unknown>;
+
+// ============================================================================
+// Processor Provider Types
+// ============================================================================
+
+/**
+ * Provider phase names as returned by the server (prefixed form).
+ * Distinct from ProcessorPhase which uses the short/unprefixed form for processor endpoints.
+ */
+export type ProcessorProviderPhase =
+  | 'processInput'
+  | 'processInputStep'
+  | 'processOutputStream'
+  | 'processOutputResult'
+  | 'processOutputStep';
+
+export interface ProcessorProviderInfo {
+  id: string;
+  name: string;
+  description?: string;
+  availablePhases: ProcessorProviderPhase[];
+}
+
+export interface GetProcessorProvidersResponse {
+  providers: ProcessorProviderInfo[];
+}
+
+export interface GetProcessorProviderResponse {
+  id: string;
+  name: string;
+  description?: string;
+  availablePhases: ProcessorProviderPhase[];
+  configSchema: Record<string, unknown>;
+}
+
+// ============================================================================
 // Error Types
 // ============================================================================
 
@@ -1406,4 +2296,376 @@ export class MastraClientError extends Error {
     this.statusText = statusText;
     this.body = body;
   }
+}
+
+// ============================================
+// Dataset Types
+// ============================================
+
+export interface DatasetItemSource {
+  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+  referenceId?: string;
+}
+
+export interface DatasetItem {
+  id: string;
+  datasetId: string;
+  datasetVersion: number;
+  input: unknown;
+  groundTruth?: unknown;
+  expectedTrajectory?: unknown;
+  requestContext?: Record<string, unknown>;
+  metadata?: unknown;
+  source?: DatasetItemSource;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+
+export interface DatasetRecord {
+  id: string;
+  name: string;
+  description?: string | null;
+  metadata?: Record<string, unknown> | null;
+  inputSchema?: Record<string, unknown>;
+  groundTruthSchema?: Record<string, unknown>;
+  requestContextSchema?: Record<string, unknown>;
+  tags?: string[] | null;
+  targetType?: string | null;
+  targetIds?: string[] | null;
+  scorerIds?: string[] | null;
+  version: number;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+
+export interface DatasetExperiment {
+  id: string;
+  datasetId: string | null;
+  datasetVersion: number | null;
+  agentVersion: string | null;
+  targetType: 'agent' | 'workflow' | 'scorer' | 'processor';
+  targetId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  totalItems: number;
+  succeededCount: number;
+  failedCount: number;
+  startedAt: string | Date | null;
+  completedAt: string | Date | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+
+export interface DatasetExperimentResult {
+  id: string;
+  experimentId: string;
+  itemId: string;
+  itemDatasetVersion: number | null;
+  input: unknown;
+  output: unknown | null;
+  groundTruth: unknown | null;
+  error: string | null;
+  startedAt: string | Date;
+  completedAt: string | Date;
+  retryCount: number;
+  traceId: string | null;
+  status: 'needs-review' | 'reviewed' | 'complete' | null;
+  tags: string[] | null;
+  scores: Array<{
+    scorerId: string;
+    scorerName: string;
+    score: number | null;
+    reason: string | null;
+    error: string | null;
+  }>;
+  createdAt: string | Date;
+}
+
+export interface UpdateExperimentResultParams {
+  datasetId: string;
+  experimentId: string;
+  resultId: string;
+  status?: 'needs-review' | 'reviewed' | 'complete' | null;
+  tags?: string[];
+}
+
+export interface CreateDatasetParams {
+  name: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown> | null;
+  groundTruthSchema?: Record<string, unknown> | null;
+  requestContextSchema?: Record<string, unknown> | null;
+  targetType?: string;
+  targetIds?: string[];
+  scorerIds?: string[];
+}
+
+export interface UpdateDatasetParams {
+  datasetId: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown> | null;
+  groundTruthSchema?: Record<string, unknown> | null;
+  requestContextSchema?: Record<string, unknown> | null;
+  tags?: string[];
+  targetType?: string;
+  targetIds?: string[];
+  scorerIds?: string[] | null;
+}
+
+export interface AddDatasetItemParams {
+  datasetId: string;
+  input: unknown;
+  groundTruth?: unknown;
+  expectedTrajectory?: unknown;
+  requestContext?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  source?: DatasetItemSource;
+}
+
+export interface UpdateDatasetItemParams {
+  datasetId: string;
+  itemId: string;
+  input?: unknown;
+  groundTruth?: unknown;
+  expectedTrajectory?: unknown;
+  requestContext?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  source?: DatasetItemSource;
+}
+
+export interface BatchInsertDatasetItemsParams {
+  datasetId: string;
+  items: Array<{
+    input: unknown;
+    groundTruth?: unknown;
+    expectedTrajectory?: unknown;
+    requestContext?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
+    source?: DatasetItemSource;
+  }>;
+}
+
+export interface BatchDeleteDatasetItemsParams {
+  datasetId: string;
+  itemIds: string[];
+}
+
+export interface GenerateDatasetItemsParams {
+  datasetId: string;
+  modelId: string;
+  prompt: string;
+  count?: number;
+  agentContext?: {
+    description?: string;
+    instructions?: string;
+    tools?: string[];
+  };
+}
+
+export interface GeneratedItem {
+  input: unknown;
+  groundTruth?: unknown;
+}
+
+export interface TriggerDatasetExperimentParams {
+  datasetId: string;
+  targetType: 'agent' | 'workflow' | 'scorer';
+  targetId: string;
+  scorerIds?: string[];
+  version?: number;
+  agentVersion?: string;
+  maxConcurrency?: number;
+  requestContext?: Record<string, unknown>;
+}
+
+export interface CompareExperimentsParams {
+  datasetId: string;
+  experimentIdA: string;
+  experimentIdB: string;
+  thresholds?: Record<
+    string,
+    {
+      value: number;
+      direction?: 'higher-is-better' | 'lower-is-better';
+    }
+  >;
+}
+
+export interface DatasetItemVersionResponse {
+  id: string;
+  datasetId: string;
+  datasetVersion: number;
+  input: unknown;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
+  validTo: number | null;
+  isDeleted: boolean;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+
+export interface DatasetVersionResponse {
+  id: string;
+  datasetId: string;
+  version: number;
+  createdAt: string | Date;
+}
+
+export interface CompareExperimentsResponse {
+  baselineId: string;
+  items: Array<{
+    itemId: string;
+    input: unknown;
+    groundTruth: unknown;
+    results: Record<
+      string,
+      {
+        output: unknown;
+        scores: Record<string, number | null>;
+      } | null
+    >;
+  }>;
+}
+
+// ============================================================================
+// Stored Prompt Block Types
+// ============================================================================
+
+/**
+ * Stored prompt block data returned from API
+ */
+export interface StoredPromptBlockResponse {
+  id: string;
+  status: string;
+  activeVersionId?: string;
+  hasDraft?: boolean;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  // Version snapshot config fields (resolved from active version)
+  name: string;
+  description?: string;
+  content: string;
+  rules?: RuleGroup;
+  requestContextSchema?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for listing stored prompt blocks
+ */
+export interface ListStoredPromptBlocksParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
+  status?: 'draft' | 'published' | 'archived';
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for listing stored prompt blocks
+ */
+export interface ListStoredPromptBlocksResponse {
+  promptBlocks: StoredPromptBlockResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating a stored prompt block
+ */
+export interface CreateStoredPromptBlockParams {
+  id?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name: string;
+  description?: string;
+  content: string;
+  rules?: RuleGroup;
+  requestContextSchema?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for updating a stored prompt block
+ */
+export interface UpdateStoredPromptBlockParams {
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name?: string;
+  description?: string;
+  content?: string;
+  rules?: RuleGroup;
+  requestContextSchema?: Record<string, unknown>;
+}
+
+/**
+ * Response for deleting a stored prompt block
+ */
+export interface DeleteStoredPromptBlockResponse {
+  success: boolean;
+  message: string;
+}
+
+// ============================================================================
+// Prompt Block Version Types
+// ============================================================================
+
+export interface PromptBlockVersionResponse {
+  id: string;
+  blockId: string;
+  versionNumber: number;
+  name: string;
+  description?: string;
+  content: string;
+  rules?: RuleGroup;
+  requestContextSchema?: Record<string, unknown>;
+  changedFields?: string[];
+  changeMessage?: string;
+  createdAt: string;
+}
+
+export interface ListPromptBlockVersionsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: 'versionNumber' | 'createdAt';
+  sortDirection?: 'ASC' | 'DESC';
+}
+
+export interface ListPromptBlockVersionsResponse {
+  versions: PromptBlockVersionResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+export interface CreatePromptBlockVersionParams {
+  changeMessage?: string;
+}
+
+export interface ActivatePromptBlockVersionResponse {
+  success: boolean;
+  message: string;
+  activeVersionId: string;
+}
+
+export interface DeletePromptBlockVersionResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface ExperimentReviewCounts {
+  experimentId: string;
+  total: number;
+  needsReview: number;
+  reviewed: number;
+  complete: number;
 }

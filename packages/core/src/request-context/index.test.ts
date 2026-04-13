@@ -2,6 +2,43 @@ import { describe, it, expect } from 'vitest';
 import { RequestContext } from './index';
 
 describe('RequestContext', () => {
+  describe('constructor', () => {
+    it('should construct from a plain object (e.g. deserialized from JSON)', () => {
+      const original = new RequestContext();
+      original.set('userTier', 'free');
+      original.set('feature', 'dark-mode');
+      original.set('count', 42);
+
+      const serialized = original.toJSON();
+      const restored = new RequestContext(serialized as any);
+
+      expect(restored.get('userTier')).toBe('free');
+      expect(restored.get('feature')).toBe('dark-mode');
+      expect(restored.get('count')).toBe(42);
+      expect(restored.size()).toBe(3);
+    });
+
+    it('should construct from an empty plain object', () => {
+      const restored = new RequestContext({} as any);
+
+      expect(restored.size()).toBe(0);
+    });
+
+    it('should still construct from undefined', () => {
+      const ctx = new RequestContext();
+      expect(ctx.size()).toBe(0);
+    });
+
+    it('should still construct from an array of tuples', () => {
+      const ctx = new RequestContext([
+        ['key1', 'value1'],
+        ['key2', 'value2'],
+      ]);
+      expect(ctx.get('key1')).toBe('value1');
+      expect(ctx.get('key2')).toBe('value2');
+    });
+  });
+
   describe('toJSON', () => {
     it('should correctly serialize serializable values', () => {
       const ctx = new RequestContext();

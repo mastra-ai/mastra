@@ -135,6 +135,16 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     // Validate topK parameter - throws MastraError directly
     validateTopK('LIBSQL', topK);
 
+    if (!queryVector) {
+      throw new MastraError({
+        id: createVectorErrorId('LIBSQL', 'QUERY', 'MISSING_VECTOR'),
+        text: 'queryVector is required for LibSQL queries. Metadata-only queries are not supported by this vector store.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
     if (!Array.isArray(queryVector) || !queryVector.every(x => typeof x === 'number' && Number.isFinite(x))) {
       throw new MastraError({
         id: createVectorErrorId('LIBSQL', 'QUERY', 'INVALID_ARGS'),

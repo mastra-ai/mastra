@@ -146,6 +146,8 @@ export type SkillFormat = 'xml' | 'json' | 'markdown';
 export interface SkillMetadata {
   /** Skill name (1-64 chars, lowercase, hyphens only) */
   name: string;
+  /** Path to skill directory (relative to workspace root) */
+  path: string;
   /** Description of what the skill does and when to use it (1-1024 chars) */
   description: string;
   /** Optional license */
@@ -160,8 +162,6 @@ export interface SkillMetadata {
  * Full skill with parsed instructions and path info
  */
 export interface Skill extends SkillMetadata {
-  /** Path to skill directory (relative to workspace root) */
-  path: string;
   /** Markdown body from SKILL.md */
   instructions: string;
   /** Source of the skill (external package, local project, or managed) */
@@ -180,6 +180,8 @@ export interface Skill extends SkillMetadata {
 export interface SkillSearchResult extends BaseSearchResult {
   /** Skill name */
   skillName: string;
+  /** Skill path for disambiguation */
+  skillPath: string;
   /** Source file (SKILL.md or reference path) */
   source: string;
 }
@@ -215,7 +217,7 @@ export interface SkillSearchOptions extends BaseSearchOptions {
  * // List all skills
  * const skills = await workspace.skills.list();
  *
- * // Get a specific skill
+ * // Get a specific skill by name (or path for disambiguation)
  * const skill = await workspace.skills.get('brand-guidelines');
  *
  * // Search skills
@@ -228,17 +230,21 @@ export interface WorkspaceSkills {
   // ===========================================================================
 
   /**
-   * List all discovered skills (metadata only)
+   * List discovered skills as canonical metadata entries.
+   *
+   * Alias paths that resolve to the same underlying skill are de-duplicated.
    */
   list(): Promise<SkillMetadata[]>;
 
   /**
-   * Get a specific skill by name (full content)
+   * Get a specific skill by name (full content).
+   * Also accepts a skill path for disambiguation when multiple skills share the same name.
    */
   get(name: string): Promise<Skill | null>;
 
   /**
-   * Check if a skill exists
+   * Check if a skill exists by name.
+   * Also accepts a skill path for disambiguation.
    */
   has(name: string): Promise<boolean>;
 
@@ -308,4 +314,26 @@ export interface WorkspaceSkills {
    * Get all asset file paths for a skill
    */
   listAssets(skillName: string): Promise<string[]>;
+
+  // ===========================================================================
+  // Surgical Cache Updates
+  // ===========================================================================
+
+  /**
+   * Surgically add or update a single skill in the cache from its path.
+   * Parses the SKILL.md, updates the in-memory cache and search index,
+   * and bumps the discovery timestamp so maybeRefresh() won't trigger a full scan.
+   *
+   * @param skillPath - Path to the skill directory or SKILL.md file
+   */
+  addSkill?(skillPath: string): Promise<void>;
+
+  /**
+   * Surgically remove a single skill from the cache by name.
+   * Removes the skill from the in-memory cache and search index,
+   * and bumps the discovery timestamp so maybeRefresh() won't trigger a full scan.
+   *
+   * @param skillName - Name of the skill to remove
+   */
+  removeSkill?(skillName: string): Promise<void>;
 }

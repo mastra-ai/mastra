@@ -337,104 +337,108 @@ export function handleCardGridItems(
 
 /**
  * Check if an element is a PropertiesTable container
- * Structure: <div class="flex flex-col"><div id="propName" class="... border-b ...">...</div>...</div>
  */
 export function isPropertiesTable(node: Element): boolean {
-  // Check if this is a flex flex-col container
-  const classNames = node.properties?.className as string[] | undefined
-  if (!classNames) return false
-
-  const hasFlexCol =
-    classNames.includes('flex') && classNames.some(cls => cls === 'flex-col' || cls.startsWith('flex-col'))
-
-  if (!hasFlexCol) return false
-
-  // Check if children have id attributes and border-b class (property rows)
-  let propertyRowCount = 0
-  for (const child of node.children) {
-    if (child.type === 'element' && child.properties?.id && hasClass(child, 'border-b')) {
-      propertyRowCount++
-    }
-  }
-
-  return propertyRowCount >= 1
+  return node.properties?.dataTestid === 'properties-table'
 }
 
 /**
- * Handle PropertiesTable - format as definition-style list
+ * Find all descendant elements with a specific data-testid, stopping at boundary nodes.
+ * Does not recurse into elements with data-testid matching the target (avoids double-collecting)
+ * or into property-nested boundaries (those are handled by recursive extractPropertyRows calls).
  */
-export function handlePropertiesTable(
-  _state: State,
-  node: Element,
-): BlockContent | Array<BlockContent | DefinitionContent> {
-  const result: Array<BlockContent | DefinitionContent> = []
-
-  for (const child of node.children) {
-    if (child.type !== 'element') continue
-
-    const propId = child.properties?.id as string | undefined
-    if (!propId) continue
-
-    // Find the h3 with property name
-    const h3 = findElementByTag(child, 'h3')
-    const propName = h3 ? getTextContent(h3).trim() : propId
-
-    // Find type and default value in the first row div
-    let propType = ''
-    let defaultValue = ''
-    let description = ''
-
-    // Structure: div > (div.group[h3, div(type), div(default)], div(description))
-    const divChildren = child.children.filter((c): c is Element => c.type === 'element' && c.tagName === 'div')
-
-    if (divChildren.length >= 1) {
-      // First div contains h3, type, and default
-      const headerDiv = divChildren[0]
-      const headerDivChildren = headerDiv.children.filter(
-        (c): c is Element => c.type === 'element' && c.tagName === 'div',
-      )
-
-      // Extract type (first div after h3)
-      if (headerDivChildren.length >= 1) {
-        propType = getTextContent(headerDivChildren[0]).trim()
-      }
-
-      // Extract default value (second div after h3, starts with "=")
-      if (headerDivChildren.length >= 2) {
-        const defaultText = getTextContent(headerDivChildren[1]).trim()
-        if (defaultText.startsWith('=')) {
-          defaultValue = defaultText.slice(1).trim()
+function findAllByTestId(node: Element, testId: string): Element[] {
+  const results: Element[] = []
+  function search(el: Element) {
+    for (const child of el.children) {
+      if (child.type === 'element') {
+        if (child.properties?.dataTestid === testId) {
+          results.push(child)
+          // Don't recurse into matched elements — their children belong to them
+          continue
         }
+        // Don't cross into nested property containers — they're handled recursively
+        if (child.properties?.dataTestid === 'property-nested') continue
+        search(child)
       }
     }
+  }
+  search(node)
+  return results
+}
 
-    // Last div is the description
-    if (divChildren.length >= 2) {
-      description = getTextContent(divChildren[divChildren.length - 1]).trim()
+/**
+ * Find the first descendant element with a specific data-testid.
+ * Stops recursion at property-row and property-nested boundaries to avoid
+ * picking up values from nested property rows. Still returns those boundary
+ * elements if they match the requested testId.
+ */
+function findByTestId(node: Element, testId: string): Element | null {
+  for (const child of node.children) {
+    if (child.type === 'element') {
+      if (child.properties?.dataTestid === testId) return child
+      // Don't recurse into nested property rows or nested containers
+      // to avoid picking up wrong values (e.g. child's type for parent)
+      const childTestId = child.properties?.dataTestid as string | undefined
+      if (childTestId === 'property-row' || childTestId === 'property-nested') continue
+      const found = findByTestId(child, testId)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+/**
+ * Extract property rows from a container, supporting nested properties with a parent prefix.
+ * Each row is formatted as: **name** (`type`): description (Default: value)
+ * Nested properties are prefixed: **parent.child** (`type`): description
+ */
+function extractPropertyRows(node: Element, prefix: string): Array<BlockContent | DefinitionContent> {
+  const result: Array<BlockContent | DefinitionContent> = []
+  const rows = findAllByTestId(node, 'property-row')
+
+  for (const row of rows) {
+    // Extract name from data-testid="property-name"
+    const nameEl = findByTestId(row, 'property-name')
+    const rawName = nameEl ? getTextContent(nameEl).trim() : ''
+    // The name text includes the "?:" or ":" suffix from the <span> — strip it
+    const propName = rawName.replace(/\??:$/, '')
+    const fullName = prefix ? `${prefix}.${propName}` : propName
+
+    // Extract type from data-testid="property-type"
+    const typeEl = findByTestId(row, 'property-type')
+    const propType = typeEl ? getTextContent(typeEl).trim() : ''
+
+    // Extract default value from data-testid="property-default"
+    const defaultEl = findByTestId(row, 'property-default')
+    let defaultValue = ''
+    if (defaultEl) {
+      const defaultText = getTextContent(defaultEl).trim()
+      defaultValue = defaultText.startsWith('=') ? defaultText.slice(1).trim() : defaultText
     }
 
-    // Format as: **propName** (`type`): description (Default: value)
+    // Extract description from data-testid="property-description"
+    const descEl = findByTestId(row, 'property-description')
+    const description = descEl ? getTextContent(descEl).trim() : ''
+
+    // Format as: **fullName** (`type`): description (Default: value)
     const children: Array<{ type: string; value?: string; children?: Array<{ type: string; value: string }> }> = []
 
-    // Property name in bold
     children.push({
       type: 'strong',
-      children: [{ type: 'text', value: propName }],
+      children: [{ type: 'text', value: fullName }],
     })
 
-    // Type in code
     if (propType) {
       children.push({ type: 'text', value: ' (' })
       children.push({ type: 'inlineCode', value: propType })
       children.push({ type: 'text', value: ')' })
     }
 
-    // Description
     if (description) {
       children.push({ type: 'text', value: ': ' + description })
     }
 
-    // Default value
     if (defaultValue) {
       children.push({ type: 'text', value: ' (Default: ' })
       children.push({ type: 'inlineCode', value: defaultValue })
@@ -445,9 +449,25 @@ export function handlePropertiesTable(
       type: 'paragraph',
       children: children as Paragraph['children'],
     })
+
+    // Recursively process nested properties (data-testid="property-nested")
+    const nestedContainer = findByTestId(row, 'property-nested')
+    if (nestedContainer) {
+      result.push(...extractPropertyRows(nestedContainer, fullName))
+    }
   }
 
   return result
+}
+
+/**
+ * Handle PropertiesTable - format as definition-style list with nested property prefixes
+ */
+export function handlePropertiesTable(
+  _state: State,
+  node: Element,
+): BlockContent | Array<BlockContent | DefinitionContent> {
+  return extractPropertyRows(node, '')
 }
 
 // ============================================

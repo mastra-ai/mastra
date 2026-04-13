@@ -22,13 +22,20 @@ export const WORKSPACE_TOOLS = {
     DELETE: `${WORKSPACE_TOOLS_PREFIX}_delete` as const,
     FILE_STAT: `${WORKSPACE_TOOLS_PREFIX}_file_stat` as const,
     MKDIR: `${WORKSPACE_TOOLS_PREFIX}_mkdir` as const,
+    GREP: `${WORKSPACE_TOOLS_PREFIX}_grep` as const,
+    AST_EDIT: `${WORKSPACE_TOOLS_PREFIX}_ast_edit` as const,
   },
   SANDBOX: {
     EXECUTE_COMMAND: `${WORKSPACE_TOOLS_PREFIX}_execute_command` as const,
+    GET_PROCESS_OUTPUT: `${WORKSPACE_TOOLS_PREFIX}_get_process_output` as const,
+    KILL_PROCESS: `${WORKSPACE_TOOLS_PREFIX}_kill_process` as const,
   },
   SEARCH: {
     SEARCH: `${WORKSPACE_TOOLS_PREFIX}_search` as const,
     INDEX: `${WORKSPACE_TOOLS_PREFIX}_index` as const,
+  },
+  LSP: {
+    LSP_INSPECT: `${WORKSPACE_TOOLS_PREFIX}_lsp_inspect` as const,
   },
 } as const;
 
@@ -38,4 +45,5 @@ export const WORKSPACE_TOOLS = {
 export type WorkspaceToolName =
   | (typeof WORKSPACE_TOOLS.FILESYSTEM)[keyof typeof WORKSPACE_TOOLS.FILESYSTEM]
   | (typeof WORKSPACE_TOOLS.SEARCH)[keyof typeof WORKSPACE_TOOLS.SEARCH]
-  | (typeof WORKSPACE_TOOLS.SANDBOX)[keyof typeof WORKSPACE_TOOLS.SANDBOX];
+  | (typeof WORKSPACE_TOOLS.SANDBOX)[keyof typeof WORKSPACE_TOOLS.SANDBOX]
+  | (typeof WORKSPACE_TOOLS.LSP)[keyof typeof WORKSPACE_TOOLS.LSP];

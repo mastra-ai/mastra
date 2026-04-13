@@ -1,12 +1,16 @@
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import z from 'zod';
+import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
-import type { TracingContext } from '../../observability';
+import type { ObservabilityContext } from '../../observability';
+import { resolveObservabilityContext } from '../../observability';
+import { standardSchemaToJSONSchema } from '../../schema';
 import type { Processor } from '../index';
+import { selectMessagesToCheck } from './message-selection';
+import type { LastMessageOnlyOption } from './message-selection';
 
 /**
  * Language detection result for a single text
@@ -40,7 +44,7 @@ export interface LanguageDetectionResult {
 /**
  * Configuration options for LanguageDetector
  */
-export interface LanguageDetectorOptions {
+export interface LanguageDetectorOptions extends LastMessageOnlyOption {
   /** Model configuration for the detection/translation agent */
   model: MastraModelConfig;
 
@@ -130,6 +134,7 @@ export class LanguageDetector implements Processor<'language-detector'> {
   private minTextLength: number;
   private includeDetectionDetails: boolean;
   private translationQuality: 'speed' | 'quality' | 'balanced';
+  private lastMessageOnly: boolean;
   private providerOptions?: ProviderOptions;
 
   // Default target language
@@ -184,6 +189,7 @@ export class LanguageDetector implements Processor<'language-detector'> {
     this.minTextLength = options.minTextLength ?? 10;
     this.includeDetectionDetails = options.includeDetectionDetails ?? false;
     this.translationQuality = options.translationQuality || 'quality';
+    this.lastMessageOnly = options.lastMessageOnly ?? false;
     this.providerOptions = options.providerOptions;
 
     // Create internal detection and translation agent
@@ -195,22 +201,30 @@ export class LanguageDetector implements Processor<'language-detector'> {
     });
   }
 
-  async processInput(args: {
-    messages: MastraDBMessage[];
-    abort: (reason?: string) => never;
-    tracingContext?: TracingContext;
-  }): Promise<MastraDBMessage[]> {
+  async processInput(
+    args: {
+      messages: MastraDBMessage[];
+      abort: (reason?: string) => never;
+    } & Partial<ObservabilityContext>,
+  ): Promise<MastraDBMessage[]> {
     try {
-      const { messages, abort, tracingContext } = args;
+      const { messages, abort, ...rest } = args;
+      const observabilityContext = resolveObservabilityContext(rest);
 
       if (messages.length === 0) {
         return messages;
       }
 
       const processedMessages: MastraDBMessage[] = [];
+      const messagesToCheck = selectMessagesToCheck(messages, this.lastMessageOnly);
+      const checkedMessageIds = new Set(messagesToCheck.map(message => message.id));
 
       // Process each message
       for (const message of messages) {
+        if (!checkedMessageIds.has(message.id)) {
+          processedMessages.push(message);
+          continue;
+        }
         const textContent = this.extractTextContent(message);
         if (textContent.length < this.minTextLength) {
           // Text too short for reliable detection
@@ -218,7 +232,7 @@ export class LanguageDetector implements Processor<'language-detector'> {
           continue;
         }
 
-        const detectionResult = await this.detectLanguage(textContent, tracingContext);
+        const detectionResult = await this.detectLanguage(textContent, observabilityContext);
 
         // Check if confidence meets threshold
         if (detectionResult.confidence && detectionResult.confidence < this.threshold) {
@@ -267,12 +281,14 @@ export class LanguageDetector implements Processor<'language-detector'> {
   /**
    * Detect language using the internal agent
    */
-  private async detectLanguage(content: string, tracingContext?: TracingContext): Promise<LanguageDetectionResult> {
+  private async detectLanguage(
+    content: string,
+    observabilityContext?: ObservabilityContext,
+  ): Promise<LanguageDetectionResult> {
     const prompt = this.createDetectionPrompt(content);
 
     try {
       const model = await this.detectionAgent.getModel();
-      let response;
 
       const baseSchema = z.object({
         iso_code: z.string().describe('ISO language code').nullable(),
@@ -286,8 +302,9 @@ export class LanguageDetector implements Processor<'language-detector'> {
             })
           : baseSchema;
 
+      let result: LanguageDetectionResult;
       if (isSupportedLanguageModel(model)) {
-        response = await this.detectionAgent.generate(prompt, {
+        const response = await this.detectionAgent.generate(prompt, {
           structuredOutput: {
             schema,
           },
@@ -295,18 +312,20 @@ export class LanguageDetector implements Processor<'language-detector'> {
             temperature: 0,
           },
           providerOptions: this.providerOptions,
-          tracingContext,
+          ...observabilityContext,
         });
+
+        result = response.object!;
       } else {
-        response = await this.detectionAgent.generateLegacy(prompt, {
-          output: schema,
+        const response = await this.detectionAgent.generateLegacy(prompt, {
+          output: standardSchemaToJSONSchema(schema),
           temperature: 0,
           providerOptions: this.providerOptions as SharedV2ProviderOptions,
-          tracingContext,
+          ...observabilityContext,
         });
-      }
 
-      const result = response.object as LanguageDetectionResult;
+        result = response.object as LanguageDetectionResult;
+      }
 
       if (result.translated_text && !result.confidence) {
         result.confidence = 0.95;

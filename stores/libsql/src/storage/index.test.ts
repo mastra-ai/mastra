@@ -8,6 +8,8 @@ import { createClient } from '@libsql/client';
 import { Mastra } from '@mastra/core/mastra';
 import { vi } from 'vitest';
 
+import { DatasetsLibSQL } from './domains/datasets';
+import { ExperimentsLibSQL } from './domains/experiments';
 import { MemoryLibSQL } from './domains/memory';
 import { ScoresLibSQL } from './domains/scores';
 import { WorkflowsLibSQL } from './domains/workflows';
@@ -86,6 +88,8 @@ createDomainDirectTests({
   createMemoryDomain: () => new MemoryLibSQL({ client: createTestClient() }),
   createWorkflowsDomain: () => new WorkflowsLibSQL({ client: createTestClient() }),
   createScoresDomain: () => new ScoresLibSQL({ client: createTestClient() }),
+  createDatasetsDomain: () => new DatasetsLibSQL({ client: createTestClient() }),
+  createExperimentsDomain: () => new ExperimentsLibSQL({ client: createTestClient() }),
   createMemoryDomainWithOptions: () =>
     new MemoryLibSQL({
       client: createTestClient(),

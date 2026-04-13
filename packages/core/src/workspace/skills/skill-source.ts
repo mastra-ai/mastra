@@ -35,6 +35,8 @@ export interface SkillSourceEntry {
   name: string;
   /** Entry type */
   type: 'file' | 'directory';
+  /** Whether this entry is a symbolic link */
+  isSymlink?: boolean;
 }
 
 /**
@@ -64,4 +66,10 @@ export interface SkillSource {
    * List directory contents.
    */
   readdir(path: string): Promise<SkillSourceEntry[]>;
+
+  /**
+   * Resolve a path to its canonical form.
+   * Sources without aliases or symlinks can return the input path unchanged.
+   */
+  realpath?(path: string): Promise<string>;
 }

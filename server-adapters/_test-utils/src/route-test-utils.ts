@@ -47,6 +47,9 @@ export function generateContextualValue(fieldName?: string): string {
   // JSON-encoded query params (wrapped with wrapSchemaForQueryParams)
   if (field === 'tags') return '["test-tag"]'; // For observability traces filtering
 
+  // Email fields need valid email format
+  if (field === 'email' || field.includes('email')) return 'test@example.com';
+
   // Version comparison query params (from/to are version IDs)
   // Both use the same known version ID - comparing a version to itself returns empty diffs,
   // which is valid for route integration tests that verify the endpoint responds correctly
@@ -59,10 +62,12 @@ export function generateContextualValue(fieldName?: string): string {
 
   if (field.includes('agent')) return 'test-agent';
   if (field.includes('workflow')) return 'test-workflow';
+  if (field.includes('tool') && field.includes('slug')) return 'test-tool-slug';
   if (field.includes('tool')) return 'test-tool';
   if (field.includes('skill')) return 'test-skill';
   if (field.includes('reference') && field.includes('path')) return 'test-reference.md';
   if (field.includes('thread')) return 'test-thread';
+  if (field === 'conversationid') return 'test-thread';
   if (field.includes('resource')) return 'test-resource';
   if (field.includes('run')) return 'test-run';
   if (field.includes('step')) return 'test-step';
@@ -74,10 +79,19 @@ export function generateContextualValue(fieldName?: string): string {
   if (field.includes('vector')) return 'test-vector';
   if (field.includes('index')) return 'test-index';
   if (field.includes('message')) return 'test-message';
+  if (field === 'responseid') return 'test-response';
   if (field.includes('transport')) return 'test-transport';
-  if (field.includes('model')) return 'gpt-4o';
+  if (field.includes('model')) return 'openai/gpt-4o';
   if (field.includes('action')) return 'merge-template';
   if (field.includes('entity')) return 'test-entity';
+  if (field.includes('provider')) return 'test-provider';
+  if (field.includes('dataset') && field.includes('version')) return '1';
+  if (field.includes('dataset')) return 'test-dataset';
+  if (field.includes('item')) return 'test-item';
+  if (field.includes('experiment')) return 'test-experiment';
+  if (field.includes('mcp') && field.includes('client')) return 'test-mcp-client';
+  if (field.includes('prompt') && field.includes('block')) return 'test-prompt-block';
+  if (field.includes('block')) return 'test-prompt-block';
 
   return 'test-string';
 }
@@ -100,27 +114,143 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
     return generateValidDataFromSchema(def.innerType, fieldName);
   }
   if (typeName === 'ZodDefault') {
-    return def.defaultValue();
+    if ('_zod' in schema) {
+      return def.defaultValue;
+    } else {
+      return def.defaultValue();
+    }
   }
 
   if (typeName === 'ZodString') return generateContextualValue(fieldName);
-  if (typeName === 'ZodNumber') return 10;
+  if (typeName === 'ZodNumber') {
+    // Respect min/max constraints from Zod checks
+    let min = -Infinity;
+    let max = Infinity;
+    let minInclusive = true;
+    let maxInclusive = true;
+    let requiresInt = false;
+    let requiresSafeInt = false;
+    let multipleOf: number | undefined;
+    const checks = def.checks ?? [];
+    for (const check of checks) {
+      // Zod 3: check.kind === 'min'/'max', check.value
+      if (check.kind === 'min') {
+        min = check.value;
+        minInclusive = check.inclusive ?? true;
+      }
+      if (check.kind === 'max') {
+        max = check.value;
+        maxInclusive = check.inclusive ?? true;
+      }
+      if (check.kind === 'int') requiresInt = true;
+      if (check.kind === 'multipleOf') multipleOf = check.value;
+      // Zod 4: checks have _zod.def with check type and value
+      const zod4Def = check._zod?.def;
+      if (zod4Def) {
+        if (zod4Def.check === 'greater_than') {
+          min = zod4Def.value;
+          minInclusive = false;
+        }
+        if (zod4Def.check === 'greater_than_or_equal') {
+          min = zod4Def.value;
+          minInclusive = true;
+        }
+        if (zod4Def.check === 'less_than') {
+          max = zod4Def.value;
+          maxInclusive = false;
+        }
+        if (zod4Def.check === 'less_than_or_equal') {
+          max = zod4Def.value;
+          maxInclusive = true;
+        }
+        if (zod4Def.check === 'multiple_of') multipleOf = zod4Def.value;
+        if (zod4Def.check === 'integer') requiresInt = true;
+        if (zod4Def.check === 'safeint') {
+          requiresSafeInt = true;
+          requiresInt = true;
+        }
+      }
+    }
+
+    const step = requiresInt || requiresSafeInt ? 1 : 0.1;
+    const effectiveMin = min === -Infinity ? min : minInclusive ? min : min + step;
+    const effectiveMax = max === Infinity ? max : maxInclusive ? max : max - step;
+
+    const clampToRange = (value: number): number => {
+      if (effectiveMin !== -Infinity && value < effectiveMin) return effectiveMin;
+      if (effectiveMax !== Infinity && value > effectiveMax) return effectiveMax;
+      return value;
+    };
+
+    let candidate: number;
+    if (effectiveMin !== -Infinity && effectiveMax !== Infinity) {
+      candidate = (effectiveMin + effectiveMax) / 2;
+    } else if (effectiveMin !== -Infinity) {
+      candidate = effectiveMin;
+    } else if (effectiveMax !== Infinity) {
+      candidate = effectiveMax;
+    } else {
+      candidate = requiresInt ? 10 : 10.5;
+    }
+
+    candidate = clampToRange(candidate);
+
+    if (multipleOf && multipleOf > 0) {
+      const minBase = effectiveMin !== -Infinity ? effectiveMin : 0;
+      const maxBase = effectiveMax !== Infinity ? effectiveMax : minBase + multipleOf * 10;
+      let aligned = Math.ceil(minBase / multipleOf) * multipleOf;
+      if (effectiveMin !== -Infinity && aligned < effectiveMin) {
+        aligned += multipleOf;
+      }
+      if (effectiveMax !== Infinity && aligned > effectiveMax) {
+        aligned = Math.floor(maxBase / multipleOf) * multipleOf;
+      }
+      candidate = aligned;
+    }
+
+    if (requiresInt) {
+      candidate = Math.round(candidate);
+      candidate = clampToRange(candidate);
+    }
+
+    if (requiresSafeInt) {
+      candidate = Math.min(Math.max(candidate, Number.MIN_SAFE_INTEGER), Number.MAX_SAFE_INTEGER);
+    }
+
+    return candidate;
+  }
   if (typeName === 'ZodBoolean') return true;
   if (typeName === 'ZodNull') return null;
   if (typeName === 'ZodUndefined') return undefined;
   if (typeName === 'ZodDate') return new Date();
   if (typeName === 'ZodBigInt') return BigInt(0);
 
-  if (typeName === 'ZodLiteral') return def.value;
+  if (typeName === 'ZodLiteral') {
+    if ('_zod' in schema) {
+      return def.values?.[0];
+    } else {
+      return def.value;
+    }
+  }
 
-  if (typeName === 'ZodEnum') return def.values[0];
+  if (typeName === 'ZodEnum') {
+    if ('_zod' in schema) {
+      return Object.values(def.entries)[0];
+    } else {
+      return def.values[0];
+    }
+  }
   if (typeName === 'ZodNativeEnum') {
     const values = Object.values(def.values);
     return values[0];
   }
 
   if (typeName === 'ZodArray') {
-    return [generateValidDataFromSchema(def.type, fieldName)];
+    if ('_zod' in schema) {
+      return [generateValidDataFromSchema(def.element, fieldName)];
+    } else {
+      return [generateValidDataFromSchema(def.type, fieldName)];
+    }
   }
 
   if (typeName === 'ZodObject') {
@@ -132,7 +262,7 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
         // Special case: workflow routes need inputData field even when optional
         // because _run.start() expects { inputData?, ... } structure, not just {}
         // Without this, z.object({}).safeParse(undefined) fails with "Required" error
-        if (key === 'inputData') {
+        if (key === 'inputData' || key === 'agent_id') {
           const fieldDef = getZodDef(fieldSchema as z.ZodTypeAny);
           const innerType = fieldDef.innerType;
           obj[key] = generateValidDataFromSchema(innerType, key);
@@ -218,9 +348,16 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':workflowId')) params.workflowId = 'test-workflow';
   if (route.path.includes(':toolId')) params.toolId = 'test-tool';
   if (route.path.includes(':threadId')) params.threadId = 'test-thread';
+  if (route.path.includes(':conversationId')) params.conversationId = 'test-thread';
+  if (route.path.includes(':responseId')) params.responseId = 'test-response';
   if (route.path.includes(':resourceId')) params.resourceId = 'test-resource';
   if (route.path.includes(':modelConfigId')) params.modelConfigId = 'id1';
-  if (route.path.includes(':scorerId')) params.scorerId = 'test-scorer';
+  // For stored scorer version routes, use the stored scorer ID to match test context
+  if (route.path.includes(':scorerId') && route.path.includes('/stored/scorers/')) {
+    params.scorerId = 'test-stored-scorer';
+  } else if (route.path.includes(':scorerId')) {
+    params.scorerId = 'test-scorer';
+  }
   if (route.path.includes(':traceId')) params.traceId = 'test-trace';
   if (route.path.includes(':runId')) params.runId = 'test-run';
   if (route.path.includes(':stepId')) params.stepId = 'test-step';
@@ -233,6 +370,7 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':entityId')) params.entityId = 'test-agent';
   if (route.path.includes(':actionId')) params.actionId = 'merge-template';
   if (route.path.includes(':storedAgentId')) params.storedAgentId = 'test-stored-agent';
+  if (route.path.includes(':storedScorerId')) params.storedScorerId = 'test-stored-scorer';
   if (route.path.includes(':versionId')) params.versionId = 'test-version-id';
   if (route.path.includes(':processorId')) params.processorId = 'test-processor';
   // MCP route params - need to get actual server ID from test context
@@ -246,6 +384,27 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   // Skills route params
   if (route.path.includes(':skillName')) params.skillName = 'test-skill';
   if (route.path.includes(':referencePath')) params.referencePath = 'test-reference.md';
+
+  // Stored entity route params
+  if (route.path.includes(':storedMCPClientId')) params.storedMCPClientId = 'test-stored-mcp-client';
+  if (route.path.includes(':mcpClientId')) params.mcpClientId = 'test-stored-mcp-client';
+  if (route.path.includes(':storedPromptBlockId')) params.storedPromptBlockId = 'test-stored-prompt-block';
+  if (route.path.includes(':promptBlockId')) params.promptBlockId = 'test-stored-prompt-block';
+  if (route.path.includes(':storedWorkspaceId')) params.storedWorkspaceId = 'test-stored-workspace';
+  if (route.path.includes(':storedSkillId')) params.storedSkillId = 'test-stored-skill';
+  if (route.path.includes(':scorerId') && route.path.includes('/stored/scorers/'))
+    params.scorerId = 'test-stored-scorer';
+
+  // Dataset route params
+  if (route.path.includes(':datasetId')) params.datasetId = 'test-dataset';
+  if (route.path.includes(':itemId')) params.itemId = 'test-item';
+  if (route.path.includes(':experimentId')) params.experimentId = 'test-experiment';
+  if (route.path.includes(':resultId')) params.resultId = 'test-result';
+  if (route.path.includes(':datasetVersion')) params.datasetVersion = '1';
+
+  // Tool provider route params
+  if (route.path.includes(':providerId')) params.providerId = 'test-provider';
+  if (route.path.includes(':toolSlug')) params.toolSlug = 'test-tool-slug';
 
   return params;
 }

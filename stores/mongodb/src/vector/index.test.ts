@@ -84,14 +84,18 @@ const uri =
   'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true&serverSelectionTimeoutMS=2000';
 const dbName = 'vector_db';
 
+// Track whether Atlas Search readiness has been verified (shared across suites)
+let atlasSearchReady = false;
+
 async function waitForAtlasSearchReady(
   vectorDB: MongoDBVector,
   indexName: string = 'dummy_vector_index',
   dimension: number = 1,
   metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine',
   timeout: number = 300000,
-  interval: number = 5000,
+  interval: number = 1000,
 ) {
+  if (atlasSearchReady) return;
   const start = Date.now();
   let lastError: any = null;
   let attempt = 0;
@@ -101,6 +105,7 @@ async function waitForAtlasSearchReady(
       await vectorDB.createIndex({ indexName, dimension, metric });
       // If it succeeds, we're ready
       console.log(`[waitForAtlasSearchReady] Atlas Search is ready! (attempt ${attempt})`);
+      atlasSearchReady = true;
       return;
     } catch (e: any) {
       lastError = e;
@@ -112,11 +117,12 @@ async function waitForAtlasSearchReady(
     'Atlas Search did not become ready in time. Last error: ' + (lastError ? lastError.message : 'unknown'),
   );
 }
-// Helper function to wait for a condition with timeout (similar to mdb_toolkit)
+
+// Helper function to wait for a condition with timeout
 async function waitForCondition(
   condition: () => Promise<boolean>,
   timeout: number = 10000,
-  interval: number = 1000,
+  interval: number = 500,
 ): Promise<boolean> {
   const startTime = Date.now();
   while (Date.now() - startTime < timeout) {
@@ -124,6 +130,18 @@ async function waitForCondition(
     await new Promise(resolve => setTimeout(resolve, interval));
   }
   return false;
+}
+
+// Poll until upserted/updated data is visible to vector search queries
+async function waitForSync(
+  vectorDB: MongoDBVector,
+  indexName: string,
+  check: () => Promise<boolean>,
+  timeout: number = 10000,
+  interval: number = 200,
+): Promise<void> {
+  const ok = await waitForCondition(check, timeout, interval);
+  if (!ok) throw new Error(`waitForSync timed out for index "${indexName}"`);
 }
 
 // Create index and wait until the search index (named `${indexName}_vector_index`) is READY
@@ -134,14 +152,14 @@ async function createIndexAndWait(
   metric: 'cosine' | 'euclidean' | 'dotproduct',
 ) {
   await vectorDB.createIndex({ indexName, dimension, metric });
-  await vectorDB.waitForIndexReady({ indexName });
+  await vectorDB.waitForIndexReady({ indexName, checkIntervalMs: 500 });
   const created = await waitForCondition(
     async () => {
       const cols = await vectorDB.listIndexes();
       return cols.includes(indexName);
     },
     30000,
-    2000,
+    500,
   );
   if (!created) throw new Error('Timed out waiting for collection to be created');
 }
@@ -156,7 +174,7 @@ async function deleteIndexAndWait(vectorDB: MongoDBVector, indexName: string) {
         return !cols.includes(indexName);
       },
       30000,
-      2000,
+      500,
     );
     if (!deleted) throw new Error('Timed out waiting for collection to be deleted');
   } catch (error) {
@@ -181,16 +199,18 @@ describe('MongoDBVector Integration Tests', () => {
     try {
       const cols = await vectorDB.listIndexes();
       await Promise.all(cols.map(c => vectorDB.deleteIndex({ indexName: c })));
-      const deleted = await waitForCondition(async () => (await vectorDB.listIndexes()).length === 0, 30000, 2000);
+      const deleted = await waitForCondition(async () => (await vectorDB.listIndexes()).length === 0, 30000, 500);
       if (!deleted) throw new Error('Timed out waiting for collections to be deleted');
     } catch (error) {
       console.error('Failed to delete test collections:', error);
       throw error;
     }
 
-    await createIndexAndWait(vectorDB, testIndexName, 4, 'cosine');
-    await createIndexAndWait(vectorDB, testIndexName2, 4, 'cosine');
-    await createIndexAndWait(vectorDB, emptyIndexName, 4, 'cosine');
+    await Promise.all([
+      createIndexAndWait(vectorDB, testIndexName, 4, 'cosine'),
+      createIndexAndWait(vectorDB, testIndexName2, 4, 'cosine'),
+      createIndexAndWait(vectorDB, emptyIndexName, 4, 'cosine'),
+    ]);
   }, 500000);
 
   afterAll(async () => {
@@ -242,7 +262,10 @@ describe('MongoDBVector Integration Tests', () => {
       });
 
       // Wait for indexing
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await waitForSync(vectorDB, bugTestIndexName, async () => {
+        const r = await vectorDB.query({ indexName: bugTestIndexName, queryVector: [0.5, 0.5, 0.5, 0.5], topK: 10 });
+        return r.length === 4;
+      });
     });
 
     afterAll(async () => {
@@ -335,10 +358,49 @@ createVectorTestSuite({
   deleteIndex: async (indexName: string) => {
     await deleteIndexAndWait(mongodbVector, indexName);
   },
-  waitForIndexing: async () => {
-    // Vectors still need time to be indexed after upsert
-    // CI environments are slower, so use 3000ms for reliability
-    await new Promise(resolve => setTimeout(resolve, 3000));
+  waitForIndexing: async (indexName: string) => {
+    // Poll until mongot's $vectorSearch result count matches countDocuments (immediate).
+    // Uses a large topK and exact-match check so this works for upserts and deletes:
+    //   - Upsert (count goes up):  stale mongot returns fewer  → keeps polling
+    //   - Delete (count goes down): stale mongot returns more   → keeps polling
+    // For updates (count unchanged), count matches on the first poll so we can't
+    // detect the change. A minimum sleep of 1000ms covers this case — mongot on
+    // atlas-local CI typically indexes within 200-500ms, so 1000ms is a 2-5× buffer.
+    // This is still half the original 2000ms fixed sleep.
+    const interval = 200;
+    const timeout = 10000;
+    const largeTopK = 10000;
+    const minSleep = 1000;
+    const start = Date.now();
+    let firstPoll = true;
+    while (Date.now() - start < timeout) {
+      try {
+        const stats = await mongodbVector.describeIndex({ indexName });
+        const docCount = stats?.count ?? 0;
+        if (docCount === 0) {
+          await mongodbVector.query({ indexName, queryVector: new Array(1536).fill(0.1), topK: 1 });
+          return;
+        }
+        const results = await mongodbVector.query({
+          indexName,
+          queryVector: new Array(1536).fill(0.1),
+          topK: largeTopK,
+        });
+        if (results.length === docCount) {
+          if (firstPoll) {
+            // Count matched immediately — likely an update (count didn't change).
+            // Sleep to give mongot time to re-index the updated data.
+            await new Promise(resolve => setTimeout(resolve, minSleep));
+          }
+          return;
+        }
+      } catch {
+        // Index not queryable yet — keep polling.
+      }
+      firstPoll = false;
+      await new Promise(resolve => setTimeout(resolve, interval));
+    }
+    // Timeout — don't throw. Let the test assertion surface the real failure.
   },
   supportsContains: false,
   // MongoDB limitations:

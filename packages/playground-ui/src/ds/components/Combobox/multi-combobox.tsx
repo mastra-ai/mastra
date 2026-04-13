@@ -1,11 +1,11 @@
 import { Combobox as BaseCombobox } from '@base-ui/react/combobox';
-import { buttonVariants } from '@/ds/components/Button/Button';
-import { cn } from '@/lib/utils';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import * as React from 'react';
-import { type FormElementSize } from '@/ds/primitives/form-element';
-import { comboboxStyles } from './combobox-styles';
 import type { ComboboxOption } from './combobox';
+import { comboboxStyles } from './combobox-styles';
+import { buttonVariants } from '@/ds/components/Button/Button';
+import type { FormElementSize } from '@/ds/primitives/form-element';
+import { cn } from '@/lib/utils';
 
 export type { ComboboxOption };
 
@@ -101,7 +101,7 @@ export function MultiCombobox({
                       <span className={comboboxStyles.optionContent}>
                         {option.start}
                         <span className={comboboxStyles.optionText}>
-                          <span>{option.label}</span>
+                          <span className={comboboxStyles.optionLabel}>{option.label}</span>
                           {option.description && (
                             <span className={comboboxStyles.optionDescription}>{option.description}</span>
                           )}

@@ -2,6 +2,7 @@ import { generateId } from '@internal/ai-sdk-v5';
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { ConsoleLogger } from '../logger';
+import { createObservabilityContext } from '../observability';
 import type { ProcessorState } from '../processors';
 import { createDestructurableOutput, MastraModelOutput } from '../stream/base/output';
 import type { LoopOptions, LoopRun, StreamInternal } from './types';
@@ -38,7 +39,6 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
       category: ErrorCategory.USER,
     });
     loggerToUse.trackException(mastraError);
-    loggerToUse.error(mastraError.toString());
     throw mastraError;
   }
 
@@ -67,6 +67,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     resourceId: _internal?.resourceId,
     memory: _internal?.memory,
     threadExists: _internal?.threadExists,
+    transportRef: _internal?.transportRef ?? {},
   };
 
   let startTimestamp = internalToUse.now?.();
@@ -126,6 +127,9 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   // Apply chunk tracing transform to track MODEL_STEP and MODEL_CHUNK spans
   const stream = rest.modelSpanTracker?.wrapStream(baseStream) ?? baseStream;
 
+  // Build observability context from modelSpanTracker if tracing context is available
+  const observabilityContext = createObservabilityContext(rest.modelSpanTracker?.getTracingContext());
+
   modelOutput = new MastraModelOutput({
     model: {
       modelId: firstModel.model.modelId,
@@ -144,9 +148,10 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
       structuredOutput: rest.structuredOutput,
       outputProcessors,
       returnScorerData,
-      tracingContext: rest.modelSpanTracker?.getTracingContext(),
+      ...observabilityContext,
       requestContext: rest.requestContext,
       processorStates,
+      transportRef: internalToUse.transportRef,
     },
     initialState: initialStreamState,
   });

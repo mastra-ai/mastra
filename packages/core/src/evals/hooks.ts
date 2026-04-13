@@ -1,5 +1,5 @@
 import { AvailableHooks, executeHook } from '../hooks';
-import type { TracingContext } from '../observability';
+import type { ObservabilityContext } from '../observability';
 import type { MastraScorerEntry } from './base';
 import type { ScoringEntityType, ScoringHookInput, ScoringSource } from './types';
 
@@ -16,7 +16,7 @@ export function runScorer({
   entityType,
   threadId,
   resourceId,
-  tracingContext,
+  ...observabilityContext
 }: {
   scorerId: string;
   scorerObject: MastraScorerEntry;
@@ -30,8 +30,7 @@ export function runScorer({
   entityType: ScoringEntityType;
   threadId?: string;
   resourceId?: string;
-  tracingContext?: TracingContext;
-}) {
+} & ObservabilityContext) {
   let shouldExecute = false;
 
   if (!scorerObject?.sampling || scorerObject?.sampling?.type === 'none') {
@@ -68,7 +67,7 @@ export function runScorer({
     entityType,
     threadId,
     resourceId,
-    tracingContext,
+    ...observabilityContext,
   };
 
   executeHook(AvailableHooks.ON_SCORER_RUN, payload);

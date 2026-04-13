@@ -16,13 +16,8 @@
       ],
       "outputs": ["dist/**", "!dist/docs/**"]
     },
-    "build:docs": {
-      "dependsOn": ["build:lib", "mastra-docs#build"],
-      "inputs": ["src/**", "package.json", "!**/*.md"],
-      "outputs": ["dist/docs/**"]
-    },
     "build": {
-      "dependsOn": ["build:lib", "build:docs"],
+      "dependsOn": ["build:lib"],
       "inputs": ["package.json"]
     },
     "test": {

@@ -46,6 +46,9 @@
             "attributes": {
               "status": "success"
             },
+            "metadata": {
+              "runId": "<runId-1>"
+            },
             "input": {
               "input": "nested test"
             },
@@ -94,6 +97,9 @@
                     "entityId": "simple-step",
                     "attributes": {
                       "status": "success"
+                    },
+                    "metadata": {
+                      "runId": "<runId-2>"
                     },
                     "input": {
                       "input": "nested test"

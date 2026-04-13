@@ -4,6 +4,12 @@ import { join } from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GET_SYSTEM_PACKAGES_ROUTE } from './system';
 
+const createMockMastra = (hasEditor: boolean) =>
+  ({
+    getEditor: () => (hasEditor ? {} : undefined),
+    getStorage: () => undefined,
+  }) as any;
+
 describe('System Handlers', () => {
   const originalEnv = process.env;
   let tempDir: string;
@@ -34,34 +40,101 @@ describe('System Handlers', () => {
       writeFileSync(tempFilePath, JSON.stringify(packages), 'utf-8');
       process.env.MASTRA_PACKAGES_FILE = tempFilePath;
 
-      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler();
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(false) } as any);
 
-      expect(result).toEqual({ packages });
+      expect(result).toEqual({
+        packages,
+        isDev: false,
+        cmsEnabled: false,
+        storageType: undefined,
+        observabilityStorageType: undefined,
+      });
     });
 
     it('should return empty array when MASTRA_PACKAGES_FILE is not set', async () => {
       delete process.env.MASTRA_PACKAGES_FILE;
 
-      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler();
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(false) } as any);
 
-      expect(result).toEqual({ packages: [] });
+      expect(result).toEqual({
+        packages: [],
+        isDev: false,
+        cmsEnabled: false,
+        storageType: undefined,
+        observabilityStorageType: undefined,
+      });
     });
 
     it('should return empty array when MASTRA_PACKAGES_FILE points to invalid JSON', async () => {
       writeFileSync(tempFilePath, 'not-valid-json', 'utf-8');
       process.env.MASTRA_PACKAGES_FILE = tempFilePath;
 
-      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler();
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(false) } as any);
 
-      expect(result).toEqual({ packages: [] });
+      expect(result).toEqual({
+        packages: [],
+        isDev: false,
+        cmsEnabled: false,
+        storageType: undefined,
+        observabilityStorageType: undefined,
+      });
     });
 
     it('should return empty array when MASTRA_PACKAGES_FILE points to non-existent file', async () => {
       process.env.MASTRA_PACKAGES_FILE = '/non/existent/path/packages.json';
 
-      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler();
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(false) } as any);
 
-      expect(result).toEqual({ packages: [] });
+      expect(result).toEqual({
+        packages: [],
+        isDev: false,
+        cmsEnabled: false,
+        storageType: undefined,
+        observabilityStorageType: undefined,
+      });
+    });
+
+    it('should return isDev true when MASTRA_DEV is set', async () => {
+      process.env.MASTRA_DEV = 'true';
+      delete process.env.MASTRA_PACKAGES_FILE;
+
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(false) } as any);
+
+      expect(result).toEqual({
+        packages: [],
+        isDev: true,
+        cmsEnabled: false,
+        storageType: undefined,
+        observabilityStorageType: undefined,
+      });
+    });
+
+    it('should return cmsEnabled true when editor is configured', async () => {
+      delete process.env.MASTRA_PACKAGES_FILE;
+
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(true) } as any);
+
+      expect(result).toEqual({
+        packages: [],
+        isDev: false,
+        cmsEnabled: true,
+        storageType: undefined,
+        observabilityStorageType: undefined,
+      });
+    });
+
+    it('should return cmsEnabled false when editor is not configured', async () => {
+      delete process.env.MASTRA_PACKAGES_FILE;
+
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(false) } as any);
+
+      expect(result).toEqual({
+        packages: [],
+        isDev: false,
+        cmsEnabled: false,
+        storageType: undefined,
+        observabilityStorageType: undefined,
+      });
     });
   });
 });

@@ -95,6 +95,8 @@ describe('getProvidersHandler', () => {
     // Set some API keys
     process.env.OPENAI_API_KEY = 'test-key';
     process.env.ANTHROPIC_API_KEY = 'test-key';
+    // Ensure Google is not connected
+    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
 
     const result = await GET_PROVIDERS_ROUTE.handler({});
 
@@ -114,7 +116,7 @@ describe('getProvidersHandler', () => {
     // Clear all API keys
     delete process.env.OPENAI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
-    delete process.env.GOOGLE_API_KEY;
+    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
 
     const result = await GET_PROVIDERS_ROUTE.handler({});
 
@@ -164,10 +166,57 @@ describe('getProvidersHandler', () => {
       const registryEntry = PROVIDER_REGISTRY[provider.id as keyof typeof PROVIDER_REGISTRY];
       expect(registryEntry).toBeDefined();
       expect(provider.name).toBe(registryEntry.name);
-      expect(provider.envVar).toBe(registryEntry.apiKeyEnvVar);
+      expect(provider.envVar).toEqual(registryEntry.apiKeyEnvVar);
       // Models should match (converting readonly to regular array)
       expect(provider.models).toEqual([...registryEntry.models]);
     });
+  });
+
+  it('should include custom gateway providers alongside default providers when mastra has gateways', async () => {
+    // Create a mock gateway that returns custom providers
+    const mockGateway = {
+      id: 'test-gateway',
+      name: 'Test Gateway',
+      getId: () => 'test-gateway',
+      fetchProviders: vi.fn().mockResolvedValue({
+        'custom-llm': {
+          name: 'Custom LLM',
+          models: ['custom-model-1', 'custom-model-2'],
+          apiKeyEnvVar: 'CUSTOM_LLM_API_KEY',
+          gateway: 'test-gateway',
+        },
+      }),
+      buildUrl: vi.fn(),
+      getApiKey: vi.fn(),
+      resolveLanguageModel: vi.fn(),
+    };
+
+    const mastra = new Mastra({
+      gateways: {
+        'test-gateway': mockGateway,
+      },
+    });
+
+    process.env.CUSTOM_LLM_API_KEY = 'test-key';
+
+    const requestContext = new RequestContext();
+    const abortSignal = new AbortController().signal;
+
+    const result = await GET_PROVIDERS_ROUTE.handler({ mastra, requestContext, abortSignal });
+
+    // Should include default providers from PROVIDER_REGISTRY
+    const defaultProvider = result.providers.find(p => p.id === 'openai');
+    expect(defaultProvider).toBeDefined();
+
+    // Should also include the custom gateway provider
+    const customProvider = result.providers.find(p => p.id === 'test-gateway/custom-llm');
+    expect(customProvider).toBeDefined();
+    expect(customProvider?.name).toBe('Custom LLM');
+    expect(customProvider?.models).toEqual(['custom-model-1', 'custom-model-2']);
+    expect(customProvider?.connected).toBe(true);
+
+    // Cleanup
+    delete process.env.CUSTOM_LLM_API_KEY;
   });
 
   it('should correctly show custom gateway providers as connected', async () => {
@@ -208,7 +257,7 @@ describe('isProviderConnected', () => {
     // Clear all API keys
     delete process.env.OPENAI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
-    delete process.env.GOOGLE_API_KEY;
+    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   });
 
   afterEach(() => {
