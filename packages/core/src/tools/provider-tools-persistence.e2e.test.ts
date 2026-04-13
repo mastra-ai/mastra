@@ -8,7 +8,7 @@ import { createTool } from '../tools';
 
 // Anthropic only defers provider tool execution non-deterministically, so this
 // test must always run against the recorded response.
-const mock = createGatewayMock({ mode: 'replay' });
+const mock = createGatewayMock();
 beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());
 

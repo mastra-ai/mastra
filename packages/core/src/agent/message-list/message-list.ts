@@ -37,6 +37,7 @@ import type {
 } from './state';
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
 import { ensureGeminiCompatibleMessages } from './utils/provider-compat';
+import { stampPart } from './utils/stamp-part';
 
 export class MessageList {
   private messages: MastraDBMessage[] = [];
@@ -785,7 +786,7 @@ export class MessageList {
       return false;
     }
 
-    lastMsg.content.parts.push({ type: 'step-start' as const });
+    lastMsg.content.parts.push(stampPart({ type: 'step-start' as const }));
 
     // Ensure the mutated message is persisted
     if (!this.stateManager.isResponseMessage(lastMsg)) {

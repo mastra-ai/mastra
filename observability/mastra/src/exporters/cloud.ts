@@ -20,6 +20,7 @@ export interface CloudExporterConfig extends BaseExporterConfig {
 
   // Cloud-specific configuration
   accessToken?: string; // Cloud access token (from env or config)
+  projectId?: string; // Project ID for project-scoped collector routes
   endpoint?: string; // Base cloud endpoint
   tracesEndpoint?: string; // Explicit cloud traces endpoint override
   logsEndpoint?: string; // Explicit cloud logs endpoint override
@@ -38,15 +39,7 @@ const SIGNAL_PUBLISH_SUFFIXES: Record<CloudSignal, string> = {
   feedback: '/feedback/publish',
 };
 
-const SIGNAL_PUBLISH_PATHS: Record<CloudSignal, string> = {
-  traces: '/ai/spans/publish',
-  logs: '/ai/logs/publish',
-  metrics: '/ai/metrics/publish',
-  scores: '/ai/scores/publish',
-  feedback: '/ai/feedback/publish',
-};
-
-const SIGNAL_PAYLOAD_KEYS: Record<CloudSignal, string> = {
+const SIGNAL_PUBLISH_SEGMENTS: Record<CloudSignal, string> = {
   traces: 'spans',
   logs: 'logs',
   metrics: 'metrics',
@@ -79,6 +72,20 @@ function createInvalidEndpointError(endpoint: string, text: string, cause?: unkn
   );
 }
 
+const VALID_PROJECT_ID = /^[a-zA-Z0-9_-]+$/;
+
+function createInvalidProjectIdError(projectId: string): MastraError {
+  return new MastraError({
+    id: `CLOUD_EXPORTER_INVALID_PROJECT_ID`,
+    text: 'CloudExporter projectId must only contain letters, numbers, hyphens, and underscores.',
+    domain: ErrorDomain.MASTRA_OBSERVABILITY,
+    category: ErrorCategory.USER,
+    details: {
+      projectId,
+    },
+  });
+}
+
 function resolveBaseEndpoint(baseEndpoint: string): string {
   const normalizedEndpoint = trimTrailingSlashes(baseEndpoint);
   const invalidText =
@@ -99,11 +106,20 @@ function resolveBaseEndpoint(baseEndpoint: string): string {
   }
 }
 
-function buildSignalEndpoint(baseEndpoint: string, signal: CloudSignal): string {
-  return `${baseEndpoint}${SIGNAL_PUBLISH_PATHS[signal]}`;
+function buildSignalPath(signal: CloudSignal, projectId?: string): string {
+  const signalSegment = SIGNAL_PUBLISH_SEGMENTS[signal];
+  if (!projectId) {
+    return `/ai/${signalSegment}/publish`;
+  }
+
+  return `/projects/${projectId}/ai/${signalSegment}/publish`;
 }
 
-function resolveExplicitSignalEndpoint(signal: CloudSignal, endpoint: string): string {
+function buildSignalEndpoint(baseEndpoint: string, signal: CloudSignal, projectId?: string): string {
+  return `${baseEndpoint}${buildSignalPath(signal, projectId)}`;
+}
+
+function resolveExplicitSignalEndpoint(signal: CloudSignal, endpoint: string, projectId?: string): string {
   const normalizedEndpoint = trimTrailingSlashes(endpoint);
   const invalidText = `CloudExporter ${signal}Endpoint must be a base origin like "https://collector.example.com" or a full ${signal} publish URL ending in "${SIGNAL_PUBLISH_SUFFIXES[signal]}".`;
 
@@ -117,7 +133,7 @@ function resolveExplicitSignalEndpoint(signal: CloudSignal, endpoint: string): s
     const normalizedPathname = trimTrailingSlashes(parsedEndpoint.pathname);
 
     if (!normalizedPathname || normalizedPathname === '/') {
-      return buildSignalEndpoint(normalizedOrigin, signal);
+      return buildSignalEndpoint(normalizedOrigin, signal, projectId);
     }
 
     if (normalizedPathname.endsWith(SIGNAL_PUBLISH_SUFFIXES[signal])) {
@@ -205,7 +221,7 @@ type ResolvedCloudConfig = {
 export class CloudExporter extends BaseExporter {
   name = 'mastra-cloud-observability-exporter';
 
-  private cloudConfig: ResolvedCloudConfig;
+  private readonly cloudConfig: Readonly<ResolvedCloudConfig>;
   private buffer: MastraCloudBuffer;
   private flushTimer: NodeJS.Timeout | null = null;
   private inFlightFlushes = new Set<Promise<void>>();
@@ -213,7 +229,13 @@ export class CloudExporter extends BaseExporter {
   constructor(config: CloudExporterConfig = {}) {
     super(config);
 
+    if (config.projectId !== undefined && !VALID_PROJECT_ID.test(config.projectId)) {
+      throw createInvalidProjectIdError(config.projectId);
+    }
+
     const accessToken = config.accessToken ?? process.env.MASTRA_CLOUD_ACCESS_TOKEN;
+    const rawProjectId = config.projectId ?? process.env.MASTRA_PROJECT_ID;
+    const projectId = rawProjectId && VALID_PROJECT_ID.test(rawProjectId) ? rawProjectId : undefined;
     if (!accessToken) {
       this.setDisabled('MASTRA_CLOUD_ACCESS_TOKEN environment variable not set.');
     }
@@ -223,10 +245,10 @@ export class CloudExporter extends BaseExporter {
     let tracesEndpoint: string;
 
     if (tracesEndpointOverride) {
-      tracesEndpoint = resolveExplicitSignalEndpoint('traces', tracesEndpointOverride);
+      tracesEndpoint = resolveExplicitSignalEndpoint('traces', tracesEndpointOverride, projectId);
     } else {
       baseEndpoint = resolveBaseEndpoint(config.endpoint ?? DEFAULT_CLOUD_ENDPOINT);
-      tracesEndpoint = buildSignalEndpoint(baseEndpoint, 'traces');
+      tracesEndpoint = buildSignalEndpoint(baseEndpoint, 'traces', projectId);
     }
 
     const resolveConfiguredSignalEndpoint = (
@@ -234,14 +256,14 @@ export class CloudExporter extends BaseExporter {
       explicitEndpoint?: string,
     ): string => {
       if (explicitEndpoint) {
-        return resolveExplicitSignalEndpoint(signal, explicitEndpoint);
+        return resolveExplicitSignalEndpoint(signal, explicitEndpoint, projectId);
       }
 
       if (tracesEndpointOverride) {
         return deriveSignalEndpointFromTracesEndpoint(signal, tracesEndpoint);
       }
 
-      return buildSignalEndpoint(baseEndpoint!, signal);
+      return buildSignalEndpoint(baseEndpoint!, signal, projectId);
     };
 
     this.cloudConfig = {
@@ -517,7 +539,7 @@ export class CloudExporter extends BaseExporter {
     const options: RequestInit = {
       method: 'POST',
       headers,
-      body: JSON.stringify({ [SIGNAL_PAYLOAD_KEYS[signal]]: records }),
+      body: JSON.stringify({ [SIGNAL_PUBLISH_SEGMENTS[signal]]: records }),
     };
 
     await fetchWithRetry(endpointMap[signal], options, this.cloudConfig.maxRetries);

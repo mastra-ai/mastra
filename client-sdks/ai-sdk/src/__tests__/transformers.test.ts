@@ -741,7 +741,7 @@ describe('WorkflowStreamToAISDKTransformer', () => {
       expect(textDeltaChunks[0].delta).toBe('Here is my answer');
     });
 
-    it('should filter reasoning-delta chunks when sendReasoning is not set', async () => {
+    it('should filter all reasoning chunks when sendReasoning is not set', async () => {
       const mockStream = new ReadableStream<ChunkType>({
         async start(controller) {
           controller.enqueue({
@@ -826,7 +826,7 @@ describe('WorkflowStreamToAISDKTransformer', () => {
         },
       });
 
-      // Default behavior (no sendReasoning) should filter reasoning-delta
+      // Default behavior (no sendReasoning) should filter reasoning chunks
       const transformedStream = mockStream.pipeThrough(
         WorkflowStreamToAISDKTransformer({ includeTextStreamParts: true }),
       );
@@ -836,20 +836,18 @@ describe('WorkflowStreamToAISDKTransformer', () => {
         chunks.push(chunk);
       }
 
-      // reasoning-delta should be filtered out (sendReasoning defaults to false)
+      // reasoning chunks should be filtered out (sendReasoning defaults to false)
       const reasoningDeltaChunks = chunks.filter(chunk => chunk.type === 'reasoning-delta');
       expect(reasoningDeltaChunks.length).toBe(0);
-
-      // reasoning-start and reasoning-end still pass through (matching agent stream behavior)
-      expect(chunks.find(chunk => chunk.type === 'reasoning-start')).toBeDefined();
-      expect(chunks.find(chunk => chunk.type === 'reasoning-end')).toBeDefined();
+      expect(chunks.find(chunk => chunk.type === 'reasoning-start')).toBeUndefined();
+      expect(chunks.find(chunk => chunk.type === 'reasoning-end')).toBeUndefined();
 
       // Text should still come through
       const textDeltaChunks = chunks.filter(chunk => chunk.type === 'text-delta');
       expect(textDeltaChunks.length).toBe(1);
     });
 
-    it('should filter reasoning-delta chunks when sendReasoning is explicitly false', async () => {
+    it('should filter all reasoning chunks when sendReasoning is explicitly false', async () => {
       const mockStream = new ReadableStream<ChunkType>({
         async start(controller) {
           controller.enqueue({

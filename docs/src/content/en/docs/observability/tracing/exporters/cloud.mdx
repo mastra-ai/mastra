@@ -1,30 +1,92 @@
 ---
 title: "Cloud exporter | Tracing | Observability"
-description: "Send traces to Mastra Cloud for production monitoring"
+description: "Send traces, logs, metrics, scores, and feedback to Mastra platform"
 packages:
   - "@mastra/observability"
 ---
 
 # Cloud exporter
 
-The `CloudExporter` sends traces to Mastra Cloud for centralized monitoring and team collaboration. It's automatically enabled when using the default observability configuration with a valid access token.
+The `CloudExporter` sends traces, logs, metrics, scores, and feedback to the Mastra platform. Use it to route observability data from any Mastra app to a hosted project in the Mastra platform.
 
-## Configuration
+## Quickstart
 
-### Prerequisites
+To connect `CloudExporter`, create an access token, find the destination `projectId`, and add the exporter to your observability config.
 
-1. **Mastra Cloud Account**: Sign up at [cloud.mastra.ai](https://cloud.mastra.ai)
-1. **Mastra Cloud Project**: Create a project in Mastra Cloud. Traces are scoped per project, so even if you only want observability, you need a project to act as the destination for your traces.
-1. **Access Token**: Generate in your project's sidebar under **Project Settings → Access Tokens**
-1. **Environment Variables**: Set your credentials:
+### 1. Create an access token
 
-```bash title=".env"
-MASTRA_CLOUD_ACCESS_TOKEN=mst_xxxxxxxxxxxxxxxx
+Run the following command:
+
+```bash
+mastra auth tokens create exporter-token
 ```
 
-### Basic Setup
+This command prints a token secret that you can use as `MASTRA_CLOUD_ACCESS_TOKEN`.
 
-```typescript title="src/mastra/index.ts"
+If you already have an access token, copy the **Observability** value from the Mastra platform instead. You can find it in either of these places:
+
+- On the **Projects** page, open the project list and find the **Observability** row on the project card.
+- On the project **Overview** page, find the **Observability** row directly below the deployment URL.
+
+Set the token as an environment variable:
+
+```bash title=".env"
+MASTRA_CLOUD_ACCESS_TOKEN=<your-cloud-access-token>
+```
+
+### 2. Find your `projectId`
+
+Run the following command:
+
+```bash
+mastra studio deploy list
+```
+
+The output looks similar to this:
+
+```text
+✅ <your-project-name> (<your-project-id>)
+   Latest:   00000000-0000-0000-0000-000000000000 — running
+   URL:      https://260407.studio.mastra.cloud
+```
+
+In this output, the value in parentheses is the `projectId`:
+
+```text
+<your-project-id>
+```
+
+Set it as an environment variable:
+
+```bash title=".env"
+MASTRA_PROJECT_ID=<your-project-id>
+```
+
+### 3. Set your environment variables
+
+Tokens created with `mastra auth tokens create` are organization-scoped, so `MASTRA_PROJECT_ID` is required.
+
+If you use a project-scoped token from the Mastra platform instead, `CloudExporter` can route without `projectId`, but setting it explicitly is still supported.
+
+Add both values to your environment:
+
+```bash title=".env"
+MASTRA_CLOUD_ACCESS_TOKEN=<your-cloud-access-token>
+MASTRA_PROJECT_ID=<your-project-id>
+```
+
+For example:
+
+```bash title=".env"
+MASTRA_CLOUD_ACCESS_TOKEN=<your-cloud-access-token>
+MASTRA_PROJECT_ID=<your-project-id>
+```
+
+### 4. Enable `CloudExporter`
+
+The following example demonstrates how to add `CloudExporter` to your observability config:
+
+```ts title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import { Observability, CloudExporter } from '@mastra/observability'
 
@@ -34,7 +96,10 @@ export const mastra = new Mastra({
       production: {
         serviceName: 'my-service',
         exporters: [
-          new CloudExporter(), // Uses MASTRA_CLOUD_ACCESS_TOKEN env var
+          new CloudExporter({
+            accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN,
+            projectId: process.env.MASTRA_PROJECT_ID,
+          }),
         ],
       },
     },
@@ -42,11 +107,49 @@ export const mastra = new Mastra({
 })
 ```
 
-### Recommended Configuration
+Set `serviceName` in code on the observability config, not on `CloudExporter` itself. In the example above, the value is `configs.production.serviceName`.
 
-Include CloudExporter in your observability configuration:
+For example:
 
-```typescript
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Observability, CloudExporter } from '@mastra/observability'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      production: {
+        serviceName: 'api-server',
+        exporters: [new CloudExporter()],
+      },
+    },
+  }),
+})
+```
+
+Use a stable `serviceName` value. In Studio, traces can be filtered by **Deployments → Service Name**, so a consistent name makes traces easier to find.
+
+Visit [Observability configuration reference](/reference/observability/tracing/configuration) for the full observability config shape.
+
+If you prefer, rely entirely on environment variables:
+
+```ts title="src/mastra/index.ts"
+new CloudExporter()
+```
+
+With `MASTRA_CLOUD_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` set, `CloudExporter` automatically sends data to the correct Mastra platform project.
+
+:::note
+
+Visit [CloudExporter reference](/reference/observability/tracing/exporters/cloud-exporter) for the full list of configuration options.
+
+:::
+
+## Recommended configuration
+
+Include `DefaultExporter` if you also want to inspect local traces in Studio or persist observability data to your configured storage.
+
+```ts title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import {
   Observability,
@@ -60,10 +163,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'mastra',
-        exporters: [
-          new DefaultExporter(),
-          new CloudExporter(), // Sends traces to Mastra Cloud (requires MASTRA_CLOUD_ACCESS_TOKEN)
-        ],
+        exporters: [new DefaultExporter(), new CloudExporter()],
         spanOutputProcessors: [new SensitiveDataFilter()],
       },
     },
@@ -71,66 +171,53 @@ export const mastra = new Mastra({
 })
 ```
 
-### Complete Configuration
+## Complete configuration
 
-```typescript
+The following example demonstrates how to configure custom endpoints and batching behavior:
+
+```ts title="src/mastra/index.ts"
 new CloudExporter({
-  // Optional - defaults to env var
   accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN,
-
-  // Optional - for self-hosted Mastra Cloud
+  projectId: process.env.MASTRA_PROJECT_ID,
   endpoint: 'https://cloud.your-domain.com',
-
-  // Batching configuration
-  maxBatchSize: 1000, // Max spans per batch
-  maxBatchWaitMs: 5000, // Max wait before sending batch
-
-  // Diagnostic logging
-  logLevel: 'info', // debug | info | warn | error
+  maxBatchSize: 1000,
+  maxBatchWaitMs: 5000,
+  logLevel: 'info',
 })
 ```
 
-## Viewing traces
+## Viewing data in Mastra Studio
 
-### Mastra Cloud Dashboard
+After you enable `CloudExporter`, open your project in [Mastra Studio](https://projects.mastra.ai) to inspect the exported data.
 
-1. Navigate to [cloud.mastra.ai](https://cloud.mastra.ai)
-1. Select the project associated with your access token
-1. Go to **Observability → Traces**
-1. Use filters to find specific traces:
-   - Service name
-   - Time range
-   - Trace ID
-   - Error status
+- Open your project and select **Open Studio**.
+- In Studio, go to **Traces** to inspect agent and workflow traces.
+- Open the filter menu and use **Deployments → Service Name** to isolate traces from a specific app or deployment.
+- Use the **Logs** page in the project dashboard to inspect exported logs.
+- Use the project named by `MASTRA_PROJECT_ID` when you work with organization-scoped tokens.
 
 :::note
-Traces are scoped to the project that issued the access token. To view traces, make sure you're viewing the same project you generated the token from.
+If you use a project-scoped token, open the project that issued the token. If you use an organization-scoped token, open the project named by `MASTRA_PROJECT_ID`.
 :::
 
-### Features
-
-- **Trace Timeline** - Visual execution flow
-- **Span Details** - Inputs, outputs, metadata
-- **Performance Metrics** - Latency, token usage
-- **Team Collaboration** - Share trace links
+When you deploy with Mastra Studio, set **Deployment → Service Name** to a stable value and keep it aligned with the `serviceName` in your observability config. This makes traces easier to filter in Studio through **Deployments → Service Name** when multiple services or deployments send data to the same project.
 
 ## Performance
 
 :::info
 
-CloudExporter uses intelligent batching to optimize network usage. Traces are buffered and sent in batches, reducing overhead while maintaining near real-time visibility.
+CloudExporter uses batching to optimize network usage. Events are buffered and sent in batches, reducing overhead while maintaining near real-time visibility.
 
 :::
 
-### Batching Behavior
+### Batching behavior
 
-- Traces are batched up to `maxBatchSize` (default: 1000)
-- Batches are sent when full or after `maxBatchWaitMs` (default: 5 seconds)
-- Failed batches are retried with exponential backoff
-- Graceful degradation if Mastra Cloud is unreachable
+- Events are batched up to `maxBatchSize` (default: 1000).
+- Batches are sent when full or after `maxBatchWaitMs` (default: 5 seconds).
+- Failed batches are retried with exponential backoff.
+- The exporter degrades gracefully if Mastra Studio is unreachable.
 
 ## Related
 
 - [Tracing Overview](/docs/observability/tracing/overview)
 - [DefaultExporter](/docs/observability/tracing/exporters/default)
-- [Mastra Cloud Documentation](/docs/mastra-cloud/overview)

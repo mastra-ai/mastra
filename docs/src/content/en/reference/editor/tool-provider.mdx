@@ -1,0 +1,130 @@
+---
+title: "Reference: ToolProvider | Editor"
+description: "Documentation for the ToolProvider interface and the built-in Composio and Arcade implementations."
+packages:
+  - "@mastra/editor"
+---
+
+# ToolProvider
+
+The `ToolProvider` interface defines how the editor discovers and resolves integration tools from external platforms. Mastra ships with two built-in implementations: `ComposioToolProvider` and `ArcadeToolProvider`.
+
+See [Tools](/docs/editor/tools) for a guide on setting up tool providers.
+
+## ToolProvider interface
+
+Tool providers implement these methods:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'listToolkits()',
+    type: '() => Promise<Toolkit[]>',
+    description: 'Returns a list of available toolkits (tool categories) from the provider.',
+  },
+  {
+    name: 'listTools(params?)',
+    type: '(params?) => Promise<Tool[]>',
+    description: 'Returns a list of available tools. Accepts optional filtering by toolkit, search query, and limit.',
+  },
+  {
+    name: 'getToolSchema(slug)',
+    type: '(slug: string) => Promise<JSONSchema>',
+    description: 'Returns the JSON schema for a specific tool identified by its slug.',
+  },
+  {
+    name: 'resolveTools(slugs, options?)',
+    type: '(slugs: string[], options?) => Promise<Record<string, ToolAction>>',
+    description:
+      'Resolves tool slugs into executable Mastra tool actions. The options object can include userId for per-user authentication.',
+  },
+]}
+/>
+
+---
+
+## ComposioToolProvider
+
+Connects to [Composio](https://composio.dev) for access to hundreds of integration tools.
+
+### Usage example
+
+```typescript title="src/mastra/index.ts"
+import { MastraEditor } from '@mastra/editor'
+import { ComposioToolProvider } from '@mastra/editor/providers/composio'
+
+const editor = new MastraEditor({
+  toolProviders: {
+    composio: new ComposioToolProvider({
+      apiKey: process.env.COMPOSIO_API_KEY!,
+    }),
+  },
+})
+```
+
+### Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'Your Composio API key.',
+  },
+]}
+/>
+
+### Tool slugs
+
+Composio tools use uppercase slug format: `GITHUB_CREATE_ISSUE`, `SLACK_SEND_MESSAGE`.
+
+### Authentication
+
+Tool execution is scoped to a `userId` passed through request context. Each user authenticates with the integration separately through Composio's auth flow.
+
+---
+
+## ArcadeToolProvider
+
+Connects to [Arcade](https://arcade.dev) for a curated tool catalog with built-in authentication.
+
+### Usage example
+
+```typescript title="src/mastra/index.ts"
+import { MastraEditor } from '@mastra/editor'
+import { ArcadeToolProvider } from '@mastra/editor/providers/arcade'
+
+const editor = new MastraEditor({
+  toolProviders: {
+    arcade: new ArcadeToolProvider({
+      apiKey: process.env.ARCADE_API_KEY!,
+    }),
+  },
+})
+```
+
+### Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'Your Arcade API key.',
+  },
+  {
+    name: 'baseURL',
+    type: 'string',
+    description: 'Custom base URL for the Arcade API.',
+    isOptional: true,
+  },
+]}
+/>
+
+### Tool slugs
+
+Arcade tools use `Toolkit.ToolName` format: `Github.GetRepository`, `Slack.SendMessage`.
+
+### Authentication
+
+Like Composio, tool execution requires a `userId` for per-user authorization through Arcade's auth flow.

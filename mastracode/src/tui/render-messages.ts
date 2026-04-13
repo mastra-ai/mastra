@@ -192,6 +192,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   state.allToolComponents = [];
   state.allSlashCommandComponents = [];
   state.allSystemReminderComponents = [];
+  state.allShellComponents = [];
 
   // Local accumulator for detecting task clears during history reconstruction
   let previousTasksAcc: TaskItem[] = [];

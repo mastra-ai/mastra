@@ -1,28 +1,30 @@
 import { EntityType } from '@mastra/core/observability';
-import type { EntityOptions, TraceDatePreset, SpanTab } from '@mastra/playground-ui';
 import {
-  EntityListPageLayout,
-  MainHeader,
-  TracesToolbar,
   ButtonWithTooltip,
-  CONTEXT_FIELD_IDS,
-  parseError,
-  ObservabilityTracesList,
-  useAgents,
-  useWorkflows,
-  useTags,
-  useEnvironments,
-  useServiceNames,
+  ErrorState,
+  NoDataPageLayout,
+  PageHeader,
+  PageLayout,
   PermissionDenied,
   SessionExpired,
-  is403ForbiddenError,
   is401UnauthorizedError,
+  is403ForbiddenError,
+  parseError,
 } from '@mastra/playground-ui';
-
 import { BookIcon, EyeIcon } from 'lucide-react';
 import { useCallback, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
+import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { useEnvironments } from '@/domains/observability/hooks/use-environments';
+import { useServiceNames } from '@/domains/observability/hooks/use-service-names';
+import { useTags } from '@/domains/observability/hooks/use-tags';
 import { useTraces } from '@/domains/observability/hooks/use-traces';
+import { ObservabilityTracesList } from '@/domains/traces/components/observability-traces-list';
+import type { SpanTab } from '@/domains/traces/components/observability-traces-list';
+import { TracesToolbar } from '@/domains/traces/components/traces-toolbar';
+import { CONTEXT_FIELD_IDS } from '@/domains/traces/types';
+import type { EntityOptions, TraceDatePreset } from '@/domains/traces/types';
+import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 export default function Traces() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -58,10 +60,6 @@ export default function Traces() {
 
   const handleTraceClick = useCallback(
     (traceId: string) => {
-      // Skip if the URL already matches to avoid unnecessary updates
-      const currentTraceId = searchParams.get('traceId') || '';
-      if (traceId === currentTraceId) return;
-
       const params: Record<string, string> = {};
       const entity = searchParams.get('entity');
       if (entity) params.entity = entity;
@@ -344,40 +342,26 @@ export default function Traces() {
   // 401 check - session expired
   if (TracesError && is401UnauthorizedError(TracesError)) {
     return (
-      <EntityListPageLayout>
-        <EntityListPageLayout.Top>
-          <MainHeader withMargins={false}>
-            <MainHeader.Column>
-              <MainHeader.Title>
-                <EyeIcon /> Traces
-              </MainHeader.Title>
-            </MainHeader.Column>
-          </MainHeader>
-        </EntityListPageLayout.Top>
-        <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
-      </EntityListPageLayout>
+      <NoDataPageLayout title="Traces" icon={<EyeIcon />}>
+        <SessionExpired />
+      </NoDataPageLayout>
     );
   }
 
   // 403 check
   if (TracesError && is403ForbiddenError(TracesError)) {
     return (
-      <EntityListPageLayout>
-        <EntityListPageLayout.Top>
-          <MainHeader withMargins={false}>
-            <MainHeader.Column>
-              <MainHeader.Title>
-                <EyeIcon /> Traces
-              </MainHeader.Title>
-            </MainHeader.Column>
-          </MainHeader>
-        </EntityListPageLayout.Top>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="traces" />
-        </div>
-      </EntityListPageLayout>
+      <NoDataPageLayout title="Traces" icon={<EyeIcon />}>
+        <PermissionDenied resource="traces" />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (TracesError) {
+    return (
+      <NoDataPageLayout title="Traces" icon={<EyeIcon />}>
+        <ErrorState title="Failed to load traces" message={error?.error ?? 'Unknown error'} />
+      </NoDataPageLayout>
     );
   }
 
@@ -392,15 +376,17 @@ export default function Traces() {
     Object.values(contextFilters).some(v => v.trim());
 
   return (
-    <EntityListPageLayout className="max-w-none">
-      <EntityListPageLayout.Top>
-        <MainHeader withMargins={false}>
-          <MainHeader.Column>
-            <MainHeader.Title isLoading={isTracesLoading}>
-              <EyeIcon /> Traces
-            </MainHeader.Title>
-          </MainHeader.Column>
-          <MainHeader.Column className="flex justify-end gap-2">
+    <PageLayout width="wide" height="full">
+      <PageLayout.TopArea>
+        <PageLayout.Row>
+          <PageLayout.Column>
+            <PageHeader>
+              <PageHeader.Title isLoading={isTracesLoading}>
+                <EyeIcon /> Traces
+              </PageHeader.Title>
+            </PageHeader>
+          </PageLayout.Column>
+          <PageLayout.Column className="flex justify-end gap-2">
             <ButtonWithTooltip
               as="a"
               href="https://mastra.ai/en/docs/observability/tracing/overview"
@@ -411,8 +397,8 @@ export default function Traces() {
             >
               <BookIcon />
             </ButtonWithTooltip>
-          </MainHeader.Column>
-        </MainHeader>
+          </PageLayout.Column>
+        </PageLayout.Row>
 
         <TracesToolbar
           onEntityChange={handleSelectedEntityChange}
@@ -441,7 +427,7 @@ export default function Traces() {
           availableContextValues={availableContextValues}
           onContextFiltersChange={setContextFilters}
         />
-      </EntityListPageLayout.Top>
+      </PageLayout.TopArea>
 
       <ObservabilityTracesList
         traces={traces}
@@ -449,7 +435,6 @@ export default function Traces() {
         isFetchingNextPage={isFetchingNextPage}
         hasNextPage={hasNextPage}
         setEndOfListElement={setEndOfListElement}
-        error={error?.error}
         filtersApplied={Boolean(filtersApplied)}
         selectedTraceId={traceIdParam}
         initialSpanId={spanIdParam}
@@ -462,6 +447,6 @@ export default function Traces() {
         groupByThread={groupByThread}
         threadTitles={threadTitles}
       />
-    </EntityListPageLayout>
+    </PageLayout>
   );
 }
