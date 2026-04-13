@@ -244,25 +244,27 @@ describe('recording file format', () => {
     const recorder = setupLLMRecording({ name, recordingsDir: tempDir, exactMatch: true, debug: true });
     recorder.start();
 
-    const response = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        input: {
-          actualData: '2024-05-15T12:00:00.000Z',
-          date: '2024-05-15T12:00:00.000Z',
-          dateAfter: '2025-01-02T12:00:00.000Z',
-          dateBefore: '2023-12-31T12:00:00.000Z',
-        },
-      }),
-    });
+    try {
+      const response = await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          input: {
+            actualData: '2024-05-15T12:00:00.000Z',
+            date: '2024-05-15T12:00:00.000Z',
+            dateAfter: '2025-01-02T12:00:00.000Z',
+            dateBefore: '2023-12-31T12:00:00.000Z',
+          },
+        }),
+      });
 
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ id: 'normalized-match', output: [] });
-    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('No exact match for hash'));
-
-    recorder.stop();
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ id: 'normalized-match', output: [] });
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('No exact match for hash'));
+    } finally {
+      recorder.stop();
+    }
   });
 
   afterEach(() => {
