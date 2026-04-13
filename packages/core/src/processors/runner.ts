@@ -1307,10 +1307,11 @@ export class ProcessorRunner {
       requestContext?: RequestContext;
       retryCount?: number;
       writer?: ProcessorStreamWriter;
+      abortSignal?: AbortSignal;
       rotateResponseMessageId?: () => string;
     } & Partial<ObservabilityContext>,
   ): Promise<{ retry: boolean }> {
-    const { error, messageList, stepNumber, steps, requestContext, retryCount = 0, writer } = args;
+    const { error, messageList, stepNumber, steps, requestContext, retryCount = 0, writer, abortSignal } = args;
     const observabilityContext = resolveObservabilityContext(args);
 
     const allProcessors: ProcessorOrWorkflow[] = [
@@ -1372,6 +1373,7 @@ export class ProcessorRunner {
           requestContext,
           retryCount,
           writer,
+          abortSignal,
           messageId: args.messageId,
           ...(args.rotateResponseMessageId
             ? {

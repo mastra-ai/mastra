@@ -2065,6 +2065,7 @@ describe('ProcessorRunner', () => {
       messageList.add(createMessage('hello', 'user'), 'user');
       const error = new Error('Some API error');
 
+      const abortSignal = new AbortController().signal;
       const result = await runner.runProcessAPIError({
         error,
         messages: messageList.get.all.db(),
@@ -2072,6 +2073,7 @@ describe('ProcessorRunner', () => {
         stepNumber: 0,
         steps: [],
         retryCount: 0,
+        abortSignal,
       });
 
       expect(processAPIError).toHaveBeenCalledTimes(1);
@@ -2080,6 +2082,7 @@ describe('ProcessorRunner', () => {
           error,
           stepNumber: 0,
           retryCount: 0,
+          abortSignal,
         }),
       );
       expect(result).toEqual({ retry: true });

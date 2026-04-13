@@ -1194,6 +1194,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 retryCount: currentRetryCount,
                 requestContext,
                 writer: apiErrorWriter,
+                abortSignal: options?.abortSignal,
                 messageId: currentMessageId,
                 rotateResponseMessageId: () => {
                   currentMessageId = _internal?.generateId?.() ?? generateId();
@@ -1319,6 +1320,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           retryCount: currentRetryCount,
           requestContext,
           writer: apiErrorWriter2,
+          abortSignal: options?.abortSignal,
           messageId: currentMessageId,
           rotateResponseMessageId: () => {
             currentMessageId = _internal?.generateId?.() ?? generateId();
