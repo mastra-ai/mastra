@@ -125,5 +125,20 @@
     "@mastra/s3": "0.3.0",
     "@mastra/vercel": "0.1.0"
   },
-  "changesets": []
+  "changesets": [
+    "@mastra_core-15214-dependencies",
+    "@mastra_playground-ui-15085-dependencies",
+    "add-map-user-to-resource-id",
+    "automated-provider-registry-20260410-005356",
+    "fine-tables-roll",
+    "five-apples-act",
+    "fix-reserved-context-key-injection",
+    "four-yaks-invite",
+    "good-donuts-accept",
+    "green-birds-knock",
+    "jolly-ducks-switch",
+    "lovely-moles-camp",
+    "stale-worlds-happen",
+    "strong-pillows-admire"
+  ]
 }

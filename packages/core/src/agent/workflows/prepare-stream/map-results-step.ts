@@ -179,6 +179,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
         ...options.structuredOutput,
         logger: capabilities.logger,
       });
+      if (capabilities.mastra) {
+        structuredProcessor.__registerMastra(capabilities.mastra);
+      }
       effectiveOutputProcessors = effectiveOutputProcessors
         ? [...effectiveOutputProcessors, structuredProcessor]
         : [structuredProcessor];

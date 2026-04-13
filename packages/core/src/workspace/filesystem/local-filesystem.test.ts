@@ -724,6 +724,38 @@ describe('LocalFilesystem', () => {
         expect(content).toBe('new content');
       });
 
+      it('should allow access through the canonical target of a symlinked allowed path', async () => {
+        const allowedRootLink = path.join(tempDir, 'allowed-root-link');
+        await fs.symlink(outsideDir, allowedRootLink);
+
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+          allowedPaths: [allowedRootLink],
+        });
+
+        const content = await fsWithAllowed.readFile(path.join(outsideDir, 'external.txt'), {
+          encoding: 'utf-8',
+        });
+        expect(content).toBe('external content');
+      });
+
+      it('should allow access through a symlink path when the canonical root is allowed', async () => {
+        const allowedRootLink = path.join(tempDir, 'allowed-root-link');
+        await fs.symlink(outsideDir, allowedRootLink);
+
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+          allowedPaths: [outsideDir],
+        });
+
+        const content = await fsWithAllowed.readFile(path.join(allowedRootLink, 'external.txt'), {
+          encoding: 'utf-8',
+        });
+        expect(content).toBe('external content');
+      });
+
       it('should block path traversal that escapes all roots', async () => {
         const restrictedFs = new LocalFilesystem({
           basePath: tempDir,
