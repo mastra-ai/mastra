@@ -12,7 +12,7 @@ export interface ToolsListProps {
 }
 
 export function ToolsList({ tools, agents, isLoading, search = '' }: ToolsListProps) {
-  const { paths } = useLinkComponent();
+  const { paths, Link } = useLinkComponent();
 
   const toolData = useMemo(() => prepareToolsTable(tools, agents), [tools, agents]);
 
@@ -46,7 +46,7 @@ export function ToolsList({ tools, agents, isLoading, search = '' }: ToolsListPr
         const agentsCount = tool.agents.length;
 
         return (
-          <EntityList.RowLink key={tool.id} to={paths.toolLink(tool.id)}>
+          <EntityList.RowLink key={tool.id} to={paths.toolLink(tool.id)} LinkComponent={Link}>
             <EntityList.NameCell>{name}</EntityList.NameCell>
             <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
             <EntityList.TextCell className="text-center">{agentsCount || ''}</EntityList.TextCell>

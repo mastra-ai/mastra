@@ -20,7 +20,7 @@ export const SCORER_SOURCE_OPTIONS = [
 const COLUMNS = 'auto 1fr auto auto auto';
 
 export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'all' }: ScorersListProps) {
-  const { paths } = useLinkComponent();
+  const { paths, Link } = useLinkComponent();
 
   const scorerData = useMemo(
     () =>
@@ -75,7 +75,7 @@ export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'a
         const isTrajectory = scorer.scorer.config?.type === 'trajectory';
 
         return (
-          <EntityList.RowLink key={scorer.id} to={paths.scorerLink(scorer.id)}>
+          <EntityList.RowLink key={scorer.id} to={paths.scorerLink(scorer.id)} LinkComponent={Link}>
             <EntityList.NameCell>
               <span className="flex items-center gap-1.5">
                 {name}

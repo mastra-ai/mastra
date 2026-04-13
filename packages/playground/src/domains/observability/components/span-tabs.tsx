@@ -11,6 +11,7 @@ import type { KeyValueListItemData } from '@mastra/playground-ui';
 import { KeyValueList, Section, Sections } from '@mastra/playground-ui';
 import { SpanScoring } from '@/domains/traces/components/span-scoring';
 import { SpanScoreList } from '@/domains/observability/components/span-score-list';
+import { useLinkComponent } from '@/lib/framework';
 
 type SpanTabsProps = {
   trace?: SpanRecord;
@@ -39,6 +40,7 @@ export function SpanTabs({
   scorers,
   isLoadingScorers,
 }: SpanTabsProps) {
+  const { Link } = useLinkComponent();
   let entityType;
   if (span?.attributes?.agentId || span?.entityType === EntityType.AGENT) {
     entityType = 'Agent';
@@ -55,7 +57,7 @@ export function SpanTabs({
       <TabContent value="details">
         <Sections>
           {span?.attributes?.usage ? <TraceSpanUsage spanUsage={span.attributes.usage as TokenUsage} /> : null}
-          <KeyValueList data={spanInfo} />
+          <KeyValueList data={spanInfo} LinkComponent={Link} />
           <SpanDetails span={span} />
         </Sections>
       </TabContent>

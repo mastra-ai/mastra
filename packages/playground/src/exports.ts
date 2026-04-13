@@ -1,5 +1,5 @@
-// Public exports consumed by @mastra/playground-ui DS components
-// This file is the entry point for the @internal/playground package exports
+// Public exports for the @internal/playground package
+// Store and workspace-compat are re-exported from playground-ui (canonical source)
 
 export {
   LinkComponentProvider,
@@ -10,3 +10,7 @@ export {
 } from './lib/framework';
 
 export { PlaygroundQueryClient } from './lib/tanstack-query';
+
+export { usePlaygroundStore, useIsDarkMode, type PlaygroundTheme } from '@mastra/playground-ui';
+
+export { isWorkspaceV1Supported } from '@mastra/playground-ui/utils';

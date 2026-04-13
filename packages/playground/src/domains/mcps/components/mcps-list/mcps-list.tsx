@@ -14,7 +14,7 @@ export interface McpServersListProps {
 }
 
 function McpServerRow({ server }: { server: McpServer }) {
-  const { paths } = useLinkComponent();
+  const { paths, Link } = useLinkComponent();
   const client = useMastraClient();
   const baseUrl = client.options.baseUrl;
   const sseUrl = baseUrl ? `${baseUrl}/api/mcp/${server.id}/sse` : '';
@@ -28,7 +28,7 @@ function McpServerRow({ server }: { server: McpServer }) {
   const name = truncateString(server.name, 50);
 
   return (
-    <EntityList.RowLink to={paths.mcpServerLink(server.id)}>
+    <EntityList.RowLink to={paths.mcpServerLink(server.id)} LinkComponent={Link}>
       <EntityList.NameCell>{name}</EntityList.NameCell>
       <EntityList.DescriptionCell>{sseUrl}</EntityList.DescriptionCell>
       <EntityList.TextCell className="text-center">{agentToolsCount || ''}</EntityList.TextCell>

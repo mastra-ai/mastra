@@ -21,6 +21,7 @@ import {
   GaugeIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
+import { useLinkComponent } from '@/lib/framework';
 
 type SidebarLink = NavLink & {
   requiredPermission?: string;
@@ -197,6 +198,7 @@ function getIsLinkActive(link: SidebarLink, pathname: string): boolean {
 }
 
 export function AppSidebar() {
+  const { Link } = useLinkComponent();
   const { state } = useMainSidebar();
 
   const location = useLocation();
@@ -282,7 +284,7 @@ export function AppSidebar() {
           return (
             <MainSidebar.NavSection key={section.key}>
               {section?.title ? (
-                <MainSidebar.NavHeader state={state} href={section.href} isActive={isHeaderActive}>
+                <MainSidebar.NavHeader LinkComponent={Link} state={state} href={section.href} isActive={isHeaderActive}>
                   {section.title}
                 </MainSidebar.NavHeader>
               ) : (
@@ -291,7 +293,7 @@ export function AppSidebar() {
               <MainSidebar.NavList>
                 {filteredLinks.map(link => {
                   const isActive = getIsLinkActive(link, pathname);
-                  return <MainSidebar.NavLink key={link.name} state={state} link={link} isActive={isActive} />;
+                  return <MainSidebar.NavLink key={link.name} LinkComponent={Link} state={state} link={link} isActive={isActive} />;
                 })}
               </MainSidebar.NavList>
             </MainSidebar.NavSection>

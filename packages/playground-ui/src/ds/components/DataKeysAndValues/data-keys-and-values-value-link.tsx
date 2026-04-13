@@ -1,20 +1,20 @@
 import { ExternalLinkIcon, Link2Icon } from 'lucide-react';
 import { dataKeysAndValuesValueStyles } from './shared';
-import { useLinkComponent } from '@internal/playground';
+import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
 export interface DataKeysAndValuesValueLinkProps {
   className?: string;
   children: React.ReactNode;
   href: string;
+  LinkComponent: LinkComponent;
 }
 
 function isExternalUrl(href: string) {
   return /^https?:\/\//.test(href);
 }
 
-export function DataKeysAndValuesValueLink({ className, children, href }: DataKeysAndValuesValueLinkProps) {
-  const { Link } = useLinkComponent();
+export function DataKeysAndValuesValueLink({ className, children, href, LinkComponent: Link }: DataKeysAndValuesValueLinkProps) {
   const isExternal = isExternalUrl(href);
 
   const linkClassName = cn(

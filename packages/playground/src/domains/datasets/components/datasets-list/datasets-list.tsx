@@ -44,7 +44,7 @@ export function DatasetsList({
   experimentFilter = 'all',
   tagFilter = 'all',
 }: DatasetsListProps) {
-  const { paths, navigate } = useLinkComponent();
+  const { paths, navigate, Link } = useLinkComponent();
 
   const enrichedDatasets = useMemo(() => {
     return datasets.map(ds => {
@@ -106,7 +106,7 @@ export function DatasetsList({
           );
 
         return (
-          <EntityList.RowLink key={ds.id} to={paths.datasetLink(ds.id)}>
+          <EntityList.RowLink key={ds.id} to={paths.datasetLink(ds.id)} LinkComponent={Link}>
             <EntityList.NameCell>{ds.name}</EntityList.NameCell>
             <EntityList.DescriptionCell>{ds.description || ''}</EntityList.DescriptionCell>
             <EntityList.Cell>

@@ -13,7 +13,7 @@ export interface ProcessorsListProps {
 }
 
 export function ProcessorsList({ processors, isLoading, search = '' }: ProcessorsListProps) {
-  const { paths } = useLinkComponent();
+  const { paths, Link } = useLinkComponent();
 
   const processorData = useMemo(
     () => Object.values(processors ?? {}).filter(p => p.phases && p.phases.length > 0),
@@ -91,7 +91,7 @@ export function ProcessorsList({ processors, isLoading, search = '' }: Processor
           : paths.processorLink(processor.id);
 
         return (
-          <EntityList.RowLink key={processor.id} to={linkTo}>
+          <EntityList.RowLink key={processor.id} to={linkTo} LinkComponent={Link}>
             <EntityList.NameCell>{name}</EntityList.NameCell>
             <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
             {phaseKeys.map(key => (

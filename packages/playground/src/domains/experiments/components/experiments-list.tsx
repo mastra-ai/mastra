@@ -45,7 +45,7 @@ export function ExperimentsList({
   statusFilter = 'all',
   datasetFilter = 'all',
 }: ExperimentsListProps) {
-  const { paths } = useLinkComponent();
+  const { paths, Link } = useLinkComponent();
 
   const datasetMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -103,7 +103,7 @@ export function ExperimentsList({
         const successPct = total > 0 ? Math.round((succeeded / total) * 100) : 0;
 
         return (
-          <EntityList.RowLink key={exp.id} to={paths.experimentLink(exp.id)}>
+          <EntityList.RowLink key={exp.id} to={paths.experimentLink(exp.id)} LinkComponent={Link}>
             <EntityList.NameCell className="font-mono">{exp.id.slice(0, 8)}</EntityList.NameCell>
             <EntityList.TextCell>{dsName}</EntityList.TextCell>
             <EntityList.Cell>

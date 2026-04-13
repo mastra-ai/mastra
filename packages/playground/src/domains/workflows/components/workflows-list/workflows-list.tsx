@@ -10,7 +10,7 @@ export interface WorkflowsListProps {
 }
 
 export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsListProps) {
-  const { paths } = useLinkComponent();
+  const { paths, Link } = useLinkComponent();
 
   const workflowData = useMemo(
     () =>
@@ -48,7 +48,7 @@ export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsLi
         const stepsCount = Object.keys(wf.steps ?? {}).length;
 
         return (
-          <EntityList.RowLink key={wf.id} to={paths.workflowLink(wf.id)}>
+          <EntityList.RowLink key={wf.id} to={paths.workflowLink(wf.id)} LinkComponent={Link}>
             <EntityList.NameCell>{name}</EntityList.NameCell>
             <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
             <EntityList.TextCell className="text-center">{stepsCount || ''}</EntityList.TextCell>

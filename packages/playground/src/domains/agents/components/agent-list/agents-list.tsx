@@ -12,7 +12,7 @@ export interface AgentsListProps {
 }
 
 export function AgentsList({ agents, isLoading, search = '' }: AgentsListProps) {
-  const { paths } = useLinkComponent();
+  const { paths, Link } = useLinkComponent();
 
   const agentData = useMemo(() => Object.values(agents ?? {}), [agents]);
 
@@ -64,7 +64,7 @@ export function AgentsList({ agents, isLoading, search = '' }: AgentsListProps) 
         const workflowsCount = Object.keys(agent.workflows ?? {}).length;
 
         return (
-          <EntityList.RowLink key={agent.id} to={paths.agentLink(agent.id)}>
+          <EntityList.RowLink key={agent.id} to={paths.agentLink(agent.id)} LinkComponent={Link}>
             <EntityList.NameCell>{name || ''}</EntityList.NameCell>
             <EntityList.DescriptionCell>{instructions || ''}</EntityList.DescriptionCell>
             <EntityList.Cell>

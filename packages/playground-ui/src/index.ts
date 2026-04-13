@@ -132,9 +132,6 @@ export * from './lib/errors';
 export * from './lib/query-utils';
 export * from './lib/toast';
 
-// Store (used by DS components for theme)
-export * from './store/playground-store';
-
 // Pure lib modules
 export * from './lib/rule-engine';
 export * from './lib/json-schema';
@@ -142,4 +139,8 @@ export * from './lib/resize';
 export * from './lib/file';
 export * from './lib/template';
 
+// Store
+export { usePlaygroundStore, useIsDarkMode, type PlaygroundTheme } from './store/playground-store';
 
+// DS Types
+export type { LinkComponent, LinkComponentProps } from './ds/types/link-component';

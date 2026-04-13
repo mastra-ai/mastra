@@ -2,6 +2,14 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { MainSidebar, MainSidebarProvider } from './main-sidebar';
 import { TooltipProvider } from '../Tooltip';
 import { Home, Bot, Workflow, Settings, Database, FileText, Users, Bell } from 'lucide-react';
+import { forwardRef } from 'react';
+import type { LinkComponentProps } from '@/ds/types/link-component';
+
+const StoryLink = forwardRef<HTMLAnchorElement, LinkComponentProps>(({ href, children, ...props }, ref) => (
+  <a ref={ref} href={href} {...props}>
+    {children}
+  </a>
+));
 
 const meta: Meta<typeof MainSidebar> = {
   title: 'Layout/MainSidebar',
@@ -35,9 +43,10 @@ export const Default: Story = {
       <MainSidebar.Nav>
         <MainSidebar.NavSection>
           <MainSidebar.NavList>
-            <MainSidebar.NavLink link={{ name: 'Home', url: '/', icon: <Home />, isOnMastraPlatform: true }} isActive />
-            <MainSidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <Bot />, isOnMastraPlatform: true }} />
+            <MainSidebar.NavLink LinkComponent={StoryLink} link={{ name: 'Home', url: '/', icon: <Home />, isOnMastraPlatform: true }} isActive />
+            <MainSidebar.NavLink LinkComponent={StoryLink} link={{ name: 'Agents', url: '/agents', icon: <Bot />, isOnMastraPlatform: true }} />
             <MainSidebar.NavLink
+              LinkComponent={StoryLink}
               link={{ name: 'Workflows', url: '/workflows', icon: <Workflow />, isOnMastraPlatform: true }}
             />
           </MainSidebar.NavList>
@@ -54,12 +63,12 @@ export const WithSections: Story = {
         <MainSidebar.NavSection>
           <MainSidebar.NavHeader>Main</MainSidebar.NavHeader>
           <MainSidebar.NavList>
-            <MainSidebar.NavLink
+            <MainSidebar.NavLink LinkComponent={StoryLink}
               link={{ name: 'Dashboard', url: '/', icon: <Home />, isOnMastraPlatform: true }}
               isActive
             />
-            <MainSidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <Bot />, isOnMastraPlatform: true }} />
-            <MainSidebar.NavLink
+            <MainSidebar.NavLink LinkComponent={StoryLink} link={{ name: 'Agents', url: '/agents', icon: <Bot />, isOnMastraPlatform: true }} />
+            <MainSidebar.NavLink LinkComponent={StoryLink}
               link={{ name: 'Workflows', url: '/workflows', icon: <Workflow />, isOnMastraPlatform: true }}
             />
           </MainSidebar.NavList>
@@ -70,10 +79,10 @@ export const WithSections: Story = {
         <MainSidebar.NavSection>
           <MainSidebar.NavHeader>Data</MainSidebar.NavHeader>
           <MainSidebar.NavList>
-            <MainSidebar.NavLink
+            <MainSidebar.NavLink LinkComponent={StoryLink}
               link={{ name: 'Storage', url: '/storage', icon: <Database />, isOnMastraPlatform: true }}
             />
-            <MainSidebar.NavLink link={{ name: 'Logs', url: '/logs', icon: <FileText />, isOnMastraPlatform: true }} />
+            <MainSidebar.NavLink LinkComponent={StoryLink} link={{ name: 'Logs', url: '/logs', icon: <FileText />, isOnMastraPlatform: true }} />
           </MainSidebar.NavList>
         </MainSidebar.NavSection>
       </MainSidebar.Nav>
@@ -87,9 +96,9 @@ export const WithBottom: Story = {
       <MainSidebar.Nav>
         <MainSidebar.NavSection>
           <MainSidebar.NavList>
-            <MainSidebar.NavLink link={{ name: 'Home', url: '/', icon: <Home />, isOnMastraPlatform: true }} isActive />
-            <MainSidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <Bot />, isOnMastraPlatform: true }} />
-            <MainSidebar.NavLink
+            <MainSidebar.NavLink LinkComponent={StoryLink} link={{ name: 'Home', url: '/', icon: <Home />, isOnMastraPlatform: true }} isActive />
+            <MainSidebar.NavLink LinkComponent={StoryLink} link={{ name: 'Agents', url: '/agents', icon: <Bot />, isOnMastraPlatform: true }} />
+            <MainSidebar.NavLink LinkComponent={StoryLink}
               link={{ name: 'Workflows', url: '/workflows', icon: <Workflow />, isOnMastraPlatform: true }}
             />
           </MainSidebar.NavList>
@@ -98,11 +107,11 @@ export const WithBottom: Story = {
 
       <MainSidebar.Bottom>
         <MainSidebar.NavList>
-          <MainSidebar.NavLink link={{ name: 'Team', url: '/team', icon: <Users />, isOnMastraPlatform: true }} />
-          <MainSidebar.NavLink
+          <MainSidebar.NavLink LinkComponent={StoryLink} link={{ name: 'Team', url: '/team', icon: <Users />, isOnMastraPlatform: true }} />
+          <MainSidebar.NavLink LinkComponent={StoryLink}
             link={{ name: 'Notifications', url: '/notifications', icon: <Bell />, isOnMastraPlatform: true }}
           />
-          <MainSidebar.NavLink
+          <MainSidebar.NavLink LinkComponent={StoryLink}
             link={{ name: 'Settings', url: '/settings', icon: <Settings />, isOnMastraPlatform: true }}
           />
         </MainSidebar.NavList>
@@ -118,12 +127,12 @@ export const FullSidebar: Story = {
         <MainSidebar.NavSection>
           <MainSidebar.NavHeader>Workspace</MainSidebar.NavHeader>
           <MainSidebar.NavList>
-            <MainSidebar.NavLink
+            <MainSidebar.NavLink LinkComponent={StoryLink}
               link={{ name: 'Overview', url: '/', icon: <Home />, isOnMastraPlatform: true }}
               isActive
             />
-            <MainSidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <Bot />, isOnMastraPlatform: true }} />
-            <MainSidebar.NavLink
+            <MainSidebar.NavLink LinkComponent={StoryLink} link={{ name: 'Agents', url: '/agents', icon: <Bot />, isOnMastraPlatform: true }} />
+            <MainSidebar.NavLink LinkComponent={StoryLink}
               link={{ name: 'Workflows', url: '/workflows', icon: <Workflow />, isOnMastraPlatform: true }}
             />
           </MainSidebar.NavList>
@@ -134,10 +143,10 @@ export const FullSidebar: Story = {
         <MainSidebar.NavSection>
           <MainSidebar.NavHeader>Resources</MainSidebar.NavHeader>
           <MainSidebar.NavList>
-            <MainSidebar.NavLink
+            <MainSidebar.NavLink LinkComponent={StoryLink}
               link={{ name: 'Storage', url: '/storage', icon: <Database />, isOnMastraPlatform: true }}
             />
-            <MainSidebar.NavLink link={{ name: 'Logs', url: '/logs', icon: <FileText />, isOnMastraPlatform: true }} />
+            <MainSidebar.NavLink LinkComponent={StoryLink} link={{ name: 'Logs', url: '/logs', icon: <FileText />, isOnMastraPlatform: true }} />
           </MainSidebar.NavList>
         </MainSidebar.NavSection>
       </MainSidebar.Nav>
@@ -145,7 +154,7 @@ export const FullSidebar: Story = {
       <MainSidebar.Bottom>
         <MainSidebar.NavSeparator />
         <MainSidebar.NavList>
-          <MainSidebar.NavLink
+          <MainSidebar.NavLink LinkComponent={StoryLink}
             link={{ name: 'Settings', url: '/settings', icon: <Settings />, isOnMastraPlatform: true }}
           />
         </MainSidebar.NavList>

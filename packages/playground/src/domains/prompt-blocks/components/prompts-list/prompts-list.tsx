@@ -11,7 +11,7 @@ export interface PromptsListProps {
 }
 
 export function PromptsList({ promptBlocks, isLoading, search = '' }: PromptsListProps) {
-  const { paths } = useLinkComponent();
+  const { paths, Link } = useLinkComponent();
 
   const filteredData = useMemo(() => {
     const term = search.toLowerCase();
@@ -40,7 +40,7 @@ export function PromptsList({ promptBlocks, isLoading, search = '' }: PromptsLis
         const description = truncateString(block.description ?? '', 200);
 
         return (
-          <EntityList.RowLink key={block.id} to={paths.cmsPromptBlockEditLink(block.id)}>
+          <EntityList.RowLink key={block.id} to={paths.cmsPromptBlockEditLink(block.id)} LinkComponent={Link}>
             <EntityList.NameCell>{name}</EntityList.NameCell>
             <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
             <EntityList.TextCell className="text-center">

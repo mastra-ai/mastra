@@ -59,7 +59,7 @@ export function TraceDialog({
   scorers,
   isLoadingScorers,
 }: TraceDialogProps) {
-  const { navigate } = useLinkComponent();
+  const { navigate, Link } = useLinkComponent();
 
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(Boolean(initialSpanId));
   const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(initialSpanId);
@@ -273,7 +273,7 @@ export function TraceDialog({
             {traceDetails && (
               <Sections>
                 <div className="grid xl:grid-cols-[3fr_2fr] gap-4 items-start">
-                  <KeyValueList data={traceInfo} />
+                  <KeyValueList data={traceInfo} LinkComponent={Link} />
                   <div className="bg-surface3 p-6 rounded-lg grid gap-4">
                     <h4 className="text-ui-lg">
                       <TextAndIcon>
