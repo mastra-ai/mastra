@@ -4,13 +4,13 @@ import { resolve } from 'node:path';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
 import { loadProjectConfig } from '../studio/project-config.js';
 import { parseEnvFile } from './deploy.js';
-import { getServerProjectEnv, updateServerProjectEnv } from './platform-api.js';
+import { fetchServerProjects, getServerProjectEnv, updateServerProjectEnv } from './platform-api.js';
 
 /* ------------------------------------------------------------------ */
 /*  Shared helpers                                                     */
 /* ------------------------------------------------------------------ */
 
-async function resolveAuth(): Promise<{ token: string; orgId: string }> {
+export async function resolveAuth(): Promise<{ token: string; orgId: string }> {
   const token = await getToken();
   const orgId = process.env.MASTRA_ORG_ID ?? (await getCurrentOrgId());
   if (!orgId) {
@@ -19,9 +19,21 @@ async function resolveAuth(): Promise<{ token: string; orgId: string }> {
   return { token, orgId };
 }
 
-async function resolveProjectId(opts: { config?: string }): Promise<string> {
+export async function resolveProjectId(
+  opts: { config?: string; project?: string },
+  auth?: { token: string; orgId: string },
+): Promise<string> {
   const envProjectId = process.env.MASTRA_PROJECT_ID;
   if (envProjectId) return envProjectId;
+
+  if (opts.project) {
+    if (auth) {
+      const projects = await fetchServerProjects(auth.token, auth.orgId);
+      const match = projects.find(p => p.slug === opts.project || p.id === opts.project);
+      if (match) return match.id;
+    }
+    return opts.project;
+  }
 
   const config = await loadProjectConfig(process.cwd(), opts.config);
   if (!config?.projectId) {

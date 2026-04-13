@@ -2,6 +2,18 @@ import { createApiClient, throwApiError } from '../auth/client.js';
 import { getToken } from '../auth/credentials.js';
 import type { paths } from '../platform-api.js';
 
+function apiErrorDetail(error: unknown): string | undefined {
+  if (
+    error &&
+    typeof error === 'object' &&
+    'detail' in error &&
+    typeof (error as { detail: unknown }).detail === 'string'
+  ) {
+    return (error as { detail: string }).detail;
+  }
+  return undefined;
+}
+
 type ServerProjectsResponse = paths['/v1/server/projects']['get'] extends {
   responses: { 200: { content: { 'application/json': infer T } } };
 }
@@ -194,6 +206,44 @@ export async function updateServerProjectEnv(
 
   if (error) {
     throwApiError('Failed to update environment variables', response.status);
+  }
+}
+
+export async function pauseServerProject(token: string, orgId: string, projectId: string): Promise<void> {
+  const client = createApiClient(token, orgId);
+  const { error, response } = await client.POST('/v1/server/projects/{id}/pause', {
+    params: { path: { id: projectId } },
+  });
+
+  if (error) {
+    if (response.status === 409) {
+      throwApiError(
+        'Failed to pause server',
+        response.status,
+        'Pause failed: the server is not running, or a deployment is still in progress.',
+      );
+    }
+    const detail = apiErrorDetail(error);
+    throwApiError('Failed to pause server', response.status, detail);
+  }
+}
+
+export async function restartServerProject(token: string, orgId: string, projectId: string): Promise<void> {
+  const client = createApiClient(token, orgId);
+  const { error, response } = await client.POST('/v1/server/projects/{id}/restart', {
+    params: { path: { id: projectId } },
+  });
+
+  if (error) {
+    if (response.status === 409) {
+      throwApiError(
+        'Failed to restart server',
+        response.status,
+        'Restart failed: the server is running, or a deployment is still in progress.',
+      );
+    }
+    const detail = apiErrorDetail(error);
+    throwApiError('Failed to restart server', response.status, detail);
   }
 }
 

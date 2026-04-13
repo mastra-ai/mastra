@@ -724,6 +724,46 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/v1/server/projects/{id}/pause': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Pause server
+     * @description Pause a running server project
+     */
+    post: operations['postV1ServerProjectsByIdPause'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/server/projects/{id}/restart': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Restart server
+     * @description Restart a paused server project
+     */
+    post: operations['postV1ServerProjectsByIdRestart'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/v1/server/deploys': {
     parameters: {
       query?: never;
@@ -3353,6 +3393,106 @@ export interface operations {
             id: string;
             status: string;
             uploadUrl?: string;
+          };
+        };
+      };
+      /** @description Project not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+          };
+        };
+      };
+    };
+  };
+  postV1ServerProjectsByIdPause: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Server paused */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': Record<string, never>;
+        };
+      };
+      /** @description Conflict — server not running or deploy active */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+          };
+        };
+      };
+      /** @description Project not found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
+          };
+        };
+      };
+    };
+  };
+  postV1ServerProjectsByIdRestart: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Restart initiated */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': Record<string, never>;
+        };
+      };
+      /** @description Conflict — server running or deploy active */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            type: string;
+            title: string;
+            status: number;
+            detail?: string;
           };
         };
       };
