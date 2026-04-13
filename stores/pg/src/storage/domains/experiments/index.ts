@@ -65,6 +65,17 @@ export class ExperimentsPG extends ExperimentsStorage {
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_EXPERIMENTS, schema: EXPERIMENTS_SCHEMA });
     await this.#db.createTable({ tableName: TABLE_EXPERIMENT_RESULTS, schema: EXPERIMENT_RESULTS_SCHEMA });
+    // Add columns introduced after initial schema for backwards compatibility
+    await this.#db.alterTable({
+      tableName: TABLE_EXPERIMENTS,
+      schema: EXPERIMENTS_SCHEMA,
+      ifNotExists: ['agentVersion'],
+    });
+    await this.#db.alterTable({
+      tableName: TABLE_EXPERIMENT_RESULTS,
+      schema: EXPERIMENT_RESULTS_SCHEMA,
+      ifNotExists: ['status', 'tags'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
