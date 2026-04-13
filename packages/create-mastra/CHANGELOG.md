@@ -1,5 +1,113 @@
 # create-mastra
 
+## 1.5.1-alpha.2
+
+## 1.5.1-alpha.1
+
+## 1.5.1-alpha.0
+
+## 1.5.0
+
+## 1.5.0-alpha.2
+
+## 1.5.0-alpha.1
+
+## 1.4.2-alpha.0
+
+## 1.4.1
+
+## 1.4.1-alpha.1
+
+## 1.4.1-alpha.0
+
+## 1.4.0
+
+## 1.4.0-alpha.10
+
+## 1.4.0-alpha.9
+
+## 1.4.0-alpha.8
+
+## 1.4.0-alpha.7
+
+## 1.4.0-alpha.6
+
+## 1.4.0-alpha.5
+
+## 1.4.0-alpha.4
+
+## 1.3.21-alpha.3
+
+## 1.3.21-alpha.2
+
+## 1.3.21-alpha.1
+
+## 1.3.21-alpha.0
+
+## 1.3.20
+
+## 1.3.20-alpha.3
+
+## 1.3.20-alpha.2
+
+## 1.3.20-alpha.1
+
+## 1.3.20-alpha.0
+
+## 1.3.19
+
+## 1.3.19-alpha.2
+
+## 1.3.19-alpha.1
+
+## 1.3.19-alpha.0
+
+## 1.3.18
+
+## 1.3.18-alpha.0
+
+## 1.3.17
+
+## 1.3.17-alpha.2
+
+## 1.3.17-alpha.1
+
+## 1.3.17-alpha.0
+
+## 1.3.16
+
+## 1.3.16-alpha.8
+
+## 1.3.16-alpha.7
+
+## 1.3.16-alpha.6
+
+## 1.3.16-alpha.5
+
+## 1.3.16-alpha.4
+
+## 1.3.16-alpha.3
+
+## 1.3.16-alpha.2
+
+## 1.3.16-alpha.1
+
+## 1.3.16-alpha.0
+
+## 1.3.15
+
+### Patch Changes
+
+- Improved Skills setup in `create-mastra` so agent selection is faster during project creation. Choosing an agent-specific setup now also installs the shared `Universal` skill. ([#14540](https://github.com/mastra-ai/mastra/pull/14540))
+
+## 1.3.15-alpha.5
+
+## 1.3.15-alpha.4
+
+## 1.3.15-alpha.3
+
+## 1.3.15-alpha.2
+
 ## 1.3.15-alpha.1
 
 ### Patch Changes

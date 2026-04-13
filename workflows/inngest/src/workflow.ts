@@ -279,6 +279,7 @@ export class InngestWorkflow<
             name: `workflow run: '${this.id}'`,
             entityType: EntityType.WORKFLOW_RUN,
             entityId: this.id,
+            entityName: this.id,
             input: inputData,
             metadata: {
               resourceId,

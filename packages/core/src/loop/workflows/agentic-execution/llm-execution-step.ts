@@ -12,7 +12,8 @@ import { ModelRouterLanguageModel } from '../../../llm/model/router';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
-import { createObservabilityContext, executeWithContextSync } from '../../../observability';
+import { createObservabilityContext, SpanType } from '../../../observability';
+import { executeWithContextSync } from '../../../observability/utils';
 import type { ProcessorStreamWriter } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
@@ -62,6 +63,38 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
 function buildResponseModelMetadata(runState: AgenticRunState): { metadata: Record<string, unknown> } | undefined {
   const modelId = runState.state.responseMetadata?.modelId;
   return modelId ? { metadata: { modelId } } : undefined;
+}
+
+function flushReasoningBuffer({
+  buffer,
+  messageId,
+  messageList,
+  runState,
+}: {
+  buffer: { deltas: string[]; providerMetadata: Record<string, any> | undefined };
+  messageId: string;
+  messageList: MessageList;
+  runState: AgenticRunState;
+}) {
+  const message: MastraDBMessage = {
+    id: messageId,
+    role: 'assistant',
+    content: {
+      format: 2,
+      parts: [
+        {
+          type: 'reasoning' as const,
+          reasoning: '',
+          details: [{ type: 'text', text: buffer.deltas.join('') }],
+          providerMetadata: buffer.providerMetadata,
+        },
+      ],
+      ...buildResponseModelMetadata(runState),
+    },
+    createdAt: new Date(),
+  };
+
+  messageList.add(message, 'response');
 }
 
 async function processOutputStream<OUTPUT = undefined>({
@@ -118,6 +151,10 @@ async function processOutputStream<OUTPUT = undefined>({
       // Alternative solution: in message list allow combining text deltas together when the message source is "response" and the text parts are directly next to each other
       // simple solution for now is to not flush text deltas on response-metadata
       chunk.type !== 'response-metadata' &&
+      // Don't flush on source chunks - OpenAI web search interleaves source citations
+      // with text-deltas, all sharing the same itemId. Flushing creates multiple parts
+      // with duplicate itemIds, causing "Duplicate item found" errors on the next request.
+      chunk.type !== 'source' &&
       runState.state.isStreaming
     ) {
       if (runState.state.textDeltas.length) {
@@ -151,7 +188,7 @@ async function processOutputStream<OUTPUT = undefined>({
 
     // Only reset reasoning state for truly unexpected chunk types.
     // Some providers (e.g., ZAI/glm-4.6) send text-start before reasoning-end,
-    // so we must allow text-start to pass through without clearing reasoningDeltas.
+    // so we must allow text-start to pass through without clearing buffered reasoning deltas.
     if (
       chunk.type !== 'reasoning-start' &&
       chunk.type !== 'reasoning-delta' &&
@@ -165,33 +202,22 @@ async function processOutputStream<OUTPUT = undefined>({
       // Flush reasoning deltas before clearing, same pattern as textDeltas above.
       // Some providers (e.g., OpenAI-compatible reasoning models like kimi-k2.5, DeepSeek-R1)
       // emit tool-input-start before reasoning-end (which arrives from flush()).
-      // Without this flush, reasoningDeltas are lost and reasoning_content becomes empty,
-      // causing 400 errors on subsequent turns that require reasoning_content echo-back.
+      // Without this flush, reasoning_content becomes empty, causing 400 errors on
+      // subsequent turns that require reasoning_content echo-back.
       // See: https://github.com/mastra-ai/mastra/issues/13635
-      if (runState.state.reasoningDeltas.length) {
-        const message: MastraDBMessage = {
-          id: messageId,
-          role: 'assistant',
-          content: {
-            format: 2,
-            parts: [
-              {
-                type: 'reasoning' as const,
-                reasoning: '',
-                details: [{ type: 'text', text: runState.state.reasoningDeltas.join('') }],
-                providerMetadata: runState.state.providerOptions,
-              },
-            ],
-            ...buildResponseModelMetadata(runState),
-          },
-          createdAt: new Date(),
-        };
-        messageList.add(message, 'response');
+      for (const buffer of runState.state.reasoningBuffers.values()) {
+        flushReasoningBuffer({
+          buffer,
+          messageId,
+          messageList,
+          runState,
+        });
       }
 
       runState.setState({
         isReasoning: false,
-        reasoningDeltas: [],
+        reasoningBuffers: new Map(),
+        providerOptions: undefined,
       });
     }
 
@@ -292,9 +318,15 @@ async function processOutputStream<OUTPUT = undefined>({
       }
 
       case 'reasoning-start': {
+        const reasoningBuffers = new Map(runState.state.reasoningBuffers);
+        reasoningBuffers.set(chunk.payload.id, {
+          deltas: reasoningBuffers.get(chunk.payload.id)?.deltas ?? [],
+          providerMetadata: chunk.payload.providerMetadata ?? reasoningBuffers.get(chunk.payload.id)?.providerMetadata,
+        });
+
         runState.setState({
           isReasoning: true,
-          reasoningDeltas: [],
+          reasoningBuffers,
           providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
         });
 
@@ -325,11 +357,17 @@ async function processOutputStream<OUTPUT = undefined>({
       }
 
       case 'reasoning-delta': {
-        const reasoningDeltasFromState = runState.state.reasoningDeltas;
-        reasoningDeltasFromState.push(chunk.payload.text);
+        const reasoningBuffers = new Map(runState.state.reasoningBuffers);
+        const existingBuffer = reasoningBuffers.get(chunk.payload.id);
+        const buffer = {
+          deltas: [...(existingBuffer?.deltas ?? []), chunk.payload.text],
+          providerMetadata: chunk.payload.providerMetadata ?? existingBuffer?.providerMetadata,
+        };
+
+        reasoningBuffers.set(chunk.payload.id, buffer);
         runState.setState({
           isReasoning: true,
-          reasoningDeltas: reasoningDeltasFromState,
+          reasoningBuffers,
           providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
         });
         safeEnqueue(controller, chunk);
@@ -346,34 +384,35 @@ async function processOutputStream<OUTPUT = undefined>({
           break;
         }
 
+        const reasoningBuffers = new Map(runState.state.reasoningBuffers);
+        const buffer = reasoningBuffers.get(chunk.payload.id);
+
+        if (!buffer) {
+          safeEnqueue(controller, chunk);
+          break;
+        }
+
         // Always store reasoning, even if empty - OpenAI requires item_reference for tool calls
         // See: https://github.com/mastra-ai/mastra/issues/9005
-        const message: MastraDBMessage = {
-          id: messageId,
-          role: 'assistant',
-          content: {
-            format: 2,
-            parts: [
-              {
-                type: 'reasoning' as const,
-                reasoning: '',
-                details: [{ type: 'text', text: runState.state.reasoningDeltas.join('') }],
-                providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
-              },
-            ],
-            ...buildResponseModelMetadata(runState),
+        flushReasoningBuffer({
+          buffer: {
+            deltas: buffer.deltas,
+            providerMetadata: chunk.payload.providerMetadata ?? buffer.providerMetadata,
           },
-          createdAt: new Date(),
-        };
+          messageId,
+          messageList,
+          runState,
+        });
 
-        messageList.add(message, 'response');
+        reasoningBuffers.delete(chunk.payload.id);
+        const nextProviderOptions = Array.from(reasoningBuffers.values()).at(-1)?.providerMetadata;
 
         // Reset reasoning state - clear providerOptions to prevent reasoning metadata
         // (like openai.itemId) from leaking into subsequent text parts
         runState.setState({
-          isReasoning: false,
-          reasoningDeltas: [],
-          providerOptions: undefined,
+          isReasoning: reasoningBuffers.size > 0,
+          reasoningBuffers,
+          providerOptions: nextProviderOptions,
         });
 
         safeEnqueue(controller, chunk);
@@ -393,6 +432,7 @@ async function processOutputStream<OUTPUT = undefined>({
                   // @ts-expect-error - data type mismatch, see TODO
                   data: chunk.payload.data, // TODO: incorrect string type
                   mimeType: chunk.payload.mimeType,
+                  ...(chunk.payload.providerMetadata ? { providerMetadata: chunk.payload.providerMetadata } : {}),
                 },
               ],
               ...buildResponseModelMetadata(runState),
@@ -434,7 +474,7 @@ async function processOutputStream<OUTPUT = undefined>({
 
       case 'finish':
         runState.setState({
-          providerOptions: chunk.payload.metadata.providerMetadata,
+          providerOptions: chunk.payload.metadata?.providerMetadata ?? chunk.payload.providerMetadata,
           stepResult: {
             reason: chunk.payload.reason,
             logprobs: chunk.payload.logprobs,
@@ -487,7 +527,6 @@ async function processOutputStream<OUTPUT = undefined>({
               result: chunk.payload.result,
             },
             providerMetadata: chunk.payload.providerMetadata,
-            // @ts-expect-error - providerExecuted is not in the type but is read by output-converter.ts (to keep deferred provider calls) and tool-call-step.ts (to skip client execution)
             providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef),
           });
         }
@@ -508,7 +547,6 @@ async function processOutputStream<OUTPUT = undefined>({
             args: chunk.payload.args,
           },
           providerMetadata: chunk.payload.providerMetadata,
-          // @ts-expect-error - providerExecuted is not in the type but is read by output-converter.ts (to keep deferred provider calls) and tool-call-step.ts (to skip client execution)
           providerExecuted: inferredProviderExecuted,
         };
 
@@ -642,6 +680,14 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
     execute: async ({ inputData, bail, tracingContext }) => {
       currentIteration++;
 
+      // Insert a step-start boundary between loop iterations so that
+      // consecutive tool-only turns are not collapsed into a single block
+      // by convertToModelMessages. This ensures the LLM sees them as
+      // sequential steps rather than parallel tool calls.
+      if (currentIteration > 1) {
+        messageList.stepStart();
+      }
+
       let currentMessageId = inputData.isTaskCompleteCheckFailed
         ? `${messageIdPassed}-${currentIteration}`
         : inputData.messageId || messageIdPassed;
@@ -746,6 +792,47 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             });
             Object.assign(currentStep, processInputStepResult);
 
+            // Update MODEL_GENERATION span if processor actually changed model or modelSettings
+            const modelChanged = processInputStepResult.model && processInputStepResult.model !== model;
+            const modelSettingsChanged =
+              processInputStepResult.modelSettings && processInputStepResult.modelSettings !== modelSettings;
+            if (modelSpanTracker && (modelChanged || modelSettingsChanged)) {
+              modelSpanTracker.updateGeneration({
+                ...(modelChanged ? { name: `llm: '${currentStep.model.modelId}'` } : {}),
+                attributes: {
+                  ...(modelChanged
+                    ? {
+                        model: currentStep.model.modelId,
+                        provider: currentStep.model.provider,
+                      }
+                    : {}),
+                  ...(modelSettingsChanged ? { parameters: currentStep.modelSettings } : {}),
+                },
+              });
+            }
+
+            // Update AGENT_RUN span if processor actually changed available tools
+            const toolsChanged = processInputStepResult.tools && processInputStepResult.tools !== tools;
+            const activeToolsChanged =
+              processInputStepResult.activeTools && processInputStepResult.activeTools !== activeTools;
+            if (toolsChanged || activeToolsChanged) {
+              const agentSpan = tracingContext?.currentSpan?.findParent(SpanType.AGENT_RUN);
+              if (agentSpan) {
+                const toolNames = activeToolsChanged
+                  ? (processInputStepResult.activeTools as string[])
+                  : currentStep.tools
+                    ? Object.keys(currentStep.tools)
+                    : undefined;
+                if (toolNames !== undefined) {
+                  agentSpan.update({
+                    attributes: {
+                      availableTools: toolNames,
+                    },
+                  });
+                }
+              }
+            }
+
             // Convert any raw Mastra Tool objects returned by processors into CoreTool format.
             // Processors like ToolSearchProcessor return raw Tool instances that lack requestContext binding.
             if (processInputStepResult.tools && currentStep.tools) {
@@ -777,6 +864,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           } catch (error) {
             // Handle TripWire from processInputStep - emit tripwire chunk and signal abort
             if (error instanceof TripWire) {
+              logger?.warn('Streaming input processor tripwire triggered', {
+                reason: error.message,
+                processorId: error.processorId,
+                retry: error.options?.retry,
+              });
               // Emit tripwire chunk to the stream
               safeEnqueue(controller, {
                 type: 'tripwire',
@@ -932,12 +1024,19 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 modelSettings: { ...currentStep.modelSettings, maxRetries: modelConfig.maxRetries },
                 includeRawChunks,
                 structuredOutput: currentStep.structuredOutput,
-                // Merge headers: modelConfig headers first, then modelSettings overrides them
-                // Only create object if there are actual headers to avoid passing empty {}
-                headers:
-                  modelHeaders || currentStep.modelSettings?.headers
-                    ? { ...modelHeaders, ...currentStep.modelSettings?.headers }
-                    : undefined,
+                // Merge headers: memory context first, then modelConfig headers, then modelSettings overrides
+                // x-thread-id / x-resource-id enable server-side memory enrichment (e.g. Memory Gateway)
+                headers: (() => {
+                  const memoryHeaders: Record<string, string> = {};
+                  if (_internal?.threadId) memoryHeaders['x-thread-id'] = _internal.threadId;
+                  if (_internal?.resourceId) memoryHeaders['x-resource-id'] = _internal.resourceId;
+                  const merged = {
+                    ...memoryHeaders,
+                    ...modelHeaders,
+                    ...currentStep.modelSettings?.headers,
+                  };
+                  return Object.keys(merged).length > 0 ? merged : undefined;
+                })(),
                 methodType,
                 generateId: _internal?.generateId,
                 onResult: ({
@@ -1202,6 +1301,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         } catch (error) {
           if (error instanceof TripWire) {
             processOutputStepTripwire = error;
+            logger?.warn('Output step processor tripwire triggered', {
+              reason: error.message,
+              processorId: error.processorId,
+              retry: error.options?.retry,
+            });
             // If retry is requested, we'll handle it below
             // For now, we just capture the tripwire
           } else {

@@ -153,15 +153,18 @@ describe('Mastra Custom Gateway Integration', () => {
 
       const gateways = mastra.listGateways();
       expect(gateways).toBeDefined();
-      expect(Object.keys(gateways ?? {})).toHaveLength(1);
       expect(gateways?.test.name).toBe('test-gateway');
     });
 
-    it('should return empty record when no gateways are configured', () => {
+    it('should include default gateways when no custom gateways are configured', () => {
       const mastra = new Mastra();
       const gateways = mastra.listGateways();
       expect(gateways).toBeDefined();
-      expect(Object.keys(gateways ?? {})).toHaveLength(0);
+      // Default gateways (netlify, mastra, models.dev) are auto-registered
+      const keys = Object.keys(gateways ?? {});
+      expect(keys).toContain('netlify');
+      expect(keys).toContain('mastra');
+      expect(keys).toContain('models.dev');
     });
 
     it('should allow adding gateways after construction', () => {
@@ -172,7 +175,6 @@ describe('Mastra Custom Gateway Integration', () => {
 
       const gateways = mastra.listGateways();
       expect(gateways).toBeDefined();
-      expect(Object.keys(gateways ?? {})).toHaveLength(1);
       expect(gateways?.test).toBe(testGateway);
     });
 
@@ -186,7 +188,6 @@ describe('Mastra Custom Gateway Integration', () => {
 
       const gateways = mastra.listGateways();
       expect(gateways).toBeDefined();
-      expect(Object.keys(gateways ?? {})).toHaveLength(2);
       expect(gateways?.g1.name).toBe('gateway-1');
       expect(gateways?.g2.name).toBe('gateway-2');
     });
@@ -446,12 +447,11 @@ describe('Mastra Custom Gateway Integration', () => {
         },
       });
 
-      expect(Object.keys(mastra.listGateways() ?? {})).toHaveLength(1);
+      expect(mastra.listGateways()?.test).toBe(gateway1);
 
       mastra.addGateway(new Gateway2(), 'g2');
 
       const gateways = mastra.listGateways();
-      expect(Object.keys(gateways ?? {})).toHaveLength(2);
       expect(gateways?.test.name).toBe('test-gateway');
       expect(gateways?.g2.name).toBe('gateway-2');
     });
@@ -467,7 +467,6 @@ describe('Mastra Custom Gateway Integration', () => {
       mastra.addGateway(new Gateway2(), 'test'); // Try to add with same key
 
       const gateways = mastra.listGateways();
-      expect(Object.keys(gateways ?? {})).toHaveLength(1);
       expect(gateways?.test).toBe(testGateway); // Original gateway should remain
       expect(gateways?.test.name).toBe('test-gateway');
     });

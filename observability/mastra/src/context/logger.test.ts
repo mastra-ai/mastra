@@ -31,7 +31,9 @@ describe('LoggerContextImpl', () => {
     const logger = new LoggerContextImpl({
       traceId: 'trace-abc',
       spanId: 'span-123',
-      tags: ['tag-a'],
+      correlationContext: {
+        tags: ['tag-a'],
+      },
       metadata: { runId: 'run-1', environment: 'test' },
       observabilityBus: bus,
     });
@@ -45,7 +47,9 @@ describe('LoggerContextImpl', () => {
     expect(log.data).toEqual({ key: 'value' });
     expect(log.traceId).toBe('trace-abc');
     expect(log.spanId).toBe('span-123');
-    expect(log.tags).toEqual(['tag-a']);
+    expect(log.correlationContext).toEqual({
+      tags: ['tag-a'],
+    });
     expect(log.metadata).toEqual({ runId: 'run-1', environment: 'test' });
   });
 
@@ -100,9 +104,7 @@ describe('LoggerContextImpl', () => {
 
     expect(emittedEvents).toHaveLength(1);
     const log = emittedEvents[0]!.log;
-    expect(log.traceId).toBeUndefined();
-    expect(log.spanId).toBeUndefined();
-    expect(log.tags).toBeUndefined();
+    expect(log.correlationContext).toBeUndefined();
     expect(log.metadata).toBeUndefined();
   });
 
@@ -177,12 +179,41 @@ describe('LoggerContextImpl', () => {
 
     const logger = new LoggerContextImpl({
       observabilityBus: bus,
-      tags: ['root-tag-1', 'root-tag-2'],
+      correlationContext: {
+        tags: ['root-tag-1', 'root-tag-2'],
+      },
     });
 
     logger.info('with tags');
 
     const log = emittedEvents[0]!.log;
-    expect(log.tags).toEqual(['root-tag-1', 'root-tag-2']);
+    expect(log.correlationContext).toEqual({
+      tags: ['root-tag-1', 'root-tag-2'],
+    });
+  });
+
+  it('should fall back to deprecated traceId and spanId on correlationContext', () => {
+    bus = new ObservabilityBus();
+    captureEvents();
+
+    const logger = new LoggerContextImpl({
+      observabilityBus: bus,
+      correlationContext: {
+        traceId: 'legacy-trace',
+        spanId: 'legacy-span',
+        tags: ['tag-a'],
+      },
+    });
+
+    logger.info('legacy trace context');
+
+    const log = emittedEvents[0]!.log;
+    expect(log.traceId).toBe('legacy-trace');
+    expect(log.spanId).toBe('legacy-span');
+    expect(log.correlationContext).toEqual({
+      traceId: 'legacy-trace',
+      spanId: 'legacy-span',
+      tags: ['tag-a'],
+    });
   });
 });

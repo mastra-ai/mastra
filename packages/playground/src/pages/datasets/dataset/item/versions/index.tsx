@@ -1,29 +1,24 @@
 import {
-  Header,
-  MainContentLayout,
-  MainContentContent,
-  Icon,
-  Button,
-  HeaderAction,
   Breadcrumb,
-  Crumb,
-  MainHeader,
-  TextAndIcon,
-  useDataset,
-  useDatasetItemVersion,
-  useDatasetItemVersions,
-  DatasetItemContent,
-  CodeDiff,
-  SelectField,
-  useLinkComponent,
-  Columns,
-  Column,
+  Button,
   ButtonsGroup,
   Chip,
+  CodeDiff,
+  Column,
+  Columns,
+  Crumb,
+  Header,
+  HeaderAction,
+  Icon,
+  MainContentContent,
+  MainContentLayout,
+  MainHeader,
   PermissionDenied,
+  SessionExpired,
+  TextAndIcon,
+  is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import type { DatasetItemVersion } from '@mastra/playground-ui';
 import { format } from 'date-fns';
 import {
   Database,
@@ -36,6 +31,12 @@ import {
 } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router';
+import { DatasetItemContent } from '@/domains/datasets';
+import { useDatasetItemVersion, useDatasetItemVersions } from '@/domains/datasets/hooks/use-dataset-item-versions';
+import type { DatasetItemVersion } from '@/domains/datasets/hooks/use-dataset-item-versions';
+import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+import { SelectField } from '@/lib/form/components/select-field';
+import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/lib/utils';
 
 function versionToText(version: DatasetItemVersion): string {
@@ -79,6 +80,16 @@ function DatasetItemVersionsComparePage() {
     versionNumbers[1] ?? 0,
     dataset?.version,
   );
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   if (error && is403ForbiddenError(error)) {
     return (

@@ -1,6 +1,6 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import { Agent } from '../agent';
 import { createStep, createWorkflow } from '../workflows/workflow';

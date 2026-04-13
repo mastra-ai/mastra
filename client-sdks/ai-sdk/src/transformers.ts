@@ -383,6 +383,36 @@ export function AgentStreamToAISDKV6Transformer<OUTPUT>({
   });
 }
 
+function ensureAgentRunState(bufferedSteps: Map<string, any>, runId: string) {
+  if (!bufferedSteps.has(runId)) {
+    bufferedSteps.set(runId, {
+      id: '',
+      object: null,
+      finishReason: null,
+      usage: null,
+      warnings: [],
+      text: '',
+      reasoning: [],
+      sources: [],
+      files: [],
+      toolCalls: [],
+      toolResults: [],
+      request: {},
+      response: {
+        id: '',
+        timestamp: new Date(),
+        modelId: '',
+        messages: [],
+      },
+      providerMetadata: undefined,
+      steps: [],
+      status: 'running',
+    });
+  }
+
+  return bufferedSteps.get(runId)!;
+}
+
 export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps: Map<string, any>) {
   let hasChanged = false;
   switch (payload.type) {
@@ -420,10 +450,14 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
         warnings: payload.payload?.stepResult?.warnings,
         steps: bufferedSteps.get(payload.runId!)!.steps,
         status: 'finished',
+        response: {
+          ...bufferedSteps.get(payload.runId!).response,
+          ...(payload.payload.response || {}),
+        },
       });
       hasChanged = true;
       break;
-    case 'text-delta':
+    case 'text-delta': {
       const prevData = bufferedSteps.get(payload.runId!)!;
       bufferedSteps.set(payload.runId!, {
         ...prevData,
@@ -431,6 +465,7 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
       });
       hasChanged = true;
       break;
+    }
     case 'reasoning-delta':
       bufferedSteps.set(payload.runId!, {
         ...bufferedSteps.get(payload.runId!),
@@ -459,13 +494,15 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
       });
       hasChanged = true;
       break;
-    case 'tool-result':
+    case 'tool-result': {
+      const toolResultRun = ensureAgentRunState(bufferedSteps, payload.runId!);
       bufferedSteps.set(payload.runId!, {
-        ...bufferedSteps.get(payload.runId!),
-        toolResults: [...bufferedSteps.get(payload.runId)!.toolResults, payload.payload],
+        ...toolResultRun,
+        toolResults: [...toolResultRun.toolResults, payload.payload],
       });
       hasChanged = true;
       break;
+    }
     case 'object-result':
       bufferedSteps.set(payload.runId!, {
         ...bufferedSteps.get(payload.runId!),
@@ -480,53 +517,86 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
       });
       hasChanged = true;
       break;
-    case 'step-finish':
-      const currentRun = bufferedSteps.get(payload.runId!)!;
+    case 'step-finish': {
+      const stepRun = ensureAgentRunState(bufferedSteps, payload.runId!);
+      // Exclude `steps` and internal offset trackers from the stepResult to
+      // avoid recursive nesting where each stepResult embeds copies of all
+      // prior stepResults (issue #14932).
+      const { steps: _steps, _textOffset, _reasoningOffset, ...stepRunWithoutSteps } = stepRun;
+
+      // Derive per-step text and reasoning using tracked offsets so each
+      // stepResult only contains its own content, not the cumulative run state.
+      const textOffset: number = _textOffset || 0;
+      const reasoningOffset: number = _reasoningOffset || 0;
+      const stepText = stepRun.text.slice(textOffset);
+      const stepReasoning: string[] = stepRun.reasoning.slice(reasoningOffset);
+
       const stepResult = {
-        ...bufferedSteps.get(payload.runId!)!,
-        stepType: currentRun.steps.length === 0 ? 'initial' : 'tool-result',
-        reasoningText: bufferedSteps.get(payload.runId!)!.reasoning.join(''),
-        staticToolCalls: bufferedSteps
-          .get(payload.runId!)!
-          .toolCalls.filter((part: any) => part.type === 'tool-call' && part.payload?.dynamic === false),
-        dynamicToolCalls: bufferedSteps
-          .get(payload.runId!)!
-          .toolCalls.filter((part: any) => part.type === 'tool-call' && part.payload?.dynamic === true),
-        staticToolResults: bufferedSteps
-          .get(payload.runId!)!
-          .toolResults.filter((part: any) => part.type === 'tool-result' && part.payload?.dynamic === false),
-        dynamicToolResults: bufferedSteps
-          .get(payload.runId!)!
-          .toolResults.filter((part: any) => part.type === 'tool-result' && part.payload?.dynamic === true),
+        ...stepRunWithoutSteps,
+        text: stepText,
+        reasoning: stepReasoning,
+        stepType: stepRun.steps.length === 0 ? 'initial' : 'tool-result',
+        reasoningText: stepReasoning.join(''),
+        staticToolCalls: stepRun.toolCalls.filter(
+          (part: any) => part.type === 'tool-call' && part.payload?.dynamic === false,
+        ),
+        dynamicToolCalls: stepRun.toolCalls.filter(
+          (part: any) => part.type === 'tool-call' && part.payload?.dynamic === true,
+        ),
+        staticToolResults: stepRun.toolResults.filter(
+          (part: any) => part.type === 'tool-result' && part.payload?.dynamic === false,
+        ),
+        dynamicToolResults: stepRun.toolResults.filter(
+          (part: any) => part.type === 'tool-result' && part.payload?.dynamic === true,
+        ),
         finishReason: payload.payload.stepResult.reason,
         usage: payload.payload.output.usage,
         warnings: payload.payload.stepResult.warnings || [],
         response: {
+          ...stepRun.response,
           id: payload.payload.id || '',
           timestamp: (payload.payload.metadata?.timestamp as Date) || new Date(),
           modelId: (payload.payload.metadata?.modelId as string) || (payload.payload.metadata?.model as string) || '',
-          ...bufferedSteps.get(payload.runId!)!.response,
-          messages: bufferedSteps.get(payload.runId!)!.response.messages || [],
+          ...((payload.payload as any).response || {}),
+          messages:
+            ((payload.payload as any).response?.messages as typeof stepRun.response.messages) ??
+            stepRun.response.messages ??
+            [],
         },
       };
 
+      // Reset per-step structural fields so the next step starts fresh instead
+      // of carrying forward all prior toolCalls/toolResults (issue #14932).
+      // Text and reasoning stay cumulative at the run level (consumers read
+      // `data.text`); offsets track where the next step's content begins.
+      // `object` is last-write-wins, so it is NOT reset — clearing it would
+      // lose structured output from the completed step.
       bufferedSteps.set(payload.runId!, {
-        ...bufferedSteps.get(payload.runId!)!,
+        ...stepRun,
+        sources: [],
+        files: [],
+        toolCalls: [],
+        toolResults: [],
         usage: payload.payload.output.usage,
         warnings: payload.payload.stepResult.warnings || [],
-        steps: [...bufferedSteps.get(payload.runId!)!.steps, stepResult],
+        steps: [...stepRun.steps, stepResult],
+        _textOffset: stepRun.text.length,
+        _reasoningOffset: stepRun.reasoning.length,
       });
       hasChanged = true;
       break;
+    }
     default:
       break;
   }
 
   if (hasChanged) {
+    // Strip internal offset trackers so they don't leak over the wire.
+    const { _textOffset: _to, _reasoningOffset: _ro, ...data } = bufferedSteps.get(payload.runId!)!;
     return {
       type: 'data-tool-agent',
       id: payload.runId!,
-      data: bufferedSteps.get(payload.runId!),
+      data,
     } satisfies AgentDataPart;
   }
   return null;

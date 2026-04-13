@@ -1,31 +1,25 @@
 import {
-  MainContentLayout,
-  MainContentContent,
-  useDatasetItemVersions,
-  useDatasetMutations,
-  useLinkComponent,
-  DatasetItemContent,
-  DatasetItemVersionsPanel,
-  EditModeContent,
   AlertDialog,
-  Button,
-  Icon,
-  Header,
   Breadcrumb,
-  Crumb,
-  MainHeader,
+  Button,
   ButtonsGroup,
-  toast,
-  TextAndIcon,
-  useDataset,
-  CopyButton,
-  Columns,
   Column,
+  Columns,
+  CopyButton,
+  Crumb,
+  Header,
+  Icon,
+  MainContentContent,
+  MainContentLayout,
+  MainHeader,
   Notice,
   PermissionDenied,
+  SessionExpired,
+  TextAndIcon,
+  is401UnauthorizedError,
   is403ForbiddenError,
+  toast,
 } from '@mastra/playground-ui';
-import type { DatasetItemVersion } from '@mastra/playground-ui';
 import { format } from 'date-fns';
 import {
   AlertTriangleIcon,
@@ -39,6 +33,12 @@ import {
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router';
+import { DatasetItemContent, DatasetItemVersionsPanel, EditModeContent } from '@/domains/datasets';
+import { useDatasetItemVersions } from '@/domains/datasets/hooks/use-dataset-item-versions';
+import type { DatasetItemVersion } from '@/domains/datasets/hooks/use-dataset-item-versions';
+import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
+import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+import { useLinkComponent } from '@/lib/framework';
 
 function DatasetItemPage() {
   const { datasetId, itemId } = useParams<{ datasetId: string; itemId: string }>();
@@ -204,6 +204,16 @@ function DatasetItemPage() {
         updatedAt: versionToDisplay.updatedAt,
       }
     : null;
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   if (error && is403ForbiddenError(error)) {
     return (

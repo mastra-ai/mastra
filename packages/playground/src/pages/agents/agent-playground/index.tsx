@@ -1,42 +1,50 @@
 import {
-  AgentPlaygroundView,
-  AgentEditFormProvider,
-  useAgent,
-  useStoredAgent,
-  useAgentCmsForm,
-  useAgentVersions,
-  useAgentVersion,
-  useMemory,
-  mapAgentResponseToDataSource,
-  Spinner,
   PermissionDenied,
+  SessionExpired,
+  Spinner,
+  is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import type { AgentDataSource } from '@mastra/playground-ui';
 import { useCallback, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
+import { AgentPlaygroundView } from '@/domains/agents/components/agent-playground/agent-playground-view';
+import { AgentEditFormProvider } from '@/domains/agents/context/agent-edit-form-context';
+import { useAgent } from '@/domains/agents/hooks/use-agent';
+import { useAgentCmsForm } from '@/domains/agents/hooks/use-agent-cms-form';
+import { useAgentVersions, useAgentVersion } from '@/domains/agents/hooks/use-agent-versions';
+import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
+import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
+import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
+import { useMemory } from '@/domains/memory/hooks/use-memory';
 
 function AgentPlayground() {
   const { agentId } = useParams();
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
 
   const { data: codeAgent, isLoading: isLoadingCodeAgent, error } = useAgent(agentId!);
-  const { data: storedAgent, isLoading: isLoadingStoredAgent } = useStoredAgent(agentId!, { status: 'draft' });
   const { data: memory } = useMemory(agentId!);
 
+  // Fetch versions first — this endpoint returns an empty array for code-only agents
+  const { data: versionsData } = useAgentVersions({
+    agentId: agentId ?? '',
+    params: { sortDirection: 'DESC' },
+  });
+
+  // Only fetch stored agent details when versions exist (avoids 404 for code-only agents)
+  const hasVersions = (versionsData?.versions?.length ?? 0) > 0;
+  const { data: storedAgent, isLoading: isLoadingStoredAgent } = useStoredAgent(agentId!, {
+    status: 'draft',
+    enabled: hasVersions,
+  });
+
   const isCodeAgentOverride = codeAgent?.source === 'code';
-  const isLoading = isLoadingCodeAgent || isLoadingStoredAgent;
+  const isLoading = isLoadingCodeAgent || (hasVersions && isLoadingStoredAgent);
   const hasMemory = Boolean(memory?.result);
 
   // Fetch version data when a specific version is selected
   const { data: versionData } = useAgentVersion({
     agentId: agentId ?? '',
     versionId: selectedVersionId ?? '',
-  });
-
-  const { data: versionsData } = useAgentVersions({
-    agentId: agentId ?? '',
-    params: { sortDirection: 'DESC' },
   });
 
   const activeVersionId = storedAgent?.activeVersionId;
@@ -64,6 +72,14 @@ function AgentPlayground() {
     onSuccess: () => {},
   });
 
+  const handlePublishVersion = useCallback(async () => {
+    if (isViewingPreviousVersion && selectedVersionId) {
+      await handlePublish(selectedVersionId);
+    } else {
+      await handlePublish();
+    }
+  }, [handlePublish, isViewingPreviousVersion, selectedVersionId]);
+
   const handleVersionSelect = useCallback(
     (versionId: string) => {
       // If selecting the latest version, clear the selection (back to editable draft)
@@ -75,6 +91,14 @@ function AgentPlayground() {
     },
     [latestVersion?.id],
   );
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <SessionExpired />
+      </div>
+    );
+  }
 
   if (error && is403ForbiddenError(error)) {
     return (
@@ -112,6 +136,7 @@ function AgentPlayground() {
         agentId={agentId!}
         agentName={codeAgent?.name}
         modelVersion={codeAgent?.modelVersion}
+        agentVersionId={selectedVersionId ?? latestVersion?.id}
         hasMemory={hasMemory}
         activeVersionId={activeVersionId}
         selectedVersionId={selectedVersionId ?? undefined}
@@ -123,7 +148,8 @@ function AgentPlayground() {
         hasDraft={hasDraft}
         readOnly={isViewingPreviousVersion}
         onSaveDraft={handleSaveDraft}
-        onPublish={handlePublish}
+        onPublish={handlePublishVersion}
+        isViewingPreviousVersion={isViewingPreviousVersion}
       />
     </AgentEditFormProvider>
   );

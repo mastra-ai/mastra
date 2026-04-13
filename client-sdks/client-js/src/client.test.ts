@@ -652,6 +652,51 @@ describe('MastraClient', () => {
         expect(result).toEqual(mockMessages);
       });
 
+      it('should not include system reminders by default', async () => {
+        const mockMessages = {
+          messages: [{ id: 'msg-1', content: 'Hello' }],
+        };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockMessages,
+        });
+
+        const result = await client.listThreadMessages('thread-1', {
+          agentId: 'agent-1',
+        });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/memory/threads/thread-1/messages?agentId=agent-1',
+          expect.any(Object),
+        );
+        expect(result).toEqual(mockMessages);
+      });
+
+      it('should include system reminders when requested', async () => {
+        const mockMessages = {
+          messages: [{ id: 'msg-1', content: 'Hello' }],
+        };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockMessages,
+        });
+
+        const result = await client.listThreadMessages('thread-1', {
+          agentId: 'agent-1',
+          includeSystemReminders: true,
+        });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/memory/threads/thread-1/messages?agentId=agent-1&includeSystemReminders=true',
+          expect.any(Object),
+        );
+        expect(result).toEqual(mockMessages);
+      });
+
       it('should list messages without agentId (storage fallback)', async () => {
         const mockMessages = {
           messages: [{ id: 'msg-1', content: 'Hello' }],

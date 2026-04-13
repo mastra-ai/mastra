@@ -388,6 +388,7 @@ export const DATASETS_SCHEMA: Record<string, StorageColumn> = {
   tags: { type: 'jsonb', nullable: true },
   targetType: { type: 'text', nullable: true },
   targetIds: { type: 'jsonb', nullable: true },
+  scorerIds: { type: 'jsonb', nullable: true },
   version: { type: 'integer', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
@@ -404,6 +405,7 @@ export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
   requestContext: { type: 'jsonb', nullable: true },
   metadata: { type: 'jsonb', nullable: true },
   source: { type: 'jsonb', nullable: true },
+  expectedTrajectory: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
