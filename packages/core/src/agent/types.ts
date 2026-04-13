@@ -234,12 +234,6 @@ export interface AgentConfig<
    */
   maxRetries?: number;
   /**
-   * Maximum number of consecutive processor-triggered retries allowed for a single generation.
-   * Applies to input, output, and error processors that request `{ retry: true }`.
-   * @defaultValue 10
-   */
-  maxProcessorRetries?: number;
-  /**
    * Tools that the agent can access. Can be provided statically or resolved dynamically.
    */
   tools?: DynamicArgument<TTools, TRequestContext>;
@@ -359,6 +353,13 @@ export interface AgentConfig<
    */
   outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[], TRequestContext>;
   /**
+   * Maximum number of times processors can trigger a retry per generation.
+   * When a processor calls abort({ retry: true }), the agent will retry with feedback.
+   * This limit prevents infinite retry loops.
+   * If not set, no retries are performed.
+   */
+  maxProcessorRetries?: number;
+  /**
    * Error processors that handle LLM API rejections.
    * These implement `processAPIError` and can inspect the error, modify messages, and signal a retry.
    * Error processors can also be placed in `inputProcessors` or `outputProcessors`.
@@ -432,6 +433,12 @@ export type AgentGenerateOptions<
   inputProcessors?: InputProcessorOrWorkflow[];
   /** Output processors to use for this generation call (overrides agent's default) */
   outputProcessors?: OutputProcessorOrWorkflow[];
+  /**
+   * Maximum number of times processors can trigger a retry for this generation.
+   * Overrides agent's default maxProcessorRetries.
+   * If not set, no retries are performed.
+   */
+  maxProcessorRetries?: number;
   /** Error processors to use for this generation call (overrides agent's default) */
   errorProcessors?: ErrorProcessorOrWorkflow[];
   /** tracing options for starting new traces */

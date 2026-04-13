@@ -1241,6 +1241,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           requireToolApproval: (defaultOptions as Record<string, any>)?.requireToolApproval,
           autoResumeSuspendedTools: (defaultOptions as Record<string, any>)?.autoResumeSuspendedTools,
           toolCallConcurrency: (defaultOptions as Record<string, any>)?.toolCallConcurrency,
+          maxProcessorRetries: (defaultOptions as Record<string, any>)?.maxProcessorRetries,
           includeRawChunks: (defaultOptions as Record<string, any>)?.includeRawChunks,
         }
       : undefined;
