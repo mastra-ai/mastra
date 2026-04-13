@@ -43,7 +43,7 @@ const COLUMNS_SQL = COLUMNS.join(', ');
 
 function rowToLogRecord(row: Record<string, unknown>): Record<string, unknown> {
   return {
-    logId: (row.logId as string) ?? null,
+    logId: (row.logId as string) ?? '',
     timestamp: toDate(row.timestamp),
     level: row.level as string,
     message: row.message as string,
@@ -85,7 +85,7 @@ export async function batchCreateLogs(db: DuckDBConnection, args: BatchCreateLog
 
   const tuples = args.logs.map(log => {
     return `(${[
-      v(log.logId ?? null),
+      v(log.logId ?? ''),
       v(log.timestamp),
       v(log.level),
       v(log.message),

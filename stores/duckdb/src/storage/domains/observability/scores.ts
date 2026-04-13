@@ -154,7 +154,7 @@ function toSeriesName(values: unknown[]): string {
 
 function rowToScoreRecord(row: Record<string, unknown>): Record<string, unknown> {
   return {
-    scoreId: (row.scoreId as string) ?? null,
+    scoreId: (row.scoreId as string) ?? '',
     timestamp: toDate(row.timestamp),
     traceId: (row.traceId as string) ?? null,
     spanId: (row.spanId as string) ?? null,
@@ -238,7 +238,7 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
       scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope
     )
      VALUES (${[
-       v(s.scoreId ?? null),
+       v(s.scoreId ?? ''),
        v(s.timestamp),
        v(s.traceId),
        v(s.spanId ?? null),
@@ -286,7 +286,7 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
     const legacyScore = s as LegacyScoreRecord;
     const scoreSource = legacyScore.scoreSource ?? legacyScore.source ?? null;
     return `(${[
-      v(legacyScore.scoreId ?? null),
+      v(legacyScore.scoreId ?? ''),
       v(legacyScore.timestamp),
       v(legacyScore.traceId),
       v(legacyScore.spanId ?? null),

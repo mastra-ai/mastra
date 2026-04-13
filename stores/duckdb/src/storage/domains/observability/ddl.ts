@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS metric_events (
   timestamp TIMESTAMP NOT NULL,
 
   -- IDs
-  metricId VARCHAR,
+  metricId VARCHAR NOT NULL,
   traceId VARCHAR,
   spanId VARCHAR,
   experimentId VARCHAR,
@@ -121,7 +121,7 @@ CREATE TABLE IF NOT EXISTS log_events (
   timestamp TIMESTAMP NOT NULL,
 
   -- IDs
-  logId VARCHAR,
+  logId VARCHAR NOT NULL,
   traceId VARCHAR,
   spanId VARCHAR,
   experimentId VARCHAR,
@@ -170,7 +170,7 @@ CREATE TABLE IF NOT EXISTS score_events (
   timestamp TIMESTAMP NOT NULL,
 
   -- IDs
-  scoreId VARCHAR,
+  scoreId VARCHAR NOT NULL,
   traceId VARCHAR,
   spanId VARCHAR,
   experimentId VARCHAR,
@@ -223,7 +223,7 @@ CREATE TABLE IF NOT EXISTS feedback_events (
   timestamp TIMESTAMP NOT NULL,
 
   -- IDs
-  feedbackId VARCHAR,
+  feedbackId VARCHAR NOT NULL,
   traceId VARCHAR,
   spanId VARCHAR,
   experimentId VARCHAR,
@@ -388,8 +388,9 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE feedback_events ALTER COLUMN traceId DROP NOT NULL`,
 
   // Signal IDs for de-duplication (added in observability signal IDs feature)
-  `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS logId VARCHAR`,
-  `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS metricId VARCHAR`,
-  `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS scoreId VARCHAR`,
-  `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS feedbackId VARCHAR`,
+  // DEFAULT '' ensures existing rows get an empty string instead of failing NOT NULL.
+  `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS logId VARCHAR NOT NULL DEFAULT ''`,
+  `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS metricId VARCHAR NOT NULL DEFAULT ''`,
+  `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS scoreId VARCHAR NOT NULL DEFAULT ''`,
+  `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS feedbackId VARCHAR NOT NULL DEFAULT ''`,
 ];
