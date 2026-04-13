@@ -135,9 +135,9 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   requestContext?: RequestContext;
   methodType: ModelMethodType;
   /**
-   * Maximum number of consecutive times processors can trigger a retry per generation.
-   * Applies when input/output processors call abort({ retry: true }) or when an error processor returns { retry: true } from processAPIError.
-   * Defaults to 10 when not set.
+   * Maximum number of processor-triggered retries allowed for this generation.
+   * Input/output processor retries require this to be explicitly set.
+   * Error processor retries from processAPIError default to 10 when errorProcessors are configured and this is not set.
    */
   maxProcessorRetries?: number;
 

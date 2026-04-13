@@ -1690,6 +1690,17 @@ describe('New Processor Features', () => {
       // Should have made 2 calls to the model
       expect(callCount).toBe(2);
 
+      // The second call should include the retry feedback message as a system message
+      const secondCallMessages = receivedMessages[1];
+      const hasRetryFeedback = secondCallMessages.some((msg: any) => {
+        if (msg.role === 'system') {
+          const content = typeof msg.content === 'string' ? msg.content : '';
+          return content.includes('Response quality too low');
+        }
+        return false;
+      });
+      expect(hasRetryFeedback).toBe(true);
+
       // Final result text should only include the accepted response
       // The rejected step has tripwire data, so its text returns empty
       expect(result.text).toBe('improved response');
@@ -1924,6 +1935,12 @@ describe('New Processor Features', () => {
         return msg.content.some(part => part.type === 'text' && part.text.includes(firstResponseText));
       });
       expect(hasRejectedResponse).toBe(false);
+
+      // The retry feedback should be present as a system message
+      const hasRetryFeedback = retryPrompt.some(
+        msg => msg.role === 'system' && msg.content.includes('Fabrication detected'),
+      );
+      expect(hasRetryFeedback).toBe(true);
 
       // Final result should be the corrected response
       expect(result.text).toBe('corrected response');

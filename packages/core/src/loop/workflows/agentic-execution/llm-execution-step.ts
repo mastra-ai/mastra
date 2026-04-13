@@ -726,6 +726,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             messageList.replaceAllSystemMessages(initialSystemMessages);
           }
 
+          if (inputData.processorRetryFeedback) {
+            messageList.addSystem(inputData.processorRetryFeedback, 'processor-retry-feedback');
+          }
+
           const currentStep: {
             messageId: string;
             model: MastraLanguageModel;
@@ -1553,6 +1557,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         messageList.removeByIds([outputStream.messageId]);
       }
 
+      const retryFeedbackText =
+        shouldRetry && processOutputStepTripwire
+          ? `[Processor Feedback] Your previous response was not accepted: ${processOutputStepTripwire.message}. Please try again with the feedback in mind.`
+          : undefined;
+
       const messages = {
         all: messageList.get.all.aiV5.model(),
         user: messageList.get.input.aiV5.model(),
@@ -1612,6 +1621,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         messages,
         // Track processor retry count for next iteration
         processorRetryCount: nextProcessorRetryCount,
+        processorRetryFeedback: retryFeedbackText,
         ...(nextFallbackModelIndex > 0 ? { fallbackModelIndex: nextFallbackModelIndex } : {}),
       };
     },

@@ -32,6 +32,7 @@ type IterationData = {
   };
   processorRetryCount?: number;
   fallbackModelIndex?: number;
+  processorRetryFeedback?: string;
 };
 
 describe('createLLMExecutionStep gateway provider tools', () => {

@@ -345,7 +345,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
         ...(options.modelSettings || {}),
       },
       messageList: memoryData.messageList!,
-      maxProcessorRetries: options.maxProcessorRetries ?? 10,
+      maxProcessorRetries: options.maxProcessorRetries,
       // IsTaskComplete scoring for supervisor patterns
       isTaskComplete: options.isTaskComplete,
       // Iteration hook for supervisor patterns
