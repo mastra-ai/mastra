@@ -136,7 +136,7 @@ Adjust the `paths` filter and `working-directory` if your Mastra project is in a
 
 :::note
 
-For Studio deploys, replace `mastra server deploy` with `mastra studio deploy` and also set `MASTRA_ORG_ID` and `MASTRA_PROJECT_ID` in CI. See [Studio deployment](/docs/studio/deployment#mastra-platform) or the [CLI reference](/reference/cli/mastra#mastra-studio-deploy).
+For Studio deploys, replace `mastra server deploy` with `mastra studio deploy`. The flags and environment variables are the same.
 
 :::
 
@@ -164,9 +164,7 @@ Any CI system that runs Node.js and shell commands works with Mastra:
 
 1. Install dependencies.
 1. Set `MASTRA_API_TOKEN` as an environment variable.
-1. Run `mastra server deploy --yes`.
-
-For Studio deploys, also set `MASTRA_ORG_ID` and `MASTRA_PROJECT_ID` before running `mastra studio deploy --yes`.
+1. Run `mastra server deploy --yes` (or `mastra studio deploy --yes`).
 
 ### Verify the deploy
 
