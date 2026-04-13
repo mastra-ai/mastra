@@ -8,6 +8,7 @@ import {
   createBrowserFromSettings,
   loadSettings,
   saveSettings,
+  setProfileProvider,
 } from '../../onboarding/settings.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import type { SlashCommandContext } from './types.js';
@@ -209,7 +210,9 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     }
 
     if (!value) {
-      ctx.showError(`Missing value. Use: /browser set ${args[1]} <value>\nTo remove a setting, use: /browser clear ${args[1]}`);
+      ctx.showError(
+        `Missing value. Use: /browser set ${args[1]} <value>\nTo remove a setting, use: /browser clear ${args[1]}`,
+      );
       return;
     }
 
@@ -259,6 +262,9 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
           }
           ctx.showInfo(`Note: Cleared profile and executablePath (ignored when using cdpUrl).`);
         }
+        if (settings.browser.agentBrowser?.storageState) {
+          delete settings.browser.agentBrowser.storageState;
+        }
         break;
     }
 
@@ -294,7 +300,8 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       }
       if (activeSettings.executablePath) lines.push(`  Executable: ${activeSettings.executablePath}`);
       if (activeSettings.profile) lines.push(`  Profile: ${activeSettings.profile}`);
-      if (activeSettings.agentBrowser?.storageState) lines.push(`  Storage State: ${activeSettings.agentBrowser.storageState}`);
+      if (activeSettings.agentBrowser?.storageState)
+        lines.push(`  Storage State: ${activeSettings.agentBrowser.storageState}`);
       if (activeSettings.cdpUrl) lines.push(`  CDP URL: ${activeSettings.cdpUrl}`);
 
       lines.push('');
@@ -372,6 +379,9 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     try {
       const browserInstance = await createBrowserFromSettings(nextBrowser);
       applyBrowserToAgents(ctx, browserInstance, nextBrowser);
+      if (nextBrowser.profile && nextBrowser.provider) {
+        setProfileProvider(nextBrowser.profile, nextBrowser.provider);
+      }
       settings.browser = nextBrowser;
       saveSettings(settings);
       const providerLabel = browser.provider === 'stagehand' ? 'Stagehand' : 'AgentBrowser';
@@ -392,7 +402,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       settings.browser = {
         enabled: wasEnabled,
         provider: 'stagehand',
-        headless: true,
+        headless: false,
         viewport: { width: 1280, height: 720 },
       };
       saveSettings(settings);
@@ -629,9 +639,10 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
         return;
       }
       cdpUrl = cdpUrlInput;
-      // Clear profile/executable when using CDP (they don't apply)
+      // Clear launch options when using CDP (they don't apply)
       profile = undefined;
       executablePath = undefined;
+      storageState = undefined;
     } else {
       // Bundled browser - clear custom paths
       cdpUrl = undefined;
@@ -693,6 +704,9 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
   try {
     const browserInstance = await createBrowserFromSettings(nextBrowser);
     applyBrowserToAgents(ctx, browserInstance, nextBrowser);
+    if (nextBrowser.profile && nextBrowser.provider) {
+      setProfileProvider(nextBrowser.profile, nextBrowser.provider);
+    }
     settings.browser = nextBrowser;
     saveSettings(settings);
   } catch (err) {

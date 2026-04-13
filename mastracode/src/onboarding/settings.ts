@@ -103,6 +103,8 @@ export interface BrowserSettings {
   profile?: string;
   /** Path to the browser executable to use. */
   executablePath?: string;
+  /** Browser scope — 'shared' (all threads share one browser) or 'thread' (each thread gets its own). */
+  scope?: 'shared' | 'thread';
   /** Stagehand-specific settings. */
   stagehand?: StagehandSettings;
   /** AgentBrowser-specific settings. */
@@ -744,34 +746,29 @@ export async function createBrowserFromSettings(settings: BrowserSettings): Prom
 
   const { provider, headless, viewport, cdpUrl, profile, executablePath, stagehand, agentBrowser } = settings;
 
-  // Write provider marker to profile directory (if using a profile)
-  if (profile) {
-    setProfileProvider(profile, provider);
-  }
+  // Chrome only allows one process per profile directory, so force 'shared' scope
+  // when a profile is set. Otherwise use the user's setting (or provider default).
+  const scope = profile ? ('shared' as const) : settings.scope;
+
+  // Common launch options (no CDP)
+  const launchConfig = { headless, viewport, profile, executablePath, scope } as const;
 
   if (provider === 'stagehand') {
     const { StagehandBrowser } = await import('@mastra/stagehand');
-    return new StagehandBrowser({
-      headless,
-      viewport,
-      cdpUrl,
-      profile,
-      executablePath,
+    const stagehandOpts = {
       env: stagehand?.env ?? 'LOCAL',
       apiKey: stagehand?.apiKey ?? process.env.BROWSERBASE_API_KEY,
       projectId: stagehand?.projectId ?? process.env.BROWSERBASE_PROJECT_ID,
       preserveUserDataDir: stagehand?.preserveUserDataDir,
-    });
+    };
+    return cdpUrl
+      ? new StagehandBrowser({ ...launchConfig, cdpUrl, scope: 'shared', ...stagehandOpts })
+      : new StagehandBrowser({ ...launchConfig, ...stagehandOpts });
   } else if (provider === 'agent-browser') {
     const { AgentBrowser } = await import('@mastra/agent-browser');
-    return new AgentBrowser({
-      headless,
-      viewport,
-      cdpUrl,
-      profile,
-      executablePath,
-      storageState: agentBrowser?.storageState,
-    });
+    return cdpUrl
+      ? new AgentBrowser({ ...launchConfig, cdpUrl, scope: 'shared', storageState: agentBrowser?.storageState })
+      : new AgentBrowser({ ...launchConfig, storageState: agentBrowser?.storageState, scope });
   }
 
   throw new Error(`Unsupported browser provider: ${provider}`);

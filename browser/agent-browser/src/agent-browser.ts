@@ -189,8 +189,10 @@ export class AgentBrowser extends MastraBrowser {
     try {
       // Capture the Chrome process PID via CDP while the browser is alive.
       // The base class uses this to kill orphaned child processes on disconnect.
+      // Guard: only store if this manager is still the active shared manager,
+      // otherwise a stale lookup could overwrite a newer PID.
       const pidLookup = getBrowserPid(manager).then(pid => {
-        if (pid) this.sharedBrowserPid = pid;
+        if (pid && this.sharedManager === manager) this.sharedBrowserPid = pid;
       });
       this.pidLookups.push(pidLookup);
 
@@ -332,8 +334,12 @@ export class AgentBrowser extends MastraBrowser {
     try {
       // Capture the Chrome process PID via CDP while the browser is alive.
       // The base class uses this to kill orphaned child processes on disconnect.
+      // Guard: only store if this manager is still the active one for the thread,
+      // otherwise a stale lookup could overwrite a newer PID.
       const pidLookup = getBrowserPid(manager).then(pid => {
-        if (pid) this.threadBrowserPids.set(threadId, pid);
+        if (pid && this.threadManager?.getExistingManagerForThread(threadId) === manager) {
+          this.threadBrowserPids.set(threadId, pid);
+        }
       });
       this.pidLookups.push(pidLookup);
 

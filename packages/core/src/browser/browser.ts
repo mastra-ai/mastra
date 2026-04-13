@@ -568,6 +568,22 @@ export abstract class MastraBrowser extends MastraBase {
           '2. Use scope: "shared" when connecting via cdpUrl (all threads share one browser)',
       );
     }
+
+    // Validate: cdpUrl is incompatible with launch-time options (profile, executablePath).
+    // CDP connects to an already-running browser — it has its own profile and executable.
+    if (config.cdpUrl && (config.profile || config.executablePath)) {
+      const conflicting = [config.profile && 'profile', config.executablePath && 'executablePath']
+        .filter(Boolean)
+        .join(' and ');
+      throw new Error(
+        `Invalid browser configuration: "cdpUrl" cannot be used with ${conflicting}.\n\n` +
+          '• cdpUrl connects to an existing browser (which has its own profile and executable)\n' +
+          '• profile and executablePath are launch-time options for spawning a new browser\n\n' +
+          'To fix this, either:\n' +
+          '1. Remove cdpUrl to launch a new browser with your profile/executable\n' +
+          '2. Remove profile/executablePath to connect to the existing browser via CDP',
+      );
+    }
   }
 
   // ---------------------------------------------------------------------------
