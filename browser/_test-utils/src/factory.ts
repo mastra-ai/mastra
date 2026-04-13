@@ -72,7 +72,7 @@ export function getActiveConfigs(): BrowserTestConfig[] {
 
 const TEST_URL = 'https://example.com';
 const THREAD_ID = 'test-thread-1';
-const CHROME_LOCK_FILES = ['SingletonLock', 'SingletonSocket', 'SingletonCookie'];
+const CHROME_LOCK_FILES = ['SingletonLock', 'SingletonSocket', 'SingletonCookie', 'chrome.pid', 'RunningChromeVersion'];
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -201,6 +201,7 @@ export function createProviderTests(factory: BrowserFactory) {
       describe(configLabel(config), () => {
         it('programmatic close — process exits, cleans up', async () => {
           const profileDir = config.profile ? mkdtempSync(join(tmpdir(), 'browser-test-')) : undefined;
+          let browser: MastraBrowser | undefined;
 
           try {
             // Seed a Preferences file with exit_type: Crashed.
@@ -211,7 +212,7 @@ export function createProviderTests(factory: BrowserFactory) {
               seedCrashedPreferences(profileDir);
             }
 
-            const browser = factory.create({
+            browser = factory.create({
               profile: profileDir,
               scope: config.scope,
               headless: config.headless,
@@ -249,14 +250,12 @@ export function createProviderTests(factory: BrowserFactory) {
                 expect(getExitType(profileDir)).toBe('Normal');
               }
             }
-
-            // Final cleanup for thread scope
-            if (config.scope === 'thread') {
+          } finally {
+            if (browser) {
               try {
                 await browser.close();
               } catch {}
             }
-          } finally {
             if (profileDir) {
               rmSync(profileDir, { recursive: true, force: true });
             }
@@ -265,6 +264,7 @@ export function createProviderTests(factory: BrowserFactory) {
 
         it('manual close — process exits, cleans up', async () => {
           const profileDir = config.profile ? mkdtempSync(join(tmpdir(), 'browser-test-')) : undefined;
+          let browser: MastraBrowser | undefined;
 
           try {
             // Seed exit_type: Crashed so we can verify cleanup patches it.
@@ -272,7 +272,7 @@ export function createProviderTests(factory: BrowserFactory) {
               seedCrashedPreferences(profileDir);
             }
 
-            const browser = factory.create({
+            browser = factory.create({
               profile: profileDir,
               scope: config.scope,
               headless: config.headless,
@@ -308,12 +308,12 @@ export function createProviderTests(factory: BrowserFactory) {
                 expect(getExitType(profileDir)).toBe('Normal');
               }
             }
-
-            // Clean up browser state
-            try {
-              await browser.close();
-            } catch {}
           } finally {
+            if (browser) {
+              try {
+                await browser.close();
+              } catch {}
+            }
             if (profileDir) {
               rmSync(profileDir, { recursive: true, force: true });
             }
@@ -356,7 +356,7 @@ export function createHeadlessSwitchingTests(factory: BrowserFactory) {
         const pid1 = await factory.getPid(b1);
         expect(pid1).toBeDefined();
         await b1.close();
-        await waitForProcessExit(pid1!, 5000);
+        expect(await waitForProcessExit(pid1!, 5000)).toBe(true);
         expect(hasLockFiles(profileDir)).toBe(false);
 
         // Headed
@@ -366,7 +366,7 @@ export function createHeadlessSwitchingTests(factory: BrowserFactory) {
         const pid2 = await factory.getPid(b2);
         expect(pid2).toBeDefined();
         await b2.close();
-        await waitForProcessExit(pid2!, 5000);
+        expect(await waitForProcessExit(pid2!, 5000)).toBe(true);
         expect(hasLockFiles(profileDir)).toBe(false);
 
         // Headless again
@@ -376,7 +376,7 @@ export function createHeadlessSwitchingTests(factory: BrowserFactory) {
         const pid3 = await factory.getPid(b3);
         expect(pid3).toBeDefined();
         await b3.close();
-        await waitForProcessExit(pid3!, 5000);
+        expect(await waitForProcessExit(pid3!, 5000)).toBe(true);
         expect(hasLockFiles(profileDir)).toBe(false);
       } finally {
         rmSync(profileDir, { recursive: true, force: true });
@@ -394,7 +394,7 @@ export function createHeadlessSwitchingTests(factory: BrowserFactory) {
         const pid1 = await factory.getPid(b1);
         expect(pid1).toBeDefined();
         await b1.close();
-        await waitForProcessExit(pid1!, 5000);
+        expect(await waitForProcessExit(pid1!, 5000)).toBe(true);
         expect(hasLockFiles(profileDir)).toBe(false);
 
         // Headless
@@ -404,7 +404,7 @@ export function createHeadlessSwitchingTests(factory: BrowserFactory) {
         const pid2 = await factory.getPid(b2);
         expect(pid2).toBeDefined();
         await b2.close();
-        await waitForProcessExit(pid2!, 5000);
+        expect(await waitForProcessExit(pid2!, 5000)).toBe(true);
         expect(hasLockFiles(profileDir)).toBe(false);
 
         // Headed again
@@ -414,7 +414,7 @@ export function createHeadlessSwitchingTests(factory: BrowserFactory) {
         const pid3 = await factory.getPid(b3);
         expect(pid3).toBeDefined();
         await b3.close();
-        await waitForProcessExit(pid3!, 5000);
+        expect(await waitForProcessExit(pid3!, 5000)).toBe(true);
         expect(hasLockFiles(profileDir)).toBe(false);
       } finally {
         rmSync(profileDir, { recursive: true, force: true });
@@ -429,7 +429,7 @@ export function createHeadlessSwitchingTests(factory: BrowserFactory) {
       const pid1 = await factory.getPid(b1);
       expect(pid1).toBeDefined();
       await b1.close();
-      await waitForProcessExit(pid1!, 5000);
+      expect(await waitForProcessExit(pid1!, 5000)).toBe(true);
 
       // Headed (fresh temp profile)
       const b2 = factory.create({ scope: 'shared', headless: false });
@@ -438,7 +438,7 @@ export function createHeadlessSwitchingTests(factory: BrowserFactory) {
       const pid2 = await factory.getPid(b2);
       expect(pid2).toBeDefined();
       await b2.close();
-      await waitForProcessExit(pid2!, 5000);
+      expect(await waitForProcessExit(pid2!, 5000)).toBe(true);
     }, 60_000);
   });
 }
