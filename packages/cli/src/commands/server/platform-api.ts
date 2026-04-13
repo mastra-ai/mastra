@@ -230,7 +230,8 @@ export async function pauseServerProject(token: string, orgId: string, projectId
 
   if (error) {
     if (response.status === 409) {
-      throwApiError('Failed to pause server', response.status, 'Pause failed: the server is not running.');
+      const detail = apiErrorDetail(error);
+      throwApiError('Failed to pause server', response.status, detail ?? 'Pause failed: the server is not running.');
     }
     const detail = apiErrorDetail(error);
     throwApiError('Failed to pause server', response.status, detail);
@@ -239,7 +240,8 @@ export async function pauseServerProject(token: string, orgId: string, projectId
 
 /**
  * Triggers a platform restart and returns the deploy id to pass to {@link pollServerDeploy}.
- * Uses `id` from the restart response when present; otherwise polls project details until `latestDeployId` changes.
+ * Uses `id` from the restart response when present; otherwise polls project details until `latestDeployId`
+ * changes, or until the current `latestDeployId` shows an active deploy status (in-place restart without a new id).
  */
 export async function restartServerProject(token: string, orgId: string, projectId: string): Promise<string> {
   const client = createApiClient(token, orgId);
@@ -253,10 +255,12 @@ export async function restartServerProject(token: string, orgId: string, project
 
   if (error) {
     if (response.status === 409) {
+      const detail = apiErrorDetail(error);
       throwApiError(
         'Failed to restart server',
         response.status,
-        'Restart failed: a deployment for this project is currently active. Run `mastra server pause` to pause the server before restarting.',
+        detail ??
+          'Restart failed: a deployment for this project is currently active. Run `mastra server pause` to pause the server before restarting.',
       );
     }
     const detail = apiErrorDetail(error);
@@ -267,6 +271,8 @@ export async function restartServerProject(token: string, orgId: string, project
     return data.id;
   }
 
+  const deployLooksActive = (status: string) => status === 'queued' || status === 'starting' || status === 'running';
+
   const deadline = Date.now() + 45000;
   while (Date.now() < deadline) {
     const snap = await fetchServerProjectDetail(token, orgId, projectId);
@@ -274,11 +280,21 @@ export async function restartServerProject(token: string, orgId: string, project
     if (latest && latest !== previousLatestDeployId) {
       return latest;
     }
+    if (latest) {
+      try {
+        const st = await fetchServerDeployStatus(latest, token, orgId);
+        if (deployLooksActive(st.status)) {
+          return latest;
+        }
+      } catch {
+        // Deploy record may lag the restart — keep polling project + status.
+      }
+    }
     await new Promise(r => setTimeout(r, 2000));
   }
 
   throw new Error(
-    'Restart was accepted but no new deploy ID appeared. Check the Mastra platform for deployment status.',
+    'Restart was accepted but no deploy ID could be resolved. Check the Mastra platform for deployment status.',
   );
 }
 

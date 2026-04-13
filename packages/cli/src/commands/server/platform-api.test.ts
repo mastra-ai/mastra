@@ -117,10 +117,21 @@ describe('pauseServerProject', () => {
     });
   });
 
-  it('throws conflict message on 409', async () => {
+  it('prefers API detail on 409 when present', async () => {
     mockPOST.mockResolvedValue({
       data: undefined,
-      error: { detail: 'conflict' },
+      error: { detail: 'Instance is busy' },
+      response: { status: 409 },
+    });
+
+    const { pauseServerProject } = await import('./platform-api.js');
+    await expect(pauseServerProject('tok', 'org-1', 'proj-1')).rejects.toThrow('Instance is busy');
+  });
+
+  it('uses default pause message on 409 when API omits detail', async () => {
+    mockPOST.mockResolvedValue({
+      data: undefined,
+      error: {},
       response: { status: 409 },
     });
 
@@ -184,7 +195,7 @@ describe('restartServerProject', () => {
     vi.useRealTimers();
   });
 
-  it('throws 409 message when deployment active', async () => {
+  it('prefers API detail on restart 409 when present', async () => {
     mockGET.mockResolvedValue({
       data: {
         project: { latestDeployId: null, id: 'p1', name: 'N', slug: 'n', organizationId: 'org-1' },
@@ -195,7 +206,26 @@ describe('restartServerProject', () => {
     });
     mockPOST.mockResolvedValue({
       data: undefined,
-      error: { detail: 'busy' },
+      error: { detail: 'Deploy already in progress' },
+      response: { status: 409 },
+    });
+
+    const { restartServerProject } = await import('./platform-api.js');
+    await expect(restartServerProject('tok', 'org-1', 'proj-1')).rejects.toThrow('Deploy already in progress');
+  });
+
+  it('uses default restart message on 409 when API omits detail', async () => {
+    mockGET.mockResolvedValue({
+      data: {
+        project: { latestDeployId: null, id: 'p1', name: 'N', slug: 'n', organizationId: 'org-1' },
+        deploys: [],
+      },
+      error: undefined,
+      response: { status: 200 },
+    });
+    mockPOST.mockResolvedValue({
+      data: undefined,
+      error: {},
       response: { status: 409 },
     });
 
@@ -203,6 +233,37 @@ describe('restartServerProject', () => {
     await expect(restartServerProject('tok', 'org-1', 'proj-1')).rejects.toThrow(
       'Restart failed: a deployment for this project is currently active. Run `mastra server pause` to pause the server before restarting.',
     );
+  });
+
+  it('returns existing latestDeployId when restart omits id but deploy status is active', async () => {
+    mockGET.mockImplementation(async (path: string) => {
+      const p = String(path);
+      if (p.includes('/deploys/') && !p.includes('/logs')) {
+        return {
+          data: { id: 'dep-same', status: 'queued', instanceUrl: null, error: null },
+          error: undefined,
+          response: { status: 200 },
+        };
+      }
+      return {
+        data: {
+          project: {
+            latestDeployId: 'dep-same',
+            id: 'proj-1',
+            name: 'N',
+            slug: 'n',
+            organizationId: 'org-1',
+          },
+          deploys: [],
+        },
+        error: undefined,
+        response: { status: 200 },
+      };
+    });
+    mockPOST.mockResolvedValue({ data: {}, error: undefined, response: { status: 200 } });
+
+    const { restartServerProject } = await import('./platform-api.js');
+    await expect(restartServerProject('tok', 'org-1', 'proj-1')).resolves.toBe('dep-same');
   });
 });
 
