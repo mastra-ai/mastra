@@ -293,8 +293,6 @@ export interface TaskContext {
   executor: ToolExecutor;
   /** Emits stream chunks (background-task-completed/failed) to the caller's stream */
   onChunk?: (chunk: BackgroundTaskResultChunk) => void;
-  /** Receives intermediate progress data from the executor during execution */
-  // onProgress?: (taskId: string, progress: BackgroundTaskProgressData) => void;
   /** Injects tool results into the caller's message list */
   onResult?: ResultInjector;
   /** Per-task callback on completion */

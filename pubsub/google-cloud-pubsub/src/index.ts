@@ -9,6 +9,9 @@ export class GoogleCloudPubSub extends PubSub {
   private ackBuffer: Record<string, Promise<any>> = {};
   private activeSubscriptions: Record<string, Subscription> = {};
   private activeCbs: Record<string, Set<EventCallback>> = {};
+  // Tracks the actual anonymous message listener registered on each subscription,
+  // so we can remove it cleanly on the final unsubscribe.
+  private messageListeners: Record<string, (message: Message) => void> = {};
 
   constructor(config: ClientConfig) {
     super();
@@ -133,7 +136,7 @@ export class GoogleCloudPubSub extends PubSub {
       return;
     }
 
-    subscription.on('message', async message => {
+    const messageListener = async (message: Message) => {
       const event = JSON.parse(message.data.toString()) as Event;
       event.id = message.id;
       event.createdAt = message.publishTime;
@@ -163,7 +166,10 @@ export class GoogleCloudPubSub extends PubSub {
       } catch (error) {
         console.error('Error processing event', error);
       }
-    });
+    };
+
+    this.messageListeners[subscriptionKey] = messageListener;
+    subscription.on('message', messageListener);
 
     subscription.on('error', async error => {
       console.error('subscription error', error);
@@ -183,13 +189,17 @@ export class GoogleCloudPubSub extends PubSub {
       const activeCbs = this.activeCbs[subscriptionKey];
       if (activeCbs?.has(cb)) {
         activeCbs.delete(cb);
-        this.activeCbs[subscriptionKey] = activeCbs;
 
         if (activeCbs.size === 0) {
-          const subscription =
-            this.activeSubscriptions[subscriptionKey] ?? this.pubsub.subscription(this.getSubscriptionName(topic));
-          subscription.removeListener('message', cb);
-          await subscription.close();
+          const subscription = this.activeSubscriptions[subscriptionKey];
+          const listener = this.messageListeners[subscriptionKey];
+          if (subscription) {
+            if (listener) subscription.removeListener('message', listener);
+            await subscription.close();
+          }
+          delete this.activeSubscriptions[subscriptionKey];
+          delete this.activeCbs[subscriptionKey];
+          delete this.messageListeners[subscriptionKey];
         }
         return;
       }

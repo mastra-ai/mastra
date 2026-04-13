@@ -17,7 +17,6 @@ interface ContentItem {
     mode?: string;
     completionResult?: unknown;
     isTaskCompleteResult?: unknown;
-    runningBackgroundTasksCount?: number;
   };
 }
 

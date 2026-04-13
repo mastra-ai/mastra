@@ -3123,9 +3123,6 @@ export class Agent<
             // see the correct context on subsequent steps.
             const savedMastraMemory = requestContext.get('MastraMemory');
 
-            //disable background tasks for the sub-agent
-            agent.disableBackgroundTasks();
-
             // Save and clear reserved thread/resource keys so they don't override the
             // sub-agent's isolated memory config. These keys take precedence over the
             // memory option in generate/stream, so leaving them would cause the
@@ -3356,6 +3353,7 @@ export class Agent<
                             },
                           }
                         : {}),
+                      disableBackgroundTasks: true,
                     })
                   : await agent.generate(messagesForSubAgent, {
                       requestContext,
@@ -3372,6 +3370,7 @@ export class Agent<
                             },
                           }
                         : {}),
+                      disableBackgroundTasks: true,
                     });
 
                 const agentResponseMessages = generateResult.response.dbMessages ?? [];
@@ -3468,6 +3467,7 @@ export class Agent<
                             },
                           }
                         : {}),
+                      disableBackgroundTasks: true,
                     })
                   : await agent.stream(messagesForSubAgent, {
                       requestContext,
@@ -3486,6 +3486,7 @@ export class Agent<
                             },
                           }
                         : {}),
+                      disableBackgroundTasks: true,
                     });
 
                 let requireToolApproval;
@@ -4730,8 +4731,12 @@ export class Agent<
       agentName: this.name,
       toolCallId: options.toolCallId,
       workspace,
-      backgroundTaskManager: this.#mastra?.backgroundTaskManager,
-      agentBackgroundConfig: this.#backgroundTasks,
+      ...(options.disableBackgroundTasks
+        ? {}
+        : {
+            backgroundTaskManager: this.#mastra?.backgroundTaskManager,
+            agentBackgroundConfig: this.#backgroundTasks,
+          }),
     });
 
     const run = await executionWorkflow.createRun();
