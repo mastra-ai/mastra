@@ -1,218 +1,141 @@
 import {
-  Button,
-  ButtonsGroup,
-  CreateDatasetDialog,
-  EntityListPageLayout,
-  EvaluationDashboard,
-  EVALUATION_DATASET_EXPERIMENT_OPTIONS,
-  EVALUATION_DATASET_TARGET_OPTIONS,
-  EVALUATION_EXPERIMENT_STATUS_OPTIONS,
-  EVALUATION_SCORER_SOURCE_OPTIONS,
-  getEvaluationDatasetTagOptions,
-  getEvaluationExperimentDatasetOptions,
-  ListSearch,
-  MainHeader,
-  SelectFieldBlock,
-  useEvaluationDatasets,
+  ButtonWithTooltip,
+  ErrorState,
+  MetricsFlexGrid,
+  NoDataPageLayout,
+  PageHeader,
+  PageLayout,
+  PermissionDenied,
+  SessionExpired,
+  is401UnauthorizedError,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
-import type { EvaluationTab } from '@mastra/playground-ui';
-import { BeakerIcon, DatabaseIcon, FlaskConicalIcon, Plus, TestTubeDiagonalIcon, XIcon } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router';
-
-const TAB_PARAM = 'tab';
-const VALID_TABS: EvaluationTab[] = ['overview', 'scorers', 'datasets', 'experiments'];
+import { BookIcon, FlaskConicalIcon } from 'lucide-react';
+import { useMemo } from 'react';
+import { DatasetHealthCard } from '@/domains/datasets';
+import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
+import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
+import { EvaluationKpiCards } from '@/domains/evaluation/components/evaluation-kpi-cards';
+import { ExperimentStatusCard } from '@/domains/experiments';
+import { ReviewPipelineCard, useReviewSummary } from '@/domains/review';
+import { computeReviewTotals } from '@/domains/review/review-maps';
+import { useScoreMetrics, useScorers } from '@/domains/scores';
+import { ScoresOverTimeCard } from '@/domains/scores/components/scores-over-time-card';
 
 export default function Evaluation() {
-  const [searchParams] = useSearchParams();
-  const urlTab = searchParams.get(TAB_PARAM) as EvaluationTab | null;
-  const activeTab: EvaluationTab = urlTab && VALID_TABS.includes(urlTab) ? urlTab : 'overview';
+  const { data: scorers, isLoading: isLoadingScorers, error: errorScorers } = useScorers();
+  const { data: datasetsData, isLoading: isLoadingDatasets, error: errorDatasets } = useDatasets();
+  const { data: experimentsData, isLoading: isLoadingExperiments, error: errorExperiments } = useExperiments();
+  const {
+    data: scoreMetrics,
+    isLoading: isLoadingScores,
+    isError: isErrorScores,
+    error: errorScores,
+  } = useScoreMetrics();
+  const {
+    data: reviewSummary,
+    isLoading: isLoadingReview,
+    isError: errorReview,
+    error: errorReviewSummary,
+  } = useReviewSummary();
 
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [scorersSearch, setScorersSearch] = useState('');
-  const [scorersSourceFilter, setScorersSourceFilter] = useState('all');
-  const [datasetsSearch, setDatasetsSearch] = useState('');
-  const [datasetsTargetFilter, setDatasetsTargetFilter] = useState('all');
-  const [datasetsExperimentFilter, setDatasetsExperimentFilter] = useState('all');
-  const [datasetsTagFilter, setDatasetsTagFilter] = useState('all');
-  const [experimentsSearch, setExperimentsSearch] = useState('');
-  const [experimentsStatusFilter, setExperimentsStatusFilter] = useState('all');
-  const [experimentsDatasetFilter, setExperimentsDatasetFilter] = useState('all');
+  const datasets = datasetsData?.datasets;
+  const experiments = experimentsData?.experiments;
 
-  const { data: datasetsData } = useEvaluationDatasets();
-  const datasets = useMemo(() => datasetsData?.datasets ?? [], [datasetsData?.datasets]);
+  const reviewTotals = useMemo(() => computeReviewTotals(reviewSummary), [reviewSummary]);
 
-  const datasetTagOptions = useMemo(() => getEvaluationDatasetTagOptions(datasets), [datasets]);
-  const experimentDatasetOptions = useMemo(() => getEvaluationExperimentDatasetOptions(datasets), [datasets]);
+  const error = errorScorers || errorDatasets || errorExperiments || errorScores || errorReviewSummary;
 
-  const resetScorerFilters = () => {
-    setScorersSearch('');
-    setScorersSourceFilter('all');
-  };
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <NoDataPageLayout title="Evaluation" icon={<FlaskConicalIcon />}>
+        <SessionExpired />
+      </NoDataPageLayout>
+    );
+  }
 
-  const resetDatasetFilters = () => {
-    setDatasetsSearch('');
-    setDatasetsTargetFilter('all');
-    setDatasetsExperimentFilter('all');
-    setDatasetsTagFilter('all');
-  };
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <NoDataPageLayout title="Evaluation" icon={<FlaskConicalIcon />}>
+        <PermissionDenied resource="evaluation" />
+      </NoDataPageLayout>
+    );
+  }
 
-  const resetExperimentFilters = () => {
-    setExperimentsSearch('');
-    setExperimentsStatusFilter('all');
-    setExperimentsDatasetFilter('all');
-  };
-
-  const hasScorerFilters = scorersSourceFilter !== 'all' || scorersSearch !== '';
-  const hasDatasetFilters =
-    datasetsTargetFilter !== 'all' ||
-    datasetsExperimentFilter !== 'all' ||
-    datasetsTagFilter !== 'all' ||
-    datasetsSearch !== '';
-  const hasExperimentFilters =
-    experimentsStatusFilter !== 'all' || experimentsDatasetFilter !== 'all' || experimentsSearch !== '';
-
-  const tabConfig: Record<EvaluationTab, { icon: React.ReactNode; label: string }> = {
-    overview: { icon: <FlaskConicalIcon />, label: 'Evaluation' },
-    scorers: { icon: <BeakerIcon />, label: 'Scorers' },
-    datasets: { icon: <DatabaseIcon />, label: 'Datasets' },
-    experiments: { icon: <TestTubeDiagonalIcon />, label: 'Experiments' },
-  };
-
-  const { icon: headerIcon, label: headerLabel } = tabConfig[activeTab];
+  if (error) {
+    return (
+      <NoDataPageLayout title="Evaluation" icon={<FlaskConicalIcon />}>
+        <ErrorState title="Failed to load evaluation data" message={error.message} />
+      </NoDataPageLayout>
+    );
+  }
 
   return (
-    <EntityListPageLayout>
-      <EntityListPageLayout.Top>
-        <MainHeader withMargins={false}>
-          <MainHeader.Column>
-            <MainHeader.Title>
-              {headerIcon} {headerLabel}
-            </MainHeader.Title>
-          </MainHeader.Column>
-        </MainHeader>
+    <PageLayout width="wide" height="full">
+      <PageLayout.TopArea className="sticky top-0 z-100 bg-surface1 ">
+        <PageLayout.Row>
+          <PageLayout.Column>
+            <PageHeader>
+              <PageHeader.Title>
+                <FlaskConicalIcon /> Evaluation
+              </PageHeader.Title>
+            </PageHeader>
+          </PageLayout.Column>
+          <PageLayout.Column className="flex justify-end gap-2">
+            <ButtonWithTooltip
+              as="a"
+              href="https://mastra.ai/en/docs/evals/overview"
+              target="_blank"
+              rel="noopener noreferrer"
+              tooltipContent="Go to Evaluation documentation"
+            >
+              <BookIcon />
+            </ButtonWithTooltip>
+          </PageLayout.Column>
+        </PageLayout.Row>
+      </PageLayout.TopArea>
 
-        {activeTab === 'scorers' && (
-          <div className="flex flex-wrap items-center gap-2">
-            <ListSearch label="Search scorers" placeholder="Filter by scorer name" onSearch={setScorersSearch} />
-            <ButtonsGroup>
-              <SelectFieldBlock
-                label="Source"
-                labelIsHidden
-                name="filter-source"
-                options={[...EVALUATION_SCORER_SOURCE_OPTIONS]}
-                value={scorersSourceFilter}
-                onValueChange={setScorersSourceFilter}
-                className="whitespace-nowrap"
-              />
-              {hasScorerFilters && (
-                <Button onClick={resetScorerFilters} size="sm" variant="light">
-                  <XIcon className="size-3" /> Reset
-                </Button>
-              )}
-            </ButtonsGroup>
-          </div>
-        )}
-
-        {activeTab === 'datasets' && (
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <ListSearch label="Search datasets" placeholder="Filter by dataset name" onSearch={setDatasetsSearch} />
-              <ButtonsGroup>
-                <SelectFieldBlock
-                  label="Target"
-                  labelIsHidden
-                  name="filter-target"
-                  options={[...EVALUATION_DATASET_TARGET_OPTIONS]}
-                  value={datasetsTargetFilter}
-                  onValueChange={setDatasetsTargetFilter}
-                  className="whitespace-nowrap"
-                />
-                <SelectFieldBlock
-                  label="Experiments"
-                  labelIsHidden
-                  name="filter-experiments"
-                  options={[...EVALUATION_DATASET_EXPERIMENT_OPTIONS]}
-                  value={datasetsExperimentFilter}
-                  onValueChange={setDatasetsExperimentFilter}
-                  className="whitespace-nowrap"
-                />
-                {datasetTagOptions.length > 1 && (
-                  <SelectFieldBlock
-                    label="Tags"
-                    labelIsHidden
-                    name="filter-tags"
-                    options={datasetTagOptions}
-                    value={datasetsTagFilter}
-                    onValueChange={setDatasetsTagFilter}
-                    className="whitespace-nowrap"
-                  />
-                )}
-                {hasDatasetFilters && (
-                  <Button onClick={resetDatasetFilters} size="sm" variant="light">
-                    <XIcon className="size-3" /> Reset
-                  </Button>
-                )}
-              </ButtonsGroup>
-            </div>
-            <Button variant="primary" size="sm" onClick={() => setIsCreateDialogOpen(true)}>
-              <Plus className="size-4" /> Create Dataset
-            </Button>
-          </div>
-        )}
-
-        {activeTab === 'experiments' && (
-          <div className="flex flex-wrap items-center gap-2">
-            <ListSearch
-              label="Search experiments"
-              placeholder="Filter by experiment, dataset, or target"
-              onSearch={setExperimentsSearch}
-            />
-            <ButtonsGroup>
-              <SelectFieldBlock
-                label="Status"
-                labelIsHidden
-                name="filter-status"
-                options={[...EVALUATION_EXPERIMENT_STATUS_OPTIONS]}
-                value={experimentsStatusFilter}
-                onValueChange={setExperimentsStatusFilter}
-                className="whitespace-nowrap"
-              />
-              <SelectFieldBlock
-                label="Dataset"
-                labelIsHidden
-                name="filter-dataset"
-                options={experimentDatasetOptions}
-                value={experimentsDatasetFilter}
-                onValueChange={setExperimentsDatasetFilter}
-                className="whitespace-nowrap"
-              />
-              {hasExperimentFilters && (
-                <Button onClick={resetExperimentFilters} size="sm" variant="light">
-                  <XIcon className="size-3" /> Reset
-                </Button>
-              )}
-            </ButtonsGroup>
-          </div>
-        )}
-      </EntityListPageLayout.Top>
-
-      <div className="overflow-y-auto px-4 pt-2">
-        <EvaluationDashboard
-          activeTab={activeTab}
-          scorerSearch={scorersSearch}
-          scorerSourceFilter={scorersSourceFilter}
-          datasetSearch={datasetsSearch}
-          datasetTargetFilter={datasetsTargetFilter}
-          datasetExperimentFilter={datasetsExperimentFilter}
-          datasetTagFilter={datasetsTagFilter}
-          experimentSearch={experimentsSearch}
-          experimentStatusFilter={experimentsStatusFilter}
-          experimentDatasetFilter={experimentsDatasetFilter}
+      <div className="flex flex-col gap-6 pt-4">
+        <MetricsFlexGrid>
+          <EvaluationKpiCards
+            scorers={scorers}
+            datasets={datasets}
+            experiments={experiments}
+            avgScore={scoreMetrics?.avgScore ?? null}
+            prevAvgScore={scoreMetrics?.prevAvgScore ?? null}
+            totalNeedsReview={reviewTotals.needsReview}
+            isLoadingScorers={isLoadingScorers}
+            isLoadingDatasets={isLoadingDatasets}
+            isLoadingExperiments={isLoadingExperiments}
+            isLoadingScores={isLoadingScores}
+            isLoadingReview={isLoadingReview}
+          />
+        </MetricsFlexGrid>
+        <ScoresOverTimeCard
+          summaryData={scoreMetrics?.summaryData ?? []}
+          overTimeData={scoreMetrics?.overTimeData ?? []}
+          scorerNames={scoreMetrics?.scorerNames ?? []}
+          avgScore={scoreMetrics?.avgScore ?? null}
+          isLoading={isLoadingScores}
+          isError={isErrorScores}
+        />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <DatasetHealthCard experiments={experiments} isLoading={isLoadingExperiments} isError={!!errorExperiments} />
+          <ExperimentStatusCard
+            experiments={experiments}
+            datasets={datasets}
+            isLoading={isLoadingExperiments}
+            isError={!!errorExperiments}
+          />
+        </div>
+        <ReviewPipelineCard
+          reviewSummary={reviewSummary}
+          experiments={experiments}
+          datasets={datasets}
+          isLoading={isLoadingReview}
+          isError={!!errorReview}
         />
       </div>
-
-      <CreateDatasetDialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen} />
-    </EntityListPageLayout>
+    </PageLayout>
   );
 }

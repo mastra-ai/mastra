@@ -1,5 +1,230 @@
 # @mastra/core
 
+## 1.25.0-alpha.2
+
+### Patch Changes
+
+- Update references to "Mastra Cloud" to "Mastra platform" ([#15297](https://github.com/mastra-ai/mastra/pull/15297))
+
+- Updated dependencies [[`2a69802`](https://github.com/mastra-ai/mastra/commit/2a69802a0fc6d8a25a77fa6a42276e9d59a83914)]:
+  - @mastra/schema-compat@1.2.8-alpha.0
+
+## 1.25.0-alpha.1
+
+### Minor Changes
+
+- feat(server): Add `mapUserToResourceId` callback to auth config for automatic resource ID scoping ([#13954](https://github.com/mastra-ai/mastra/pull/13954))
+
+  Auth configs now accept a `mapUserToResourceId` callback that maps the authenticated user to a resource ID after successful authentication. This enables per-user memory and thread isolation without requiring custom middleware or adapter subclassing.
+
+  ```typescript
+  const mastra = new Mastra({
+    server: {
+      auth: {
+        authenticateToken: async token => verifyToken(token),
+        mapUserToResourceId: user => user.id,
+      },
+    },
+  });
+  ```
+
+  The callback is called in `coreAuthMiddleware` after the user is authenticated and set on the request context. The returned value is set as `MASTRA_RESOURCE_ID_KEY`, which takes precedence over client-provided values for security. Works across all server adapters (Hono, Express, Next.js, etc.).
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`582644c`](https://github.com/mastra-ai/mastra/commit/582644c4a87f83b4f245a84d72b9e8590585012e))
+
+- Fixed symlinked skill paths so workspace skills resolve consistently and allowed path checks work through both symlink and real paths. ([#15228](https://github.com/mastra-ai/mastra/pull/15228))
+
+- Improved `structuredOutput.model` error messages to surface upstream structuring failures, including plain-object errors, instead of a generic internal agent error. ([#15226](https://github.com/mastra-ai/mastra/pull/15226))
+
+- Fixed `structuredOutput.model` custom gateway resolution by registering the internal structuring agent with the parent Mastra instance. ([#15230](https://github.com/mastra-ai/mastra/pull/15230))
+
+- Fixed OpenAI reasoning summary streaming so reasoning summary text is preserved when multiple summaries overlap or finish out of order. ([#15225](https://github.com/mastra-ai/mastra/pull/15225))
+
+## 1.24.2-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#15214](https://github.com/mastra-ai/mastra/pull/15214))
+  - Updated dependency [`chat@^4.24.0` ↗︎](https://www.npmjs.com/package/chat/v/4.24.0) (from `^4.23.0`, in `dependencies`)
+
+- Fixed gateway model detection to use duck typing instead of instanceof check, preventing potential failures from cross-package module resolution issues. Propagates `gatewayId` through the AISDKV5LanguageModel wrapper so duck-type detection works even when models are re-wrapped. ([#15168](https://github.com/mastra-ai/mastra/pull/15168))
+
+## 1.24.1
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`ef94400`](https://github.com/mastra-ai/mastra/commit/ef9440049402596b31f2ab976c5e4508f6cb6c91))
+
+- Fixed subagent writing observations to the parent agent's memory thread. When a parent agent spawns a subagent via `createSubagentTool`, the subagent now receives its own isolated request context with `threadId` and `resourceId` cleared, preventing it from corrupting the parent's observation history. ([#15103](https://github.com/mastra-ai/mastra/pull/15103))
+
+## 1.24.1-alpha.1
+
+### Patch Changes
+
+- Fixed subagent writing observations to the parent agent's memory thread. When a parent agent spawns a subagent via `createSubagentTool`, the subagent now receives its own isolated request context with `threadId` and `resourceId` cleared, preventing it from corrupting the parent's observation history. ([#15103](https://github.com/mastra-ai/mastra/pull/15103))
+
+## 1.24.1-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`ef94400`](https://github.com/mastra-ai/mastra/commit/ef9440049402596b31f2ab976c5e4508f6cb6c91))
+
+## 1.24.0
+
+### Minor Changes
+
+- Added `excludeSpanTypes` and `spanFilter` options to `ObservabilityInstanceConfig` for selectively filtering spans before export. Use `excludeSpanTypes` to drop entire categories of spans by type (e.g., `MODEL_CHUNK`, `MODEL_STEP`) or `spanFilter` for fine-grained predicate-based filtering by attributes, metadata, entity, or any combination. Both options help reduce noise and costs in observability platforms that charge per-span. ([#15131](https://github.com/mastra-ai/mastra/pull/15131))
+
+  **`excludeSpanTypes` example:**
+
+  ```ts
+  excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP, SpanType.WORKFLOW_SLEEP];
+  ```
+
+  **`spanFilter` example:**
+
+  ```ts
+  spanFilter: span => {
+    if (span.type === SpanType.MODEL_CHUNK) return false;
+    if (span.type === SpanType.TOOL_CALL && span.attributes?.success) return false;
+    return true;
+  };
+  ```
+
+  Resolves https://github.com/mastra-ai/mastra/issues/12710
+
+- Add RAG observability (#10898) ([#15137](https://github.com/mastra-ai/mastra/pull/15137))
+
+  Surfaces RAG ingestion and query operations in Mastra's AI tracing.
+
+  New span types in `@mastra/core/observability`:
+  - `RAG_INGESTION` (root) — wraps an ingestion pipeline run
+  - `RAG_EMBEDDING` — embedding call (used by ingestion and query)
+  - `RAG_VECTOR_OPERATION` — vector store I/O (`query`/`upsert`/`delete`/`fetch`)
+  - `RAG_ACTION` — `chunk` / `extract_metadata` / `rerank`
+  - `GRAPH_ACTION` — non-RAG graph `build` / `traverse` / `update` / `prune`
+
+  New helpers exported from `@mastra/core/observability`:
+  - `startRagIngestion(opts)` — manual: returns `{ span, observabilityContext }`
+  - `withRagIngestion(opts, fn)` — scoped: runs `fn(observabilityContext)`,
+    attaches the return value as the span's output, routes thrown errors to
+    `span.error(...)`
+
+  Wired in `@mastra/rag`:
+  - `vectorQuerySearch` emits `RAG_EMBEDDING` (mode: `query`) and
+    `RAG_VECTOR_OPERATION` (operation: `query`)
+  - `rerank` / `rerankWithScorer` emit `RAG_ACTION` (action: `rerank`)
+  - `MDocument.chunk` emits `RAG_ACTION` (action: `chunk`) and
+    `RAG_ACTION` (action: `extract_metadata`)
+  - `createGraphRAGTool` emits `GRAPH_ACTION` (action: `build` / `traverse`)
+  - `createVectorQueryTool` and `createGraphRAGTool` thread
+    `observabilityContext` from the agent's `TOOL_CALL` span automatically
+
+  All new instrumentation is opt-in: functions accept an optional
+  `observabilityContext` and no-op when absent, so existing callers are
+  unaffected.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`8db7663`](https://github.com/mastra-ai/mastra/commit/8db7663c9a9c735828094c359d2e327fd4f8fba3))
+
+- Added AI SDK v6 UI message support to MessageList in @mastra/core. ([#14592](https://github.com/mastra-ai/mastra/pull/14592))
+
+  MessageList can now accept AI SDK v6 UI and model messages in add(...), and project stored messages with messageList.get.all.aiV6.ui(). This adds first-class handling for v6 approval request and response message flows.
+
+- Fix observability log correlation: logs emitted from inside an agent run were being persisted with `entityId`, `runId`, `traceId`, and the other correlation fields set to `null`, breaking trace ↔ log linking in Mastra Studio and downstream observability tools. Logs now correctly carry the active span's correlation context end to end. ([#15148](https://github.com/mastra-ai/mastra/pull/15148))
+
+- Added `createdAt` timestamps to message parts in message history. ([#15121](https://github.com/mastra-ai/mastra/pull/15121))
+
+  Message parts now keep their own creation timestamps so downstream code can preserve part-level timing instead of relying only on the parent message timestamp.
+
+  After:
+
+  ```ts
+  { type: 'text', text: 'hello', createdAt: 1712534400000 }
+  ```
+
+## 1.24.0-alpha.1
+
+### Minor Changes
+
+- Added `excludeSpanTypes` and `spanFilter` options to `ObservabilityInstanceConfig` for selectively filtering spans before export. Use `excludeSpanTypes` to drop entire categories of spans by type (e.g., `MODEL_CHUNK`, `MODEL_STEP`) or `spanFilter` for fine-grained predicate-based filtering by attributes, metadata, entity, or any combination. Both options help reduce noise and costs in observability platforms that charge per-span. ([#15131](https://github.com/mastra-ai/mastra/pull/15131))
+
+  **`excludeSpanTypes` example:**
+
+  ```ts
+  excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP, SpanType.WORKFLOW_SLEEP];
+  ```
+
+  **`spanFilter` example:**
+
+  ```ts
+  spanFilter: span => {
+    if (span.type === SpanType.MODEL_CHUNK) return false;
+    if (span.type === SpanType.TOOL_CALL && span.attributes?.success) return false;
+    return true;
+  };
+  ```
+
+  Resolves https://github.com/mastra-ai/mastra/issues/12710
+
+- Add RAG observability (#10898) ([#15137](https://github.com/mastra-ai/mastra/pull/15137))
+
+  Surfaces RAG ingestion and query operations in Mastra's AI tracing.
+
+  New span types in `@mastra/core/observability`:
+  - `RAG_INGESTION` (root) — wraps an ingestion pipeline run
+  - `RAG_EMBEDDING` — embedding call (used by ingestion and query)
+  - `RAG_VECTOR_OPERATION` — vector store I/O (`query`/`upsert`/`delete`/`fetch`)
+  - `RAG_ACTION` — `chunk` / `extract_metadata` / `rerank`
+  - `GRAPH_ACTION` — non-RAG graph `build` / `traverse` / `update` / `prune`
+
+  New helpers exported from `@mastra/core/observability`:
+  - `startRagIngestion(opts)` — manual: returns `{ span, observabilityContext }`
+  - `withRagIngestion(opts, fn)` — scoped: runs `fn(observabilityContext)`,
+    attaches the return value as the span's output, routes thrown errors to
+    `span.error(...)`
+
+  Wired in `@mastra/rag`:
+  - `vectorQuerySearch` emits `RAG_EMBEDDING` (mode: `query`) and
+    `RAG_VECTOR_OPERATION` (operation: `query`)
+  - `rerank` / `rerankWithScorer` emit `RAG_ACTION` (action: `rerank`)
+  - `MDocument.chunk` emits `RAG_ACTION` (action: `chunk`) and
+    `RAG_ACTION` (action: `extract_metadata`)
+  - `createGraphRAGTool` emits `GRAPH_ACTION` (action: `build` / `traverse`)
+  - `createVectorQueryTool` and `createGraphRAGTool` thread
+    `observabilityContext` from the agent's `TOOL_CALL` span automatically
+
+  All new instrumentation is opt-in: functions accept an optional
+  `observabilityContext` and no-op when absent, so existing callers are
+  unaffected.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`8db7663`](https://github.com/mastra-ai/mastra/commit/8db7663c9a9c735828094c359d2e327fd4f8fba3))
+
+- Fix observability log correlation: logs emitted from inside an agent run were being persisted with `entityId`, `runId`, `traceId`, and the other correlation fields set to `null`, breaking trace ↔ log linking in Mastra Studio and downstream observability tools. Logs now correctly carry the active span's correlation context end to end. ([#15148](https://github.com/mastra-ai/mastra/pull/15148))
+
+- Added `createdAt` timestamps to message parts in message history. ([#15121](https://github.com/mastra-ai/mastra/pull/15121))
+
+  Message parts now keep their own creation timestamps so downstream code can preserve part-level timing instead of relying only on the parent message timestamp.
+
+  After:
+
+  ```ts
+  { type: 'text', text: 'hello', createdAt: 1712534400000 }
+  ```
+
+## 1.23.1-alpha.0
+
+### Patch Changes
+
+- Added AI SDK v6 UI message support to MessageList in @mastra/core. ([#14592](https://github.com/mastra-ai/mastra/pull/14592))
+
+  MessageList can now accept AI SDK v6 UI and model messages in add(...), and project stored messages with messageList.get.all.aiV6.ui(). This adds first-class handling for v6 approval request and response message flows.
+
 ## 1.23.0
 
 ### Minor Changes

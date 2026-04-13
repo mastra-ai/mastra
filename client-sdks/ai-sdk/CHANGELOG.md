@@ -1,5 +1,36 @@
 # @mastra/ai-sdk
 
+## 1.3.4-alpha.0
+
+### Patch Changes
+
+- Fixed reasoning streams so reasoning UI parts are only emitted when reasoning content is included. ([#15207](https://github.com/mastra-ai/mastra/pull/15207))
+
+- Updated dependencies [[`87df955`](https://github.com/mastra-ai/mastra/commit/87df955c028660c075873fd5d74af28233ce32eb), [`075e91a`](https://github.com/mastra-ai/mastra/commit/075e91a4549baf46ad7a42a6a8ac8dfa78cc09e6)]:
+  - @mastra/core@1.24.2-alpha.0
+
+## 1.3.3
+
+### Patch Changes
+
+- Added toAISdkMessages() for loading stored Mastra messages into AI SDK v5 or v6 chat UIs. ([#14592](https://github.com/mastra-ai/mastra/pull/14592))
+
+  Use the default v5 behavior or pass { version: 'v6' } when your app is typed against AI SDK v6 useChat() message types.
+
+- Updated dependencies [[`8db7663`](https://github.com/mastra-ai/mastra/commit/8db7663c9a9c735828094c359d2e327fd4f8fba3), [`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38), [`715710d`](https://github.com/mastra-ai/mastra/commit/715710d12fa47cf88e09d41f13843eddc29327b0), [`378c6c4`](https://github.com/mastra-ai/mastra/commit/378c6c4755726e8d8cf83a14809b350b90d46c62), [`9f91fd5`](https://github.com/mastra-ai/mastra/commit/9f91fd538ab2a44f8cc740bcad8e51205f74fbea), [`ba6fa9c`](https://github.com/mastra-ai/mastra/commit/ba6fa9cc0f3e1912c49fd70d4c3bb8c44903ddaa)]:
+  - @mastra/core@1.24.0
+
+## 1.3.3-alpha.0
+
+### Patch Changes
+
+- Added toAISdkMessages() for loading stored Mastra messages into AI SDK v5 or v6 chat UIs. ([#14592](https://github.com/mastra-ai/mastra/pull/14592))
+
+  Use the default v5 behavior or pass { version: 'v6' } when your app is typed against AI SDK v6 useChat() message types.
+
+- Updated dependencies [[`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38)]:
+  - @mastra/core@1.23.1-alpha.0
+
 ## 1.3.2
 
 ### Patch Changes

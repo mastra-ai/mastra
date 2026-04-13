@@ -77,6 +77,7 @@ import { ObserverRunner } from './observer-runner';
 import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-registry';
 import type { CompressionLevel } from './reflector-agent';
 import { ReflectorRunner } from './reflector-runner';
+import { isOmReproCaptureEnabled, writeObserverExchangeReproCapture } from './repro-capture';
 import {
   calculateDynamicThreshold,
   calculateProjectedMessageRemoval,
@@ -2880,6 +2881,24 @@ ${formattedMessages}
         requestContext,
         observabilityContext,
       }).run();
+
+      if (isOmReproCaptureEnabled()) {
+        writeObserverExchangeReproCapture({
+          threadId,
+          resourceId: record.resourceId ?? undefined,
+          label: `buffer-${cycleId}`,
+          observerExchange: this.observer.lastExchange,
+          details: {
+            cycleId,
+            startedAt,
+            buffered: true,
+            candidateMessageIds: candidateMessages.map(message => message.id),
+            candidateMessageCount: candidateMessages.length,
+            pendingTokens: currentTokens,
+            newTokens,
+          },
+        });
+      }
 
       // Update the boundary tokens in storage + in-memory cache for interval tracking
       await this.storage.setBufferingObservationFlag(record.id, false, newTokens).catch(() => {});

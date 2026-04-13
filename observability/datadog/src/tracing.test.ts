@@ -214,8 +214,8 @@ describe('DatadogExporter', () => {
   describe('span type mapping', () => {
     it.each([
       [SpanType.AGENT_RUN, 'agent'],
-      [SpanType.MODEL_GENERATION, 'llm'],
-      [SpanType.MODEL_STEP, 'task'],
+      [SpanType.MODEL_GENERATION, 'workflow'],
+      [SpanType.MODEL_STEP, 'llm'],
       [SpanType.MODEL_CHUNK, 'task'],
       [SpanType.TOOL_CALL, 'tool'],
       [SpanType.MCP_TOOL_CALL, 'tool'],
@@ -1087,7 +1087,7 @@ describe('DatadogExporter', () => {
     it('includes modelName and modelProvider for llm spans', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
-        type: SpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_STEP,
         attributes: {
           model: 'gpt-4',
           provider: 'openai',
@@ -1103,6 +1103,33 @@ describe('DatadogExporter', () => {
           modelProvider: 'openai',
         }),
         expect.any(Function),
+      );
+    });
+
+    it('inherits modelName/modelProvider from parent MODEL_GENERATION onto MODEL_STEP children', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const generation = createMockSpan({
+        id: 'gen',
+        traceId: 'trace-inherit',
+        isRootSpan: true,
+        type: SpanType.MODEL_GENERATION,
+        attributes: { model: 'gpt-4o', provider: 'openai' },
+      });
+      const step = createMockSpan({
+        id: 'step',
+        traceId: 'trace-inherit',
+        isRootSpan: false,
+        parentSpanId: 'gen',
+        type: SpanType.MODEL_STEP,
+        attributes: {},
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, step));
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, generation));
+
+      const stepCall = mockTrace.mock.calls.find(c => c[0].kind === 'llm');
+      expect(stepCall?.[0]).toEqual(
+        expect.objectContaining({ kind: 'llm', modelName: 'gpt-4o', modelProvider: 'openai' }),
       );
     });
 
@@ -1261,7 +1288,7 @@ describe('DatadogExporter', () => {
     it('excludes known LLM fields from attribute forwarding', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
-        type: SpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_STEP,
         metadata: { userKey: 'userValue' },
         attributes: {
           model: 'gpt-4', // Should be excluded (used for modelName)

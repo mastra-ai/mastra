@@ -3,6 +3,7 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 import type { Agent } from '../../agent';
+import { Mastra } from '../../mastra';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { StructuredOutputProcessor } from './structured-output';
@@ -14,7 +15,7 @@ describe('StructuredOutputProcessor', () => {
     count: z.number().optional(),
   });
 
-  let processor: StructuredOutputProcessor<typeof testSchema>;
+  let processor: StructuredOutputProcessor<z.infer<typeof testSchema>>;
   let mockModel: MockLanguageModelV2;
 
   // Helper to create a mock controller that captures enqueued chunks
@@ -59,6 +60,18 @@ describe('StructuredOutputProcessor', () => {
     vi.restoreAllMocks();
   });
 
+  describe('__registerMastra', () => {
+    it('should propagate mastra registration to the internal structuring agent', () => {
+      const mastra = new Mastra({ logger: false });
+
+      expect((processor as any).structuringAgent.getMastraInstance()).toBeUndefined();
+
+      (processor as any).__registerMastra(mastra);
+
+      expect((processor as any).structuringAgent.getMastraInstance()).toBe(mastra);
+    });
+  });
+
   describe('processOutputStream', () => {
     it('should pass through non-finish chunks unchanged', async () => {
       const { controller } = createMockController();
@@ -76,6 +89,7 @@ describe('StructuredOutputProcessor', () => {
         streamParts: [],
         state: { controller },
         abort,
+        retryCount: 0,
       });
 
       expect(result).toBe(textChunk);
@@ -98,13 +112,14 @@ describe('StructuredOutputProcessor', () => {
         },
       };
 
+      const upstreamError = new Error('Structuring failed');
       const mockStream = {
         fullStream: convertArrayToReadableStream([
           {
             runId: 'test-run',
             from: ChunkFrom.AGENT,
             type: 'error',
-            payload: { error: new Error('Structuring failed') },
+            payload: { error: upstreamError },
           },
         ]),
       };
@@ -117,21 +132,31 @@ describe('StructuredOutputProcessor', () => {
           streamParts: [],
           state: { controller },
           abort,
+          retryCount: 0,
         }),
-      ).rejects.toThrow();
+      ).rejects.toThrow('[StructuredOutputProcessor] Structuring failed: Structuring failed');
     });
 
-    it('should enqueue fallback value with fallback strategy', async () => {
-      const fallbackProcessor = new StructuredOutputProcessor({
+    it('should preserve upstream error details in strict logs', async () => {
+      const upstreamError = new Error('No recording found for gpt-5.4');
+      (upstreamError as any).statusCode = 404;
+      (upstreamError as any).requestId = 'req_structuring_123';
+
+      const mockLogger = {
+        warn: vi.fn(),
+        error: vi.fn(),
+        info: vi.fn(),
+      };
+
+      const loggingProcessor = new StructuredOutputProcessor({
         schema: testSchema,
         model: mockModel,
-        errorStrategy: 'fallback',
-        fallbackValue: { color: 'default', intensity: 'medium' },
+        errorStrategy: 'strict',
+        logger: mockLogger as any,
       });
 
-      const { controller, enqueuedChunks } = createMockController();
+      const { controller } = createMockController();
       const abort = createMockAbort();
-
       const finishChunk: ChunkType = {
         runId: 'test-run',
         from: ChunkFrom.AGENT,
@@ -150,7 +175,124 @@ describe('StructuredOutputProcessor', () => {
             runId: 'test-run',
             from: ChunkFrom.AGENT,
             type: 'error',
-            payload: { error: new Error('Structuring failed') },
+            payload: { error: upstreamError },
+          },
+        ]),
+      };
+
+      vi.spyOn(loggingProcessor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
+
+      await expect(
+        loggingProcessor.processOutputStream({
+          part: finishChunk,
+          streamParts: [],
+          state: { controller },
+          abort,
+          retryCount: 0,
+        }),
+      ).rejects.toThrow('[StructuredOutputProcessor] Structuring failed: No recording found for gpt-5.4');
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        '[StructuredOutputProcessor] Structuring failed: No recording found for gpt-5.4',
+        upstreamError,
+      );
+    });
+
+    it('should surface plain object error messages', async () => {
+      const upstreamError = { message: 'Schema failed' };
+      const mockLogger = {
+        warn: vi.fn(),
+        error: vi.fn(),
+        info: vi.fn(),
+      };
+
+      const loggingProcessor = new StructuredOutputProcessor({
+        schema: testSchema,
+        model: mockModel,
+        errorStrategy: 'strict',
+        logger: mockLogger as any,
+      });
+
+      const { controller } = createMockController();
+      const abort = createMockAbort();
+      const finishChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'finish' as const,
+        payload: {
+          stepResult: { reason: 'stop' as const },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
+
+      const mockStream = {
+        fullStream: convertArrayToReadableStream([
+          {
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            type: 'error',
+            payload: { error: upstreamError },
+          },
+        ]),
+      };
+
+      vi.spyOn(loggingProcessor['structuringAgent'], 'stream').mockResolvedValue(mockStream as any);
+
+      await expect(
+        loggingProcessor.processOutputStream({
+          part: finishChunk,
+          streamParts: [],
+          state: { controller },
+          abort,
+          retryCount: 0,
+        }),
+      ).rejects.toThrow('[StructuredOutputProcessor] Structuring failed: Schema failed');
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        '[StructuredOutputProcessor] Structuring failed: Schema failed',
+        upstreamError,
+      );
+    });
+
+    it('should enqueue fallback value with fallback strategy', async () => {
+      const mockLogger = {
+        warn: vi.fn(),
+        error: vi.fn(),
+        info: vi.fn(),
+      };
+      const fallbackProcessor = new StructuredOutputProcessor({
+        schema: testSchema,
+        model: mockModel,
+        errorStrategy: 'fallback',
+        fallbackValue: { color: 'default', intensity: 'medium' },
+        logger: mockLogger as any,
+      });
+
+      const { controller, enqueuedChunks } = createMockController();
+      const abort = createMockAbort();
+
+      const finishChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'finish' as const,
+        payload: {
+          stepResult: { reason: 'stop' as const },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
+
+      const upstreamError = { message: 'Structuring failed' };
+      const mockStream = {
+        fullStream: convertArrayToReadableStream([
+          {
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            type: 'error',
+            payload: { error: upstreamError },
           },
         ]),
       };
@@ -162,8 +304,13 @@ describe('StructuredOutputProcessor', () => {
         streamParts: [],
         state: { controller },
         abort,
+        retryCount: 0,
       });
 
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        '[StructuredOutputProcessor] Structuring failed: Structuring failed (using fallback)',
+        upstreamError,
+      );
       expect(enqueuedChunks).toHaveLength(1);
       expect(enqueuedChunks[0].type).toBe('object-result');
       expect(enqueuedChunks[0].object).toEqual({ color: 'default', intensity: 'medium' });
@@ -199,13 +346,14 @@ describe('StructuredOutputProcessor', () => {
         },
       };
 
+      const upstreamError = { message: 'Structuring failed' };
       const mockStream = {
         fullStream: convertArrayToReadableStream([
           {
             runId: 'test-run',
             from: ChunkFrom.AGENT,
             type: 'error',
-            payload: { error: new Error('Structuring failed') },
+            payload: { error: upstreamError },
           },
         ]),
       };
@@ -217,9 +365,13 @@ describe('StructuredOutputProcessor', () => {
         streamParts: [],
         state: { controller },
         abort,
+        retryCount: 0,
       });
 
-      expect(mockLogger.warn).toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        '[StructuredOutputProcessor] Structuring failed: Structuring failed',
+        upstreamError,
+      );
       expect(abort).not.toHaveBeenCalled();
     });
 
@@ -258,6 +410,7 @@ describe('StructuredOutputProcessor', () => {
         streamParts: [],
         state: { controller },
         abort,
+        retryCount: 0,
       });
 
       await processor.processOutputStream({
@@ -265,6 +418,7 @@ describe('StructuredOutputProcessor', () => {
         streamParts: [],
         state: { controller },
         abort,
+        retryCount: 0,
       });
 
       // Should only call stream once (guarded by isStructuringAgentStreamStarted)
@@ -348,6 +502,7 @@ describe('StructuredOutputProcessor', () => {
         streamParts,
         state: { controller },
         abort,
+        retryCount: 0,
       });
 
       // Check that the prompt was built correctly with all the different sections
@@ -440,6 +595,7 @@ describe('StructuredOutputProcessor', () => {
         streamParts,
         state: { controller },
         abort,
+        retryCount: 0,
       });
 
       // Check that the prompt includes reasoning
