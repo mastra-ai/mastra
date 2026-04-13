@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Added internal `__fork()` method to Agent class for creating lightweight clones with independent instructions and tools.
+Agent instances can now create lightweight clones that preserve all configuration, so version overrides and tools are isolated without mutating the shared runtime agent.

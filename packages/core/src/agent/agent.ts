@@ -186,6 +186,7 @@ export class Agent<
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
+  #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>;
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
@@ -211,6 +212,8 @@ export class Agent<
    */
   constructor(config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>) {
     super({ component: RegisteredLogger.AGENT, rawConfig: config.rawConfig });
+
+    this.#config = config;
 
     this.name = config.name;
     this.id = config.id ?? config.name;
@@ -1955,32 +1958,8 @@ export class Agent<
    */
   __fork(): Agent<TAgentId, TTools, TOutput, TRequestContext> {
     const fork = new Agent<TAgentId, TTools, TOutput, TRequestContext>({
-      id: this.id,
-      name: this.name,
-      description: this.#description,
-      instructions: this.#instructions,
-      model: this.model,
-      maxRetries: this.maxRetries,
-      tools: this.#tools,
-      workflows: this.#workflows,
-      defaultGenerateOptionsLegacy: this.#defaultGenerateOptionsLegacy,
-      defaultStreamOptionsLegacy: this.#defaultStreamOptionsLegacy,
-      defaultOptions: this.#defaultOptions,
-      defaultNetworkOptions: this.#defaultNetworkOptions,
-      mastra: this.#mastra,
-      agents: this.#agents,
-      scorers: this.#scorers,
-      memory: this.#memory,
-      skillsFormat: this.#skillsFormat,
-      browser: this.#browser,
-      workspace: this.#workspace,
-      inputProcessors: this.#inputProcessors,
-      outputProcessors: this.#outputProcessors,
-      maxProcessorRetries: this.#maxProcessorRetries,
-      options: this.#options,
+      ...this.#config,
       rawConfig: this.toRawConfig(),
-      // voice and channels are intentionally omitted — the fork gets a
-      // DefaultVoice and no channels, which is fine for versioned resolution.
     });
 
     fork.source = this.source;
