@@ -26,19 +26,27 @@ let requestContextPresetsJson: string | undefined;
 const ON_ERROR_MAX_RESTARTS = 3;
 
 function waitForProcessExit(child: ChildProcess, timeoutMs = 2000): Promise<void> {
+  if (child.exitCode !== null) {
+    return Promise.resolve();
+  }
   return new Promise(resolve => {
-    if (child.exitCode !== null || child.killed) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const done = () => {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
       resolve();
+    };
+    child.once('exit', done);
+    if (child.exitCode !== null) {
+      child.removeListener('exit', done);
+      done();
       return;
     }
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
       child.kill('SIGKILL');
-      resolve();
     }, timeoutMs);
-    child.once('exit', () => {
-      clearTimeout(timer);
-      resolve();
-    });
   });
 }
 
