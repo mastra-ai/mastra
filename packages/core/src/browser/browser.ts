@@ -711,7 +711,7 @@ export abstract class MastraBrowser extends MastraBase {
     const scope = this.threadManager?.getScope();
     const threadId = this.getCurrentThread();
 
-    if (scope === 'thread' && threadId !== DEFAULT_THREAD_ID) {
+    if (scope === 'thread' && this.threadManager?.hasSession(threadId)) {
       // Only clear the specific thread's session - other threads have independent browsers
       this.threadManager!.clearSession(threadId);
       this.logger.debug?.(`Cleared browser session for thread: ${threadId}`);
@@ -719,7 +719,7 @@ export abstract class MastraBrowser extends MastraBase {
       // since other threads may still have active browsers
       this.notifyBrowserClosed(threadId);
     } else {
-      // For 'shared' scope or default thread, the shared browser is gone
+      // For 'shared' scope, the shared browser is gone
       this.sharedManager = null;
       // Also clear the shared manager in the thread manager so getManagerForThread
       // doesn't return the dead manager

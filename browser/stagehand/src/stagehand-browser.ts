@@ -93,7 +93,7 @@ export class StagehandBrowser extends MastraBrowser {
     // For 'thread' scope, ensure thread session exists after browser is ready
     const scope = this.getScope();
     const threadId = this.getCurrentThread();
-    if (scope === 'thread' && threadId && threadId !== DEFAULT_THREAD_ID) {
+    if (scope === 'thread') {
       // This will create the Stagehand instance for this thread if needed
       await this.getManagerForThread(threadId);
     }
@@ -404,10 +404,6 @@ export class StagehandBrowser extends MastraBrowser {
       return this.sharedManager;
     }
 
-    if (!threadId || threadId === DEFAULT_THREAD_ID) {
-      return this.sharedManager;
-    }
-
     // For 'thread' scope, get or create the thread's Stagehand instance
     let stagehand = this.threadManager.getExistingManagerForThread(threadId);
     if (!stagehand) {
@@ -446,7 +442,7 @@ export class StagehandBrowser extends MastraBrowser {
     const threadId = explicitThreadId ?? this.getCurrentThread();
 
     // For 'thread' scope, get the thread's Stagehand's active page
-    if (scope === 'thread' && threadId && threadId !== DEFAULT_THREAD_ID) {
+    if (scope === 'thread' && threadId) {
       const stagehand = this.threadManager.getExistingManagerForThread(threadId);
       if (stagehand?.context) {
         return stagehand.context.activePage() as V3Page | null;

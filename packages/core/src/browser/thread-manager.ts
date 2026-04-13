@@ -192,7 +192,7 @@ export abstract class ThreadManager<TManager = unknown> {
     const effectiveThreadId = threadId ?? DEFAULT_THREAD_ID;
 
     // Shared scope - always use shared manager
-    if (this.scope === 'shared' || effectiveThreadId === DEFAULT_THREAD_ID) {
+    if (this.scope === 'shared') {
       return this.getSharedManager();
     }
 

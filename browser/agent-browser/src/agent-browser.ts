@@ -100,14 +100,14 @@ export class AgentBrowser extends MastraBrowser {
 
     // For 'thread' scope, create the thread session first
     // This ensures checkBrowserAlive() has a browser to check
-    if (scope === 'thread' && threadId !== DEFAULT_THREAD_ID && !existingSession) {
+    if (scope === 'thread' && !existingSession) {
       await this.getManagerForThread(threadId);
     }
 
     await super.ensureReady();
 
     // For 'thread' scope with existing session, just verify it's accessible
-    if (scope === 'thread' && threadId !== DEFAULT_THREAD_ID && existingSession) {
+    if (scope === 'thread' && existingSession) {
       await this.getManagerForThread(threadId);
     }
   }
@@ -118,18 +118,6 @@ export class AgentBrowser extends MastraBrowser {
    */
   async getManagerForThread(threadId?: string): Promise<BrowserManager> {
     const effectiveThreadId = threadId ?? this.getCurrentThread();
-    const scope = this.threadManager.getScope();
-
-    // In 'thread' scope with no specific threadId, check for an existing manager first
-    // to avoid creating a new session unnecessarily
-    if (scope === 'thread' && (!effectiveThreadId || effectiveThreadId === DEFAULT_THREAD_ID)) {
-      const existingManager = this.threadManager.getExistingManagerForThread(effectiveThreadId);
-      if (existingManager) {
-        return existingManager;
-      }
-      // Fall through to create a session for DEFAULT_THREAD_ID
-    }
-
     return this.threadManager.getManagerForThread(effectiveThreadId);
   }
 
