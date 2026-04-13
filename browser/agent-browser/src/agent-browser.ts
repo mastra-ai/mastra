@@ -49,7 +49,7 @@ export class AgentBrowser extends MastraBrowser {
   declare protected sharedManager: BrowserManager | null;
   private defaultTimeout = 30000;
   /** Pending PID lookups — awaited in disconnect handlers to avoid racing. */
-  private pidLookups: Promise<void>[] = [];
+  private pidLookups = new Set<Promise<void>>();
 
   /** Thread manager - narrowed type from base class */
   declare protected threadManager: AgentBrowserThreadManager;
@@ -191,10 +191,12 @@ export class AgentBrowser extends MastraBrowser {
       // The base class uses this to kill orphaned child processes on disconnect.
       // Guard: only store if this manager is still the active shared manager,
       // otherwise a stale lookup could overwrite a newer PID.
-      const pidLookup = getBrowserPid(manager).then(pid => {
-        if (pid && this.sharedManager === manager) this.sharedBrowserPid = pid;
-      });
-      this.pidLookups.push(pidLookup);
+      const pidLookup = getBrowserPid(manager)
+        .then(pid => {
+          if (pid && this.sharedManager === manager) this.sharedBrowserPid = pid;
+        })
+        .finally(() => this.pidLookups.delete(pidLookup));
+      this.pidLookups.add(pidLookup);
 
       let disconnectHandled = false;
       const handleDisconnect = () => {
@@ -229,8 +231,8 @@ export class AgentBrowser extends MastraBrowser {
   protected override async doClose(): Promise<void> {
     // Ensure all PID lookups have resolved before closing, so killProcessGroup
     // (called by the base class after doClose) has the correct PID.
-    await Promise.allSettled(this.pidLookups);
-    this.pidLookups = [];
+    await Promise.allSettled([...this.pidLookups]);
+    this.pidLookups.clear();
 
     // Close all thread sessions via ThreadManager
     await this.threadManager.destroyAllSessions();
@@ -336,12 +338,14 @@ export class AgentBrowser extends MastraBrowser {
       // The base class uses this to kill orphaned child processes on disconnect.
       // Guard: only store if this manager is still the active one for the thread,
       // otherwise a stale lookup could overwrite a newer PID.
-      const pidLookup = getBrowserPid(manager).then(pid => {
-        if (pid && this.threadManager?.getExistingManagerForThread(threadId) === manager) {
-          this.threadBrowserPids.set(threadId, pid);
-        }
-      });
-      this.pidLookups.push(pidLookup);
+      const pidLookup = getBrowserPid(manager)
+        .then(pid => {
+          if (pid && this.threadManager?.getExistingManagerForThread(threadId) === manager) {
+            this.threadBrowserPids.set(threadId, pid);
+          }
+        })
+        .finally(() => this.pidLookups.delete(pidLookup));
+      this.pidLookups.add(pidLookup);
 
       let disconnectHandled = false;
       const handleDisconnect = () => {

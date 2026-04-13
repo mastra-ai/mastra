@@ -109,6 +109,10 @@ export function cleanupProfileLockFiles(
  * these children can become orphaned. Killing the process group ensures all
  * related processes are cleaned up.
  *
+ * Note: Process group signaling (`-pid`) is POSIX-only. On Windows, this
+ * function is a no-op and orphaned child processes must be cleaned up by
+ * other means (e.g., taskkill).
+ *
  * @param pid - The PID of the main browser process. If undefined, this is a no-op.
  * @param logger - Optional logger for debug output.
  */
