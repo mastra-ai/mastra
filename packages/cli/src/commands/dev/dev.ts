@@ -25,6 +25,31 @@ let serverStartTime: number | undefined;
 let requestContextPresetsJson: string | undefined;
 const ON_ERROR_MAX_RESTARTS = 3;
 
+function waitForProcessExit(child: ChildProcess, timeoutMs = 2000): Promise<void> {
+  if (child.exitCode !== null) {
+    return Promise.resolve();
+  }
+  return new Promise(resolve => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const done = () => {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+      resolve();
+    };
+    child.once('exit', done);
+    if (child.exitCode !== null) {
+      child.removeListener('exit', done);
+      done();
+      return;
+    }
+    timer = setTimeout(() => {
+      child.kill('SIGKILL');
+    }, timeoutMs);
+  });
+}
+
 interface HTTPSOptions {
   key: Buffer;
   cert: Buffer;
@@ -309,7 +334,48 @@ async function rebundleAndRestart(
     if (currentServerProcess) {
       devLogger.restarting();
       devLogger.debug('Stopping current server...');
-      currentServerProcess.kill('SIGINT');
+      const serverProcess = currentServerProcess;
+      // Wait for the process to exit before starting a new one
+      await new Promise<void>(resolve => {
+        if (serverProcess.exitCode !== null || serverProcess.signalCode !== null) {
+          resolve();
+          return;
+        }
+
+        let timeout: NodeJS.Timeout | undefined;
+        const handleExit = () => {
+          if (timeout) {
+            clearTimeout(timeout);
+          }
+          resolve();
+        };
+
+        serverProcess.once('exit', handleExit);
+
+        try {
+          serverProcess.kill('SIGINT');
+        } catch {
+          if (serverProcess.exitCode !== null || serverProcess.signalCode !== null) {
+            serverProcess.off('exit', handleExit);
+            resolve();
+          }
+          return;
+        }
+
+        timeout = setTimeout(() => {
+          try {
+            serverProcess.kill('SIGKILL');
+          } catch {
+            if (serverProcess.exitCode !== null || serverProcess.signalCode !== null) {
+              serverProcess.off('exit', handleExit);
+              resolve();
+            }
+          }
+        }, 5000);
+      });
+      if (currentServerProcess === serverProcess) {
+        currentServerProcess = undefined;
+      }
     }
 
     const env = await bundler.loadEnvVars();
@@ -508,6 +574,8 @@ export async function dev({
 
     if (currentServerProcess) {
       currentServerProcess.kill();
+      await waitForProcessExit(currentServerProcess);
+      currentServerProcess = undefined;
     }
 
     watcher
@@ -516,11 +584,11 @@ export async function dev({
       .finally(() => process.exit(0));
   };
 
-  process.on('SIGINT', () => {
+  const onSignal = () => {
     handleShutdown().catch(() => process.exit(0));
-  });
+  };
 
-  process.on('SIGTERM', () => {
-    handleShutdown().catch(() => process.exit(0));
-  });
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
+  process.on('SIGHUP', onSignal);
 }
