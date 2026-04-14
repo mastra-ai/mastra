@@ -271,6 +271,11 @@ export class CoreToolBuilder extends MastraBase {
         ...(processedOutputSchema ? { outputSchema: processedOutputSchema } : {}),
         type: 'provider-defined' as const,
         id: tool.id as `${string}.${string}`,
+        // V5 SDK factories set a hardcoded `name` (e.g. "web_search" for
+        // anthropic.web_search_20250305). Preserve it so that when this tool
+        // is later used with a V6 provider, the bidirectional toolNameMapping
+        // resolves the correct model-facing name instead of the versioned ID.
+        ...('name' in tool && typeof tool.name === 'string' ? { name: tool.name } : {}),
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
         description: tool.description,
         parameters: processedParameters,
