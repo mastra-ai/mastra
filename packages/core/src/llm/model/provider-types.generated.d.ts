@@ -979,6 +979,7 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-20b:free',
     'openai/gpt-oss-safeguard-20b',
     'openai/o4-mini',
+    'openrouter/elephant-alpha',
     'openrouter/free',
     'prime-intellect/intellect-3',
     'qwen/qwen-2.5-coder-32b-instruct',
