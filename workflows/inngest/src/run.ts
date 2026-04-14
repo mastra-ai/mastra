@@ -140,12 +140,14 @@ export class InngestRun<
 
                 const realtimeResult: Record<string, unknown> = {
                   steps: snapshot?.context,
-                  status: event.payload.status,
+                  status: event.payload?.status ?? snapshot?.status,
                   input: (snapshot?.context as Record<string, unknown>)?.input,
                 };
-                if (event.payload.result !== undefined) realtimeResult.result = event.payload.result;
-                if (event.payload.error) {
-                  realtimeResult.error = getErrorFromUnknown(event.payload.error, { serializeStack: false });
+                const resultValue = event.payload?.result ?? snapshot?.result;
+                if (resultValue !== undefined) realtimeResult.result = resultValue;
+                const rawError = event.payload?.error ?? snapshot?.error;
+                if (rawError) {
+                  realtimeResult.error = getErrorFromUnknown(rawError, { serializeStack: false });
                 }
                 if (snapshot?.value !== undefined) realtimeResult.state = snapshot.value;
                 const result = { output: { result: realtimeResult } };
