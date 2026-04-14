@@ -5110,6 +5110,78 @@ describe('Locking Behavior', () => {
     expect(updatedRecord!.isReflecting).toBe(false);
   });
 
+  it('should force reflection when activationTTL has expired even below threshold', async () => {
+    vi.useFakeTimers();
+    const now = new Date('2026-04-14T12:00:00.000Z');
+    vi.setSystemTime(now);
+
+    const storage = createInMemoryStorage();
+    let reflectorCalled = false;
+    const mockReflectorModel = createStreamCapableMockModel({
+      doGenerate: async () => {
+        reflectorCalled = true;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [{ type: 'text' as const, text: '<observations>\n- Reflected summary\n</observations>' }],
+          warnings: [],
+        };
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: {
+        messageTokens: 100,
+        bufferTokens: false,
+        model: createStreamCapableMockModel({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+            content: [{ type: 'text' as const, text: '<observations>\n- Observation\n</observations>' }],
+            warnings: [],
+          }),
+        }) as any,
+      },
+      reflection: {
+        observationTokens: 1000,
+        activationTTL: 300_000,
+        model: mockReflectorModel as any,
+      },
+      scope: 'thread',
+    });
+
+    await storage.initializeObservationalMemory({
+      threadId: 'thread-ttl',
+      resourceId: 'resource-ttl',
+      scope: 'thread',
+      config: {
+        observation: { messageTokens: 100, model: 'test-model' },
+        reflection: { observationTokens: 1000, activationTTL: 300_000, model: 'test-model' },
+      },
+    });
+
+    const record = await storage.getObservationalMemory('thread-ttl', 'resource-ttl');
+    await storage.updateActiveObservations({
+      id: record!.id,
+      observations: '- Observation 1\n- Observation 2',
+      tokenCount: 100,
+      lastObservedAt: new Date(now.getTime() - 301_000),
+    });
+
+    await om.reflector.maybeReflect({
+      record: (await storage.getObservationalMemory('thread-ttl', 'resource-ttl'))!,
+      observationTokens: 100,
+      lastActivityAt: now.getTime() - 301_000,
+      threadId: 'thread-ttl',
+    });
+
+    expect(reflectorCalled).toBe(true);
+    vi.useRealTimers();
+  });
+
   it('should skip observation when isObserving flag is true in processOutputResult', async () => {
     const storage = createInMemoryStorage();
 

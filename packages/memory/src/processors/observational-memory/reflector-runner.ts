@@ -613,6 +613,7 @@ export class ReflectorRunner {
     reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
     requestContext?: RequestContext;
     observabilityContext?: ObservabilityContext;
+    lastActivityAt?: number;
   }): Promise<void> {
     const {
       record,
@@ -623,6 +624,7 @@ export class ReflectorRunner {
       reflectionHooks,
       requestContext,
       observabilityContext,
+      lastActivityAt,
     } = opts;
     const lockKey = this.buffering.getLockKey(record.threadId, record.resourceId);
     const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
@@ -658,7 +660,11 @@ export class ReflectorRunner {
       }
     }
 
-    if (observationTokens < reflectThreshold) {
+    const activationTTL = this.reflectionConfig.activationTTL;
+    const ttlExpired =
+      activationTTL !== undefined && lastActivityAt !== undefined && Date.now() - lastActivityAt >= activationTTL;
+
+    if (observationTokens < reflectThreshold && !ttlExpired) {
       return;
     }
 

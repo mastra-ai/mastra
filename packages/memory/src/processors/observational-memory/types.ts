@@ -138,6 +138,11 @@ export interface ObservationConfig {
   bufferActivation?: number;
 
   /**
+   * Time in milliseconds. When the gap between the current time and the last assistant message part's `createdAt` exceeds this value, buffered observations are force-activated regardless of whether the token threshold has been reached.
+   */
+  activationTTL?: number;
+
+  /**
    * Token threshold above which synchronous (blocking) observation is forced.
    * Between `messageTokens` and `blockAfter`, only async buffering/activation is used.
    * Above `blockAfter`, a synchronous observation runs as a last resort.
@@ -241,6 +246,11 @@ export interface ReflectionConfig {
    * Requires `observation.bufferTokens` to also be set.
    */
   bufferActivation?: number;
+
+  /**
+   * Time in milliseconds. When the gap between the current time and the last assistant message part's `createdAt` exceeds this value, buffered reflections are force-activated regardless of whether the token threshold has been reached.
+   */
+  activationTTL?: number;
 
   /**
    * Custom instructions to append to the Reflector's system prompt.
@@ -846,6 +856,8 @@ export interface ResolvedObservationConfig {
   bufferTokens?: number;
   /** Ratio of buffered observations to activate (0-1 float) */
   bufferActivation?: number;
+  /** Time in milliseconds before buffered observations are force-activated based on the last assistant message part timestamp */
+  activationTTL?: number;
   /** Token threshold above which synchronous observation is forced */
   blockAfter?: number;
   /** Optional token budget for observer context optimization (0 = full truncation, false = disabled) */
@@ -867,6 +879,8 @@ export interface ResolvedReflectionConfig {
   providerOptions: ProviderOptions;
   /** Ratio (0-1) controlling when async reflection buffering starts */
   bufferActivation?: number;
+  /** Time in milliseconds before buffered reflections are force-activated based on the last assistant message part timestamp */
+  activationTTL?: number;
   /** Token threshold above which synchronous reflection is forced */
   blockAfter?: number;
   /** Custom instructions to append to the Reflector's system prompt */

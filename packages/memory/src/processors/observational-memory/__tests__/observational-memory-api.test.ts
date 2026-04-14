@@ -132,6 +132,8 @@ function createOM(
     scope?: 'thread' | 'resource';
     observerModel?: any;
     reflectorModel?: any;
+    activationTTL?: number;
+    reflectionActivationTTL?: number;
   },
 ) {
   return new ObservationalMemory({
@@ -141,10 +143,12 @@ function createOM(
       model: opts?.observerModel ?? createMockObserverModel(),
       messageTokens: opts?.messageTokens ?? 100,
       bufferTokens: opts?.bufferTokens ?? false,
+      activationTTL: opts?.activationTTL,
     },
     reflection: {
       model: opts?.reflectorModel ?? createMockReflectorModel(),
       observationTokens: opts?.observationTokens ?? 50_000,
+      activationTTL: opts?.reflectionActivationTTL,
     },
   });
 }
@@ -654,6 +658,150 @@ describe('activate()', () => {
 
     const second = await om.activate({ threadId });
     expect(second.activated).toBe(false);
+  });
+
+  describe('with activationTTL', () => {
+    it('activates buffered observations when the ttl has expired even below threshold', async () => {
+      vi.useFakeTimers();
+      const now = new Date('2026-04-14T12:00:00.000Z');
+      vi.setSystemTime(now);
+
+      const om = createOM(storage, { messageTokens: 50_000, bufferTokens: 5_000, activationTTL: 300_000 });
+      const staleAssistantPartTime = now.getTime() - 301_000;
+      const messages: MastraDBMessage[] = [
+        {
+          ...createTestMessage('Earlier question', 'user', 'ttl-user-1', new Date(staleAssistantPartTime - 1000)),
+          threadId,
+        },
+        {
+          ...createTestMessage('Earlier answer', 'assistant', 'ttl-assistant-1', new Date(staleAssistantPartTime)),
+          threadId,
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Earlier answer', createdAt: staleAssistantPartTime }],
+          } as MastraMessageContentV2,
+        },
+        {
+          ...createTestMessage('Latest user follow-up', 'user', 'ttl-user-2', now),
+          threadId,
+        },
+      ];
+
+      await storage.saveMessages({ messages });
+      const { record } = await om.getStatus({ threadId, messages });
+      await storage.updateBufferedObservations({
+        id: record.id,
+        chunk: {
+          observations: '- Buffered observation',
+          tokenCount: 80,
+          messageIds: ['ttl-user-1', 'ttl-assistant-1'],
+          cycleId: 'ttl-cycle-1',
+          messageTokens: 200,
+          lastObservedAt: new Date(staleAssistantPartTime),
+        },
+      });
+
+      const result = await om.activate({ threadId, checkThreshold: true, messages });
+
+      expect(result.activated).toBe(true);
+      vi.useRealTimers();
+    });
+
+    it('does not activate when ttl has not expired and pending tokens stay below threshold', async () => {
+      vi.useFakeTimers();
+      const now = new Date('2026-04-14T12:00:00.000Z');
+      vi.setSystemTime(now);
+
+      const om = createOM(storage, { messageTokens: 50_000, bufferTokens: 5_000, activationTTL: 300_000 });
+      const recentAssistantPartTime = now.getTime() - 60_000;
+      const messages: MastraDBMessage[] = [
+        {
+          ...createTestMessage('Earlier question', 'user', 'ttl-user-3', new Date(recentAssistantPartTime - 1000)),
+          threadId,
+        },
+        {
+          ...createTestMessage('Recent answer', 'assistant', 'ttl-assistant-2', new Date(recentAssistantPartTime)),
+          threadId,
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Recent answer', createdAt: recentAssistantPartTime }],
+          } as MastraMessageContentV2,
+        },
+        {
+          ...createTestMessage('Latest user follow-up', 'user', 'ttl-user-4', now),
+          threadId,
+        },
+      ];
+
+      await storage.saveMessages({ messages });
+      await om.buffer({ threadId, messages });
+
+      const result = await om.activate({ threadId, checkThreshold: true, messages });
+
+      expect(result.activated).toBe(false);
+      vi.useRealTimers();
+    });
+
+    it('keeps existing threshold behavior when activationTTL is undefined', async () => {
+      vi.useFakeTimers();
+      const now = new Date('2026-04-14T12:00:00.000Z');
+      vi.setSystemTime(now);
+
+      const om = createOM(storage, { messageTokens: 50_000, bufferTokens: 5_000 });
+      const oldAssistantPartTime = now.getTime() - 600_000;
+      const messages: MastraDBMessage[] = [
+        {
+          ...createTestMessage('Earlier question', 'user', 'ttl-user-5', new Date(oldAssistantPartTime - 1000)),
+          threadId,
+        },
+        {
+          ...createTestMessage('Old answer', 'assistant', 'ttl-assistant-3', new Date(oldAssistantPartTime)),
+          threadId,
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Old answer', createdAt: oldAssistantPartTime }],
+          } as MastraMessageContentV2,
+        },
+        {
+          ...createTestMessage('Latest user follow-up', 'user', 'ttl-user-6', now),
+          threadId,
+        },
+      ];
+
+      await storage.saveMessages({ messages });
+      await om.buffer({ threadId, messages });
+
+      const result = await om.activate({ threadId, checkThreshold: true, messages });
+
+      expect(result.activated).toBe(false);
+      vi.useRealTimers();
+    });
+
+    it('does not use ttl activation when there is no assistant message', async () => {
+      vi.useFakeTimers();
+      const now = new Date('2026-04-14T12:00:00.000Z');
+      vi.setSystemTime(now);
+
+      const om = createOM(storage, { messageTokens: 50_000, bufferTokens: 5_000, activationTTL: 300_000 });
+      const messages: MastraDBMessage[] = [
+        {
+          ...createTestMessage('First user message', 'user', 'ttl-user-7', new Date(now.getTime() - 600_000)),
+          threadId,
+        },
+        {
+          ...createTestMessage('Second user message', 'user', 'ttl-user-8', now),
+          threadId,
+        },
+      ];
+
+      await storage.saveMessages({ messages });
+      await om.buffer({ threadId, messages });
+
+      const result = await om.activate({ threadId, checkThreshold: true, messages });
+
+      expect(result.activated).toBe(false);
+      vi.useRealTimers();
+    });
   });
 });
 

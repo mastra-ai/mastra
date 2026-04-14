@@ -357,6 +357,7 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config.observation?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferActivation),
+      activationTTL: config.observation?.activationTTL,
       blockAfter: asyncBufferingDisabled
         ? undefined
         : resolveBlockAfter(
@@ -388,6 +389,7 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config?.reflection?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferActivation),
+      activationTTL: config.reflection?.activationTTL,
       blockAfter: asyncBufferingDisabled
         ? undefined
         : resolveBlockAfter(
@@ -1137,6 +1139,29 @@ export class ObservationalMemory {
         parts: unobservedParts,
       },
     };
+  }
+
+  /**
+   * Returns the unix-ms timestamp of the last part in the last assistant message,
+   * representing when the last LLM response completed. Used as the last activity
+   * time for activationTTL checks.
+   */
+  private getLastActivityFromMessages(messages?: MastraDBMessage[]): number | undefined {
+    if (!messages) return undefined;
+
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
+      if (!message || message.role !== 'assistant' || !message.content || typeof message.content === 'string') {
+        continue;
+      }
+
+      const lastPart = message.content.parts[message.content.parts.length - 1];
+      if (lastPart?.createdAt !== undefined) {
+        return lastPart.createdAt;
+      }
+    }
+
+    return undefined;
   }
 
   /**
@@ -2995,9 +3020,16 @@ ${formattedMessages}
 
     // Optional threshold guard — skip activation if pending tokens are below threshold
     if (opts.checkThreshold) {
-      const status = await this.getStatus({ threadId, resourceId, messages: opts.messages });
-      if (status.pendingTokens < status.threshold) {
-        return { activated: false, record };
+      const activationTTL = this.observationConfig.activationTTL;
+      const lastActivityAt = this.getLastActivityFromMessages(opts.messages);
+      const ttlExpired =
+        activationTTL !== undefined && lastActivityAt !== undefined && Date.now() - lastActivityAt >= activationTTL;
+
+      if (!ttlExpired) {
+        const status = await this.getStatus({ threadId, resourceId, messages: opts.messages });
+        if (status.pendingTokens < status.threshold) {
+          return { activated: false, record };
+        }
       }
     }
 

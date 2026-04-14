@@ -19,6 +19,23 @@ export class ObservationStep {
   private _prepared = false;
   private _context?: StepContext;
 
+  private getLastActivityAt() {
+    const messages = this.turn.messageList.get.all.db();
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i]!;
+      if (message.role !== 'assistant' || !message.content || typeof message.content === 'string') {
+        continue;
+      }
+
+      const lastPart = message.content.parts[message.content.parts.length - 1];
+      if (lastPart?.createdAt !== undefined) {
+        return lastPart.createdAt;
+      }
+    }
+
+    return undefined;
+  }
+
   constructor(
     private readonly turn: ObservationTurn,
     readonly stepNumber: number,
@@ -93,6 +110,7 @@ export class ObservationStep {
         writer: this.turn.writer,
         requestContext: this.turn.requestContext,
         observabilityContext: this.turn.observabilityContext,
+        lastActivityAt: this.getLastActivityAt(),
       });
       await this.turn.refreshRecord();
       if (this.turn.record.generationCount > preReflectGeneration) {
@@ -334,6 +352,7 @@ export class ObservationStep {
           messageList,
           requestContext: this.turn.requestContext,
           observabilityContext: this.turn.observabilityContext,
+          lastActivityAt: this.getLastActivityAt(),
         });
 
         return {
