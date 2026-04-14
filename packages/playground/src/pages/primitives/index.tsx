@@ -1,12 +1,5 @@
-import {
-  EntityListPageLayout,
-  MainHeader,
-  AgentIcon,
-  McpServerIcon,
-  ToolsIcon,
-  WorkflowIcon,
-} from '@mastra/playground-ui';
-import { FileTextIcon, Cpu, FolderIcon, GlobeIcon } from 'lucide-react';
+import { AgentIcon, McpServerIcon, PageHeader, PageLayout, ToolsIcon, WorkflowIcon } from '@mastra/playground-ui';
+import { FileTextIcon, Cpu, FolderIcon, GlobeIcon, GripIcon } from 'lucide-react';
 import { Link } from 'react-router';
 
 const sections = [
@@ -62,17 +55,17 @@ const sections = [
 
 export default function Primitives() {
   return (
-    <EntityListPageLayout>
-      <EntityListPageLayout.Top>
-        <MainHeader withMargins={false}>
-          <MainHeader.Column>
-            <MainHeader.Title>Primitives</MainHeader.Title>
-          </MainHeader.Column>
-        </MainHeader>
-      </EntityListPageLayout.Top>
+    <PageLayout width="narrow">
+      <PageLayout.TopArea>
+        <PageHeader>
+          <PageHeader.Title>
+            <GripIcon /> Primitives
+          </PageHeader.Title>
+        </PageHeader>
+      </PageLayout.TopArea>
 
-      <div className="px-6 pt-6 overflow-y-auto">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl">
+      <PageLayout.MainArea>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {sections.map(section => (
             <Link
               key={section.href}
@@ -87,7 +80,7 @@ export default function Primitives() {
             </Link>
           ))}
         </div>
-      </div>
-    </EntityListPageLayout>
+      </PageLayout.MainArea>
+    </PageLayout>
   );
 }
