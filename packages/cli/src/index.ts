@@ -23,6 +23,7 @@ import { whoamiAction } from './commands/auth/whoami';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
 import { serverDeployAction } from './commands/server/deploy';
 import { envListAction, envSetAction, envUnsetAction, envImportAction } from './commands/server/env';
+import { serverPauseAction, serverRestartAction } from './commands/server/lifecycle';
 import { deployAction } from './commands/studio/deploy';
 import { deploysAction } from './commands/studio/deploy-list';
 import { logsAction } from './commands/studio/deploy-logs';
@@ -268,6 +269,22 @@ serverCommand
   .option('-y, --yes', 'Auto-accept defaults without confirmation')
   .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
   .action(wrapAction(serverDeployAction));
+
+serverCommand
+  .command('pause')
+  .description('Pause the linked Mastra Server project instance')
+  .option('--org <id>', 'Organization ID')
+  .option('--project <id>', 'Project ID or slug (overrides linked project when MASTRA_PROJECT_ID is unset)')
+  .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .action(wrapAction(serverPauseAction));
+
+serverCommand
+  .command('restart')
+  .description('Restart the linked Mastra Server project instance')
+  .option('--org <id>', 'Organization ID')
+  .option('--project <id>', 'Project ID or slug (overrides linked project when MASTRA_PROJECT_ID is unset)')
+  .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .action(wrapAction(serverRestartAction));
 
 const serverEnvCommand = serverCommand.command('env').description('Manage server environment variables');
 
