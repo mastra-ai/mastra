@@ -352,6 +352,7 @@ export class Mastra<
   #bundler?: BundlerConfig;
   #idGenerator?: MastraIdGenerator;
   #pubsub: PubSub;
+  #backgroundTaskConfig?: BackgroundTaskManagerConfig;
   #backgroundTaskManager?: BackgroundTaskManager;
   #gateways?: Record<string, MastraModelGateway>;
 
@@ -672,15 +673,9 @@ export class Mastra<
 
     this.#storage = storage;
 
-    if (config?.backgroundTasks?.enabled !== false && this.#storage) {
-      // Sync creation, async init is fire-and-forget but manager is available immediately
-      const bgManager = new BackgroundTaskManager(config?.backgroundTasks);
-      bgManager.__registerMastra(this);
-      this.#backgroundTaskManager = bgManager;
-      void bgManager.init(this.#pubsub).catch(error => {
-        this.#logger?.error('Failed to initialize background task manager', error);
-      });
-    }
+    this.#backgroundTaskConfig = config?.backgroundTasks;
+    this.#ensureBackgroundTaskManager();
+
     // Initialize all primitive storage objects first, we need to do this before adding primitives to avoid circular dependencies
     this.#vectors = {} as TVectors;
     this.#mcpServers = {} as TMCPServers;
@@ -809,6 +804,19 @@ export class Mastra<
     this.#observability.setMastraContext({ mastra: this });
 
     this.setLogger({ logger });
+  }
+
+  #ensureBackgroundTaskManager(): void {
+    if (this.#backgroundTaskManager || this.#backgroundTaskConfig?.enabled === false || !this.#storage) {
+      return;
+    }
+
+    const bgManager = new BackgroundTaskManager(this.#backgroundTaskConfig);
+    bgManager.__registerMastra(this);
+    this.#backgroundTaskManager = bgManager;
+    void bgManager.init(this.#pubsub).catch(error => {
+      this.#logger?.error('Failed to initialize background task manager', error);
+    });
   }
 
   /**
@@ -2537,6 +2545,7 @@ export class Mastra<
    */
   public setStorage(storage: MastraCompositeStore) {
     this.#storage = augmentWithInit(storage);
+    this.#ensureBackgroundTaskManager();
   }
 
   public setLogger({ logger }: { logger: TLogger }) {
