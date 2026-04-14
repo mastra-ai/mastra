@@ -54,6 +54,43 @@ export function getClipboardText(): string | null {
 }
 
 /**
+ * Write plain text to the system clipboard.
+ * Returns true on success, false on failure.
+ */
+export function setClipboardText(text: string): boolean {
+  try {
+    if (process.platform === 'darwin') {
+      execSync('pbcopy', {
+        input: text,
+        timeout: 3000,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      return true;
+    }
+    if (process.platform === 'linux') {
+      try {
+        execSync('xclip -selection clipboard', {
+          input: text,
+          timeout: 3000,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+        return true;
+      } catch {
+        execSync('wl-copy', {
+          input: text,
+          timeout: 3000,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Check the system clipboard for image data and return it as base64.
  * Returns null if no image data is found or extraction fails.
  */
