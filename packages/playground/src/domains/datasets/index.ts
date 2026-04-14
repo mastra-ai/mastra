@@ -26,13 +26,12 @@ export * from './utils/json-export';
 
 // Components
 export { DatasetsTable } from './components/datasets-table/datasets-table';
+export { DatasetsList, type DatasetsListProps } from './components/datasets-list/datasets-list';
 export {
-  DatasetsList,
-  type DatasetsListProps,
   DATASET_TARGET_OPTIONS,
   DATASET_EXPERIMENT_OPTIONS,
   getDatasetTagOptions,
-} from './components/datasets-list/datasets-list';
+} from './components/datasets-list/helpers';
 export { NoDatasetsInfo } from './components/datasets-list/no-datasets-info';
 export { DatasetHealthCard } from './components/dataset-health-card';
 export { DatasetsToolbar, type DatasetsToolbarProps } from './components/datasets-toolbar';
