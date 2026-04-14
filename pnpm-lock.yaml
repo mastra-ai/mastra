@@ -480,6 +480,15 @@ importers:
         specifier: 'catalog:'
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0(bufferutil@4.1.0))(lightningcss@1.32.0)(msw@2.12.13(@types/node@22.19.15)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
 
+  browser/_test-utils:
+    devDependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      vitest:
+        specifier: 'catalog:'
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0(bufferutil@4.1.0))(lightningcss@1.32.0)(msw@2.12.13(@types/node@22.19.15)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
+
   browser/agent-browser:
     dependencies:
       agent-browser:
@@ -489,6 +498,9 @@ importers:
         specifier: ^2.1.0
         version: 2.1.0
     devDependencies:
+      '@internal/browser-test-utils':
+        specifier: workspace:*
+        version: link:../_test-utils
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -532,6 +544,9 @@ importers:
         specifier: ^3.2.1
         version: 3.2.1(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.213.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.6.0(@opentelemetry/api@1.9.0))(deepmerge@4.3.1)(encoding@0.1.13)(zod@4.3.6)
     devDependencies:
+      '@internal/browser-test-utils':
+        specifier: workspace:*
+        version: link:../_test-utils
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
