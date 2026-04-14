@@ -16,7 +16,12 @@ import type { StandardSchemaWithJSON } from './standard-schema.types';
  * - z.date() -> { type: 'string', format: 'date-time' }
  */
 function jsonSchemaOverride(ctx: { zodSchema: unknown; jsonSchema: Record<string, unknown> }): undefined {
-  const zodSchema = ctx.zodSchema as { type?: string; _zod?: { def?: { type?: string } }; optional?: () => unknown };
+  const zodSchema = ctx.zodSchema as {
+    type?: string;
+    _def?: { typeName?: string };
+    _zod?: { def?: { type?: string; coerce?: boolean } };
+    optional?: () => unknown;
+  };
 
   if (
     ctx.jsonSchema.type === 'object' &&
@@ -27,10 +32,20 @@ function jsonSchemaOverride(ctx: { zodSchema: unknown; jsonSchema: Record<string
   }
 
   if (zodSchema) {
-    // Convert z.date() to JSON Schema string with date-time format
-    if (zodSchema?.type === 'date') {
-      ctx.jsonSchema.type = 'string';
-      ctx.jsonSchema.format = 'date-time';
+    // Zod v4: zodSchema.type === 'date'
+    // Zod v3: zodSchema._def.typeName === 'ZodDate'
+    const isDateType = zodSchema?.type === 'date' || zodSchema?._def?.typeName === 'ZodDate';
+
+    if (isDateType) {
+      // Zod v4 dates need explicit JSON schema conversion (zod-to-json-schema doesn't handle them)
+      if (zodSchema?.type === 'date') {
+        ctx.jsonSchema.type = 'string';
+        ctx.jsonSchema.format = 'date-time';
+      }
+      // Mark dates for #traverse: x-date=true means string→Date conversion needed.
+      // z.coerce.date() handles its own coercion, so mark as false to prevent conversion.
+      // Zod v3 has no coerce, so all v3 dates are strict (handled by preProcessJSONNode fallback).
+      ctx.jsonSchema['x-date'] = !zodSchema._zod?.def?.coerce;
       // @ts-expect-error - catchall is a valid property for zod
     } else if (zodSchema?.type === 'object' && zodSchema._zod?.def?.catchall?.type === 'unknown') {
       ctx.jsonSchema.additionalProperties = true;

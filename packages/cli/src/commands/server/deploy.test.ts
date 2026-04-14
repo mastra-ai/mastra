@@ -1,17 +1,57 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('node:child_process', () => ({
+  execSync: vi.fn().mockReturnValue('my-app'),
+}));
+
+let closeHandler: (() => void) | undefined;
+
+vi.mock('node:fs', () => ({
+  createWriteStream: vi.fn(() => ({
+    on: vi.fn((event: string, callback: () => void) => {
+      if (event === 'close') {
+        closeHandler = callback;
+      }
+    }),
+  })),
+}));
+
+vi.mock('node:fs/promises', () => ({
+  mkdir: vi.fn().mockResolvedValue(undefined),
+  rm: vi.fn().mockResolvedValue(undefined),
+  stat: vi.fn().mockResolvedValue({ size: 1024 }),
+  access: vi.fn().mockResolvedValue(undefined),
+  readFile: vi.fn(async (path: string) => {
+    if (path.endsWith('.env') || path.endsWith('.env.local') || path.endsWith('.env.production')) {
+      const err = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+      throw err;
+    }
+    return Buffer.from('zip-data');
+  }),
+}));
 
 vi.mock('@clack/prompts', () => ({
   intro: vi.fn(),
-  log: { step: vi.fn(), info: vi.fn(), success: vi.fn(), error: vi.fn(), warn: vi.fn() },
+  log: { step: vi.fn(), info: vi.fn(), success: vi.fn(), warn: vi.fn(), error: vi.fn() },
   note: vi.fn(),
   confirm: vi.fn(),
+  select: vi.fn(),
   isCancel: vi.fn(() => false),
   cancel: vi.fn(),
   spinner: vi.fn(() => ({ start: vi.fn(), stop: vi.fn() })),
+  outro: vi.fn(),
 }));
 
 vi.mock('archiver', () => ({
-  default: vi.fn(),
+  default: vi.fn(() => ({
+    on: vi.fn(),
+    pipe: vi.fn(),
+    glob: vi.fn(),
+    file: vi.fn(),
+    finalize: vi.fn(async () => {
+      closeHandler?.();
+    }),
+  })),
 }));
 
 vi.mock('../auth/credentials.js', () => ({
@@ -42,15 +82,18 @@ vi.mock('../studio/project-config.js', () => ({
   saveProjectConfig: vi.fn().mockResolvedValue(undefined),
 }));
 
+beforeEach(() => {
+  vi.clearAllMocks();
+  closeHandler = undefined;
+});
+
+afterEach(() => {
+  delete process.env.MASTRA_API_TOKEN;
+  delete process.env.MASTRA_ORG_ID;
+  delete process.env.MASTRA_PROJECT_ID;
+});
+
 describe('parseEnvFile (server deploy)', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   it('parses simple key=value pairs', async () => {
     const { parseEnvFile } = await import('./deploy.js');
     expect(parseEnvFile('FOO=bar\nBAZ=qux')).toEqual({ FOO: 'bar', BAZ: 'qux' });
@@ -70,13 +113,10 @@ describe('parseEnvFile (server deploy)', () => {
 
 describe('serverDeployAction', () => {
   afterEach(() => {
-    delete process.env.MASTRA_API_TOKEN;
-    delete process.env.MASTRA_ORG_ID;
-    delete process.env.MASTRA_PROJECT_ID;
     vi.resetModules();
   });
 
-  it('throws when headless mode missing org and project', async () => {
+  it('throws when headless mode is missing required env vars and flags', async () => {
     process.env.MASTRA_API_TOKEN = 'headless-token';
     vi.resetModules();
 
@@ -97,5 +137,43 @@ describe('serverDeployAction', () => {
     await expect(serverDeployAction(undefined, {})).rejects.toThrow(
       'MASTRA_ORG_ID and MASTRA_PROJECT_ID (or --org/--project flags, or .mastra-project.json) are required when MASTRA_API_TOKEN is set',
     );
+  });
+
+  it('allows headless mode to rely on .mastra-project.json without env vars or flags', async () => {
+    process.env.MASTRA_API_TOKEN = 'headless-token';
+    vi.resetModules();
+
+    const { loadProjectConfig } = await import('../studio/project-config.js');
+    vi.mocked(loadProjectConfig).mockResolvedValue({
+      organizationId: 'org-1',
+      projectId: 'proj-1',
+      projectName: 'my-app',
+      projectSlug: 'my-app',
+    });
+
+    const { serverDeployAction } = await import('./deploy.js');
+
+    await expect(serverDeployAction(undefined, {})).resolves.toBeUndefined();
+  });
+
+  it('uses project config in headless mode without fetching orgs', async () => {
+    process.env.MASTRA_API_TOKEN = 'headless-token';
+    vi.resetModules();
+
+    const { loadProjectConfig } = await import('../studio/project-config.js');
+    const { fetchOrgs } = await import('../auth/api.js');
+
+    vi.mocked(loadProjectConfig).mockResolvedValue({
+      organizationId: 'org-1',
+      projectId: 'proj-1',
+      projectName: 'my-app',
+      projectSlug: 'my-app',
+    });
+    vi.mocked(fetchOrgs).mockResolvedValue([]);
+
+    const { serverDeployAction } = await import('./deploy.js');
+
+    await expect(serverDeployAction(undefined, {})).resolves.toBeUndefined();
+    expect(fetchOrgs).not.toHaveBeenCalled();
   });
 });

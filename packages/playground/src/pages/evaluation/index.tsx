@@ -1,28 +1,26 @@
 import {
   ButtonWithTooltip,
-  computeReviewTotals,
-  DatasetHealthCard,
   ErrorState,
-  EvaluationKpiCards,
-  ExperimentStatusCard,
-  is401UnauthorizedError,
-  is403ForbiddenError,
   MetricsFlexGrid,
   NoDataPageLayout,
   PageHeader,
   PageLayout,
   PermissionDenied,
-  ReviewPipelineCard,
-  ScoresOverTimeCard,
   SessionExpired,
-  useDatasets,
-  useExperiments,
-  useReviewSummary,
-  useScoreMetrics,
-  useScorers,
+  is401UnauthorizedError,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { BookIcon, FlaskConicalIcon } from 'lucide-react';
 import { useMemo } from 'react';
+import { DatasetHealthCard } from '@/domains/datasets';
+import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
+import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
+import { EvaluationKpiCards } from '@/domains/evaluation/components/evaluation-kpi-cards';
+import { ExperimentStatusCard } from '@/domains/experiments';
+import { ReviewPipelineCard, useReviewSummary } from '@/domains/review';
+import { computeReviewTotals } from '@/domains/review/review-maps';
+import { useScoreMetrics, useScorers } from '@/domains/scores';
+import { ScoresOverTimeCard } from '@/domains/scores/components/scores-over-time-card';
 
 export default function Evaluation() {
   const { data: scorers, isLoading: isLoadingScorers, error: errorScorers } = useScorers();

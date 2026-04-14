@@ -1,0 +1,2043 @@
+{
+  "meta": {
+    "name": "schema-compat-src-provider-compats-google.e2e",
+    "testFile": "src/provider-compats/google.e2e.test.ts",
+    "testName": "Google e2e test",
+    "createdAt": "2026-03-27T09:17:07.578Z"
+  },
+  "recordings": [
+    {
+      "hash": "6cfe65fc154e6243",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+              "required": [
+                "string",
+                "stringMin",
+                "stringMax",
+                "stringEmail",
+                "stringEmoji",
+                "stringUrl",
+                "stringUuid",
+                "stringCuid",
+                "stringRegex",
+                "number",
+                "numberGt",
+                "numberLt",
+                "numberGte",
+                "numberLte",
+                "numberMultipleOf",
+                "numberInt",
+                "exampleArray",
+                "arrayMin",
+                "arrayMax",
+                "date",
+                "dateAfter",
+                "dateBefore",
+                "actualData",
+                "object",
+                "objectNested",
+                "objectPassthrough",
+                "objectLoose",
+                "nullable",
+                "enum",
+                "nativeEnum",
+                "unionPrimitives",
+                "unionObjects",
+                "default"
+              ],
+              "type": "object",
+              "properties": {
+                "string": {
+                  "description": "Sample text",
+                  "type": "string"
+                },
+                "stringMin": {
+                  "description": "sample text with a minimum of 5 characters\nconstraints: minimum length 5",
+                  "type": "string"
+                },
+                "stringMax": {
+                  "description": "sample text with a maximum of 10 characters\nconstraints: maximum length 10",
+                  "type": "string"
+                },
+                "stringEmail": {
+                  "description": "a sample email address\nconstraints: a valid email",
+                  "type": "string"
+                },
+                "stringEmoji": {
+                  "description": "a valid sample emoji\nconstraints: a valid emoji",
+                  "type": "string"
+                },
+                "stringUrl": {
+                  "description": "a valid sample url\nconstraints: a valid uri",
+                  "type": "string"
+                },
+                "stringUuid": {
+                  "description": "a valid sample uuid\nconstraints: a valid uuid",
+                  "type": "string"
+                },
+                "stringCuid": {
+                  "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$",
+                  "format": "cuid",
+                  "type": "string"
+                },
+                "stringRegex": {
+                  "description": "a valid sample string that satisfies the regex\nconstraints: input must match this regex ^test-",
+                  "type": "string"
+                },
+                "number": {
+                  "description": "any valid sample number",
+                  "type": "number"
+                },
+                "numberGt": {
+                  "description": "any valid sample number greater than 3\nconstraints: greater than 3",
+                  "type": "number"
+                },
+                "numberLt": {
+                  "description": "any valid sample number less than 6\nconstraints: lower than 6",
+                  "type": "number"
+                },
+                "numberGte": {
+                  "description": "any valid sample number greater than or equal to 1\nconstraints: greater than or equal to 1",
+                  "type": "number"
+                },
+                "numberLte": {
+                  "description": "any valid sample number less than or equal to 1\nconstraints: lower than or equal to 1",
+                  "type": "number"
+                },
+                "numberMultipleOf": {
+                  "description": "any valid sample number that is a multiple of 2\nconstraints: multiple of 2",
+                  "type": "number"
+                },
+                "numberInt": {
+                  "description": "any valid sample number that is an integer",
+                  "type": "integer"
+                },
+                "exampleArray": {
+                  "description": "any valid array of example strings",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "arrayMin": {
+                  "description": "any valid sample array of strings with a minimum of 1 string\nconstraints: minimum length 1",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "arrayMax": {
+                  "description": "any valid sample array of strings with a maximum of 5 strings\nconstraints: maximum length 5",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "date": {
+                  "description": "a valid sample date\nconstraints: a valid date-time",
+                  "type": "string"
+                },
+                "dateAfter": {
+                  "description": "a valid sample date after 2024-01-01\nconstraints: a valid date-time",
+                  "type": "string"
+                },
+                "dateBefore": {
+                  "description": "a valid sample date before today\nconstraints: a valid date-time",
+                  "type": "string"
+                },
+                "actualData": {
+                  "description": "a valid sample date\nconstraints: a valid date-time",
+                  "type": "string"
+                },
+                "object": {
+                  "description": "any valid sample object with a string and a number",
+                  "required": ["foo", "bar"],
+                  "type": "object",
+                  "properties": {
+                    "foo": {
+                      "type": "string"
+                    },
+                    "bar": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "objectNested": {
+                  "description": "any valid sample data",
+                  "required": ["user"],
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "required": ["name", "age"],
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "description": "constraints: minimum length 2",
+                          "type": "string"
+                        },
+                        "age": {
+                          "description": "constraints: greater than or equal to 18",
+                          "type": "number"
+                        }
+                      }
+                    }
+                  }
+                },
+                "objectPassthrough": {
+                  "description": "any sample object with example keys and data",
+                  "required": [],
+                  "type": "object",
+                  "properties": {}
+                },
+                "objectLoose": {
+                  "description": "any sample object with example keys and data",
+                  "required": [],
+                  "type": "object",
+                  "properties": {}
+                },
+                "optional": {
+                  "description": "leave this field empty as an example of an optional field",
+                  "type": "string"
+                },
+                "nullable": {
+                  "description": "leave this field empty as an example of a nullable field",
+                  "nullable": true,
+                  "type": "string"
+                },
+                "enum": {
+                  "description": "The letter A, B, or C",
+                  "type": "string",
+                  "enum": ["A", "B", "C"]
+                },
+                "nativeEnum": {
+                  "description": "The letter A, B, or C",
+                  "type": "string",
+                  "enum": ["A", "B", "C"]
+                },
+                "unionPrimitives": {
+                  "description": "sample text or number",
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ]
+                },
+                "unionObjects": {
+                  "description": "give an valid object",
+                  "anyOf": [
+                    {
+                      "required": ["amount", "inventoryItemName"],
+                      "type": "object",
+                      "properties": {
+                        "amount": {
+                          "type": "number"
+                        },
+                        "inventoryItemName": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "required": ["type", "permissions"],
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string"
+                        },
+                        "permissions": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "default": {
+                  "description": "sample text that is the default value",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "You are a test agent. Your task is to respond with valid JSON matching the schema provided. When a field is optional or nullable please mark it as null.."
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1774602927022
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Fri, 27 Mar 2026 09:15:55 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=28550",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "{\"string\":\"sample text\",\"stringMin\":\"abcde\",\"stringMax\":\"abcdef\",\"stringEmail\":\"test@example.com\",\"stringEmoji\":\"😀\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"c123456789\",\"stringRegex\":\"test-123\",\"number\":1.23,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":42,\"exampleArray\":[\"a\",\"b\"],\"arrayMin\":[\"a\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2023-10-10T00:00:00Z\",\"dateAfter\":\"2024-02-01T00:00:00Z\",\"dateBefore\":\"2023-01-01T00:00:00Z\",\"actualData\":\"2023-10-10T00:00:00Z\",\"object\":{\"foo\":\"test\",\"bar\":1},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":18}},\"objectPassthrough\":{},\"objectLoose\":{},\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":1,\"unionObjects\":{\"amount\":1,\"inventoryItemName\":\"item\"},\"default\":\"default value\"}",
+                    "thoughtSignature": "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"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 33,
+            "candidatesTokenCount": 334,
+            "totalTokenCount": 3471,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 33
+              }
+            ],
+            "thoughtsTokenCount": 3104
+          },
+          "modelVersion": "gemini-3.1-pro-preview",
+          "responseId": "y0rGaZ_aI_GEvdIPjqu_kQI"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "77234633a0d7e59b",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Call the manySchemasTool tool with valid sample data."
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "name": "manySchemasTool",
+                  "description": "A test tool. Call this tool with valid data matching the schema. If the schema is optional or nullable, please mark it as null.",
+                  "parameters": {
+                    "required": [
+                      "string",
+                      "stringMin",
+                      "stringMax",
+                      "stringEmail",
+                      "stringEmoji",
+                      "stringUrl",
+                      "stringUuid",
+                      "stringCuid",
+                      "stringRegex",
+                      "number",
+                      "numberGt",
+                      "numberLt",
+                      "numberGte",
+                      "numberLte",
+                      "numberMultipleOf",
+                      "numberInt",
+                      "exampleArray",
+                      "arrayMin",
+                      "arrayMax",
+                      "date",
+                      "dateAfter",
+                      "dateBefore",
+                      "actualData",
+                      "object",
+                      "objectNested",
+                      "objectPassthrough",
+                      "objectLoose",
+                      "nullable",
+                      "enum",
+                      "nativeEnum",
+                      "unionPrimitives",
+                      "unionObjects",
+                      "default"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "string": {
+                        "description": "Sample text",
+                        "type": "string"
+                      },
+                      "stringMin": {
+                        "description": "sample text with a minimum of 5 characters\nconstraints: minimum length 5",
+                        "type": "string"
+                      },
+                      "stringMax": {
+                        "description": "sample text with a maximum of 10 characters\nconstraints: maximum length 10",
+                        "type": "string"
+                      },
+                      "stringEmail": {
+                        "description": "a sample email address\nconstraints: a valid email",
+                        "type": "string"
+                      },
+                      "stringEmoji": {
+                        "description": "a valid sample emoji\nconstraints: a valid emoji",
+                        "type": "string"
+                      },
+                      "stringUrl": {
+                        "description": "a valid sample url\nconstraints: a valid uri",
+                        "type": "string"
+                      },
+                      "stringUuid": {
+                        "description": "a valid sample uuid\nconstraints: a valid uuid",
+                        "type": "string"
+                      },
+                      "stringCuid": {
+                        "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$",
+                        "format": "cuid",
+                        "type": "string"
+                      },
+                      "stringRegex": {
+                        "description": "a valid sample string that satisfies the regex\nconstraints: input must match this regex ^test-",
+                        "type": "string"
+                      },
+                      "number": {
+                        "description": "any valid sample number",
+                        "type": "number"
+                      },
+                      "numberGt": {
+                        "description": "any valid sample number greater than 3\nconstraints: greater than 3",
+                        "type": "number"
+                      },
+                      "numberLt": {
+                        "description": "any valid sample number less than 6\nconstraints: lower than 6",
+                        "type": "number"
+                      },
+                      "numberGte": {
+                        "description": "any valid sample number greater than or equal to 1\nconstraints: greater than or equal to 1",
+                        "type": "number"
+                      },
+                      "numberLte": {
+                        "description": "any valid sample number less than or equal to 1\nconstraints: lower than or equal to 1",
+                        "type": "number"
+                      },
+                      "numberMultipleOf": {
+                        "description": "any valid sample number that is a multiple of 2\nconstraints: multiple of 2",
+                        "type": "number"
+                      },
+                      "numberInt": {
+                        "description": "any valid sample number that is an integer",
+                        "type": "integer"
+                      },
+                      "exampleArray": {
+                        "description": "any valid array of example strings",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "arrayMin": {
+                        "description": "any valid sample array of strings with a minimum of 1 string\nconstraints: minimum length 1",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "arrayMax": {
+                        "description": "any valid sample array of strings with a maximum of 5 strings\nconstraints: maximum length 5",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "date": {
+                        "description": "a valid sample date\nconstraints: a valid date-time",
+                        "type": "string"
+                      },
+                      "dateAfter": {
+                        "description": "a valid sample date after 2024-01-01\nconstraints: a valid date-time",
+                        "type": "string"
+                      },
+                      "dateBefore": {
+                        "description": "a valid sample date before today\nconstraints: a valid date-time",
+                        "type": "string"
+                      },
+                      "actualData": {
+                        "description": "a valid sample date\nconstraints: a valid date-time",
+                        "type": "string"
+                      },
+                      "object": {
+                        "description": "any valid sample object with a string and a number",
+                        "required": ["foo", "bar"],
+                        "type": "object",
+                        "properties": {
+                          "foo": {
+                            "type": "string"
+                          },
+                          "bar": {
+                            "type": "number"
+                          }
+                        }
+                      },
+                      "objectNested": {
+                        "description": "any valid sample data",
+                        "required": ["user"],
+                        "type": "object",
+                        "properties": {
+                          "user": {
+                            "required": ["name", "age"],
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "description": "constraints: minimum length 2",
+                                "type": "string"
+                              },
+                              "age": {
+                                "description": "constraints: greater than or equal to 18",
+                                "type": "number"
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "objectPassthrough": {
+                        "description": "any sample object with example keys and data",
+                        "required": [],
+                        "type": "object",
+                        "properties": {}
+                      },
+                      "objectLoose": {
+                        "description": "any sample object with example keys and data",
+                        "required": [],
+                        "type": "object",
+                        "properties": {}
+                      },
+                      "optional": {
+                        "description": "leave this field empty as an example of an optional field",
+                        "type": "string"
+                      },
+                      "nullable": {
+                        "description": "leave this field empty as an example of a nullable field",
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "enum": {
+                        "description": "The letter A, B, or C",
+                        "type": "string",
+                        "enum": ["A", "B", "C"]
+                      },
+                      "nativeEnum": {
+                        "description": "The letter A, B, or C",
+                        "type": "string",
+                        "enum": ["A", "B", "C"]
+                      },
+                      "unionPrimitives": {
+                        "description": "sample text or number",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ]
+                      },
+                      "unionObjects": {
+                        "description": "give an valid object",
+                        "anyOf": [
+                          {
+                            "required": ["amount", "inventoryItemName"],
+                            "type": "object",
+                            "properties": {
+                              "amount": {
+                                "type": "number"
+                              },
+                              "inventoryItemName": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "required": ["type", "permissions"],
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              },
+                              "permissions": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "default": {
+                        "description": "sample text that is the default value",
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "toolConfig": {
+            "functionCallingConfig": {
+              "mode": "AUTO"
+            }
+          }
+        },
+        "timestamp": 1774602955756
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Fri, 27 Mar 2026 09:16:19 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=23502",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "functionCall": {
+                      "name": "manySchemasTool",
+                      "args": {
+                        "numberGte": 1,
+                        "stringEmoji": "🚀",
+                        "nullable": null,
+                        "arrayMin": ["test"],
+                        "actualData": "2024-05-20T12:00:00.000Z",
+                        "dateAfter": "2024-02-01T00:00:00.000Z",
+                        "exampleArray": ["foo", "bar"],
+                        "stringUrl": "https://example.com",
+                        "objectLoose": {
+                          "any": "data"
+                        },
+                        "string": "Sample text",
+                        "enum": "A",
+                        "dateBefore": "2023-01-01T00:00:00.000Z",
+                        "number": 42.5,
+                        "stringMin": "hello",
+                        "objectNested": {
+                          "user": {
+                            "age": 20,
+                            "name": "Bob"
+                          }
+                        },
+                        "date": "2023-10-10T14:48:00.000Z",
+                        "stringMax": "hello",
+                        "unionPrimitives": 99,
+                        "nativeEnum": "B",
+                        "unionObjects": {
+                          "inventoryItemName": "apple",
+                          "amount": 5
+                        },
+                        "numberMultipleOf": 4,
+                        "numberLte": 1,
+                        "numberGt": 4,
+                        "default": "default text",
+                        "objectPassthrough": {
+                          "custom": "field"
+                        },
+                        "numberInt": 10,
+                        "stringCuid": "cjld2cjxh0000qzrmn831i7rn",
+                        "stringEmail": "test@example.com",
+                        "numberLt": 5,
+                        "stringRegex": "test-data",
+                        "stringUuid": "550e8400-e29b-41d4-a716-446655440000",
+                        "arrayMax": ["a", "b", "c"],
+                        "object": {
+                          "foo": "value",
+                          "bar": 100
+                        }
+                      },
+                      "id": "9ibfeglz"
+                    },
+                    "thoughtSignature": "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"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0,
+              "finishMessage": "Model generated function call(s)."
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 1360,
+            "candidatesTokenCount": 423,
+            "totalTokenCount": 4444,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 1360
+              }
+            ],
+            "thoughtsTokenCount": 2661
+          },
+          "modelVersion": "gemini-3.1-pro-preview",
+          "responseId": "40rGaaOhDvap28oPp9me6AY"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "f1640c368e05fc8b",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Call the manySchemasTool tool with valid sample data."
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "functionCall": {
+                    "name": "manySchemasTool",
+                    "args": {
+                      "numberGte": 1,
+                      "stringEmoji": "🚀",
+                      "nullable": null,
+                      "arrayMin": ["test"],
+                      "actualData": "2024-05-20T12:00:00.000Z",
+                      "dateAfter": "2024-02-01T00:00:00.000Z",
+                      "exampleArray": ["foo", "bar"],
+                      "stringUrl": "https://example.com",
+                      "objectLoose": {
+                        "any": "data"
+                      },
+                      "string": "Sample text",
+                      "enum": "A",
+                      "dateBefore": "2023-01-01T00:00:00.000Z",
+                      "number": 42.5,
+                      "stringMin": "hello",
+                      "objectNested": {
+                        "user": {
+                          "age": 20,
+                          "name": "Bob"
+                        }
+                      },
+                      "date": "2023-10-10T14:48:00.000Z",
+                      "stringMax": "hello",
+                      "unionPrimitives": 99,
+                      "nativeEnum": "B",
+                      "unionObjects": {
+                        "inventoryItemName": "apple",
+                        "amount": 5
+                      },
+                      "numberMultipleOf": 4,
+                      "numberLte": 1,
+                      "numberGt": 4,
+                      "default": "default text",
+                      "objectPassthrough": {
+                        "custom": "field"
+                      },
+                      "numberInt": 10,
+                      "stringCuid": "cjld2cjxh0000qzrmn831i7rn",
+                      "stringEmail": "test@example.com",
+                      "numberLt": 5,
+                      "stringRegex": "test-data",
+                      "stringUuid": "550e8400-e29b-41d4-a716-446655440000",
+                      "arrayMax": ["a", "b", "c"],
+                      "object": {
+                        "foo": "value",
+                        "bar": 100
+                      }
+                    }
+                  },
+                  "thoughtSignature": "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"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "functionResponse": {
+                    "name": "manySchemasTool",
+                    "response": {
+                      "name": "manySchemasTool",
+                      "content": {
+                        "numberGte": 1,
+                        "stringEmoji": "🚀",
+                        "nullable": null,
+                        "arrayMin": ["test"],
+                        "actualData": "2024-05-20T12:00:00.000Z",
+                        "dateAfter": "2024-02-01T00:00:00.000Z",
+                        "exampleArray": ["foo", "bar"],
+                        "stringUrl": "https://example.com",
+                        "objectLoose": {
+                          "any": "data"
+                        },
+                        "string": "Sample text",
+                        "enum": "A",
+                        "dateBefore": "2023-01-01T00:00:00.000Z",
+                        "number": 42.5,
+                        "stringMin": "hello",
+                        "objectNested": {
+                          "user": {
+                            "age": 20,
+                            "name": "Bob"
+                          }
+                        },
+                        "date": "2023-10-10T14:48:00.000Z",
+                        "stringMax": "hello",
+                        "unionPrimitives": 99,
+                        "nativeEnum": "B",
+                        "unionObjects": {
+                          "inventoryItemName": "apple",
+                          "amount": 5
+                        },
+                        "numberMultipleOf": 4,
+                        "numberLte": 1,
+                        "numberGt": 4,
+                        "default": "default text",
+                        "objectPassthrough": {
+                          "custom": "field"
+                        },
+                        "numberInt": 10,
+                        "stringCuid": "cjld2cjxh0000qzrmn831i7rn",
+                        "stringEmail": "test@example.com",
+                        "numberLt": 5,
+                        "stringRegex": "test-data",
+                        "stringUuid": "550e8400-e29b-41d4-a716-446655440000",
+                        "arrayMax": ["a", "b", "c"],
+                        "object": {
+                          "foo": "value",
+                          "bar": 100
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "name": "manySchemasTool",
+                  "description": "A test tool. Call this tool with valid data matching the schema. If the schema is optional or nullable, please mark it as null.",
+                  "parameters": {
+                    "required": [
+                      "string",
+                      "stringMin",
+                      "stringMax",
+                      "stringEmail",
+                      "stringEmoji",
+                      "stringUrl",
+                      "stringUuid",
+                      "stringCuid",
+                      "stringRegex",
+                      "number",
+                      "numberGt",
+                      "numberLt",
+                      "numberGte",
+                      "numberLte",
+                      "numberMultipleOf",
+                      "numberInt",
+                      "exampleArray",
+                      "arrayMin",
+                      "arrayMax",
+                      "date",
+                      "dateAfter",
+                      "dateBefore",
+                      "actualData",
+                      "object",
+                      "objectNested",
+                      "objectPassthrough",
+                      "objectLoose",
+                      "nullable",
+                      "enum",
+                      "nativeEnum",
+                      "unionPrimitives",
+                      "unionObjects",
+                      "default"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "string": {
+                        "description": "Sample text",
+                        "type": "string"
+                      },
+                      "stringMin": {
+                        "description": "sample text with a minimum of 5 characters\nconstraints: minimum length 5",
+                        "type": "string"
+                      },
+                      "stringMax": {
+                        "description": "sample text with a maximum of 10 characters\nconstraints: maximum length 10",
+                        "type": "string"
+                      },
+                      "stringEmail": {
+                        "description": "a sample email address\nconstraints: a valid email",
+                        "type": "string"
+                      },
+                      "stringEmoji": {
+                        "description": "a valid sample emoji\nconstraints: a valid emoji",
+                        "type": "string"
+                      },
+                      "stringUrl": {
+                        "description": "a valid sample url\nconstraints: a valid uri",
+                        "type": "string"
+                      },
+                      "stringUuid": {
+                        "description": "a valid sample uuid\nconstraints: a valid uuid",
+                        "type": "string"
+                      },
+                      "stringCuid": {
+                        "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$",
+                        "format": "cuid",
+                        "type": "string"
+                      },
+                      "stringRegex": {
+                        "description": "a valid sample string that satisfies the regex\nconstraints: input must match this regex ^test-",
+                        "type": "string"
+                      },
+                      "number": {
+                        "description": "any valid sample number",
+                        "type": "number"
+                      },
+                      "numberGt": {
+                        "description": "any valid sample number greater than 3\nconstraints: greater than 3",
+                        "type": "number"
+                      },
+                      "numberLt": {
+                        "description": "any valid sample number less than 6\nconstraints: lower than 6",
+                        "type": "number"
+                      },
+                      "numberGte": {
+                        "description": "any valid sample number greater than or equal to 1\nconstraints: greater than or equal to 1",
+                        "type": "number"
+                      },
+                      "numberLte": {
+                        "description": "any valid sample number less than or equal to 1\nconstraints: lower than or equal to 1",
+                        "type": "number"
+                      },
+                      "numberMultipleOf": {
+                        "description": "any valid sample number that is a multiple of 2\nconstraints: multiple of 2",
+                        "type": "number"
+                      },
+                      "numberInt": {
+                        "description": "any valid sample number that is an integer",
+                        "type": "integer"
+                      },
+                      "exampleArray": {
+                        "description": "any valid array of example strings",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "arrayMin": {
+                        "description": "any valid sample array of strings with a minimum of 1 string\nconstraints: minimum length 1",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "arrayMax": {
+                        "description": "any valid sample array of strings with a maximum of 5 strings\nconstraints: maximum length 5",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "date": {
+                        "description": "a valid sample date\nconstraints: a valid date-time",
+                        "type": "string"
+                      },
+                      "dateAfter": {
+                        "description": "a valid sample date after 2024-01-01\nconstraints: a valid date-time",
+                        "type": "string"
+                      },
+                      "dateBefore": {
+                        "description": "a valid sample date before today\nconstraints: a valid date-time",
+                        "type": "string"
+                      },
+                      "actualData": {
+                        "description": "a valid sample date\nconstraints: a valid date-time",
+                        "type": "string"
+                      },
+                      "object": {
+                        "description": "any valid sample object with a string and a number",
+                        "required": ["foo", "bar"],
+                        "type": "object",
+                        "properties": {
+                          "foo": {
+                            "type": "string"
+                          },
+                          "bar": {
+                            "type": "number"
+                          }
+                        }
+                      },
+                      "objectNested": {
+                        "description": "any valid sample data",
+                        "required": ["user"],
+                        "type": "object",
+                        "properties": {
+                          "user": {
+                            "required": ["name", "age"],
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "description": "constraints: minimum length 2",
+                                "type": "string"
+                              },
+                              "age": {
+                                "description": "constraints: greater than or equal to 18",
+                                "type": "number"
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "objectPassthrough": {
+                        "description": "any sample object with example keys and data",
+                        "required": [],
+                        "type": "object",
+                        "properties": {}
+                      },
+                      "objectLoose": {
+                        "description": "any sample object with example keys and data",
+                        "required": [],
+                        "type": "object",
+                        "properties": {}
+                      },
+                      "optional": {
+                        "description": "leave this field empty as an example of an optional field",
+                        "type": "string"
+                      },
+                      "nullable": {
+                        "description": "leave this field empty as an example of a nullable field",
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "enum": {
+                        "description": "The letter A, B, or C",
+                        "type": "string",
+                        "enum": ["A", "B", "C"]
+                      },
+                      "nativeEnum": {
+                        "description": "The letter A, B, or C",
+                        "type": "string",
+                        "enum": ["A", "B", "C"]
+                      },
+                      "unionPrimitives": {
+                        "description": "sample text or number",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ]
+                      },
+                      "unionObjects": {
+                        "description": "give an valid object",
+                        "anyOf": [
+                          {
+                            "required": ["amount", "inventoryItemName"],
+                            "type": "object",
+                            "properties": {
+                              "amount": {
+                                "type": "number"
+                              },
+                              "inventoryItemName": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "required": ["type", "permissions"],
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              },
+                              "permissions": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "default": {
+                        "description": "sample text that is the default value",
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "toolConfig": {
+            "functionCallingConfig": {
+              "mode": "AUTO"
+            }
+          }
+        },
+        "timestamp": 1774602979292
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Fri, 27 Mar 2026 09:16:22 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=3501",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "I have successfully called the `manySchemasTool` with valid sample data that matches all the specified schemas and constraints. Let me know if you need anything else!",
+                    "thoughtSignature": "EpYBCpMBAb4+9vsZZLpGDN1hIrMyDES9z98vqvxpvLFeLvx0R32IunI22f1Wf2xAsJL3gLc6Us7HBG71tHoIoRXLUs/oqOxPHi4zbvlj4nyKouI2oD2i2l4NSMaJ/1U+5XKYx9j8abImIv7KmzDe8X8/GJ1e7rZzhynhOSolSohLxKcpvXgrih2PWCQiouT3H6R4RvfCJUYt"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 4875,
+            "candidatesTokenCount": 32,
+            "totalTokenCount": 4926,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 4875
+              }
+            ],
+            "thoughtsTokenCount": 19
+          },
+          "modelVersion": "gemini-3.1-pro-preview",
+          "responseId": "5krGaev6LKqMvdIPnoam6AQ"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "dbc32a6cc2fd5ab7",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Call the manySchemasTool tool with valid sample data and return the validated tool output."
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "name": "manySchemasTool",
+                  "description": "A test tool. Call this tool with valid data matching the schema. If the schema is optional or nullable, please mark it as null.",
+                  "parameters": {
+                    "required": [
+                      "string",
+                      "stringMin",
+                      "stringMax",
+                      "stringEmail",
+                      "stringEmoji",
+                      "stringUrl",
+                      "stringUuid",
+                      "stringCuid",
+                      "stringRegex",
+                      "number",
+                      "numberGt",
+                      "numberLt",
+                      "numberGte",
+                      "numberLte",
+                      "numberMultipleOf",
+                      "numberInt",
+                      "exampleArray",
+                      "arrayMin",
+                      "arrayMax",
+                      "date",
+                      "dateAfter",
+                      "dateBefore",
+                      "actualData",
+                      "object",
+                      "objectNested",
+                      "objectPassthrough",
+                      "objectLoose",
+                      "nullable",
+                      "enum",
+                      "nativeEnum",
+                      "unionPrimitives",
+                      "unionObjects",
+                      "default"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "string": {
+                        "description": "Sample text",
+                        "type": "string"
+                      },
+                      "stringMin": {
+                        "description": "sample text with a minimum of 5 characters\nconstraints: minimum length 5",
+                        "type": "string"
+                      },
+                      "stringMax": {
+                        "description": "sample text with a maximum of 10 characters\nconstraints: maximum length 10",
+                        "type": "string"
+                      },
+                      "stringEmail": {
+                        "description": "a sample email address\nconstraints: a valid email",
+                        "type": "string"
+                      },
+                      "stringEmoji": {
+                        "description": "a valid sample emoji\nconstraints: a valid emoji",
+                        "type": "string"
+                      },
+                      "stringUrl": {
+                        "description": "a valid sample url\nconstraints: a valid uri",
+                        "type": "string"
+                      },
+                      "stringUuid": {
+                        "description": "a valid sample uuid\nconstraints: a valid uuid",
+                        "type": "string"
+                      },
+                      "stringCuid": {
+                        "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$",
+                        "format": "cuid",
+                        "type": "string"
+                      },
+                      "stringRegex": {
+                        "description": "a valid sample string that satisfies the regex\nconstraints: input must match this regex ^test-",
+                        "type": "string"
+                      },
+                      "number": {
+                        "description": "any valid sample number",
+                        "type": "number"
+                      },
+                      "numberGt": {
+                        "description": "any valid sample number greater than 3\nconstraints: greater than 3",
+                        "type": "number"
+                      },
+                      "numberLt": {
+                        "description": "any valid sample number less than 6\nconstraints: lower than 6",
+                        "type": "number"
+                      },
+                      "numberGte": {
+                        "description": "any valid sample number greater than or equal to 1\nconstraints: greater than or equal to 1",
+                        "type": "number"
+                      },
+                      "numberLte": {
+                        "description": "any valid sample number less than or equal to 1\nconstraints: lower than or equal to 1",
+                        "type": "number"
+                      },
+                      "numberMultipleOf": {
+                        "description": "any valid sample number that is a multiple of 2\nconstraints: multiple of 2",
+                        "type": "number"
+                      },
+                      "numberInt": {
+                        "description": "any valid sample number that is an integer",
+                        "type": "integer"
+                      },
+                      "exampleArray": {
+                        "description": "any valid array of example strings",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "arrayMin": {
+                        "description": "any valid sample array of strings with a minimum of 1 string\nconstraints: minimum length 1",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "arrayMax": {
+                        "description": "any valid sample array of strings with a maximum of 5 strings\nconstraints: maximum length 5",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "date": {
+                        "description": "a valid sample date\nconstraints: a valid date-time",
+                        "type": "string"
+                      },
+                      "dateAfter": {
+                        "description": "a valid sample date after 2024-01-01\nconstraints: a valid date-time",
+                        "type": "string"
+                      },
+                      "dateBefore": {
+                        "description": "a valid sample date before today\nconstraints: a valid date-time",
+                        "type": "string"
+                      },
+                      "actualData": {
+                        "description": "a valid sample date\nconstraints: a valid date-time",
+                        "type": "string"
+                      },
+                      "object": {
+                        "description": "any valid sample object with a string and a number",
+                        "required": ["foo", "bar"],
+                        "type": "object",
+                        "properties": {
+                          "foo": {
+                            "type": "string"
+                          },
+                          "bar": {
+                            "type": "number"
+                          }
+                        }
+                      },
+                      "objectNested": {
+                        "description": "any valid sample data",
+                        "required": ["user"],
+                        "type": "object",
+                        "properties": {
+                          "user": {
+                            "required": ["name", "age"],
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "description": "constraints: minimum length 2",
+                                "type": "string"
+                              },
+                              "age": {
+                                "description": "constraints: greater than or equal to 18",
+                                "type": "number"
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "objectPassthrough": {
+                        "description": "any sample object with example keys and data",
+                        "required": [],
+                        "type": "object",
+                        "properties": {}
+                      },
+                      "objectLoose": {
+                        "description": "any sample object with example keys and data",
+                        "required": [],
+                        "type": "object",
+                        "properties": {}
+                      },
+                      "optional": {
+                        "description": "leave this field empty as an example of an optional field",
+                        "type": "string"
+                      },
+                      "nullable": {
+                        "description": "leave this field empty as an example of a nullable field",
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "enum": {
+                        "description": "The letter A, B, or C",
+                        "type": "string",
+                        "enum": ["A", "B", "C"]
+                      },
+                      "nativeEnum": {
+                        "description": "The letter A, B, or C",
+                        "type": "string",
+                        "enum": ["A", "B", "C"]
+                      },
+                      "unionPrimitives": {
+                        "description": "sample text or number",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ]
+                      },
+                      "unionObjects": {
+                        "description": "give an valid object",
+                        "anyOf": [
+                          {
+                            "required": ["amount", "inventoryItemName"],
+                            "type": "object",
+                            "properties": {
+                              "amount": {
+                                "type": "number"
+                              },
+                              "inventoryItemName": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "required": ["type", "permissions"],
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              },
+                              "permissions": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "default": {
+                        "description": "sample text that is the default value",
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "toolConfig": {
+            "functionCallingConfig": {
+              "mode": "AUTO"
+            }
+          }
+        },
+        "timestamp": 1774602982827
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Fri, 27 Mar 2026 09:17:00 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=37643",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "functionCall": {
+                      "name": "manySchemasTool",
+                      "args": {
+                        "objectPassthrough": {
+                          "key": "value"
+                        },
+                        "stringEmail": "test@example.com",
+                        "dateBefore": "2022-01-01T10:00:00Z",
+                        "numberGt": 5,
+                        "date": "2023-10-15T10:00:00Z",
+                        "numberLt": 2,
+                        "arrayMin": ["minimum"],
+                        "object": {
+                          "bar": 123,
+                          "foo": "test"
+                        },
+                        "stringRegex": "test-data",
+                        "exampleArray": ["one", "two"],
+                        "arrayMax": ["a", "b", "c"],
+                        "numberInt": 10,
+                        "actualData": "2024-05-15T12:00:00Z",
+                        "nullable": null,
+                        "stringMin": "Hello World",
+                        "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
+                        "default": "default text",
+                        "numberGte": 1,
+                        "nativeEnum": "B",
+                        "stringCuid": "c123456789",
+                        "string": "Sample text",
+                        "number": 42,
+                        "numberMultipleOf": 4,
+                        "numberLte": 0,
+                        "stringUrl": "https://example.com",
+                        "objectNested": {
+                          "user": {
+                            "age": 25,
+                            "name": "Alice"
+                          }
+                        },
+                        "stringEmoji": "😀",
+                        "dateAfter": "2025-01-01T10:00:00Z",
+                        "objectLoose": {
+                          "key": "value"
+                        },
+                        "enum": "A",
+                        "stringMax": "Short",
+                        "unionObjects": {
+                          "amount": 10,
+                          "inventoryItemName": "Widget"
+                        },
+                        "unionPrimitives": "Union string"
+                      },
+                      "id": "6erag00e"
+                    },
+                    "thoughtSignature": "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"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0,
+              "finishMessage": "Model generated function call(s)."
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 1366,
+            "candidatesTokenCount": 401,
+            "totalTokenCount": 5654,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 1366
+              }
+            ],
+            "thoughtsTokenCount": 3887
+          },
+          "modelVersion": "gemini-3.1-pro-preview",
+          "responseId": "DEvGaY28GJONvdIPqv322Ac"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "cfda9397bc7c125f",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Call the manySchemasTool tool with valid sample data and return the validated tool output."
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "functionCall": {
+                    "name": "manySchemasTool",
+                    "args": {
+                      "objectPassthrough": {
+                        "key": "value"
+                      },
+                      "stringEmail": "test@example.com",
+                      "dateBefore": "2022-01-01T10:00:00Z",
+                      "numberGt": 5,
+                      "date": "2023-10-15T10:00:00Z",
+                      "numberLt": 2,
+                      "arrayMin": ["minimum"],
+                      "object": {
+                        "bar": 123,
+                        "foo": "test"
+                      },
+                      "stringRegex": "test-data",
+                      "exampleArray": ["one", "two"],
+                      "arrayMax": ["a", "b", "c"],
+                      "numberInt": 10,
+                      "actualData": "2024-05-15T12:00:00.000Z",
+                      "nullable": null,
+                      "stringMin": "Hello World",
+                      "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
+                      "default": "default text",
+                      "numberGte": 1,
+                      "nativeEnum": "B",
+                      "stringCuid": "c123456789",
+                      "string": "Sample text",
+                      "number": 42,
+                      "numberMultipleOf": 4,
+                      "numberLte": 0,
+                      "stringUrl": "https://example.com",
+                      "objectNested": {
+                        "user": {
+                          "age": 25,
+                          "name": "Alice"
+                        }
+                      },
+                      "stringEmoji": "😀",
+                      "dateAfter": "2025-01-01T10:00:00Z",
+                      "objectLoose": {
+                        "key": "value"
+                      },
+                      "enum": "A",
+                      "stringMax": "Short",
+                      "unionObjects": {
+                        "amount": 10,
+                        "inventoryItemName": "Widget"
+                      },
+                      "unionPrimitives": "Union string"
+                    }
+                  },
+                  "thoughtSignature": "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"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "functionResponse": {
+                    "name": "manySchemasTool",
+                    "response": {
+                      "name": "manySchemasTool",
+                      "content": {
+                        "string": "Sample text",
+                        "stringMin": "Hello World",
+                        "stringMax": "Short",
+                        "stringEmail": "test@example.com",
+                        "stringEmoji": "😀",
+                        "stringUrl": "https://example.com",
+                        "stringUuid": "123e4567-e89b-12d3-a456-426614174000",
+                        "stringCuid": "c123456789",
+                        "stringRegex": "test-data",
+                        "number": 42,
+                        "numberGt": 5,
+                        "numberLt": 2,
+                        "numberGte": 1,
+                        "numberLte": 0,
+                        "numberMultipleOf": 4,
+                        "numberInt": 10,
+                        "exampleArray": ["one", "two"],
+                        "arrayMin": ["minimum"],
+                        "arrayMax": ["a", "b", "c"],
+                        "date": "2023-10-15T10:00:00.000Z",
+                        "dateAfter": "2025-01-01T10:00:00.000Z",
+                        "dateBefore": "2022-01-01T10:00:00.000Z",
+                        "actualData": "2024-05-15T12:00:00.000Z",
+                        "object": {
+                          "foo": "test",
+                          "bar": 123
+                        },
+                        "objectNested": {
+                          "user": {
+                            "name": "Alice",
+                            "age": 25
+                          }
+                        },
+                        "objectPassthrough": {
+                          "key": "value"
+                        },
+                        "objectLoose": {
+                          "key": "value"
+                        },
+                        "nullable": null,
+                        "enum": "A",
+                        "nativeEnum": "B",
+                        "unionPrimitives": "Union string",
+                        "unionObjects": {
+                          "amount": 10,
+                          "inventoryItemName": "Widget"
+                        },
+                        "default": "default text"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "name": "manySchemasTool",
+                  "description": "A test tool. Call this tool with valid data matching the schema. If the schema is optional or nullable, please mark it as null.",
+                  "parameters": {
+                    "required": [
+                      "string",
+                      "stringMin",
+                      "stringMax",
+                      "stringEmail",
+                      "stringEmoji",
+                      "stringUrl",
+                      "stringUuid",
+                      "stringCuid",
+                      "stringRegex",
+                      "number",
+                      "numberGt",
+                      "numberLt",
+                      "numberGte",
+                      "numberLte",
+                      "numberMultipleOf",
+                      "numberInt",
+                      "exampleArray",
+                      "arrayMin",
+                      "arrayMax",
+                      "date",
+                      "dateAfter",
+                      "dateBefore",
+                      "actualData",
+                      "object",
+                      "objectNested",
+                      "objectPassthrough",
+                      "objectLoose",
+                      "nullable",
+                      "enum",
+                      "nativeEnum",
+                      "unionPrimitives",
+                      "unionObjects",
+                      "default"
+                    ],
+                    "type": "object",
+                    "properties": {
+                      "string": {
+                        "description": "Sample text",
+                        "type": "string"
+                      },
+                      "stringMin": {
+                        "description": "sample text with a minimum of 5 characters\nconstraints: minimum length 5",
+                        "type": "string"
+                      },
+                      "stringMax": {
+                        "description": "sample text with a maximum of 10 characters\nconstraints: maximum length 10",
+                        "type": "string"
+                      },
+                      "stringEmail": {
+                        "description": "a sample email address\nconstraints: a valid email",
+                        "type": "string"
+                      },
+                      "stringEmoji": {
+                        "description": "a valid sample emoji\nconstraints: a valid emoji",
+                        "type": "string"
+                      },
+                      "stringUrl": {
+                        "description": "a valid sample url\nconstraints: a valid uri",
+                        "type": "string"
+                      },
+                      "stringUuid": {
+                        "description": "a valid sample uuid\nconstraints: a valid uuid",
+                        "type": "string"
+                      },
+                      "stringCuid": {
+                        "description": "a valid sample cuid\nconstraints: input must match this regex ^[cC][^\\s-]{8,}$",
+                        "format": "cuid",
+                        "type": "string"
+                      },
+                      "stringRegex": {
+                        "description": "a valid sample string that satisfies the regex\nconstraints: input must match this regex ^test-",
+                        "type": "string"
+                      },
+                      "number": {
+                        "description": "any valid sample number",
+                        "type": "number"
+                      },
+                      "numberGt": {
+                        "description": "any valid sample number greater than 3\nconstraints: greater than 3",
+                        "type": "number"
+                      },
+                      "numberLt": {
+                        "description": "any valid sample number less than 6\nconstraints: lower than 6",
+                        "type": "number"
+                      },
+                      "numberGte": {
+                        "description": "any valid sample number greater than or equal to 1\nconstraints: greater than or equal to 1",
+                        "type": "number"
+                      },
+                      "numberLte": {
+                        "description": "any valid sample number less than or equal to 1\nconstraints: lower than or equal to 1",
+                        "type": "number"
+                      },
+                      "numberMultipleOf": {
+                        "description": "any valid sample number that is a multiple of 2\nconstraints: multiple of 2",
+                        "type": "number"
+                      },
+                      "numberInt": {
+                        "description": "any valid sample number that is an integer",
+                        "type": "integer"
+                      },
+                      "exampleArray": {
+                        "description": "any valid array of example strings",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "arrayMin": {
+                        "description": "any valid sample array of strings with a minimum of 1 string\nconstraints: minimum length 1",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "arrayMax": {
+                        "description": "any valid sample array of strings with a maximum of 5 strings\nconstraints: maximum length 5",
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "date": {
+                        "description": "a valid sample date\nconstraints: a valid date-time",
+                        "type": "string"
+                      },
+                      "dateAfter": {
+                        "description": "a valid sample date after 2024-01-01\nconstraints: a valid date-time",
+                        "type": "string"
+                      },
+                      "dateBefore": {
+                        "description": "a valid sample date before today\nconstraints: a valid date-time",
+                        "type": "string"
+                      },
+                      "actualData": {
+                        "description": "a valid sample date\nconstraints: a valid date-time",
+                        "type": "string"
+                      },
+                      "object": {
+                        "description": "any valid sample object with a string and a number",
+                        "required": ["foo", "bar"],
+                        "type": "object",
+                        "properties": {
+                          "foo": {
+                            "type": "string"
+                          },
+                          "bar": {
+                            "type": "number"
+                          }
+                        }
+                      },
+                      "objectNested": {
+                        "description": "any valid sample data",
+                        "required": ["user"],
+                        "type": "object",
+                        "properties": {
+                          "user": {
+                            "required": ["name", "age"],
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "description": "constraints: minimum length 2",
+                                "type": "string"
+                              },
+                              "age": {
+                                "description": "constraints: greater than or equal to 18",
+                                "type": "number"
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "objectPassthrough": {
+                        "description": "any sample object with example keys and data",
+                        "required": [],
+                        "type": "object",
+                        "properties": {}
+                      },
+                      "objectLoose": {
+                        "description": "any sample object with example keys and data",
+                        "required": [],
+                        "type": "object",
+                        "properties": {}
+                      },
+                      "optional": {
+                        "description": "leave this field empty as an example of an optional field",
+                        "type": "string"
+                      },
+                      "nullable": {
+                        "description": "leave this field empty as an example of a nullable field",
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "enum": {
+                        "description": "The letter A, B, or C",
+                        "type": "string",
+                        "enum": ["A", "B", "C"]
+                      },
+                      "nativeEnum": {
+                        "description": "The letter A, B, or C",
+                        "type": "string",
+                        "enum": ["A", "B", "C"]
+                      },
+                      "unionPrimitives": {
+                        "description": "sample text or number",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ]
+                      },
+                      "unionObjects": {
+                        "description": "give an valid object",
+                        "anyOf": [
+                          {
+                            "required": ["amount", "inventoryItemName"],
+                            "type": "object",
+                            "properties": {
+                              "amount": {
+                                "type": "number"
+                              },
+                              "inventoryItemName": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "required": ["type", "permissions"],
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              },
+                              "permissions": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "default": {
+                        "description": "sample text that is the default value",
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "toolConfig": {
+            "functionCallingConfig": {
+              "mode": "AUTO"
+            }
+          }
+        },
+        "timestamp": 1774603020510
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Fri, 27 Mar 2026 09:17:07 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=7030",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "The tool call was successfully executed with the following validated sample data:\n\n```json\n{\n  \"actualData\": \"2024-05-15T12:00:00.000Z\",\n  \"arrayMax\": [\"a\", \"b\", \"c\"],\n  \"arrayMin\": [\"minimum\"],\n  \"date\": \"2023-10-15T10:00:00.000Z\",\n  \"dateAfter\": \"2025-01-01T10:00:00.000Z\",\n  \"dateBefore\": \"2022-01-01T10:00:00.000Z\",\n  \"default\": \"default text\",\n  \"enum\": \"A\",\n  \"exampleArray\": [\"one\", \"two\"],\n  \"nativeEnum\": \"B\",\n  \"nullable\": null,\n  \"number\": 42,\n  \"numberGt\": 5,\n  \"numberGte\": 1,\n  \"numberInt\": 10,\n  \"numberLt\": 2,\n  \"numberLte\": 0,\n  \"numberMultipleOf\": 4,\n  \"object\": {\n    \"bar\": 123,\n    \"foo\": \"test\"\n  },\n  \"objectLoose\": {\n    \"key\": \"value\"\n  },\n  \"objectNested\": {\n    \"user\": {\n      \"age\": 25,\n      \"name\": \"Alice\"\n    }\n  },\n  \"objectPassthrough\": {\n    \"key\": \"value\"\n  },\n  \"string\": \"Sample text\",\n  \"stringCuid\": \"c123456789\",\n  \"stringEmail\": \"test@example.com\",\n  \"stringEmoji\": \"😀\",\n  \"stringMax\": \"Short\",\n  \"stringMin\": \"Hello World\",\n  \"stringRegex\": \"test-data\",\n  \"stringUrl\": \"https://example.com\",\n  \"stringUuid\": \"123e4567-e89b-12d3-a456-426614174000\",\n  \"unionObjects\": {\n    \"amount\": 10,\n    \"inventoryItemName\": \"Widget\"\n  },\n  \"unionPrimitives\": \"Union string\"\n}\n```\n\nThe payload satisfies all explicit constraints including regex lengths, numeric limits, array item requirements, standard dates, and enum options! Optional fields were omitted, and nullable fields correctly reflected `null` values as per instructions.",
+                    "thoughtSignature": "EpcBCpQBAb4+9vtaRZq9lxDjwNj+5W5/HYvoVfHdeHtODXmI6rRy9gHTwEWh4cQf+mutQhtjLSc9zN+/km3XvWMU9nk0RXq4eiAqtQT8Qkdk9jLvfI7Bkjn7Bmymile6FkWBchIe001JJasXQdT8SCTsfiW8oQtBym2vMQ8x7E+Dc8fb+CUpq1ujIzemdMeSW7m9V+4zreKKAA=="
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 6083,
+            "candidatesTokenCount": 604,
+            "totalTokenCount": 6708,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 6083
+              }
+            ],
+            "thoughtsTokenCount": 21
+          },
+          "modelVersion": "gemini-3.1-pro-preview",
+          "responseId": "E0vGacXDHs3VvdIPwI-32QE"
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

@@ -21,7 +21,7 @@ export const mastra = new Mastra({
         serviceName: 'my-app',
         exporters: [
           new DefaultExporter(), // Persists traces for Mastra Studio
-          new CloudExporter(), // Sends to Mastra Cloud
+          new CloudExporter(), // Sends to Mastra platform
         ],
         spanOutputProcessors: [new SensitiveDataFilter()],
       },
@@ -33,7 +33,7 @@ export const mastra = new Mastra({
 ## Features
 
 - **Auto-instrumentation** - Traces agent runs, LLM calls, tool executions, and workflows
-- **Pluggable Exporters** - Exporters for Studio and Cloud, plus integrations for Arize, Braintrust, Langfuse, LangSmith, and OpenTelemetry
+- **Pluggable Exporters** - Exporters for Studio, plus integrations for Arize, Braintrust, Langfuse, LangSmith, and OpenTelemetry
 - **Sampling Strategies** - Always, ratio-based, or custom sampling
 - **Span Processors** - Transform or filter span data before export
 - **OpenTelemetry Compatible** - Standard trace/span ID formats for integration

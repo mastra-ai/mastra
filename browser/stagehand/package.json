@@ -30,7 +30,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@browserbasehq/stagehand": "^3.2.0"
+    "@browserbasehq/stagehand": "^3.2.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

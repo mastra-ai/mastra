@@ -1,5 +1,5 @@
-import { usePlaygroundStore } from '@mastra/playground-ui';
 import { createContext, useEffect } from 'react';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 type Theme = 'dark' | 'light' | 'system';
 type ResolvedTheme = 'dark' | 'light';
