@@ -603,7 +603,7 @@ export class Agent extends BaseResource {
           runId: (response as any).runId,
           toolCallId: clientToolCalls[0].toolCallId,
           resumeData: { __mastraClientToolResults: toolResults },
-          ...params,
+          requestContext,
         }) as unknown as Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
       }
     }
@@ -1934,7 +1934,6 @@ export class Agent extends BaseResource {
     toolCallId: string;
     resumeData?: any;
     requestContext?: RequestContext | Record<string, any>;
-    [key: string]: any;
   }): Promise<any> {
     const { requestContext, ...rest } = params;
     return this.request(`/agents/${this.agentId}/approve-tool-call-generate`, {
