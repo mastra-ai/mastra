@@ -1,3 +1,4 @@
+import { withPollingRetries } from '../../utils/polling.js';
 import { createApiClient, throwApiError } from '../auth/client.js';
 import { getToken } from '../auth/credentials.js';
 import type { paths } from '../platform-api.js';
@@ -140,9 +141,13 @@ export async function pollServerDeploy(
 
   try {
     while (Date.now() - start < maxWaitMs) {
-      const { data, error, response } = await client.GET('/v1/server/deploys/{id}', {
-        params: { path: { id: deployId } },
-      });
+      const result = await withPollingRetries(() =>
+        client.GET('/v1/server/deploys/{id}', {
+          params: { path: { id: deployId } },
+        }),
+      );
+
+      const { data, error, response } = result;
 
       if (error) {
         if (response.status === 401) {
