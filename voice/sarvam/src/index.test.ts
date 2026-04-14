@@ -10,7 +10,7 @@ import { SarvamVoice } from './index';
 describe('Sarvam AI Voice Integration Tests', () => {
   const voice = new SarvamVoice({
     speechModel: {
-      model: 'bulbul:v1',
+      model: 'bulbul:v3',
       apiKey: process.env.SARVAM_API_KEY!,
       language: 'en-IN',
     },
@@ -28,7 +28,7 @@ describe('Sarvam AI Voice Integration Tests', () => {
     }
 
     const speakers = await voice.getSpeakers();
-    voiceId = speakers.find(v => v.voiceId === 'meera')!.voiceId as SarvamVoiceId;
+    voiceId = speakers.find(v => v.voiceId === 'shubh')!.voiceId as SarvamVoiceId;
     expect(voiceId).toBeDefined();
   });
 
