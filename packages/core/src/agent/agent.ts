@@ -415,7 +415,7 @@ export class Agent<
       }
 
       // 2. Any of the sub-agent's tools has background.enabled === true
-      const subAgentTools = await subAgent.listTools({ requestContext });
+      const subAgentTools = await subAgent.convertTools({ requestContext, methodType: 'generate' });
       if (subAgentTools && typeof subAgentTools === 'object') {
         for (const tool of Object.values(subAgentTools)) {
           const bg = (tool as any)?.background as ToolBackgroundConfig | undefined;

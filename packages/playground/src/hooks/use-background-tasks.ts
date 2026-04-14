@@ -5,7 +5,7 @@ import { useMastraClient } from '@mastra/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 export interface BackgroundTaskEvent {
-  type: 'task.completed' | 'task.failed' | 'task.running' | 'task.cancelled';
+  type: 'task.completed' | 'task.failed' | 'task.running' | 'task.cancelled' | 'task.output';
   taskId: string;
   toolName: string;
   toolCallId: string;
@@ -66,6 +66,7 @@ export function useBackgroundTaskStream(options: UseBackgroundTaskStreamOptions 
   const [error, setError] = useState<Error | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const readerRef = useRef<ReadableStreamDefaultReader<any> | null>(null);
+  const connectSeqRef = useRef(0);
 
   const runningTasks = useMemo(() => {
     return Object.values(tasks).filter(task => task.status === 'running');
@@ -88,6 +89,7 @@ export function useBackgroundTaskStream(options: UseBackgroundTaskStreamOptions 
   }, []);
 
   const connect = useCallback(async () => {
+    const seq = ++connectSeqRef.current;
     cleanup();
     setError(null);
 
@@ -102,7 +104,9 @@ export function useBackgroundTaskStream(options: UseBackgroundTaskStreamOptions 
         return;
       }
 
-      setIsConnected(true);
+      if (seq === connectSeqRef.current) {
+        setIsConnected(true);
+      }
 
       // Get a reader from the ReadableStream and store it in ref
       const reader = stream.getReader();
@@ -119,10 +123,14 @@ export function useBackgroundTaskStream(options: UseBackgroundTaskStreamOptions 
       }
     } catch (err: any) {
       if (err?.name !== 'AbortError') {
-        setError(err instanceof Error ? err : new Error(String(err)));
+        if (seq === connectSeqRef.current) {
+          setError(err instanceof Error ? err : new Error(String(err)));
+        }
       }
     } finally {
-      setIsConnected(false);
+      if (seq === connectSeqRef.current) {
+        setIsConnected(false);
+      }
     }
   }, [client, agentId, runId, threadId, resourceId, cleanup]);
 
@@ -148,7 +156,12 @@ export function useBackgroundTaskStream(options: UseBackgroundTaskStreamOptions 
     setTasks(prev => {
       const newTasks = { ...prev };
       Object.values(newTasks).forEach(task => {
-        if (task.status === 'completed' || task.status === 'failed') {
+        if (
+          task.status === 'completed' ||
+          task.status === 'failed' ||
+          task.status === 'cancelled' ||
+          task.status === 'timed_out'
+        ) {
           delete newTasks[task.taskId];
         }
       });
