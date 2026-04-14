@@ -210,7 +210,7 @@ export class MastraAgentLairAuth extends MastraAuthProvider<VerifiedAgent> imple
    * Get the agent's audit trail URL as their profile URL.
    */
   getUserProfileUrl(user: User): string {
-    return `${this.baseUrl}/agents/${user.id}`;
+    return `${this.baseUrl}/agents/${encodeURIComponent(user.id)}`;
   }
 
   /**
@@ -231,7 +231,7 @@ export class MastraAgentLairAuth extends MastraAuthProvider<VerifiedAgent> imple
       const response = await fetch(`${this.baseUrl}/v1/trust/${encodeURIComponent(agentId)}`, {
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
+          Accept: 'application/json',
         },
         signal: controller.signal,
       });
