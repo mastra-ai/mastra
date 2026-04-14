@@ -8,7 +8,7 @@ When an experiment specifies `agentVersion`, the experiment pipeline now resolve
 
 **`entityVersionId` is now a first-class observability dimension**
 
-A new `entityVersionId` field is available on all observability records (spans, metrics, scores, feedback, logs). This enables filtering traces by version and grouping OLAP queries (breakdowns, timeseries, aggregations) by version. This replaces the previous `resolvedVersionId` attribute which was buried in span attributes and unfilterable.
+New `entityVersionId`, `parentEntityVersionId`, and `rootEntityVersionId` fields are available on all observability records (spans, metrics, scores, feedback, logs). This enables filtering and grouping OLAP queries by version at any level of the span tree. `rootEntityVersionId` is particularly useful for aggregating all signals within a versioned agent's trace. This replaces the previous `resolvedVersionId` attribute which was buried in span attributes and unfilterable.
 
 **`experimentId` propagated to agent spans**
 
