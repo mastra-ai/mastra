@@ -373,13 +373,26 @@ mastra server env import <file>
 
 ### `mastra server env pull`
 
-Downloads environment variables from the linked project and writes them to a local file. This is the inverse of `mastra server env import`. Defaults to `.env` when no file is specified.
+Downloads environment variables from the linked project and writes them to a local file. This is the inverse of [`mastra server env import`](#mastra-server-env-import).
 
 ```bash
 mastra server env pull [file]
 ```
 
-All values are double-quoted and escaped for safe shell sourcing. Keys that are not valid shell identifiers are skipped.
+The file defaults to `.env` when no argument is given. All values are double-quoted and escaped for safe shell sourcing. Keys that aren't valid shell identifiers are skipped. The output file is created with restrictive permissions (`0600`) since it contains secrets.
+
+#### `--project`
+
+Project ID or slug. Overrides the linked project when `MASTRA_PROJECT_ID` isn't set.
+
+#### CI usage
+
+In a continuous-integration pipeline, authenticate with `MASTRA_API_TOKEN` and pull the environment before running your app:
+
+```bash
+export MASTRA_API_TOKEN="..."
+mastra server env pull .env.production --project my-project
+```
 
 ## `mastra auth`
 
