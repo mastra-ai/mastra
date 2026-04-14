@@ -53,6 +53,23 @@ export default function Datasets() {
   const handleNextPage = useCallback(() => setPage(p => p + 1), []);
   const handlePrevPage = useCallback(() => setPage(p => Math.max(0, p - 1)), []);
 
+  const handleSearchChange = useCallback((value: string) => {
+    setSearch(value);
+    setPage(0);
+  }, []);
+  const handleTargetFilterChange = useCallback((value: string) => {
+    setTargetFilter(value);
+    setPage(0);
+  }, []);
+  const handleExperimentFilterChange = useCallback((value: string) => {
+    setExperimentFilter(value);
+    setPage(0);
+  }, []);
+  const handleTagFilterChange = useCallback((value: string) => {
+    setTagFilter(value);
+    setPage(0);
+  }, []);
+
   if (error && is401UnauthorizedError(error)) {
     return (
       <NoDataPageLayout title="Datasets" icon={<DatabaseIcon />}>
@@ -95,6 +112,7 @@ export default function Datasets() {
     setTargetFilter('all');
     setExperimentFilter('all');
     setTagFilter('all');
+    setPage(0);
   };
 
   return (
@@ -125,13 +143,13 @@ export default function Datasets() {
         </PageLayout.Row>
         <DatasetsToolbar
           search={search}
-          onSearchChange={setSearch}
+          onSearchChange={handleSearchChange}
           targetFilter={targetFilter}
-          onTargetFilterChange={setTargetFilter}
+          onTargetFilterChange={handleTargetFilterChange}
           experimentFilter={experimentFilter}
-          onExperimentFilterChange={setExperimentFilter}
+          onExperimentFilterChange={handleExperimentFilterChange}
           tagFilter={tagFilter}
-          onTagFilterChange={setTagFilter}
+          onTagFilterChange={handleTagFilterChange}
           tagOptions={datasetTagOptions}
           onReset={resetFilters}
           hasActiveFilters={hasFilters}
