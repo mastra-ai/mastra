@@ -556,6 +556,57 @@ async function askImportPackString(ctx: SlashCommandContext): Promise<string | n
   });
 }
 
+async function askImportCollision(
+  ctx: SlashCommandContext,
+  existingName: string,
+): Promise<'overwrite' | 'rename' | 'cancel'> {
+  const actions = [
+    { id: 'overwrite', label: 'Overwrite', description: `Replace the existing "${existingName}" pack` },
+    { id: 'rename', label: 'Rename', description: 'Choose a different name for the imported pack' },
+    { id: 'cancel', label: 'Cancel', description: 'Abort import' },
+  ] as const;
+
+  return new Promise(resolve => {
+    const container = new Box(1, 1);
+    container.addChild(
+      new Text(theme.bold(theme.fg('accent', `A pack named "${existingName}" already exists`)), 0, 0),
+    );
+    container.addChild(new Spacer(1));
+
+    const items: SelectItem[] = actions.map(a => ({
+      value: a.id,
+      label: `  ${a.label}  ${theme.fg('dim', a.description)}`,
+    }));
+
+    const selectList = new SelectList(items, items.length, getSelectListTheme());
+
+    selectList.onSelect = (selected: SelectItem) => {
+      ctx.state.activeInlineQuestion = undefined;
+      container.clear();
+      container.addChild(new Text(theme.fg('dim', `${existingName}: ${selected.value}`), 0, 0));
+      ctx.state.ui.requestRender();
+      resolve(selected.value as 'overwrite' | 'rename' | 'cancel');
+    };
+
+    selectList.onCancel = () => {
+      ctx.state.activeInlineQuestion = undefined;
+      container.clear();
+      container.addChild(new Text(theme.fg('dim', `${existingName}: cancelled`), 0, 0));
+      ctx.state.ui.requestRender();
+      resolve('cancel');
+    };
+
+    container.addChild(selectList);
+
+    const inputShim = { handleInput: (data: string) => selectList.handleInput(data) } as any;
+    ctx.state.activeInlineQuestion = inputShim;
+    ctx.state.chatContainer.addChild(container);
+    ctx.state.chatContainer.addChild(new Spacer(1));
+    ctx.state.ui.requestRender();
+    ctx.state.chatContainer.invalidate();
+  });
+}
+
 export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise<void> {
   const harness = ctx.state.harness;
   const models = await harness.listAvailableModels();
@@ -655,7 +706,42 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
           resolve();
           return;
         }
+
+        // Validate that the imported model IDs are available in this environment
+        const availableModelIds = new Set(models.map(m => m.id));
+        const unavailable = Object.entries(imported.models)
+          .filter(([, modelId]) => !availableModelIds.has(modelId))
+          .map(([mode, modelId]) => `${mode}: ${modelId}`);
+        if (unavailable.length > 0) {
+          collapseResult('cancelled');
+          ctx.showInfo(`Can't import — these models aren't available:\n${unavailable.join('\n')}`);
+          resolve();
+          return;
+        }
+
+        // Handle name collision with existing custom pack
         const s = loadSettings();
+        const existing = s.customModelPacks.find(p => p.name === imported.name);
+        if (existing) {
+          const collision = await askImportCollision(ctx, imported.name);
+          if (collision === 'cancel') {
+            collapseResult('cancelled');
+            resolve();
+            return;
+          }
+          if (collision === 'rename') {
+            const newName = await askCustomPackName(ctx, imported.name);
+            if (!newName) {
+              collapseResult('cancelled');
+              resolve();
+              return;
+            }
+            imported.name = newName;
+            imported.id = `custom:${newName}`;
+          }
+          // collision === 'overwrite' falls through
+        }
+
         const modeDefaults: Record<string, string> = {
           plan: imported.models.plan,
           build: imported.models.build,
