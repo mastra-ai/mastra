@@ -3984,3 +3984,116 @@ describe('Supervisor Pattern - Sub-agent should not receive parent tool call ref
     }
   });
 });
+
+/**
+ * Regression test for https://github.com/mastra-ai/mastra/issues/15336
+ * When a sub-agent has its own memory config, the supervisor saves messages
+ * to the sub-agent's memory without passing memory config to generate().
+ * This causes response messages to lack threadId/resourceId, which makes
+ * storage adapters (e.g., LibSQL) throw.
+ */
+describe('Supervisor Pattern - Sub-agent memory message threadId', () => {
+  it('should set threadId and resourceId on all messages saved to sub-agent memory', async () => {
+    const savedMessages: MastraDBMessage[] = [];
+
+    // Sub-agent with its OWN memory config via defaultOptions (triggers the bug path:
+    // subAgentHasOwnMemoryConfig=true, so memory config is NOT passed to generate(),
+    // meaning response messages from the MessageList won't have threadId/resourceId)
+    const memoryStore = new InMemoryStore();
+    const subAgentMemory = new MockMemory({ storage: memoryStore });
+    const originalSaveMessages = subAgentMemory.saveMessages.bind(subAgentMemory);
+    subAgentMemory.saveMessages = async (args: { messages: MastraDBMessage[] }) => {
+      savedMessages.push(...args.messages);
+      return originalSaveMessages(args);
+    };
+
+    const subAgent = new Agent({
+      id: 'sub-agent-threadid-test',
+      name: 'Sub Agent ThreadId Test',
+      description: 'A sub-agent with its own memory for threadId test',
+      instructions: 'You are a helpful sub-agent.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: 'Sub-agent response',
+          content: [{ type: 'text', text: 'Sub-agent response' }],
+          warnings: [],
+        }),
+      }),
+      memory: subAgentMemory,
+      // Setting defaultOptions.memory makes subAgentHasOwnMemoryConfig = true,
+      // which means the supervisor won't pass memory config to the sub-agent's generate(),
+      // causing response messages to lack threadId/resourceId
+      defaultOptions: {
+        memory: {
+          options: { lastMessages: 5 },
+        },
+      },
+    });
+
+    const threadId = randomUUID();
+    const resourceId = 'test-resource';
+
+    let supervisorCallCount = 0;
+    const supervisor = new Agent({
+      id: 'supervisor-threadid-test',
+      name: 'Supervisor ThreadId Test',
+      instructions: 'You delegate tasks.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          supervisorCallCount++;
+          if (supervisorCallCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: '',
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'agent-subAgent',
+                  input: JSON.stringify({ prompt: 'Do something', threadId, resourceId }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: 'Done',
+            content: [{ type: 'text', text: 'Done' }],
+            warnings: [],
+          };
+        },
+      }),
+      agents: { subAgent },
+      memory: new MockMemory(),
+    });
+
+    await supervisor.generate('Delegate this', {
+      maxSteps: 3,
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    // Verify messages were saved to sub-agent memory
+    expect(savedMessages.length).toBeGreaterThan(0);
+
+    // Every message saved must have threadId and resourceId set
+    // This fails when agentResponseMessages from generateResult.response.dbMessages
+    // don't have threadId/resourceId because memoryInfo wasn't set on the MessageList
+    for (const msg of savedMessages) {
+      expect(msg.threadId).toBeDefined();
+      expect(msg.threadId).toBeTruthy();
+      expect(msg.resourceId).toBeDefined();
+      expect(msg.resourceId).toBeTruthy();
+    }
+  });
+});

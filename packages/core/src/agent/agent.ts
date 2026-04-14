@@ -3321,8 +3321,17 @@ export class Agent<
                       threadId: subAgentThreadId,
                     });
 
+                    // Ensure all messages have threadId/resourceId before saving.
+                    // When subAgentHasOwnMemoryConfig is true, memory config isn't passed
+                    // to the sub-agent's generate(), so response messages may lack these fields.
+                    const messagesWithIds = fullSubAgentMessages.map(msg => ({
+                      ...msg,
+                      threadId: msg.threadId || subAgentThreadId,
+                      resourceId: msg.resourceId || subAgentResourceId,
+                    }));
+
                     await memory.saveMessages({
-                      messages: fullSubAgentMessages,
+                      messages: messagesWithIds,
                     });
                   } catch (memoryError) {
                     this.logger.error('Failed to save messages to sub-agent memory', {
@@ -3468,8 +3477,17 @@ export class Agent<
                       threadId: subAgentThreadId,
                     });
 
+                    // Ensure all messages have threadId/resourceId before saving.
+                    // When subAgentHasOwnMemoryConfig is true, memory config isn't passed
+                    // to the sub-agent's generate(), so response messages may lack these fields.
+                    const messagesWithIds = fullSubAgentMessages.map(msg => ({
+                      ...msg,
+                      threadId: msg.threadId || subAgentThreadId,
+                      resourceId: msg.resourceId || subAgentResourceId,
+                    }));
+
                     await memory.saveMessages({
-                      messages: fullSubAgentMessages,
+                      messages: messagesWithIds,
                     });
                   } catch (memoryError) {
                     this.logger.error('Failed to save messages to sub-agent memory', {
