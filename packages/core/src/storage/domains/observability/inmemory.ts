@@ -372,15 +372,6 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.entityVersionId !== undefined && rootSpan.entityVersionId !== filters.entityVersionId) {
       return false;
     }
-    if (
-      filters.parentEntityVersionId !== undefined &&
-      rootSpan.parentEntityVersionId !== filters.parentEntityVersionId
-    ) {
-      return false;
-    }
-    if (filters.rootEntityVersionId !== undefined && rootSpan.rootEntityVersionId !== filters.rootEntityVersionId) {
-      return false;
-    }
 
     // Experimentation
     if (filters.experimentId !== undefined && rootSpan.experimentId !== filters.experimentId) {

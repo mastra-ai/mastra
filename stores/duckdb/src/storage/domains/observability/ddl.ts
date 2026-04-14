@@ -29,8 +29,6 @@ CREATE TABLE IF NOT EXISTS span_events (
   entityId VARCHAR,
   entityName VARCHAR,
   entityVersionId VARCHAR,
-  parentEntityVersionId VARCHAR,
-  rootEntityVersionId VARCHAR,
 
   -- Context
   userId VARCHAR,
@@ -275,8 +273,6 @@ export const ALL_DDL = [SPAN_EVENTS_DDL, METRIC_EVENTS_DDL, LOG_EVENTS_DDL, SCOR
 export const ALL_MIGRATIONS = [
   // Span events
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
-  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS parentEntityVersionId VARCHAR`,
-  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS rootEntityVersionId VARCHAR`,
 
   // Metrics
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
