@@ -87,7 +87,10 @@ describe('Multi-framework serve', () => {
     });
 
     it('should pass additional user functions', async () => {
-      const userFunction = inngest.createFunction({ id: 'user-function' }, { event: 'test/event' }, async () => 'done');
+      const userFunction = inngest.createFunction(
+        { id: 'user-function', triggers: { event: 'test/event' } },
+        async () => 'done',
+      );
 
       serve({ mastra, inngest, functions: [userFunction] });
 
@@ -159,7 +162,10 @@ describe('Multi-framework serve', () => {
 
     it('should pass user functions to custom adapter', async () => {
       const customServe = vi.fn(() => () => 'custom-handler');
-      const userFunction = inngest.createFunction({ id: 'user-function' }, { event: 'test/event' }, async () => 'done');
+      const userFunction = inngest.createFunction(
+        { id: 'user-function', triggers: { event: 'test/event' } },
+        async () => 'done',
+      );
 
       const serveWithCustom = createServe(customServe);
       serveWithCustom({ mastra, inngest, functions: [userFunction] });
