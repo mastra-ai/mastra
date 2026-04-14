@@ -77,4 +77,4 @@ const workspace = new Workspace({
 
 ## Documentation
 
-For more information, see the [Mastra Workspaces documentation](https://mastra.ai/docs/workspace/overview).
+For more information, see the [DockerSandbox reference](https://mastra.ai/docs/reference/workspace/docker-sandbox).

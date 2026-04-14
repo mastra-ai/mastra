@@ -115,6 +115,8 @@ export class DockerSandbox extends MastraSandbox {
   readonly provider = 'docker';
   status: ProviderStatus = 'pending';
 
+  declare readonly processes: DockerProcessManager;
+
   /** Underlying Docker client */
   private readonly _docker: Docker;
 
@@ -191,7 +193,7 @@ export class DockerSandbox extends MastraSandbox {
       }
 
       // Provide container reference to process manager
-      (this.processes as DockerProcessManager).setContainer(this._container);
+      this.processes.setContainer(this._container);
 
       this.logger.debug(`${LOG_PREFIX} Reconnected to container ${existing.Id}`);
       return;
@@ -228,7 +230,7 @@ export class DockerSandbox extends MastraSandbox {
     await this._container.start();
 
     // Provide container reference to process manager
-    (this.processes as DockerProcessManager).setContainer(this._container);
+    this.processes.setContainer(this._container);
 
     this.logger.debug(`${LOG_PREFIX} Container started: ${this._container.id}`);
   }
@@ -246,7 +248,7 @@ export class DockerSandbox extends MastraSandbox {
         throw error;
       }
     }
-    (this.processes as DockerProcessManager).reset();
+    this.processes.reset();
     this.logger.debug(`${LOG_PREFIX} Container stopped`);
   }
 
@@ -263,7 +265,7 @@ export class DockerSandbox extends MastraSandbox {
         throw error;
       }
     }
-    (this.processes as DockerProcessManager).reset();
+    this.processes.reset();
     this._container = null;
     this.logger.debug(`${LOG_PREFIX} Container destroyed`);
   }
