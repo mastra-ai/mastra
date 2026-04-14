@@ -55,7 +55,9 @@ export function useTraceInfo(trace: SpanRecord | undefined) {
 
   if (entityVersionId) {
     const versionLink =
-      isAgent && entityId ? `${paths.agentLink(entityId)}/editor?version=${entityVersionId}` : undefined;
+      isAgent && entityId
+        ? `${paths.agentLink(entityId)}/editor?version=${encodeURIComponent(entityVersionId)}`
+        : undefined;
     info.push({
       key: 'entityVersionId',
       label: 'Version',
