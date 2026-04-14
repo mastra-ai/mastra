@@ -64,6 +64,32 @@ async function getScoresStore(mastra: Mastra): Promise<ScoresStorage | undefined
 }
 
 /**
+ * Verify that an agent exists (code-defined or stored).
+ * Throws 404 if the agent is not found.
+ */
+async function ensureAgentExists(mastra: Mastra, agentId: string): Promise<void> {
+  // Check code-defined agents first
+  try {
+    const agent = mastra.getAgentById(agentId);
+    if (agent) return;
+  } catch {
+    // not found in code-defined agents
+  }
+
+  // Check stored agents
+  const storage = mastra.getStorage();
+  if (storage) {
+    const agentsStore = await storage.getStore('agents');
+    if (agentsStore) {
+      const stored = await agentsStore.getById(agentId);
+      if (stored) return;
+    }
+  }
+
+  throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
+}
+
+/**
  * Ensure the rollout accumulator is bound and running.
  * Lazily initializes on first call.
  */
@@ -118,6 +144,7 @@ export const GET_ROLLOUT_ROUTE = createRoute({
   handler: async ({ mastra, agentId }) => {
     try {
       requireEditor(mastra);
+      await ensureAgentExists(mastra, agentId);
       const rolloutsStore = await getRolloutsStore(mastra);
       const rollout = await rolloutsStore.getActiveRollout(agentId);
 
@@ -167,6 +194,7 @@ export const START_ROLLOUT_ROUTE = createRoute({
   handler: async ({ mastra, agentId, ...body }) => {
     try {
       requireEditor(mastra);
+      await ensureAgentExists(mastra, agentId);
       const rolloutsStore = await getRolloutsStore(mastra);
       const agentsStore = await getAgentsStore(mastra);
 
@@ -280,6 +308,7 @@ export const UPDATE_ROLLOUT_ROUTE = createRoute({
   handler: async ({ mastra, agentId, candidateWeight }) => {
     try {
       requireEditor(mastra);
+      await ensureAgentExists(mastra, agentId);
       const rolloutsStore = await getRolloutsStore(mastra);
 
       const rollout = await rolloutsStore.getActiveRollout(agentId);
@@ -334,6 +363,7 @@ export const PROMOTE_ROLLOUT_ROUTE = createRoute({
   handler: async ({ mastra, agentId, versionId }) => {
     try {
       requireEditor(mastra);
+      await ensureAgentExists(mastra, agentId);
       const rolloutsStore = await getRolloutsStore(mastra);
       const agentsStore = await getAgentsStore(mastra);
 
@@ -397,6 +427,7 @@ export const ROLLBACK_ROLLOUT_ROUTE = createRoute({
   handler: async ({ mastra, agentId }) => {
     try {
       requireEditor(mastra);
+      await ensureAgentExists(mastra, agentId);
       const rolloutsStore = await getRolloutsStore(mastra);
 
       const rollout = await rolloutsStore.getActiveRollout(agentId);
@@ -438,6 +469,7 @@ export const CANCEL_ROLLOUT_ROUTE = createRoute({
   handler: async ({ mastra, agentId }) => {
     try {
       requireEditor(mastra);
+      await ensureAgentExists(mastra, agentId);
       const rolloutsStore = await getRolloutsStore(mastra);
 
       const rollout = await rolloutsStore.getActiveRollout(agentId);
@@ -479,6 +511,7 @@ export const GET_ROLLOUT_RESULTS_ROUTE = createRoute({
   handler: async ({ mastra, agentId }) => {
     try {
       requireEditor(mastra);
+      await ensureAgentExists(mastra, agentId);
       const rolloutsStore = await getRolloutsStore(mastra);
 
       const rollout = await rolloutsStore.getActiveRollout(agentId);
@@ -579,6 +612,7 @@ export const LIST_ROLLOUTS_ROUTE = createRoute({
   handler: async ({ mastra, agentId, page, perPage }) => {
     try {
       requireEditor(mastra);
+      await ensureAgentExists(mastra, agentId);
       const rolloutsStore = await getRolloutsStore(mastra);
 
       const apiPage = page ?? 1;

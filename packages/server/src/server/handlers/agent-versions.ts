@@ -287,6 +287,23 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Version with id ${versionId} not found for agent ${agentId}` });
       }
 
+      // Cancel any active rollout — publishing is an explicit override
+      let cancelledRolloutId: string | undefined;
+      try {
+        const rolloutsStore = await storage.getStore('rollouts');
+        if (rolloutsStore) {
+          const activeRollout = await rolloutsStore.getActiveRollout(agentId);
+          if (activeRollout) {
+            await rolloutsStore.completeRollout(activeRollout.id, 'cancelled', new Date());
+            const accumulator = mastra.getRolloutAccumulator();
+            accumulator?.clearAgent(agentId);
+            cancelledRolloutId = activeRollout.id;
+          }
+        }
+      } catch {
+        // Rollouts store may not be available — not a blocker for activation
+      }
+
       // Update the agent's activeVersionId AND status to 'published'
       await agentsStore.update({
         id: agentId,
@@ -299,7 +316,9 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
 
       return {
         success: true,
-        message: `Version ${version.versionNumber} is now active`,
+        message: cancelledRolloutId
+          ? `Version ${version.versionNumber} is now active (rollout ${cancelledRolloutId} was cancelled)`
+          : `Version ${version.versionNumber} is now active`,
         activeVersionId: versionId,
       };
     } catch (error) {
