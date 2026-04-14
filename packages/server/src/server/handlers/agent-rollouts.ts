@@ -448,6 +448,9 @@ export const CANCEL_ROLLOUT_ROUTE = createRoute({
       // Complete the rollout as cancelled
       const completed = await rolloutsStore.completeRollout(rollout.id, 'cancelled', new Date());
 
+      // Clear editor cache so subsequent requests see no active rollout
+      mastra.getEditor()?.agent.clearCache(agentId);
+
       // Clear accumulator
       const accumulator = mastra.getRolloutAccumulator();
       accumulator?.clearAgent(agentId);
