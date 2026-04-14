@@ -1,5 +1,15 @@
 # @mastra/pg
 
+## 1.9.1-alpha.0
+
+### Patch Changes
+
+- Fixed `batchInsert` and `batchUpdate` in `@mastra/pg` to run on a single Postgres transaction connection. ([#15312](https://github.com/mastra-ai/mastra/pull/15312))
+
+  This prevents pooled `BEGIN`/`COMMIT`/`ROLLBACK` calls from landing on different connections and leaving idle transactions open during batch writes.
+
+- Fixed "column does not exist" errors when using experiment review features on databases created before the review pipeline was introduced. Startup now automatically migrates older experiment tables to the latest schema. ([#15304](https://github.com/mastra-ai/mastra/pull/15304))
+
 ## 1.9.0
 
 ### Minor Changes

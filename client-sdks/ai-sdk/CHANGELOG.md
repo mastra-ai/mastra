@@ -1,5 +1,28 @@
 # @mastra/ai-sdk
 
+## 1.4.0-alpha.1
+
+### Minor Changes
+
+- Added agent versioning support to chat and network route handlers. You can now pass `agentVersion` to `chatRoute()`, `handleChatStream()`, `networkRoute()`, and `handleNetworkStream()` to target a specific agent version by ID or status (draft/published). Route handlers also accept `?versionId=<id>` or `?status=draft|published` query parameters at request time, which take precedence over static configuration. Requires the Editor to be configured. ([#15296](https://github.com/mastra-ai/mastra/pull/15296))
+
+  ```typescript
+  // Static version on route config
+  chatRoute({
+    path: '/chat',
+    agent: 'weatherAgent',
+    agentVersion: { status: 'published' },
+  });
+
+  // Programmatic version on handler
+  const stream = await handleChatStream({
+    mastra,
+    agentId: 'weatherAgent',
+    agentVersion: { versionId: 'ver_abc123' },
+    params,
+  });
+  ```
+
 ## 1.3.4-alpha.0
 
 ### Patch Changes

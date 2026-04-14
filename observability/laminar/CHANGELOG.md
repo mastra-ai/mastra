@@ -1,5 +1,12 @@
 # @mastra/laminar
 
+## 1.0.16-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`b687d14`](https://github.com/mastra-ai/mastra/commit/b687d14b8c038f38cd73bc7f3b1f9b5c2fe526ee)]:
+  - @mastra/observability@1.9.1-alpha.1
+
 ## 1.0.16-alpha.0
 
 ### Patch Changes

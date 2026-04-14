@@ -1,5 +1,11 @@
 # @mastra/observability
 
+## 1.9.1-alpha.1
+
+### Patch Changes
+
+- Fixed double-counting of Anthropic cache tokens in usage metrics ([#15316](https://github.com/mastra-ai/mastra/pull/15316))
+
 ## 1.9.1-alpha.0
 
 ### Patch Changes
