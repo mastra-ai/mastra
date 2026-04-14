@@ -371,6 +371,16 @@ Imports variables from a file (for example a `.env` file) and merges them into t
 mastra server env import <file>
 ```
 
+### `mastra server env pull`
+
+Downloads environment variables from the linked project and writes them to a local file. This is the inverse of `mastra server env import`. Defaults to `.env` when no file is specified.
+
+```bash
+mastra server env pull [file]
+```
+
+All values are double-quoted and escaped for safe shell sourcing. Keys that are not valid shell identifiers are skipped.
+
 ## `mastra auth`
 
 Manages authentication for Mastra platform. Credentials are stored in `~/.mastra/credentials.json`. You can also set the `MASTRA_API_TOKEN` environment variable as an alternative to interactive login.
