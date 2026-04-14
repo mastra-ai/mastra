@@ -97,8 +97,6 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     isResume: !!resumeContext,
   });
 
-  const backgroundTaskManagerConfig = backgroundTaskManager?.config ?? {};
-
   const streamStep = createStreamStep({
     capabilities,
     runId,
@@ -118,7 +116,6 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     workspace,
     backgroundTaskManager,
     agentBackgroundConfig,
-    backgroundTaskManagerConfig,
   });
 
   const mapResultsStep = createMapResultsStep({
