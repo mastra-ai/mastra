@@ -1437,10 +1437,10 @@ importers:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: ^3.0.58
-        version: 3.0.58(zod@4.3.6)
+        version: 3.0.64(zod@4.3.6)
       '@ai-sdk/openai':
         specifier: ^3.0.41
-        version: 3.0.41(zod@4.3.6)
+        version: 3.0.48(zod@4.3.6)
       '@ast-grep/napi':
         specifier: ^0.42.0
         version: 0.42.0
@@ -2249,7 +2249,7 @@ importers:
     dependencies:
       '@vitest/eslint-plugin':
         specifier: ^1.6.12
-        version: 1.6.12(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3)(vitest@4.1.0)
+        version: 1.6.12(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3)(vitest@4.0.18)
       eslint-plugin-import-x:
         specifier: ^4.16.2
         version: 4.16.2(@typescript-eslint/utils@8.57.1(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.4(jiti@2.6.1))
@@ -2274,10 +2274,10 @@ importers:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.1.0)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.1.0)
+        version: 4.0.18(vitest@4.0.18)
 
   packages/_external-types:
     dependencies:
@@ -2439,10 +2439,10 @@ importers:
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.1.0)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.1.0)
+        version: 4.0.18(vitest@4.0.18)
 
   packages/_vendored/ai_v4:
     dependencies:
@@ -2476,10 +2476,10 @@ importers:
         version: 7.0.15
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.1.0)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.1.0)
+        version: 4.0.18(vitest@4.0.18)
       ai:
         specifier: ^4.3.19
         version: 4.3.19(react@19.2.5)(zod@3.25.76)
@@ -2533,10 +2533,10 @@ importers:
         version: 7.0.15
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.1.0)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.1.0)
+        version: 4.0.18(vitest@4.0.18)
       ai:
         specifier: ^5.0.154
         version: 5.0.155(zod@4.3.6)
@@ -2579,7 +2579,7 @@ importers:
         version: 3.0.8
       '@ai-sdk/provider-utils':
         specifier: ^4.0.19
-        version: 4.0.19(zod@3.25.76)
+        version: 4.0.21(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../_config
@@ -2597,10 +2597,10 @@ importers:
         version: 7.0.15
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.1.0)
+        version: 4.0.18(vitest@4.0.18)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.1.0)
+        version: 4.0.18(vitest@4.0.18)
       ai:
         specifier: ^6.0.116
         version: 6.0.116(zod@3.25.76)
@@ -6965,12 +6965,6 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/anthropic@3.0.58':
-    resolution: {integrity: sha512-/53SACgmVukO4bkms4dpxpRlYhW8Ct6QZRe6sj1Pi5H00hYhxIrqfiLbZBGxkdRvjsBQeP/4TVGsXgH5rQeb8Q==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4.1.8
-
   '@ai-sdk/anthropic@3.0.64':
     resolution: {integrity: sha512-rwLi/Rsuj2pYniQXIrvClHvXDzgM4UQHHnvHTWEF14efnlKclG/1ghpNC+adsRujAbCTr6gRsSbDE2vEqriV7g==}
     engines: {node: '>=18'}
@@ -7117,12 +7111,6 @@ packages:
 
   '@ai-sdk/openai@3.0.1':
     resolution: {integrity: sha512-P+qxz2diOrh8OrpqLRg+E+XIFVIKM3z2kFjABcCJGHjGbXBK88AJqmuKAi87qLTvTe/xn1fhZBjklZg9bTyigw==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4.1.8
-
-  '@ai-sdk/openai@3.0.41':
-    resolution: {integrity: sha512-IZ42A+FO+vuEQCVNqlnAPYQnnUpUfdJIwn1BEDOBywiEHa23fw7PahxVtlX9zm3/zMvTW4JKPzWyvAgDu+SQ2A==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -25643,12 +25631,6 @@ snapshots:
       zod: 4.3.6
     optional: true
 
-  '@ai-sdk/anthropic@3.0.58(zod@4.3.6)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.8
-      '@ai-sdk/provider-utils': 4.0.19(zod@4.3.6)
-      zod: 4.3.6
-
   '@ai-sdk/anthropic@3.0.64(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.8
@@ -25841,12 +25823,6 @@ snapshots:
       '@ai-sdk/provider-utils': 4.0.1(zod@4.3.6)
       zod: 4.3.6
 
-  '@ai-sdk/openai@3.0.41(zod@4.3.6)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.8
-      '@ai-sdk/provider-utils': 4.0.19(zod@4.3.6)
-      zod: 4.3.6
-
   '@ai-sdk/openai@3.0.48(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.8
@@ -25952,6 +25928,13 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.0.6
       zod: 4.3.6
+
+  '@ai-sdk/provider-utils@4.0.21(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.8
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.0.6
+      zod: 3.25.76
 
   '@ai-sdk/provider-utils@4.0.21(zod@4.3.6)':
     dependencies:
@@ -37115,14 +37098,14 @@ snapshots:
       tinyrainbow: 3.0.3
       vitest: 4.1.0(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/ui@4.0.18)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.12.13(@types/node@22.19.15)(typescript@5.9.3))(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2))
 
-  '@vitest/eslint-plugin@1.6.12(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3)(vitest@4.1.0)':
+  '@vitest/eslint-plugin@1.6.12(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3)(vitest@4.0.18)':
     dependencies:
       '@typescript-eslint/scope-manager': 8.57.1
       '@typescript-eslint/utils': 8.57.1(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3)
       eslint: 9.39.4(jiti@2.6.1)
     optionalDependencies:
       typescript: 5.9.3
-      vitest: 4.1.0(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/ui@4.0.18)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.12.13(@types/node@22.19.15)(typescript@5.9.3))(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2))
+      vitest: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0(bufferutil@4.1.0))(lightningcss@1.32.0)(msw@2.12.13(@types/node@22.19.15)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
     transitivePeerDependencies:
       - supports-color
 
