@@ -1,5 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import type { AgentModelManagerConfig } from '@mastra/core/agent';
+import type { VersionOverrides } from '@mastra/core/di';
+import { mergeVersionOverrides } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY, parseModelString } from '@mastra/core/llm';
 import type { ProviderConfig, SystemMessage } from '@mastra/core/llm';
@@ -10,6 +12,7 @@ import type {
   OutputProcessorOrWorkflow,
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_VERSIONS_KEY } from '@mastra/core/request-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import type { PublicSchema } from '@mastra/schema-compat/schema';
@@ -1026,7 +1029,7 @@ export const GENERATE_AGENT_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;
+      const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
 
       validateBody({ messages });
 
@@ -1039,6 +1042,13 @@ export const GENERATE_AGENT_ROUTE = createRoute({
             serverRequestContext.set(key, value);
           }
         }
+      }
+
+      // Stash version overrides from body onto requestContext for sub-agent resolution
+      if (versions) {
+        const existing = serverRequestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+        const merged = mergeVersionOverrides(existing, versions);
+        serverRequestContext.set(MASTRA_VERSIONS_KEY, merged);
       }
 
       // Authorization: apply context overrides to memory option if present
@@ -1319,7 +1329,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;
+      const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
       validateBody({ messages });
 
       // Merge body's requestContext values into the server's RequestContext instance
@@ -1331,6 +1341,13 @@ export const STREAM_GENERATE_ROUTE = createRoute({
             serverRequestContext.set(key, value);
           }
         }
+      }
+
+      // Stash version overrides from body onto requestContext for sub-agent resolution
+      if (versions) {
+        const existing = serverRequestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+        const merged = mergeVersionOverrides(existing, versions);
+        serverRequestContext.set(MASTRA_VERSIONS_KEY, merged);
       }
 
       // Authorization: apply context overrides to memory option if present

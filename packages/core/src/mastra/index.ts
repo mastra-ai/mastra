@@ -45,6 +45,7 @@ import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
+import type { VersionOverrides } from './types';
 
 /**
  * Creates an error for when a null/undefined value is passed to an add* method.
@@ -266,6 +267,25 @@ export interface Config<
    * The editor handles complex instantiation logic including memory resolution.
    */
   editor?: IMastraEditor;
+
+  /**
+   * Global version overrides for primitives.
+   * When set, sub-agent delegation (and future primitive resolution) will
+   * resolve the specified version instead of the code-defined default.
+   *
+   * @example
+   * ```typescript
+   * new Mastra({
+   *   versions: {
+   *     agents: {
+   *       'researcher-agent': { versionId: '123' },
+   *       'writer-agent': { status: 'published' },
+   *     },
+   *   },
+   * });
+   * ```
+   */
+  versions?: VersionOverrides;
 }
 
 /**
@@ -360,6 +380,8 @@ export class Mastra<
   // Editor instance for handling agent instantiation and configuration
   #editor?: IMastraEditor;
   #datasets?: DatasetsManager;
+  // Global version overrides for primitives (agents, etc.)
+  #versions?: VersionOverrides;
 
   get pubsub() {
     return this.#pubsub;
@@ -405,6 +427,14 @@ export class Mastra<
    */
   public getEditor() {
     return this.#editor;
+  }
+
+  /**
+   * Returns the global version overrides configured on this Mastra instance.
+   * These are used as defaults when resolving sub-agent versions during delegation.
+   */
+  public getVersionOverrides(): VersionOverrides | undefined {
+    return this.#versions;
   }
 
   /**
@@ -577,6 +607,9 @@ export class Mastra<
     if (this.#editor && typeof this.#editor.registerWithMastra === 'function') {
       this.#editor.registerWithMastra(this);
     }
+
+    // Store global version overrides
+    this.#versions = config?.versions;
 
     if (config?.pubsub) {
       this.#pubsub = config.pubsub;
@@ -926,7 +959,7 @@ export class Mastra<
     return this.resolveVersionedAgent(agent as TAgents[TAgentName], version);
   }
 
-  private async resolveVersionedAgent<TAgent extends Agent>(
+  async resolveVersionedAgent<TAgent extends Agent>(
     agent: TAgent,
     version: { versionId: string } | { status?: 'draft' | 'published' },
   ): Promise<TAgent> {

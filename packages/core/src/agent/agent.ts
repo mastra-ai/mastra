@@ -34,6 +34,8 @@ import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig 
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
+import type { VersionOverrides } from '../mastra/types';
+import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfigInternal } from '../memory/types';
 import type { DefinitionSource, TracingProperties, ObservabilityContext } from '../observability';
@@ -57,7 +59,7 @@ import { SkillsProcessor } from '../processors/processors/skills';
 import { WorkspaceInstructionsProcessor } from '../processors/processors/workspace-instructions';
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
-import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
+import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, MASTRA_VERSIONS_KEY } from '../request-context';
 import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import { ChunkFrom } from '../stream';
@@ -3246,9 +3248,31 @@ export class Agent<
               modifiedMaxSteps: effectiveMaxSteps !== inputData.maxSteps,
             });
 
+            // Resolve versioned sub-agent if a version override exists on requestContext
+            let resolvedAgent = agent;
+            const versionOverrides = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+            const agentVersionSelector = versionOverrides?.agents?.[agent.id];
+            if (agentVersionSelector && this.#mastra) {
+              try {
+                resolvedAgent = await this.#mastra.resolveVersionedAgent(agent, agentVersionSelector);
+                // Propagate parent memory to the resolved agent if it doesn't have its own
+                if (!resolvedAgent.hasOwnMemory() && this.#memory) {
+                  resolvedAgent.__setMemory(this.#memory as DynamicArgument<MastraMemory>);
+                }
+              } catch (versionError) {
+                this.logger.error('Failed to resolve versioned sub-agent, using code-defined default', {
+                  agent: this.name,
+                  targetAgent: agentName,
+                  targetAgentId: agent.id,
+                  versionSelector: agentVersionSelector,
+                  error: versionError,
+                });
+              }
+            }
+
             // Append LLM-provided instructions to the sub-agent's own instructions
             if (effectiveInstructions) {
-              const agentOwnInstructions = await agent.getInstructions({ requestContext });
+              const agentOwnInstructions = await resolvedAgent.getInstructions({ requestContext });
               if (agentOwnInstructions) {
                 const ownStr = this.#convertInstructionsToString(agentOwnInstructions);
                 if (ownStr) {
@@ -3306,7 +3330,7 @@ export class Agent<
                 supportedLanguageModelSpecifications.includes(modelVersion)
               ) {
                 const generateResult = resumeData
-                  ? await agent.resumeGenerate(resumeData, {
+                  ? await resolvedAgent.resumeGenerate(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
@@ -3323,7 +3347,7 @@ export class Agent<
                           }
                         : {}),
                     })
-                  : await agent.generate(messagesForSubAgent, {
+                  : await resolvedAgent.generate(messagesForSubAgent, {
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
@@ -3370,7 +3394,7 @@ export class Agent<
                 fullSubAgentMessages = [userMessage, ...agentResponseMessages];
 
                 // Save response messages to sub-agent's memory so the UI can display them
-                const memory = await agent.getMemory({ requestContext });
+                const memory = await resolvedAgent.getMemory({ requestContext });
                 if (memory) {
                   try {
                     await memory.createThread({
@@ -3405,7 +3429,7 @@ export class Agent<
 
                 result = { text: generateResult.text, subAgentThreadId, subAgentResourceId, subAgentToolResults };
               } else if (methodType === 'generate' && modelVersion === 'v1') {
-                const generateResult = await agent.generateLegacy(messagesForSubAgent, {
+                const generateResult = await resolvedAgent.generateLegacy(messagesForSubAgent, {
                   requestContext,
                   ...resolveObservabilityContext(context ?? {}),
                   context: filteredContextMessages as unknown as CoreMessage[],
@@ -3416,7 +3440,7 @@ export class Agent<
                 supportedLanguageModelSpecifications.includes(modelVersion)
               ) {
                 const streamResult = resumeData
-                  ? await agent.resumeStream(resumeData, {
+                  ? await resolvedAgent.resumeStream(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
@@ -3435,7 +3459,7 @@ export class Agent<
                           }
                         : {}),
                     })
-                  : await agent.stream(messagesForSubAgent, {
+                  : await resolvedAgent.stream(messagesForSubAgent, {
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
@@ -3517,15 +3541,15 @@ export class Agent<
                 fullSubAgentMessages = [userMessage, ...agentResponseMessages];
 
                 // Save response messages to sub-agent's memory so the UI can display them
-                const memory = await agent.getMemory({ requestContext });
-                if (memory) {
+                const streamMemory = await resolvedAgent.getMemory({ requestContext });
+                if (streamMemory) {
                   try {
-                    await memory.createThread({
+                    await streamMemory.createThread({
                       resourceId: subAgentResourceId,
                       threadId: subAgentThreadId,
                     });
 
-                    await memory.saveMessages({
+                    await streamMemory.saveMessages({
                       messages: fullSubAgentMessages,
                     });
                   } catch (memoryError) {
@@ -3561,7 +3585,7 @@ export class Agent<
                   subAgentToolResults,
                 };
               } else {
-                const streamResult = await agent.streamLegacy(effectivePrompt, {
+                const streamResult = await resolvedAgent.streamLegacy(effectivePrompt, {
                   requestContext,
                   ...resolveObservabilityContext(context ?? {}),
                 });
@@ -4498,6 +4522,19 @@ export class Agent<
       }
     }
     const requestContext = options.requestContext || new RequestContext();
+
+    // Seed Mastra-level version overrides onto requestContext as defaults
+    const mastraVersions = this.#mastra?.getVersionOverrides();
+    if (mastraVersions && !requestContext.has(MASTRA_VERSIONS_KEY)) {
+      requestContext.set(MASTRA_VERSIONS_KEY, mastraVersions);
+    }
+
+    // Merge call-site version overrides on top (call-site wins over Mastra-level)
+    if (options.versions) {
+      const existing = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+      const merged = mergeVersionOverrides(existing, options.versions);
+      requestContext.set(MASTRA_VERSIONS_KEY, merged);
+    }
 
     // Inject browser context for BrowserContextProcessor
     if (this.#browser && !requestContext.has('browser')) {

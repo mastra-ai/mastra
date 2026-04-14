@@ -223,6 +223,18 @@ export const agentExecutionBodySchema = z
     // Request Context (handler-specific field - merged with server's requestContext)
     requestContext: z.record(z.string(), z.any()).optional(),
 
+    // Version overrides for sub-agents (and future primitives)
+    versions: z
+      .object({
+        agents: z
+          .record(
+            z.string(),
+            z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
+          )
+          .optional(),
+      })
+      .optional(),
+
     // Execution Control
     maxSteps: z.number().optional(),
     stopWhen: z.any().optional(),

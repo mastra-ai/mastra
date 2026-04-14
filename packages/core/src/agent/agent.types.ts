@@ -5,6 +5,7 @@ import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { CompletionConfig, CompletionRunResult } from '../loop/network/validation';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
+import type { VersionOverrides } from '../mastra/types';
 import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
@@ -454,6 +455,12 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
 
   /** Request Context containing dynamic configuration and state */
   requestContext?: RequestContext<any>; // @TODO: Figure out how to type this without breaking all the inner types
+
+  /**
+   * Per-invocation version overrides for sub-agents (and future primitives).
+   * Merged on top of Mastra instance-level versions and propagated via requestContext.
+   */
+  versions?: VersionOverrides;
 
   /** Maximum number of steps to run */
   maxSteps?: number;
