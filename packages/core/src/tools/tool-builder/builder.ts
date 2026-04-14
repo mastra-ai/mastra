@@ -615,7 +615,12 @@ export class CoreToolBuilder extends MastraBase {
     // For provider-defined tools, exclude execute and add name as per v5 spec
     if (builtTool.type === 'provider-defined') {
       const { execute, parameters, ...rest } = base;
-      const name = builtTool.id.split('.')[1] || builtTool.id;
+      // Prefer the preserved provider name (e.g. "web_search" from V5 SDK
+      // factories) over the ID-derived name (e.g. "web_search_20250305").
+      const name =
+        ('name' in builtTool && typeof builtTool.name === 'string' ? builtTool.name : null) ||
+        builtTool.id.split('.')[1] ||
+        builtTool.id;
       return {
         ...rest,
         type: builtTool.type,

@@ -4,7 +4,7 @@
  *
  * NOT meant for CI — requires OPENAI_API_KEY and makes real API calls.
  * Run manually:
- *   cd packages/core && npx vitest run src/agent/message-list/tests/openai-reasoning-live.test.ts
+ *   cd packages/core && npx vitest run src/agent/message-list/tests/openai-reasoning-live.e2e.test.ts
  *
  * After validating, extract fixtures into deterministic CI tests.
  */
