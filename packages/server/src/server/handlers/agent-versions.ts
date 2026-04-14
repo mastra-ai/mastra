@@ -289,19 +289,20 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
 
       // Cancel any active rollout — publishing is an explicit override
       let cancelledRolloutId: string | undefined;
+      let rolloutsStore: Awaited<ReturnType<typeof storage.getStore<'rollouts'>>> | undefined;
       try {
-        const rolloutsStore = await storage.getStore('rollouts');
-        if (rolloutsStore) {
-          const activeRollout = await rolloutsStore.getActiveRollout(agentId);
-          if (activeRollout) {
-            await rolloutsStore.completeRollout(activeRollout.id, 'cancelled', new Date());
-            const accumulator = mastra.getRolloutAccumulator();
-            accumulator?.clearAgent(agentId);
-            cancelledRolloutId = activeRollout.id;
-          }
-        }
+        rolloutsStore = await storage.getStore('rollouts');
       } catch {
         // Rollouts store may not be available — not a blocker for activation
+      }
+      if (rolloutsStore) {
+        const activeRollout = await rolloutsStore.getActiveRollout(agentId);
+        if (activeRollout) {
+          await rolloutsStore.completeRollout(activeRollout.id, 'cancelled', new Date());
+          const accumulator = mastra.getRolloutAccumulator();
+          accumulator?.clearAgent(agentId);
+          cancelledRolloutId = activeRollout.id;
+        }
       }
 
       // Update the agent's activeVersionId AND status to 'published'

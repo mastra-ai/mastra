@@ -83,8 +83,8 @@ export class RolloutsInMemory extends RolloutsStorage {
     }
     const updated: RolloutRecord = {
       ...existing,
-      allocations: input.allocations ?? existing.allocations,
-      rules: input.rules ?? existing.rules,
+      allocations: input.allocations ? input.allocations.map(a => ({ ...a })) : existing.allocations,
+      rules: input.rules ? input.rules.map(r => ({ ...r })) : existing.rules,
       updatedAt: new Date(),
     };
     this.db.rollouts.set(input.id, updated);

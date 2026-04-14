@@ -176,11 +176,17 @@ export class RolloutsLibSQL extends RolloutsStorage {
     });
     const total = Number(countResult.rows[0]?.total ?? 0);
 
-    // Fetch page
-    const result = await this.#client.execute({
-      sql: `SELECT ${cols} FROM "${TABLE_ROLLOUTS}" WHERE "agentId" = ? ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
-      args: [input.agentId, perPage, offset],
-    });
+    // Fetch page (or all if perPage is false)
+    const result =
+      perPageInput === false
+        ? await this.#client.execute({
+            sql: `SELECT ${cols} FROM "${TABLE_ROLLOUTS}" WHERE "agentId" = ? ORDER BY "createdAt" DESC`,
+            args: [input.agentId],
+          })
+        : await this.#client.execute({
+            sql: `SELECT ${cols} FROM "${TABLE_ROLLOUTS}" WHERE "agentId" = ? ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
+            args: [input.agentId, perPage, offset],
+          });
 
     return {
       rollouts: result.rows.map(row => this.transformRow(row as unknown as Record<string, unknown>)),
@@ -188,7 +194,7 @@ export class RolloutsLibSQL extends RolloutsStorage {
         total,
         page,
         perPage: perPageForResponse,
-        hasMore: total > offset + perPage,
+        hasMore: perPageInput === false ? false : total > offset + perPage,
       },
     };
   }

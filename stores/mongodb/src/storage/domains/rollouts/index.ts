@@ -108,6 +108,10 @@ export class MongoDBRolloutsStorage extends RolloutsStorage {
         const collection = await this.getCollection(indexDef.collection);
         await collection.createIndex(indexDef.keys, indexDef.options);
       } catch (error) {
+        if (indexDef.options?.unique) {
+          // Unique indexes are critical for invariants — don't swallow failures
+          throw error;
+        }
         this.logger?.warn?.(`Failed to create index on ${indexDef.collection}:`, error);
       }
     }
@@ -295,7 +299,8 @@ export class MongoDBRolloutsStorage extends RolloutsStorage {
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      const docs = await collection.find(filter).sort({ createdAt: -1 }).skip(offset).limit(perPage).toArray();
+      const cursor = collection.find(filter).sort({ createdAt: -1 }).skip(offset);
+      const docs = await (perPageInput === false ? cursor : cursor.limit(perPage)).toArray();
 
       return {
         rollouts: docs.map(doc => transformRolloutRow(doc as Record<string, unknown>)),

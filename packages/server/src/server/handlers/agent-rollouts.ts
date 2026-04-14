@@ -204,28 +204,22 @@ export const START_ROLLOUT_ROUTE = createRoute({
         throw new HTTPException(409, { message: 'An active rollout already exists for this agent. Cancel it first.' });
       }
 
-      // Get the agent's current active version
+      // Rollouts require a stored agent with version management — code-only agents
+      // can't be promoted/rolled back because agentsStore.update would fail.
       const agent = await agentsStore.getById(agentId);
-      let stableVersionId: string | undefined;
-
-      if (agent?.activeVersionId) {
-        stableVersionId = agent.activeVersionId;
-      } else {
-        // Try code-defined agent
-        try {
-          const codeAgent = mastra.getAgentById(agentId);
-          const rawConfig = codeAgent?.toRawConfig?.();
-          stableVersionId = rawConfig?.resolvedVersionId as string | undefined;
-        } catch {
-          // not found
-        }
+      if (!agent) {
+        throw new HTTPException(400, {
+          message: 'Rollouts require a stored agent with version management. Publish a version first.',
+        });
       }
 
-      if (!stableVersionId) {
+      if (!agent.activeVersionId) {
         throw new HTTPException(400, {
           message: 'Agent has no active version. Publish a version first before starting a rollout.',
         });
       }
+
+      const stableVersionId = agent.activeVersionId;
 
       let allocations: Array<{ versionId: string; weight: number; label?: string }>;
       let rules: Array<{ scorerId: string; threshold: number; windowSize: number; action: 'rollback' }> | undefined;
@@ -236,6 +230,12 @@ export const START_ROLLOUT_ROUTE = createRoute({
         type = 'canary';
         routingKey = body.routingKey;
         rules = body.rules;
+
+        if (body.candidateVersionId === stableVersionId) {
+          throw new HTTPException(400, {
+            message: 'Candidate version cannot be the same as the current stable version.',
+          });
+        }
 
         // Validate candidate version exists
         const candidateVersion = await agentsStore.getVersion(body.candidateVersionId);
@@ -540,6 +540,10 @@ export const GET_ROLLOUT_RESULTS_ROUTE = createRoute({
           });
 
           for (const score of result.scores || []) {
+            // Only include scores created during this rollout
+            const scoreTime = score.createdAt instanceof Date ? score.createdAt : new Date(score.createdAt as string);
+            if (scoreTime < rollout.createdAt) continue;
+
             const versionId =
               typeof score.entity?.resolvedVersionId === 'string' ? score.entity.resolvedVersionId : undefined;
             if (!versionId) continue;
