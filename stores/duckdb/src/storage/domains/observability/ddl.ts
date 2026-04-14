@@ -263,7 +263,11 @@ export const ALL_DDL = [SPAN_EVENTS_DDL, METRIC_EVENTS_DDL, LOG_EVENTS_DDL, SCOR
 
 /** Additive migrations for observability tables created by older versions. */
 export const ALL_MIGRATIONS = [
+  // Span events
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
+
   // Metrics
+  `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS experimentId VARCHAR`,
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS parentEntityType VARCHAR`,
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS parentEntityId VARCHAR`,
@@ -286,6 +290,7 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS scope JSON`,
 
   // Logs
+  `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
   `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS experimentId VARCHAR`,
   `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS parentEntityType VARCHAR`,
   `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS parentEntityId VARCHAR`,
@@ -308,6 +313,7 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE log_events ADD COLUMN IF NOT EXISTS scope JSON`,
 
   // Scores
+  `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
   `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS entityType VARCHAR`,
   `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS entityId VARCHAR`,
   `ALTER TABLE score_events ADD COLUMN IF NOT EXISTS entityName VARCHAR`,
@@ -334,6 +340,7 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE score_events ALTER COLUMN traceId DROP NOT NULL`,
 
   // Feedback
+  `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS entityType VARCHAR`,
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS entityId VARCHAR`,
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS entityName VARCHAR`,
