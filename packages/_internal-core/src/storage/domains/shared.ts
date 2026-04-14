@@ -178,6 +178,10 @@ export const rootEntityNameField = z.string().describe('Name of the root entity'
 export const entityVersionIdField = z
   .string()
   .describe('Version ID of the entity that produced this signal (e.g., agent version, workflow version)');
+export const parentEntityVersionIdField = z
+  .string()
+  .describe('Version ID of the parent entity that produced this signal');
+export const rootEntityVersionIdField = z.string().describe('Version ID of the root entity that produced this signal');
 
 // Experimentation
 export const experimentIdField = z.string().describe('Experiment or eval run identifier');
@@ -233,6 +237,8 @@ const contextFieldsBase = {
 
   // Entity versioning
   entityVersionId: entityVersionIdField.nullish(),
+  parentEntityVersionId: parentEntityVersionIdField.nullish(),
+  rootEntityVersionId: rootEntityVersionIdField.nullish(),
 
   // Experimentation
   experimentId: experimentIdField.nullish(),
@@ -268,6 +274,8 @@ export const commonFilterFields = {
   entityType: entityTypeField.optional(),
   entityName: entityNameField.optional(),
   entityVersionId: entityVersionIdField.optional(),
+  parentEntityVersionId: parentEntityVersionIdField.optional(),
+  rootEntityVersionId: rootEntityVersionIdField.optional(),
   userId: userIdField.optional(),
   organizationId: organizationIdField.optional(),
   experimentId: experimentIdField.optional(),

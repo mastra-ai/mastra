@@ -275,6 +275,10 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     const metadata = this.metadata ?? {};
     const getMetadataString = (key: string): string | undefined =>
       typeof metadata[key] === 'string' ? metadata[key] : undefined;
+    const getSpanMetadataString = (span: AnySpan | null | undefined, key: string): string | undefined => {
+      const m = span?.metadata;
+      return m && typeof m[key] === 'string' ? m[key] : undefined;
+    };
     const parentSpan = this.getParentSpan(false);
 
     let rootSpan: AnySpan = this;
@@ -295,9 +299,11 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       parentEntityType: parentSpan?.entityType,
       parentEntityId: parentSpan?.entityId,
       parentEntityName: parentSpan?.entityName,
+      parentEntityVersionId: getSpanMetadataString(parentSpan, 'entityVersionId'),
       rootEntityType: rootSpan.entityType,
       rootEntityId: rootSpan.entityId,
       rootEntityName: rootSpan.entityName,
+      rootEntityVersionId: getSpanMetadataString(rootSpan, 'entityVersionId'),
       userId: getMetadataString('userId'),
       organizationId: getMetadataString('organizationId'),
       resourceId: getMetadataString('resourceId'),

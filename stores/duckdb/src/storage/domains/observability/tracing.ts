@@ -36,6 +36,8 @@ const COLUMNS = [
   'entityId',
   'entityName',
   'entityVersionId',
+  'parentEntityVersionId',
+  'rootEntityVersionId',
   'userId',
   'organizationId',
   'resourceId',
@@ -82,6 +84,8 @@ const SPAN_RECONSTRUCT_SELECT = `
     ${argMaxNonNull('entityId')},
     ${argMaxNonNull('entityName')},
     ${argMaxNonNull('entityVersionId')},
+    ${argMaxNonNull('parentEntityVersionId')},
+    ${argMaxNonNull('rootEntityVersionId')},
     ${argMaxNonNull('userId')},
     ${argMaxNonNull('organizationId')},
     ${argMaxNonNull('resourceId')},
@@ -119,6 +123,8 @@ function rowToSpanRecord(row: Record<string, unknown>): SpanRecord {
     entityId: (row.entityId as string) ?? null,
     entityName: (row.entityName as string) ?? null,
     entityVersionId: (row.entityVersionId as string) ?? null,
+    parentEntityVersionId: (row.parentEntityVersionId as string) ?? null,
+    rootEntityVersionId: (row.rootEntityVersionId as string) ?? null,
     userId: (row.userId as string) ?? null,
     organizationId: (row.organizationId as string) ?? null,
     resourceId: (row.resourceId as string) ?? null,
@@ -178,6 +184,8 @@ interface SpanEventRow {
   entityId: string | null;
   entityName: string | null;
   entityVersionId: string | null;
+  parentEntityVersionId: string | null;
+  rootEntityVersionId: string | null;
   userId: string | null;
   organizationId: string | null;
   resourceId: string | null;
@@ -215,6 +223,8 @@ function toValuesTuple(row: SpanEventRow): string {
     v(row.entityId),
     v(row.entityName),
     v(row.entityVersionId),
+    v(row.parentEntityVersionId),
+    v(row.rootEntityVersionId),
     v(row.userId),
     v(row.organizationId),
     v(row.resourceId),
@@ -263,6 +273,8 @@ function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     entityId: s.entityId ?? null,
     entityName: s.entityName ?? null,
     entityVersionId: s.entityVersionId ?? null,
+    parentEntityVersionId: s.parentEntityVersionId ?? null,
+    rootEntityVersionId: s.rootEntityVersionId ?? null,
     userId: s.userId ?? null,
     organizationId: s.organizationId ?? null,
     resourceId: s.resourceId ?? null,
@@ -301,6 +313,8 @@ function createEndSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     entityId: s.entityId ?? null,
     entityName: s.entityName ?? null,
     entityVersionId: s.entityVersionId ?? null,
+    parentEntityVersionId: s.parentEntityVersionId ?? null,
+    rootEntityVersionId: s.rootEntityVersionId ?? null,
     userId: s.userId ?? null,
     organizationId: s.organizationId ?? null,
     resourceId: s.resourceId ?? null,

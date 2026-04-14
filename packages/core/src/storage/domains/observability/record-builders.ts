@@ -74,9 +74,11 @@ type CorrelationRecordFields = Pick<
   | 'parentEntityType'
   | 'parentEntityId'
   | 'parentEntityName'
+  | 'parentEntityVersionId'
   | 'rootEntityType'
   | 'rootEntityId'
   | 'rootEntityName'
+  | 'rootEntityVersionId'
   | 'userId'
   | 'organizationId'
   | 'resourceId'
@@ -100,9 +102,11 @@ function buildCorrelationRecordFields(context: CorrelationContext | undefined): 
     parentEntityType: context?.parentEntityType ?? null,
     parentEntityId: context?.parentEntityId ?? null,
     parentEntityName: context?.parentEntityName ?? null,
+    parentEntityVersionId: context?.parentEntityVersionId ?? null,
     rootEntityType: context?.rootEntityType ?? null,
     rootEntityId: context?.rootEntityId ?? null,
     rootEntityName: context?.rootEntityName ?? null,
+    rootEntityVersionId: context?.rootEntityVersionId ?? null,
     userId: context?.userId ?? null,
     organizationId: context?.organizationId ?? null,
     resourceId: context?.resourceId ?? null,

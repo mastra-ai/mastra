@@ -63,11 +63,13 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   entityVersionId    Nullable(String),
 
   -- Parent entity
+  parentEntityVersionId Nullable(String),
   parentEntityType   LowCardinality(Nullable(String)),
   parentEntityId     Nullable(String),
   parentEntityName   Nullable(String),
 
   -- Root entity
+  rootEntityVersionId Nullable(String),
   rootEntityType     LowCardinality(Nullable(String)),
   rootEntityId       Nullable(String),
   rootEntityName     Nullable(String),
@@ -132,11 +134,13 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   entityVersionId    Nullable(String),
 
   -- Parent entity
+  parentEntityVersionId Nullable(String),
   parentEntityType   LowCardinality(Nullable(String)),
   parentEntityId     Nullable(String),
   parentEntityName   Nullable(String),
 
   -- Root entity
+  rootEntityVersionId Nullable(String),
   rootEntityType     LowCardinality(Nullable(String)),
   rootEntityId       Nullable(String),
   rootEntityName     Nullable(String),
@@ -211,9 +215,11 @@ CREATE TABLE IF NOT EXISTS ${TABLE_METRIC_EVENTS} (
   entityId           Nullable(String),
   entityName         Nullable(String),
   entityVersionId    Nullable(String),
+  parentEntityVersionId Nullable(String),
   parentEntityType   LowCardinality(Nullable(String)),
   parentEntityId     Nullable(String),
   parentEntityName   Nullable(String),
+  rootEntityVersionId Nullable(String),
   rootEntityType     LowCardinality(Nullable(String)),
   rootEntityId       Nullable(String),
   rootEntityName     Nullable(String),
@@ -271,9 +277,11 @@ CREATE TABLE IF NOT EXISTS ${TABLE_LOG_EVENTS} (
   entityId           Nullable(String),
   entityName         Nullable(String),
   entityVersionId    Nullable(String),
+  parentEntityVersionId Nullable(String),
   parentEntityType   LowCardinality(Nullable(String)),
   parentEntityId     Nullable(String),
   parentEntityName   Nullable(String),
+  rootEntityVersionId Nullable(String),
   rootEntityType     LowCardinality(Nullable(String)),
   rootEntityId       Nullable(String),
   rootEntityName     Nullable(String),
@@ -328,9 +336,11 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
   entityId           Nullable(String),
   entityName         Nullable(String),
   entityVersionId    Nullable(String),
+  parentEntityVersionId Nullable(String),
   parentEntityType   LowCardinality(Nullable(String)),
   parentEntityId     Nullable(String),
   parentEntityName   Nullable(String),
+  rootEntityVersionId Nullable(String),
   rootEntityType     LowCardinality(Nullable(String)),
   rootEntityId       Nullable(String),
   rootEntityName     Nullable(String),
@@ -390,9 +400,11 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS} (
   entityId           Nullable(String),
   entityName         Nullable(String),
   entityVersionId    Nullable(String),
+  parentEntityVersionId Nullable(String),
   parentEntityType   LowCardinality(Nullable(String)),
   parentEntityId     Nullable(String),
   parentEntityName   Nullable(String),
+  rootEntityVersionId Nullable(String),
   rootEntityType     LowCardinality(Nullable(String)),
   rootEntityId       Nullable(String),
   rootEntityName     Nullable(String),
@@ -568,16 +580,28 @@ export const DISCOVERY_MV_DDL = [DISCOVERY_VALUES_MV_DDL, DISCOVERY_PAIRS_MV_DDL
 export const ALL_MIGRATIONS = [
   // Span events
   `ALTER TABLE ${TABLE_SPAN_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_SPAN_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_SPAN_EVENTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
   // Trace roots
   `ALTER TABLE ${TABLE_TRACE_ROOTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_TRACE_ROOTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_TRACE_ROOTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
   // Metrics
   `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
   // Logs
   `ALTER TABLE ${TABLE_LOG_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_LOG_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_LOG_EVENTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
   // Scores
   `ALTER TABLE ${TABLE_SCORE_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_SCORE_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_SCORE_EVENTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
   // Feedback
   `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
 ];
 
 export const ALL_DDL = [...ALL_TABLE_DDL, ...ALL_MV_DDL, ...DISCOVERY_MV_DDL];
