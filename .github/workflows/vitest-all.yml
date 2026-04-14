@@ -120,21 +120,11 @@ jobs:
             --passWithNoTests
         env:
           NODE_OPTIONS: '--max_old_space_size=8192'
-          # LLM API Keys
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
-          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
-          # Store API Keys
           PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
           ASTRA_DB_ENDPOINT: ${{ secrets.ASTRA_DB_ENDPOINT }}
           ASTRA_DB_TOKEN: ${{ secrets.ASTRA_DB_TOKEN }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.ABHI_CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.ABHI_CLOUDFLARE_ACCOUNT_ID }}
-          # Upstash
-          KV_REST_API_URL: ${{ secrets.KV_REST_API_URL }}
-          KV_REST_API_TOKEN: ${{ secrets.KV_REST_API_TOKEN }}
 
       - name: Upload test results
         if: always()
