@@ -2,6 +2,26 @@ import type { RequestOptions, ClientOptions } from '../types';
 import { MastraClientError } from '../types';
 import { normalizeRoutePath } from '../utils';
 
+function normalizeHeaders(headers?: HeadersInit): Record<string, string> {
+  if (!headers) {
+    return {};
+  }
+
+  if (headers instanceof Headers) {
+    const normalized: Record<string, string> = {};
+    headers.forEach((value, key) => {
+      normalized[key] = value;
+    });
+    return normalized;
+  }
+
+  if (Array.isArray(headers)) {
+    return Object.fromEntries(headers);
+  }
+
+  return { ...headers };
+}
+
 export class BaseResource {
   readonly options: ClientOptions;
   protected readonly apiPrefix: string;
@@ -24,7 +44,7 @@ export class BaseResource {
       retries = 3,
       backoffMs = 100,
       maxBackoffMs = 1000,
-      headers = {},
+      headers,
       credentials,
       fetch: customFetch,
     } = this.options;
@@ -36,22 +56,24 @@ export class BaseResource {
 
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
+        const requestHeaders = {
+          ...(options.body &&
+          !(options.body instanceof FormData) &&
+          (options.method === 'POST' ||
+            options.method === 'PUT' ||
+            options.method === 'PATCH' ||
+            options.method === 'DELETE')
+            ? { 'content-type': 'application/json' }
+            : {}),
+          ...normalizeHeaders(headers),
+          ...normalizeHeaders(options.headers),
+        };
+
         const response = await fetchFn(`${baseUrl.replace(/\/$/, '')}${fullPath}`, {
           ...options,
-          headers: {
-            ...(options.body &&
-            !(options.body instanceof FormData) &&
-            (options.method === 'POST' ||
-              options.method === 'PUT' ||
-              options.method === 'PATCH' ||
-              options.method === 'DELETE')
-              ? { 'content-type': 'application/json' }
-              : {}),
-            ...headers,
-            ...options.headers,
-            // TODO: Bring this back once we figure out what we/users need to do to make this work with cross-origin requests
-            // 'x-mastra-client-type': 'js',
-          },
+          headers: requestHeaders,
+          // TODO: Bring this back once we figure out what we/users need to do to make this work with cross-origin requests
+          // 'x-mastra-client-type': 'js',
           signal: this.options.abortSignal,
           credentials: options.credentials ?? credentials,
           body:

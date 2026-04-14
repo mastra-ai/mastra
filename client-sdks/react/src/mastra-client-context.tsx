@@ -1,4 +1,5 @@
 import { MastraClient } from '@mastra/client-js';
+import type { ClientHeaders } from '@mastra/client-js';
 import type { ReactNode } from 'react';
 import { createContext, useContext } from 'react';
 
@@ -12,7 +13,7 @@ export type MastraClientCredentials = 'omit' | 'same-origin' | 'include';
 export interface MastraClientProviderProps {
   children: ReactNode;
   baseUrl?: string;
-  headers?: Record<string, string>;
+  headers?: ClientHeaders;
   /** API route prefix. Defaults to '/api'. Set this to match your server's apiPrefix configuration. */
   apiPrefix?: string;
   /**
@@ -68,14 +69,20 @@ export const isLocalUrl = (url?: string): boolean => {
 
 const createMastraClient = (
   baseUrl?: string,
-  mastraClientHeaders: Record<string, string> = {},
+  mastraClientHeaders: ClientHeaders = {},
   apiPrefix?: string,
   credentials: MastraClientCredentials = 'include',
   customFetch?: typeof fetch,
 ) => {
+  const headers = new Headers(mastraClientHeaders);
+
+  if (isLocalUrl(baseUrl)) {
+    headers.set('x-mastra-dev-playground', 'true');
+  }
+
   return new MastraClient({
     baseUrl: baseUrl || '',
-    headers: isLocalUrl(baseUrl) ? { ...mastraClientHeaders, 'x-mastra-dev-playground': 'true' } : mastraClientHeaders,
+    headers: Object.fromEntries(headers.entries()),
     apiPrefix,
     credentials,
     fetch: customFetch,

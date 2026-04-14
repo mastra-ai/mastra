@@ -51,6 +51,7 @@ import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4 } from 'zod/v4';
 
 export type ZodSchema = ZodSchemaV3 | ZodTypeV4;
+export type ClientHeaders = HeadersInit;
 
 export interface ClientOptions {
   /** Base URL for API requests */
@@ -64,7 +65,7 @@ export interface ClientOptions {
   /** Maximum backoff time in milliseconds between retries */
   maxBackoffMs?: number;
   /** Custom headers to include with requests */
-  headers?: Record<string, string>;
+  headers?: ClientHeaders;
   /** Abort signal for request */
   abortSignal?: AbortSignal;
   /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
@@ -77,7 +78,7 @@ export type AgentVersionIdentifier = { versionId: string } | { status: 'draft' |
 
 export interface RequestOptions {
   method?: string;
-  headers?: Record<string, string>;
+  headers?: ClientHeaders;
   body?: any;
   stream?: boolean;
   /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
