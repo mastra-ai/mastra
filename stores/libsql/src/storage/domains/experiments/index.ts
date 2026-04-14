@@ -46,6 +46,17 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
     });
+    // Add columns introduced after initial schema for backwards compatibility
+    await this.#db.alterTable({
+      tableName: TABLE_EXPERIMENTS,
+      schema: EXPERIMENTS_SCHEMA,
+      ifNotExists: ['agentVersion'],
+    });
+    await this.#db.alterTable({
+      tableName: TABLE_EXPERIMENT_RESULTS,
+      schema: EXPERIMENT_RESULTS_SCHEMA,
+      ifNotExists: ['status', 'tags'],
+    });
 
     // Indexes — idempotent, safe to run on every init
     await this.#client.execute({
