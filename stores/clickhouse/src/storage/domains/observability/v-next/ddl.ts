@@ -560,6 +560,26 @@ export const ALL_MV_DDL = [TRACE_ROOTS_MV_DDL];
 /** Discovery-specific refreshable MVs — created separately from core MVs. */
 export const DISCOVERY_MV_DDL = [DISCOVERY_VALUES_MV_DDL, DISCOVERY_PAIRS_MV_DDL];
 
+/**
+ * Additive migrations for existing ClickHouse databases.
+ * ClickHouse's `CREATE TABLE IF NOT EXISTS` skips if the table already exists,
+ * so new columns must be added explicitly via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
+ */
+export const ALL_MIGRATIONS = [
+  // Span events
+  `ALTER TABLE ${TABLE_SPAN_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
+  // Trace roots
+  `ALTER TABLE ${TABLE_TRACE_ROOTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
+  // Metrics
+  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
+  // Logs
+  `ALTER TABLE ${TABLE_LOG_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
+  // Scores
+  `ALTER TABLE ${TABLE_SCORE_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
+  // Feedback
+  `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
+];
+
 export const ALL_DDL = [...ALL_TABLE_DDL, ...ALL_MV_DDL, ...DISCOVERY_MV_DDL];
 
 export const ALL_TABLE_NAMES = [

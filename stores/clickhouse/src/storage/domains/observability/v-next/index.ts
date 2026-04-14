@@ -86,6 +86,7 @@ import type { ClickhouseDomainConfig } from '../../../db';
 import {
   ALL_TABLE_DDL,
   ALL_MV_DDL,
+  ALL_MIGRATIONS,
   DISCOVERY_MV_DDL,
   ALL_TABLE_NAMES,
   MV_DISCOVERY_VALUES,
@@ -127,6 +128,11 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       // Core tables + incremental MVs (must succeed)
       for (const ddl of [...ALL_TABLE_DDL, ...ALL_MV_DDL]) {
         await this.#client.command({ query: ddl });
+      }
+
+      // Additive migrations for existing databases (add new columns)
+      for (const migration of ALL_MIGRATIONS) {
+        await this.#client.command({ query: migration });
       }
 
       // Apply retention TTL if configured (per design doc: per-signal, day increments).
