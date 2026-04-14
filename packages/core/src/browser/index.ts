@@ -49,23 +49,5 @@ export type { BrowserContext } from './processor';
 // BrowserViewer (for Workspace browser capabilities)
 // ============================================================================
 
-export { BrowserViewer, CLI_SKILL_REPOS, CLI_PROVIDER_COMMANDS } from './viewer';
-export type {
-  BrowserViewerConfig,
-  BrowserViewerEvents,
-  BuiltInCLIProvider,
-  CustomCLIProvider,
-  CLIProvider,
-  PageTarget,
-} from './viewer';
-
-// ============================================================================
-// BrowserViewerThreadManager (for thread isolation in BrowserViewer)
-// ============================================================================
-
-export { BrowserViewerThreadManager } from './viewer-thread-manager';
-export type {
-  BrowserViewerThreadManagerConfig,
-  BrowserViewerSession,
-  ThreadCdpConnection,
-} from './viewer-thread-manager';
+export { BrowserViewer } from './viewer';
+export type { BrowserViewerConfig, CLIProvider } from './viewer';

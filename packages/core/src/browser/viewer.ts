@@ -77,12 +77,6 @@ export type BuiltInCLIProvider = 'agent-browser' | 'browser-use';
 export interface CustomCLIProvider {
   /** Command to get the CDP URL (e.g., 'my-browser get cdp-url') */
   getCdpUrlCommand: string;
-
-  /** Optional: Command to check if CLI is installed */
-  checkCommand?: string;
-
-  /** Optional: Command to install the CLI */
-  installCommand?: string;
 }
 
 /**
@@ -109,10 +103,6 @@ export const CLI_PROVIDER_COMMANDS: Record<
     openArgs: string[];
     /** Argument to enable headed (visible) mode, if supported */
     headedArg?: string;
-    /** Arguments to check version */
-    checkArgs: string[];
-    /** Install command */
-    install: string;
   }
 > = {
   'agent-browser': {
@@ -121,8 +111,6 @@ export const CLI_PROVIDER_COMMANDS: Record<
     getCdpUrlArgs: ['get', 'cdp-url'],
     openArgs: ['open'],
     headedArg: '--headed',
-    checkArgs: ['--version'],
-    install: 'npm install -g agent-browser',
   },
   'browser-use': {
     binary: 'browser-use',
@@ -130,23 +118,6 @@ export const CLI_PROVIDER_COMMANDS: Record<
     getCdpUrlArgs: [], // No direct command; uses process discovery fallback
     openArgs: ['open'],
     headedArg: '--headed',
-    checkArgs: ['--help'],
-    install: 'python3 -m pipx install browser-use',
-  },
-};
-
-/**
- * Skill repositories for built-in CLI providers.
- * Install with: npx skills add <repo> --skill <skill>
- */
-export const CLI_SKILL_REPOS: Record<BuiltInCLIProvider, { repo: string; skill: string }> = {
-  'agent-browser': {
-    repo: 'vercel-labs/agent-browser',
-    skill: 'agent-browser',
-  },
-  'browser-use': {
-    repo: 'browser-use/browser-use',
-    skill: 'browser-use',
   },
 };
 
@@ -1538,65 +1509,6 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
     const execAsync = promisify(exec);
 
     return await execAsync(command);
-  }
-
-  /**
-   * Check if the CLI provider is installed.
-   */
-  async checkCLI(): Promise<boolean> {
-    const cli = this.viewerConfig.cli;
-    if (!cli) {
-      return false;
-    }
-
-    if (typeof cli === 'string') {
-      const providerConfig = CLI_PROVIDER_COMMANDS[cli];
-      if (!providerConfig) {
-        return false;
-      }
-
-      // Check if binary exists directly or via npx
-      if (commandExists(providerConfig.binary)) {
-        return true;
-      }
-
-      // Try npx fallback
-      try {
-        const checkCmd = `npx ${providerConfig.npxPackage} ${providerConfig.checkArgs.join(' ')}`;
-        await this.execCommand(checkCmd);
-        return true;
-      } catch {
-        return false;
-      }
-    } else {
-      // Custom provider
-      if (!cli.checkCommand) {
-        return true; // No check command, assume installed
-      }
-
-      try {
-        await this.execCommand(cli.checkCommand);
-        return true;
-      } catch {
-        return false;
-      }
-    }
-  }
-
-  /**
-   * Get the install command for the CLI provider.
-   */
-  getInstallCommand(): string | undefined {
-    const cli = this.viewerConfig.cli;
-    if (!cli) {
-      return undefined;
-    }
-
-    if (typeof cli === 'string') {
-      return CLI_PROVIDER_COMMANDS[cli]?.install;
-    } else {
-      return cli.installCommand;
-    }
   }
 
   /**

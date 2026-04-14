@@ -32,8 +32,7 @@
 
 import * as path from 'node:path';
 import type { BrowserContext } from '../browser/processor';
-import { BrowserViewer, CLI_SKILL_REPOS, CLI_PROVIDER_COMMANDS } from '../browser/viewer';
-import type { BuiltInCLIProvider } from '../browser/viewer';
+import { BrowserViewer } from '../browser/viewer';
 import type { IMastraLogger } from '../logger';
 import type { RequestContext } from '../request-context';
 import type { MastraVector } from '../vector';
@@ -454,8 +453,6 @@ export class Workspace<
   private _skills?: WorkspaceSkills;
   private _lsp?: LSPManager;
   private _browserViewer?: BrowserViewer;
-  private _browserReadyPromise?: Promise<void>;
-  private _browserReady = false;
   private _logger?: IMastraLogger;
 
   constructor(config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>) {
@@ -635,8 +632,8 @@ export class Workspace<
    * Get the browser viewer for screencast and context injection.
    * Returns undefined if browser is not configured.
    *
-   * This method automatically ensures the browser CLI skill is installed
-   * before returning the viewer (lazy initialization).
+   * The viewer is lazily created on first access. Users are responsible for
+   * ensuring the browser CLI is installed (e.g., `npm install -g agent-browser`).
    *
    * @example
    * ```typescript
@@ -648,15 +645,12 @@ export class Workspace<
    * }
    * ```
    */
-  async getBrowserViewer(): Promise<BrowserViewer | undefined> {
+  getBrowserViewer(): BrowserViewer | undefined {
     if (!this._config.browser) {
       return undefined;
     }
 
-    // Ensure browser skill is installed (lazy init)
-    await this.ensureBrowserReady();
-
-    // Create viewer if needed
+    // Create viewer if needed (lazy init)
     if (!this._browserViewer) {
       this._browserViewer = this.createBrowserViewer(this._config.browser);
     }
@@ -667,9 +661,6 @@ export class Workspace<
   /**
    * Get browser context for prompt injection.
    * Returns null if browser is not configured or not connected.
-   *
-   * This method automatically ensures the browser CLI skill is installed
-   * before accessing the viewer.
    *
    * Use this with BrowserContextProcessor to inject browser state into prompts.
    *
@@ -682,7 +673,7 @@ export class Workspace<
    * ```
    */
   async getBrowserContext(): Promise<BrowserContext | null> {
-    const viewer = await this.getBrowserViewer();
+    const viewer = this.getBrowserViewer();
     if (!viewer) {
       return null;
     }
@@ -722,6 +713,9 @@ export class Workspace<
    * 3. CLI provider (gets CDP URL via `cli get cdp-url`)
    */
   private createBrowserViewer(config: BrowserCapabilities): BrowserViewer {
+    // Configure env vars for browser (e.g., headed mode)
+    this._configureBrowserEnv();
+
     let cdpUrl = config.cdpUrl;
 
     // If no direct CDP URL but provider is specified, create a function to fetch it
@@ -789,180 +783,23 @@ export class Workspace<
   }
 
   // ---------------------------------------------------------------------------
-  // Browser Setup (CLI + Skill installation)
+  // Browser Setup
   // ---------------------------------------------------------------------------
 
   /**
-   * Ensure browser CLI and skill are ready.
-   *
-   * Installs the CLI and skill if not already present. This is called automatically
-   * during `init()` if browser is configured, or lazily when browser capabilities
-   * are first accessed.
-   *
-   * This method is idempotent and race-condition-safe - concurrent calls return
-   * the same promise.
-   *
-   * @example
-   * ```typescript
-   * // Explicit setup
-   * await workspace.ensureBrowserReady();
-   *
-   * // Or implicit via init()
-   * const workspace = new Workspace({ browser: { cli: 'agent-browser' } });
-   * await workspace.init(); // Automatically calls ensureBrowserReady()
-   * ```
+   * Configure browser environment variables.
+   * Called lazily when the browser viewer is first created.
    */
-  async ensureBrowserReady(): Promise<void> {
-    // No browser configured
-    if (!this._config.browser?.cli) {
-      return;
-    }
-
-    // Already ready
-    if (this._browserReady) {
-      return;
-    }
-
-    // Setup in progress - return existing promise
-    if (this._browserReadyPromise) {
-      return this._browserReadyPromise;
-    }
-
-    // Start setup
-    this._browserReadyPromise = this._setupBrowser();
-
-    try {
-      await this._browserReadyPromise;
-      this._browserReady = true;
-    } finally {
-      this._browserReadyPromise = undefined;
-    }
-  }
-
-  /**
-   * Internal browser setup - installs CLI and skill, configures env vars.
-   */
-  private async _setupBrowser(): Promise<void> {
+  private _configureBrowserEnv(): void {
     const browserConfig = this._config.browser;
-    const cli = browserConfig?.cli;
-    if (!cli) return;
+    if (!browserConfig) return;
 
     // Configure headed mode env var if headless is false
     // This makes browser CLIs open visible windows by default
-    if (browserConfig?.headless === false && this._sandbox?.addEnv) {
+    if (browserConfig.headless === false && this._sandbox?.addEnv) {
       this._sandbox.addEnv({
         AGENT_BROWSER_HEADED: '1', // agent-browser
-        // playwright-cli doesn't support env var, but the skill has --headed examples
       });
-    }
-
-    // Only handle built-in CLI providers (string names)
-    if (typeof cli !== 'string') {
-      // Custom CLI provider - user is responsible for setup
-      return;
-    }
-
-    const skillInfo = CLI_SKILL_REPOS[cli as BuiltInCLIProvider];
-    if (!skillInfo) {
-      // Unknown CLI - skip auto-setup
-      return;
-    }
-
-    // Need sandbox to run commands
-    if (!this._sandbox?.executeCommand) {
-      console.warn(
-        `[Workspace] Browser CLI "${cli}" configured but no sandbox available for setup. ` +
-          `Install skill manually: npx skills add ${skillInfo.repo} --skill ${skillInfo.skill}`,
-      );
-      return;
-    }
-
-    // Ensure sandbox is running
-    if (this._sandbox instanceof MastraSandbox) {
-      await (this._sandbox as MastraSandbox).ensureRunning();
-    }
-
-    // Check if skill is already installed by looking for it in configured skill paths
-    const skillInstalled = await this._checkSkillInstalled(skillInfo.skill);
-    if (skillInstalled) {
-      console.info(`[Workspace "${this.name}"] Browser skill already installed: ${skillInfo.skill}`);
-    } else {
-      // Install skill via npx skills CLI
-      // Note: This installs to multiple agent folders (.claude/, .agents/, etc.)
-      // Future improvement: Use skills API directly like the studio does to only install to .agents/skills/
-      console.info(`[Workspace "${this.name}"] Installing browser skill "${skillInfo.skill}" from ${skillInfo.repo}`);
-      try {
-        await this._sandbox.executeCommand('npx', ['skills', 'add', skillInfo.repo, '--skill', skillInfo.skill, '-y'], {
-          timeout: 60000, // 60s timeout for npm install
-        });
-        console.info(`[Workspace "${this.name}"] Browser skill installed successfully`);
-      } catch (error) {
-        console.warn(
-          `[Workspace "${this.name}"] Failed to install browser skill: ${error}. ` +
-            `Install manually: npx skills add ${skillInfo.repo} --skill ${skillInfo.skill}`,
-        );
-      }
-    }
-
-    // Always try to install the CLI binary (checks if already installed first)
-    await this._installBrowserCLI(cli);
-  }
-
-  /**
-   * Install the browser CLI binary if not already available.
-   */
-  private async _installBrowserCLI(cli: BuiltInCLIProvider): Promise<void> {
-    const commands = CLI_PROVIDER_COMMANDS[cli];
-    if (!commands || !this._sandbox?.executeCommand) {
-      return;
-    }
-
-    // Check if CLI is already installed
-    try {
-      const result = await this._sandbox.executeCommand(commands.binary, commands.checkArgs, {
-        timeout: 5000,
-      });
-      if (result.exitCode === 0) {
-        console.info(`[Workspace "${this.name}"] Browser CLI "${commands.binary}" is already installed`);
-        return;
-      }
-      // Non-zero exit code means CLI not working properly, continue to install
-    } catch {
-      // CLI not installed or check failed, continue to install
-    }
-
-    // Parse and execute install command
-    console.info(`[Workspace "${this.name}"] Installing browser CLI: ${commands.install}`);
-    try {
-      const [cmd, ...args] = commands.install.split(' ');
-      await this._sandbox.executeCommand(cmd!, args, {
-        timeout: 120000, // 2 min timeout for install
-      });
-      console.info(`[Workspace "${this.name}"] Browser CLI installed successfully`);
-    } catch (error) {
-      console.warn(
-        `[Workspace "${this.name}"] Failed to install browser CLI: ${error}. ` +
-          `Install manually: ${commands.install}`,
-      );
-    }
-  }
-
-  /**
-   * Check if a skill is installed by searching for it in configured skill paths.
-   */
-  private async _checkSkillInstalled(skillName: string): Promise<boolean> {
-    if (!this._skills && !this.hasSkillsConfig()) {
-      return false;
-    }
-
-    try {
-      const skills = this.skills;
-      if (!skills) return false;
-
-      const skill = await skills.get(skillName);
-      return skill !== null;
-    } catch {
-      return false;
     }
   }
 
@@ -1226,11 +1063,6 @@ export class Workspace<
         await callLifecycle(this._sandbox, 'start');
       }
 
-      // Setup browser CLI and skill if configured
-      if (this._config.browser?.cli) {
-        await this.ensureBrowserReady();
-      }
-
       // Auto-index files if autoIndexPaths is configured
       if (this._searchEngine && this._config.autoIndexPaths && this._config.autoIndexPaths.length > 0) {
         await this.rebuildSearchIndex(this._config.autoIndexPaths ?? []);
@@ -1258,8 +1090,6 @@ export class Workspace<
           // Browser close errors are non-blocking
         }
         this._browserViewer = undefined;
-        this._browserReady = false;
-        this._browserReadyPromise = undefined;
       }
 
       // Shutdown LSP before sandbox — LSP clients need running processes to send shutdown/exit

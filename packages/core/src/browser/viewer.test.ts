@@ -37,15 +37,11 @@ describe('BrowserViewer', () => {
       const viewer = new BrowserViewer({
         cli: {
           getCdpUrlCommand: 'my-browser get cdp-url',
-          checkCommand: 'my-browser --version',
-          installCommand: 'npm install -g my-browser',
         },
       });
       expect(viewer).toBeInstanceOf(BrowserViewer);
       expect(viewer.cli).toEqual({
         getCdpUrlCommand: 'my-browser get cdp-url',
-        checkCommand: 'my-browser --version',
-        installCommand: 'npm install -g my-browser',
       });
     });
 
@@ -59,34 +55,6 @@ describe('BrowserViewer', () => {
         },
       });
       expect(viewer).toBeInstanceOf(BrowserViewer);
-    });
-
-    it('creates instance with autoReconnect option', () => {
-      const viewer = new BrowserViewer({
-        cdpUrl: 'ws://localhost:9222/devtools/browser/xxx',
-        autoReconnect: true,
-        reconnectDelay: 2000,
-      });
-      expect(viewer).toBeInstanceOf(BrowserViewer);
-    });
-  });
-
-  describe('CLI provider', () => {
-    it('getInstallCommand returns correct command for built-in provider', () => {
-      const viewer = new BrowserViewer({ cli: 'agent-browser' });
-      expect(viewer.getInstallCommand()).toBe('npm install -g agent-browser');
-    });
-
-    it('getInstallCommand returns custom command for custom provider', () => {
-      const viewer = new BrowserViewer({
-        cli: { getCdpUrlCommand: 'test', installCommand: 'custom-install' },
-      });
-      expect(viewer.getInstallCommand()).toBe('custom-install');
-    });
-
-    it('getInstallCommand returns undefined when no CLI configured', () => {
-      const viewer = new BrowserViewer({ cdpUrl: 'ws://localhost:9222/...' });
-      expect(viewer.getInstallCommand()).toBeUndefined();
     });
   });
 

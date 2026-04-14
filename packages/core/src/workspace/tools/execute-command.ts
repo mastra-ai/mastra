@@ -64,12 +64,6 @@ async function executeCommand(input: Record<string, any>, context: any) {
   const background = input.background as boolean | undefined;
   const { workspace, sandbox } = requireSandbox(context);
 
-  // Lazy init browser CLI + skill if browser is configured
-  // This ensures skills are installed before the agent tries to use browser commands
-  if (workspace.ensureBrowserReady) {
-    await workspace.ensureBrowserReady();
-  }
-
   // Extract tail pipe from command so output can stream in real time
   if (!background) {
     const extracted = extractTailPipe(command);
