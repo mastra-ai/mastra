@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGET = vi.fn();
 const mockPOST = vi.fn();
@@ -24,6 +24,10 @@ vi.mock('../auth/credentials.js', () => ({
 beforeEach(() => {
   vi.resetAllMocks();
   vi.stubGlobal('fetch', vi.fn());
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('fetchServerProjects', () => {
@@ -449,6 +453,111 @@ describe('pollServerDeploy', () => {
 
     expect(result.status).toBe('running');
     expect(result.instanceUrl).toBe('https://app.example');
+  });
+
+  it('retries transient polling failures up to 3 times', async () => {
+    vi.useFakeTimers();
+
+    const deploy = { id: 'd1', status: 'running' };
+    let deployFailuresRemaining = 3;
+    const networkError = new TypeError('network request failed');
+    Object.assign(networkError, { cause: { code: 'ECONNRESET' } });
+
+    mockGET.mockImplementation((path: string) => {
+      if (path === '/v1/server/deploys/{id}/logs') {
+        return Promise.resolve({
+          data: { buildLogs: [], deployLogs: [] },
+          response: { status: 200 },
+        });
+      }
+
+      if (path === '/v1/server/deploys/{id}') {
+        if (deployFailuresRemaining > 0) {
+          deployFailuresRemaining -= 1;
+          return Promise.reject(networkError);
+        }
+
+        return Promise.resolve({
+          data: deploy,
+          response: { status: 200 },
+        });
+      }
+
+      throw new Error(`Unexpected path: ${path}`);
+    });
+
+    const { pollServerDeploy } = await import('./platform-api.js');
+    const resultPromise = pollServerDeploy('d1', 'tok', 'org-1', 10000);
+
+    await vi.advanceTimersByTimeAsync(3500);
+
+    await expect(resultPromise).resolves.toEqual(deploy);
+
+    const statusCalls = mockGET.mock.calls.filter(([path]) => path === '/v1/server/deploys/{id}');
+    expect(statusCalls).toHaveLength(4);
+  });
+
+  it('throws after exhausting transient polling retries', async () => {
+    vi.useFakeTimers();
+
+    const networkError = new TypeError('network request failed');
+    Object.assign(networkError, { cause: { code: 'ECONNRESET' } });
+
+    mockGET.mockImplementation((path: string) => {
+      if (path === '/v1/server/deploys/{id}/logs') {
+        return Promise.resolve({
+          data: { buildLogs: [], deployLogs: [] },
+          response: { status: 200 },
+        });
+      }
+
+      if (path === '/v1/server/deploys/{id}') {
+        return Promise.reject(networkError);
+      }
+
+      throw new Error(`Unexpected path: ${path}`);
+    });
+
+    const { pollServerDeploy } = await import('./platform-api.js');
+    const resultPromise = pollServerDeploy('d1', 'tok', 'org-1', 10000);
+    const rejection = expect(resultPromise).rejects.toThrow('network request failed');
+
+    await vi.advanceTimersByTimeAsync(3500);
+
+    await rejection;
+
+    const statusCalls = mockGET.mock.calls.filter(([path]) => path === '/v1/server/deploys/{id}');
+    expect(statusCalls).toHaveLength(4);
+  });
+
+  it('does not retry non-transient polling failures', async () => {
+    vi.useFakeTimers();
+
+    mockGET.mockImplementation((path: string) => {
+      if (path === '/v1/server/deploys/{id}/logs') {
+        return Promise.resolve({
+          data: { buildLogs: [], deployLogs: [] },
+          response: { status: 200 },
+        });
+      }
+
+      if (path === '/v1/server/deploys/{id}') {
+        return Promise.reject(new Error('Invalid deploy payload'));
+      }
+
+      throw new Error(`Unexpected path: ${path}`);
+    });
+
+    const { pollServerDeploy } = await import('./platform-api.js');
+    const resultPromise = pollServerDeploy('d1', 'tok', 'org-1', 10000);
+    const rejection = expect(resultPromise).rejects.toThrow('Invalid deploy payload');
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    await rejection;
+
+    const statusCalls = mockGET.mock.calls.filter(([path]) => path === '/v1/server/deploys/{id}');
+    expect(statusCalls).toHaveLength(1);
   });
 });
 
