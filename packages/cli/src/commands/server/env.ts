@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
@@ -138,4 +138,35 @@ export async function envImportAction(file: string, opts: { config?: string }) {
     console.info(`    ${key}`);
   }
   console.info('');
+}
+
+/* ------------------------------------------------------------------ */
+/*  mastra server env pull                                             */
+/* ------------------------------------------------------------------ */
+
+export async function envPullAction(file: string | undefined, opts: { config?: string; project?: string }) {
+  const { token, orgId } = await resolveAuth();
+  const projectId = await resolveProjectId(opts, { token, orgId });
+
+  const envVars = await getServerProjectEnv(token, orgId, projectId);
+  const keys = Object.keys(envVars);
+
+  if (keys.length === 0) {
+    console.info('\n  No environment variables to pull.\n');
+    return;
+  }
+
+  const target = file ?? '.env';
+  const lines = ['# Pulled from Mastra Server — do not edit manually', ''];
+  for (const key of keys.sort()) {
+    const value = envVars[key]!;
+    // Quote values that contain spaces, quotes, or special shell characters
+    const needsQuoting = /[\s"'\\#$]/.test(value);
+    lines.push(`${key}=${needsQuoting ? `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : value}`);
+  }
+  lines.push(''); // trailing newline
+
+  await writeFile(resolve(target), lines.join('\n'), 'utf-8');
+
+  console.info(`\n  Pulled ${keys.length} variable(s) to ${target}.\n`);
 }

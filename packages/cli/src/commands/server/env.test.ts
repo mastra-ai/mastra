@@ -25,9 +25,11 @@ vi.mock('../studio/project-config.js', () => ({
 }));
 
 const mockReadFile = vi.fn();
+const mockWriteFile = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('node:fs/promises', () => ({
   readFile: mockReadFile,
+  writeFile: mockWriteFile,
 }));
 
 beforeEach(() => {
@@ -200,6 +202,60 @@ describe('envImportAction', () => {
       NEW: '1',
     });
     expect(spy.mock.calls.some(c => String(c[0]).includes('Imported 1 variable'))).toBe(true);
+    spy.mockRestore();
+  });
+});
+
+describe('envPullAction', () => {
+  beforeEach(() => {
+    process.env.MASTRA_PROJECT_ID = 'proj-x';
+    mockWriteFile.mockResolvedValue(undefined);
+  });
+
+  it('prints message when no vars to pull', async () => {
+    mockGetServerProjectEnv.mockResolvedValue({});
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { envPullAction } = await import('./env.js');
+    await envPullAction(undefined, {});
+    expect(mockWriteFile).not.toHaveBeenCalled();
+    expect(spy.mock.calls.some(c => String(c[0]).includes('No environment variables to pull'))).toBe(true);
+    spy.mockRestore();
+  });
+
+  it('writes env vars to default .env file', async () => {
+    mockGetServerProjectEnv.mockResolvedValue({ DB_URL: 'postgres://localhost', API_KEY: 'secret' });
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { envPullAction } = await import('./env.js');
+    await envPullAction(undefined, {});
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
+    const [filePath, content] = mockWriteFile.mock.calls[0]!;
+    expect(filePath).toContain('.env');
+    expect(content).toContain('# Pulled from Mastra Server');
+    expect(content).toContain('API_KEY=secret');
+    expect(content).toContain('DB_URL=postgres://localhost');
+    expect(spy.mock.calls.some(c => String(c[0]).includes('Pulled 2 variable(s)'))).toBe(true);
+    spy.mockRestore();
+  });
+
+  it('writes to a custom file when specified', async () => {
+    mockGetServerProjectEnv.mockResolvedValue({ FOO: 'bar' });
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { envPullAction } = await import('./env.js');
+    await envPullAction('.env.production', {});
+    const [filePath, content] = mockWriteFile.mock.calls[0]!;
+    expect(filePath).toContain('.env.production');
+    expect(content).toContain('FOO=bar');
+    expect(spy.mock.calls.some(c => String(c[0]).includes('.env.production'))).toBe(true);
+    spy.mockRestore();
+  });
+
+  it('quotes values containing special characters', async () => {
+    mockGetServerProjectEnv.mockResolvedValue({ SECRET: 'has spaces and "quotes"' });
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { envPullAction } = await import('./env.js');
+    await envPullAction(undefined, {});
+    const [, content] = mockWriteFile.mock.calls[0]!;
+    expect(content).toContain('SECRET="has spaces and \\"quotes\\""');
     spy.mockRestore();
   });
 });
