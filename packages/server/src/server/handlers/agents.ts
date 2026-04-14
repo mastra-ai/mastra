@@ -64,6 +64,19 @@ import {
 } from './utils';
 
 /**
+ * Merge incoming version overrides onto a RequestContext.
+ * Reads any existing overrides, shallow-merges per category, and writes back.
+ */
+function stashVersionOverrides(ctx: RequestContext, versions: VersionOverrides | undefined): void {
+  if (!versions) return;
+  const existing = ctx.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+  const merged = mergeVersionOverrides(existing, versions);
+  if (merged) {
+    ctx.set(MASTRA_VERSIONS_KEY, merged);
+  }
+}
+
+/**
  * Checks if a provider has its required API key environment variable(s) configured.
  * Handles provider IDs with suffixes (e.g., "openai.chat" -> "openai").
  * Also handles custom gateway providers that are stored with gateway prefix (e.g., "acme/acme-openai").
@@ -1045,11 +1058,7 @@ export const GENERATE_AGENT_ROUTE = createRoute({
       }
 
       // Stash version overrides from body onto requestContext for sub-agent resolution
-      if (versions) {
-        const existing = serverRequestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
-        const merged = mergeVersionOverrides(existing, versions);
-        serverRequestContext.set(MASTRA_VERSIONS_KEY, merged);
-      }
+      stashVersionOverrides(serverRequestContext, versions);
 
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
@@ -1344,11 +1353,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
       }
 
       // Stash version overrides from body onto requestContext for sub-agent resolution
-      if (versions) {
-        const existing = serverRequestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
-        const merged = mergeVersionOverrides(existing, versions);
-        serverRequestContext.set(MASTRA_VERSIONS_KEY, merged);
-      }
+      stashVersionOverrides(serverRequestContext, versions);
 
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;

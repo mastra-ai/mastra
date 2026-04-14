@@ -82,6 +82,15 @@ describe('mergeVersionOverrides', () => {
       },
     });
   });
+
+  it('returns undefined when both base and overrides are undefined', () => {
+    expect(mergeVersionOverrides(undefined, undefined)).toBeUndefined();
+  });
+
+  it('returns base when overrides is undefined', () => {
+    const base: VersionOverrides = { agents: { a: { versionId: '1' } } };
+    expect(mergeVersionOverrides(base, undefined)).toEqual(base);
+  });
 });
 
 describe('Sub-agent version resolution', () => {
@@ -195,6 +204,8 @@ describe('Sub-agent version resolution', () => {
       model: makeMockModel('code-defined response'),
     });
 
+    const generateSpy = vi.spyOn(sub, 'generate');
+
     const supervisor = new Agent({
       id: 'supervisor',
       name: 'supervisor',
@@ -213,6 +224,9 @@ describe('Sub-agent version resolution', () => {
     // Should not throw — falls back to default agent
     const result = await supervisor.generate('Do something', { maxSteps: 3 });
     expect(result.text).toBeDefined();
+
+    // Verify the code-defined sub-agent was invoked (fallback)
+    expect(generateSpy).toHaveBeenCalled();
   });
 
   it('uses resolved agent for generation when version override succeeds', async () => {
@@ -233,6 +247,9 @@ describe('Sub-agent version resolution', () => {
       model: makeMockModel('versioned response'),
     });
 
+    const originalGenerateSpy = vi.spyOn(sub, 'generate');
+    const versionedGenerateSpy = vi.spyOn(versionedSub, 'generate');
+
     const supervisor = new Agent({
       id: 'supervisor',
       name: 'supervisor',
@@ -252,6 +269,10 @@ describe('Sub-agent version resolution', () => {
 
     // The sub-agent should have been resolved with the versioned model
     expect(mastra.resolveVersionedAgent).toHaveBeenCalledWith(sub, { versionId: 'v99' });
+
+    // Verify the versioned agent was invoked, not the original
+    expect(versionedGenerateSpy).toHaveBeenCalled();
+    expect(originalGenerateSpy).not.toHaveBeenCalled();
   });
 
   it('propagates versions through requestContext to sub-agents', async () => {
