@@ -1,25 +1,60 @@
-import type { GetScorerResponse } from '@mastra/client-js';
-import { toast } from '@mastra/playground-ui';
+import type { GetScorerResponse, ListScoresResponse } from '@mastra/client-js';
+import { toast, useInView } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useMergedRequestContext } from '@/domains/request-context';
 
+const SCORES_PER_PAGE = 25;
+
 type UseScoresByScorerIdProps = {
   scorerId: string;
-  page?: number;
   entityId?: string;
   entityType?: string;
 };
 
-export const useScoresByScorerId = ({ scorerId, page = 0, entityId, entityType }: UseScoresByScorerIdProps) => {
-  const client = useMastraClient();
+function getScoresNextPageParam(lastPage: ListScoresResponse | undefined, _allPages: unknown, lastPageParam: number) {
+  if (lastPage?.pagination?.hasMore) {
+    return lastPageParam + 1;
+  }
+  return undefined;
+}
 
-  return useQuery({
-    queryKey: ['scores', scorerId, page, entityId, entityType],
-    queryFn: () => client.listScoresByScorerId({ scorerId, page, entityId, entityType, perPage: 10 }),
+function selectFlatScores(data: { pages: ListScoresResponse[] }) {
+  const seen = new Set<string>();
+  const scores = data.pages
+    .flatMap(page => page.scores ?? [])
+    .filter(score => {
+      if (seen.has(score.id)) return false;
+      seen.add(score.id);
+      return true;
+    });
+  return scores;
+}
+
+export const useScoresByScorerId = ({ scorerId, entityId, entityType }: UseScoresByScorerIdProps) => {
+  const client = useMastraClient();
+  const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
+
+  const query = useInfiniteQuery({
+    queryKey: ['scores', scorerId, entityId, entityType],
+    queryFn: ({ pageParam }) =>
+      client.listScoresByScorerId({ scorerId, page: pageParam, perPage: SCORES_PER_PAGE, entityId, entityType }),
+    initialPageParam: 0,
+    getNextPageParam: getScoresNextPageParam,
+    select: selectFlatScores,
     refetchInterval: 5000,
   });
+
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
+
+  useEffect(() => {
+    if (isEndOfListInView && hasNextPage && !isFetchingNextPage) {
+      void fetchNextPage();
+    }
+  }, [isEndOfListInView, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  return { ...query, setEndOfListElement };
 };
 
 export const useScorer = (scorerId: string) => {
@@ -47,7 +82,7 @@ export const useScorer = (scorerId: string) => {
     };
 
     void fetchScorer();
-  }, [scorerId]);
+  }, [scorerId, client]);
 
   return { scorer, isLoading, error };
 };

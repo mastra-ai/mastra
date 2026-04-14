@@ -28,7 +28,7 @@ export function PageHeaderRoot({ children, className, title, description, icon, 
   const useLegacyApi = children === undefined && title !== undefined;
 
   return (
-    <header className={cn('w-full grid', className)}>
+    <header className={cn('w-full grid ', className)}>
       {useLegacyApi ? (
         <>
           <PageHeaderTitle isLoading={isLoading}>

@@ -1,26 +1,21 @@
 import { ExternalLinkIcon, Link2Icon } from 'lucide-react';
 import { dataKeysAndValuesValueStyles } from './shared';
-import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
 export interface DataKeysAndValuesValueLinkProps {
   className?: string;
   children: React.ReactNode;
   href: string;
-  LinkComponent: LinkComponent;
+  as?: React.ElementType;
 }
 
 function isExternalUrl(href: string) {
   return /^https?:\/\//.test(href);
 }
 
-export function DataKeysAndValuesValueLink({
-  className,
-  children,
-  href,
-  LinkComponent: Link,
-}: DataKeysAndValuesValueLinkProps) {
+export function DataKeysAndValuesValueLink({ className, children, href, as }: DataKeysAndValuesValueLinkProps) {
   const isExternal = isExternalUrl(href);
+  const Component = as || 'a';
 
   const linkClassName = cn(
     'truncate flex items-center gap-2 hover:text-neutral4 transition-colors',
@@ -40,10 +35,10 @@ export function DataKeysAndValuesValueLink({
 
   return (
     <dd className={cn(dataKeysAndValuesValueStyles, className)}>
-      <Link href={href} className={linkClassName}>
+      <Component href={href} className={linkClassName}>
         <span>{children}</span>
         <Link2Icon />
-      </Link>
+      </Component>
     </dd>
   );
 }
