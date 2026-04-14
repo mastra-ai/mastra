@@ -32,9 +32,12 @@ const SCORE_GROUP_BY_COLUMNS = new Set([
   'entityType',
   'entityId',
   'entityName',
+  'entityVersionId',
+  'parentEntityVersionId',
   'parentEntityType',
   'parentEntityId',
   'parentEntityName',
+  'rootEntityVersionId',
   'rootEntityType',
   'rootEntityId',
   'rootEntityName',
@@ -159,9 +162,12 @@ function rowToScoreRecord(row: Record<string, unknown>): Record<string, unknown>
     entityType: (row.entityType as string) ?? null,
     entityId: (row.entityId as string) ?? null,
     entityName: (row.entityName as string) ?? null,
+    entityVersionId: (row.entityVersionId as string) ?? null,
+    parentEntityVersionId: (row.parentEntityVersionId as string) ?? null,
     parentEntityType: (row.parentEntityType as string) ?? null,
     parentEntityId: (row.parentEntityId as string) ?? null,
     parentEntityName: (row.parentEntityName as string) ?? null,
+    rootEntityVersionId: (row.rootEntityVersionId as string) ?? null,
     rootEntityType: (row.rootEntityType as string) ?? null,
     rootEntityId: (row.rootEntityId as string) ?? null,
     rootEntityName: (row.rootEntityName as string) ?? null,
@@ -226,7 +232,7 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
   await db.execute(
     `INSERT INTO score_events (
       timestamp, traceId, spanId, experimentId, scoreTraceId,
-      entityType, entityId, entityName, parentEntityType, parentEntityId, parentEntityName, rootEntityType, rootEntityId, rootEntityName,
+      entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope
     )
@@ -239,9 +245,12 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
        v(s.entityType ?? null),
        v(s.entityId ?? null),
        v(s.entityName ?? null),
+       v(s.entityVersionId ?? null),
+       v(s.parentEntityVersionId ?? null),
        v(s.parentEntityType ?? null),
        v(s.parentEntityId ?? null),
        v(s.parentEntityName ?? null),
+       v(s.rootEntityVersionId ?? null),
        v(s.rootEntityType ?? null),
        v(s.rootEntityId ?? null),
        v(s.rootEntityName ?? null),
@@ -283,9 +292,12 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
       v(legacyScore.entityType ?? null),
       v(legacyScore.entityId ?? null),
       v(legacyScore.entityName ?? null),
+      v(legacyScore.entityVersionId ?? null),
+      v(legacyScore.parentEntityVersionId ?? null),
       v(legacyScore.parentEntityType ?? null),
       v(legacyScore.parentEntityId ?? null),
       v(legacyScore.parentEntityName ?? null),
+      v(legacyScore.rootEntityVersionId ?? null),
       v(legacyScore.rootEntityType ?? null),
       v(legacyScore.rootEntityId ?? null),
       v(legacyScore.rootEntityName ?? null),
@@ -313,7 +325,7 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
   await db.execute(
     `INSERT INTO score_events (
       timestamp, traceId, spanId, experimentId, scoreTraceId,
-      entityType, entityId, entityName, parentEntityType, parentEntityId, parentEntityName, rootEntityType, rootEntityId, rootEntityName,
+      entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope
     )

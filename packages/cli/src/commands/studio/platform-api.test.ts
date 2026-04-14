@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGET = vi.fn();
 const mockPOST = vi.fn();
@@ -23,6 +23,10 @@ vi.mock('../auth/client.js', async importOriginal => {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.stubGlobal('fetch', vi.fn());
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('fetchProjects', () => {
@@ -194,5 +198,64 @@ describe('uploadDeploy', () => {
     await expect(uploadDeploy('tok', 'org-1', 'proj-1', Buffer.from('zip'))).rejects.toThrow(
       'Artifact upload failed: 403',
     );
+  });
+});
+
+describe('pollDeploy', () => {
+  it('retries transient polling failures up to 3 times', async () => {
+    vi.useFakeTimers();
+
+    const deploy = { id: 'd1', status: 'running', instanceUrl: 'https://x.com', error: null };
+    const networkError = new TypeError('network request failed');
+    Object.assign(networkError, { cause: { code: 'ECONNRESET' } });
+    mockGET
+      .mockRejectedValueOnce(networkError)
+      .mockRejectedValueOnce(networkError)
+      .mockRejectedValueOnce(networkError)
+      .mockResolvedValueOnce({ data: { deploy }, response: { status: 200 } });
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
+
+    const { pollDeploy } = await import('./platform-api.js');
+    const resultPromise = pollDeploy('d1', 'tok', 'org-1', 10000);
+
+    await vi.advanceTimersByTimeAsync(3500);
+
+    await expect(resultPromise).resolves.toEqual(deploy);
+    expect(mockGET).toHaveBeenCalledTimes(4);
+  });
+
+  it('throws after exhausting transient polling retries', async () => {
+    vi.useFakeTimers();
+
+    const networkError = new TypeError('network request failed');
+    Object.assign(networkError, { cause: { code: 'ECONNRESET' } });
+    mockGET.mockRejectedValue(networkError);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
+
+    const { pollDeploy } = await import('./platform-api.js');
+    const resultPromise = pollDeploy('d1', 'tok', 'org-1', 10000);
+    const rejection = expect(resultPromise).rejects.toThrow('network request failed');
+
+    await vi.advanceTimersByTimeAsync(3500);
+
+    await rejection;
+    expect(mockGET).toHaveBeenCalledTimes(4);
+  });
+
+  it('does not retry non-transient polling failures', async () => {
+    vi.useFakeTimers();
+
+    mockGET.mockRejectedValue(new Error('Invalid deploy payload'));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
+
+    const { pollDeploy } = await import('./platform-api.js');
+    const resultPromise = pollDeploy('d1', 'tok', 'org-1', 10000);
+    const rejection = expect(resultPromise).rejects.toThrow('Invalid deploy payload');
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    await rejection;
+    expect(mockGET).toHaveBeenCalledTimes(1);
   });
 });

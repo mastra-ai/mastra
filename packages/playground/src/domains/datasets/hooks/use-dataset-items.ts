@@ -50,11 +50,11 @@ export const useDatasetItems = (datasetId: string, search?: string, version?: nu
       return lastPageParam + 1;
     },
     enabled: Boolean(datasetId),
-    select: data => {
-      return data.pages.flatMap(page => page?.items ?? []);
-    },
     retry: false,
   });
+
+  const items = query.data?.pages.flatMap(page => page?.items ?? []) ?? [];
+  const total = query.data?.pages[0]?.pagination?.total;
 
   useEffect(() => {
     if (isEndOfListInView && query.hasNextPage && !query.isFetchingNextPage) {
@@ -62,5 +62,5 @@ export const useDatasetItems = (datasetId: string, search?: string, version?: nu
     }
   }, [isEndOfListInView, query.hasNextPage, query.isFetchingNextPage]);
 
-  return { ...query, setEndOfListElement };
+  return { ...query, data: items, total, setEndOfListElement };
 };

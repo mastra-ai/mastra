@@ -297,6 +297,22 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         conditions.push('datasetId = ?');
         queryParams.push(args.datasetId);
       }
+      if (args.targetType) {
+        conditions.push('targetType = ?');
+        queryParams.push(args.targetType);
+      }
+      if (args.targetId) {
+        conditions.push('targetId = ?');
+        queryParams.push(args.targetId);
+      }
+      if (args.agentVersion) {
+        conditions.push('agentVersion = ?');
+        queryParams.push(args.agentVersion);
+      }
+      if (args.status) {
+        conditions.push('status = ?');
+        queryParams.push(args.status);
+      }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -521,6 +537,15 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       // Build WHERE clause
       const conditions: string[] = ['experimentId = ?'];
       const queryParams: InValue[] = [args.experimentId];
+
+      if (args.traceId) {
+        conditions.push('traceId = ?');
+        queryParams.push(args.traceId);
+      }
+      if (args.status) {
+        conditions.push('status = ?');
+        queryParams.push(args.status);
+      }
 
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
