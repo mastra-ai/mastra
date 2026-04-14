@@ -3,11 +3,11 @@
 '@mastra/sentry': patch
 ---
 
-Fixed Sentry error stack traces so they point to the actual error origin instead of the Mastra exporter internals.
+Fixed stack traces for errors reported to Sentry. Exceptions now point to the code that threw the error instead of `SentryExporter.handleSpanEnded` inside the exporter, so issues in Sentry are actually debuggable.
 
-Two related fixes:
+This was caused by two issues, both fixed:
 
-- **@mastra/sentry**: The exporter now passes an `Error` object (preserving the captured stack) to `Sentry.captureException` instead of a bare message string. Previously, passing a string caused Sentry to synthesize a stack trace from the exporter's call site, so every error in Sentry appeared to originate from `SentryExporter.handleSpanEnded`.
-- **@mastra/observability**: When a span is failed with a `MastraError` that wraps another error, `span.errorInfo.stack` now prefers the original cause's stack over the wrapper's stack, so downstream exporters receive the stack pointing to the true error origin.
+- `@mastra/sentry` passed the error message as a string to `Sentry.captureException`, which made Sentry synthesize a stack trace from the exporter's call site. It now passes an `Error` instance with the captured stack attached.
+- `@mastra/observability` stored the wrapping `MastraError`'s stack on the span, hiding the original error's location. When the `MastraError` has a cause, the cause's stack is now preserved.
 
-Fixes #15337.
+Fixes [#15337](https://github.com/mastra-ai/mastra/issues/15337).
