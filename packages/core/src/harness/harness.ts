@@ -1364,7 +1364,13 @@ export class Harness<TState = {}> {
         };
       }
 
-      const response = await agent.stream(messageInput as any, streamOptions as any);
+      const response = await agent.stream(
+        typeof messageInput === 'string' && messageInput === ''
+          ? // allow sending an empty message to manually re-trigger agent from its last output
+            []
+          : (messageInput as any),
+        streamOptions as any,
+      );
       const streamResult = await this.processStream(response, requestContext);
 
       if (this.currentOperationId === operationId) {
