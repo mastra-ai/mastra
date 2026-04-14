@@ -46,6 +46,7 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import type {
+  ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
   ProcessorWorkflow,
@@ -182,6 +183,7 @@ export class Agent<
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[], TRequestContext>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[], TRequestContext>;
   #maxProcessorRetries?: number;
+  #errorProcessors?: DynamicArgument<ErrorProcessorOrWorkflow[], TRequestContext>;
   #browser?: MastraBrowser;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   readonly #options?: AgentCreateOptions;
@@ -334,6 +336,10 @@ export class Agent<
 
     if (config.maxProcessorRetries !== undefined) {
       this.#maxProcessorRetries = config.maxProcessorRetries;
+    }
+
+    if (config.errorProcessors) {
+      this.#errorProcessors = config.errorProcessors;
     }
 
     if (config.requestContextSchema) {
@@ -516,20 +522,30 @@ export class Agent<
     requestContext,
     inputProcessorOverrides,
     outputProcessorOverrides,
+    errorProcessorOverrides,
     processorStates,
   }: {
     requestContext: RequestContext;
     inputProcessorOverrides?: InputProcessorOrWorkflow[];
     outputProcessorOverrides?: OutputProcessorOrWorkflow[];
+    errorProcessorOverrides?: ErrorProcessorOrWorkflow[];
     processorStates?: Map<string, ProcessorState>;
   }): Promise<ProcessorRunner> {
     // Resolve processors - overrides replace user-configured but auto-derived (memory, skills) are kept
     const inputProcessors = await this.listResolvedInputProcessors(requestContext, inputProcessorOverrides);
     const outputProcessors = await this.listResolvedOutputProcessors(requestContext, outputProcessorOverrides);
+    const errorProcessors =
+      errorProcessorOverrides ??
+      (this.#errorProcessors
+        ? typeof this.#errorProcessors === 'function'
+          ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
+          : this.#errorProcessors
+        : []);
 
     return new ProcessorRunner({
       inputProcessors,
       outputProcessors,
+      errorProcessors,
       logger: this.logger,
       agentName: this.name,
       processorStates,
@@ -821,13 +837,13 @@ export class Agent<
   }
 
   /**
-   * Returns the IDs of the raw configured input and output processors,
+   * Returns the IDs of the raw configured input, output, and error processors,
    * without combining them into workflows. Used by the editor to clone
    * agent processor configuration to storage.
    */
   public async getConfiguredProcessorIds(
     requestContext?: RequestContext,
-  ): Promise<{ inputProcessorIds: string[]; outputProcessorIds: string[] }> {
+  ): Promise<{ inputProcessorIds: string[]; outputProcessorIds: string[]; errorProcessorIds: string[] }> {
     const ctx = requestContext || new RequestContext();
 
     let inputProcessorIds: string[] = [];
@@ -848,7 +864,16 @@ export class Agent<
       outputProcessorIds = processors.map(p => p.id).filter(Boolean);
     }
 
-    return { inputProcessorIds, outputProcessorIds };
+    let errorProcessorIds: string[] = [];
+    if (this.#errorProcessors) {
+      const processors =
+        typeof this.#errorProcessors === 'function'
+          ? await this.#errorProcessors({ requestContext: ctx as RequestContext<TRequestContext> })
+          : this.#errorProcessors;
+      errorProcessorIds = processors.map(p => p.id).filter(Boolean);
+    }
+
+    return { inputProcessorIds, outputProcessorIds, errorProcessorIds };
   }
 
   /**
@@ -4604,6 +4629,19 @@ export class Agent<
         requestContext: RequestContext;
         overrides?: OutputProcessorOrWorkflow[];
       }) => this.listResolvedOutputProcessors(requestContext, overrides),
+      errorProcessors: async ({
+        requestContext,
+        overrides,
+      }: {
+        requestContext: RequestContext;
+        overrides?: ErrorProcessorOrWorkflow[];
+      }) =>
+        overrides ??
+        (this.#errorProcessors
+          ? typeof this.#errorProcessors === 'function'
+            ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
+            : this.#errorProcessors
+          : []),
       llm,
     };
 
@@ -5354,6 +5392,8 @@ export class Agent<
         snapshot: existingSnapshot,
       },
       methodType: 'stream',
+      // Use agent's maxProcessorRetries as default, allow options to override
+      maxProcessorRetries: mergedStreamOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
     } as unknown as InnerAgentExecutionOptions<OUTPUT>);
 
     if (result.status !== 'success') {

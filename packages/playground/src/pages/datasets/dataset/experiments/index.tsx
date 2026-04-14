@@ -1,21 +1,21 @@
 import {
-  Header,
-  MainContentLayout,
-  MainContentContent,
-  Icon,
-  Button,
   Breadcrumb,
+  Button,
   Crumb,
+  Header,
+  Icon,
+  MainContentContent,
+  MainContentLayout,
   MainHeader,
-  DatasetExperimentsComparison,
-  useDataset,
   PermissionDenied,
   SessionExpired,
-  is403ForbiddenError,
   is401UnauthorizedError,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { Database, GitCompare, ArrowLeft } from 'lucide-react';
 import { useParams, useSearchParams, Link } from 'react-router';
+import { DatasetExperimentsComparison } from '@/domains/datasets';
+import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 
 function CompareDatasetExperimentsPage() {
   const { datasetId } = useParams<{ datasetId: string }>();
@@ -49,7 +49,7 @@ function CompareDatasetExperimentsPage() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to="/evaluation?tab=datasets">
+            <Crumb as={Link} to="/datasets">
               <Icon>
                 <Database />
               </Icon>
@@ -80,13 +80,13 @@ function CompareDatasetExperimentsPage() {
     <MainContentLayout>
       <Header>
         <Breadcrumb>
-          <Crumb as={Link} to="/evaluation?tab=datasets">
+          <Crumb as={Link} to="/datasets">
             <Icon>
               <Database />
             </Icon>
             Datasets
           </Crumb>
-          <Crumb as={Link} to={`/evaluation/datasets/${datasetId}`}>
+          <Crumb as={Link} to={`/datasets/${datasetId}`}>
             {dataset?.name ?? datasetId?.slice(0, 8)}
           </Crumb>
           <Crumb isCurrent as="span">
@@ -112,7 +112,7 @@ function CompareDatasetExperimentsPage() {
               </MainHeader.Description>
             </MainHeader.Column>
             <MainHeader.Column>
-              <Button as={Link} to={`/evaluation/datasets/${datasetId}`}>
+              <Button as={Link} to={`/datasets/${datasetId}`}>
                 <ArrowLeft />
                 Back to Dataset
               </Button>

@@ -1,16 +1,7 @@
-import {
-  Header,
-  Breadcrumb,
-  Crumb,
-  Icon,
-  ToolsIcon,
-  HeaderAction,
-  Button,
-  DocsIcon,
-  ToolPanel,
-  ToolCombobox,
-} from '@mastra/playground-ui';
+import { Breadcrumb, Button, Crumb, DocsIcon, Header, HeaderAction, Icon, ToolsIcon } from '@mastra/playground-ui';
 import { Link, useParams } from 'react-router';
+import { ToolCombobox } from '@/domains/tools/components/tool-combobox';
+import { ToolPanel } from '@/domains/tools/components/ToolPanel';
 
 const Tool = () => {
   const { toolId } = useParams();
