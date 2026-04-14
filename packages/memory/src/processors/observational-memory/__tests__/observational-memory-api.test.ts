@@ -133,22 +133,20 @@ function createOM(
     observerModel?: any;
     reflectorModel?: any;
     activationTTL?: number | string;
-    reflectionActivationTTL?: number | string;
   },
 ) {
   return new ObservationalMemory({
     storage,
     scope: opts?.scope ?? 'thread',
+    activationTTL: opts?.activationTTL,
     observation: {
       model: opts?.observerModel ?? createMockObserverModel(),
       messageTokens: opts?.messageTokens ?? 100,
       bufferTokens: opts?.bufferTokens ?? false,
-      activationTTL: opts?.activationTTL,
     },
     reflection: {
       model: opts?.reflectorModel ?? createMockReflectorModel(),
       observationTokens: opts?.observationTokens ?? 50_000,
-      activationTTL: opts?.reflectionActivationTTL,
     },
   });
 }

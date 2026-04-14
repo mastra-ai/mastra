@@ -5132,6 +5132,7 @@ describe('Locking Behavior', () => {
 
     const om = new ObservationalMemory({
       storage,
+      activationTTL: '5m',
       observation: {
         messageTokens: 100,
         bufferTokens: false,
@@ -5147,7 +5148,6 @@ describe('Locking Behavior', () => {
       },
       reflection: {
         observationTokens: 1000,
-        activationTTL: '5m',
         model: mockReflectorModel as any,
       },
       scope: 'thread',
@@ -5158,8 +5158,9 @@ describe('Locking Behavior', () => {
       resourceId: 'resource-ttl',
       scope: 'thread',
       config: {
+        activationTTL: '5m',
         observation: { messageTokens: 100, model: 'test-model' },
-        reflection: { observationTokens: 1000, activationTTL: '5m', model: 'test-model' },
+        reflection: { observationTokens: 1000, model: 'test-model' },
       },
     });
 
@@ -10551,15 +10552,25 @@ describe('threadId validation in thread scope', () => {
 // =============================================================================
 
 describe('Observer Context Optimization', () => {
-  function createOM(observationOverrides: Record<string, unknown> = {}) {
+  function createOM({
+    activationTTL,
+    observation,
+    ...observationOverrides
+  }: {
+    activationTTL?: number | string;
+    observation?: Record<string, unknown>;
+    [key: string]: unknown;
+  } = {}) {
     return new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' } as any),
+      activationTTL,
       observation: {
         messageTokens: 50000,
         bufferTokens: false,
         ...observationOverrides,
+        ...observation,
       },
       reflection: { observationTokens: 40000 },
     });
@@ -10602,15 +10613,15 @@ describe('Observer Context Optimization', () => {
       expect(() => createOM({ previousObserverTokens: 5000 })).not.toThrow();
     });
 
-    it('should accept duration strings for observation.activationTTL', () => {
+    it('should accept duration strings for activationTTL', () => {
       expect(() => createOM({ activationTTL: '5m' })).not.toThrow();
       expect(() => createOM({ activationTTL: '1hr' })).not.toThrow();
       expect(() => createOM({ activationTTL: '30s' })).not.toThrow();
     });
 
-    it('should throw if observation.activationTTL is an invalid duration string', () => {
-      expect(() => createOM({ activationTTL: 'later' })).toThrow(
-        'observation.activationTTL must be a non-negative number of milliseconds or a duration string like "5m" or "1hr".',
+    it('should throw if activationTTL is an invalid duration string', () => {
+      expect(() => createOM({ activationTTL: 'later' as any })).toThrow(
+        'activationTTL must be a non-negative number of milliseconds or a duration string like "5m" or "1hr".',
       );
     });
   });

@@ -401,7 +401,7 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config.observation?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferActivation),
-      activationTTL: parseActivationTTL(config.observation?.activationTTL, 'observation.activationTTL'),
+      activationTTL: parseActivationTTL(config.activationTTL, 'activationTTL'),
       blockAfter: asyncBufferingDisabled
         ? undefined
         : resolveBlockAfter(
@@ -433,7 +433,7 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config?.reflection?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferActivation),
-      activationTTL: parseActivationTTL(config.reflection?.activationTTL, 'reflection.activationTTL'),
+      activationTTL: parseActivationTTL(config.activationTTL, 'activationTTL'),
       blockAfter: asyncBufferingDisabled
         ? undefined
         : resolveBlockAfter(

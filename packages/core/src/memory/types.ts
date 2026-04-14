@@ -491,19 +491,6 @@ export interface ObservationalMemoryObservationConfig {
   bufferActivation?: number;
 
   /**
-   * Time before buffered observations are force-activated after inactivity.
-   * Accepts milliseconds as a number or a duration string like `"5m"` or `"1hr"`.
-   * When the gap between the current time and the last assistant message part's `createdAt`
-   * exceeds this value, buffered observations are force-activated regardless of whether the
-   * token threshold has been reached. Useful to align with prompt cache TTLs.
-   *
-   * @example 300_000
-   * @example "5m"
-   * @example "1hr"
-   */
-  activationTTL?: number | string;
-
-  /**
    * Token threshold above which synchronous (blocking) observation is forced.
    * When set, the system will never block for observation between `messageTokens`
    * and `blockAfter` — only async buffering and activation are used in that range.
@@ -595,19 +582,6 @@ export interface ObservationalMemoryReflectionConfig {
    * @default 40000
    */
   observationTokens?: number;
-
-  /**
-   * Time before buffered reflections are force-activated after inactivity.
-   * Accepts milliseconds as a number or a duration string like `"5m"` or `"1hr"`.
-   * When the gap between the current time and the last assistant message part's `createdAt`
-   * exceeds this value, buffered reflections are force-activated regardless of whether the
-   * token threshold has been reached. Useful to align with prompt cache TTLs.
-   *
-   * @example 300_000
-   * @example "5m"
-   * @example "1hr"
-   */
-  activationTTL?: number | string;
 
   /**
    * Model settings for the Reflector agent.
@@ -751,6 +725,19 @@ export interface ObservationalMemoryOptions {
    * @default 'thread'
    */
   scope?: 'resource' | 'thread';
+
+  /**
+   * Time before buffered observations or buffered reflections are force-activated after inactivity.
+   * Accepts milliseconds as a number or a duration string like `"5m"` or `"1hr"`.
+   * When the gap between the current time and the last assistant message part's `createdAt`
+   * exceeds this value, buffered observational memory activates regardless of whether the
+   * token threshold has been reached. Useful to align with prompt cache TTLs.
+   *
+   * @example 300_000
+   * @example "5m"
+   * @example "1hr"
+   */
+  activationTTL?: number | string;
 
   /**
    * Share the token budget between messages and observations.

@@ -65,6 +65,13 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     defaultValue: "'thread'",
   },
   {
+    name: 'activationTTL',
+    type: 'number | string',
+    description:
+      'Time before buffered observations or buffered reflections are forced to activate after inactivity, even if their token thresholds have not been reached yet. Accepts milliseconds or duration strings like `300_000`, `"5m"`, or `"1hr"`. When the gap between the current time and the last assistant message part timestamp exceeds this value, buffered observational memory activates before the next prompt. Useful for aligning with prompt cache TTLs.',
+    isOptional: true,
+  },
+  {
     name: 'shareTokenBudget',
     type: 'boolean',
     description:
@@ -180,13 +187,6 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             defaultValue: '1.2 (when bufferTokens is set)',
           },
           {
-            name: 'activationTTL',
-            type: 'number | string',
-            description:
-              'Time before buffered observations are forced to activate after inactivity, even if the `messageTokens` threshold has not been reached. Accepts milliseconds or duration strings like `300_000`, `"5m"`, or `"1hr"`. When the gap between the current time and the last assistant message part timestamp exceeds this value, buffered observations activate regardless of pending token count. Useful for aligning with prompt cache TTLs.',
-            isOptional: true,
-          },
-          {
             name: 'previousObserverTokens',
             type: 'number | false',
             description:
@@ -272,13 +272,6 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
               'Token threshold above which synchronous (blocking) reflection is forced. Between `observationTokens` and `blockAfter`, only async buffering/activation is used. Above `blockAfter`, a synchronous reflection runs as a last resort. Accepts a multiplier (1 < value < 2, multiplied by `observationTokens`) or an absolute token count (≥ 2, must be greater than `observationTokens`). Only relevant when `bufferActivation` is set. Defaults to `1.2` when async reflection is enabled.',
             isOptional: true,
             defaultValue: '1.2 (when bufferActivation is set)',
-          },
-          {
-            name: 'activationTTL',
-            type: 'number | string',
-            description:
-              'Time before buffered reflections are forced to activate after inactivity. Accepts milliseconds or duration strings like `300_000`, `"5m"`, or `"1hr"`. Same semantics as `observation.activationTTL` but applies to the reflection step.',
-            isOptional: true,
           },
         ],
       },
