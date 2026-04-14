@@ -12,6 +12,10 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 Sends Tracing data to Datadog's LLM Observability product for monitoring and analytics.
 
+:::info
+For users who also need dd-trace APM auto-instrumentation to be correctly parented under Mastra spans, use the [DatadogBridge](/reference/observability/tracing/bridges/datadog) instead. The exporter emits LLMObs data retroactively, so it doesn't participate in dd-trace's live scope.
+:::
+
 ## Constructor
 
 ```typescript prettier:false

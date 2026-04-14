@@ -123,10 +123,17 @@ export interface DatadogBridgeConfig extends BaseExporterConfig {
   env?: string;
 
   /**
-   * Use agentless mode (direct HTTPS intake without local Datadog Agent).
-   * Defaults to true for consistency with other Mastra exporters.
-   * Set to false to use a local Datadog Agent instead.
-   * Falls back to DD_LLMOBS_AGENTLESS_ENABLED environment variable.
+   * Use agentless mode (direct HTTPS intake without a local Datadog Agent).
+   *
+   * Defaults to `false` for the bridge — most users running dd-trace
+   * auto-instrumentation already have a local Datadog Agent (required for
+   * APM data). Agentless mode only routes LLMObs data directly to Datadog
+   * intake, which would split your APM and LLMObs telemetry across two
+   * paths.
+   *
+   * Set to `true` if you only want LLMObs data (no APM auto-instrumentation)
+   * and don't have a local Datadog Agent. Falls back to the
+   * `DD_LLMOBS_AGENTLESS_ENABLED` environment variable.
    */
   agentless?: boolean;
 
@@ -190,8 +197,10 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
     const site = config.site ?? process.env.DD_SITE ?? 'datadoghq.com';
     const env = config.env ?? process.env.DD_ENV;
 
+    // Default to false for the bridge — assume a local Datadog Agent is
+    // present (required for the APM auto-instrumentation the bridge enables)
     const envAgentless = process.env.DD_LLMOBS_AGENTLESS_ENABLED?.toLowerCase();
-    const agentless = config.agentless ?? (envAgentless === 'false' || envAgentless === '0' ? false : true);
+    const agentless = config.agentless ?? (envAgentless === 'true' || envAgentless === '1' ? true : false);
 
     if (!mlApp) {
       this.setDisabled(`Missing required mlApp. Set DD_LLMOBS_ML_APP environment variable or pass mlApp in config.`);
