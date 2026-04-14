@@ -1,3 +1,4 @@
+import { anthropic } from '@ai-sdk/anthropic-v5';
 import { openai } from '@ai-sdk/openai-v6';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
@@ -300,26 +301,18 @@ describe('CoreToolBuilder strict', () => {
   });
 
   it('should preserve provider name in buildV5() for versioned provider-defined tools', () => {
-    // Simulates an Anthropic-style V5 tool where the ID is versioned
-    // (e.g. "anthropic.web_search_20250305") but the model-facing name
-    // is the generic "web_search". Without the fix, buildV5() would
-    // derive "web_search_20250305" from the ID, which breaks V6 provider
-    // bidirectional tool name mapping.
-    const providerTool = {
-      type: 'provider-defined' as const,
-      id: 'anthropic.web_search_20250305' as const,
-      name: 'web_search',
-      args: {},
-      description: 'Search the web',
-      inputSchema: z.object({}),
-    };
+    // Uses the real Anthropic V5 webSearch tool where the ID is versioned
+    // ("anthropic.web_search_20250305") but the model-facing name is "web_search".
+    // Without the fix, buildV5() would derive "web_search_20250305" from the ID,
+    // which breaks V6 provider bidirectional tool name mapping.
+    const providerTool = anthropic.tools.webSearch_20250305({});
 
     const builder = new CoreToolBuilder({
       originalTool: providerTool as any,
       options: {
         name: 'search',
         logger: console as any,
-        description: 'Search the web',
+        description: providerTool.description ?? 'Search the web',
         requestContext: new RequestContext(),
         tracingContext: {},
       },
