@@ -352,17 +352,14 @@ export class ProcessorRunner {
           }
         } else {
           if (processResult) {
-            const deletedIds = idsBeforeProcessing.filter(
-              (i: string) => !processResult.some((m: MastraDBMessage) => m.id === i),
+            ProcessorRunner.applyMessagesToMessageList(
+              processResult,
+              messageList,
+              idsBeforeProcessing,
+              check,
+              'response',
             );
-            if (deletedIds.length) {
-              messageList.removeByIds(deletedIds);
-            }
-            processableMessages = processResult || [];
-            for (const message of processResult) {
-              messageList.removeByIds([message.id]);
-              messageList.add(message, check.getSource(message) || 'response');
-            }
+            processableMessages = processResult;
           }
         }
 
@@ -1228,27 +1225,7 @@ export class ProcessorRunner {
           }
           // Processor returned the same messageList - mutations have been applied
         } else if (result) {
-          // Processor returned an array - apply changes to messageList
-          const deletedIds = idsBeforeProcessing.filter(
-            (i: string) => !result.some((m: MastraDBMessage) => m.id === i),
-          );
-          if (deletedIds.length) {
-            messageList.removeByIds(deletedIds);
-          }
-
-          // Re-add messages with correct sources
-          for (const message of result) {
-            messageList.removeByIds([message.id]);
-            if (message.role === 'system') {
-              const systemText =
-                (message.content.content as string | undefined) ??
-                message.content.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n') ??
-                '';
-              messageList.addSystem(systemText);
-            } else {
-              messageList.add(message, check.getSource(message) || 'response');
-            }
-          }
+          ProcessorRunner.applyMessagesToMessageList(result, messageList, idsBeforeProcessing, check, 'response');
         }
 
         processorSpan?.end({
@@ -1293,8 +1270,19 @@ export class ProcessorRunner {
       messageList.removeByIds(deletedIds);
     }
 
-    // Re-add messages with correct sources
+    // Build a lookup of messages currently in the list by ID.
+    // Skip the remove/re-add for messages that are already present
+    // with the same object reference — the processor either returned
+    // them unchanged or mutated them in-place (both are already
+    // reflected in the MessageList). This avoids corrupting the
+    // MessageStateManager's source Set tracking during the
+    // removeByIds → add round-trip.
+    const currentMessages = messageList.get.all.db();
+    const currentById = new Map(currentMessages.map(m => [m.id, m]));
     for (const message of messages) {
+      if (currentById.get(message.id) === message) {
+        continue;
+      }
       messageList.removeByIds([message.id]);
       if (message.role === 'system') {
         const systemText =
