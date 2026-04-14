@@ -465,7 +465,8 @@ export class AgentChannels {
       });
 
       // Default handler that routes messages to the agent
-      const defaultHandler = (sdkThread: Thread, message: Message) => this.handleChatMessage(sdkThread, message, mastra);
+      const defaultHandler = (sdkThread: Thread, message: Message) =>
+        this.handleChatMessage(sdkThread, message, mastra);
 
       // Register handlers with optional overrides
       const { onDirectMessage, onMention, onSubscribedMessage } = this.handlerOverrides;
@@ -682,7 +683,7 @@ export class AgentChannels {
    * One POST route per adapter at `/api/agents/{agentId}/channels/{platform}/webhook`.
    */
   getWebhookRoutes(): ApiRoute[] {
-if (!this.agent) return [];
+    if (!this.agent) return [];
 
     const agentId = this.agent.id;
     const routes: ApiRoute[] = [];
