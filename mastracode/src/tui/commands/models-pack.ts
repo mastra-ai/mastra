@@ -734,6 +734,12 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
               resolve();
               return;
             }
+            if (s.customModelPacks.some(p => p.name === newName)) {
+              collapseResult('cancelled');
+              ctx.showInfo(`A custom pack named "${newName}" already exists. Rename or delete it first.`);
+              resolve();
+              return;
+            }
             imported.name = newName;
             imported.id = `custom:${newName}`;
           }
