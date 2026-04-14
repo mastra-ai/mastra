@@ -87,6 +87,13 @@ export const mastra = new Mastra({
     isOptional: true,
   },
   {
+    name: 'agentVersion',
+    type: "{ versionId: string } | { status?: 'draft' | 'published' }",
+    description:
+      "Selects a specific agent version. Pass `{ versionId: '<id>' }` to target an exact version, or `{ status: 'draft' }` / `{ status: 'published' }` to resolve by status. When the route is called, query parameters `?versionId=<id>` or `?status=draft|published` take precedence over this static value. Requires the [Editor](/docs/editor/overview) to be configured.",
+    isOptional: true,
+  },
+  {
     name: 'defaultOptions',
     type: 'AgentExecutionOptions',
     description:

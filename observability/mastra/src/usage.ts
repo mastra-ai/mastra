@@ -127,9 +127,12 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
       inputDetails.cacheWrite = anthropic.cacheCreationInputTokens;
     }
 
-    // AI SDK v6-style usage already provides total input tokens including cache details,
-    // so avoid adding cache tokens on top of an already-totaled input count.
-    if (!hasV3CachedTotals && (isDefined(inputDetails.cacheRead) || isDefined(inputDetails.cacheWrite))) {
+    // Skip adjustment when inputTokens already includes cache tokens.
+    // Detected via V3 raw structure or a positive cachedInputTokens field.
+    const inputAlreadyIncludesCache =
+      hasV3CachedTotals || (isDefined(usage.cachedInputTokens) && usage.cachedInputTokens > 0);
+
+    if (!inputAlreadyIncludesCache && (isDefined(inputDetails.cacheRead) || isDefined(inputDetails.cacheWrite))) {
       inputTokens = (usage.inputTokens ?? 0) + (inputDetails.cacheRead ?? 0) + (inputDetails.cacheWrite ?? 0);
     }
   }

@@ -279,6 +279,11 @@ export interface LLMRecorderOptions {
    */
   debug?: boolean;
   /**
+   * When true, only accept exact hash matches during replay.
+   * Disables fuzzy/similarity matching.
+   */
+  exactMatch?: boolean;
+  /**
    * Override the test mode instead of reading from `LLM_TEST_MODE` env var.
    * Useful for tests that must always replay regardless of environment.
    */
@@ -363,13 +368,20 @@ function relativizeTestFile(filepath: string): string {
  * Deep sort object keys for stable serialization
  */
 function stableSortKeys(value: unknown): unknown {
+  if (typeof value === 'string') return canonicalizeISODateString(value);
   if (value === null || typeof value !== 'object') return value;
+  if (value instanceof Date) return value.toISOString();
   if (Array.isArray(value)) return value.map(stableSortKeys);
   const sorted: Record<string, unknown> = {};
   for (const key of Object.keys(value as Record<string, unknown>).sort()) {
     sorted[key] = stableSortKeys((value as Record<string, unknown>)[key]);
   }
   return sorted;
+}
+
+function canonicalizeISODateString(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value)) return value;
+  return new Date(value).toISOString();
 }
 
 interface ParsedRequestBody {
@@ -422,9 +434,15 @@ async function parseRequestBody(request: Request): Promise<ParsedRequestBody> {
 /**
  * Serialize request content for hashing and fuzzy matching.
  */
+function normalizeRequestBody(body: unknown): unknown {
+  if (typeof body === 'string') return canonicalizeISODateString(body);
+  if (body !== null && typeof body === 'object') return stableSortKeys(body);
+  return body;
+}
+
 function serializeRequestContent(url: string, body: unknown): string {
-  const normalizedBody = typeof body === 'object' ? JSON.stringify(stableSortKeys(body)) : String(body);
-  return `${url}:${normalizedBody}`;
+  const normalizedBody = normalizeRequestBody(body);
+  return `${url}:${typeof normalizedBody === 'string' ? normalizedBody : JSON.stringify(normalizedBody)}`;
 }
 
 /**
@@ -593,7 +611,7 @@ function findRecording(
   body: unknown,
   usedHashes?: Set<string>,
 ): LLMRecording | undefined {
-  // 1. Exact hash match (fast path) — always valid regardless of used set
+  // 1. Exact hash match (fast path)
   const exact = recordings.find(r => r.hash === hash);
   if (exact) {
     return exact;
@@ -953,7 +971,10 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
           const transformedReqBody = options.transformRequest
             ? options.transformRequest({ url, body: recording.request.body }).body
             : recording.request.body;
-          const changes = diffJson(transformedReqBody!, transformedBody ?? {});
+          const changes = diffJson(
+            normalizeRequestBody(transformedReqBody)!,
+            normalizeRequestBody(transformedBody) ?? {},
+          );
           const formatted = changes
             .map(part => {
               const prefix = part.added ? '+' : part.removed ? '-' : ' ';
@@ -965,6 +986,13 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
             })
             .join('\n');
           console.warn(`[llm-recorder] Diff (recorded vs actual):\n${formatted}`);
+
+          if (options.exactMatch) {
+            throw new Error(
+              `No exact match for hash ${hash}, using fuzzy match (recorded hash: ${recording.hash}). ` +
+                `Consider re-recording with UPDATE_RECORDINGS=true.`,
+            );
+          }
         }
 
         if (recording.response.isStreaming) {
