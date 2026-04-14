@@ -140,6 +140,7 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
             ...tool,
             inputSchema,
           } as any);
+          const strict = 'strict' in tool ? tool.strict : undefined;
 
           const toolType = sdkTool?.type ?? 'function';
 
@@ -191,6 +192,7 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
                 name,
                 description: sdkTool.description,
                 inputSchema: fixTypelessProperties(parameters as Record<string, unknown>),
+                ...(targetVersion === 'v3' && strict != null ? { strict } : {}),
                 providerOptions: sdkTool.providerOptions,
               };
             case 'provider-defined': {

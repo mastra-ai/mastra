@@ -2,6 +2,37 @@ import { MessageList } from '@mastra/core/agent/message-list';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { V5UIMessage, V6UIMessage } from './public-types';
 
+function isSystemReminderUIMessage(message: {
+  role?: string;
+  parts?: Array<{ type?: string; text?: string }>;
+  content?: unknown;
+  metadata?: Record<string, unknown>;
+}) {
+  // Check metadata first — processors stamp systemReminder or legacy dynamicAgentsMdReminder
+  if (message.metadata?.systemReminder || message.metadata?.dynamicAgentsMdReminder) {
+    return true;
+  }
+
+  if (message.role !== 'user') {
+    return false;
+  }
+
+  // Fall back to text inspection for backward compatibility
+  if (Array.isArray(message.parts)) {
+    return message.parts.some(
+      part => part.type === 'text' && typeof part.text === 'string' && part.text.includes('<system-reminder'),
+    );
+  }
+
+  return typeof message.content === 'string' && message.content.includes('<system-reminder');
+}
+
+function filterSystemReminderUIMessages<
+  T extends { role?: string; parts?: Array<{ type?: string; text?: string }>; content?: unknown },
+>(messages: T[]): T[] {
+  return messages.filter(message => !isSystemReminderUIMessage(message));
+}
+
 type MessageConversionOptionsV5 = {
   version?: 'v5';
 };
@@ -52,9 +83,9 @@ export function toAISdkMessages(
 ): V5UIMessage[] | V6UIMessage[] {
   const list = new MessageList().add(messages, `memory`);
   if (options.version === 'v6') {
-    return list.get.all.aiV6.ui();
+    return filterSystemReminderUIMessages(list.get.all.aiV6.ui());
   }
-  return list.get.all.aiV5.ui();
+  return filterSystemReminderUIMessages(list.get.all.aiV5.ui());
 }
 
 /**
@@ -99,7 +130,7 @@ export function toAISdkMessages(
  * ```
  */
 export function toAISdkV5Messages(messages: MessageListInput) {
-  return toAISdkMessages(messages);
+  return filterSystemReminderUIMessages(toAISdkMessages(messages));
 }
 
 /**
@@ -148,5 +179,5 @@ export function toAISdkV5Messages(messages: MessageListInput) {
  * ```
  */
 export function toAISdkV4Messages(messages: MessageListInput) {
-  return new MessageList().add(messages, `memory`).get.all.aiV4.ui();
+  return filterSystemReminderUIMessages(new MessageList().add(messages, `memory`).get.all.aiV4.ui());
 }

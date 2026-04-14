@@ -179,6 +179,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
         ...options.structuredOutput,
         logger: capabilities.logger,
       });
+      if (capabilities.mastra) {
+        structuredProcessor.__registerMastra(capabilities.mastra);
+      }
       effectiveOutputProcessors = effectiveOutputProcessors
         ? [...effectiveOutputProcessors, structuredProcessor]
         : [structuredProcessor];
@@ -193,6 +196,16 @@ export function createMapResultsStep<OUTPUT = undefined>({
           })
         : options.inputProcessors || capabilities.inputProcessors
       : options.inputProcessors || [];
+
+    // Resolve error processors
+    const effectiveErrorProcessors = capabilities.errorProcessors
+      ? typeof capabilities.errorProcessors === 'function'
+        ? await capabilities.errorProcessors({
+            requestContext: result.requestContext!,
+            overrides: options.errorProcessors,
+          })
+        : options.errorProcessors || capabilities.errorProcessors
+      : options.errorProcessors || [];
 
     const messageList = memoryData.messageList!;
 
@@ -326,6 +339,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       structuredOutput: options.structuredOutput,
       inputProcessors: effectiveInputProcessors,
       outputProcessors: effectiveOutputProcessors,
+      errorProcessors: effectiveErrorProcessors,
       modelSettings: {
         temperature: 0,
         ...(options.modelSettings || {}),

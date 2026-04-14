@@ -105,6 +105,7 @@ async function resolveOrg(
   projectConfig: { organizationId?: string } | null,
   flagOrg?: string,
 ): Promise<{ orgId: string; orgName: string }> {
+  const isHeadless = Boolean(process.env.MASTRA_API_TOKEN);
   const envOrgId = process.env.MASTRA_ORG_ID;
   if (envOrgId) {
     return { orgId: envOrgId, orgName: envOrgId };
@@ -117,6 +118,9 @@ async function resolveOrg(
   }
 
   if (projectConfig?.organizationId) {
+    if (isHeadless) {
+      return { orgId: projectConfig.organizationId, orgName: projectConfig.organizationId };
+    }
     const orgs = await fetchOrgs(token);
     const match = orgs.find(o => o.id === projectConfig.organizationId);
     if (match) {

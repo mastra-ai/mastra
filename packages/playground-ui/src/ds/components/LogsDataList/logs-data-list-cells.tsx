@@ -1,6 +1,6 @@
 import { format, isToday } from 'date-fns';
 import { DataListCell } from '../DataList/data-list-cells';
-import type { LogLevel } from '@/domains/logs/types';
+type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
