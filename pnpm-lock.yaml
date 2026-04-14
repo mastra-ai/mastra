@@ -529,8 +529,8 @@ importers:
   browser/stagehand:
     dependencies:
       '@browserbasehq/stagehand':
-        specifier: ^3.2.0
-        version: 3.2.0(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.213.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.6.0(@opentelemetry/api@1.9.0))(deepmerge@4.3.1)(encoding@0.1.13)(zod@4.3.6)
+        specifier: ^3.2.1
+        version: 3.2.1(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.213.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.6.0(@opentelemetry/api@1.9.0))(deepmerge@4.3.1)(encoding@0.1.13)(zod@4.3.6)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -8596,8 +8596,8 @@ packages:
   '@browserbasehq/sdk@2.9.0':
     resolution: {integrity: sha512-Xzm1+6suzQypXjley4Phqer++pjnYyST6S7CArUn3kWyGA8aruXjAV5wkmqE21lgXo9K3/OQJvCu48bKEZFNDQ==}
 
-  '@browserbasehq/stagehand@3.2.0':
-    resolution: {integrity: sha512-X9s3sZuTL3zf8gt1o9yr4mvT2JmDRigkmBinlKF6LD+rlAIOh+nH6Cmz6xfRjZ4RgTfR0wRoE1iUTKa39YtWfA==}
+  '@browserbasehq/stagehand@3.2.1':
+    resolution: {integrity: sha512-h7KAAaNK7JUMw97w7sj0CBsBVtjLXyEorbUoYmCwLYYWrL2IUd9WFS7gRFspCp0ww2hpVPJEKMxHumwFCPEC8g==}
     engines: {node: ^20.19.0 || >=22.12.0}
     peerDependencies:
       deepmerge: ^4.3.1
@@ -28014,7 +28014,7 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
-  '@browserbasehq/stagehand@3.2.0(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.213.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.6.0(@opentelemetry/api@1.9.0))(deepmerge@4.3.1)(encoding@0.1.13)(zod@4.3.6)':
+  '@browserbasehq/stagehand@3.2.1(@cfworker/json-schema@4.1.1)(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.213.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.6.0(@opentelemetry/api@1.9.0))(deepmerge@4.3.1)(encoding@0.1.13)(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 2.0.1
       '@anthropic-ai/sdk': 0.39.0(encoding@0.1.13)
