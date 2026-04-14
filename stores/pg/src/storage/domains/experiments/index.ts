@@ -336,6 +336,22 @@ export class ExperimentsPG extends ExperimentsStorage {
         conditions.push(`"datasetId" = $${paramIndex++}`);
         queryParams.push(args.datasetId);
       }
+      if (args.targetType) {
+        conditions.push(`"targetType" = $${paramIndex++}`);
+        queryParams.push(args.targetType);
+      }
+      if (args.targetId) {
+        conditions.push(`"targetId" = $${paramIndex++}`);
+        queryParams.push(args.targetId);
+      }
+      if (args.agentVersion) {
+        conditions.push(`"agentVersion" = $${paramIndex++}`);
+        queryParams.push(args.agentVersion);
+      }
+      if (args.status) {
+        conditions.push(`"status" = $${paramIndex++}`);
+        queryParams.push(args.status);
+      }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -547,9 +563,24 @@ export class ExperimentsPG extends ExperimentsStorage {
       const { page, perPage: perPageInput } = args.pagination;
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
 
+      const conditions: string[] = ['"experimentId" = $1'];
+      const queryParams: any[] = [args.experimentId];
+      let paramIndex = 2;
+
+      if (args.traceId) {
+        conditions.push(`"traceId" = $${paramIndex++}`);
+        queryParams.push(args.traceId);
+      }
+      if (args.status) {
+        conditions.push(`"status" = $${paramIndex++}`);
+        queryParams.push(args.status);
+      }
+
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
       const countResult = await this.#db.client.one(
-        `SELECT COUNT(*) as count FROM ${tableName} WHERE "experimentId" = $1`,
-        [args.experimentId],
+        `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
+        queryParams,
       );
       const total = parseInt(countResult.count, 10);
 
@@ -562,8 +593,8 @@ export class ExperimentsPG extends ExperimentsStorage {
       const limitValue = perPageInput === false ? total : perPage;
 
       const rows = await this.#db.client.manyOrNone(
-        `SELECT * FROM ${tableName} WHERE "experimentId" = $1 ORDER BY "startedAt" ASC LIMIT $2 OFFSET $3`,
-        [args.experimentId, limitValue, offset],
+        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "startedAt" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+        [...queryParams, limitValue, offset],
       );
 
       return {
