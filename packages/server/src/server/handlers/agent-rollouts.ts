@@ -24,6 +24,15 @@ import { handleError } from './error';
 // Helpers
 // ============================================================================
 
+function requireEditor(mastra: Mastra): void {
+  if (!mastra.getEditor()) {
+    throw new HTTPException(400, {
+      message:
+        'Rollouts require the Mastra Editor to be configured. Pass an editor instance when constructing your Mastra instance.',
+    });
+  }
+}
+
 async function getRolloutsStore(mastra: Mastra): Promise<RolloutsStorage> {
   const storage = mastra.getStorage();
   if (!storage) {
@@ -108,6 +117,7 @@ export const GET_ROLLOUT_ROUTE = createRoute({
   tags: ['Agent Rollouts'],
   handler: async ({ mastra, agentId }) => {
     try {
+      requireEditor(mastra);
       const rolloutsStore = await getRolloutsStore(mastra);
       const rollout = await rolloutsStore.getActiveRollout(agentId);
 
@@ -156,6 +166,7 @@ export const START_ROLLOUT_ROUTE = createRoute({
   tags: ['Agent Rollouts'],
   handler: async ({ mastra, agentId, ...body }) => {
     try {
+      requireEditor(mastra);
       const rolloutsStore = await getRolloutsStore(mastra);
       const agentsStore = await getAgentsStore(mastra);
 
@@ -268,6 +279,7 @@ export const UPDATE_ROLLOUT_ROUTE = createRoute({
   tags: ['Agent Rollouts'],
   handler: async ({ mastra, agentId, candidateWeight }) => {
     try {
+      requireEditor(mastra);
       const rolloutsStore = await getRolloutsStore(mastra);
 
       const rollout = await rolloutsStore.getActiveRollout(agentId);
@@ -321,6 +333,7 @@ export const PROMOTE_ROLLOUT_ROUTE = createRoute({
   tags: ['Agent Rollouts'],
   handler: async ({ mastra, agentId, versionId }) => {
     try {
+      requireEditor(mastra);
       const rolloutsStore = await getRolloutsStore(mastra);
       const agentsStore = await getAgentsStore(mastra);
 
@@ -383,6 +396,7 @@ export const ROLLBACK_ROLLOUT_ROUTE = createRoute({
   tags: ['Agent Rollouts'],
   handler: async ({ mastra, agentId }) => {
     try {
+      requireEditor(mastra);
       const rolloutsStore = await getRolloutsStore(mastra);
 
       const rollout = await rolloutsStore.getActiveRollout(agentId);
@@ -423,6 +437,7 @@ export const CANCEL_ROLLOUT_ROUTE = createRoute({
   tags: ['Agent Rollouts'],
   handler: async ({ mastra, agentId }) => {
     try {
+      requireEditor(mastra);
       const rolloutsStore = await getRolloutsStore(mastra);
 
       const rollout = await rolloutsStore.getActiveRollout(agentId);
@@ -460,6 +475,7 @@ export const GET_ROLLOUT_RESULTS_ROUTE = createRoute({
   tags: ['Agent Rollouts'],
   handler: async ({ mastra, agentId }) => {
     try {
+      requireEditor(mastra);
       const rolloutsStore = await getRolloutsStore(mastra);
 
       const rollout = await rolloutsStore.getActiveRollout(agentId);
@@ -559,6 +575,7 @@ export const LIST_ROLLOUTS_ROUTE = createRoute({
   tags: ['Agent Rollouts'],
   handler: async ({ mastra, agentId, page, perPage }) => {
     try {
+      requireEditor(mastra);
       const rolloutsStore = await getRolloutsStore(mastra);
 
       const apiPage = page ?? 1;
