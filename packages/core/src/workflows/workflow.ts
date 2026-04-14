@@ -25,7 +25,7 @@ import {
   getOrCreateSpan,
   resolveObservabilityContext,
 } from '../observability';
-import { executeWithContext } from '../observability/context-storage';
+import { executeWithContext } from '../observability/utils';
 import { ProcessorRunner, ProcessorState } from '../processors';
 import type { OutputResult, Processor, ProcessorStreamWriter } from '../processors';
 import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';
@@ -1298,7 +1298,8 @@ export function isProcessor(obj: unknown): obj is Processor {
       typeof (obj as any).processInputStep === 'function' ||
       typeof (obj as any).processOutputStream === 'function' ||
       typeof (obj as any).processOutputResult === 'function' ||
-      typeof (obj as any).processOutputStep === 'function')
+      typeof (obj as any).processOutputStep === 'function' ||
+      typeof (obj as any).processAPIError === 'function')
   );
 }
 

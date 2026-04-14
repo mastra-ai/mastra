@@ -2,7 +2,7 @@
  * Stagehand Browser Types
  */
 
-import type { BrowserConfig } from '@mastra/core/browser';
+import type { BrowserConfig as BaseBrowserConfig } from '@mastra/core/browser';
 
 /**
  * Model configuration for Stagehand AI operations
@@ -16,9 +16,9 @@ export type ModelConfiguration =
     };
 
 /**
- * Configuration for StagehandBrowser
+ * Stagehand-specific configuration fields.
  */
-export interface StagehandBrowserConfig extends BrowserConfig {
+interface StagehandConfigExtensions {
   /**
    * Environment to run the browser in
    * - 'LOCAL': Run browser locally
@@ -69,7 +69,24 @@ export interface StagehandBrowserConfig extends BrowserConfig {
    * Custom system prompt for AI operations (act, extract, observe)
    */
   systemPrompt?: string;
+
+  /**
+   * Whether to preserve the user data directory after the browser closes.
+   * By default, Stagehand may clean up temporary user data directories.
+   * Set to `true` to keep the profile data for future sessions.
+   *
+   * Only applicable when `profile` is provided.
+   *
+   * @default false
+   */
+  preserveUserDataDir?: boolean;
 }
+
+/**
+ * Configuration for StagehandBrowser.
+ * Extends the base BrowserConfig with Stagehand-specific options.
+ */
+export type StagehandBrowserConfig = BaseBrowserConfig & StagehandConfigExtensions;
 
 /**
  * Action returned from observe()

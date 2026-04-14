@@ -20,6 +20,7 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
   options: InnerAgentExecutionOptions<OUTPUT>;
   resourceId?: string;
+  threadId?: string;
   runId: string;
   requestContext: RequestContext;
   memory?: MastraMemory;
@@ -38,6 +39,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
   capabilities,
   options,
   resourceId,
+  threadId: threadIdFromArgs,
   runId,
   requestContext,
   memory,
@@ -69,7 +71,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       temperature: options.modelSettings?.temperature,
       toolChoice: options.toolChoice,
       thread: memoryData.thread,
-      threadId: memoryData.thread?.id,
+      threadId: memoryData.thread?.id ?? threadIdFromArgs,
       resourceId,
       requestContext,
       messageList: memoryData.messageList,
@@ -177,6 +179,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
         ...options.structuredOutput,
         logger: capabilities.logger,
       });
+      if (capabilities.mastra) {
+        structuredProcessor.__registerMastra(capabilities.mastra);
+      }
       effectiveOutputProcessors = effectiveOutputProcessors
         ? [...effectiveOutputProcessors, structuredProcessor]
         : [structuredProcessor];
@@ -191,6 +196,16 @@ export function createMapResultsStep<OUTPUT = undefined>({
           })
         : options.inputProcessors || capabilities.inputProcessors
       : options.inputProcessors || [];
+
+    // Resolve error processors
+    const effectiveErrorProcessors = capabilities.errorProcessors
+      ? typeof capabilities.errorProcessors === 'function'
+        ? await capabilities.errorProcessors({
+            requestContext: result.requestContext!,
+            overrides: options.errorProcessors,
+          })
+        : options.errorProcessors || capabilities.errorProcessors
+      : options.errorProcessors || [];
 
     const messageList = memoryData.messageList!;
 
@@ -324,6 +339,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       structuredOutput: options.structuredOutput,
       inputProcessors: effectiveInputProcessors,
       outputProcessors: effectiveOutputProcessors,
+      errorProcessors: effectiveErrorProcessors,
       modelSettings: {
         temperature: 0,
         ...(options.modelSettings || {}),

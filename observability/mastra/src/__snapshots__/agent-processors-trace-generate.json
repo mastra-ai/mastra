@@ -103,7 +103,8 @@
                     "parts": [
                       {
                         "type": "text",
-                        "text": "  Hello! How are you?  "
+                        "text": "  Hello! How are you?  ",
+                        "createdAt": "<date>"
                       }
                     ],
                     "content": "  Hello! How are you?  "
@@ -469,7 +470,8 @@
                         "type": "text",
                         "text": {
                           "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                        }
+                        },
+                        "createdAt": "<date>"
                       }
                     ]
                   }
@@ -504,7 +506,8 @@
                         "type": "text",
                         "text": {
                           "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                        }
+                        },
+                        "createdAt": "<date>"
                       }
                     ],
                     "metadata": {

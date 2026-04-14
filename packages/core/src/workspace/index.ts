@@ -37,6 +37,10 @@ export {
   type BackgroundProcessConfig,
   type BackgroundProcessMeta,
   type BackgroundProcessExitMeta,
+  type ToolConfigContext,
+  type ToolConfigWithArgsContext,
+  type DynamicToolConfigValue,
+  type ResolvedToolConfig,
   // Individual standalone tools
   readFileTool,
   writeFileTool,

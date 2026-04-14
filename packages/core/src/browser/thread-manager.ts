@@ -73,6 +73,12 @@ export abstract class ThreadManager<TManager = unknown> {
   /** Preserved browser state that survives session clears (for browser restore) */
   protected readonly savedBrowserStates = new Map<string, BrowserState>();
 
+  /** Shared manager instance (used for 'shared' scope) */
+  protected sharedManager: TManager | null = null;
+
+  /** Map of thread ID to dedicated manager instance (for 'thread' scope) */
+  protected readonly threadManagers = new Map<string, TManager>();
+
   private readonly onSessionCreated?: (session: ThreadSession) => void;
   private readonly onSessionDestroyed?: (threadId: string) => void;
 
@@ -95,6 +101,54 @@ export abstract class ThreadManager<TManager = unknown> {
    */
   getActiveThreadId(): string {
     return this.activeThreadId;
+  }
+
+  /**
+   * Set the shared manager instance (called after browser launch).
+   */
+  setSharedManager(manager: TManager): void {
+    this.sharedManager = manager;
+  }
+
+  /**
+   * Clear the shared manager instance (called when browser disconnects).
+   */
+  clearSharedManager(): void {
+    this.sharedManager = null;
+  }
+
+  /**
+   * Get the manager for an existing thread session without creating a new one.
+   *
+   * For 'thread' scope: Returns the thread-specific manager, or null if no session exists.
+   * For 'shared' scope: Returns the shared manager (all threads use the same instance).
+   *
+   * @param threadId - Thread identifier (defaults to DEFAULT_THREAD_ID)
+   * @returns The manager for the thread, or null if not found (thread scope only)
+   */
+  getExistingManagerForThread(threadId?: string): TManager | null {
+    const effectiveThreadId = threadId ?? DEFAULT_THREAD_ID;
+    if (this.scope === 'thread') {
+      return this.threadManagers.get(effectiveThreadId) ?? null;
+    }
+    return this.sharedManager;
+  }
+
+  /**
+   * Check if any thread managers are still running (for 'thread' scope).
+   */
+  hasActiveThreadManagers(): boolean {
+    return this.threadManagers.size > 0;
+  }
+
+  /**
+   * Clear all session tracking without closing managers.
+   * Used when browsers have been externally closed and we just need to reset state.
+   */
+  clearAllSessions(): void {
+    this.threadManagers.clear();
+    this.sessions.clear();
+    this.activeThreadId = DEFAULT_THREAD_ID;
   }
 
   /**
@@ -151,9 +205,6 @@ export abstract class ThreadManager<TManager = unknown> {
       this.sessions.set(effectiveThreadId, session);
       this.logger?.debug?.(`Created thread session: ${effectiveThreadId}`);
       this.onSessionCreated?.(session);
-    } else if (this.activeThreadId !== effectiveThreadId) {
-      // Switch to existing session
-      await this.switchToSession(session);
     }
 
     this.activeThreadId = effectiveThreadId;
@@ -172,6 +223,7 @@ export abstract class ThreadManager<TManager = unknown> {
     }
 
     await this.doDestroySession(session);
+    this.threadManagers.delete(threadId);
     this.sessions.delete(threadId);
     this.logger?.debug?.(`Destroyed thread session: ${threadId}`);
     this.onSessionDestroyed?.(threadId);
@@ -230,26 +282,47 @@ export abstract class ThreadManager<TManager = unknown> {
     return this.savedBrowserStates.get(threadId);
   }
 
+  /**
+   * Clear a specific thread's session without closing the browser.
+   * Used when a thread's browser has been externally closed.
+   * Preserves the browser state for potential restoration.
+   *
+   * @param threadId - The thread ID to clear
+   */
+  clearSession(threadId: string): void {
+    // Save the browser state before clearing so it can be restored on relaunch
+    const session = this.sessions.get(threadId);
+    if (session?.browserState) {
+      this.savedBrowserStates.set(threadId, session.browserState);
+    }
+    this.threadManagers.delete(threadId);
+    this.sessions.delete(threadId);
+    // Reset activeThreadId if we just cleared it
+    if (this.activeThreadId === threadId) {
+      this.activeThreadId = DEFAULT_THREAD_ID;
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Abstract methods to be implemented by subclasses
   // ---------------------------------------------------------------------------
 
   /**
    * Get the shared browser manager (used for 'shared' scope and default thread).
+   * @throws Error if shared manager is not initialized
    */
-  protected abstract getSharedManager(): TManager;
+  protected getSharedManager(): TManager {
+    if (!this.sharedManager) {
+      throw new Error('Browser not launched');
+    }
+    return this.sharedManager;
+  }
 
   /**
    * Create a new session for a thread.
    * Called when a thread is accessed for the first time.
    */
   protected abstract createSession(threadId: string): Promise<ThreadSession>;
-
-  /**
-   * Switch to an existing session.
-   * May be a no-op depending on isolation mode.
-   */
-  protected abstract switchToSession(session: ThreadSession): Promise<void>;
 
   /**
    * Get the browser manager for a specific session.

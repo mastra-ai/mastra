@@ -1,18 +1,15 @@
 import {
-  MainContentLayout,
+  Breadcrumb,
+  Button,
+  Crumb,
+  DocsIcon,
   Header,
   HeaderAction,
   Icon,
-  Button,
-  DocsIcon,
-  Breadcrumb,
-  Crumb,
-  SkillDetail,
-  ReferenceViewerDialog,
-  useWorkspaceSkill,
-  useWorkspaceSkillReference,
-  useWorkspaceFile,
+  MainContentLayout,
   PermissionDenied,
+  SessionExpired,
+  is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { useQueryClient } from '@tanstack/react-query';
@@ -22,6 +19,10 @@ import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 
 import { validateAgentId } from './validate-agent-id';
+import { ReferenceViewerDialog } from '@/domains/workspace/components/reference-viewer-dialog';
+import { SkillDetail } from '@/domains/workspace/components/skill-detail';
+import { useWorkspaceFile } from '@/domains/workspace/hooks/use-workspace';
+import { useWorkspaceSkill, useWorkspaceSkillReference } from '@/domains/workspace/hooks/use-workspace-skills';
 
 export default function WorkspaceSkillDetailPage() {
   const { skillName, workspaceId } = useParams<{ skillName: string; workspaceId: string }>();
@@ -124,6 +125,18 @@ export default function WorkspaceSkillDetailPage() {
         <Header>{renderBreadcrumb('Loading...')}</Header>
         <div className="grid place-items-center h-full">
           <div className="h-8 w-8 border-2 border-accent1 border-t-transparent rounded-full animate-spin" />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
+  // 401 check - session expired
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <MainContentLayout>
+        <Header>{renderBreadcrumb('Session Expired')}</Header>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
         </div>
       </MainContentLayout>
     );

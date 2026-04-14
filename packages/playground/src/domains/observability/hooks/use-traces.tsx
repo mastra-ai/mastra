@@ -1,7 +1,7 @@
 import type { ListTracesArgs, ListTracesResponse } from '@mastra/core/storage';
-import { useInView, useInfiniteQuery, is403ForbiddenError } from '@mastra/playground-ui';
+import { useInView, is403ForbiddenError } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
-import { keepPreviousData } from '@tanstack/react-query';
+import { useInfiniteQuery, keepPreviousData } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
 const fetchTracesFn = async ({

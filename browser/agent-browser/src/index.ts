@@ -4,6 +4,9 @@ export { AgentBrowser } from './agent-browser';
 // Type exports
 export type { BrowserConfig } from './types';
 
+// Utility exports
+export { getBrowserPid } from './utils';
+
 // Tool exports
 export { createAgentBrowserTools, BROWSER_TOOLS } from './tools';
 export type { BrowserToolName } from './tools';

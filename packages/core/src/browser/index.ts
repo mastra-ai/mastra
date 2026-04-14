@@ -7,6 +7,7 @@ export type {
   BrowserStatus,
   BrowserLifecycleHook,
   BrowserConfig,
+  BrowserConfigBase,
   CdpUrlProvider,
   ScreencastOptions,
   ScreencastStream,

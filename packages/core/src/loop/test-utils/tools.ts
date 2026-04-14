@@ -524,6 +524,11 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
                 {
                   "content": [
                     {
+                      "providerOptions": {
+                        "mastra": {
+                          "createdAt": 1704067200000,
+                        },
+                      },
                       "text": "test-input",
                       "type": "text",
                     },
@@ -543,6 +548,11 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
                 {
                   "content": [
                     {
+                      "providerOptions": {
+                        "mastra": {
+                          "createdAt": 1704067200000,
+                        },
+                      },
                       "text": "test-input",
                       "type": "text",
                     },
@@ -562,6 +572,11 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
                 {
                   "content": [
                     {
+                      "providerOptions": {
+                        "mastra": {
+                          "createdAt": 1704067200000,
+                        },
+                      },
                       "text": "test-input",
                       "type": "text",
                     },
@@ -581,6 +596,11 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
                 {
                   "content": [
                     {
+                      "providerOptions": {
+                        "mastra": {
+                          "createdAt": 1704067200000,
+                        },
+                      },
                       "text": "test-input",
                       "type": "text",
                     },
@@ -600,6 +620,11 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
                 {
                   "content": [
                     {
+                      "providerOptions": {
+                        "mastra": {
+                          "createdAt": 1704067200000,
+                        },
+                      },
                       "text": "test-input",
                       "type": "text",
                     },
@@ -619,6 +644,11 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
                 {
                   "content": [
                     {
+                      "providerOptions": {
+                        "mastra": {
+                          "createdAt": 1704067200000,
+                        },
+                      },
                       "text": "test-input",
                       "type": "text",
                     },
@@ -638,6 +668,11 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
                 {
                   "content": [
                     {
+                      "providerOptions": {
+                        "mastra": {
+                          "createdAt": 1704067200000,
+                        },
+                      },
                       "text": "test-input",
                       "type": "text",
                     },
@@ -657,6 +692,11 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
                 {
                   "content": [
                     {
+                      "providerOptions": {
+                        "mastra": {
+                          "createdAt": 1704067200000,
+                        },
+                      },
                       "text": "test-input",
                       "type": "text",
                     },
@@ -678,6 +718,11 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
                 {
                   "content": [
                     {
+                      "providerOptions": {
+                        "mastra": {
+                          "createdAt": 1704067200000,
+                        },
+                      },
                       "text": "test-input",
                       "type": "text",
                     },

@@ -1,5 +1,104 @@
 # @mastra/otel-exporter
 
+## 1.0.16-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`b687d14`](https://github.com/mastra-ai/mastra/commit/b687d14b8c038f38cd73bc7f3b1f9b5c2fe526ee)]:
+  - @mastra/observability@1.9.1-alpha.1
+
+## 1.0.16-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`4ba3bb1`](https://github.com/mastra-ai/mastra/commit/4ba3bb1e465ad2ddaba3bbf2bc47e0faec32985e)]:
+  - @mastra/observability@1.9.1-alpha.0
+  - @mastra/core@1.25.0-alpha.2
+
+## 1.0.15
+
+### Patch Changes
+
+- Updated dependencies [[`ef94400`](https://github.com/mastra-ai/mastra/commit/ef9440049402596b31f2ab976c5e4508f6cb6c91), [`3db852b`](https://github.com/mastra-ai/mastra/commit/3db852bff74e29f60d415a7b0f1583d6ce2bad92), [`194ef1c`](https://github.com/mastra-ai/mastra/commit/194ef1c069a182fb816c4cfe799debe2001b710b)]:
+  - @mastra/core@1.24.1
+  - @mastra/observability@1.9.0
+
+## 1.0.15-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`ef94400`](https://github.com/mastra-ai/mastra/commit/ef9440049402596b31f2ab976c5e4508f6cb6c91), [`194ef1c`](https://github.com/mastra-ai/mastra/commit/194ef1c069a182fb816c4cfe799debe2001b710b)]:
+  - @mastra/core@1.24.1-alpha.0
+  - @mastra/observability@1.9.0-alpha.0
+
+## 1.0.14
+
+### Patch Changes
+
+- Updated dependencies [[`8db7663`](https://github.com/mastra-ai/mastra/commit/8db7663c9a9c735828094c359d2e327fd4f8fba3), [`a0a516d`](https://github.com/mastra-ai/mastra/commit/a0a516db7e522c7463fa406ba0ca67e69e0ab923), [`b6a7e06`](https://github.com/mastra-ai/mastra/commit/b6a7e06175d5f4b16151e2b7ffcff9ed266af89a), [`02b9227`](https://github.com/mastra-ai/mastra/commit/02b9227ce1fefe33c80e0025eb6bf38aae8e2df5), [`ed46416`](https://github.com/mastra-ai/mastra/commit/ed464161f590aa7538f2c6272f17166d8b93e6c8), [`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38), [`715710d`](https://github.com/mastra-ai/mastra/commit/715710d12fa47cf88e09d41f13843eddc29327b0), [`378c6c4`](https://github.com/mastra-ai/mastra/commit/378c6c4755726e8d8cf83a14809b350b90d46c62), [`9f91fd5`](https://github.com/mastra-ai/mastra/commit/9f91fd538ab2a44f8cc740bcad8e51205f74fbea), [`ba6fa9c`](https://github.com/mastra-ai/mastra/commit/ba6fa9cc0f3e1912c49fd70d4c3bb8c44903ddaa)]:
+  - @mastra/core@1.24.0
+  - @mastra/observability@1.8.0
+
+## 1.0.14-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`8db7663`](https://github.com/mastra-ai/mastra/commit/8db7663c9a9c735828094c359d2e327fd4f8fba3), [`715710d`](https://github.com/mastra-ai/mastra/commit/715710d12fa47cf88e09d41f13843eddc29327b0), [`378c6c4`](https://github.com/mastra-ai/mastra/commit/378c6c4755726e8d8cf83a14809b350b90d46c62), [`9f91fd5`](https://github.com/mastra-ai/mastra/commit/9f91fd538ab2a44f8cc740bcad8e51205f74fbea), [`ba6fa9c`](https://github.com/mastra-ai/mastra/commit/ba6fa9cc0f3e1912c49fd70d4c3bb8c44903ddaa)]:
+  - @mastra/core@1.24.0-alpha.1
+  - @mastra/observability@1.8.0-alpha.1
+
+## 1.0.14-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`a0a516d`](https://github.com/mastra-ai/mastra/commit/a0a516db7e522c7463fa406ba0ca67e69e0ab923), [`b6a7e06`](https://github.com/mastra-ai/mastra/commit/b6a7e06175d5f4b16151e2b7ffcff9ed266af89a), [`02b9227`](https://github.com/mastra-ai/mastra/commit/02b9227ce1fefe33c80e0025eb6bf38aae8e2df5), [`ed46416`](https://github.com/mastra-ai/mastra/commit/ed464161f590aa7538f2c6272f17166d8b93e6c8), [`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38)]:
+  - @mastra/observability@1.8.0-alpha.0
+  - @mastra/core@1.23.1-alpha.0
+
+## 1.0.13
+
+### Patch Changes
+
+- Upgraded Langfuse integration to the official v5 SDK, replacing the deprecated v3 package. ([#14985](https://github.com/mastra-ai/mastra/pull/14985))
+
+  **New features:**
+  - Access Langfuse's full platform via `exporter.client` — prompt management, datasets, evaluations, and scoring
+  - New `environment` and `release` config options for filtering traces in the Langfuse dashboard
+
+  **No breaking changes to your existing code** — `LangfuseExporter`, `LangfuseExporterConfig`, and `withLangfusePrompt()` work the same way. Just upgrade the package and your traces will use the latest Langfuse format.
+
+  **Note:** `withLangfusePrompt({ id })` is deprecated — Langfuse v5 requires `name` + `version` for prompt linking.
+
+- Updated dependencies [[`f32b9e1`](https://github.com/mastra-ai/mastra/commit/f32b9e115a3c754d1c8cfa3f4256fba87b09cfb7), [`7d6f521`](https://github.com/mastra-ai/mastra/commit/7d6f52164d0cca099f0b07cb2bba334360f1c8ab), [`a50d220`](https://github.com/mastra-ai/mastra/commit/a50d220b01ecbc5644d489a3d446c3bd4ab30245), [`665477b`](https://github.com/mastra-ai/mastra/commit/665477bc104fd52cfef8e7610d7664781a70c220), [`4cc2755`](https://github.com/mastra-ai/mastra/commit/4cc2755a7194cb08720ff2ab4dffb4b4a5103dfd), [`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`ed425d7`](https://github.com/mastra-ai/mastra/commit/ed425d78e7c66cbda8209fee910856f98c6c6b82), [`1371703`](https://github.com/mastra-ai/mastra/commit/1371703835080450ef3f9aea58059a95d0da2e5a), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`98f8a8b`](https://github.com/mastra-ai/mastra/commit/98f8a8bdf5761b9982f3ad3acbe7f1cc3efa71f3), [`d26ad28`](https://github.com/mastra-ai/mastra/commit/d26ad2899edd83b9c4dceb8a8a428e64b8775aef), [`ba6f7e9`](https://github.com/mastra-ai/mastra/commit/ba6f7e9086d8281393f2acae60fda61de3bff1f9), [`7eb2596`](https://github.com/mastra-ai/mastra/commit/7eb25960d607e07468c9a10c5437abd2deaf1e9a), [`1805ddc`](https://github.com/mastra-ai/mastra/commit/1805ddc9c9b3b14b63749735a13c05a45af43a80), [`fff91cf`](https://github.com/mastra-ai/mastra/commit/fff91cf914de0e731578aacebffdeebef82f0440), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/core@1.23.0
+  - @mastra/observability@1.7.3
+
+## 1.0.13-alpha.0
+
+### Patch Changes
+
+- Upgraded Langfuse integration to the official v5 SDK, replacing the deprecated v3 package. ([#14985](https://github.com/mastra-ai/mastra/pull/14985))
+
+  **New features:**
+  - Access Langfuse's full platform via `exporter.client` — prompt management, datasets, evaluations, and scoring
+  - New `environment` and `release` config options for filtering traces in the Langfuse dashboard
+
+  **No breaking changes to your existing code** — `LangfuseExporter`, `LangfuseExporterConfig`, and `withLangfusePrompt()` work the same way. Just upgrade the package and your traces will use the latest Langfuse format.
+
+  **Note:** `withLangfusePrompt({ id })` is deprecated — Langfuse v5 requires `name` + `version` for prompt linking.
+
+- Updated dependencies [[`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`d26ad28`](https://github.com/mastra-ai/mastra/commit/d26ad2899edd83b9c4dceb8a8a428e64b8775aef), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/core@1.23.0-alpha.8
+  - @mastra/observability@1.7.3-alpha.0
+
+## 1.0.12
+
+### Patch Changes
+
+- Updated dependencies [[`cb15509`](https://github.com/mastra-ai/mastra/commit/cb15509b58f6a83e11b765c945082afc027db972), [`81e4259`](https://github.com/mastra-ai/mastra/commit/81e425939b4ceeb4f586e9b6d89c3b1c1f2d2fe7), [`951b8a1`](https://github.com/mastra-ai/mastra/commit/951b8a1b5ef7e1474c59dc4f2b9fc1a8b1e508b6), [`80c5668`](https://github.com/mastra-ai/mastra/commit/80c5668e365470d3a96d3e953868fd7a643ff67c), [`951b8a1`](https://github.com/mastra-ai/mastra/commit/951b8a1b5ef7e1474c59dc4f2b9fc1a8b1e508b6), [`3d478c1`](https://github.com/mastra-ai/mastra/commit/3d478c1e13f17b80f330ac49d7aa42ef929b93ff), [`2b4ea10`](https://github.com/mastra-ai/mastra/commit/2b4ea10b053e4ea1ab232d536933a4a3c4cba999), [`a0544f0`](https://github.com/mastra-ai/mastra/commit/a0544f0a1e6bd52ac12676228967c1938e43648d), [`6039f17`](https://github.com/mastra-ai/mastra/commit/6039f176f9c457304825ff1df8c83b8e457376c0), [`06b928d`](https://github.com/mastra-ai/mastra/commit/06b928dfc2f5630d023467476cc5919dfa858d0a), [`6a8d984`](https://github.com/mastra-ai/mastra/commit/6a8d9841f2933456ee1598099f488d742b600054), [`c8c86aa`](https://github.com/mastra-ai/mastra/commit/c8c86aa1458017fbd1c0776fdc0c520d129df8a6)]:
+  - @mastra/core@1.22.0
+  - @mastra/observability@1.7.2
+
 ## 1.0.12-alpha.0
 
 ### Patch Changes

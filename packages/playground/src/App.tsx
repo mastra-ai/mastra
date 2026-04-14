@@ -1,3 +1,9 @@
+import { PlaygroundQueryClient } from '@/lib/tanstack-query';
+import { createFetchWithRefresh } from '@/domains/auth/hooks/fetch-with-refresh';
+import { PlaygroundConfigGuard } from '@/domains/configuration/components/playground-config-guard';
+import { StudioConfigProvider, useStudioConfig } from '@/domains/configuration/context/studio-config-context';
+import { LinkComponentProvider } from '@/lib/framework';
+import type { LinkComponentProviderProps } from '@/lib/framework';
 import { v4 as uuid } from '@lukeed/uuid';
 import { coreFeatures } from '@mastra/core/features';
 
@@ -20,19 +26,12 @@ declare global {
   }
 }
 
-import type { LinkComponentProviderProps } from '@mastra/playground-ui';
-import {
-  LinkComponentProvider,
-  PlaygroundConfigGuard,
-  PlaygroundQueryClient,
-  StudioConfigProvider,
-  useStudioConfig,
-} from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
+import { useMemo } from 'react';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
-import { Link } from './lib/framework';
+import { Link } from './lib/link';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
@@ -55,6 +54,7 @@ import CmsPromptBlocksCreatePage from './pages/cms/prompt-blocks/create';
 import CmsPromptBlocksEditPage from './pages/cms/prompt-blocks/edit';
 import CmsScorersCreatePage from './pages/cms/scorers/create';
 import CmsScorersEditPage from './pages/cms/scorers/edit';
+import Datasets from './pages/datasets';
 import DatasetPage from './pages/datasets/dataset';
 import DatasetExperiment from './pages/datasets/dataset/experiment';
 import CompareDatasetExperimentsPage from './pages/datasets/dataset/experiments';
@@ -63,18 +63,20 @@ import DatasetItemsComparePage from './pages/datasets/dataset/item/compare';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 import Evaluation from './pages/evaluation';
+import Experiments from './pages/experiments';
+import ExperimentPage from './pages/experiments/experiment';
 import { Login } from './pages/login';
 import Logs from './pages/logs';
 import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
 import Metrics from './pages/metrics';
-import Observability from './pages/observability';
 import ObservabilityOverview from './pages/observability-overview';
 import Primitives from './pages/primitives';
 import PromptBlocks from './pages/prompt-blocks';
 import RequestContext from './pages/request-context';
 import Resources from './pages/resources';
+import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
 import { StudioSettingsPage } from './pages/settings';
 import { SignUp } from './pages/signup';
@@ -82,6 +84,7 @@ import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';
+import Traces from './pages/traces';
 import Workflows from './pages/workflows';
 import { Workflow } from './pages/workflows/workflow';
 import Workspace from './pages/workspace';
@@ -109,7 +112,7 @@ const paths: LinkComponentProviderProps['paths'] = {
   networkLink: (networkId: string) => `/networks/v-next/${networkId}/chat`,
   networkNewThreadLink: (networkId: string) => `/networks/v-next/${networkId}/chat/${uuid()}`,
   networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
-  scorerLink: (scorerId: string) => `/evaluation/scorers/${scorerId}`,
+  scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
   cmsScorersCreateLink: () => '/cms/scorers/create',
   cmsScorerEditLink: (scorerId: string) => `/cms/scorers/${scorerId}/edit`,
   cmsAgentCreateLink: () => '/cms/agents/create',
@@ -134,10 +137,11 @@ const paths: LinkComponentProviderProps['paths'] = {
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
   mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
-  datasetLink: (datasetId: string) => `/evaluation/datasets/${datasetId}`,
-  datasetItemLink: (datasetId: string, itemId: string) => `/evaluation/datasets/${datasetId}/items/${itemId}`,
+  datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
+  datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,
   datasetExperimentLink: (datasetId: string, experimentId: string) =>
-    `/evaluation/datasets/${datasetId}/experiments/${experimentId}`,
+    `/datasets/${datasetId}/experiments/${experimentId}`,
+  experimentLink: (experimentId: string) => `/experiments/${experimentId}`,
 };
 
 const RootLayout = () => {
@@ -208,10 +212,11 @@ const routes = [
       { path: '/logs', element: <Logs /> },
       { path: '/primitives', element: <Primitives /> },
       { path: '/evaluation', element: <Evaluation /> },
-      { path: '/evaluation/scorers/:scorerId', element: <Scorer /> },
+      { path: '/scorers', element: <Scorers /> },
+      { path: '/scorers/:scorerId', element: <Scorer /> },
       { path: '/metrics', element: <Metrics /> },
       { path: '/observability-overview', element: <ObservabilityOverview /> },
-      { path: '/observability', element: <Observability /> },
+      { path: '/observability', element: <Traces /> },
       { path: '/resources', element: <Resources /> },
       { path: '/agents', element: <Agents /> },
       {
@@ -290,16 +295,19 @@ const routes = [
 
       ...(isExperimentalFeatures
         ? [
-            { path: '/evaluation/datasets/:datasetId', element: <DatasetPage /> },
-            { path: '/evaluation/datasets/:datasetId/items/:itemId', element: <DatasetItemPage /> },
+            { path: '/datasets', element: <Datasets /> },
+            { path: '/datasets/:datasetId', element: <DatasetPage /> },
+            { path: '/datasets/:datasetId/items/:itemId', element: <DatasetItemPage /> },
             {
-              path: '/evaluation/datasets/:datasetId/items/:itemId/versions',
+              path: '/datasets/:datasetId/items/:itemId/versions',
               element: <DatasetItemVersionsComparePage />,
             },
-            { path: '/evaluation/datasets/:datasetId/experiments/:experimentId', element: <DatasetExperiment /> },
-            { path: '/evaluation/datasets/:datasetId/experiments', element: <CompareDatasetExperimentsPage /> },
-            { path: '/evaluation/datasets/:datasetId/items', element: <DatasetItemsComparePage /> },
-            { path: '/evaluation/datasets/:datasetId/versions', element: <DatasetCompareDatasetVersions /> },
+            { path: '/datasets/:datasetId/experiments/:experimentId', element: <DatasetExperiment /> },
+            { path: '/experiments', element: <Experiments /> },
+            { path: '/experiments/:experimentId', element: <ExperimentPage /> },
+            { path: '/datasets/:datasetId/experiments', element: <CompareDatasetExperimentsPage /> },
+            { path: '/datasets/:datasetId/items', element: <DatasetItemsComparePage /> },
+            { path: '/datasets/:datasetId/versions', element: <DatasetCompareDatasetVersions /> },
           ]
         : []),
 
@@ -312,6 +320,12 @@ const routes = [
 function App() {
   const studioBasePath = window.MASTRA_STUDIO_BASE_PATH || '';
   const { baseUrl, headers, apiPrefix, isLoading } = useStudioConfig();
+
+  // Create a stable fetch function that auto-refreshes on 401
+  const customFetch = useMemo(
+    () => (baseUrl ? createFetchWithRefresh(baseUrl, apiPrefix) : undefined),
+    [baseUrl, apiPrefix],
+  );
 
   if (isLoading) {
     // Config is loaded from localStorage. However, there might be a race condition
@@ -326,7 +340,7 @@ function App() {
   const router = createBrowserRouter(routes, { basename: studioBasePath });
 
   return (
-    <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix}>
+    <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix} customFetch={customFetch}>
       <PostHogProvider>
         <RouterProvider router={router} />
       </PostHogProvider>

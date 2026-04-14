@@ -129,13 +129,14 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
     // Use meta.path (not meta.name) so same-named skills each resolve to their specific entry.
     const skillPromises = skillsList.map(meta => this.skills?.get(meta.path));
     const fullSkills = (await Promise.all(skillPromises)).filter((s): s is Skill => s !== undefined && s !== null);
+    const dedupedSkills = Array.from(new Map(fullSkills.map(skill => [skill.path, skill])).values());
 
     // Sort by name for deterministic output (avoids busting prompt cache)
-    fullSkills.sort((a, b) => a.name.localeCompare(b.name));
+    dedupedSkills.sort((a, b) => a.name.localeCompare(b.name));
 
     switch (this._format) {
       case 'xml': {
-        const skillsXml = fullSkills
+        const skillsXml = dedupedSkills
           .map(
             skill => `  <skill>
     <name>${this.escapeXml(skill.name)}</name>
@@ -155,7 +156,7 @@ ${skillsXml}
         return `Available Skills:
 
 ${JSON.stringify(
-  fullSkills.map(s => ({
+  dedupedSkills.map(s => ({
     name: s.name,
     description: s.description,
     location: this.formatLocation(s),
@@ -167,7 +168,7 @@ ${JSON.stringify(
       }
 
       case 'markdown': {
-        const skillsMd = fullSkills
+        const skillsMd = dedupedSkills
           .map(
             skill =>
               `- **${skill.name}** [${this.formatSourceType(skill)}] (${this.formatLocation(skill)}): ${skill.description}`,
