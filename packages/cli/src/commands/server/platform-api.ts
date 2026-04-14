@@ -98,9 +98,17 @@ export async function uploadServerDeploy(
   async function cancelDeploy(deployClient: ReturnType<typeof createApiClient>) {
     try {
       console.warn(`Cancelling deploy ${id}...`);
-      await deployClient.POST('/v1/server/deploys/{id}/cancel', {
-        params: { path: { id } },
-      });
+      const { error: cancelError, response: cancelResponse } = await deployClient.POST(
+        '/v1/server/deploys/{id}/cancel',
+        {
+          params: { path: { id } },
+        },
+      );
+      if (cancelError) {
+        console.warn(
+          `Warning: failed to cancel deploy ${id} (${cancelResponse.status}). It may remain in a queued state.`,
+        );
+      }
     } catch {
       console.warn(`Warning: failed to cancel deploy ${id}. It may remain in a queued state.`);
     }
@@ -169,8 +177,13 @@ export async function uploadServerDeploy(
 
     // On 401, refresh the token before retrying (same pattern as pollServerDeploy)
     if (status === 401) {
-      const freshToken = await getToken();
-      currentClient = createApiClient(freshToken, orgId);
+      try {
+        const freshToken = await getToken();
+        currentClient = createApiClient(freshToken, orgId);
+      } catch (refreshError) {
+        lastError = refreshError instanceof Error ? refreshError : new Error('Failed to refresh authentication token');
+        break;
+      }
     }
 
     // Exponential backoff: 1s, 2s, 4s
