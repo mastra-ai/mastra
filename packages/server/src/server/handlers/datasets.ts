@@ -114,7 +114,7 @@ export const LIST_DATASETS_ROUTE = createRoute({
     assertDatasetsAvailable();
     try {
       const { page, perPage } = params;
-      const result = await mastra.datasets.list({ page: page ?? 0, perPage: perPage ?? 20 });
+      const result = await mastra.datasets.list({ page: page ?? 0, perPage: perPage ?? 10 });
       return {
         datasets: result.datasets as any,
         pagination: result.pagination,

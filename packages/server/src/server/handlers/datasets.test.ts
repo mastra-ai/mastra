@@ -20,24 +20,22 @@ describe('Datasets Handlers', () => {
   });
 
   describe('LIST_DATASETS_ROUTE', () => {
-    it('should return more than 10 datasets when no pagination params are provided', async () => {
-      // Create 15 datasets
+    it('should respect explicit perPage parameter larger than the default', async () => {
       for (let i = 0; i < 15; i++) {
         await mastra.datasets.create({ name: `Dataset ${i + 1}` });
       }
 
-      // Call the handler without pagination params (simulates what the UI does)
       const result = await LIST_DATASETS_ROUTE.handler({
         ...createTestServerContext({ mastra }),
+        page: 0,
+        perPage: 15,
       });
 
-      // The UI sends no pagination params, so the handler defaults apply.
-      // With 15 datasets and a default perPage of 20, all 15 should be returned.
       expect(result.datasets).toHaveLength(15);
+      expect(result.pagination.hasMore).toBe(false);
     });
 
     it('should return all datasets when fewer than the default page size exist', async () => {
-      // Create 5 datasets
       for (let i = 0; i < 5; i++) {
         await mastra.datasets.create({ name: `Dataset ${i + 1}` });
       }
@@ -49,24 +47,7 @@ describe('Datasets Handlers', () => {
       expect(result.datasets).toHaveLength(5);
     });
 
-    it('should respect explicit perPage parameter', async () => {
-      // Create 15 datasets
-      for (let i = 0; i < 15; i++) {
-        await mastra.datasets.create({ name: `Dataset ${i + 1}` });
-      }
-
-      const result = await LIST_DATASETS_ROUTE.handler({
-        ...createTestServerContext({ mastra }),
-        page: 0,
-        perPage: 5,
-      });
-
-      expect(result.datasets).toHaveLength(5);
-      expect(result.pagination.hasMore).toBe(true);
-    });
-
-    it('should paginate correctly across pages', async () => {
-      // Create 25 datasets
+    it('should paginate correctly across pages using the default perPage of 10', async () => {
       for (let i = 0; i < 25; i++) {
         await mastra.datasets.create({ name: `Dataset ${i + 1}` });
       }
@@ -76,7 +57,7 @@ describe('Datasets Handlers', () => {
         page: 0,
       });
 
-      expect(page0.datasets).toHaveLength(20);
+      expect(page0.datasets).toHaveLength(10);
       expect(page0.pagination.hasMore).toBe(true);
 
       const page1 = await LIST_DATASETS_ROUTE.handler({
@@ -84,8 +65,16 @@ describe('Datasets Handlers', () => {
         page: 1,
       });
 
-      expect(page1.datasets).toHaveLength(5);
-      expect(page1.pagination.hasMore).toBe(false);
+      expect(page1.datasets).toHaveLength(10);
+      expect(page1.pagination.hasMore).toBe(true);
+
+      const page2 = await LIST_DATASETS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        page: 2,
+      });
+
+      expect(page2.datasets).toHaveLength(5);
+      expect(page2.pagination.hasMore).toBe(false);
     });
   });
 });

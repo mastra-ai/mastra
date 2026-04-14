@@ -18,7 +18,7 @@ import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
 import { useReviewSummary } from '@/domains/review';
 import { buildReviewByDatasetMap } from '@/domains/review/review-maps';
 
-const DATASETS_PER_PAGE = 20;
+const DATASETS_PER_PAGE = 10;
 
 export default function Datasets() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
