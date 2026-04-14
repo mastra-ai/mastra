@@ -26,13 +26,13 @@ export function EntityListPagination({ currentPage, hasMore, onNextPage, onPrevP
           )}
         >
           {typeof currentPage === 'number' && currentPage > 0 && (
-            <button onClick={onPrevPage}>
+            <button type="button" onClick={onPrevPage}>
               <ArrowLeftIcon />
               Previous
             </button>
           )}
           {hasMore && (
-            <button onClick={onNextPage}>
+            <button type="button" onClick={onNextPage}>
               Next
               <ArrowRightIcon />
             </button>
