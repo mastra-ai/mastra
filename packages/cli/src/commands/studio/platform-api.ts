@@ -1,4 +1,4 @@
-import { isRetryablePollingError } from '../../utils/polling.js';
+import { withPollingRetries } from '../../utils/polling.js';
 import { authHeaders, createApiClient, MASTRA_PLATFORM_API_URL, platformFetch, throwApiError } from '../auth/client.js';
 
 export interface Project {
@@ -193,23 +193,11 @@ export async function pollDeploy(
 
   try {
     while (Date.now() - start < maxWaitMs) {
-      let retryCount = 0;
-      let result: Awaited<ReturnType<typeof client.GET>> | undefined;
-
-      while (!result) {
-        try {
-          result = await client.GET('/v1/studio/deploys/{id}', {
-            params: { path: { id: deployId } },
-          });
-        } catch (error) {
-          if (!isRetryablePollingError(error) || retryCount >= 3) {
-            throw error;
-          }
-
-          await new Promise(resolve => setTimeout(resolve, 500 * Math.pow(2, retryCount)));
-          retryCount += 1;
-        }
-      }
+      const result = await withPollingRetries(() =>
+        client.GET('/v1/studio/deploys/{id}', {
+          params: { path: { id: deployId } },
+        }),
+      );
 
       const { data, error, response } = result;
 

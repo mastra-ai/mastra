@@ -16,3 +16,20 @@ export function isRetryablePollingError(error: unknown): boolean {
 
   return error instanceof TypeError && error.message.toLowerCase().includes('fetch failed');
 }
+
+export async function withPollingRetries<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
+  let retryCount = 0;
+
+  while (true) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (!isRetryablePollingError(error) || retryCount >= maxRetries) {
+        throw error;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 500 * Math.pow(2, retryCount)));
+      retryCount += 1;
+    }
+  }
+}

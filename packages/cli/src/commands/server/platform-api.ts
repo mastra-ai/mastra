@@ -1,4 +1,4 @@
-import { isRetryablePollingError } from '../../utils/polling.js';
+import { withPollingRetries } from '../../utils/polling.js';
 import { createApiClient, throwApiError } from '../auth/client.js';
 import { getToken } from '../auth/credentials.js';
 import type { paths } from '../platform-api.js';
@@ -141,23 +141,11 @@ export async function pollServerDeploy(
 
   try {
     while (Date.now() - start < maxWaitMs) {
-      let retryCount = 0;
-      let result: Awaited<ReturnType<typeof client.GET>> | undefined;
-
-      while (!result) {
-        try {
-          result = await client.GET('/v1/server/deploys/{id}', {
-            params: { path: { id: deployId } },
-          });
-        } catch (error) {
-          if (!isRetryablePollingError(error) || retryCount >= 3) {
-            throw error;
-          }
-
-          await new Promise(resolve => setTimeout(resolve, 500 * Math.pow(2, retryCount)));
-          retryCount += 1;
-        }
-      }
+      const result = await withPollingRetries(() =>
+        client.GET('/v1/server/deploys/{id}', {
+          params: { path: { id: deployId } },
+        }),
+      );
 
       const { data, error, response } = result;
 
