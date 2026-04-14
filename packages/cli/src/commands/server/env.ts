@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { chmod, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
@@ -166,7 +166,9 @@ export async function envPullAction(file: string | undefined, opts: { config?: s
   }
   lines.push(''); // trailing newline
 
-  await writeFile(resolve(target), lines.join('\n'), 'utf-8');
+  const outputPath = resolve(target);
+  await writeFile(outputPath, lines.join('\n'), { encoding: 'utf-8', mode: 0o600 });
+  await chmod(outputPath, 0o600);
 
   console.info(`\n  Pulled ${keys.length} variable(s) to ${target}.\n`);
 }

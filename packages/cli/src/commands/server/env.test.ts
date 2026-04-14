@@ -26,10 +26,12 @@ vi.mock('../studio/project-config.js', () => ({
 
 const mockReadFile = vi.fn();
 const mockWriteFile = vi.fn().mockResolvedValue(undefined);
+const mockChmod = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('node:fs/promises', () => ({
   readFile: mockReadFile,
   writeFile: mockWriteFile,
+  chmod: mockChmod,
 }));
 
 beforeEach(() => {
@@ -210,6 +212,7 @@ describe('envPullAction', () => {
   beforeEach(() => {
     process.env.MASTRA_PROJECT_ID = 'proj-x';
     mockWriteFile.mockResolvedValue(undefined);
+    mockChmod.mockResolvedValue(undefined);
   });
 
   it('prints message when no vars to pull', async () => {
@@ -218,21 +221,24 @@ describe('envPullAction', () => {
     const { envPullAction } = await import('./env.js');
     await envPullAction(undefined, {});
     expect(mockWriteFile).not.toHaveBeenCalled();
+    expect(mockChmod).not.toHaveBeenCalled();
     expect(spy.mock.calls.some(c => String(c[0]).includes('No environment variables to pull'))).toBe(true);
     spy.mockRestore();
   });
 
-  it('writes env vars to default .env file', async () => {
+  it('writes env vars to default .env file with restrictive permissions', async () => {
     mockGetServerProjectEnv.mockResolvedValue({ DB_URL: 'postgres://localhost', API_KEY: 'secret' });
     const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const { envPullAction } = await import('./env.js');
     await envPullAction(undefined, {});
     expect(mockWriteFile).toHaveBeenCalledTimes(1);
-    const [filePath, content] = mockWriteFile.mock.calls[0]!;
+    const [filePath, content, options] = mockWriteFile.mock.calls[0]!;
     expect(filePath).toContain('.env');
     expect(content).toContain('# Pulled from Mastra Server');
     expect(content).toContain('API_KEY=secret');
     expect(content).toContain('DB_URL=postgres://localhost');
+    expect(options).toEqual({ encoding: 'utf-8', mode: 0o600 });
+    expect(mockChmod).toHaveBeenCalledWith(filePath, 0o600);
     expect(spy.mock.calls.some(c => String(c[0]).includes('Pulled 2 variable(s)'))).toBe(true);
     spy.mockRestore();
   });
