@@ -206,6 +206,8 @@ describe('RolloutsInMemory storage', () => {
           { versionId: `ver_${i}`, weight: 10 },
         ],
       });
+      // Complete before creating the next so the active-rollout invariant isn't violated
+      await store.completeRollout(`rol_${i}`, 'completed');
     }
 
     const page1 = await store.listRollouts({

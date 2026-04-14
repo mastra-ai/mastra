@@ -124,49 +124,41 @@ export class RolloutsLibSQL extends RolloutsStorage {
   }
 
   async updateRollout(input: UpdateRolloutInput): Promise<RolloutRecord> {
-    const existing = await this.getRollout(input.id);
-    if (!existing) {
-      throw new Error(`Rollout not found: ${input.id}`);
-    }
-    if (existing.status !== 'active') {
-      throw new Error(`Cannot update rollout with status: ${existing.status}`);
-    }
+    const setClauses: string[] = ['"updatedAt" = ?'];
+    const args: InValue[] = [new Date().toISOString()];
 
-    const updates: Record<string, InValue> = {
-      updatedAt: new Date().toISOString(),
-    };
     if (input.allocations) {
-      updates.allocations = JSON.stringify(input.allocations);
+      setClauses.push('"allocations" = ?');
+      args.push(JSON.stringify(input.allocations));
     }
     if (input.rules) {
-      updates.rules = JSON.stringify(input.rules);
+      setClauses.push('"rules" = ?');
+      args.push(JSON.stringify(input.rules));
     }
 
-    await this.#db.update({
-      tableName: TABLE_ROLLOUTS,
-      keys: { id: input.id },
-      data: updates,
+    args.push(input.id);
+    const result = await this.#client.execute({
+      sql: `UPDATE "${TABLE_ROLLOUTS}" SET ${setClauses.join(', ')} WHERE "id" = ? AND "status" = 'active'`,
+      args,
     });
+
+    if (!result.rowsAffected) {
+      throw new Error(`Rollout not found or no longer active: ${input.id}`);
+    }
 
     return this.getRollout(input.id) as Promise<RolloutRecord>;
   }
 
   async completeRollout(id: string, status: RolloutStatus, completedAt?: Date): Promise<RolloutRecord> {
-    const existing = await this.getRollout(id);
-    if (!existing) {
-      throw new Error(`Rollout not found: ${id}`);
-    }
-
     const now = completedAt ?? new Date();
-    await this.#db.update({
-      tableName: TABLE_ROLLOUTS,
-      keys: { id },
-      data: {
-        status,
-        updatedAt: now.toISOString(),
-        completedAt: now.toISOString(),
-      },
+    const result = await this.#client.execute({
+      sql: `UPDATE "${TABLE_ROLLOUTS}" SET "status" = ?, "updatedAt" = ?, "completedAt" = ? WHERE "id" = ? AND "status" = 'active'`,
+      args: [status, now.toISOString(), now.toISOString(), id],
     });
+
+    if (!result.rowsAffected) {
+      throw new Error(`Rollout not found or no longer active: ${id}`);
+    }
 
     return this.getRollout(id) as Promise<RolloutRecord>;
   }

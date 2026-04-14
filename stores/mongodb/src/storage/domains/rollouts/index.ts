@@ -221,30 +221,13 @@ export class MongoDBRolloutsStorage extends RolloutsStorage {
   async updateRollout(input: UpdateRolloutInput): Promise<RolloutRecord> {
     try {
       const collection = await this.getCollection(TABLE_ROLLOUTS);
-      const existing = await collection.findOne({ id: input.id });
-      if (!existing) {
-        throw new MastraError({
-          id: createStorageErrorId('ROLLOUTS', 'UPDATE', 'NOT_FOUND'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { rolloutId: input.id },
-        });
-      }
-      if (existing.status !== 'active') {
-        throw new MastraError({
-          id: createStorageErrorId('ROLLOUTS', 'UPDATE', 'INVALID_STATUS'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { rolloutId: input.id, status: existing.status },
-        });
-      }
 
       const updateData: Record<string, unknown> = { updatedAt: new Date() };
       if (input.allocations) updateData.allocations = input.allocations;
       if (input.rules) updateData.rules = input.rules;
 
       const updated = await collection.findOneAndUpdate(
-        { id: input.id },
+        { id: input.id, status: 'active' },
         { $set: updateData },
         { returnDocument: 'after' },
       );
@@ -275,7 +258,7 @@ export class MongoDBRolloutsStorage extends RolloutsStorage {
       const now = completedAt ?? new Date();
       const collection = await this.getCollection(TABLE_ROLLOUTS);
       const updated = await collection.findOneAndUpdate(
-        { id },
+        { id, status: 'active' },
         { $set: { status, updatedAt: now, completedAt: now } },
         { returnDocument: 'after' },
       );

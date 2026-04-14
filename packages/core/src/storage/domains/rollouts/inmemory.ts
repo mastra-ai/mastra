@@ -45,9 +45,19 @@ export class RolloutsInMemory extends RolloutsStorage {
   }
 
   async createRollout(input: CreateRolloutInput): Promise<RolloutRecord> {
+    const id = input.id ?? `rol_${crypto.randomUUID()}`;
+    if (this.db.rollouts.has(id)) {
+      throw new Error(`Rollout already exists: ${id}`);
+    }
+    for (const rollout of this.db.rollouts.values()) {
+      if (rollout.agentId === input.agentId && rollout.status === 'active') {
+        throw new Error(`Active rollout already exists for agent: ${input.agentId}`);
+      }
+    }
+
     const now = new Date();
     const rollout: RolloutRecord = {
-      id: input.id ?? `rol_${crypto.randomUUID()}`,
+      id,
       agentId: input.agentId,
       type: input.type,
       status: 'active',
@@ -85,6 +95,9 @@ export class RolloutsInMemory extends RolloutsStorage {
     const existing = this.db.rollouts.get(id);
     if (!existing) {
       throw new Error(`Rollout not found: ${id}`);
+    }
+    if (existing.status !== 'active') {
+      throw new Error(`Cannot complete rollout with status: ${existing.status}`);
     }
     const now = completedAt ?? new Date();
     const updated: RolloutRecord = {

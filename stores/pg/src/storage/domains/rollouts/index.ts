@@ -209,24 +209,6 @@ export class RolloutsPG extends RolloutsStorage {
 
   async updateRollout(input: UpdateRolloutInput): Promise<RolloutRecord> {
     try {
-      const existing = await this.getRollout(input.id);
-      if (!existing) {
-        throw new MastraError({
-          id: createStorageErrorId('PG', 'UPDATE_ROLLOUT', 'NOT_FOUND'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { rolloutId: input.id },
-        });
-      }
-      if (existing.status !== 'active') {
-        throw new MastraError({
-          id: createStorageErrorId('PG', 'UPDATE_ROLLOUT', 'INVALID_STATUS'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { rolloutId: input.id, status: existing.status },
-        });
-      }
-
       const tableName = getTableName({ indexName: TABLE_ROLLOUTS, schemaName: getSchemaName(this.#schema) });
       const now = new Date().toISOString();
       const setClauses: string[] = ['"updatedAt" = $1', '"updatedAtZ" = $2'];
@@ -243,10 +225,19 @@ export class RolloutsPG extends RolloutsStorage {
       }
 
       values.push(input.id);
-      await this.#db.client.none(
-        `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE "id" = $${paramIndex}`,
+      const result = await this.#db.client.query(
+        `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE "id" = $${paramIndex} AND "status" = 'active'`,
         values,
       );
+
+      if (!result.rowCount) {
+        throw new MastraError({
+          id: createStorageErrorId('PG', 'UPDATE_ROLLOUT', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { rolloutId: input.id },
+        });
+      }
 
       return (await this.getRollout(input.id))!;
     } catch (error) {
@@ -264,8 +255,15 @@ export class RolloutsPG extends RolloutsStorage {
 
   async completeRollout(id: string, status: RolloutStatus, completedAt?: Date): Promise<RolloutRecord> {
     try {
-      const existing = await this.getRollout(id);
-      if (!existing) {
+      const tableName = getTableName({ indexName: TABLE_ROLLOUTS, schemaName: getSchemaName(this.#schema) });
+      const now = completedAt ?? new Date();
+      const nowIso = now.toISOString();
+      const result = await this.#db.client.query(
+        `UPDATE ${tableName} SET "status" = $1, "updatedAt" = $2, "updatedAtZ" = $3, "completedAt" = $4, "completedAtZ" = $5 WHERE "id" = $6 AND "status" = 'active'`,
+        [status, nowIso, nowIso, nowIso, nowIso, id],
+      );
+
+      if (!result.rowCount) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'COMPLETE_ROLLOUT', 'NOT_FOUND'),
           domain: ErrorDomain.STORAGE,
@@ -273,14 +271,6 @@ export class RolloutsPG extends RolloutsStorage {
           details: { rolloutId: id },
         });
       }
-
-      const tableName = getTableName({ indexName: TABLE_ROLLOUTS, schemaName: getSchemaName(this.#schema) });
-      const now = completedAt ?? new Date();
-      const nowIso = now.toISOString();
-      await this.#db.client.none(
-        `UPDATE ${tableName} SET "status" = $1, "updatedAt" = $2, "updatedAtZ" = $3, "completedAt" = $4, "completedAtZ" = $5 WHERE "id" = $6`,
-        [status, nowIso, nowIso, nowIso, nowIso, id],
-      );
 
       return (await this.getRollout(id))!;
     } catch (error) {

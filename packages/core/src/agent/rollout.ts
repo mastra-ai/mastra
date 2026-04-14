@@ -48,6 +48,9 @@ export function deterministicBucket(routingValue: string, agentId: string): numb
  * Allocations are walked in order; their weights define consecutive ranges.
  */
 export function pickAllocation(allocations: RolloutAllocation[], bucket: number): string {
+  if (!allocations.length) {
+    throw new Error('Cannot pick allocation from empty array');
+  }
   let cumulative = 0;
   for (const alloc of allocations) {
     cumulative += alloc.weight;
