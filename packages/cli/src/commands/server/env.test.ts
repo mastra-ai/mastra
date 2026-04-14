@@ -238,8 +238,8 @@ describe('envPullAction', () => {
     const [filePath, content, options] = mockWriteFile.mock.calls[0]!;
     expect(filePath).toContain('.env');
     expect(content).toContain('# Pulled from Mastra Server');
-    expect(content).toContain('API_KEY=secret');
-    expect(content).toContain('DB_URL=postgres://localhost');
+    expect(content).toContain('API_KEY="secret"');
+    expect(content).toContain('DB_URL="postgres://localhost"');
     expect(options).toEqual({ encoding: 'utf-8', mode: 0o600 });
     expect(mockChmod).toHaveBeenCalledWith(filePath, 0o600);
     expect(spy.mock.calls.some(c => String(c[0]).includes('Pulled 2 variable(s)'))).toBe(true);
@@ -253,7 +253,7 @@ describe('envPullAction', () => {
     await envPullAction('.env.production', {});
     const [filePath, content] = mockWriteFile.mock.calls[0]!;
     expect(filePath).toContain('.env.production');
-    expect(content).toContain('FOO=bar');
+    expect(content).toContain('FOO="bar"');
     expect(spy.mock.calls.some(c => String(c[0]).includes('.env.production'))).toBe(true);
     spy.mockRestore();
   });

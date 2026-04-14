@@ -155,16 +155,16 @@ export async function envPullAction(file: string | undefined, opts: { config?: s
   const lines = ['# Pulled from Mastra Server — do not edit manually', ''];
   for (const key of keys.sort()) {
     const value = envVars[key]!;
-    // Quote values that contain spaces, quotes, or special shell characters
-    const needsQuoting = /[\s"'\\#$`]/.test(value);
+    // Always quote values to prevent shell metacharacter interpretation when sourced
     const escaped = value
       .replace(/\\/g, '\\\\')
       .replace(/\r/g, '\\r')
       .replace(/\n/g, '\\n')
+      .replace(/\t/g, '\\t')
       .replace(/"/g, '\\"')
       .replace(/\$/g, '\\$')
       .replace(/`/g, '\\`');
-    lines.push(`${key}=${needsQuoting ? `"${escaped}"` : value}`);
+    lines.push(`${key}="${escaped}"`);
   }
   lines.push(''); // trailing newline
 
