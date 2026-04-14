@@ -206,6 +206,10 @@ export type CoreTool = {
   outputSchema?: FlexibleSchema<any> | Schema;
   execute?: (params: any, options: MastraToolInvocationOptions) => Promise<any>;
   /**
+   * Enables strict tool input generation for providers that support it.
+   */
+  strict?: boolean;
+  /**
    * Provider-specific options passed to the model when this tool is used.
    */
   providerOptions?: Record<string, Record<string, unknown>>;
@@ -258,6 +262,10 @@ export type InternalCoreTool = {
   parameters: Schema;
   outputSchema?: Schema;
   execute?: (params: any, options: MastraToolInvocationOptions) => Promise<any>;
+  /**
+   * Enables strict tool input generation for providers that support it.
+   */
+  strict?: boolean;
   /**
    * Provider-specific options passed to the model when this tool is used.
    */
@@ -386,6 +394,12 @@ export interface ToolAction<
   execute?: (inputData: TSchemaIn, context: TContext) => Promise<TSchemaOut | ValidationError>;
   mastra?: Mastra;
   requireApproval?: boolean;
+  /**
+   * Enables strict tool input generation for providers that support it.
+   * When enabled, supported providers will attempt to generate arguments
+   * that exactly match the tool schema.
+   */
+  strict?: boolean;
   /**
    * Provider-specific options passed to the model when this tool is used.
    * Keys are provider names (e.g., 'anthropic', 'openai'), values are provider-specific configs.
