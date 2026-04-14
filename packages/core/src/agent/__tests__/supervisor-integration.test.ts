@@ -3892,6 +3892,102 @@ describe('Supervisor Pattern - Client tools forwarded to sub-agents', () => {
   });
 });
 
+describe('Supervisor Pattern - Client tool call suspension', () => {
+  it('should suspend when sub-agent calls a client tool so the client can execute it', async () => {
+    // When a sub-agent calls a client tool (no server-side execute), the supervisor
+    // should detect the pending client tool call and suspend so the client can
+    // execute the tool and resume with the result.
+
+    const subAgent = new Agent({
+      id: 'color-sub',
+      name: 'color-sub',
+      description: 'Changes colors via client tools',
+      instructions: 'Call the changeColor tool.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          // Sub-agent calls the client tool
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'ct-1',
+                toolName: 'changeColor',
+                args: JSON.stringify({ color: 'red' }),
+              },
+            ],
+            warnings: [],
+          };
+        },
+      }),
+    });
+
+    let supervisorCallCount = 0;
+    const supervisor = new Agent({
+      id: 'ct-suspend-supervisor',
+      name: 'ct-suspend-supervisor',
+      instructions: 'Delegate to the color sub-agent.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          supervisorCallCount++;
+          if (supervisorCallCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'delegate-1',
+                  toolName: 'agent-colorSub',
+                  input: JSON.stringify({ prompt: 'Change the color to red' }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text' as const, text: 'Done' }],
+            warnings: [],
+          };
+        },
+      }),
+      agents: { colorSub: subAgent },
+      defaultOptions: {
+        clientTools: {
+          changeColor: {
+            id: 'changeColor',
+            description: 'Change the color on the client side',
+            inputSchema: z.object({ color: z.string() }),
+          },
+        },
+      },
+    });
+
+    const result = await supervisor.generate('Change the color to red', { maxSteps: 5 });
+
+    // The supervisor should suspend because the sub-agent called a client tool.
+    // The suspend payload is wrapped by the tool-call-step:
+    // { toolCallId, toolName, suspendPayload: { __mastraClientToolCalls }, args }
+    expect(result.finishReason).toBe('suspended');
+    expect(result.suspendPayload).toBeDefined();
+
+    const clientToolCalls =
+      result.suspendPayload?.suspendPayload?.__mastraClientToolCalls ?? result.suspendPayload?.__mastraClientToolCalls;
+    expect(clientToolCalls).toBeDefined();
+    expect(clientToolCalls).toHaveLength(1);
+    expect(clientToolCalls[0]).toMatchObject({
+      toolCallId: 'ct-1',
+      toolName: 'changeColor',
+    });
+  });
+});
+
 describe('Supervisor Pattern - Sub-agent should not receive parent tool call references for unknown tools', () => {
   it('should not pass tool_call or tool_result content parts from the parent to the sub-agent model', async () => {
     // Scenario: Supervisor delegates to a sub-agent that has its own tools.

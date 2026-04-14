@@ -2897,6 +2897,46 @@ export class Agent<
   }
 
   /**
+   * Finds pending client tool calls in response messages that have no
+   * corresponding tool-result. Used by supervisor delegation to detect when
+   * a sub-agent called a client tool so the supervisor can suspend.
+   * @internal
+   */
+  #findPendingClientToolCalls(
+    responseMessages: MastraDBMessage[],
+    clientTools: ToolsInput,
+  ): Array<{ toolCallId: string; toolName: string; args: any }> {
+    const pending: Array<{ toolCallId: string; toolName: string; args: any }> = [];
+    for (const msg of responseMessages) {
+      if (msg.role !== 'assistant') continue;
+      const parts = (msg.content as any)?.parts || (Array.isArray(msg.content) ? msg.content : []);
+      for (const part of parts) {
+        // Check raw tool-call parts
+        if (part.type === 'tool-call' && clientTools[part.toolName]) {
+          pending.push({
+            toolCallId: part.toolCallId,
+            toolName: part.toolName,
+            args: part.args,
+          });
+        }
+        // Check tool-invocation parts (dbMessage format) — pending client
+        // tool calls have state 'call' (no result yet).
+        if (part.type === 'tool-invocation' && part.toolInvocation) {
+          const inv = part.toolInvocation;
+          if (inv.state === 'call' && clientTools[inv.toolName]) {
+            pending.push({
+              toolCallId: inv.toolCallId,
+              toolName: inv.toolName,
+              args: inv.args,
+            });
+          }
+        }
+      }
+    }
+    return pending;
+  }
+
+  /**
    * Retrieves and converts agent tools to CoreTool format.
    * @internal
    */
@@ -3250,42 +3290,68 @@ export class Agent<
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
                 supportedLanguageModelSpecifications.includes(modelVersion)
               ) {
-                const generateResult = resumeData
-                  ? await agent.resumeGenerate(resumeData, {
-                      runId: suspendedToolRunId,
-                      requestContext,
-                      clientTools,
-                      ...resolveObservabilityContext(context ?? {}),
-                      ...(effectiveInstructions && { instructions: effectiveInstructions }),
-                      ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
-                      context: filteredContextMessages as unknown as ModelMessage[],
-                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
-                        ? {
-                            memory: {
-                              resource: subAgentResourceId,
-                              thread: subAgentThreadId,
-                              options: { lastMessages: false },
-                            },
-                          }
-                        : {}),
-                    })
-                  : await agent.generate(messagesForSubAgent, {
-                      requestContext,
-                      clientTools,
-                      ...resolveObservabilityContext(context ?? {}),
-                      ...(effectiveInstructions && { instructions: effectiveInstructions }),
-                      ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
-                      context: filteredContextMessages as unknown as ModelMessage[],
-                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
-                        ? {
-                            memory: {
-                              resource: subAgentResourceId,
-                              thread: subAgentThreadId,
-                              options: { lastMessages: false },
-                            },
-                          }
-                        : {}),
-                    });
+                const subAgentGenerateOptions = {
+                  requestContext,
+                  clientTools,
+                  ...resolveObservabilityContext(context ?? {}),
+                  ...(effectiveInstructions && { instructions: effectiveInstructions }),
+                  ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
+                  context: filteredContextMessages as unknown as ModelMessage[],
+                  ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
+                    ? {
+                        memory: {
+                          resource: subAgentResourceId,
+                          thread: subAgentThreadId,
+                          options: { lastMessages: false as const },
+                        },
+                      }
+                    : {}),
+                };
+
+                let generateResult;
+
+                if ((resumeData as any)?.__mastraClientToolResults) {
+                  // Resuming from client tool call suspension.
+                  // Load the sub-agent's previous messages, append the client-provided
+                  // tool results, and re-generate so the LLM can continue.
+                  const memory = await agent.getMemory({ requestContext });
+                  let previousMessages: MastraDBMessage[] = [];
+                  if (memory && resourceId && threadId) {
+                    try {
+                      const recalled = await memory.recall({ threadId: subAgentThreadId });
+                      previousMessages = recalled.messages;
+                    } catch {
+                      // If we cannot load previous messages, fall through with empty array.
+                      // The sub-agent will start fresh but still receive the tool results.
+                    }
+                  }
+
+                  const toolResultInputMessages = ((resumeData as any).__mastraClientToolResults as any[]).map(
+                    (tr: any) => ({
+                      role: 'tool' as const,
+                      content: [
+                        {
+                          type: 'tool-result' as const,
+                          toolCallId: tr.toolCallId,
+                          toolName: tr.toolName,
+                          result: tr.result,
+                        },
+                      ],
+                    }),
+                  );
+
+                  generateResult = await agent.generate(
+                    [...(previousMessages as any), ...toolResultInputMessages] as any,
+                    subAgentGenerateOptions as any,
+                  );
+                } else if (resumeData) {
+                  generateResult = await agent.resumeGenerate(resumeData, {
+                    runId: suspendedToolRunId,
+                    ...subAgentGenerateOptions,
+                  });
+                } else {
+                  generateResult = await agent.generate(messagesForSubAgent, subAgentGenerateOptions);
+                }
 
                 const agentResponseMessages = generateResult.response.dbMessages ?? [];
                 const subAgentToolResults = generateResult.toolResults?.map(toolResult => ({
@@ -3350,6 +3416,31 @@ export class Agent<
                   });
                 }
 
+                // Check for pending client tool calls from sub-agent.
+                // When a sub-agent's LLM calls a client tool, the step loop bails
+                // (client tools have no server-side execute). We detect this and
+                // suspend so the client can execute the tools and resume.
+                if (clientTools) {
+                  const pendingClientToolCalls = this.#findPendingClientToolCalls(agentResponseMessages, clientTools);
+
+                  if (pendingClientToolCalls.length > 0) {
+                    if (savedThreadIdKey !== undefined) {
+                      requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
+                    }
+                    if (savedResourceIdKey !== undefined) {
+                      requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
+                    }
+                    return suspend?.(
+                      {
+                        __mastraClientToolCalls: pendingClientToolCalls,
+                      },
+                      {
+                        isAgentSuspend: true,
+                      },
+                    );
+                  }
+                }
+
                 result = { text: generateResult.text, subAgentThreadId, subAgentResourceId, subAgentToolResults };
               } else if (methodType === 'generate' && modelVersion === 'v1') {
                 const generateResult = await agent.generateLegacy(messagesForSubAgent, {
@@ -3362,46 +3453,65 @@ export class Agent<
                 (methodType === 'stream' || methodType === 'streamLegacy') &&
                 supportedLanguageModelSpecifications.includes(modelVersion)
               ) {
-                const streamResult = resumeData
-                  ? await agent.resumeStream(resumeData, {
-                      runId: suspendedToolRunId,
-                      requestContext,
-                      clientTools,
-                      ...resolveObservabilityContext(context ?? {}),
-                      ...(effectiveInstructions && { instructions: effectiveInstructions }),
-                      ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
-                      context: filteredContextMessages as unknown as ModelMessage[],
-                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
-                        ? {
-                            memory: {
-                              resource: subAgentResourceId,
-                              thread: subAgentThreadId,
-                              options: {
-                                lastMessages: false,
-                              },
-                            },
-                          }
-                        : {}),
-                    })
-                  : await agent.stream(messagesForSubAgent, {
-                      requestContext,
-                      clientTools,
-                      ...resolveObservabilityContext(context ?? {}),
-                      ...(effectiveInstructions && { instructions: effectiveInstructions }),
-                      ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
-                      context: filteredContextMessages as unknown as ModelMessage[],
-                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
-                        ? {
-                            memory: {
-                              resource: subAgentResourceId,
-                              thread: subAgentThreadId,
-                              options: {
-                                lastMessages: false,
-                              },
-                            },
-                          }
-                        : {}),
-                    });
+                const subAgentStreamOptions = {
+                  requestContext,
+                  clientTools,
+                  ...resolveObservabilityContext(context ?? {}),
+                  ...(effectiveInstructions && { instructions: effectiveInstructions }),
+                  ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
+                  context: filteredContextMessages as unknown as ModelMessage[],
+                  ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
+                    ? {
+                        memory: {
+                          resource: subAgentResourceId,
+                          thread: subAgentThreadId,
+                          options: { lastMessages: false as const },
+                        },
+                      }
+                    : {}),
+                };
+
+                let streamResult;
+
+                if ((resumeData as any)?.__mastraClientToolResults) {
+                  // Resuming from client tool call suspension (stream path).
+                  const memory = await agent.getMemory({ requestContext });
+                  let previousMessages: MastraDBMessage[] = [];
+                  if (memory && resourceId && threadId) {
+                    try {
+                      const recalled = await memory.recall({ threadId: subAgentThreadId });
+                      previousMessages = recalled.messages;
+                    } catch {
+                      // Fall through with empty messages
+                    }
+                  }
+
+                  const toolResultInputMessages = ((resumeData as any).__mastraClientToolResults as any[]).map(
+                    (tr: any) => ({
+                      role: 'tool' as const,
+                      content: [
+                        {
+                          type: 'tool-result' as const,
+                          toolCallId: tr.toolCallId,
+                          toolName: tr.toolName,
+                          result: tr.result,
+                        },
+                      ],
+                    }),
+                  );
+
+                  streamResult = await agent.stream(
+                    [...(previousMessages as any), ...toolResultInputMessages] as any,
+                    subAgentStreamOptions as any,
+                  );
+                } else if (resumeData) {
+                  streamResult = await agent.resumeStream(resumeData, {
+                    runId: suspendedToolRunId,
+                    ...subAgentStreamOptions,
+                  });
+                } else {
+                  streamResult = await agent.stream(messagesForSubAgent, subAgentStreamOptions);
+                }
 
                 let requireToolApproval;
                 let suspendedPayload;
@@ -3498,6 +3608,29 @@ export class Agent<
                     runId: streamResult.runId,
                     isAgentSuspend: true,
                   });
+                }
+
+                // Check for pending client tool calls from sub-agent (stream path).
+                if (clientTools) {
+                  const pendingClientToolCalls = this.#findPendingClientToolCalls(agentResponseMessages, clientTools);
+
+                  if (pendingClientToolCalls.length > 0) {
+                    if (savedThreadIdKey !== undefined) {
+                      requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
+                    }
+                    if (savedResourceIdKey !== undefined) {
+                      requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
+                    }
+                    return suspend?.(
+                      {
+                        __mastraClientToolCalls: pendingClientToolCalls,
+                      },
+                      {
+                        isAgentSuspend: true,
+                        runId: streamResult.runId,
+                      },
+                    );
+                  }
                 }
 
                 // Use streamResult.text (a delayed promise) which resolves to the
@@ -4903,7 +5036,6 @@ export class Agent<
       routingAgent: this,
       routingAgentOptions: {
         modelSettings: mergedOptions?.modelSettings,
-        clientTools: mergedOptions?.clientTools,
         memory: mergedOptions?.memory,
       } as unknown as AgentExecutionOptions<OUTPUT>,
       generateId: context => this.#mastra?.generateId(context) || randomUUID(),
@@ -4980,7 +5112,6 @@ export class Agent<
       routingAgent: this,
       routingAgentOptions: {
         modelSettings: mergedOptions?.modelSettings,
-        clientTools: mergedOptions?.clientTools,
         memory: mergedOptions?.memory,
       },
       generateId: context => this.#mastra?.generateId(context) || randomUUID(),
@@ -5541,10 +5672,11 @@ export class Agent<
    * ```
    */
   async approveToolCall<OUTPUT = undefined>(
-    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string; resumeData?: any },
   ): Promise<MastraModelOutput<OUTPUT>> {
+    const data = options.resumeData ?? { approved: true };
     // @ts-expect-error - the types here are wrong
-    return this.resumeStream({ approved: true }, options);
+    return this.resumeStream(data, options);
   }
 
   /**
@@ -5586,10 +5718,11 @@ export class Agent<
    * ```
    */
   async approveToolCallGenerate<OUTPUT = undefined>(
-    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string; resumeData?: any },
   ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
+    const data = options.resumeData ?? { approved: true };
     // @ts-expect-error - the types here are wrong
-    return this.resumeGenerate({ approved: true }, options);
+    return this.resumeGenerate(data, options);
   }
 
   /**

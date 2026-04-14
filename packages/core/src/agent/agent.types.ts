@@ -340,9 +340,6 @@ export type NetworkOptions<OUTPUT = undefined> = {
   /** Model-specific settings like temperature, maxTokens, topP, etc. */
   modelSettings?: LoopOptions['modelSettings'];
 
-  /** Client-side tools available during execution */
-  clientTools?: ToolsInput;
-
   /**
    * Routing configuration - controls how primitives are selected.
    */

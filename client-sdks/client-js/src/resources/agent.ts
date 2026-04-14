@@ -560,6 +560,54 @@ export class Agent extends BaseResource {
       }) as unknown as Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
     }
 
+    // Handle suspended responses containing client tool calls from sub-agents.
+    // When a supervisor delegates to a sub-agent that calls a client tool,
+    // the server suspends with __mastraClientToolCalls in the suspend payload.
+    // The payload may be nested under suspendPayload.suspendPayload (wrapped
+    // by the tool-call-step) or directly under suspendPayload.
+    const suspendPayload = (response as any).suspendPayload;
+    const clientToolCallsPayload =
+      suspendPayload?.suspendPayload?.__mastraClientToolCalls ?? suspendPayload?.__mastraClientToolCalls;
+
+    if (response.finishReason === 'suspended' && clientToolCallsPayload && params.clientTools) {
+      const clientToolCalls = clientToolCallsPayload as Array<{
+        toolCallId: string;
+        toolName: string;
+        args: any;
+      }>;
+
+      const toolResults: Array<{ toolCallId: string; toolName: string; result: any }> = [];
+
+      for (const toolCall of clientToolCalls) {
+        const clientTool = params.clientTools[toolCall.toolName] as Tool;
+        if (clientTool?.execute) {
+          const result = await clientTool.execute(toolCall.args, {
+            requestContext: requestContext as RequestContext,
+            tracingContext: { currentSpan: undefined },
+            agent: {
+              agentId: this.agentId,
+              messages: [],
+              toolCallId: toolCall.toolCallId,
+              suspend: async () => {},
+              threadId,
+              resourceId,
+            },
+          });
+          toolResults.push({ toolCallId: toolCall.toolCallId, toolName: toolCall.toolName, result });
+        }
+      }
+
+      if (toolResults.length > 0) {
+        // Resume via approveToolCallGenerate with the client-executed tool results
+        return this.approveToolCallGenerate({
+          runId: (response as any).runId,
+          toolCallId: clientToolCalls[0].toolCallId,
+          resumeData: { __mastraClientToolResults: toolResults },
+          ...params,
+        }) as unknown as Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
+      }
+    }
+
     return response;
   }
 
@@ -1884,7 +1932,9 @@ export class Agent extends BaseResource {
   async approveToolCallGenerate(params: {
     runId: string;
     toolCallId: string;
+    resumeData?: any;
     requestContext?: RequestContext | Record<string, any>;
+    [key: string]: any;
   }): Promise<any> {
     const { requestContext, ...rest } = params;
     return this.request(`/agents/${this.agentId}/approve-tool-call-generate`, {

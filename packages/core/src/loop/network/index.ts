@@ -1,7 +1,7 @@
 import { parsePartialJson } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
 import type { Mastra } from '../..';
-import type { AgentExecutionOptions, ToolsInput } from '../../agent';
+import type { AgentExecutionOptions } from '../../agent';
 import type { MultiPrimitiveExecutionOptions, NetworkOptions } from '../../agent/agent.types';
 import { Agent, tryGenerateWithJsonFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
@@ -128,32 +128,17 @@ function filterMessagesForSubAgent(messages: MastraDBMessage[]): MastraDBMessage
   });
 }
 
-/**
- * Merges default client tools from agent config with runtime (invocation-scoped) client tools.
- * Runtime tools take precedence over defaults when names collide.
- */
-async function resolveClientTools(
-  agent: Agent,
-  requestContext: RequestContext,
-  runtimeClientTools?: ToolsInput,
-): Promise<ToolsInput> {
-  const defaultClientTools = (await agent.getDefaultOptions({ requestContext }))?.clientTools;
-  return { ...(defaultClientTools || {}), ...(runtimeClientTools || {}) };
-}
-
 /** @internal Exported for testing purposes */
 export async function getRoutingAgent({
   requestContext,
   agent,
   routingConfig,
-  clientTools,
 }: {
   agent: Agent;
   requestContext: RequestContext;
   routingConfig?: {
     additionalInstructions?: string;
   };
-  clientTools?: ToolsInput;
 }) {
   const instructionsToUse = await agent.getInstructions({ requestContext: requestContext });
   const agentsToUse = await agent.listAgents({ requestContext: requestContext });
@@ -161,7 +146,7 @@ export async function getRoutingAgent({
   const toolsToUse = await agent.listTools({ requestContext: requestContext });
   const model = await agent.getModel({ requestContext: requestContext });
   const memoryToUse = await agent.getMemory({ requestContext: requestContext });
-  const clientToolsToUse = await resolveClientTools(agent, requestContext, clientTools);
+  const clientToolsToUse = (await agent.getDefaultOptions({ requestContext: requestContext }))?.clientTools;
 
   // Get only user-configured processors (not memory processors) for the routing agent.
   // Memory processors (semantic recall, working memory) can interfere with routing decisions,
@@ -504,7 +489,7 @@ export async function createNetworkLoop({
   requestContext: RequestContext;
   runId: string;
   agent: Agent;
-  routingAgentOptions?: Pick<MultiPrimitiveExecutionOptions, 'modelSettings' | 'clientTools'>;
+  routingAgentOptions?: Pick<MultiPrimitiveExecutionOptions, 'modelSettings'>;
   generateId: NetworkIdGenerator;
   routing?: {
     additionalInstructions?: string;
@@ -612,12 +597,7 @@ export async function createNetworkLoop({
 
       const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
 
-      const routingAgent = await getRoutingAgent({
-        requestContext,
-        agent,
-        routingConfig: routing,
-        clientTools: routingAgentOptions?.clientTools,
-      });
+      const routingAgent = await getRoutingAgent({ requestContext, agent, routingConfig: routing });
 
       // Increment iteration counter. Must use nullish coalescing (??) not ternary (?)
       // to avoid treating 0 as falsy. Initial value is -1, so first iteration becomes 0.
@@ -887,9 +867,6 @@ export async function createNetworkLoop({
         { role: 'user' as const, content: inputData.prompt },
       ];
 
-      // Forward parent agent's client tools so sub-agents can request them.
-      const clientTools = await resolveClientTools(agent, requestContext, routingAgentOptions?.clientTools);
-
       // We set lastMessages: 0 to prevent loading messages from the network's thread
       // (which contains isNetwork JSON and completion feedback). We still pass
       // threadId/resourceId so working memory tools function correctly.
@@ -897,7 +874,6 @@ export async function createNetworkLoop({
         ? agentForStep.resumeStream(resumeData, {
             requestContext: requestContext,
             runId,
-            clientTools,
             memory: {
               thread: threadId,
               resource: resourceId,
@@ -913,7 +889,6 @@ export async function createNetworkLoop({
         : agentForStep.stream(messagesForSubAgent, {
             requestContext: requestContext,
             runId,
-            clientTools,
             memory: {
               thread: threadId,
               resource: resourceId,
@@ -1474,7 +1449,7 @@ export async function createNetworkLoop({
       const agentTools = await agent.listTools({ requestContext });
       const memory = await agent.getMemory({ requestContext });
       const memoryTools = await memory?.listTools?.();
-      const clientTools = await resolveClientTools(agent, requestContext, routingAgentOptions?.clientTools);
+      const clientTools = (await agent.getDefaultOptions({ requestContext }))?.clientTools;
       const toolsMap = { ...agentTools, ...memoryTools, ...(clientTools || {}) };
 
       let tool = toolsMap[inputData.primitiveId];
@@ -2306,7 +2281,6 @@ export async function networkLoop<OUTPUT = undefined>({
             requestContext,
             agent: routingAgent,
             routingConfig: routing,
-            clientTools: routingAgentOptions?.clientTools,
           });
 
           // Use structured output generation if schema is provided
@@ -2355,7 +2329,6 @@ export async function networkLoop<OUTPUT = undefined>({
           requestContext,
           agent: routingAgent,
           routingConfig: routing,
-          clientTools: routingAgentOptions?.clientTools,
         });
         // Use the default LLM completion check
         const defaultResult = await runDefaultCompletionCheck(
