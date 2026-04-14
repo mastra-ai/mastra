@@ -467,56 +467,69 @@ export const GET_ROLLOUT_RESULTS_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'No active rollout found for this agent' });
       }
 
-      // Query scores from storage for each allocation
+      // Query scores from storage — fetch once and distribute across allocations
       const scoresStore = await getScoresStore(mastra);
 
-      const allocations = await Promise.all(
-        rollout.allocations.map(async alloc => {
-          const scores: Record<string, { avg: number; stddev: number; count: number; min: number; max: number }> = {};
+      // Group scores by (versionId, scorerId)
+      type ScoreStats = { avg: number; stddev: number; count: number; min: number; max: number };
+      const scoresByVersion = new Map<string, Map<string, number[]>>();
 
-          if (scoresStore) {
-            // Get all scores for this agent — filter by version via entity.resolvedVersionId
-            const allScores = await scoresStore.listScoresByEntityId({
-              entityId: agentId,
-              entityType: 'AGENT',
-              pagination: { page: 0, perPage: 10000 },
-            });
+      if (scoresStore) {
+        // Page through scores to avoid loading everything into memory at once
+        let page = 0;
+        const pageSize = 500;
+        let hasMore = true;
 
-            // Group scores by scorerId, filtering by version
-            const byScorer = new Map<string, number[]>();
-            for (const score of allScores.scores || []) {
-              // Match scores to allocations via the entity's resolvedVersionId
-              const scoreVersionId = score.entity?.resolvedVersionId as string | undefined;
-              if (scoreVersionId !== alloc.versionId) continue;
+        while (hasMore) {
+          const result = await scoresStore.listScoresByEntityId({
+            entityId: agentId,
+            entityType: 'AGENT',
+            pagination: { page, perPage: pageSize },
+          });
 
-              const sid = score.scorerId;
-              if (!byScorer.has(sid)) byScorer.set(sid, []);
-              byScorer.get(sid)!.push(score.score);
-            }
+          for (const score of result.scores || []) {
+            const versionId =
+              typeof score.entity?.resolvedVersionId === 'string' ? score.entity.resolvedVersionId : undefined;
+            if (!versionId) continue;
 
-            for (const [scorerId, values] of byScorer) {
-              if (values.length === 0) continue;
-              const avg = values.reduce((a, b) => a + b, 0) / values.length;
-              const variance = values.reduce((sum, v) => sum + (v - avg) ** 2, 0) / values.length;
-              const stddev = Math.sqrt(variance);
-              scores[scorerId] = {
-                avg,
-                stddev,
-                count: values.length,
-                min: Math.min(...values),
-                max: Math.max(...values),
-              };
-            }
+            if (!scoresByVersion.has(versionId)) scoresByVersion.set(versionId, new Map());
+            const byScorer = scoresByVersion.get(versionId)!;
+            if (!byScorer.has(score.scorerId)) byScorer.set(score.scorerId, []);
+            byScorer.get(score.scorerId)!.push(score.score);
           }
 
-          return {
-            versionId: alloc.versionId,
-            label: alloc.label,
-            requestCount: Object.values(scores).reduce((sum, s) => Math.max(sum, s.count), 0),
-            scores,
-          };
-        }),
-      );
+          hasMore = result.pagination.hasMore;
+          page++;
+        }
+      }
+
+      function computeStats(values: number[]): ScoreStats {
+        const avg = values.reduce((a, b) => a + b, 0) / values.length;
+        const variance = values.reduce((sum, v) => sum + (v - avg) ** 2, 0) / values.length;
+        return {
+          avg,
+          stddev: Math.sqrt(variance),
+          count: values.length,
+          min: Math.min(...values),
+          max: Math.max(...values),
+        };
+      }
+
+      const allocations = rollout.allocations.map(alloc => {
+        const scores: Record<string, ScoreStats> = {};
+        const byScorer = scoresByVersion.get(alloc.versionId);
+        if (byScorer) {
+          for (const [scorerId, values] of byScorer) {
+            if (values.length > 0) scores[scorerId] = computeStats(values);
+          }
+        }
+        return {
+          versionId: alloc.versionId,
+          label: alloc.label,
+          requestCount: Object.values(scores).reduce((sum, s) => Math.max(sum, s.count), 0),
+          scores,
+        };
+      });
 
       return {
         rolloutId: rollout.id,
@@ -548,15 +561,16 @@ export const LIST_ROLLOUTS_ROUTE = createRoute({
     try {
       const rolloutsStore = await getRolloutsStore(mastra);
 
+      const apiPage = page ?? 1;
       const result = await rolloutsStore.listRollouts({
         agentId,
-        pagination: { page: page ?? 0, perPage: perPage ?? 20 },
+        pagination: { page: apiPage - 1, perPage: perPage ?? 20 },
       });
 
       return {
         rollouts: result.rollouts,
         total: result.pagination.total,
-        page: result.pagination.page,
+        page: apiPage,
         perPage: typeof result.pagination.perPage === 'number' ? result.pagination.perPage : 0,
       };
     } catch (error) {

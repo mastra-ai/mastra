@@ -93,6 +93,11 @@ export class MongoDBRolloutsStorage extends RolloutsStorage {
       { collection: TABLE_ROLLOUTS, keys: { id: 1 }, options: { unique: true } },
       { collection: TABLE_ROLLOUTS, keys: { agentId: 1, status: 1 } },
       { collection: TABLE_ROLLOUTS, keys: { agentId: 1, createdAt: -1 } },
+      {
+        collection: TABLE_ROLLOUTS,
+        keys: { agentId: 1 },
+        options: { unique: true, partialFilterExpression: { status: 'active' } },
+      },
     ];
   }
 
@@ -218,24 +223,42 @@ export class MongoDBRolloutsStorage extends RolloutsStorage {
       const collection = await this.getCollection(TABLE_ROLLOUTS);
       const existing = await collection.findOne({ id: input.id });
       if (!existing) {
-        throw new Error(`Rollout not found: ${input.id}`);
+        throw new MastraError({
+          id: createStorageErrorId('ROLLOUTS', 'UPDATE', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { rolloutId: input.id },
+        });
       }
       if (existing.status !== 'active') {
-        throw new Error(`Cannot update rollout with status: ${existing.status}`);
+        throw new MastraError({
+          id: createStorageErrorId('ROLLOUTS', 'UPDATE', 'INVALID_STATUS'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { rolloutId: input.id, status: existing.status },
+        });
       }
 
       const updateData: Record<string, unknown> = { updatedAt: new Date() };
       if (input.allocations) updateData.allocations = input.allocations;
       if (input.rules) updateData.rules = input.rules;
 
-      await collection.updateOne({ id: input.id }, { $set: updateData });
-
-      const updated = await collection.findOne({ id: input.id });
+      const updated = await collection.findOneAndUpdate(
+        { id: input.id },
+        { $set: updateData },
+        { returnDocument: 'after' },
+      );
+      if (!updated) {
+        throw new MastraError({
+          id: createStorageErrorId('ROLLOUTS', 'UPDATE', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { rolloutId: input.id },
+        });
+      }
       return transformRolloutRow(updated as Record<string, unknown>);
     } catch (error) {
-      if (error instanceof Error && (error.message.includes('not found') || error.message.includes('Cannot update'))) {
-        throw error;
-      }
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('ROLLOUTS', 'UPDATE', 'FAILED'),
@@ -251,19 +274,22 @@ export class MongoDBRolloutsStorage extends RolloutsStorage {
     try {
       const now = completedAt ?? new Date();
       const collection = await this.getCollection(TABLE_ROLLOUTS);
-      const existing = await collection.findOne({ id });
-      if (!existing) {
-        throw new Error(`Rollout not found: ${id}`);
+      const updated = await collection.findOneAndUpdate(
+        { id },
+        { $set: { status, updatedAt: now, completedAt: now } },
+        { returnDocument: 'after' },
+      );
+      if (!updated) {
+        throw new MastraError({
+          id: createStorageErrorId('ROLLOUTS', 'COMPLETE', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { rolloutId: id },
+        });
       }
-
-      await collection.updateOne({ id }, { $set: { status, updatedAt: now, completedAt: now } });
-
-      const updated = await collection.findOne({ id });
       return transformRolloutRow(updated as Record<string, unknown>);
     } catch (error) {
-      if (error instanceof Error && error.message.includes('not found')) {
-        throw error;
-      }
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('ROLLOUTS', 'COMPLETE', 'FAILED'),

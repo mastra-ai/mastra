@@ -1054,13 +1054,6 @@ export const GENERATE_AGENT_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async ({ agentId, mastra, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(serverRequestContext),
-        requestContext: serverRequestContext,
-      });
-
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
@@ -1070,8 +1063,9 @@ export const GENERATE_AGENT_ROUTE = createRoute({
       validateBody({ messages });
 
       // Merge body's requestContext values into the server's RequestContext instance
-      // Only set values that don't already exist on the server context to prevent
-      // clients from overwriting server-populated auth/tenant values
+      // before resolving the agent version, so rollout routing has access to client-supplied
+      // values like resourceId. Only set values that don't already exist on the server
+      // context to prevent clients from overwriting server-populated auth/tenant values.
       if (bodyRequestContext && typeof bodyRequestContext === 'object') {
         for (const [key, value] of Object.entries(bodyRequestContext)) {
           if (serverRequestContext.get(key) === undefined) {
@@ -1079,6 +1073,13 @@ export const GENERATE_AGENT_ROUTE = createRoute({
           }
         }
       }
+
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(serverRequestContext),
+        requestContext: serverRequestContext,
+      });
 
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
@@ -1350,13 +1351,6 @@ export const STREAM_GENERATE_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(serverRequestContext),
-        requestContext: serverRequestContext,
-      });
-
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
@@ -1365,8 +1359,9 @@ export const STREAM_GENERATE_ROUTE = createRoute({
       validateBody({ messages });
 
       // Merge body's requestContext values into the server's RequestContext instance
-      // Only set values that don't already exist on the server context to prevent
-      // clients from overwriting server-populated auth/tenant values
+      // before resolving the agent version, so rollout routing has access to client-supplied
+      // values like resourceId. Only set values that don't already exist on the server
+      // context to prevent clients from overwriting server-populated auth/tenant values.
       if (bodyRequestContext && typeof bodyRequestContext === 'object') {
         for (const [key, value] of Object.entries(bodyRequestContext)) {
           if (serverRequestContext.get(key) === undefined) {
@@ -1374,6 +1369,13 @@ export const STREAM_GENERATE_ROUTE = createRoute({
           }
         }
       }
+
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(serverRequestContext),
+        requestContext: serverRequestContext,
+      });
 
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;

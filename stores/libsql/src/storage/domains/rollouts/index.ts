@@ -39,6 +39,11 @@ export class RolloutsLibSQL extends RolloutsStorage {
       sql: `CREATE INDEX IF NOT EXISTS idx_rollouts_agentid_status ON "${TABLE_ROLLOUTS}" ("agentId", "status")`,
       args: [],
     });
+    // Unique partial index to enforce at most one active rollout per agent
+    await this.#client.execute({
+      sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_rollouts_one_active_per_agent ON "${TABLE_ROLLOUTS}" ("agentId") WHERE "status" = 'active'`,
+      args: [],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {

@@ -2477,7 +2477,7 @@ export interface RolloutRecord {
   rules?: RolloutRule[];
   createdAt: Date;
   updatedAt: Date;
-  completedAt?: Date | null;
+  completedAt: Date | null;
 }
 
 export interface CreateRolloutInput {

@@ -67,6 +67,13 @@ export class RolloutsPG extends RolloutsStorage {
         table: TABLE_ROLLOUTS,
         columns: ['agentId', 'status'],
       },
+      {
+        name: 'idx_rollouts_one_active_per_agent',
+        table: TABLE_ROLLOUTS,
+        columns: ['agentId'],
+        unique: true,
+        where: `"status" = 'active'`,
+      },
     ];
   }
 
@@ -168,7 +175,10 @@ export class RolloutsPG extends RolloutsStorage {
           rules: input.rules ? JSON.stringify(input.rules) : null,
           createdAt: nowIso,
           updatedAt: nowIso,
+          createdAtZ: nowIso,
+          updatedAtZ: nowIso,
           completedAt: null,
+          completedAtZ: null,
         },
       });
 

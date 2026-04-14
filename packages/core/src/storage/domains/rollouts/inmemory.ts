@@ -10,6 +10,14 @@ import type {
 import type { InMemoryDB } from '../inmemory-db';
 import { RolloutsStorage } from './base';
 
+function cloneRollout(r: RolloutRecord): RolloutRecord {
+  return {
+    ...r,
+    allocations: r.allocations.map(a => ({ ...a })),
+    rules: r.rules?.map(rule => ({ ...rule })),
+  };
+}
+
 export class RolloutsInMemory extends RolloutsStorage {
   private db: InMemoryDB;
 
@@ -25,7 +33,7 @@ export class RolloutsInMemory extends RolloutsStorage {
   async getActiveRollout(agentId: string): Promise<RolloutRecord | null> {
     for (const rollout of this.db.rollouts.values()) {
       if (rollout.agentId === agentId && rollout.status === 'active') {
-        return { ...rollout };
+        return cloneRollout(rollout);
       }
     }
     return null;
@@ -33,7 +41,7 @@ export class RolloutsInMemory extends RolloutsStorage {
 
   async getRollout(id: string): Promise<RolloutRecord | null> {
     const rollout = this.db.rollouts.get(id);
-    return rollout ? { ...rollout } : null;
+    return rollout ? cloneRollout(rollout) : null;
   }
 
   async createRollout(input: CreateRolloutInput): Promise<RolloutRecord> {
@@ -44,15 +52,15 @@ export class RolloutsInMemory extends RolloutsStorage {
       type: input.type,
       status: 'active',
       stableVersionId: input.stableVersionId,
-      allocations: input.allocations,
+      allocations: input.allocations.map(a => ({ ...a })),
       routingKey: input.routingKey,
-      rules: input.rules,
+      rules: input.rules?.map(r => ({ ...r })),
       createdAt: now,
       updatedAt: now,
       completedAt: null,
     };
     this.db.rollouts.set(rollout.id, rollout);
-    return { ...rollout };
+    return cloneRollout(rollout);
   }
 
   async updateRollout(input: UpdateRolloutInput): Promise<RolloutRecord> {
@@ -70,7 +78,7 @@ export class RolloutsInMemory extends RolloutsStorage {
       updatedAt: new Date(),
     };
     this.db.rollouts.set(input.id, updated);
-    return { ...updated };
+    return cloneRollout(updated);
   }
 
   async completeRollout(id: string, status: RolloutStatus, completedAt?: Date): Promise<RolloutRecord> {
@@ -86,7 +94,7 @@ export class RolloutsInMemory extends RolloutsStorage {
       completedAt: now,
     };
     this.db.rollouts.set(id, updated);
-    return { ...updated };
+    return cloneRollout(updated);
   }
 
   async listRollouts(input: ListRolloutsInput): Promise<ListRolloutsOutput> {
@@ -101,7 +109,7 @@ export class RolloutsInMemory extends RolloutsStorage {
     const end = perPageInput === false ? rollouts.length : start + perPage;
 
     return {
-      rollouts: rollouts.slice(start, end).map(r => ({ ...r })),
+      rollouts: rollouts.slice(start, end).map(cloneRollout),
       pagination: {
         total: rollouts.length,
         page,
