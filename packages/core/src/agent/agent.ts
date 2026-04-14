@@ -188,6 +188,7 @@ export class Agent<
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
+  #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>;
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
@@ -213,6 +214,8 @@ export class Agent<
    */
   constructor(config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>) {
     super({ component: RegisteredLogger.AGENT, rawConfig: config.rawConfig });
+
+    this.#config = config;
 
     this.name = config.name;
     this.id = config.id ?? config.name;
@@ -1970,6 +1973,35 @@ export class Agent<
    */
   __setTools(tools: DynamicArgument<TTools, any>) {
     this.#tools = tools as DynamicArgument<TTools, TRequestContext>;
+  }
+
+  /**
+   * Create a lightweight clone of this agent that can be independently mutated
+   * without affecting the original instance. Used by the editor to apply
+   * version overrides without mutating the singleton agent.
+   * @internal
+   */
+  __fork(): Agent<TAgentId, TTools, TOutput, TRequestContext> {
+    const fork = new Agent<TAgentId, TTools, TOutput, TRequestContext>({
+      ...this.#config,
+      rawConfig: this.toRawConfig(),
+    });
+
+    // Preserve runtime state that may have been set after construction
+    // (e.g. when Mastra registers agents via __registerMastra / __registerPrimitives).
+    // Assign fields directly to avoid re-triggering tool/processor registration
+    // side effects that __registerMastra would cause.
+    if (this.#mastra && !this.#config.mastra) {
+      fork.#mastra = this.#mastra;
+    }
+    if (this.#primitives) {
+      fork.#primitives = this.#primitives;
+    }
+
+    fork.source = this.source;
+    fork._agentNetworkAppend = this._agentNetworkAppend;
+
+    return fork;
   }
 
   async generateTitleFromUserMessage({
