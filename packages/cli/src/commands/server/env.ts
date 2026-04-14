@@ -151,11 +151,6 @@ export async function envPullAction(file: string | undefined, opts: { config?: s
   const envVars = await getServerProjectEnv(token, orgId, projectId);
   const keys = Object.keys(envVars);
 
-  if (keys.length === 0) {
-    console.info('\n  No environment variables to pull.\n');
-    return;
-  }
-
   const target = file ?? '.env';
   const lines = ['# Pulled from Mastra Server — do not edit manually', ''];
   for (const key of keys.sort()) {
@@ -177,5 +172,9 @@ export async function envPullAction(file: string | undefined, opts: { config?: s
   await writeFile(outputPath, lines.join('\n'), { encoding: 'utf-8', mode: 0o600 });
   await chmod(outputPath, 0o600);
 
-  console.info(`\n  Pulled ${keys.length} variable(s) to ${target}.\n`);
+  if (keys.length === 0) {
+    console.info(`\n  No environment variables set in the project. Wrote empty ${target}.\n`);
+  } else {
+    console.info(`\n  Pulled ${keys.length} variable(s) to ${target}.\n`);
+  }
 }

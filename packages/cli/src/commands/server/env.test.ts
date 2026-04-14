@@ -215,14 +215,17 @@ describe('envPullAction', () => {
     mockChmod.mockResolvedValue(undefined);
   });
 
-  it('prints message when no vars to pull', async () => {
+  it('writes empty env file when no vars exist', async () => {
     mockGetServerProjectEnv.mockResolvedValue({});
     const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const { envPullAction } = await import('./env.js');
     await envPullAction(undefined, {});
-    expect(mockWriteFile).not.toHaveBeenCalled();
-    expect(mockChmod).not.toHaveBeenCalled();
-    expect(spy.mock.calls.some(c => String(c[0]).includes('No environment variables to pull'))).toBe(true);
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
+    const [, content] = mockWriteFile.mock.calls[0]!;
+    expect(content).toContain('# Pulled from Mastra Server');
+    expect(content).not.toMatch(/^\w+=.+$/m);
+    expect(mockChmod).toHaveBeenCalled();
+    expect(spy.mock.calls.some(c => String(c[0]).includes('Wrote empty'))).toBe(true);
     spy.mockRestore();
   });
 
