@@ -77,14 +77,15 @@ export interface LLMIterationData<Tools extends ToolSet = ToolSet, OUTPUT = unde
   metadata: LLMIterationMetadata;
   stepResult: LLMIterationStepResult;
   /**
-   * Number of times processors have triggered retry for this generation.
-   * Used to enforce maxProcessorRetries limit.
+   * Number of consecutive processor-triggered retries for the current generation.
+   * Used to enforce the processor retry safety cap.
    */
   processorRetryCount?: number;
   /**
-   * Feedback message from processor to be added as system message on retry.
-   * This is passed through workflow state so it survives the system message reset.
+   * Current fallback model index for the active generation.
+   * Preserved across processor-triggered retries so retries resume on the same fallback model.
    */
+  fallbackModelIndex?: number;
   processorRetryFeedback?: string;
   /**
    * True when a background task result was injected and the LLM needs another
@@ -155,6 +156,7 @@ export const llmIterationOutputSchema = z.object({
   }),
   stepResult: llmIterationStepResultSchema,
   processorRetryCount: z.number().optional(),
+  fallbackModelIndex: z.number().optional(),
   processorRetryFeedback: z.string().optional(),
   isTaskCompleteCheckFailed: z.boolean().optional(), //true if the isTaskComplete check failed and LLM has to run again
   backgroundTaskPending: z.boolean().optional(), // true if a background task result was injected and LLM needs to process it
