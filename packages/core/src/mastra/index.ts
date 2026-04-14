@@ -1088,14 +1088,13 @@ export class Mastra<
     const agentChannels = mastraAgent.getChannels();
     if (agentChannels) {
       agentChannels.__setLogger(this.#logger);
-      const channelRoutes = agentChannels.getWebhookRoutes();
+      const channelRoutes = agentChannels.getWebhookRoutes(this);
       if (channelRoutes.length > 0) {
         this.#server = {
           ...this.#server,
           apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
         };
       }
-      agentChannels.__startInitialize(this);
     }
   }
 
