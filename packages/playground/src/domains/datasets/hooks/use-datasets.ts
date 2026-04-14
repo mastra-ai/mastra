@@ -9,6 +9,7 @@ export const useDatasets = (pagination?: { page?: number; perPage?: number }) =>
   return useQuery({
     queryKey: ['datasets', pagination],
     queryFn: () => client.listDatasets(pagination),
+    placeholderData: previousData => previousData,
   });
 };
 

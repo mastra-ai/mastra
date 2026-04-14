@@ -8,6 +8,7 @@ import { useDatasetItems } from '../../hooks/use-dataset-items';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import type { DatasetVersion } from '../../hooks/use-dataset-versions';
 import { useDataset } from '../../hooks/use-datasets';
+import { getItemsTabCount } from '../../utils/tab-counts';
 import { AddItemsToDatasetDialog } from '../add-items-to-dataset-dialog';
 import { CreateDatasetFromItemsDialog } from '../create-dataset-from-items-dialog';
 import { CSVImportDialog } from '../csv-import';
@@ -79,6 +80,7 @@ export function DatasetPageContent({
   const { data: dataset, isLoading: isDatasetLoading } = useDataset(datasetId);
   const {
     data: items = [],
+    total: itemsTotal,
     isLoading: isItemsLoading,
     setEndOfListElement,
     isFetchingNextPage,
@@ -86,11 +88,11 @@ export function DatasetPageContent({
   } = useDatasetItems(datasetId, debouncedSearch || undefined, activeDatasetVersion);
   // Unfiltered query (no search) to determine if dataset has any items — avoids
   // incorrectly disabling the experiment button when a search yields no matches.
-  const { data: unfilteredItems = [], isLoading: isUnfilteredLoading } = useDatasetItems(
-    datasetId,
-    undefined,
-    activeDatasetVersion,
-  );
+  const {
+    data: unfilteredItems = [],
+    total: unfilteredItemsTotal,
+    isLoading: isUnfilteredLoading,
+  } = useDatasetItems(datasetId, undefined, activeDatasetVersion);
   const [experimentsFilters, setExperimentsFilters] = useState<DatasetExperimentsFilters>({});
   const { data: experimentsData, isLoading: isExperimentsLoading } = useDatasetExperiments(
     datasetId,
@@ -103,6 +105,12 @@ export function DatasetPageContent({
 
   const experiments = experimentsData?.experiments ?? [];
   const allExperiments = allExperimentsData?.experiments ?? [];
+  const itemsTabCount = getItemsTabCount({
+    hasSearchQuery: Boolean(debouncedSearch),
+    filteredItemsLength: items.length,
+    unfilteredItemsTotal,
+    itemsTotal,
+  });
   const { data: reviewItems } = useDatasetReviewItems(datasetId);
   const reviewCount = reviewItems?.length ?? 0;
 
@@ -220,7 +228,7 @@ export function DatasetPageContent({
               >
                 <TabList>
                   <Tab value="items">
-                    Items <Chip color="gray">{items.length}</Chip>
+                    Items <Chip color="gray">{itemsTabCount}</Chip>
                   </Tab>
                   <Tab value="experiments">
                     Experiments
