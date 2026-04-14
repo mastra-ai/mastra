@@ -703,6 +703,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let request: any;
       let rawResponse: any;
       let activeFallbackModelIndex = inputData.fallbackModelIndex || 0;
+      const maxErrorProcessorRetries = maxProcessorRetries ?? (errorProcessors?.length ? 10 : undefined);
       const { outputStream, callBail, runState, stepTools, stepWorkspace, processAPIErrorRetry } =
         await executeStreamWithFallbackModels<{
           outputStream: MastraModelOutput<OUTPUT>;
@@ -1188,7 +1189,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               });
 
               const currentRetryCount = inputData.processorRetryCount || 0;
-              const canRetryError = maxProcessorRetries !== undefined && currentRetryCount < maxProcessorRetries;
+              const canRetryError =
+                maxErrorProcessorRetries !== undefined && currentRetryCount < maxErrorProcessorRetries;
               const apiErrorWriter: ProcessorStreamWriter | undefined = outputWriter
                 ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
                 : undefined;
@@ -1305,7 +1307,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
       if (!apiErrorRetryResult && runState.state.hasErrored && runState.state.apiError) {
         const currentRetryCount = inputData.processorRetryCount || 0;
-        const canRetryError = maxProcessorRetries !== undefined && currentRetryCount < maxProcessorRetries;
+        const canRetryError = maxErrorProcessorRetries !== undefined && currentRetryCount < maxErrorProcessorRetries;
         const processorRunner = new ProcessorRunner({
           inputProcessors: inputProcessors || [],
           outputProcessors: outputProcessors || [],

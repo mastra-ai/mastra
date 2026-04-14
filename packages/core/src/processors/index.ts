@@ -466,19 +466,17 @@ export type ProcessorTypes<TTripwireMetadata = unknown> =
 export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOutput, ProcessorStepOutput, any>;
 
 /**
- * Input processor config: can be a Processor, ErrorProcessor, or a Workflow.
+ * Input processor config: can be a Processor or a Workflow.
  */
 export type InputProcessorOrWorkflow<TTripwireMetadata = unknown> =
   | InputProcessor<TTripwireMetadata>
-  | ErrorProcessor<TTripwireMetadata>
   | ProcessorWorkflow;
 
 /**
- * Output processor config: can be a Processor, ErrorProcessor, or a Workflow.
+ * Output processor config: can be a Processor or a Workflow.
  */
 export type OutputProcessorOrWorkflow<TTripwireMetadata = unknown> =
   | OutputProcessor<TTripwireMetadata>
-  | ErrorProcessor<TTripwireMetadata>
   | ProcessorWorkflow;
 
 /**

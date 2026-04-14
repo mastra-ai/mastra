@@ -18,8 +18,6 @@ import { isMaybeClaude46, TrailingAssistantGuard } from './trailing-assistant-gu
 import { isProcessorWorkflow } from './index';
 import type {
   ErrorProcessorOrWorkflow,
-  InputProcessorOrWorkflow,
-  OutputProcessorOrWorkflow,
   OutputResult,
   ProcessInputStepResult,
   Processor,
@@ -114,11 +112,11 @@ export class ProcessorState<OUTPUT = undefined> {
 /**
  * Union type for processor or workflow that can be used as a processor
  */
-type ProcessorOrWorkflow = InputProcessorOrWorkflow | OutputProcessorOrWorkflow | ErrorProcessorOrWorkflow;
+type ProcessorOrWorkflow = Processor | ProcessorWorkflow;
 
 export class ProcessorRunner {
-  public readonly inputProcessors: InputProcessorOrWorkflow[];
-  public readonly outputProcessors: OutputProcessorOrWorkflow[];
+  public readonly inputProcessors: ProcessorOrWorkflow[];
+  public readonly outputProcessors: ProcessorOrWorkflow[];
   public readonly errorProcessors: ErrorProcessorOrWorkflow[];
   private readonly logger: IMastraLogger;
   private readonly agentName: string;
@@ -137,8 +135,8 @@ export class ProcessorRunner {
     agentName,
     processorStates,
   }: {
-    inputProcessors?: InputProcessorOrWorkflow[];
-    outputProcessors?: OutputProcessorOrWorkflow[];
+    inputProcessors?: ProcessorOrWorkflow[];
+    outputProcessors?: ProcessorOrWorkflow[];
     errorProcessors?: ErrorProcessorOrWorkflow[];
     logger: IMastraLogger;
     agentName: string;
