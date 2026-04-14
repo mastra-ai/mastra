@@ -12,6 +12,7 @@ import { MCPServersLibSQL } from './domains/mcp-servers';
 import { MemoryLibSQL } from './domains/memory';
 import { ObservabilityLibSQL } from './domains/observability';
 import { PromptBlocksLibSQL } from './domains/prompt-blocks';
+import { RolloutsLibSQL } from './domains/rollouts';
 import { ScorerDefinitionsLibSQL } from './domains/scorer-definitions';
 import { ScoresLibSQL } from './domains/scores';
 import { SkillsLibSQL } from './domains/skills';
@@ -29,6 +30,7 @@ export {
   MemoryLibSQL,
   ObservabilityLibSQL,
   PromptBlocksLibSQL,
+  RolloutsLibSQL,
   ScorerDefinitionsLibSQL,
   ScoresLibSQL,
   SkillsLibSQL,
@@ -164,6 +166,7 @@ export class LibSQLStore extends MastraCompositeStore {
     const workspaces = new WorkspacesLibSQL(domainConfig);
     const skills = new SkillsLibSQL(domainConfig);
     const blobs = new BlobsLibSQL(domainConfig);
+    const rollouts = new RolloutsLibSQL(domainConfig);
 
     this.stores = {
       scores,
@@ -180,6 +183,7 @@ export class LibSQLStore extends MastraCompositeStore {
       workspaces,
       skills,
       blobs,
+      rollouts,
     };
   }
 }

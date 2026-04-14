@@ -4,6 +4,13 @@ export type { OutputFormat } from './message-list';
 export * from './types';
 export * from './agent';
 export * from './utils';
+export {
+  resolveVersionFromRollout,
+  deterministicBucket,
+  pickAllocation,
+  evaluateRules,
+  RolloutAccumulator,
+} from './rollout';
 
 export type {
   AgentExecutionOptions,

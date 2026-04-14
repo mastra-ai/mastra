@@ -1,0 +1,113 @@
+import { calculatePagination, normalizePerPage } from '../../base';
+import type {
+  RolloutRecord,
+  RolloutStatus,
+  CreateRolloutInput,
+  UpdateRolloutInput,
+  ListRolloutsInput,
+  ListRolloutsOutput,
+} from '../../types';
+import type { InMemoryDB } from '../inmemory-db';
+import { RolloutsStorage } from './base';
+
+export class RolloutsInMemory extends RolloutsStorage {
+  private db: InMemoryDB;
+
+  constructor({ db }: { db: InMemoryDB }) {
+    super();
+    this.db = db;
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    this.db.rollouts.clear();
+  }
+
+  async getActiveRollout(agentId: string): Promise<RolloutRecord | null> {
+    for (const rollout of this.db.rollouts.values()) {
+      if (rollout.agentId === agentId && rollout.status === 'active') {
+        return { ...rollout };
+      }
+    }
+    return null;
+  }
+
+  async getRollout(id: string): Promise<RolloutRecord | null> {
+    const rollout = this.db.rollouts.get(id);
+    return rollout ? { ...rollout } : null;
+  }
+
+  async createRollout(input: CreateRolloutInput): Promise<RolloutRecord> {
+    const now = new Date();
+    const rollout: RolloutRecord = {
+      id: input.id ?? `rol_${crypto.randomUUID()}`,
+      agentId: input.agentId,
+      type: input.type,
+      status: 'active',
+      stableVersionId: input.stableVersionId,
+      allocations: input.allocations,
+      routingKey: input.routingKey,
+      rules: input.rules,
+      createdAt: now,
+      updatedAt: now,
+      completedAt: null,
+    };
+    this.db.rollouts.set(rollout.id, rollout);
+    return { ...rollout };
+  }
+
+  async updateRollout(input: UpdateRolloutInput): Promise<RolloutRecord> {
+    const existing = this.db.rollouts.get(input.id);
+    if (!existing) {
+      throw new Error(`Rollout not found: ${input.id}`);
+    }
+    if (existing.status !== 'active') {
+      throw new Error(`Cannot update rollout with status: ${existing.status}`);
+    }
+    const updated: RolloutRecord = {
+      ...existing,
+      allocations: input.allocations ?? existing.allocations,
+      rules: input.rules ?? existing.rules,
+      updatedAt: new Date(),
+    };
+    this.db.rollouts.set(input.id, updated);
+    return { ...updated };
+  }
+
+  async completeRollout(id: string, status: RolloutStatus, completedAt?: Date): Promise<RolloutRecord> {
+    const existing = this.db.rollouts.get(id);
+    if (!existing) {
+      throw new Error(`Rollout not found: ${id}`);
+    }
+    const now = completedAt ?? new Date();
+    const updated: RolloutRecord = {
+      ...existing,
+      status,
+      updatedAt: now,
+      completedAt: now,
+    };
+    this.db.rollouts.set(id, updated);
+    return { ...updated };
+  }
+
+  async listRollouts(input: ListRolloutsInput): Promise<ListRolloutsOutput> {
+    let rollouts = Array.from(this.db.rollouts.values()).filter(r => r.agentId === input.agentId);
+
+    // Sort by createdAt descending (newest first)
+    rollouts.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    const { page, perPage: perPageInput } = input.pagination;
+    const perPage = normalizePerPage(perPageInput, 100);
+    const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const end = perPageInput === false ? rollouts.length : start + perPage;
+
+    return {
+      rollouts: rollouts.slice(start, end).map(r => ({ ...r })),
+      pagination: {
+        total: rollouts.length,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : rollouts.length > end,
+      },
+    };
+  }
+}

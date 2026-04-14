@@ -1,4 +1,5 @@
 import type { Agent } from '../agent';
+import type { RolloutAccumulator } from '../agent/rollout';
 import type { MastraScorer } from '../evals';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
@@ -183,6 +184,8 @@ export interface IEditorAgentNamespace {
     agent: Agent,
     options?: { status?: 'draft' | 'published' } | { versionId: string },
   ): Promise<Agent>;
+  /** Gets the rollout accumulator for in-memory score tracking during active rollouts. */
+  getRolloutAccumulator(): RolloutAccumulator;
 }
 
 // ============================================================================

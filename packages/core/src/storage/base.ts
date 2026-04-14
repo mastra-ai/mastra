@@ -15,6 +15,7 @@ import type {
   BlobStore,
   DatasetsStorage,
   ExperimentsStorage,
+  RolloutsStorage,
 } from './domains';
 
 /** Map of all storage domain interfaces available in a composite store. */
@@ -26,6 +27,7 @@ export type StorageDomains = {
   agents?: AgentsStorage;
   datasets?: DatasetsStorage;
   experiments?: ExperimentsStorage;
+  rollouts?: RolloutsStorage;
   promptBlocks?: PromptBlocksStorage;
   scorerDefinitions?: ScorerDefinitionsStorage;
   mcpClients?: MCPClientsStorage;
@@ -278,6 +280,7 @@ export class MastraCompositeStore extends MastraBase {
         agents: resolve('agents'),
         datasets: resolve('datasets'),
         experiments: resolve('experiments'),
+        rollouts: resolve('rollouts'),
         promptBlocks: resolve('promptBlocks'),
         scorerDefinitions: resolve('scorerDefinitions'),
         mcpClients: resolve('mcpClients'),
@@ -347,6 +350,10 @@ export class MastraCompositeStore extends MastraBase {
 
     if (this.stores?.experiments) {
       initTasks.push(this.stores.experiments.init());
+    }
+
+    if (this.stores?.rollouts) {
+      initTasks.push(this.stores.rollouts.init());
     }
 
     if (this.stores?.promptBlocks) {

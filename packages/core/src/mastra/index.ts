@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
+import type { RolloutAccumulator } from '../agent/rollout';
 import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
@@ -355,6 +356,7 @@ export class Mastra<
   #storedAgentsCache: Map<string, Agent> = new Map();
   // Cache for stored scorers to allow in-memory modifications to persist across requests
   #storedScorersCache: Map<string, MastraScorer<any, any, any, any>> = new Map();
+
   // Registry for prompt blocks (stored or code-defined)
   #promptBlocks: Record<string, StorageResolvedPromptBlockType> = {};
   // Editor instance for handling agent instantiation and configuration
@@ -421,6 +423,15 @@ export class Mastra<
    */
   public getStoredScorerCache() {
     return this.#storedScorersCache;
+  }
+
+  /**
+   * Gets the rollout accumulator for in-memory score tracking during active rollouts.
+   * Delegates to the editor's agent namespace where the accumulator lives.
+   * @internal
+   */
+  public getRolloutAccumulator(): RolloutAccumulator | undefined {
+    return this.#editor?.agent.getRolloutAccumulator();
   }
 
   /**

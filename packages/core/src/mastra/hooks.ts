@@ -89,6 +89,13 @@ export function createOnScorerHook(mastra: Mastra) {
       // Legacy score-store emission. This path is being deprecated.
       await validateAndSaveScore(storage, payload);
 
+      // Push score to rollout accumulator for background rule evaluation.
+      // resolvedVersionId is set on the agent entity by applyStoredOverrides.
+      const resolvedVersionId = hookData.entity.resolvedVersionId as string | undefined;
+      if (resolvedVersionId && typeof runResult.score === 'number') {
+        mastra.getRolloutAccumulator()?.push(entityId, resolvedVersionId, scorerId, runResult.score);
+      }
+
       if (currentSpan && spanId && traceId) {
         await pMap(
           currentSpan.observabilityInstance.getExporters(),
