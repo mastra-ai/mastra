@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { ReadableStream, TransformStream } from 'node:stream/web';
 import { TripWire } from '../../agent';
 import { coreContentToString } from '../../agent/message-list';
-import type { MessageList, MastraDBMessage } from '../../agent/message-list';
+import type { MessageList, MastraDBMessage, MastraMessagePart } from '../../agent/message-list';
 import { MastraBase } from '../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
@@ -79,6 +79,42 @@ type PromiseResults<OUTPUT = undefined> = Pick<
 type DelayedPromises<OUTPUT = undefined> = {
   [K in keyof PromiseResults<OUTPUT>]: DelayedPromise<PromiseResults<OUTPUT>[K]>;
 };
+
+function clearStructuredOutputJsonEcho({
+  responseMessages,
+  bufferedObject,
+}: {
+  responseMessages: MastraDBMessage[];
+  bufferedObject: unknown;
+}) {
+  const serializedObject = JSON.stringify(bufferedObject).trim();
+
+  for (const message of responseMessages) {
+    if (message.role !== 'assistant') {
+      continue;
+    }
+
+    const textParts = message.content.parts.filter(
+      (part): part is Extract<MastraMessagePart, { type: 'text'; text: string }> =>
+        part.type === 'text' && typeof part.text === 'string',
+    );
+
+    if (textParts.length === 0 || textParts.length !== message.content.parts.length) {
+      continue;
+    }
+
+    const combinedText = textParts.map(part => part.text.trim()).join('');
+    if (combinedText !== serializedObject) {
+      continue;
+    }
+
+    for (const part of message.content.parts) {
+      if (part.type === 'text') {
+        part.text = '';
+      }
+    }
+  }
+}
 
 /**
  * The complete output returned by `getFullOutput()`.
@@ -769,6 +805,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               // Add structured output to the latest assistant message metadata
               if (self.#bufferedObject !== undefined) {
                 const responseMessages = messageList.get.response.db();
+
+                if (self.#structuredOutputMode === 'direct') {
+                  clearStructuredOutputJsonEcho({
+                    responseMessages,
+                    bufferedObject: self.#bufferedObject,
+                  });
+                }
+
                 const lastAssistantMessage = [...responseMessages].reverse().find(m => m.role === 'assistant');
                 if (lastAssistantMessage) {
                   if (!lastAssistantMessage.content.metadata) {
