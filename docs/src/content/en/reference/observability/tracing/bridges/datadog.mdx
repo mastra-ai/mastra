@@ -17,7 +17,7 @@ The Datadog Bridge is currently **experimental**. APIs and configuration options
 
 :::
 
-Enables bidirectional integration between Mastra tracing and Datadog. Creates native dd-trace APM spans in real time so that auto-instrumented operations inside tools and processors are correctly nested under their parent Mastra span. Emits LLM Observability data through dd-trace's own LLMObs pipeline when spans end.
+Enables bidirectional integration between Mastra tracing and Datadog. Creates native `dd-trace` APM spans in real time so that auto-instrumented operations inside tools and processors are correctly nested under their parent Mastra span. Emits LLM Observability data through `dd-trace`'s pipeline when spans end.
 
 ## Constructor
 
@@ -50,7 +50,8 @@ Extends `BaseExporterConfig`, which includes:
   {
     name: 'mlApp',
     type: 'string',
-    description: 'ML application name for grouping LLMObs traces. Required. Falls back to DD_LLMOBS_ML_APP env var.',
+    description:
+      'ML application name for grouping LLM Observability traces. Required. Falls back to DD_LLMOBS_ML_APP env var.',
     required: false,
   },
   {
@@ -96,7 +97,7 @@ Extends `BaseExporterConfig`, which includes:
     name: 'requestContextKeys',
     type: 'string[]',
     description:
-      'Keys from request context or span attributes to promote into flat, searchable LLMObs tags (e.g., tenantId, agentId). Promoted keys are removed from annotations.metadata.',
+      'Keys from request context or span attributes to promote into flat, searchable LLM Observability tags (e.g., tenantId, agentId). Promoted keys are removed from annotations.metadata.',
     required: false,
   },
 ]}
@@ -174,7 +175,7 @@ Executes a synchronous function within the dd-trace context of a Mastra span.
 async flush(): Promise<void>
 ```
 
-Force-flushes any buffered LLMObs data to Datadog without shutting down the bridge. Useful in serverless environments where you need to ensure data is exported before the runtime terminates.
+Force-flushes any buffered LLM Observability data to Datadog without shutting down the bridge. Useful in serverless environments where you need to ensure data is exported before the runtime terminates.
 
 ### `shutdown`
 
@@ -182,7 +183,7 @@ Force-flushes any buffered LLMObs data to Datadog without shutting down the brid
 async shutdown(): Promise<void>
 ```
 
-Force-finishes any APM spans that weren't properly closed, flushes pending LLMObs data, disables LLM Observability, and clears all internal state.
+Force-finishes any APM spans that weren't properly closed, flushes pending LLM Observability data, disables the LLM Observability integration, and clears all internal state.
 
 ## Usage examples
 
@@ -215,9 +216,9 @@ const mastra = new Mastra({
 })
 ```
 
-### Agentless Mode (LLMObs only, no local agent)
+### Agentless Mode (LLM Observability only, no local agent)
 
-If you don't have a local Datadog Agent and only want LLMObs data, enable agentless mode:
+If you don't have a local Datadog Agent and only want LLM Observability data, enable agentless mode:
 
 ```typescript
 new DatadogBridge({
@@ -227,7 +228,7 @@ new DatadogBridge({
 })
 ```
 
-Note: APM data cannot be sent in agentless mode. If you only need LLMObs data without dd-trace APM, the [Datadog Exporter](/reference/observability/tracing/exporters/datadog) is a simpler choice.
+Note: APM data cannot be sent in agentless mode. If you only need LLM Observability data without `dd-trace` APM, the [Datadog Exporter](/reference/observability/tracing/exporters/datadog) is a simpler choice.
 
 ### With Additional Exporters
 
@@ -315,4 +316,4 @@ The bridge reads configuration from these environment variables:
 
 - [DatadogBridge Guide](/docs/observability/tracing/bridges/datadog) - Setup guide with examples
 - [Tracing Overview](/docs/observability/tracing/overview) - General tracing concepts
-- [DatadogExporter Reference](/reference/observability/tracing/exporters/datadog) - LLMObs-only exporter (no dd-trace APM)
+- [DatadogExporter Reference](/reference/observability/tracing/exporters/datadog) - LLM Observability only, no `dd-trace` APM
