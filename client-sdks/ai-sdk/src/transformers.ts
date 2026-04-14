@@ -68,7 +68,8 @@ export type WorkflowDataPart = {
   data: {
     name: string;
     status: WorkflowRunStatus;
-    steps: Record<string, StepResult>;
+    steps?: Record<string, StepResult>;
+    step?: StepResult;
     output: {
       usage: {
         inputTokens: number;
@@ -628,16 +629,17 @@ export function transformWorkflow<OUTPUT>(
         data: {
           name: bufferedWorkflows.get(payload.runId!)!.name,
           status: 'running',
-          steps: bufferedWorkflows.get(payload.runId!)!.steps,
+          steps: undefined,
           output: null,
         },
       } as const;
     case 'workflow-step-start': {
-      const current = bufferedWorkflows.get(payload.runId!) || { name: '', steps: {} };
+      const current = bufferedWorkflows.get(payload.runId!);
+      if (!current) return null;
       current.steps[payload.payload.id] = {
         name: payload.payload.id,
         status: payload.payload.status,
-        input: payload.payload.payload ?? null,
+        input: null,
         output: null,
         suspendPayload: null,
         resumePayload: null,
@@ -649,7 +651,7 @@ export function transformWorkflow<OUTPUT>(
         data: {
           name: current.name,
           status: 'running',
-          steps: current.steps,
+          step: current.steps[payload.payload.id],
           output: null,
         },
       } as const;
@@ -657,18 +659,20 @@ export function transformWorkflow<OUTPUT>(
     case 'workflow-step-result': {
       const current = bufferedWorkflows.get(payload.runId!);
       if (!current) return null;
+
       current.steps[payload.payload.id] = {
         ...current.steps[payload.payload.id]!,
         status: payload.payload.status,
-        output: payload.payload.output ?? null,
+        output: null,
       };
+
       return {
         type: isNested ? 'data-tool-workflow' : 'data-workflow',
         id: payload.runId,
         data: {
           name: current.name,
           status: 'running',
-          steps: current.steps,
+          step: current.steps[payload.payload.id],
           output: null,
         },
       } as const;
@@ -676,20 +680,22 @@ export function transformWorkflow<OUTPUT>(
     case 'workflow-step-suspended': {
       const current = bufferedWorkflows.get(payload.runId!);
       if (!current) return null;
+
       current.steps[payload.payload.id] = {
         ...current.steps[payload.payload.id]!,
         status: payload.payload.status,
-        suspendPayload: payload.payload.suspendPayload ?? null,
-        resumePayload: payload.payload.resumePayload ?? null,
+        suspendPayload: null,
+        resumePayload: null,
         output: null,
       } satisfies StepResult;
+
       return {
         type: isNested ? 'data-tool-workflow' : 'data-workflow',
         id: payload.runId,
         data: {
           name: current.name,
           status: 'suspended',
-          steps: current.steps,
+          step: current.steps[payload.payload.id],
           output: null,
         },
       } as const;
@@ -728,31 +734,16 @@ export function transformWorkflow<OUTPUT>(
       }
 
       if (output && isDataChunkType(output)) {
-        if (!('data' in output)) {
-          throw new Error(
-            `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(output)}`,
-          );
-        }
-        const { type, data, id } = output;
+        if (!('data' in output)) return null;
+
+        const { type, data, id } = output as any;
         return { type, data, ...(id !== undefined && { id }) };
       }
       return null;
     }
     default: {
-      // return the chunk as is if it's not a known type
       if (isDataChunkType(payload)) {
-        if (!('data' in payload)) {
-          throw new Error(
-            `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
-          );
-        }
-        const { type, data, id } = payload;
-
-        return {
-          type,
-          data,
-          ...(id !== undefined && { id }),
-        };
+        return null;
       }
       return null;
     }
@@ -1095,23 +1086,10 @@ export function transformNetwork(
     default: {
       // Check for custom data chunks first (before processing as events)
       if (isAgentExecutionDataChunkType(payload)) {
-        if (!('data' in payload.payload)) {
-          throw new Error(
-            `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
-          );
-        }
-
-        const { type, data, id } = payload.payload;
-        return { type, data, ...(id !== undefined && { id }) };
+        return null;
       }
       if (isWorkflowExecutionDataChunkType(payload)) {
-        if (!('data' in payload.payload)) {
-          throw new Error(
-            `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
-          );
-        }
-        const { type, data, id } = payload.payload;
-        return { type, data, ...(id !== undefined && { id }) };
+        return null;
       }
 
       if (payload.type.startsWith('agent-execution-event-')) {
@@ -1155,11 +1133,11 @@ export function transformNetwork(
         step[PRIMITIVE_CACHE_SYMBOL] = step[PRIMITIVE_CACHE_SYMBOL] || new Map();
         const result = transformWorkflow(payload.payload as WorkflowStreamEvent, step[PRIMITIVE_CACHE_SYMBOL]);
         if (result && 'data' in result) {
-          const data = result.data;
-          step.task = data;
+          const data = result.data as Record<string, unknown> | null;
+          step.task = data as Record<string, any>;
 
-          if (data.name && step.task) {
-            step.task.id = data.name;
+          if (data && typeof data === 'object' && 'name' in data && step.task) {
+            step.task.id = (data as any).name;
           }
         }
 
@@ -1174,13 +1152,17 @@ export function transformNetwork(
         } as const;
       }
 
-      // return the chunk as is if it's not a known type
+      // ONLY drop heavy workflow/agent data chunks
+      if (isAgentExecutionDataChunkType(payload)) {
+        return null;
+      }
+      if (isWorkflowExecutionDataChunkType(payload)) {
+        return null;
+      }
+
+      // keep normal data chunks (tests need this)
       if (isDataChunkType(payload)) {
-        if (!('data' in payload)) {
-          throw new Error(
-            `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
-          );
-        }
+        if (!('data' in payload)) return null;
 
         const { type, data, id } = payload;
         return { type, data, ...(id !== undefined && { id }) };
