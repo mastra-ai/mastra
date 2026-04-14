@@ -4523,17 +4523,17 @@ export class Agent<
     }
     const requestContext = options.requestContext || new RequestContext();
 
-    // Seed Mastra-level version overrides onto requestContext as defaults
-    const mastraVersions = this.#mastra?.getVersionOverrides();
-    if (mastraVersions && !requestContext.has(MASTRA_VERSIONS_KEY)) {
-      requestContext.set(MASTRA_VERSIONS_KEY, mastraVersions);
+    // Build version overrides by merging: Mastra defaults < requestContext < call-site
+    const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+    let mergedVersions = mergeVersionOverrides(this.#mastra?.getVersionOverrides(), requestVersions);
+
+    // Merge call-site version overrides on top (call-site wins over request + Mastra defaults)
+    if (options.versions) {
+      mergedVersions = mergeVersionOverrides(mergedVersions, options.versions);
     }
 
-    // Merge call-site version overrides on top (call-site wins over Mastra-level)
-    if (options.versions) {
-      const existing = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
-      const merged = mergeVersionOverrides(existing, options.versions);
-      requestContext.set(MASTRA_VERSIONS_KEY, merged);
+    if (mergedVersions) {
+      requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
     }
 
     // Inject browser context for BrowserContextProcessor
