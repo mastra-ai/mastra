@@ -1095,7 +1095,7 @@ export class Mastra<
           apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
         };
       }
-      void agentChannels.initialize(this);
+      agentChannels.__startInitialize(this);
     }
   }
 

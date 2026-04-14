@@ -343,6 +343,8 @@ async function headContentType(url: string, logger?: IMastraLogger): Promise<str
 export class AgentChannels {
   readonly adapters: Record<string, Adapter>;
   private chat: Chat | null = null;
+  /** Stored initialization promise so webhook handlers can await readiness on serverless cold starts. */
+  private initPromise: Promise<void> | null = null;
   private agent!: Agent<any, any, any, any>;
   private logger?: IMastraLogger;
   private customState: StateAdapter | undefined;
@@ -409,6 +411,19 @@ export class AgentChannels {
   __setLogger(logger: IMastraLogger): void {
     this.logger =
       'child' in logger && typeof (logger as any).child === 'function' ? (logger as any).child('CHANNEL') : logger;
+  }
+
+  /**
+   * Begin initialization and store the promise so webhook handlers can
+   * await readiness on serverless cold starts instead of returning 503.
+   * @internal Called by Mastra.addAgent.
+   */
+  __startInitialize(mastra: Mastra): void {
+    const promise = this.initialize(mastra);
+    // Attach a no-op catch to prevent unhandled rejection warnings.
+    // Errors are re-surfaced when the webhook handler awaits initPromise.
+    promise.catch(() => {});
+    this.initPromise = promise;
   }
 
   /**
@@ -679,6 +694,16 @@ export class AgentChannels {
         requiresAuth: false,
         createHandler: async () => {
           return async c => {
+            // Await initialization to handle serverless cold starts where
+            // the first request arrives before initialize() completes.
+            if (self.initPromise) {
+              try {
+                await self.initPromise;
+              } catch {
+                return c.json({ error: 'Chat initialization failed' }, 503);
+              }
+            }
+
             const sdkInstance = self.chat;
             if (!sdkInstance) {
               return c.json({ error: 'Chat not initialized' }, 503);
@@ -688,7 +713,12 @@ export class AgentChannels {
             if (!webhookHandler) {
               return c.json({ error: `No webhook handler for ${platform}` }, 404);
             }
-            return webhookHandler(c.req.raw);
+
+            // Pass platform execution context (e.g. Vercel/Cloudflare waitUntil)
+            // to the Chat SDK so background processing survives serverless responses.
+            const execCtx = c.executionCtx as { waitUntil?: (p: Promise<unknown>) => void } | undefined;
+            const waitUntilFn = execCtx?.waitUntil?.bind(execCtx);
+            return webhookHandler(c.req.raw, waitUntilFn ? { waitUntil: waitUntilFn } : undefined);
           };
         },
       });
