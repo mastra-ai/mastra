@@ -601,7 +601,7 @@ export class Agent extends BaseResource {
         // Resume via approveToolCallGenerate with the client-executed tool results.
         // Prefer the outer suspended wrapper's toolCallId so the resume targets the
         // parent agent-tool step, not the inner delegated sub-agent tool call.
-        const outerToolCallId = suspendPayload?.toolCallId ?? clientToolCalls[0].toolCallId;
+        const outerToolCallId = suspendPayload?.toolCallId ?? clientToolCalls[0]?.toolCallId;
         return this.approveToolCallGenerate({
           runId: (response as any).runId,
           toolCallId: outerToolCallId,
