@@ -278,42 +278,52 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
 
       const part = convertMastraChunkToAISDK({ chunk, mode: 'stream' });
 
-      const transformedChunk = convertFullStreamChunkToUIMessageStream<any>({
-        part: part as any,
-        sendReasoning,
-        sendSources,
-        messageMetadataValue: part ? messageMetadata?.({ part: part as TextStreamPart<ToolSet> }) : undefined,
-        sendStart,
-        sendFinish,
-        responseMessageId: lastMessageId,
-        onError(error) {
-          return onError ? onError(error) : safeParseErrorObject(error);
-        },
-      });
+      const enqueueTransformedPart = (p: any) => {
+        const transformedChunk = convertFullStreamChunkToUIMessageStream<any>({
+          part: p as any,
+          sendReasoning,
+          sendSources,
+          messageMetadataValue: p ? messageMetadata?.({ part: p as TextStreamPart<ToolSet> }) : undefined,
+          sendStart,
+          sendFinish,
+          responseMessageId: lastMessageId,
+          onError(error) {
+            return onError ? onError(error) : safeParseErrorObject(error);
+          },
+        });
 
-      if (transformedChunk) {
-        if (transformedChunk.type === 'tool-agent') {
-          const payload = transformedChunk.payload;
-          const agentTransformed = transformAgent<OUTPUT>(payload, bufferedSteps);
-          if (agentTransformed) controller.enqueue(agentTransformed);
-        } else if (transformedChunk.type === 'tool-workflow') {
-          const payload = transformedChunk.payload;
-          const workflowChunk = transformWorkflow(
-            payload,
-            bufferedSteps,
-            true,
-            undefined,
-            undefined,
-            convertMastraChunkToAISDK,
-          );
-          if (workflowChunk) controller.enqueue(workflowChunk);
-        } else if (transformedChunk.type === 'tool-network') {
-          const payload = transformedChunk.payload;
-          const networkChunk = transformNetwork(payload, bufferedSteps, true);
-          if (networkChunk) controller.enqueue(networkChunk);
-        } else {
-          controller.enqueue(transformedChunk as any);
+        if (transformedChunk) {
+          if (transformedChunk.type === 'tool-agent') {
+            const payload = transformedChunk.payload;
+            const agentTransformed = transformAgent<OUTPUT>(payload, bufferedSteps);
+            if (agentTransformed) controller.enqueue(agentTransformed);
+          } else if (transformedChunk.type === 'tool-workflow') {
+            const payload = transformedChunk.payload;
+            const workflowChunk = transformWorkflow(
+              payload,
+              bufferedSteps,
+              true,
+              undefined,
+              undefined,
+              convertMastraChunkToAISDK,
+            );
+            if (workflowChunk) controller.enqueue(workflowChunk);
+          } else if (transformedChunk.type === 'tool-network') {
+            const payload = transformedChunk.payload;
+            const networkChunk = transformNetwork(payload, bufferedSteps, true);
+            if (networkChunk) controller.enqueue(networkChunk);
+          } else {
+            controller.enqueue(transformedChunk as any);
+          }
         }
+      };
+
+      if (Array.isArray(part)) {
+        for (const p of part) {
+          enqueueTransformedPart(p);
+        }
+      } else {
+        enqueueTransformedPart(part);
       }
     },
     flush(controller) {
