@@ -2348,10 +2348,11 @@ export class Harness<TState = {}> {
     }
 
     const requestContext = await this.buildRequestContext(requestContextInput);
+    const isYolo = (this.state as Record<string, unknown>).yolo === true;
     const response = await agent.approveToolCall({
       runId: this.currentRunId,
       toolCallId,
-      requireToolApproval: true,
+      requireToolApproval: !isYolo,
       memory: this.currentThreadId ? { thread: this.currentThreadId, resource: this.resourceId } : undefined,
       abortSignal: this.abortController.signal,
       requestContext,
@@ -2378,10 +2379,11 @@ export class Harness<TState = {}> {
     }
 
     const requestContext = await this.buildRequestContext(requestContextInput);
+    const isYolo = (this.state as Record<string, unknown>).yolo === true;
     const response = await agent.declineToolCall({
       runId: this.currentRunId,
       toolCallId,
-      requireToolApproval: true,
+      requireToolApproval: !isYolo,
       memory: this.currentThreadId ? { thread: this.currentThreadId, resource: this.resourceId } : undefined,
       abortSignal: this.abortController.signal,
       requestContext,
@@ -2409,10 +2411,11 @@ export class Harness<TState = {}> {
     }
 
     const requestContext = await this.buildRequestContext(requestContextInput);
+    const isYolo = (this.state as Record<string, unknown>).yolo === true;
     const response = await agent.resumeStream(resumeData, {
       runId: this.pendingSuspensionRunId,
       toolCallId: this.pendingSuspensionToolCallId ?? undefined,
-      requireToolApproval: true,
+      requireToolApproval: !isYolo,
       memory: this.currentThreadId ? { thread: this.currentThreadId, resource: this.resourceId } : undefined,
       abortSignal: this.abortController.signal,
       requestContext,
