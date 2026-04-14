@@ -545,24 +545,36 @@ export class InngestRun<
       } as any,
     });
 
-    const eventOutput = await this.inngest.send({
-      name: `workflow.${this.workflowId}`,
-      data: {
-        inputData: resumeDataToUse,
-        initialState: snapshot?.value ?? {},
-        runId: this.runId,
-        workflowId: this.workflowId,
-        stepResults: snapshot?.context as any,
-        resume: {
-          steps,
+    let eventOutput;
+    try {
+      eventOutput = await this.inngest.send({
+        name: `workflow.${this.workflowId}`,
+        data: {
+          inputData: resumeDataToUse,
+          initialState: snapshot?.value ?? {},
+          runId: this.runId,
+          workflowId: this.workflowId,
           stepResults: snapshot?.context as any,
-          resumePayload: resumeDataToUse,
-          resumePath: steps?.[0] ? (snapshot?.suspendedPaths?.[steps?.[0]] as any) : undefined,
+          resume: {
+            steps,
+            stepResults: snapshot?.context as any,
+            resumePayload: resumeDataToUse,
+            resumePath: steps?.[0] ? (snapshot?.suspendedPaths?.[steps?.[0]] as any) : undefined,
+          },
+          requestContext: mergedRequestContext,
+          perStep: params.perStep,
         },
-        requestContext: mergedRequestContext,
-        perStep: params.perStep,
-      },
-    });
+      });
+    } catch (err) {
+      // Rollback: restore the original snapshot so the run isn't stuck in 'running'
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName: this.workflowId,
+        runId: this.runId,
+        resourceId: this.resourceId,
+        snapshot: snapshot as any,
+      });
+      throw err;
+    }
 
     const eventId = eventOutput.ids[0];
     if (!eventId) {
@@ -695,6 +707,9 @@ export class InngestRun<
       perStep: params.perStep,
     });
 
+    // Save previous snapshot for rollback if send fails
+    const previousSnapshot = snapshot;
+
     // Mark the snapshot as 'running' before sending the event so that
     // snapshot-based polling doesn't return the stale result from a previous run.
     await workflowsStore.persistWorkflowSnapshot({
@@ -716,20 +731,34 @@ export class InngestRun<
       },
     });
 
-    const eventOutput = await this.inngest.send({
-      name: `workflow.${this.workflowId}`,
-      data: {
-        initialState: timeTravelData.state,
-        runId: this.runId,
-        workflowId: this.workflowId,
-        stepResults: timeTravelData.stepResults,
-        timeTravel: timeTravelData,
-        tracingOptions: params.tracingOptions,
-        outputOptions: params.outputOptions,
-        requestContext: params.requestContext ? Object.fromEntries(params.requestContext.entries()) : {},
-        perStep: params.perStep,
-      },
-    });
+    let eventOutput;
+    try {
+      eventOutput = await this.inngest.send({
+        name: `workflow.${this.workflowId}`,
+        data: {
+          initialState: timeTravelData.state,
+          runId: this.runId,
+          workflowId: this.workflowId,
+          stepResults: timeTravelData.stepResults,
+          timeTravel: timeTravelData,
+          tracingOptions: params.tracingOptions,
+          outputOptions: params.outputOptions,
+          requestContext: params.requestContext ? Object.fromEntries(params.requestContext.entries()) : {},
+          perStep: params.perStep,
+        },
+      });
+    } catch (err) {
+      // Rollback: restore the previous snapshot so the run isn't stuck in 'running'
+      if (previousSnapshot) {
+        await workflowsStore.persistWorkflowSnapshot({
+          workflowName: this.workflowId,
+          runId: this.runId,
+          resourceId: this.resourceId,
+          snapshot: previousSnapshot as any,
+        });
+      }
+      throw err;
+    }
 
     const eventId = eventOutput.ids[0];
     if (!eventId) {
