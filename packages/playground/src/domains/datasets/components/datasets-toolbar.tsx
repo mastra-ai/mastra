@@ -1,6 +1,6 @@
 import { Button, ButtonsGroup, SelectFieldBlock, ListSearch } from '@mastra/playground-ui';
 import { XIcon } from 'lucide-react';
-import { DATASET_EXPERIMENT_OPTIONS, DATASET_TARGET_OPTIONS } from './datasets-list/datasets-list';
+import { DATASET_EXPERIMENT_OPTIONS, DATASET_TARGET_OPTIONS } from './datasets-list/helpers';
 
 export interface DatasetsToolbarTagOption {
   value: string;

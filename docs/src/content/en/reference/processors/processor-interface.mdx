@@ -421,6 +421,8 @@ System messages are **reset to their original values** at the start of each step
 
 Handles LLM API rejection errors before they surface as final errors. This runs when the API call fails with a non-retryable error (such as a 400 or 422 status code). Unlike `processOutputStep` which runs after successful responses, this runs when the API rejects the request.
 
+Add processors that implement `processAPIError` to an agent's `errorProcessors` array.
+
 Processors can inspect the error, modify the request (for example, by appending messages to the `messageList`), and return `{ retry: true }` to signal a retry with the modified state.
 
 ```typescript prettier:false
@@ -826,6 +828,15 @@ type OutputProcessor = Processor &
 
 // Must implement processAPIError
 type ErrorProcessor = Processor & { processAPIError: required }
+```
+
+Configure processors that implement `processAPIError` in `errorProcessors`:
+
+```typescript
+const agent = new Agent({
+  // ...
+  errorProcessors: [new PrefillErrorHandler()],
+})
 ```
 
 ## Usage examples
