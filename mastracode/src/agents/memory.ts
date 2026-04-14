@@ -65,7 +65,7 @@ Example 1
 ✅ 14:34 fixed render issue by wrap object in useMemo
 
 Example 2
-🟡 15:10 explained pool reuse DB connections, skip repeat handshake overhead"
+🟡 15:10 explained pool reuse DB connections, skip repeat handshake overhead
 
 Don't say "Agent did x", say "did x". It will be assumed the agent did what was observed. The who should only be specified for the user or other third parties: "user asked x"
 
