@@ -153,6 +153,52 @@ describe('prepareToolsAndToolChoice', () => {
       });
     });
 
+    it('should pass strict through for v3 function tools', () => {
+      const strictTool = createTool({
+        id: 'strict-tool',
+        description: 'A strict test tool',
+        strict: true,
+        inputSchema: z.object({
+          query: z.string(),
+        }),
+        execute: async ({ query }) => `Result for: ${query}`,
+      });
+
+      const result = prepareToolsAndToolChoice({
+        tools: { strictTool: strictTool as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v3',
+      });
+
+      expect(result.tools![0]).toMatchObject({
+        type: 'function',
+        name: 'strictTool',
+        strict: true,
+      });
+    });
+
+    it('should omit strict for v2 function tools', () => {
+      const strictTool = createTool({
+        id: 'strict-tool-v2',
+        description: 'A strict test tool for v2',
+        strict: true,
+        inputSchema: z.object({
+          query: z.string(),
+        }),
+        execute: async ({ query }) => `Result for: ${query}`,
+      });
+
+      const result = prepareToolsAndToolChoice({
+        tools: { strictTool: strictTool as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v2',
+      });
+
+      expect(result.tools![0]).not.toHaveProperty('strict');
+    });
+
     it('should not treat regular tools with no id as provider tools', () => {
       const regularTool = createTool({
         id: 'regular-tool',

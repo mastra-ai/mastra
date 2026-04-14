@@ -247,3 +247,55 @@ describe('Provider-defined Tool Handling', () => {
     }).not.toThrow();
   });
 });
+
+describe('CoreToolBuilder strict', () => {
+  it('should pass through strict when building a tool', () => {
+    const strictTool = createTool({
+      id: 'strict-tool',
+      description: 'A tool with strict input generation',
+      strict: true,
+      inputSchema: z.object({ city: z.string() }),
+      execute: async ({ city }) => ({ result: city }),
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: strictTool,
+      options: {
+        name: 'strict-tool',
+        logger: console as any,
+        description: 'A tool with strict input generation',
+        requestContext: new RequestContext(),
+        tracingContext: {},
+      },
+    });
+
+    const builtTool = builder.build();
+
+    expect(builtTool.strict).toBe(true);
+  });
+
+  it('should pass through strict via buildV5()', () => {
+    const strictTool = createTool({
+      id: 'strict-tool-v5',
+      description: 'A tool with strict input generation for V5',
+      strict: true,
+      inputSchema: z.object({ query: z.string() }),
+      execute: async ({ query }) => ({ result: query }),
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: strictTool,
+      options: {
+        name: 'strict-tool-v5',
+        logger: console as any,
+        description: 'A tool with strict input generation for V5',
+        requestContext: new RequestContext(),
+        tracingContext: {},
+      },
+    });
+
+    const builtTool = builder.buildV5();
+
+    expect((builtTool as any).strict).toBe(true);
+  });
+});
