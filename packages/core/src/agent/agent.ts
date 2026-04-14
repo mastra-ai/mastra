@@ -2906,14 +2906,14 @@ export class Agent<
     responseMessages: MastraDBMessage[],
     clientTools: ToolsInput,
   ): Array<{ toolCallId: string; toolName: string; args: any }> {
-    const pending: Array<{ toolCallId: string; toolName: string; args: any }> = [];
+    const pendingByToolCallId = new Map<string, { toolCallId: string; toolName: string; args: any }>();
     for (const msg of responseMessages) {
       if (msg.role !== 'assistant') continue;
       const parts = (msg.content as any)?.parts || (Array.isArray(msg.content) ? msg.content : []);
       for (const part of parts) {
         // Check raw tool-call parts
         if (part.type === 'tool-call' && clientTools[part.toolName]) {
-          pending.push({
+          pendingByToolCallId.set(part.toolCallId, {
             toolCallId: part.toolCallId,
             toolName: part.toolName,
             args: part.args,
@@ -2924,7 +2924,7 @@ export class Agent<
         if (part.type === 'tool-invocation' && part.toolInvocation) {
           const inv = part.toolInvocation;
           if (inv.state === 'call' && clientTools[inv.toolName]) {
-            pending.push({
+            pendingByToolCallId.set(inv.toolCallId, {
               toolCallId: inv.toolCallId,
               toolName: inv.toolName,
               args: inv.args,
@@ -2933,7 +2933,7 @@ export class Agent<
         }
       }
     }
-    return pending;
+    return Array.from(pendingByToolCallId.values());
   }
 
   /**
@@ -3050,22 +3050,35 @@ export class Agent<
             // Generate sub-agent thread and resource IDs early (before any rejection)
             // These are needed for both successful execution and rejection cases
             const slugify = await import(`@sindresorhus/slugify`);
-            const subAgentThreadId = inputData.threadId
-              ? `${inputData.threadId}-${randomUUID()}`
-              : context?.mastra?.generateId({
-                  idType: 'thread',
-                  source: 'agent',
-                  entityId: agentName,
-                  resourceId,
-                }) || randomUUID();
+            const { resumeData, suspend } = context?.agent ?? {};
+            const delegatedReplayState = (resumeData as any)?.__mastraDelegatedReplayState as
+              | {
+                  subAgentThreadId?: string;
+                  subAgentResourceId?: string;
+                  replayMessages?: MastraDBMessage[];
+                }
+              | undefined;
 
-            const subAgentResourceId = inputData.resourceId
-              ? `${inputData.resourceId}-${agentName}`
-              : context?.mastra?.generateId({
-                  idType: 'generic',
-                  source: 'agent',
-                  entityId: agentName,
-                }) || `${slugify.default(this.id)}-${agentName}`;
+            const subAgentThreadId =
+              delegatedReplayState?.subAgentThreadId ||
+              (inputData.threadId
+                ? `${inputData.threadId}-${randomUUID()}`
+                : context?.mastra?.generateId({
+                    idType: 'thread',
+                    source: 'agent',
+                    entityId: agentName,
+                    resourceId,
+                  }) || randomUUID());
+
+            const subAgentResourceId =
+              delegatedReplayState?.subAgentResourceId ||
+              (inputData.resourceId
+                ? `${inputData.resourceId}-${agentName}`
+                : context?.mastra?.generateId({
+                    idType: 'generic',
+                    source: 'agent',
+                    entityId: agentName,
+                  }) || `${slugify.default(this.id)}-${agentName}`);
 
             const subAgentDefaultOptions = await agent.getDefaultOptions?.({ requestContext });
             const subAgentHasOwnMemoryConfig = subAgentDefaultOptions?.memory !== undefined;
@@ -3255,8 +3268,6 @@ export class Agent<
               let result: any;
               const suspendedToolRunId = (inputData as any).suspendedToolRunId;
 
-              const { resumeData, suspend } = context?.agent ?? {};
-
               // Apply messageFilter callback (runs after onDelegationStart so effectivePrompt
               // reflects any hook modifications). Falls back to full context on error.
               let filteredContextMessages = sanitizedMessages;
@@ -3315,14 +3326,15 @@ export class Agent<
                   // Load the sub-agent's previous messages, append the client-provided
                   // tool results, and re-generate so the LLM can continue.
                   const memory = await agent.getMemory({ requestContext });
-                  let previousMessages: MastraDBMessage[] = [];
+                  let previousMessages: MastraDBMessage[] = delegatedReplayState?.replayMessages || [];
                   if (memory) {
                     try {
                       const recalled = await memory.recall({ threadId: subAgentThreadId });
-                      previousMessages = recalled.messages;
+                      if (recalled.messages?.length) {
+                        previousMessages = recalled.messages;
+                      }
                     } catch {
-                      // If we cannot load previous messages, fall through with empty array.
-                      // The sub-agent will start fresh but still receive the tool results.
+                      // Fall back to the serialized replay state when memory is unavailable.
                     }
                   }
 
@@ -3434,6 +3446,11 @@ export class Agent<
                     return suspend?.(
                       {
                         __mastraClientToolCalls: pendingClientToolCalls,
+                        __mastraDelegatedReplayState: {
+                          subAgentThreadId,
+                          subAgentResourceId,
+                          replayMessages: fullSubAgentMessages,
+                        },
                       },
                       {
                         isAgentSuspend: true,
@@ -3477,13 +3494,15 @@ export class Agent<
                 if ((resumeData as any)?.__mastraClientToolResults) {
                   // Resuming from client tool call suspension (stream path).
                   const memory = await agent.getMemory({ requestContext });
-                  let previousMessages: MastraDBMessage[] = [];
+                  let previousMessages: MastraDBMessage[] = delegatedReplayState?.replayMessages || [];
                   if (memory) {
                     try {
                       const recalled = await memory.recall({ threadId: subAgentThreadId });
-                      previousMessages = recalled.messages;
+                      if (recalled.messages?.length) {
+                        previousMessages = recalled.messages;
+                      }
                     } catch {
-                      // Fall through with empty messages
+                      // Fall back to the serialized replay state when memory is unavailable.
                     }
                   }
 
@@ -3626,6 +3645,11 @@ export class Agent<
                     return suspend?.(
                       {
                         __mastraClientToolCalls: pendingClientToolCalls,
+                        __mastraDelegatedReplayState: {
+                          subAgentThreadId,
+                          subAgentResourceId,
+                          replayMessages: fullSubAgentMessages,
+                        },
                       },
                       {
                         isAgentSuspend: true,

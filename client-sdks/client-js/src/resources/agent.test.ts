@@ -23,6 +23,26 @@ class TestAgent extends Agent {
   }
 }
 
+function createMastraSseResponse(chunks: any[]): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+      }
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/event-stream',
+    },
+  });
+}
+
 describe('Agent.stream', () => {
   const mockClientOptions = {
     baseUrl: 'http://localhost:4111',
@@ -97,6 +117,95 @@ describe('Agent.stream', () => {
 
     const requestBody = mockRequest.mock.calls[0][1].body;
     expect(requestBody.clientTools).toEqual(processClientTools(clientTools));
+  });
+
+  it('should resume suspended delegated client tool calls in stream responses', async () => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn();
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    const execute = vi.fn().mockResolvedValue('red');
+    const clientTool = createTool({
+      id: 'changeColor',
+      description: 'Change the color on the client side',
+      execute,
+      inputSchema: undefined,
+    });
+
+    const replayState = {
+      subAgentThreadId: 'sub-thread-1',
+      subAgentResourceId: 'sub-resource-1',
+      replayMessages: [{ role: 'user', content: 'Change the color to red' }],
+    };
+
+    mockRequest.mockResolvedValueOnce(
+      createMastraSseResponse([
+        {
+          type: 'tool-call-suspended',
+          runId: 'run-1',
+          payload: {
+            toolCallId: 'delegate-1',
+            toolName: 'agent-colorSub',
+            args: { prompt: 'Change the color to red' },
+            suspendPayload: {
+              __mastraClientToolCalls: [{ toolCallId: 'ct-1', toolName: 'changeColor', args: { color: 'red' } }],
+              __mastraDelegatedReplayState: replayState,
+            },
+            resumeSchema: { type: 'object' },
+          },
+        },
+        {
+          type: 'finish',
+          runId: 'run-1',
+          payload: {
+            stepResult: { reason: 'suspended' },
+            usage: { completionTokens: 1, promptTokens: 1, totalTokens: 2 },
+          },
+        },
+      ]),
+    );
+
+    mockRequest.mockResolvedValueOnce(
+      createMastraSseResponse([
+        {
+          type: 'text-delta',
+          payload: { text: 'Color changed to red' },
+        },
+        {
+          type: 'finish',
+          payload: {
+            stepResult: { reason: 'stop' },
+            usage: { completionTokens: 1, promptTokens: 1, totalTokens: 2 },
+          },
+        },
+      ]),
+    );
+
+    const response = await agent.stream('Change the color to red', {
+      clientTools: { changeColor: clientTool },
+    });
+
+    const chunks: any[] = [];
+    await response.processDataStream({
+      onChunk: async chunk => {
+        chunks.push(chunk);
+      },
+    });
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(mockRequest).toHaveBeenCalledTimes(2);
+
+    const secondCall = mockRequest.mock.calls[1];
+    expect(secondCall[0]).toBe('/agents/test-agent/approve-tool-call');
+    expect(secondCall[1].body.runId).toBe('run-1');
+    expect(secondCall[1].body.toolCallId).toBe('delegate-1');
+    expect(secondCall[1].body.resumeData).toEqual({
+      __mastraClientToolResults: [{ toolCallId: 'ct-1', toolName: 'changeColor', result: 'red' }],
+      __mastraDelegatedReplayState: replayState,
+    });
+    expect(chunks.some(chunk => chunk.type === 'text-delta' && chunk.payload.text === 'Color changed to red')).toBe(
+      true,
+    );
   });
 });
 
@@ -766,6 +875,82 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
 
     expect(secondCallMessages.filter((msg: any) => msg.role === 'user')).toHaveLength(0);
     expect(thirdCallMessages.filter((msg: any) => msg.role === 'user')).toHaveLength(0);
+  });
+
+  it('should keep resuming delegated client tool suspensions until none remain', async () => {
+    const execute = vi.fn().mockResolvedValueOnce('red').mockResolvedValueOnce('blue');
+    const clientTool = createTool({
+      id: 'changeColor',
+      description: 'Change the color on the client side',
+      execute,
+      inputSchema: undefined,
+    });
+
+    const replayState = {
+      subAgentThreadId: 'sub-thread-1',
+      subAgentResourceId: 'sub-resource-1',
+      replayMessages: [{ role: 'user', content: 'Change the color twice' }],
+    };
+
+    mockRequest.mockResolvedValueOnce({
+      finishReason: 'suspended',
+      runId: 'run-1',
+      suspendPayload: {
+        toolCallId: 'delegate-1',
+        suspendPayload: {
+          __mastraClientToolCalls: [{ toolCallId: 'ct-1', toolName: 'changeColor', args: { color: 'red' } }],
+          __mastraDelegatedReplayState: replayState,
+        },
+      },
+    });
+
+    mockRequest.mockResolvedValueOnce({
+      finishReason: 'suspended',
+      runId: 'run-1',
+      suspendPayload: {
+        toolCallId: 'delegate-1',
+        suspendPayload: {
+          __mastraClientToolCalls: [{ toolCallId: 'ct-2', toolName: 'changeColor', args: { color: 'blue' } }],
+          __mastraDelegatedReplayState: replayState,
+        },
+      },
+    });
+
+    mockRequest.mockResolvedValueOnce({
+      finishReason: 'stop',
+      response: {
+        messages: [
+          {
+            role: 'assistant',
+            content: 'Final response',
+          },
+        ],
+      },
+    });
+
+    const result = await agent.generate('Change the color twice', {
+      clientTools: { changeColor: clientTool },
+    });
+
+    expect(result.finishReason).toBe('stop');
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(mockRequest).toHaveBeenCalledTimes(3);
+
+    const secondCall = mockRequest.mock.calls[1];
+    const thirdCall = mockRequest.mock.calls[2];
+
+    expect(secondCall[0]).toBe('/agents/test-agent-id/approve-tool-call-generate');
+    expect(thirdCall[0]).toBe('/agents/test-agent-id/approve-tool-call-generate');
+    expect(secondCall[1].body.toolCallId).toBe('delegate-1');
+    expect(thirdCall[1].body.toolCallId).toBe('delegate-1');
+    expect(secondCall[1].body.resumeData).toEqual({
+      __mastraClientToolResults: [{ toolCallId: 'ct-1', toolName: 'changeColor', result: 'red' }],
+      __mastraDelegatedReplayState: replayState,
+    });
+    expect(thirdCall[1].body.resumeData).toEqual({
+      __mastraClientToolResults: [{ toolCallId: 'ct-2', toolName: 'changeColor', result: 'blue' }],
+      __mastraDelegatedReplayState: replayState,
+    });
   });
 });
 

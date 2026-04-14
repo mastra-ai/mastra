@@ -3986,6 +3986,128 @@ describe('Supervisor Pattern - Client tool call suspension', () => {
       toolName: 'changeColor',
     });
   });
+
+  it('should resume delegated client tool suspensions from replay state when memory recall fails', async () => {
+    const mockStorage = new InMemoryStore();
+    const subAgentPrompts: any[] = [];
+    let subAgentCallCount = 0;
+    const subAgent = new Agent({
+      id: 'color-sub',
+      name: 'color-sub',
+      description: 'Changes colors via client tools',
+      instructions: 'Call the changeColor tool.',
+      model: new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          subAgentCallCount++;
+          subAgentPrompts.push(prompt as any[]);
+
+          if (subAgentCallCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'ct-1',
+                  toolName: 'changeColor',
+                  args: JSON.stringify({ color: 'red' }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            content: [{ type: 'text' as const, text: 'Color changed' }],
+            warnings: [],
+          };
+        },
+      }),
+    });
+    const subAgentMemory = new MockMemory();
+    subAgent.__setMemory(subAgentMemory);
+
+    let supervisorCallCount = 0;
+    const supervisor = new Agent({
+      id: 'ct-suspend-supervisor-replay',
+      name: 'ct-suspend-supervisor-replay',
+      instructions: 'Delegate to the color sub-agent.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          supervisorCallCount++;
+          if (supervisorCallCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'delegate-1',
+                  toolName: 'agent-colorSub',
+                  input: JSON.stringify({ prompt: 'Change the color to red' }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text' as const, text: 'Done' }],
+            warnings: [],
+          };
+        },
+      }),
+      agents: { colorSub: subAgent },
+      memory: new MockMemory(),
+      defaultOptions: {
+        clientTools: {
+          changeColor: {
+            id: 'changeColor',
+            description: 'Change the color on the client side',
+            inputSchema: z.object({ color: z.string() }),
+          },
+        },
+      },
+    });
+    new Mastra({
+      agents: { ctSuspendSupervisorReplay: supervisor },
+      storage: mockStorage,
+    });
+
+    const suspended = await supervisor.generate('Change the color to red', { maxSteps: 5 });
+
+    expect(suspended.finishReason).toBe('suspended');
+    const nestedSuspendPayload = suspended.suspendPayload?.suspendPayload ?? suspended.suspendPayload;
+    const replayState = nestedSuspendPayload?.__mastraDelegatedReplayState;
+    expect(replayState).toBeDefined();
+    const recall = vi.spyOn(subAgentMemory, 'recall').mockRejectedValueOnce(new Error('recall failed'));
+
+    const resumed = await supervisor.approveToolCallGenerate({
+      runId: suspended.runId!,
+      toolCallId: suspended.suspendPayload?.toolCallId,
+      resumeData: {
+        __mastraClientToolResults: [{ toolCallId: 'ct-1', toolName: 'changeColor', result: 'red' }],
+        __mastraDelegatedReplayState: replayState,
+      },
+    });
+
+    expect(resumed.finishReason).toBe('stop');
+    expect(recall).toHaveBeenCalledWith({ threadId: replayState.subAgentThreadId });
+    expect(subAgentPrompts).toHaveLength(2);
+
+    const resumedPrompt = JSON.stringify(subAgentPrompts[1]);
+    expect(resumedPrompt).toContain('Change the color to red');
+    expect(resumedPrompt).toContain('changeColor');
+    expect(resumedPrompt).toContain('red');
+  });
 });
 
 describe('Supervisor Pattern - Sub-agent should not receive parent tool call references for unknown tools', () => {

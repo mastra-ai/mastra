@@ -58,6 +58,69 @@ type ToolCallRespondFn<OUTPUT> = (
   },
 ) => Promise<FullOutput<OUTPUT>>;
 
+type SuspendedClientToolCall = {
+  toolCallId: string;
+  toolName: string;
+  args: any;
+};
+
+function getDelegatedClientToolSuspendData(response: any): {
+  suspendPayload: any;
+  clientToolCalls: SuspendedClientToolCall[];
+  delegatedReplayState?: any;
+} {
+  const suspendPayload = response?.suspendPayload;
+  const nestedSuspendPayload = suspendPayload?.suspendPayload;
+
+  return {
+    suspendPayload,
+    clientToolCalls: (nestedSuspendPayload?.__mastraClientToolCalls ??
+      suspendPayload?.__mastraClientToolCalls ??
+      []) as SuspendedClientToolCall[],
+    delegatedReplayState:
+      nestedSuspendPayload?.__mastraDelegatedReplayState ?? suspendPayload?.__mastraDelegatedReplayState,
+  };
+}
+
+async function executeClientToolsFromCalls({
+  clientToolCalls,
+  clientTools,
+  agentId,
+  requestContext,
+  threadId,
+  resourceId,
+}: {
+  clientToolCalls: SuspendedClientToolCall[];
+  clientTools: Record<string, Tool>;
+  agentId: string;
+  requestContext?: RequestContext<any>;
+  threadId?: string;
+  resourceId?: string;
+}): Promise<Array<{ toolCallId: string; toolName: string; result: any }>> {
+  const toolResults: Array<{ toolCallId: string; toolName: string; result: any }> = [];
+
+  for (const toolCall of clientToolCalls) {
+    const clientTool = clientTools[toolCall.toolName] as Tool;
+    if (clientTool?.execute) {
+      const result = await clientTool.execute(toolCall.args, {
+        requestContext: requestContext as RequestContext,
+        tracingContext: { currentSpan: undefined },
+        agent: {
+          agentId,
+          messages: [],
+          toolCallId: toolCall.toolCallId,
+          suspend: async () => {},
+          threadId,
+          resourceId,
+        },
+      });
+      toolResults.push({ toolCallId: toolCall.toolCallId, toolName: toolCall.toolName, result });
+    }
+  }
+
+  return toolResults;
+}
+
 async function executeToolCallAndRespond<OUTPUT>({
   response,
   params,
@@ -141,6 +204,78 @@ async function executeToolCallAndRespond<OUTPUT>({
 
   // If no client tool was executed, return the original response
   return response;
+}
+
+async function executeSuspendedClientToolCallsAndRespond<OUTPUT>({
+  response,
+  params,
+  agentId,
+  resourceId,
+  threadId,
+  requestContext,
+  respondFn,
+  approveFn,
+}: {
+  params: StreamParams<OUTPUT>;
+  response: Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
+  agentId: string;
+  resourceId?: string;
+  threadId?: string;
+  requestContext?: RequestContext<any>;
+  respondFn: ToolCallRespondFn<OUTPUT>;
+  approveFn: (params: {
+    runId: string;
+    toolCallId: string;
+    resumeData?: any;
+    requestContext?: RequestContext | Record<string, any>;
+  }) => Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>>;
+}) {
+  let currentResponse = response;
+
+  while (true) {
+    const { suspendPayload, clientToolCalls, delegatedReplayState } =
+      getDelegatedClientToolSuspendData(currentResponse);
+
+    if (currentResponse.finishReason !== 'suspended' || clientToolCalls.length === 0 || !params.clientTools) {
+      return currentResponse;
+    }
+
+    const toolResults = await executeClientToolsFromCalls({
+      clientToolCalls,
+      clientTools: params.clientTools as Record<string, Tool>,
+      agentId,
+      requestContext,
+      threadId,
+      resourceId,
+    });
+
+    const outerToolCallId = suspendPayload?.toolCallId ?? clientToolCalls[0]?.toolCallId;
+    if (toolResults.length === 0 || !outerToolCallId || !(currentResponse as any).runId) {
+      return currentResponse;
+    }
+
+    currentResponse = await approveFn({
+      runId: (currentResponse as any).runId,
+      toolCallId: outerToolCallId,
+      resumeData: {
+        __mastraClientToolResults: toolResults,
+        ...(delegatedReplayState ? { __mastraDelegatedReplayState: delegatedReplayState } : {}),
+      },
+      requestContext,
+    });
+
+    if (currentResponse.finishReason === 'tool-calls') {
+      return executeToolCallAndRespond<OUTPUT>({
+        response: currentResponse,
+        params,
+        agentId,
+        resourceId,
+        threadId,
+        requestContext,
+        respondFn,
+      });
+    }
+  }
 }
 
 export class AgentVoice extends BaseResource {
@@ -548,70 +683,32 @@ export class Agent extends BaseResource {
       },
     );
 
-    if (response.finishReason === 'tool-calls') {
-      return executeToolCallAndRespond<OUTPUT>({
-        response,
+    let finalResponse = response;
+
+    if (finalResponse.finishReason === 'tool-calls') {
+      finalResponse = (await executeToolCallAndRespond<OUTPUT>({
+        response: finalResponse,
         params,
         agentId: this.agentId,
         resourceId,
         threadId,
         requestContext: requestContext as RequestContext<any>,
         respondFn: this.generate.bind(this) as ToolCallRespondFn<OUTPUT>,
-      }) as unknown as Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
+      })) as Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
     }
 
-    // Handle suspended responses containing client tool calls from sub-agents.
-    // When a supervisor delegates to a sub-agent that calls a client tool,
-    // the server suspends with __mastraClientToolCalls in the suspend payload.
-    // The payload may be nested under suspendPayload.suspendPayload (wrapped
-    // by the tool-call-step) or directly under suspendPayload.
-    const suspendPayload = (response as any).suspendPayload;
-    const clientToolCallsPayload =
-      suspendPayload?.suspendPayload?.__mastraClientToolCalls ?? suspendPayload?.__mastraClientToolCalls;
+    finalResponse = await executeSuspendedClientToolCallsAndRespond<OUTPUT>({
+      response: finalResponse,
+      params,
+      agentId: this.agentId,
+      resourceId,
+      threadId,
+      requestContext: requestContext as RequestContext<any>,
+      respondFn: this.generate.bind(this) as ToolCallRespondFn<OUTPUT>,
+      approveFn: this.approveToolCallGenerate.bind(this),
+    });
 
-    if (response.finishReason === 'suspended' && clientToolCallsPayload && params.clientTools) {
-      const clientToolCalls = clientToolCallsPayload as Array<{
-        toolCallId: string;
-        toolName: string;
-        args: any;
-      }>;
-
-      const toolResults: Array<{ toolCallId: string; toolName: string; result: any }> = [];
-
-      for (const toolCall of clientToolCalls) {
-        const clientTool = params.clientTools[toolCall.toolName] as Tool;
-        if (clientTool?.execute) {
-          const result = await clientTool.execute(toolCall.args, {
-            requestContext: requestContext as RequestContext,
-            tracingContext: { currentSpan: undefined },
-            agent: {
-              agentId: this.agentId,
-              messages: [],
-              toolCallId: toolCall.toolCallId,
-              suspend: async () => {},
-              threadId,
-              resourceId,
-            },
-          });
-          toolResults.push({ toolCallId: toolCall.toolCallId, toolName: toolCall.toolName, result });
-        }
-      }
-
-      if (toolResults.length > 0) {
-        // Resume via approveToolCallGenerate with the client-executed tool results.
-        // Prefer the outer suspended wrapper's toolCallId so the resume targets the
-        // parent agent-tool step, not the inner delegated sub-agent tool call.
-        const outerToolCallId = suspendPayload?.toolCallId ?? clientToolCalls[0]?.toolCallId;
-        return this.approveToolCallGenerate({
-          runId: (response as any).runId,
-          toolCallId: outerToolCallId,
-          resumeData: { __mastraClientToolResults: toolResults },
-          requestContext,
-        }) as unknown as Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
-      }
-    }
-
-    return response;
+    return finalResponse;
   }
 
   private async processChatResponse({
@@ -625,7 +722,13 @@ export class Agent extends BaseResource {
     stream: ReadableStream<Uint8Array>;
     update: (options: { message: UIMessage; data: JSONValue[] | undefined; replaceLastMessage: boolean }) => void;
     onToolCall?: UseChatOptions['onToolCall'];
-    onFinish?: (options: { message: UIMessage | undefined; finishReason: string; usage: string }) => void;
+    onFinish?: (options: {
+      message: UIMessage | undefined;
+      finishReason: string;
+      usage: string;
+      suspendedPayload?: any;
+      runId?: string;
+    }) => void;
     generateId?: () => string;
     getCurrentDate?: () => Date;
     lastMessage: UIMessage | undefined;
@@ -682,6 +785,8 @@ export class Agent extends BaseResource {
       totalTokens: NaN,
     };
     let finishReason: string = 'unknown';
+    let suspendedPayload: any = undefined;
+    let runId: string | undefined = undefined;
 
     function execUpdate() {
       // make a copy of the data array to ensure UI is updated (SWR)
@@ -1016,7 +1121,13 @@ export class Agent extends BaseResource {
     stream: ReadableStream<Uint8Array>;
     update: (options: { message: UIMessage; data: JSONValue[] | undefined; replaceLastMessage: boolean }) => void;
     onToolCall?: UseChatOptions['onToolCall'];
-    onFinish?: (options: { message: UIMessage | undefined; finishReason: string; usage: string }) => void;
+    onFinish?: (options: {
+      message: UIMessage | undefined;
+      finishReason: string;
+      usage: string;
+      suspendedPayload?: any;
+      runId?: string;
+    }) => void;
     generateId?: () => string;
     getCurrentDate?: () => Date;
     lastMessage: UIMessage | undefined;
@@ -1073,6 +1184,8 @@ export class Agent extends BaseResource {
       totalTokens: NaN,
     };
     let finishReason: string = 'unknown';
+    let suspendedPayload: any = undefined;
+    let runId: string | undefined = undefined;
 
     function execUpdate() {
       // make a copy of the data array to ensure UI is updated (SWR)
@@ -1108,6 +1221,10 @@ export class Agent extends BaseResource {
       // TODO: casting as any here because the stream types were all typed as any before in core.
       // but this is completely wrong and this fn is probably broken. Remove ":any" and you'll see a bunch of type errors
       onChunk: async (chunk: any) => {
+        if (chunk.runId) {
+          runId = chunk.runId;
+        }
+
         switch (chunk.type) {
           case 'tripwire': {
             message.parts.push({
@@ -1335,6 +1452,11 @@ export class Agent extends BaseResource {
             break;
           }
 
+          case 'tool-call-suspended': {
+            suspendedPayload = chunk.payload;
+            break;
+          }
+
           case 'step-finish': {
             step += 1;
 
@@ -1359,7 +1481,7 @@ export class Agent extends BaseResource {
       },
     });
 
-    onFinish?.({ message, finishReason, usage });
+    onFinish?.({ message, finishReason, usage, suspendedPayload, runId });
   }
 
   async processStreamResponse(
@@ -1434,7 +1556,9 @@ export class Agent extends BaseResource {
             messages.push(message);
           }
         },
-        onFinish: async ({ finishReason, message }) => {
+        onFinish: async ({ finishReason, message, suspendedPayload, runId }) => {
+          let shouldContinueRecursively = false;
+
           if (finishReason === 'tool-calls') {
             const toolCall = [...(message?.parts ?? [])]
               .reverse()
@@ -1449,6 +1573,7 @@ export class Agent extends BaseResource {
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               if (clientTool && clientTool.execute) {
                 shouldExecuteClientTool = true;
+                shouldContinueRecursively = true;
                 const result = await clientTool.execute(toolCall?.args, {
                   requestContext: processedParams.requestContext as RequestContext,
                   // TODO: Pass proper tracing context when client-js supports tracing
@@ -1514,16 +1639,50 @@ export class Agent extends BaseResource {
                 }
               }
             }
+            shouldContinueRecursively = shouldContinueRecursively && shouldExecuteClientTool;
+          } else if (finishReason === 'suspended' && suspendedPayload && processedParams.clientTools) {
+            const { clientToolCalls, delegatedReplayState } = getDelegatedClientToolSuspendData({
+              suspendPayload: suspendedPayload,
+            });
 
-            // Close the controller after all processing is complete
-            // Wait for current pipe to finish before closing
-            if (!shouldExecuteClientTool) {
-              await pipePromise;
-              controller.close();
+            if (clientToolCalls.length > 0 && runId) {
+              const toolResults = await executeClientToolsFromCalls({
+                clientToolCalls,
+                clientTools: processedParams.clientTools as Record<string, Tool>,
+                agentId: this.agentId,
+                requestContext: processedParams.requestContext as RequestContext,
+                threadId,
+                resourceId,
+              });
+
+              const outerToolCallId = suspendedPayload?.toolCallId ?? clientToolCalls[0]?.toolCallId;
+              if (toolResults.length > 0 && outerToolCallId) {
+                shouldContinueRecursively = true;
+                try {
+                  await this.processStreamResponse(
+                    {
+                      runId,
+                      toolCallId: outerToolCallId,
+                      requestContext: processedParams.requestContext,
+                      clientTools: processedParams.clientTools,
+                      resumeData: {
+                        __mastraClientToolResults: toolResults,
+                        ...(delegatedReplayState ? { __mastraDelegatedReplayState: delegatedReplayState } : {}),
+                      },
+                    },
+                    controller,
+                    'approve-tool-call',
+                  );
+                } catch (error) {
+                  console.error('Error processing recursive suspended stream response:', error);
+                }
+              }
             }
-            // If client tool was executed, the recursive call will handle closing the stream
-          } else {
-            // No tool calls - wait for pipe to complete then close the stream
+          }
+
+          // Close the controller after all processing is complete.
+          // If a recursive resume handled continuation, that call will close the stream.
+          if (!shouldContinueRecursively) {
             await pipePromise;
             controller.close();
           }
@@ -1821,6 +1980,7 @@ export class Agent extends BaseResource {
   async approveToolCall(params: {
     runId: string;
     toolCallId: string;
+    resumeData?: any;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<
     Response & {

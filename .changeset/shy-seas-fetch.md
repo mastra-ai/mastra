@@ -1,5 +1,7 @@
 ---
 '@mastra/core': patch
+'@mastra/client-js': patch
+'@mastra/server': patch
 ---
 
-Forward parent agent client tools to sub-agents in supervisor mode. Previously, client tools defined on a parent agent were only visible to the supervisor agent. Now, when a supervisor delegates to a sub-agent, the parent client tools are forwarded so sub-agents can call them. When a sub-agent calls a client tool, the supervisor suspends so the client can execute the tool and resume with the result.
+Forward parent agent client tools to sub-agents in supervisor mode and make delegated client-tool suspend/resume robust across core, server, and the JS SDK. Sub-agents can now request parent client tools, suspend for client-side execution, and resume generate/stream flows with client tool results until the delegated run completes.
