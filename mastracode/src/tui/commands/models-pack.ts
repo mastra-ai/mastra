@@ -568,9 +568,7 @@ async function askImportCollision(
 
   return new Promise(resolve => {
     const container = new Box(1, 1);
-    container.addChild(
-      new Text(theme.bold(theme.fg('accent', `A pack named "${existingName}" already exists`)), 0, 0),
-    );
+    container.addChild(new Text(theme.bold(theme.fg('accent', `A pack named "${existingName}" already exists`)), 0, 0));
     container.addChild(new Spacer(1));
 
     const items: SelectItem[] = actions.map(a => ({
