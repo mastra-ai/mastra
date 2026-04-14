@@ -687,17 +687,20 @@ export class InternalMastraMCPClient extends MastraBase {
         let needsApprovalFn: ((args: any, ctx: any) => boolean | Promise<boolean>) | undefined;
 
         if (typeof this.requireToolApproval === 'function') {
-          // Wrap the server-level function to match the per-tool needsApprovalFn signature
-          // (args, ctx) => the server function receives { toolName, args, ...ctx }
+          // Wrap the server-level function to match the per-tool needsApprovalFn signature.
+          // Note: ctx may be undefined when called via network/index.ts (which only passes args).
+          // We default ctx to {} so the spread doesn't fail and approval fn receives partial context.
           const serverApprovalFn = this.requireToolApproval;
           const toolName = tool.name;
           requireApproval = true; // Signal that approval check is needed
-          needsApprovalFn = (args: Record<string, unknown>, ctx: Record<string, unknown>) => {
+          needsApprovalFn = (args: Record<string, unknown>, ctx: Record<string, unknown> = {}) => {
             return serverApprovalFn({ toolName, args, ...ctx });
           };
         } else if (this.requireToolApproval === true) {
           requireApproval = true;
         }
+        // When requireToolApproval is false/undefined, requireApproval stays undefined
+        // and createTool defaults it to false
 
         const mastraTool = createTool({
           id: `${this.name}_${tool.name}`,
@@ -707,7 +710,7 @@ export class InternalMastraMCPClient extends MastraBase {
           // already validates structuredContent against the tool's outputSchema using AJV.
           // Passing it here causes Zod to strip unrecognized keys from the CallToolResult
           // envelope, returning {} for tools without structuredContent.
-          ...(requireApproval !== undefined ? { requireApproval } : {}),
+          requireApproval,
           mcpMetadata: {
             serverName: this.name,
             serverVersion: this.client.getServerVersion()?.version,
