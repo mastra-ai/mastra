@@ -598,10 +598,13 @@ export class Agent extends BaseResource {
       }
 
       if (toolResults.length > 0) {
-        // Resume via approveToolCallGenerate with the client-executed tool results
+        // Resume via approveToolCallGenerate with the client-executed tool results.
+        // Prefer the outer suspended wrapper's toolCallId so the resume targets the
+        // parent agent-tool step, not the inner delegated sub-agent tool call.
+        const outerToolCallId = suspendPayload?.toolCallId ?? clientToolCalls[0].toolCallId;
         return this.approveToolCallGenerate({
           runId: (response as any).runId,
-          toolCallId: clientToolCalls[0].toolCallId,
+          toolCallId: outerToolCallId,
           resumeData: { __mastraClientToolResults: toolResults },
           requestContext,
         }) as unknown as Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;

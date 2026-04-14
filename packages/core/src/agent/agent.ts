@@ -3316,7 +3316,7 @@ export class Agent<
                   // tool results, and re-generate so the LLM can continue.
                   const memory = await agent.getMemory({ requestContext });
                   let previousMessages: MastraDBMessage[] = [];
-                  if (memory && resourceId && threadId) {
+                  if (memory) {
                     try {
                       const recalled = await memory.recall({ threadId: subAgentThreadId });
                       previousMessages = recalled.messages;
@@ -3335,6 +3335,7 @@ export class Agent<
                           toolCallId: tr.toolCallId,
                           toolName: tr.toolName,
                           result: tr.result,
+                          ...(tr.isError != null && { isError: tr.isError }),
                         },
                       ],
                     }),
@@ -3477,7 +3478,7 @@ export class Agent<
                   // Resuming from client tool call suspension (stream path).
                   const memory = await agent.getMemory({ requestContext });
                   let previousMessages: MastraDBMessage[] = [];
-                  if (memory && resourceId && threadId) {
+                  if (memory) {
                     try {
                       const recalled = await memory.recall({ threadId: subAgentThreadId });
                       previousMessages = recalled.messages;
@@ -3495,6 +3496,7 @@ export class Agent<
                           toolCallId: tr.toolCallId,
                           toolName: tr.toolName,
                           result: tr.result,
+                          ...(tr.isError != null && { isError: tr.isError }),
                         },
                       ],
                     }),
