@@ -59,3 +59,19 @@ const mastra = env => new Mastra({
 export { mastra };
 "
 `;
+
+exports[`Wrap Mastra instance > should wrap Mastra instance in ./__fixtures__/factory-function-expression.js 1`] = `
+"import { Mastra } from '@mastra/core/mastra';
+import { D1Store } from '@mastra/cloudflare-d1';
+
+const mastra = function (env) {
+  return new Mastra({
+    storage: new D1Store({
+      binding: env.D1Database
+    })
+  });
+};
+
+export { mastra };
+"
+`;

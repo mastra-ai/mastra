@@ -225,7 +225,9 @@ export default stream;
         const {createHonoServer, getToolExports} = await import('#server');
         // Pass env so user factories can access Workers bindings (D1, KV, R2, etc.).
         // Backward compatible: factories created by the auto-wrap simply ignore the arg.
-        const _mastra = mastra(env);
+        // Awaited so users can also export an async factory if their setup needs it
+        // (await on a non-Promise simply resolves to the value).
+        const _mastra = await mastra(env);
 
         if (_mastra.getStorage()) {
           _mastra.__registerInternalWorkflow(scoreTracesWorkflow);
