@@ -4,7 +4,7 @@
  *
  * NOT meant for CI — requires OPENAI_API_KEY and makes real API calls.
  * Run manually:
- *   cd packages/core && npx vitest run src/agent/message-list/tests/openai-reasoning-live.e2e.test.ts
+ *   RUN_LIVE_OPENAI_TESTS=true cd packages/core && npx vitest run src/agent/message-list/tests/openai-reasoning-live.e2e.test.ts
  *
  * After validating, extract fixtures into deterministic CI tests.
  */
@@ -14,8 +14,9 @@ import { describe, expect, it } from 'vitest';
 import { MessageList } from '../index';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const RUN_LIVE = process.env.RUN_LIVE_OPENAI_TESTS === 'true';
 
-describe.skipIf(!OPENAI_API_KEY)('OpenAI reasoning live round-trip', () => {
+describe.skipIf(!OPENAI_API_KEY || !RUN_LIVE)('OpenAI reasoning live round-trip', () => {
   it('should complete a multi-turn conversation with reasoning model', async () => {
     const openai = createOpenAI({ apiKey: OPENAI_API_KEY });
     const model: LanguageModelV3 = openai('gpt-5-mini') as any;
