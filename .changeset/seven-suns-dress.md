@@ -2,4 +2,4 @@
 '@mastra/ai-sdk': patch
 ---
 
-Fixed tool call approvals in AI SDK v6: `handleChatStream` now automatically routes to `resumeStream` when the AI SDK v6 `approve()` method is used on the client, enabling the suspend/resume flow without any extra server-side wiring. The v6 stream now also emits native `tool-approval-request` parts alongside the existing `data-tool-call-approval` chunk for backwards compatibility with `@mastra/react`.
+Fixed tool call approvals in AI SDK v6: `handleChatStream` now automatically routes to `resumeStream` when the AI SDK v6 native approval flow is used on the client (no extra server-side wiring required). The v6 stream now emits native `tool-approval-request` parts so `useChat` can surface approval UI and call `addToolApprovalResponse()`, while also emitting the existing `data-tool-call-approval` chunk for backwards compatibility.

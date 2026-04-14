@@ -24,35 +24,46 @@ import type {
 } from './public-types';
 
 /**
- * Scans a v6 UIMessage array (most-recent-first) for a tool part in
- * 'approval-responded' state. When found, splits the composite approvalId
- * ("${runId}::${toolCallId}") to recover the runId needed for resumeStream.
+ * Scans a v6 UIMessage array for an 'approval-responded' tool part in the
+ * last trailing assistant message only. When found, splits the composite
+ * approvalId ("${runId}::${toolCallId}") to recover the runId needed for
+ * resumeStream.
+ *
+ * Only the last trailing assistant message is inspected so that approval
+ * responses from earlier turns are never re-processed.
  *
  * Returns null when no approval response is present (normal chat turn).
  */
 export function extractV6NativeApproval(
   messages: V6UIMessage[],
 ): { resumeData: Record<string, unknown>; runId: string } | null {
+  // Find the last trailing assistant message — stop as soon as we see one.
+  let lastAssistantMsg: V6UIMessage | undefined;
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i]!;
-    if (message.role !== 'assistant') continue;
-
-    for (const part of message.parts ?? []) {
-      if (!isToolUIPart(part) || part.state !== 'approval-responded') continue;
-
-      const lastSep = part.approval.id.lastIndexOf(APPROVAL_ID_SEPARATOR);
-      if (lastSep === -1) continue;
-      const runId = part.approval.id.slice(0, lastSep);
-      if (!runId) continue;
-
-      return {
-        resumeData: {
-          approved: part.approval.approved,
-          ...(part.approval.reason != null ? { reason: part.approval.reason } : {}),
-        },
-        runId,
-      };
+    if (message.role === 'assistant') {
+      lastAssistantMsg = message;
+      break;
     }
+  }
+
+  if (!lastAssistantMsg) return null;
+
+  for (const part of lastAssistantMsg.parts ?? []) {
+    if (!isToolUIPart(part) || part.state !== 'approval-responded') continue;
+
+    const lastSep = part.approval.id.lastIndexOf(APPROVAL_ID_SEPARATOR);
+    if (lastSep === -1) continue;
+    const runId = part.approval.id.slice(0, lastSep);
+    if (!runId) continue;
+
+    return {
+      resumeData: {
+        approved: part.approval.approved,
+        ...(part.approval.reason != null ? { reason: part.approval.reason } : {}),
+      },
+      runId,
+    };
   }
 
   return null;

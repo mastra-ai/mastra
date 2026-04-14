@@ -152,7 +152,13 @@ export function createWorkflowStreamToAISDKTransformer<UI_CHUNK>(
         },
         convertMastraChunkToAISDK,
       );
-      if (transformed) controller.enqueue(transformed as UI_CHUNK);
+      if (Array.isArray(transformed)) {
+        for (const c of transformed) {
+          if (c) controller.enqueue(c as UI_CHUNK);
+        }
+      } else if (transformed) {
+        controller.enqueue(transformed as UI_CHUNK);
+      }
     },
   });
 }
@@ -307,7 +313,13 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
               undefined,
               convertMastraChunkToAISDK,
             );
-            if (workflowChunk) controller.enqueue(workflowChunk);
+            if (Array.isArray(workflowChunk)) {
+              for (const c of workflowChunk) {
+                if (c) controller.enqueue(c);
+              }
+            } else if (workflowChunk) {
+              controller.enqueue(workflowChunk);
+            }
           } else if (transformedChunk.type === 'tool-network') {
             const payload = transformedChunk.payload;
             const networkChunk = transformNetwork(payload, bufferedSteps, true);
@@ -724,6 +736,22 @@ export function transformWorkflow<OUTPUT>(
       if (includeTextStreamParts && output && isMastraTextStreamChunk(output)) {
         // @ts-expect-error - generic type mismatch in conversion
         const part = convertMastraChunkToAISDK<OUTPUT>({ chunk: output, mode: 'stream' });
+
+        // convertMastraChunkToAISDK can return an array (e.g. for tool-call-approval v6 chunks)
+        if (Array.isArray(part)) {
+          return part
+            .map(p =>
+              convertFullStreamChunkToUIMessageStream({
+                part: p as any,
+                sendReasoning: streamOptions?.sendReasoning,
+                sendSources: streamOptions?.sendSources,
+                onError(error) {
+                  return safeParseErrorObject(error);
+                },
+              }),
+            )
+            .filter(Boolean);
+        }
 
         const transformedChunk = convertFullStreamChunkToUIMessageStream({
           part: part as any,
