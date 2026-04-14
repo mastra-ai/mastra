@@ -152,8 +152,15 @@ export async function envPullAction(file: string | undefined, opts: { config?: s
   const keys = Object.keys(envVars);
 
   const target = file ?? '.env';
+  const shellSafeKey = /^[A-Za-z_][A-Za-z0-9_]*$/;
   const lines = ['# Pulled from Mastra Server — do not edit manually', ''];
+  let skipped = 0;
   for (const key of keys.sort()) {
+    if (!shellSafeKey.test(key)) {
+      lines.push(`# Skipped unsafe key: ${key.replace(/[^\w.-]/g, '?')}`);
+      skipped++;
+      continue;
+    }
     const value = envVars[key]!;
     // Always quote values to prevent shell metacharacter interpretation when sourced
     const escaped = value
@@ -172,9 +179,12 @@ export async function envPullAction(file: string | undefined, opts: { config?: s
   await writeFile(outputPath, lines.join('\n'), { encoding: 'utf-8', mode: 0o600 });
   await chmod(outputPath, 0o600);
 
-  if (keys.length === 0) {
+  const written = keys.length - skipped;
+  if (written === 0) {
     console.info(`\n  No environment variables set in the project. Wrote empty ${target}.\n`);
   } else {
-    console.info(`\n  Pulled ${keys.length} variable(s) to ${target}.\n`);
+    console.info(
+      `\n  Pulled ${written} variable(s) to ${target}.${skipped > 0 ? ` Skipped ${skipped} unsafe key(s).` : ''}\n`,
+    );
   }
 }

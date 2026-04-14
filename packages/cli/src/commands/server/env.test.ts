@@ -277,4 +277,18 @@ describe('envPullAction', () => {
     expect(content).toContain('TOKEN="price=\\$100\\`cmd\\`\\nline2"');
     spy.mockRestore();
   });
+
+  it('skips keys that are not valid shell identifiers', async () => {
+    mockGetServerProjectEnv.mockResolvedValue({ GOOD_KEY: 'ok', 'bad-key': 'nope', 'also bad': 'no' });
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { envPullAction } = await import('./env.js');
+    await envPullAction(undefined, {});
+    const [, content] = mockWriteFile.mock.calls[0]!;
+    expect(content).toContain('GOOD_KEY="ok"');
+    expect(content).not.toContain('bad-key=');
+    expect(content).not.toContain('also bad=');
+    expect(content).toContain('# Skipped unsafe key');
+    expect(spy.mock.calls.some(c => String(c[0]).includes('Skipped 2 unsafe key(s)'))).toBe(true);
+    spy.mockRestore();
+  });
 });
