@@ -11,7 +11,7 @@ export const NoScoresInfo = () => (
         <Button
           variant="ghost"
           as="a"
-          href="https://mastra.ai/docs/evals/overview"
+          href="https://mastra.ai/en/docs/evals/overview"
           target="_blank"
           rel="noopener noreferrer"
         >

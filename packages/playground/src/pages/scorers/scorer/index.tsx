@@ -161,6 +161,7 @@ export default function Scorer() {
   const hasOtherError = !isUnauthorized && !isForbidden && (scorerError || agentsError || workflowsError);
 
   const hasNoScores = !isLoadingScores && scores.length === 0;
+  const hasFilterApplied = selectedEntityOption?.value !== 'all';
 
   const scorerTopAreaSharedContent = (
     <>
@@ -202,7 +203,9 @@ export default function Scorer() {
     </>
   );
 
-  if (isUnauthorized || isForbidden || hasOtherError || hasNoScores) {
+  const showEmptyState = isUnauthorized || isForbidden || hasOtherError || (hasNoScores && !hasFilterApplied);
+
+  if (showEmptyState) {
     const errorMessage =
       (scorerError instanceof Error ? scorerError.message : undefined) ??
       (agentsError instanceof Error ? agentsError.message : undefined) ??
