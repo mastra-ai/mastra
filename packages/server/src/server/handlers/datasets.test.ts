@@ -1,6 +1,6 @@
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { LIST_DATASETS_ROUTE } from './datasets';
 import { createTestServerContext } from './test-utils';
 
@@ -9,7 +9,6 @@ describe('Datasets Handlers', () => {
   let mastra: Mastra;
 
   beforeEach(async () => {
-    vi.clearAllMocks();
     mockStorage = new InMemoryStore();
     await mockStorage.init();
 
@@ -45,6 +44,7 @@ describe('Datasets Handlers', () => {
       });
 
       expect(result.datasets).toHaveLength(5);
+      expect(result.pagination.hasMore).toBe(false);
     });
 
     it('should paginate correctly across pages using the default perPage of 10', async () => {
