@@ -1,3 +1,4 @@
+import { withPollingRetries } from '../../utils/polling.js';
 import { authHeaders, createApiClient, MASTRA_PLATFORM_API_URL, platformFetch, throwApiError } from '../auth/client.js';
 
 export interface Project {
@@ -192,9 +193,13 @@ export async function pollDeploy(
 
   try {
     while (Date.now() - start < maxWaitMs) {
-      const { data, error, response } = await client.GET('/v1/studio/deploys/{id}', {
-        params: { path: { id: deployId } },
-      });
+      const result = await withPollingRetries(() =>
+        client.GET('/v1/studio/deploys/{id}', {
+          params: { path: { id: deployId } },
+        }),
+      );
+
+      const { data, error, response } = result;
 
       if (error) {
         throwApiError('Poll failed', response.status, error.detail);

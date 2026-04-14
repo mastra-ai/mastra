@@ -33,6 +33,7 @@ import { useAgentVersions } from '../../hooks/use-agent-versions';
 import { formatVersionLabel } from './format-version-label';
 import { useDatasetExperimentResults, useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { TraceDialog } from '@/domains/observability/components/trace-dialog';
+import { useLinkComponent } from '@/lib/framework';
 
 function formatTimestamp(dateStr: string | Date): string {
   const date = new Date(dateStr);
@@ -363,6 +364,7 @@ export function ExperimentResultsPanel({
   const agentId = experiment.targetType === 'agent' ? experiment.targetId : '';
   const { data: agentVersionsData } = useAgentVersions({ agentId });
   const agentVersions = agentVersionsData?.versions ?? [];
+  const { navigate } = useLinkComponent();
 
   const { data: traceData, isLoading: isLoadingTrace } = useQuery({
     queryKey: ['trace', viewingTraceId],
@@ -414,7 +416,21 @@ export function ExperimentResultsPanel({
           {experiment.agentVersion &&
             (() => {
               const av = agentVersions.find(v => v.id === experiment.agentVersion);
-              return ` · ${formatVersionLabel('Agent', av ? av.versionNumber : experiment.agentVersion)}`;
+              const label = formatVersionLabel('Agent', av ? av.versionNumber : experiment.agentVersion);
+              return (
+                <>
+                  {' · '}
+                  <button
+                    type="button"
+                    className="underline hover:text-neutral5 transition-colors cursor-pointer"
+                    onClick={() =>
+                      navigate(`/agents/${agentId}/editor?version=${encodeURIComponent(experiment.agentVersion!)}`)
+                    }
+                  >
+                    {label}
+                  </button>
+                </>
+              );
             })()}
           {' · '}
           {experiment.startedAt ? formatTimestamp(experiment.startedAt) : '-'}

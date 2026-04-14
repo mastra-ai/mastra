@@ -3,6 +3,7 @@ import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../eval
 import type { Mastra } from '../../mastra';
 import { validateAndSaveScore } from '../../mastra/hooks';
 import { EntityType } from '../../observability';
+import type { CorrelationContext } from '../../observability';
 import type { MastraCompositeStore } from '../../storage/base';
 import type { TargetType } from '../../storage/types';
 import type { ScorerResult } from './types';
@@ -64,6 +65,15 @@ export async function runScorersForItem(
 ): Promise<ScorerResult[]> {
   if (scorers.length === 0) return [];
 
+  // Build correlation context so scorers can emit scores with full experiment context
+  const targetCorrelationContext: CorrelationContext = {
+    ...(traceId ? { traceId } : {}),
+    entityType: toScorerTargetEntityType(targetType),
+    entityId: targetId,
+    entityName: targetId,
+    experimentId: runId,
+  };
+
   const settled = await Promise.allSettled(
     scorers.map(async scorer => {
       const { result, promptMetadata } = await runScorerSafe(
@@ -74,6 +84,7 @@ export async function runScorersForItem(
         scorerOutput,
         targetType,
         traceId,
+        targetCorrelationContext,
       );
 
       // Persist score if storage available and score was computed
@@ -144,6 +155,7 @@ async function runScorerSafe(
   scorerOutput?: ScorerRunOutputForAgent,
   targetType?: TargetType,
   targetTraceId?: string,
+  targetCorrelationContext?: CorrelationContext,
 ): Promise<{ result: ScorerResult; promptMetadata: ScorerPromptMetadata }> {
   try {
     const scoreResult: unknown = await scorer.run({
@@ -154,6 +166,7 @@ async function runScorerSafe(
       targetScope: 'span',
       targetEntityType: toScorerTargetEntityType(targetType),
       targetTraceId,
+      ...(targetCorrelationContext ? { targetCorrelationContext } : {}),
     });
 
     // Extract fields with typeof guards — scorer run result types use complex
