@@ -125,5 +125,29 @@
     "@mastra/s3": "0.3.0",
     "@mastra/vercel": "0.1.0"
   },
-  "changesets": []
+  "changesets": [
+    "@mastra_core-15214-dependencies",
+    "@mastra_playground-ui-15085-dependencies",
+    "add-map-user-to-resource-id",
+    "afraid-poems-sit",
+    "automated-provider-registry-20260410-005356",
+    "curly-bears-lead",
+    "fine-tables-roll",
+    "five-apples-act",
+    "fix-reserved-context-key-injection",
+    "four-yaks-invite",
+    "fresh-owls-lay",
+    "good-donuts-accept",
+    "green-birds-knock",
+    "jolly-ducks-switch",
+    "lovely-moles-camp",
+    "neat-dingos-protect",
+    "old-guests-lie",
+    "rich-seas-flow",
+    "stale-worlds-happen",
+    "strong-pillows-admire",
+    "tame-cars-thank",
+    "tiny-trams-behave",
+    "young-paws-float"
+  ]
 }

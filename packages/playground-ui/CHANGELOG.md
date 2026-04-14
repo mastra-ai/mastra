@@ -1,5 +1,52 @@
 # @mastra/playground-ui
 
+## 22.1.2-alpha.3
+
+### Patch Changes
+
+- Refresh Studio Evaluation pages with an updated UI and flattened top-level URLs (`/scorers`, `/datasets`, `/experiments`; `/evaluation` remains as the overview). `@mastra/playground-ui` removes `EvaluationDashboard` and all `Evaluation*`-prefixed list components, constants, and hooks — use the per-domain replacements (e.g. `ScorersList`) instead. ([#15258](https://github.com/mastra-ai/mastra/pull/15258))
+
+- Fixed DataList to only take as much height as its content needs instead of always stretching to fill available space ([#15291](https://github.com/mastra-ai/mastra/pull/15291))
+
+- Updated dependencies [[`4ba3bb1`](https://github.com/mastra-ai/mastra/commit/4ba3bb1e465ad2ddaba3bbf2bc47e0faec32985e)]:
+  - @mastra/core@1.25.0-alpha.2
+  - @mastra/client-js@1.13.4-alpha.2
+  - @mastra/react@0.2.26-alpha.2
+
+## 22.1.2-alpha.2
+
+### Patch Changes
+
+- Added `PageLayout` and `PageHeader` compound components for consistent page structure across Mastra Studio, plus a `NoDataPageLayout` helper for 401/403/empty/error states. ([#15243](https://github.com/mastra-ai/mastra/pull/15243))
+
+  List components (`AgentsList`, `WorkflowsList`, `ToolsList`, `ProcessorsList`, `McpServersList`, `PromptsList`, `LogsList`, `ObservabilityTracesList`) no longer handle errors or empty states internally — handle those at the page level. If you consume these components directly, move error/empty-state rendering to the parent.
+
+## 22.1.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`8fad147`](https://github.com/mastra-ai/mastra/commit/8fad14759804179c8e080ce4d9dec6ef1a808b31), [`582644c`](https://github.com/mastra-ai/mastra/commit/582644c4a87f83b4f245a84d72b9e8590585012e), [`5d84914`](https://github.com/mastra-ai/mastra/commit/5d84914e0e520c642a40329b210b413fcd139898), [`fd2f314`](https://github.com/mastra-ai/mastra/commit/fd2f31473d3449b6b97e837ef8641264377f41a7), [`e80fead`](https://github.com/mastra-ai/mastra/commit/e80fead1412cc0d1b2f7d6a1ce5017d9e0098ff7), [`0287b64`](https://github.com/mastra-ai/mastra/commit/0287b644a5c3272755cf3112e71338106664103b)]:
+  - @mastra/core@1.25.0-alpha.1
+  - @mastra/client-js@1.13.4-alpha.1
+  - @mastra/react@0.2.26-alpha.1
+
+## 22.1.2-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#15085](https://github.com/mastra-ai/mastra/pull/15085))
+  - Updated dependency [`@assistant-ui/react@^0.12.22` ↗︎](https://www.npmjs.com/package/@assistant-ui/react/v/0.12.22) (from `^0.12.21`, in `dependencies`)
+  - Updated dependency [`@assistant-ui/react-markdown@^0.12.8` ↗︎](https://www.npmjs.com/package/@assistant-ui/react-markdown/v/0.12.8) (from `^0.12.7`, in `dependencies`)
+  - Updated dependency [`@assistant-ui/react-syntax-highlighter@^0.12.8` ↗︎](https://www.npmjs.com/package/@assistant-ui/react-syntax-highlighter/v/0.12.8) (from `^0.12.7`, in `dependencies`)
+
+- Added ValueLink, ValueWithTooltip, and ValueWithCopyBtn variants to DataKeysAndValues component ([#15208](https://github.com/mastra-ai/mastra/pull/15208))
+
+- Updated dependencies [[`87df955`](https://github.com/mastra-ai/mastra/commit/87df955c028660c075873fd5d74af28233ce32eb), [`30a189b`](https://github.com/mastra-ai/mastra/commit/30a189bdd92c4f875a2a6e5d8498ee7fa547bde6), [`075e91a`](https://github.com/mastra-ai/mastra/commit/075e91a4549baf46ad7a42a6a8ac8dfa78cc09e6)]:
+  - @mastra/core@1.24.2-alpha.0
+  - @mastra/ai-sdk@1.3.4-alpha.0
+  - @mastra/client-js@1.13.4-alpha.0
+  - @mastra/react@0.2.26-alpha.0
+
 ## 22.1.1
 
 ### Patch Changes
