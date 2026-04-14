@@ -1,8 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('node:child_process', () => ({
-  execSync: vi.fn().mockReturnValue('my-app'),
-}));
+vi.mock('node:child_process', async importOriginal => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    execSync: vi.fn().mockReturnValue('my-app'),
+  };
+});
 
 let closeHandler: (() => void) | undefined;
 
@@ -75,6 +79,10 @@ vi.mock('./platform-api.js', () => ({
     instanceUrl: 'https://example.com',
     error: null,
   }),
+}));
+
+vi.mock('../../utils/run-build.js', () => ({
+  runBuild: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../studio/project-config.js', () => ({

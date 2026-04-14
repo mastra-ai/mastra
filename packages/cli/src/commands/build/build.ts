@@ -79,11 +79,11 @@ export async function build({
         const { message, ...details } = error.toJSONDetails();
         logger.error(message, details);
       } else if (error instanceof Error) {
-        logger.error('Mastra Build failed', { error });
+        logger.error(`Mastra Build failed: ${error.message}`, { stack: error.stack });
       }
     } catch {
       if (error instanceof Error) {
-        logger.error('Mastra Build failed', { error });
+        logger.error(`Mastra Build failed: ${error.message}`, { stack: error.stack });
       }
     }
     process.exit(1);
