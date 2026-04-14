@@ -1,5 +1,26 @@
 # mastracode
 
+## 0.14.0-alpha.3
+
+### Minor Changes
+
+- Added /api-keys command to manage API keys for model providers. You can add, update, or remove keys directly, or access it from the settings menu. ([#15014](https://github.com/mastra-ai/mastra/pull/15014))
+
+### Patch Changes
+
+- Updated dependencies [[`f5e254f`](https://github.com/mastra-ai/mastra/commit/f5e254f2984c4aae25e26a34ac2e2bbd637b27a6), [`6544c97`](https://github.com/mastra-ai/mastra/commit/6544c974182bccfb31f48efff07671ac528d1533)]:
+  - @mastra/pg@1.9.1-alpha.0
+  - @mastra/libsql@1.8.1-alpha.0
+
+## 0.13.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`4ba3bb1`](https://github.com/mastra-ai/mastra/commit/4ba3bb1e465ad2ddaba3bbf2bc47e0faec32985e)]:
+  - @mastra/core@1.25.0-alpha.2
+  - @mastra/mcp@1.4.2
+  - @mastra/memory@1.15.1-alpha.1
+
 ## 0.13.1-alpha.1
 
 ### Patch Changes

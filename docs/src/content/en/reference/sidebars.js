@@ -386,6 +386,7 @@ const sidebars = {
         { type: 'doc', id: 'processors/message-history-processor', label: 'MessageHistory' },
         { type: 'doc', id: 'processors/moderation-processor', label: 'ModerationProcessor' },
         { type: 'doc', id: 'processors/pii-detector', label: 'PIIDetector' },
+        { type: 'doc', id: 'processors/prefill-error-handler', label: 'PrefillErrorHandler' },
         { type: 'doc', id: 'processors/processor-interface', label: 'Processor Interface' },
         {
           type: 'doc',

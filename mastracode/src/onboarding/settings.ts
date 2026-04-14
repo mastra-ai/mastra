@@ -77,6 +77,14 @@ export interface StagehandSettings {
   env: StagehandEnv;
   apiKey?: string;
   projectId?: string;
+  /** Whether to preserve the user data directory after the browser closes. */
+  preserveUserDataDir?: boolean;
+}
+
+/** AgentBrowser-specific browser settings. */
+export interface AgentBrowserSettings {
+  /** Path to a Playwright storage state file (JSON) containing cookies and localStorage. */
+  storageState?: string;
 }
 
 /** Browser configuration persisted in global settings. */
@@ -91,8 +99,16 @@ export interface BrowserSettings {
   viewport?: { width: number; height: number };
   /** CDP URL for connecting to an existing browser. */
   cdpUrl?: string;
+  /** Path to a Chrome/Chromium user data directory (profile). */
+  profile?: string;
+  /** Path to the browser executable to use. */
+  executablePath?: string;
+  /** Browser scope — 'shared' (all threads share one browser) or 'thread' (each thread gets its own). */
+  scope?: 'shared' | 'thread';
   /** Stagehand-specific settings. */
   stagehand?: StagehandSettings;
+  /** AgentBrowser-specific settings. */
+  agentBrowser?: AgentBrowserSettings;
 }
 
 export interface GlobalSettings {
@@ -301,6 +317,8 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
   const rawViewport = raw.viewport && typeof raw.viewport === 'object' ? (raw.viewport as Record<string, unknown>) : {};
   const rawStagehand =
     raw.stagehand && typeof raw.stagehand === 'object' ? (raw.stagehand as Record<string, unknown>) : {};
+  const rawAgentBrowser =
+    raw.agentBrowser && typeof raw.agentBrowser === 'object' ? (raw.agentBrowser as Record<string, unknown>) : {};
 
   return {
     enabled: typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULTS.browser.enabled,
@@ -310,10 +328,14 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
         : DEFAULTS.browser.provider,
     headless: typeof raw.headless === 'boolean' ? raw.headless : DEFAULTS.browser.headless,
     cdpUrl: typeof raw.cdpUrl === 'string' && raw.cdpUrl.trim() ? raw.cdpUrl.trim() : undefined,
+    profile: typeof raw.profile === 'string' && raw.profile.trim() ? raw.profile.trim() : undefined,
+    executablePath:
+      typeof raw.executablePath === 'string' && raw.executablePath.trim() ? raw.executablePath.trim() : undefined,
     viewport: {
       width: typeof rawViewport.width === 'number' ? rawViewport.width : DEFAULTS.browser.viewport!.width,
       height: typeof rawViewport.height === 'number' ? rawViewport.height : DEFAULTS.browser.viewport!.height,
     },
+    scope: typeof raw.scope === 'string' && (raw.scope === 'shared' || raw.scope === 'thread') ? raw.scope : undefined,
     stagehand: {
       env:
         typeof rawStagehand.env === 'string' && STAGEHAND_ENVS.has(rawStagehand.env as StagehandEnv)
@@ -325,7 +347,14 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
       ...(typeof rawStagehand.projectId === 'string' && rawStagehand.projectId.trim()
         ? { projectId: rawStagehand.projectId.trim() }
         : {}),
+      ...(typeof rawStagehand.preserveUserDataDir === 'boolean'
+        ? { preserveUserDataDir: rawStagehand.preserveUserDataDir }
+        : {}),
     },
+    agentBrowser:
+      typeof rawAgentBrowser.storageState === 'string' && rawAgentBrowser.storageState.trim()
+        ? { storageState: rawAgentBrowser.storageState.trim() }
+        : undefined,
   };
 }
 
@@ -653,6 +682,59 @@ export function saveSettings(settings: GlobalSettings, filePath: string = getSet
   writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf-8');
 }
 
+/** Marker file name to track which provider last used a profile. */
+const PROFILE_PROVIDER_MARKER = '.mastra-provider';
+
+/**
+ * Check which provider last used a profile directory.
+ * Returns the provider name if the marker exists, undefined otherwise.
+ */
+export function getProfileProvider(profilePath: string): BrowserProvider | undefined {
+  const markerPath = join(profilePath, PROFILE_PROVIDER_MARKER);
+  if (!existsSync(markerPath)) {
+    return undefined;
+  }
+  try {
+    const content = readFileSync(markerPath, 'utf-8').trim();
+    if (content === 'stagehand' || content === 'agent-browser') {
+      return content;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Write the provider marker to a profile directory.
+ * Creates the directory if it doesn't exist.
+ */
+export function setProfileProvider(profilePath: string, provider: BrowserProvider): void {
+  const markerPath = join(profilePath, PROFILE_PROVIDER_MARKER);
+  if (!existsSync(profilePath)) {
+    mkdirSync(profilePath, { recursive: true });
+  }
+  writeFileSync(markerPath, provider, 'utf-8');
+}
+
+/**
+ * Check if a profile has a provider mismatch.
+ * Returns the existing provider if there's a mismatch, undefined otherwise.
+ */
+export function checkProfileProviderMismatch(
+  profilePath: string | undefined,
+  targetProvider: BrowserProvider,
+): BrowserProvider | undefined {
+  if (!profilePath) {
+    return undefined;
+  }
+  const existingProvider = getProfileProvider(profilePath);
+  if (existingProvider && existingProvider !== targetProvider) {
+    return existingProvider;
+  }
+  return undefined;
+}
+
 /**
  * Create a browser instance from settings.
  * Shared by startup (main.ts) and live reconfiguration (/browser command).
@@ -663,25 +745,31 @@ export async function createBrowserFromSettings(settings: BrowserSettings): Prom
     return undefined;
   }
 
-  const { provider, headless, viewport, cdpUrl, stagehand } = settings;
+  const { provider, headless, viewport, cdpUrl, profile, executablePath, stagehand, agentBrowser } = settings;
+
+  // Chrome only allows one process per profile directory, so force 'shared' scope
+  // when a profile is set. Otherwise use the user's setting (or provider default).
+  const scope = profile ? ('shared' as const) : settings.scope;
+
+  // Common launch options (no CDP)
+  const launchConfig = { headless, viewport, profile, executablePath, scope } as const;
 
   if (provider === 'stagehand') {
     const { StagehandBrowser } = await import('@mastra/stagehand');
-    return new StagehandBrowser({
-      headless,
-      viewport,
-      cdpUrl,
+    const stagehandOpts = {
       env: stagehand?.env ?? 'LOCAL',
       apiKey: stagehand?.apiKey ?? process.env.BROWSERBASE_API_KEY,
       projectId: stagehand?.projectId ?? process.env.BROWSERBASE_PROJECT_ID,
-    });
+      preserveUserDataDir: stagehand?.preserveUserDataDir,
+    };
+    return cdpUrl
+      ? new StagehandBrowser({ ...launchConfig, cdpUrl, scope: 'shared', ...stagehandOpts })
+      : new StagehandBrowser({ ...launchConfig, ...stagehandOpts });
   } else if (provider === 'agent-browser') {
     const { AgentBrowser } = await import('@mastra/agent-browser');
-    return new AgentBrowser({
-      headless,
-      viewport,
-      cdpUrl,
-    });
+    return cdpUrl
+      ? new AgentBrowser({ ...launchConfig, cdpUrl, scope: 'shared', storageState: agentBrowser?.storageState })
+      : new AgentBrowser({ ...launchConfig, storageState: agentBrowser?.storageState, scope });
   }
 
   throw new Error(`Unsupported browser provider: ${provider}`);

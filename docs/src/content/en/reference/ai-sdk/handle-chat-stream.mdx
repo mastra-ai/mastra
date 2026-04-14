@@ -17,6 +17,23 @@ Framework-agnostic handler for streaming agent chat in AI SDK-compatible format.
 
 Use [`chatRoute()`](/reference/ai-sdk/chat-route) if you want to create a chat route inside a Mastra server.
 
+## Structured output in UI streams
+
+When you pass `structuredOutput` to the underlying agent execution, the final structured output object is emitted in the AI SDK-compatible UI stream as a custom data part:
+
+```json
+{
+  "type": "data-structured-output",
+  "data": {
+    "object": {}
+  }
+}
+```
+
+The `object` field contains your full structured output value. Mastra emits this event for the final structured output object only. Partial structured output chunks are not exposed in the UI stream.
+
+Read this event with AI SDK UI's custom data handling, such as `onData`, or render it from message data parts.
+
 ## Usage example
 
 Next.js App Router example:
@@ -61,6 +78,13 @@ export async function POST(req: Request) {
     type: 'string',
     description: 'The ID of the agent to use for chat.',
     isOptional: false,
+  },
+  {
+    name: 'agentVersion',
+    type: "{ versionId: string } | { status?: 'draft' | 'published' }",
+    description:
+      "Selects a specific agent version. Pass `{ versionId: '<id>' }` to target an exact version, or `{ status: 'draft' }` / `{ status: 'published' }` to resolve by status. Requires the [Editor](/docs/editor/overview) to be configured.",
+    isOptional: true,
   },
   {
     name: 'params',

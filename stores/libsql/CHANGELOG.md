@@ -1,5 +1,11 @@
 # @mastra/libsql
 
+## 1.8.1-alpha.0
+
+### Patch Changes
+
+- Fixed "column does not exist" errors when using experiment review features on databases created before the review pipeline was introduced. Startup now automatically migrates older experiment tables to the latest schema. ([#15304](https://github.com/mastra-ai/mastra/pull/15304))
+
 ## 1.8.0
 
 ### Minor Changes

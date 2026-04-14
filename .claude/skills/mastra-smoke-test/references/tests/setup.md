@@ -15,7 +15,7 @@ One project can target multiple environments using separate config files:
 | Production  | `.mastra-project.json`         | `https://platform.mastra.ai`         | `*.studio.mastra.cloud`         |
 
 - **Local** = Running your Mastra project with `pnpm dev` (no cloud deploy)
-- **Staging/Production** = Deploying to Mastra Cloud
+- **Staging/Production** = Deploying to Mastra platform
 
 ### Setting Up Multi-Environment
 

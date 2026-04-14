@@ -167,6 +167,34 @@ describe('createTool with providerOptions', () => {
   });
 });
 
+describe('createTool with strict mode', () => {
+  it('should preserve strict when creating a tool', () => {
+    const strictTool = createTool({
+      id: 'strict-tool',
+      description: 'A tool with strict input generation',
+      strict: true,
+      inputSchema: z.object({
+        city: z.string(),
+      }),
+      execute: async ({ city }) => ({ result: city }),
+    });
+
+    expect(strictTool.strict).toBe(true);
+  });
+
+  it('should preserve strict through Tool class constructor', () => {
+    const tool = new Tool({
+      id: 'strict-direct-tool',
+      description: 'Tool created directly with strict mode',
+      strict: true,
+      inputSchema: z.object({ value: z.string() }),
+      execute: async ({ value }) => ({ result: value }),
+    });
+
+    expect(tool.strict).toBe(true);
+  });
+});
+
 describe('AgentToolExecutionContext', () => {
   it('should include agentId in context.agent when flat agent context is reorganized', async () => {
     let capturedContext: any;
