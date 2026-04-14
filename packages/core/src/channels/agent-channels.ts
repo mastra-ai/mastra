@@ -681,11 +681,8 @@ export class AgentChannels {
    * Returns API routes for receiving webhook events from each adapter.
    * One POST route per adapter at `/api/agents/{agentId}/channels/{platform}/webhook`.
    */
-  getWebhookRoutes(mastra?: Mastra): ApiRoute[] {
-    if (!this.agent) return [];
-    if (mastra) {
-      this.initialize(mastra).catch(() => {});
-    }
+  getWebhookRoutes(): ApiRoute[] {
+if (!this.agent) return [];
 
     const agentId = this.agent.id;
     const routes: ApiRoute[] = [];
