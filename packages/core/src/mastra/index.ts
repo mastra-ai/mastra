@@ -672,7 +672,7 @@ export class Mastra<
 
     this.#storage = storage;
 
-    if (config?.backgroundTasks?.enabled !== false) {
+    if (config?.backgroundTasks?.enabled !== false && this.#storage) {
       // Sync creation, async init is fire-and-forget but manager is available immediately
       const bgManager = new BackgroundTaskManager(config?.backgroundTasks);
       bgManager.__registerMastra(this);
