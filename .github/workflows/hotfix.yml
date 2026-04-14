@@ -56,10 +56,12 @@ jobs:
 
       - name: Build hotfix branch
         id: hotfix
-        run: pnpm tsx packages/_changeset-cli/src/git/hotfix.ts "${{ github.event.inputs.pr_numbers }}" --branch "${{ github.event.inputs.hotfix_branch }}"
+        run: pnpm tsx packages/_changeset-cli/src/git/hotfix.ts "$PR_NUMBERS" --branch "$HOTFIX_BRANCH"
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
           HUSKY: 0
+          PR_NUMBERS: ${{ github.event.inputs.pr_numbers }}
+          HOTFIX_BRANCH: ${{ github.event.inputs.hotfix_branch }}
 
       - name: Summarize hotfix branch
         run: |
@@ -69,6 +71,8 @@ jobs:
       - name: Trigger hotfix publish
         if: ${{ github.event.inputs.publish_now == 'true' }}
         uses: actions/github-script@v8
+        env:
+          HOTFIX_BRANCH: ${{ steps.hotfix.outputs.hotfix_branch }}
         with:
           github-token: ${{ steps.app-auth.outputs.token }}
           script: |
@@ -79,7 +83,7 @@ jobs:
               ref: 'main',
               inputs: {
                 publish_type: 'hotfix',
-                hotfix_branch: `${{ steps.hotfix.outputs.hotfix_branch }}`,
+                hotfix_branch: process.env.HOTFIX_BRANCH,
                 dry_run: 'false',
               },
             });

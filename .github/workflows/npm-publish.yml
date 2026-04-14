@@ -245,6 +245,20 @@ jobs:
       - name: Build packages
         run: pnpm build
 
+      - name: Validate hotfix merge back into main
+        run: |
+          git fetch origin main
+          git checkout -B hotfix-merge-check origin/main
+          if git merge --no-commit --no-ff "origin/$HOTFIX_BRANCH"; then
+            git merge --abort
+          else
+            git merge --abort || true
+            echo "Hotfix branch cannot be merged cleanly back into origin/main."
+            exit 1
+          fi
+        env:
+          HOTFIX_BRANCH: ${{ github.event.inputs.hotfix_branch }}
+
       - name: Publish packages
         if: ${{ !inputs.dry_run }}
         run: pnpm publish -r --access public --no-git-checks
@@ -267,10 +281,11 @@ jobs:
         run: |
           git fetch origin main
           git checkout -B hotfix-main origin/main
-          git merge --no-ff -m 'chore: merge hotfix release into main' "origin/${{ github.event.inputs.hotfix_branch }}"
+          git merge --no-ff -m 'chore: merge hotfix release into main' "origin/$HOTFIX_BRANCH"
           git push origin HEAD:main
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+          HOTFIX_BRANCH: ${{ github.event.inputs.hotfix_branch }}
 
       - name: Close tracking PR
         if: ${{ !inputs.dry_run }}
@@ -302,9 +317,10 @@ jobs:
 
       - name: Delete hotfix branch
         if: ${{ !inputs.dry_run }}
-        run: git push origin --delete "${{ github.event.inputs.hotfix_branch }}"
+        run: git push origin --delete "$HOTFIX_BRANCH"
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+          HOTFIX_BRANCH: ${{ github.event.inputs.hotfix_branch }}
 
   enter_prerelease:
     needs: stable
