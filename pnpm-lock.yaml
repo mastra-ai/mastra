@@ -1569,11 +1569,11 @@ importers:
   observability/arize:
     dependencies:
       '@arizeai/openinference-genai':
-        specifier: 0.1.6
-        version: 0.1.6(@opentelemetry/api@1.9.0)(@opentelemetry/semantic-conventions@1.40.0)
+        specifier: 0.1.7
+        version: 0.1.7(@opentelemetry/api@1.9.0)(@opentelemetry/semantic-conventions@1.40.0)
       '@arizeai/openinference-semantic-conventions':
         specifier: ^2.1.7
-        version: 2.1.7
+        version: 2.2.0
       '@mastra/otel-exporter':
         specifier: workspace:*
         version: link:../otel-exporter
@@ -1627,11 +1627,11 @@ importers:
   observability/arthur:
     dependencies:
       '@arizeai/openinference-genai':
-        specifier: 0.1.6
-        version: 0.1.6(@opentelemetry/api@1.9.0)(@opentelemetry/semantic-conventions@1.40.0)
+        specifier: 0.1.7
+        version: 0.1.7(@opentelemetry/api@1.9.0)(@opentelemetry/semantic-conventions@1.40.0)
       '@arizeai/openinference-semantic-conventions':
         specifier: ^2.1.7
-        version: 2.1.7
+        version: 2.2.0
       '@mastra/otel-exporter':
         specifier: workspace:*
         version: link:../otel-exporter
@@ -7364,14 +7364,14 @@ packages:
     resolution: {integrity: sha512-MZ2/nT/uCJDH5Fk3xT9pz7TUcMFZPv5cs2iiomAOb2J1eimc3LbbKy7doPjtfOlLZHVeMiTzPNqsvE+8barK8w==}
     hasBin: true
 
-  '@arizeai/openinference-genai@0.1.6':
-    resolution: {integrity: sha512-SYXKe/wKS5rrXfq2nrxvNqy3qtJzZeIp3AWAMWzmkKqd5e0R/jAquuAawhIY8Jxof0jhuhYm/QBsE+tqEg8fkg==}
+  '@arizeai/openinference-genai@0.1.7':
+    resolution: {integrity: sha512-w1sevI+y1tFusyzlLkuI7mdT87IsvO9cBGljxB0cd/tM9/TWV5/A0m9fZd/hys/jgMRRQCU+AW4tGBWcCZ/WCQ==}
     peerDependencies:
       '@opentelemetry/api': '>=1.9.0'
       '@opentelemetry/semantic-conventions': '>=1.37.0'
 
-  '@arizeai/openinference-semantic-conventions@2.1.7':
-    resolution: {integrity: sha512-KyBfwxkSusPvxHBaW/TJ0japEbXCNziW9o6/IRKiPu+gp5TMKIagV2NKvt47rWYa4Jc0Nl+SvAPm+yxkdJqVbg==}
+  '@arizeai/openinference-semantic-conventions@2.2.0':
+    resolution: {integrity: sha512-jyVeggDSuVFyOXWXqShKsRxHc5RrE7jRN2D0LGMGYDbo4oHeCJCgUezHQITT7t7FPNQxj5O+NcqERhznnDx6UQ==}
 
   '@ark/schema@0.56.0':
     resolution: {integrity: sha512-ECg3hox/6Z/nLajxXqNhgPtNdHWC9zNsDyskwO28WinoFEnWow4IsERNz9AnXRhTZJnYIlAJ4uGn3nlLk65vZA==}
@@ -26165,13 +26165,13 @@ snapshots:
 
   '@arcadeai/arcadejs@2.3.0': {}
 
-  '@arizeai/openinference-genai@0.1.6(@opentelemetry/api@1.9.0)(@opentelemetry/semantic-conventions@1.40.0)':
+  '@arizeai/openinference-genai@0.1.7(@opentelemetry/api@1.9.0)(@opentelemetry/semantic-conventions@1.40.0)':
     dependencies:
-      '@arizeai/openinference-semantic-conventions': 2.1.7
+      '@arizeai/openinference-semantic-conventions': 2.2.0
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/semantic-conventions': 1.40.0
 
-  '@arizeai/openinference-semantic-conventions@2.1.7': {}
+  '@arizeai/openinference-semantic-conventions@2.2.0': {}
 
   '@ark/schema@0.56.0':
     dependencies:
