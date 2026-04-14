@@ -225,6 +225,22 @@ describe('DatadogBridge', () => {
       expect(bridge['isDisabled']).toBe(false);
     });
 
+    it('defaults agentless to false (assumes local Datadog Agent)', () => {
+      const bridge = new DatadogBridge({ mlApp: 'test-app' });
+
+      // Bridge does not require apiKey because agentless defaults to false
+      expect(bridge['isDisabled']).toBe(false);
+    });
+
+    it('respects DD_LLMOBS_AGENTLESS_ENABLED=true env var', () => {
+      process.env.DD_LLMOBS_AGENTLESS_ENABLED = 'true';
+
+      // Without apiKey, agentless mode should disable the bridge
+      const bridge = new DatadogBridge({ mlApp: 'test-app' });
+
+      expect(bridge['isDisabled']).toBe(true);
+    });
+
     it('prefers config values over environment variables', () => {
       process.env.DD_LLMOBS_ML_APP = 'env-app';
 

@@ -539,6 +539,11 @@ const sidebars = {
               items: [
                 {
                   type: 'doc',
+                  id: 'observability/tracing/bridges/datadog',
+                  label: 'Datadog',
+                },
+                {
+                  type: 'doc',
                   id: 'observability/tracing/bridges/otel',
                   label: 'OpenTelemetry',
                 },
