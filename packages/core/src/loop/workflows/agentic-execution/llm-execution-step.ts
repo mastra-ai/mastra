@@ -45,6 +45,8 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   tools?: ToolSet;
   messageId: string;
   includeRawChunks?: boolean;
+  provider?: string;
+  modelId?: string;
   messageList: MessageList;
   outputStream: MastraModelOutput<OUTPUT>;
   runState: AgenticRunState;
@@ -107,6 +109,8 @@ async function processOutputStream<OUTPUT = undefined>({
   controller,
   responseFromModel,
   includeRawChunks,
+  provider,
+  modelId,
   logger,
   transportRef,
   transportResolver,
@@ -508,7 +512,11 @@ async function processOutputStream<OUTPUT = undefined>({
           fallbackMessage: 'Unknown error in agent stream',
         });
         safeEnqueue(controller, { ...chunk, payload: { ...chunk.payload, error } });
-        await options?.onError?.({ error });
+        await options?.onError?.({
+          error,
+          ...(provider && { provider }),
+          ...(modelId && { modelId }),
+        });
         break;
 
       // Provider-executed tool results (e.g. web_search). Client tool results
@@ -1105,6 +1113,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             messageList,
             runState,
             options,
+            provider: model?.provider,
+            modelId: model?.modelId,
             controller,
             responseFromModel: {
               warnings,

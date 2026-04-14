@@ -82,9 +82,15 @@ export type PrepareStepFunction = (
   args: ProcessInputStepArgs,
 ) => Promise<ProcessInputStepResult | undefined | void> | ProcessInputStepResult | undefined | void;
 
+export type LoopErrorInfo = {
+  error: Error | string;
+  provider?: string;
+  modelId?: string;
+};
+
 export type LoopConfig<OUTPUT = undefined> = {
   onChunk?: (chunk: ChunkType<OUTPUT>) => Promise<void> | void;
-  onError?: ({ error }: { error: Error | string }) => Promise<void> | void;
+  onError?: (errorInfo: LoopErrorInfo) => Promise<void> | void;
   onFinish?: MastraOnFinishCallback<OUTPUT>;
   onStepFinish?: MastraOnStepFinishCallback<OUTPUT>;
   onAbort?: (event: any) => Promise<void> | void;

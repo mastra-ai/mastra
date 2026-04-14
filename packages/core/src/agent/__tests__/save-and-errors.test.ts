@@ -3,6 +3,7 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { noopLogger } from '../../logger';
 import { MockMemory } from '../../memory/mock';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
@@ -1283,6 +1284,73 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         expect(errorCaught).toBe(true);
         expect(caughtError).toBeDefined();
         expect(caughtError.message).toMatch(/Simulated stream error/);
+      });
+
+      it('should pass resolved model metadata through onError for stream failures', async () => {
+        if (version === 'v1') return;
+
+        const upstreamError = new APICallError({
+          message: 'Google Vertex request timed out',
+          url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:streamGenerateContent',
+          requestBodyValues: {},
+          statusCode: 504,
+        });
+
+        const errorModel = new MockLanguageModelV2({
+          provider: 'google-vertex',
+          modelId: 'gemini-2.5-pro',
+          doGenerate() {
+            throw upstreamError;
+          },
+          doStream() {
+            throw upstreamError;
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-options-onerror-upstream-metadata',
+          name: 'Test Options OnError Upstream Metadata',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        const logger = {
+          ...noopLogger,
+          error: vi.fn(),
+        };
+        agent.__setLogger(logger);
+
+        let caughtError: Error | string | null = null;
+        let caughtProvider: string | undefined;
+        let caughtModelId: string | undefined;
+
+        const stream = await agent.stream('Hello', {
+          onError: ({ error, provider, modelId }) => {
+            caughtError = error;
+            caughtProvider = provider;
+            caughtModelId = modelId;
+          },
+          modelSettings: {
+            maxRetries: 0,
+          },
+        });
+
+        try {
+          await stream.consumeStream();
+        } catch {}
+
+        expect(caughtError).toBe(upstreamError);
+        expect(caughtProvider).toBe('google-vertex');
+        expect(caughtModelId).toBe('gemini-2.5-pro');
+        expect(logger.error).toHaveBeenCalledWith(
+          'Upstream LLM API error from google-vertex (model: gemini-2.5-pro)',
+          expect.objectContaining({
+            error: upstreamError,
+            runId: expect.any(String),
+            provider: 'google-vertex',
+            modelId: 'gemini-2.5-pro',
+          }),
+        );
       });
 
       it('should call options.onChunk when streaming in stream', async () => {

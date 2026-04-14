@@ -1,5 +1,6 @@
 import { APICallError } from '@internal/ai-sdk-v5';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
+import { getErrorFromUnknown } from '../../../error/utils.js';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraMemory } from '../../../memory/memory';
@@ -219,45 +220,8 @@ export function createMapResultsStep<OUTPUT = undefined>({
         ...(options.prepareStep && { prepareStep: options.prepareStep }),
         onFinish: async (payload: any) => {
           if (payload.finishReason === 'error') {
-            const provider = payload.model?.provider;
-            const modelId = payload.model?.modelId;
-            const isUpstreamError = APICallError.isInstance(payload.error);
-
-            if (isUpstreamError) {
-              capabilities.logger.error('Upstream LLM API error', {
-                error: payload.error,
-                runId,
-                ...(provider && { provider }),
-                ...(modelId && { modelId }),
-              });
-            } else {
-              capabilities.logger.error('Error in agent stream', {
-                error: payload.error,
-                runId,
-                ...(provider && { provider }),
-                ...(modelId && { modelId }),
-              });
-            }
-
-            const error =
-              payload.error instanceof Error
-                ? payload.error
-                : new MastraError(
-                    {
-                      id: 'AGENT_STREAM_ERROR',
-                      domain: ErrorDomain.AGENT,
-                      category: ErrorCategory.SYSTEM,
-                      details: { runId },
-                    },
-                    payload.error,
-                  );
-            // End the AGENT_RUN span so the trace is exported.
-            // Without this, the span is orphaned and exporters that wait
-            // for the root span to end (e.g. Datadog) never emit the trace.
-            agentSpan?.error({ error, endSpan: true });
             return;
           }
-
           // Skip memory persistence when the abort signal has fired.
           // The LLM response may have continued after the caller disconnected,
           // and we should not persist a partial or full response for an aborted request.
@@ -321,7 +285,31 @@ export function createMapResultsStep<OUTPUT = undefined>({
         },
         onStepFinish: result.onStepFinish,
         onChunk: options.onChunk,
-        onError: options.onError,
+        onError: async (errorInfo: Parameters<NonNullable<InnerAgentExecutionOptions<OUTPUT>['onError']>>[0]) => {
+          const { error, provider, modelId } = errorInfo;
+          const isUpstreamError = APICallError.isInstance(error);
+          const streamError = getErrorFromUnknown(error, { supportSerialization: false });
+
+          if (isUpstreamError) {
+            const providerInfo = provider ? ` from ${provider}` : '';
+            const modelInfo = modelId ? ` (model: ${modelId})` : '';
+            capabilities.logger.error(`Upstream LLM API error${providerInfo}${modelInfo}`, {
+              error: streamError,
+              runId,
+              ...(provider && { provider }),
+              ...(modelId && { modelId }),
+            });
+          } else {
+            capabilities.logger.error('Error in agent stream', {
+              error: streamError,
+              runId,
+            });
+          }
+
+          agentSpan?.error({ error: streamError, endSpan: true });
+
+          await options.onError?.(errorInfo);
+        },
         onAbort: options.onAbort,
         abortSignal: options.abortSignal,
       },
