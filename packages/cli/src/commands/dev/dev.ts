@@ -334,9 +334,48 @@ async function rebundleAndRestart(
     if (currentServerProcess) {
       devLogger.restarting();
       devLogger.debug('Stopping current server...');
-      currentServerProcess.kill('SIGINT');
-      await waitForProcessExit(currentServerProcess);
-      currentServerProcess = undefined;
+      const serverProcess = currentServerProcess;
+      // Wait for the process to exit before starting a new one
+      await new Promise<void>(resolve => {
+        if (serverProcess.exitCode !== null || serverProcess.signalCode !== null) {
+          resolve();
+          return;
+        }
+
+        let timeout: NodeJS.Timeout | undefined;
+        const handleExit = () => {
+          if (timeout) {
+            clearTimeout(timeout);
+          }
+          resolve();
+        };
+
+        serverProcess.once('exit', handleExit);
+
+        try {
+          serverProcess.kill('SIGINT');
+        } catch {
+          if (serverProcess.exitCode !== null || serverProcess.signalCode !== null) {
+            serverProcess.off('exit', handleExit);
+            resolve();
+          }
+          return;
+        }
+
+        timeout = setTimeout(() => {
+          try {
+            serverProcess.kill('SIGKILL');
+          } catch {
+            if (serverProcess.exitCode !== null || serverProcess.signalCode !== null) {
+              serverProcess.off('exit', handleExit);
+              resolve();
+            }
+          }
+        }, 5000);
+      });
+      if (currentServerProcess === serverProcess) {
+        currentServerProcess = undefined;
+      }
     }
 
     const env = await bundler.loadEnvVars();
