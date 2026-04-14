@@ -675,6 +675,11 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
         timeoutMs: 300_000,
         createdAt: new Date(),
       });
+
+      await backgroundTasks.updateTask('test-background-task-id', {
+        status: 'running',
+        startedAt: new Date(),
+      });
     }
 
     const saveStoredResponseFixtures = async (memoryStore: Awaited<ReturnType<InMemoryStore['getStore']>>) => {

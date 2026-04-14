@@ -164,7 +164,7 @@ describe('Background Tasks handlers', () => {
 
       const result = await GET_BACKGROUND_TASK_ROUTE.handler({
         mastra,
-        taskId: task.id,
+        backgroundTaskId: task.id,
         requestContext: {} as any,
         abortSignal: new AbortController().signal,
       } as any);
@@ -178,7 +178,7 @@ describe('Background Tasks handlers', () => {
       await expect(
         GET_BACKGROUND_TASK_ROUTE.handler({
           mastra,
-          taskId: 'nonexistent',
+          backgroundTaskId: 'nonexistent',
           requestContext: {} as any,
           abortSignal: new AbortController().signal,
         } as any),
@@ -191,7 +191,7 @@ describe('Background Tasks handlers', () => {
       await expect(
         GET_BACKGROUND_TASK_ROUTE.handler({
           mastra: noTasksMastra,
-          taskId: 'any',
+          backgroundTaskId: 'any',
           requestContext: {} as any,
           abortSignal: new AbortController().signal,
         } as any),

@@ -8,6 +8,7 @@ function makeTask(overrides: Partial<BackgroundTask> = {}): BackgroundTask {
     id: crypto.randomUUID(),
     status: 'pending',
     toolName: 'test-tool',
+    runId: 'run-1',
     toolCallId: 'call-1',
     args: { query: 'test' },
     agentId: 'agent-1',
@@ -97,7 +98,7 @@ describe('BackgroundTasksInMemory', () => {
       await storage.createTask(makeTask({ id: '3' }));
 
       const result = await storage.listTasks({});
-      expect(result.length).toBe(3);
+      expect(result.total).toBe(3);
     });
 
     it('filters by status', async () => {
@@ -106,11 +107,11 @@ describe('BackgroundTasksInMemory', () => {
       await storage.createTask(makeTask({ id: '3', status: 'completed' }));
 
       const pending = await storage.listTasks({ status: 'pending' });
-      expect(pending.length).toBe(1);
-      expect(pending[0]!.id).toBe('1');
+      expect(pending.total).toBe(1);
+      expect(pending.tasks[0]!.id).toBe('1');
 
       const multiple = await storage.listTasks({ status: ['pending', 'running'] });
-      expect(multiple.length).toBe(2);
+      expect(multiple.total).toBe(2);
     });
 
     it('filters by agentId', async () => {
@@ -118,8 +119,8 @@ describe('BackgroundTasksInMemory', () => {
       await storage.createTask(makeTask({ id: '2', agentId: 'a2' }));
 
       const result = await storage.listTasks({ agentId: 'a1' });
-      expect(result.length).toBe(1);
-      expect(result[0]!.agentId).toBe('a1');
+      expect(result.total).toBe(1);
+      expect(result.tasks[0]!.agentId).toBe('a1');
     });
 
     it('filters by threadId', async () => {
@@ -128,7 +129,7 @@ describe('BackgroundTasksInMemory', () => {
       await storage.createTask(makeTask({ id: '3' })); // no threadId
 
       const result = await storage.listTasks({ threadId: 't1' });
-      expect(result.length).toBe(1);
+      expect(result.total).toBe(1);
     });
 
     it('filters by toolName', async () => {
@@ -136,7 +137,7 @@ describe('BackgroundTasksInMemory', () => {
       await storage.createTask(makeTask({ id: '2', toolName: 'lookup' }));
 
       const result = await storage.listTasks({ toolName: 'research' });
-      expect(result.length).toBe(1);
+      expect(result.total).toBe(1);
     });
 
     it('filters by date ranges', async () => {
@@ -148,13 +149,13 @@ describe('BackgroundTasksInMemory', () => {
       await storage.createTask(makeTask({ id: '2', createdAt: now }));
       await storage.createTask(makeTask({ id: '3', createdAt: future }));
 
-      const result = await storage.listTasks({ createdBefore: now });
-      expect(result.length).toBe(1);
-      expect(result[0]!.id).toBe('1');
+      const result = await storage.listTasks({ toDate: now, dateFilterBy: 'createdAt' });
+      expect(result.total).toBe(1);
+      expect(result.tasks[0]!.id).toBe('1');
 
-      const result2 = await storage.listTasks({ createdAfter: now });
-      expect(result2.length).toBe(1);
-      expect(result2[0]!.id).toBe('3');
+      const result2 = await storage.listTasks({ fromDate: now, dateFilterBy: 'createdAt' });
+      expect(result2.total).toBe(2);
+      expect(result2.tasks[0]!.id).toBe('2');
     });
 
     it('filters by completedBefore', async () => {
@@ -165,9 +166,9 @@ describe('BackgroundTasksInMemory', () => {
       await storage.createTask(makeTask({ id: '2', status: 'completed', completedAt: now }));
       await storage.createTask(makeTask({ id: '3', status: 'pending' })); // no completedAt
 
-      const result = await storage.listTasks({ completedBefore: now });
-      expect(result.length).toBe(1);
-      expect(result[0]!.id).toBe('1');
+      const result = await storage.listTasks({ toDate: now, dateFilterBy: 'completedAt' });
+      expect(result.total).toBe(1);
+      expect(result.tasks[0]!.id).toBe('1');
     });
 
     it('sorts by createdAt ascending (default)', async () => {
@@ -180,7 +181,7 @@ describe('BackgroundTasksInMemory', () => {
       await storage.createTask(makeTask({ id: '2', createdAt: t2 }));
 
       const result = await storage.listTasks({});
-      expect(result.map(t => t.id)).toEqual(['1', '2', '3']);
+      expect(result.tasks.map(t => t.id)).toEqual(['1', '2', '3']);
     });
 
     it('sorts descending', async () => {
@@ -191,18 +192,19 @@ describe('BackgroundTasksInMemory', () => {
       await storage.createTask(makeTask({ id: '2', createdAt: t2 }));
 
       const result = await storage.listTasks({ orderDirection: 'desc' });
-      expect(result.map(t => t.id)).toEqual(['2', '1']);
+      expect(result.tasks.map(t => t.id)).toEqual(['2', '1']);
     });
 
-    it('supports limit and offset', async () => {
+    it('supports page and perPage', async () => {
       for (let i = 0; i < 5; i++) {
         await storage.createTask(makeTask({ id: `${i}`, createdAt: new Date(2024, 0, i + 1) }));
       }
 
-      const page = await storage.listTasks({ limit: 2, offset: 1 });
-      expect(page.length).toBe(2);
-      expect(page[0]!.id).toBe('1');
-      expect(page[1]!.id).toBe('2');
+      const page = await storage.listTasks({ perPage: 2, page: 0 });
+      expect(page.total).toBe(5);
+      expect(page.tasks.length).toBe(2);
+      expect(page.tasks[0]!.id).toBe('0');
+      expect(page.tasks[1]!.id).toBe('1');
     });
   });
 
@@ -215,8 +217,8 @@ describe('BackgroundTasksInMemory', () => {
       await storage.deleteTasks({ status: 'completed' });
 
       const all = await storage.listTasks({});
-      expect(all.length).toBe(1);
-      expect(all[0]!.id).toBe('3');
+      expect(all.total).toBe(1);
+      expect(all.tasks[0]!.id).toBe('3');
     });
 
     it('deletes with multiple status filter', async () => {
@@ -227,8 +229,8 @@ describe('BackgroundTasksInMemory', () => {
       await storage.deleteTasks({ status: ['completed', 'failed'] });
 
       const all = await storage.listTasks({});
-      expect(all.length).toBe(1);
-      expect(all[0]!.id).toBe('3');
+      expect(all.total).toBe(1);
+      expect(all.tasks[0]!.id).toBe('3');
     });
   });
 
@@ -271,7 +273,7 @@ describe('BackgroundTasksInMemory', () => {
       await storage.dangerouslyClearAll();
 
       const all = await storage.listTasks({});
-      expect(all.length).toBe(0);
+      expect(all.total).toBe(0);
     });
   });
 });
