@@ -27,6 +27,8 @@ type HotfixPullRequest = {
   url: string;
 };
 
+type TrackedHotfixPullRequest = Pick<HotfixPullRequest, 'number' | 'title'>;
+
 function run(
   command: string,
   args: string[],
@@ -69,13 +71,25 @@ function setGithubOutput(name: string, value: string) {
 }
 
 function normalizePrNumbers(prNumbers: string): number[] {
-  const normalized = prNumbers
+  const tokens = prNumbers
     .split(/[\s,]+/)
     .map(value => value.trim())
-    .filter(Boolean)
-    .map(value => Number.parseInt(value, 10));
+    .filter(Boolean);
 
-  if (normalized.length === 0 || normalized.some(value => Number.isNaN(value))) {
+  const normalized = tokens.map(value => {
+    if (!/^\d+$/.test(value)) {
+      throw new Error(`Please provide one or more valid pull request numbers.`);
+    }
+
+    const parsedValue = Number(value);
+    if (!Number.isSafeInteger(parsedValue) || parsedValue <= 0) {
+      throw new Error(`Please provide one or more valid pull request numbers.`);
+    }
+
+    return parsedValue;
+  });
+
+  if (normalized.length === 0) {
     throw new Error(`Please provide one or more valid pull request numbers.`);
   }
 
@@ -182,9 +196,37 @@ function commitVersionChanges(): boolean {
   return true;
 }
 
-async function createOrUpdateHotfixPr(branch: string, pullRequests: HotfixPullRequest[]) {
-  const body = ['## Hotfix source PRs', '', ...pullRequests.map(pr => `- #${pr.number} - ${pr.title}`)].join('\n');
+function parseTrackedPullRequests(body: string | null | undefined): TrackedHotfixPullRequest[] {
+  if (!body) {
+    return [];
+  }
 
+  const trackedPullRequests: TrackedHotfixPullRequest[] = [];
+
+  for (const line of body.split('\n')) {
+    const match = line.match(/^- #(\d+) - (.+)$/);
+
+    if (!match) {
+      continue;
+    }
+
+    const number = match[1];
+    const title = match[2];
+
+    if (!number || !title) {
+      continue;
+    }
+
+    trackedPullRequests.push({
+      number: Number(number),
+      title,
+    });
+  }
+
+  return trackedPullRequests;
+}
+
+async function createOrUpdateHotfixPr(branch: string, pullRequests: HotfixPullRequest[]) {
   const existingPullRequests = await octokit.pulls.list({
     owner,
     repo,
@@ -195,6 +237,19 @@ async function createOrUpdateHotfixPr(branch: string, pullRequests: HotfixPullRe
   });
 
   const existingPullRequest = existingPullRequests.data[0];
+  const trackedPullRequests = existingPullRequest ? parseTrackedPullRequests(existingPullRequest.body) : [];
+  const mergedPullRequests = [
+    ...trackedPullRequests,
+    ...pullRequests.map(pr => ({
+      number: pr.number,
+      title: pr.title,
+    })),
+  ].filter(
+    (pullRequest, index, array) => array.findIndex(existing => existing.number === pullRequest.number) === index,
+  );
+  const body = ['## Hotfix source PRs', '', ...mergedPullRequests.map(pr => `- #${pr.number} - ${pr.title}`)].join(
+    '\n',
+  );
 
   if (existingPullRequest) {
     const updatedPullRequest = await octokit.pulls.update({
@@ -279,8 +334,11 @@ async function hotfix({ prNumbers, branch }: { prNumbers: number[]; branch: stri
     run('git', ['push', '--set-upstream', 'origin', branch], { stdio: 'inherit' });
   }
 
-  const hotfixPullRequest = await createOrUpdateHotfixPr(branch, mergedPullRequests);
-  await commentOnSourcePullRequests(mergedPullRequests, branch, hotfixPullRequest.html_url);
+  const hotfixPullRequest = await createOrUpdateHotfixPr(branch, newlyCherryPickedPullRequests);
+
+  if (newlyCherryPickedPullRequests.length > 0) {
+    await commentOnSourcePullRequests(newlyCherryPickedPullRequests, branch, hotfixPullRequest.html_url);
+  }
 
   console.log(`Hotfix branch: ${branch}`);
   console.log(`Hotfix PR: ${hotfixPullRequest.html_url}`);
