@@ -1,7 +1,7 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 import type { ScoreRowData } from '@mastra/core/evals';
 import { ScoresDataList, DataListSkeleton, cn } from '@mastra/playground-ui';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
 
 const COLUMNS = 'auto auto 1fr auto auto';
@@ -37,6 +37,11 @@ export function ScoresList({
 }: ScoresListProps) {
   const [internalSelectedId, setInternalSelectedId] = useState<string | undefined>(controlledSelectedId);
   const selectedScoreId = controlledSelectedId ?? internalSelectedId;
+
+  // Sync internal selection when parent updates the controlled prop (e.g. browser back clearing ?scoreId)
+  useEffect(() => {
+    setInternalSelectedId(controlledSelectedId);
+  }, [controlledSelectedId]);
 
   const handleScoreClick = useCallback(
     (id: string) => {
