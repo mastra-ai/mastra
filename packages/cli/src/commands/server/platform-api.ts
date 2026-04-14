@@ -1,4 +1,4 @@
-import { withPollingRetries } from '../../utils/polling.js';
+import { withPollingRetries, isRetryablePollingError } from '../../utils/polling.js';
 import { createApiClient, throwApiError } from '../auth/client.js';
 import { getToken } from '../auth/credentials.js';
 import type { paths } from '../platform-api.js';
@@ -133,27 +133,38 @@ export async function uploadServerDeploy(
   let lastError: Error | undefined;
   let currentClient = client;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const { error: completeError, response: completeResponse } = await currentClient.POST(
-      '/v1/server/deploys/{id}/upload-complete',
-      { params: { path: { id } } },
-    );
+    let completeError: unknown;
+    let status: number | undefined;
 
-    if (!completeError) {
-      return { id, status: 'queued' };
+    try {
+      const result = await currentClient.POST('/v1/server/deploys/{id}/upload-complete', {
+        params: { path: { id } },
+      });
+      if (!result.error) {
+        return { id, status: 'queued' };
+      }
+      completeError = result.error;
+      status = result.response.status;
+    } catch (networkError) {
+      // Network-level failure (ECONNRESET, ETIMEDOUT, fetch failed, etc.)
+      completeError = networkError;
     }
 
-    const status = completeResponse.status;
+    // Determine if we should retry
+    const isRetryableStatus = status !== undefined && (status >= 500 || status === 401);
+    const isRetryableNetwork = isRetryablePollingError(completeError);
+    const isRetryable = isRetryableStatus || isRetryableNetwork;
 
-    // Only retry on transient failures: 5xx, 401 (token expiry), or network errors
-    const isRetryable = status >= 500 || status === 401;
     if (!isRetryable || attempt === maxRetries) {
-      lastError = new Error(`Upload confirmation failed: ${status}`);
+      const detail = status ? `${status}` : completeError instanceof Error ? completeError.message : 'unknown error';
+      lastError = new Error(`Upload confirmation failed: ${detail}`);
       break;
     }
 
     const delay = 1000 * Math.pow(2, attempt);
+    const detail = status ? `${status}` : completeError instanceof Error ? completeError.message : 'network error';
     console.warn(
-      `Upload confirmation failed (${status}), retrying in ${delay / 1000}s... (attempt ${attempt + 1}/${maxRetries})`,
+      `Upload confirmation failed (${detail}), retrying in ${delay / 1000}s... (attempt ${attempt + 1}/${maxRetries})`,
     );
 
     // On 401, refresh the token before retrying (same pattern as pollServerDeploy)
