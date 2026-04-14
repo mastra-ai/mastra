@@ -31,6 +31,7 @@ describe('BackgroundTaskManager', () => {
       globalConcurrency: 3,
       perAgentConcurrency: 2,
       defaultTimeoutMs: 5000,
+      enabled: true,
     });
     manager.__registerMastra(mastra);
     await manager.init(pubsub);
@@ -259,6 +260,7 @@ describe('BackgroundTaskManager', () => {
     it('backpressure reject throws on limit', async () => {
       const isolatedPubsub = new EventEmitterPubSub();
       const rejectManager = new BackgroundTaskManager({
+        enabled: true,
         globalConcurrency: 1,
         perAgentConcurrency: 1,
         backpressure: 'reject',
@@ -295,6 +297,7 @@ describe('BackgroundTaskManager', () => {
     it('backpressure fallback-sync returns signal', async () => {
       const isolatedPubsub = new EventEmitterPubSub();
       const syncManager = new BackgroundTaskManager({
+        enabled: true,
         globalConcurrency: 1,
         perAgentConcurrency: 1,
         backpressure: 'fallback-sync',
@@ -363,6 +366,7 @@ describe('BackgroundTaskManager', () => {
 
       const isolatedPubsub = new EventEmitterPubSub();
       const retryManager = new BackgroundTaskManager({
+        enabled: true,
         defaultRetries: { retryDelayMs: 0 },
       });
       retryManager.__registerMastra(mastra);
@@ -389,6 +393,7 @@ describe('BackgroundTaskManager', () => {
 
       const isolatedPubsub = new EventEmitterPubSub();
       const retryManager = new BackgroundTaskManager({
+        enabled: true,
         defaultRetries: { retryDelayMs: 0 },
       });
       retryManager.__registerMastra(mastra);
@@ -544,7 +549,7 @@ describe('BackgroundTaskManager', () => {
     it('invokes onTaskComplete callback', async () => {
       const onComplete = vi.fn();
       const isolatedPubsub = new EventEmitterPubSub();
-      const mgr = new BackgroundTaskManager({ onTaskComplete: onComplete });
+      const mgr = new BackgroundTaskManager({ enabled: true, onTaskComplete: onComplete });
       mgr.__registerMastra(mastra);
       await mgr.init(isolatedPubsub);
 
@@ -565,7 +570,7 @@ describe('BackgroundTaskManager', () => {
     it('invokes onTaskFailed callback', async () => {
       const onFailed = vi.fn();
       const isolatedPubsub = new EventEmitterPubSub();
-      const mgr = new BackgroundTaskManager({ onTaskFailed: onFailed });
+      const mgr = new BackgroundTaskManager({ enabled: true, onTaskFailed: onFailed });
       mgr.__registerMastra(mastra);
       await mgr.init(isolatedPubsub);
 
@@ -617,6 +622,7 @@ describe('BackgroundTaskManager', () => {
     it('deletes old completed tasks', async () => {
       const isolatedPubsub = new EventEmitterPubSub();
       const mgr = new BackgroundTaskManager({
+        enabled: true,
         cleanup: { completedTtlMs: 100, failedTtlMs: 200 },
       });
       mgr.__registerMastra(mastra);
@@ -645,6 +651,7 @@ describe('BackgroundTaskManager', () => {
     it('keeps recent completed tasks', async () => {
       const isolatedPubsub = new EventEmitterPubSub();
       const mgr = new BackgroundTaskManager({
+        enabled: true,
         cleanup: { completedTtlMs: 60_000 },
       });
       mgr.__registerMastra(mastra);
@@ -669,6 +676,7 @@ describe('BackgroundTaskManager', () => {
     it('deletes old failed tasks with separate TTL', async () => {
       const isolatedPubsub = new EventEmitterPubSub();
       const mgr = new BackgroundTaskManager({
+        enabled: true,
         cleanup: { completedTtlMs: 50, failedTtlMs: 100 },
       });
       mgr.__registerMastra(mastra);

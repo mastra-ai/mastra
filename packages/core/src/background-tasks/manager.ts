@@ -366,6 +366,9 @@ export class BackgroundTaskManager {
 
     return new ReadableStream({
       async start(controller) {
+        controller.enqueue({
+          type: 'start',
+        });
         // 1. Subscribe to live events first (so we don't miss anything between snapshot and subscribe)
         const handler = async (event: Event) => {
           const status = EVENT_STATUS_MAP[event.type];

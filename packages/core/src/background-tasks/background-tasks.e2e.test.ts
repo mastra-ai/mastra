@@ -74,6 +74,7 @@ describeE2E('Background Tasks E2E', () => {
     mastra = new Mastra({
       agents: { 'bg-test-agent': agent },
       backgroundTasks: {
+        enabled: true,
         globalConcurrency: 5,
         perAgentConcurrency: 3,
       },
@@ -115,9 +116,9 @@ describeE2E('Background Tasks E2E', () => {
     // Check the manager knows about the task
     const manager = mastra.backgroundTaskManager!;
     const tasks = await manager.listTasks({ toolName: 'research' });
-    expect(tasks.length).toBeGreaterThan(0);
+    expect(tasks.total).toBeGreaterThan(0);
 
-    const task = tasks[0]!;
+    const task = tasks.tasks[0]!;
     expect(task.status).toBe('completed');
     expect(task.result).toBeDefined();
     expect((task.result as any).summary).toContain('quantum computing');
@@ -180,7 +181,7 @@ describeE2E('Background Tasks E2E', () => {
     // The task should have completed in the manager
     const manager = mastra.backgroundTaskManager!;
     const tasks = await manager.listTasks({ toolName: 'research', status: 'completed' });
-    expect(tasks.length).toBeGreaterThan(0);
+    expect(tasks.total).toBeGreaterThan(0);
   }, 30_000);
 
   it('background task works alongside memory — second prompt processes while bg task runs', async () => {
@@ -208,6 +209,7 @@ describeE2E('Background Tasks E2E', () => {
     const memoryMastra = new Mastra({
       agents: { 'bg-memory-agent': memoryAgent },
       backgroundTasks: {
+        enabled: true,
         globalConcurrency: 5,
         perAgentConcurrency: 3,
       },
@@ -258,8 +260,8 @@ describeE2E('Background Tasks E2E', () => {
       // Background task should have completed
       const manager = memoryMastra.backgroundTaskManager!;
       const tasks = await manager.listTasks({ toolName: 'research', status: 'completed' });
-      expect(tasks.length).toBeGreaterThan(0);
-      expect((tasks[0]!.result as any).summary).toContain('neural networks');
+      expect(tasks.total).toBeGreaterThan(0);
+      expect((tasks.tasks[0]!.result as any).summary).toContain('neural networks');
 
       // --- Verify messages in memory ---
       const { messages } = await mockMemory.recall({

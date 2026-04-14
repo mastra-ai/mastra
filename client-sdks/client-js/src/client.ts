@@ -1860,8 +1860,8 @@ export class MastraClient extends BaseResource {
   /**
    * Gets a single background task by ID.
    */
-  public getBackgroundTask(taskId: string): Promise<BackgroundTaskResponse> {
-    return this.request(`/background-tasks/${encodeURIComponent(taskId)}`);
+  public getBackgroundTask(backgroundTaskId: string): Promise<BackgroundTaskResponse> {
+    return this.request(`/background-tasks/${encodeURIComponent(backgroundTaskId)}`);
   }
 
   /**

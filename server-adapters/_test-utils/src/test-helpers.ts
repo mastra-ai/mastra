@@ -453,6 +453,9 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     processors: {
       'test-processor': testProcessor,
     },
+    backgroundTasks: {
+      enabled: true,
+    },
   });
 
   // Mock getEditor to return an object with namespaced methods for stored agents routes
@@ -654,6 +657,23 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
           description: 'A test stored skill',
           instructions: 'Test skill instructions',
         },
+      });
+    }
+
+    const backgroundTasks = await storage.getStore('backgroundTasks');
+    if (backgroundTasks) {
+      await backgroundTasks.createTask({
+        id: 'test-background-task-id',
+        status: 'pending',
+        toolName: 'test-tool',
+        toolCallId: 'test-tool-call-id',
+        agentId: 'test-agent',
+        runId: 'test-run',
+        args: { query: 'test' },
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 300_000,
+        createdAt: new Date(),
       });
     }
 

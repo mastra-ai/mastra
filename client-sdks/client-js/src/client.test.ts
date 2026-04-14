@@ -786,18 +786,18 @@ describe('MastraClient', () => {
     });
 
     describe('getBackgroundTask', () => {
-      it('calls GET /background-tasks/:taskId', async () => {
-        const mockTask = { id: 'task-1', status: 'completed', toolName: 'tool' };
+      it('calls GET /background-tasks/:backgroundTaskId', async () => {
+        const mockTask = { id: 'background-task-1', status: 'completed', toolName: 'tool' };
         (global.fetch as any).mockResolvedValueOnce({
           ok: true,
           headers: { get: () => 'application/json' },
           json: async () => mockTask,
         });
 
-        const result = await client.getBackgroundTask('task-1');
+        const result = await client.getBackgroundTask('background-task-1');
 
         expect(global.fetch).toHaveBeenCalledWith(
-          'http://localhost:4111/api/background-tasks/task-1',
+          'http://localhost:4111/api/background-tasks/background-task-1',
           expect.any(Object),
         );
         expect(result).toEqual(mockTask);

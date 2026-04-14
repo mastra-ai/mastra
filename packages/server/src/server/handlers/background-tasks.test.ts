@@ -28,6 +28,7 @@ describe('Background Tasks handlers', () => {
       logger: false,
       storage,
       backgroundTasks: {
+        enabled: true,
         globalConcurrency: 5,
         perAgentConcurrency: 3,
       },

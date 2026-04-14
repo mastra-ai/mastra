@@ -16,9 +16,9 @@ export const backgroundTaskStreamQuerySchema = z.object({
   resourceId: z.string().optional(),
 });
 
-export const taskDateColumnSchema = z.enum(['createdAt', 'startedAt', 'completedAt']);
+export const backgroundTaskDateColumnSchema = z.enum(['createdAt', 'startedAt', 'completedAt']);
 
-export const listTasksQuerySchema = z.object({
+export const listBackgroundTasksQuerySchema = z.object({
   agentId: z.string().optional(),
   status: backgroundTaskStatusSchema.optional(),
   runId: z.string().optional(),
@@ -26,15 +26,15 @@ export const listTasksQuerySchema = z.object({
   resourceId: z.string().optional(),
   fromDate: z.coerce.date().optional(),
   toDate: z.coerce.date().optional(),
-  dateFilterBy: taskDateColumnSchema.optional(),
-  orderBy: taskDateColumnSchema.optional(),
+  dateFilterBy: backgroundTaskDateColumnSchema.optional(),
+  orderBy: backgroundTaskDateColumnSchema.optional(),
   orderDirection: z.enum(['asc', 'desc']).optional(),
   page: z.coerce.number().optional(),
   perPage: z.coerce.number().optional(),
 });
 
-export const taskIdPathParams = z.object({
-  taskId: z.string(),
+export const backgroundTaskIdPathParams = z.object({
+  backgroundTaskId: z.string(),
 });
 
 export const backgroundTaskResponseSchema = z.object({
