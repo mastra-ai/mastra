@@ -210,6 +210,54 @@ describe('MCP Tool Tracing', () => {
     expect(spanArgs.attributes).not.toHaveProperty('mcpServer');
     expect(spanArgs.attributes).not.toHaveProperty('serverVersion');
   });
+
+  describe('requireApproval Handling', () => {
+    it('should correctly handle function in this.options.requireApproval', () => {
+      const needsApprovalFn = (input: any) => input.value === 'secret';
+      const testTool = {
+        id: 'test-tool',
+        description: 'A test tool',
+        inputSchema: z.object({ value: z.string() }),
+        execute: async (input: any) => input,
+      };
+
+      const builder = new CoreToolBuilder({
+        originalTool: testTool as any,
+        options: {
+          name: 'test-tool',
+          requireApproval: needsApprovalFn as any,
+        },
+      });
+
+      const builtTool = builder.build();
+
+      // requireApproval should be true to trigger logic in tool-call-step
+      expect(builtTool.requireApproval).toBe(true);
+      // needsApprovalFn should be correctly assigned from options
+      expect((builtTool as any).needsApprovalFn).toBe(needsApprovalFn);
+    });
+
+    it('should correctly handle boolean in this.options.requireApproval', () => {
+      const testTool = {
+        id: 'test-tool',
+        description: 'A test tool',
+        inputSchema: z.object({ value: z.string() }),
+        execute: async (input: any) => input,
+      };
+
+      const builder = new CoreToolBuilder({
+        originalTool: testTool as any,
+        options: {
+          name: 'test-tool',
+          requireApproval: true,
+        },
+      });
+
+      const builtTool = builder.build();
+      expect(builtTool.requireApproval).toBe(true);
+      expect((builtTool as any).needsApprovalFn).toBeUndefined();
+    });
+  });
 });
 
 describe('Provider-defined Tool Handling', () => {

@@ -725,13 +725,22 @@ export class CoreToolBuilder extends MastraBase {
 
     // Map AI SDK's needsApproval to our requireApproval
     // needsApproval can be boolean or a function that takes input and returns boolean
-    let requireApproval = this.options.requireApproval;
+    let requireApproval = false;
     let needsApprovalFn: ((input: any) => boolean | Promise<boolean>) | undefined;
+
+    if (typeof this.options.requireApproval === 'function') {
+      requireApproval = true;
+      needsApprovalFn = this.options.requireApproval;
+    } else if (typeof this.options.requireApproval === 'boolean') {
+      requireApproval = this.options.requireApproval;
+      needsApprovalFn = undefined;
+    }
 
     if (isVercelTool(this.originalTool) && 'needsApproval' in this.originalTool) {
       const needsApproval = (this.originalTool as any).needsApproval;
       if (typeof needsApproval === 'boolean') {
         requireApproval = needsApproval;
+        needsApprovalFn = undefined;
       } else if (typeof needsApproval === 'function') {
         // Store the function to evaluate it per-call
         needsApprovalFn = needsApproval;
