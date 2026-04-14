@@ -35,7 +35,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
       await expect(page.locator('h2')).toContainText('OM Agent');
 
       // Click on the Memory tab to see OM sidebar
-      await page.getByRole('tab', { name: 'Memory' }).click();
+      await page.getByTestId('left-tab-memory').click();
 
       // ASSERT: OM sidebar section should be visible with progress bars
       // The sidebar should show "Observational Memory" section
@@ -60,7 +60,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
       await expect(page.locator('h2')).toContainText('OM Agent');
 
       // Click on the Memory tab to see OM sidebar
-      await page.getByRole('tab', { name: 'Memory' }).click();
+      await page.getByTestId('left-tab-memory').click();
 
       // Wait for OM section
       await expect(page.getByRole('heading', { name: 'Observational Memory' })).toBeVisible({ timeout: 10000 });
@@ -111,7 +111,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
       await expect(threadWrapper).toBeVisible({ timeout: 15000 });
 
       // Click on the Memory tab to see OM sidebar
-      await page.getByRole('tab', { name: 'Memory' }).click();
+      await page.getByTestId('left-tab-memory').click();
 
       // The OM sidebar should show activity (progress bars should have updated)
       await expect(page.getByText('Messages', { exact: true })).toBeVisible();
@@ -221,7 +221,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
       });
 
       // ASSERT: OM sidebar should show the observations
-      await page.getByRole('tab', { name: 'Memory' }).click();
+      await page.getByTestId('left-tab-memory').click();
       const omSection = page.getByRole('heading', { name: 'Observational Memory' });
       await expect(omSection).toBeVisible({ timeout: 10000 });
     });
@@ -256,7 +256,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
       await expect(threadWrapper.getByText(/Reflected.*→.*tokens/i).first()).toBeVisible({ timeout: 10000 });
 
       // Click on the Memory tab to verify sidebar
-      await page.getByRole('tab', { name: 'Memory' }).click();
+      await page.getByTestId('left-tab-memory').click();
       await expect(page.getByRole('heading', { name: 'Observational Memory' })).toBeVisible();
     });
   });
@@ -275,7 +275,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
       await expect(page.locator('h2')).toContainText('OM Adaptive Agent');
 
       // Click on the Memory tab to see OM sidebar
-      await page.getByRole('tab', { name: 'Memory' }).click();
+      await page.getByTestId('left-tab-memory').click();
 
       // ASSERT: OM sidebar should show adaptive threshold behavior
       const omSection = page.getByRole('heading', { name: 'Observational Memory' });
@@ -313,7 +313,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
       await page.goto('/agents/om-agent/chat/new');
 
       // Click on the Memory tab to see OM sidebar
-      await page.getByRole('tab', { name: 'Memory' }).click();
+      await page.getByTestId('left-tab-memory').click();
 
       // ACT: Send messages to create observation history
       const chatInput = page.locator('textarea[placeholder*="message"]').first();
@@ -363,7 +363,7 @@ test.describe('Observational Memory - Edge Cases', () => {
     await expect(page.locator('h2')).toContainText('OM Agent', { timeout: 10000 });
 
     // Click on the Memory tab to see OM sidebar
-    await page.getByRole('tab', { name: 'Memory' }).click();
+    await page.getByTestId('left-tab-memory').click();
 
     // OM section should not show stuck "observing" state
     const omSection = page.getByRole('heading', { name: 'Observational Memory' });
@@ -395,7 +395,7 @@ test.describe('Observational Memory - Edge Cases', () => {
     await expect(page.locator('h2')).toContainText('OM Agent');
 
     // Click on the Memory tab to see OM sidebar
-    await page.getByRole('tab', { name: 'Memory' }).click();
+    await page.getByTestId('left-tab-memory').click();
 
     // ASSERT: Second thread should start fresh
     // Progress bars should be at 0 or initial state

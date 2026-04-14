@@ -1,12 +1,9 @@
 import {
   AgentMemory,
   ChatThreads,
-  Tabs,
-  TabList,
-  Tab,
-  TabContent,
   useCloneThread,
   useDeleteThread,
+  useLeftSidebarTab,
   useLinkComponent,
 } from '@mastra/playground-ui';
 import type { ChatThreadsProps } from '@mastra/playground-ui';
@@ -27,6 +24,7 @@ export function AgentSidebar({
   const { mutateAsync: cloneThread } = useCloneThread();
   const { paths, navigate } = useLinkComponent();
   const [isCloningThreadId, setIsCloningThreadId] = useState<string | null>(null);
+  const { activeTab } = useLeftSidebarTab();
 
   const handleDelete = async (deleteId: string) => {
     await mutateAsync({ threadId: deleteId!, agentId });
@@ -49,17 +47,8 @@ export function AgentSidebar({
   };
 
   return (
-    <Tabs defaultTab="conversations" className="flex flex-col h-full overflow-hidden">
-      <TabList className="shrink-0 border-b border-border1 bg-surface2 px-2">
-        <Tab value="conversations" className="!text-ui-sm !px-3 !py-2.5">
-          Conversations
-        </Tab>
-        <Tab value="memory" className="!text-ui-sm !px-3 !py-2.5">
-          Memory
-        </Tab>
-      </TabList>
-
-      <TabContent value="conversations" className="flex-1 overflow-y-auto py-0">
+    <div className="flex flex-col h-full overflow-hidden bg-surface2">
+      {activeTab === 'conversations' && (
         <ChatThreads
           resourceId={agentId}
           resourceType={'agent'}
@@ -70,11 +59,13 @@ export function AgentSidebar({
           onClone={handleClone}
           isCloningThreadId={isCloningThreadId}
         />
-      </TabContent>
+      )}
 
-      <TabContent value="memory" className="flex-1 overflow-y-auto py-0">
-        <AgentMemory agentId={agentId} threadId={threadId} />
-      </TabContent>
-    </Tabs>
+      {activeTab === 'memory' && (
+        <div className="flex-1 overflow-y-auto">
+          <AgentMemory agentId={agentId} threadId={threadId} />
+        </div>
+      )}
+    </div>
   );
 }

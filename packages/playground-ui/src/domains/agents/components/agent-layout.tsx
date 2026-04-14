@@ -1,11 +1,15 @@
 import { Panel, useDefaultLayout, Group, usePanelRef } from 'react-resizable-panels';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { MessagesSquare } from 'lucide-react';
 import { getMainContentContentClassName } from '@/ds/components/MainContent';
-import { PanelSeparator } from '@/lib/resize/separator';
-import { CollapsiblePanel, CollapsiblePanelTriggerProps } from '@/lib/resize/collapsible-panel';
-import { Button } from '@/ds/components/Button/Button';
+import { CollapsiblePanel } from '@/lib/resize/collapsible-panel';
 import { MemoryIcon } from '@/ds/icons/MemoryIcon';
+import { AgentIcon } from '@/ds/icons/AgentIcon';
+import { transitions } from '@/ds/primitives/transitions';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { cn } from '@/lib/utils';
+import { LeftSidebarTabProvider } from './left-sidebar-context';
+import type { LeftSidebarTab } from './left-sidebar-context';
 
 export interface AgentLayoutProps {
   agentId: string;
@@ -13,7 +17,6 @@ export interface AgentLayoutProps {
   leftSlot?: React.ReactNode;
   rightSlot?: React.ReactNode;
   rightDefaultCollapsed?: boolean;
-  rightCollapsedTrigger?: CollapsiblePanelTriggerProps;
 }
 
 export const AgentLayout = ({
@@ -22,7 +25,6 @@ export const AgentLayout = ({
   leftSlot,
   rightSlot,
   rightDefaultCollapsed = false,
-  rightCollapsedTrigger,
 }: AgentLayoutProps) => {
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
     id: `agent-layout-${agentId}`,
@@ -32,6 +34,7 @@ export const AgentLayout = ({
   const rightPanelRef = usePanelRef();
   const [isLeftCollapsed, setIsLeftCollapsed] = useState(false);
   const [isRightCollapsed, setIsRightCollapsed] = useState(Boolean(rightDefaultCollapsed));
+  const [activeLeftTab, setActiveLeftTab] = useState<LeftSidebarTab>('conversations');
 
   const computedClassName = getMainContentContentClassName({
     isCentered: false,
@@ -44,15 +47,29 @@ export const AgentLayout = ({
     setIsRightCollapsed(Boolean(rightPanelRef.current?.isCollapsed?.()));
   }, [leftPanelRef, rightPanelRef]);
 
-  const handleOpenConversations = () => {
-    leftPanelRef.current?.expand();
-    setIsLeftCollapsed(false);
+  const handleLeftTabClick = useCallback(
+    (tab: LeftSidebarTab) => {
+      if (tab === activeLeftTab && !isLeftCollapsed) {
+        leftPanelRef.current?.collapse();
+      } else {
+        setActiveLeftTab(tab);
+        if (isLeftCollapsed) {
+          leftPanelRef.current?.expand();
+        }
+      }
+    },
+    [activeLeftTab, isLeftCollapsed, leftPanelRef],
+  );
+
+  const toggleRight = () => {
+    if (isRightCollapsed) {
+      rightPanelRef.current?.expand();
+    } else {
+      rightPanelRef.current?.collapse();
+    }
   };
 
-  const handleOpenDetails = () => {
-    rightPanelRef.current?.expand();
-    setIsRightCollapsed(false);
-  };
+  const leftSidebarCtx = useMemo(() => ({ activeTab: activeLeftTab }), [activeLeftTab]);
 
   return (
     <Group className={computedClassName} defaultLayout={defaultLayout} onLayoutChange={onLayoutChange}>
@@ -69,40 +86,63 @@ export const AgentLayout = ({
             panelRef={leftPanelRef}
             showCollapsedTrigger={false}
             onCollapsedChange={setIsLeftCollapsed}
-            className={cn(isLeftCollapsed && '!overflow-hidden !min-w-0 !border-0')}
+            className={cn('border-r border-border2', isLeftCollapsed && '!overflow-hidden !min-w-0 !border-0')}
           >
-            {leftSlot}
+            <LeftSidebarTabProvider value={leftSidebarCtx}>{leftSlot}</LeftSidebarTabProvider>
           </CollapsiblePanel>
-          <div className={cn(isLeftCollapsed && 'hidden')}>
-            <PanelSeparator />
-          </div>
         </>
       )}
-      <Panel id="main-slot" className="grid overflow-y-auto relative bg-surface1 py-4">
-        {leftSlot && isLeftCollapsed && (
-          <div className="absolute left-4 top-4 z-10">
-            <Button data-testid="open-conversations-button" size="sm" variant="outline" onClick={handleOpenConversations}>
-              <span className="inline-flex items-center gap-2">
-                <MemoryIcon className="h-4 w-4" />
-                Memory
-              </span>
-            </Button>
+      <Panel id="main-slot" className="grid overflow-y-auto relative bg-surface1 py-4 px-7">
+        {leftSlot && (
+          <div
+            className={cn(
+              'absolute top-0 left-0 z-10 flex flex-col',
+              'bg-surface2 border-r border-b border-border2 rounded-br-lg overflow-hidden',
+            )}
+            data-testid="left-sidebar-tabs"
+          >
+            <LeftSidebarIconTab
+              icon={<MessagesSquare className="h-4 w-4" />}
+              isActive={activeLeftTab === 'conversations' && !isLeftCollapsed}
+              tooltip="Conversations"
+              onClick={() => handleLeftTabClick('conversations')}
+              testId="left-tab-conversations"
+            />
+            <LeftSidebarIconTab
+              icon={<MemoryIcon className="h-4 w-4" />}
+              isActive={activeLeftTab === 'memory' && !isLeftCollapsed}
+              tooltip="Memory"
+              onClick={() => handleLeftTabClick('memory')}
+              testId="left-tab-memory"
+            />
           </div>
         )}
-        {rightSlot && isRightCollapsed && (
-          <div className="absolute right-4 top-4 z-10">
-            <Button data-testid="open-details-button" size="sm" variant="outline" onClick={handleOpenDetails}>
-              Open details
-            </Button>
-          </div>
+        {rightSlot && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                data-testid="toggle-right-sidebar"
+                onClick={toggleRight}
+                className={cn(
+                  'absolute top-0 right-0 z-10',
+                  'flex items-center justify-center h-10 w-10',
+                  'rounded-bl-lg',
+                  'bg-surface2 text-neutral3 border-l border-b border-border2',
+                  transitions.all,
+                  'hover:bg-surface4 hover:text-neutral5',
+                )}
+                aria-label="Agent Details"
+              >
+                <AgentIcon className="h-4 w-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="left">Agent Details</TooltipContent>
+          </Tooltip>
         )}
         {children}
       </Panel>
       {rightSlot && (
         <>
-          <div className={cn(isRightCollapsed && 'hidden')}>
-            <PanelSeparator />
-          </div>
           <CollapsiblePanel
             direction="right"
             id="right-slot"
@@ -111,16 +151,48 @@ export const AgentLayout = ({
             defaultSize={rightDefaultCollapsed ? 0 : '30%'}
             collapsedSize={0}
             collapsible={true}
-            collapsedTrigger={rightCollapsedTrigger}
             panelRef={rightPanelRef}
             showCollapsedTrigger={false}
             onCollapsedChange={setIsRightCollapsed}
-            className={cn(isRightCollapsed && '!overflow-hidden !min-w-0 !border-0')}
+            className={cn('border-l border-border2', isRightCollapsed && '!overflow-hidden !min-w-0 !border-0')}
           >
             {rightSlot}
           </CollapsiblePanel>
         </>
       )}
     </Group>
+  );
+};
+
+interface LeftSidebarIconTabProps {
+  icon: React.ReactNode;
+  isActive: boolean;
+  tooltip: string;
+  onClick: () => void;
+  testId: string;
+}
+
+const LeftSidebarIconTab = ({ icon, isActive, tooltip, onClick, testId }: LeftSidebarIconTabProps) => {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          data-testid={testId}
+          onClick={onClick}
+          className={cn(
+            'flex items-center justify-center h-9 w-9',
+            transitions.all,
+            isActive
+              ? 'bg-surface4 text-neutral6'
+              : 'text-neutral3 hover:bg-surface3 hover:text-neutral5',
+          )}
+          aria-label={tooltip}
+          aria-pressed={isActive}
+        >
+          {icon}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="right">{tooltip}</TooltipContent>
+    </Tooltip>
   );
 };

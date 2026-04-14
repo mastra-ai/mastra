@@ -1,7 +1,7 @@
 import type { MessagePrimitive } from '@assistant-ui/react';
 import { ComposerPrimitive, ThreadPrimitive, useComposerRuntime, useThreadRuntime } from '@assistant-ui/react';
-import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowUp, Mic, PlusIcon, TriangleAlert } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { ComposerAttachments } from './attachments/attachment';
 import { BracketOverlay } from './components/bracket-overlay';
@@ -15,6 +15,7 @@ import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recogniti
 import { Avatar } from '@/ds/components/Avatar';
 import { IconButton } from '@/ds/components/IconButton';
 import { useAutoscroll } from '@/hooks/use-autoscroll';
+import { cn } from '@/lib/utils';
 
 export interface ThreadProps {
   agentName?: string;
@@ -37,67 +38,103 @@ export const Thread = ({
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
 
+  const threadRuntime = useThreadRuntime();
+  const isEmpty = useSyncExternalStore(
+    cb => threadRuntime.subscribe(cb),
+    () => threadRuntime.getState().messages.length === 0,
+  );
+
   const WrappedAssistantMessage = (props: MessagePrimitive.Root.Props) => {
     return <AssistantMessage {...props} hasModelList={hasModelList} />;
   };
 
+  const composer = (
+    <Composer
+      hasMemory={hasMemory}
+      agentId={agentId}
+      hasModelList={hasModelList}
+      hideModelSwitcher={hideModelSwitcher}
+      controls={composerControls}
+    />
+  );
+
+  const memoryWarning = !hasMemory && (
+    <div className="flex items-center justify-center gap-2 max-w-3xl mx-auto px-4 py-2 mt-1 text-warning1">
+      <TriangleAlert className="h-4 w-4 shrink-0" />
+      <p className="text-xs">
+        Memory not enabled — thread messages will not be stored.{' '}
+        <a
+          href="https://mastra.ai/docs/memory/overview"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:opacity-80"
+        >
+          Learn how to activate memory
+        </a>
+      </p>
+    </div>
+  );
+
   return (
-    <ThreadWrapper>
+    <ThreadWrapper isEmpty={isEmpty}>
       <ThreadPrimitive.Viewport ref={areaRef} autoScroll={false} className="overflow-y-scroll scroll-smooth h-full">
-        <ThreadWelcome agentName={agentName} />
+        {isEmpty ? (
+          <div className="flex h-full flex-col items-center justify-center pb-16">
+            <Avatar name={agentName || 'Agent'} size="lg" />
+            <p className="mt-4 mb-6 font-medium">How can I help you today?</p>
+            <div className="w-full max-w-3xl px-4">
+              {composer}
+              {memoryWarning}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div ref={messagesContainerRef} className="relative max-w-3xl w-full mx-auto px-4 pb-7">
+              <BracketOverlay containerRef={messagesContainerRef} />
+              <ThreadPrimitive.Messages
+                components={{
+                  UserMessage: UserMessage,
+                  EditComposer: EditComposer,
+                  AssistantMessage: WrappedAssistantMessage,
+                }}
+              />
+            </div>
 
-        <div ref={messagesContainerRef} className="relative max-w-3xl w-full mx-auto px-4 pb-7">
-          <BracketOverlay containerRef={messagesContainerRef} />
-          <ThreadPrimitive.Messages
-            components={{
-              UserMessage: UserMessage,
-              EditComposer: EditComposer,
-              AssistantMessage: WrappedAssistantMessage,
-            }}
-          />
-        </div>
-
-        <ThreadPrimitive.If empty={false}>
-          <ThreadPrimitive.If running={false}>
-            <SaveFullConversationAction />
-          </ThreadPrimitive.If>
-          <div />
-        </ThreadPrimitive.If>
+            <ThreadPrimitive.If empty={false}>
+              <ThreadPrimitive.If running={false}>
+                <SaveFullConversationAction />
+              </ThreadPrimitive.If>
+              <div />
+            </ThreadPrimitive.If>
+          </>
+        )}
       </ThreadPrimitive.Viewport>
 
-      <Composer
-        hasMemory={hasMemory}
-        agentId={agentId}
-        hasModelList={hasModelList}
-        hideModelSwitcher={hideModelSwitcher}
-        controls={composerControls}
-      />
+      {!isEmpty && (
+        <div className="pb-4">
+          {composer}
+          {memoryWarning}
+        </div>
+      )}
     </ThreadWrapper>
   );
 };
 
-const ThreadWrapper = ({ children }: { children: React.ReactNode }) => {
+const ThreadWrapper = ({ children, isEmpty }: { children: React.ReactNode; isEmpty: boolean }) => {
   return (
-    <ThreadPrimitive.Root className="grid grid-rows-[1fr_auto] h-full overflow-y-auto" data-testid="thread-wrapper">
+    <ThreadPrimitive.Root
+      className={cn(
+        'grid h-full overflow-y-auto transition-[grid-template-rows] duration-slow ease-out-custom',
+        isEmpty ? 'grid-rows-[1fr]' : 'grid-rows-[1fr_auto]',
+      )}
+      data-testid="thread-wrapper"
+    >
       {children}
     </ThreadPrimitive.Root>
   );
 };
 
-export interface ThreadWelcomeProps {
-  agentName?: string;
-}
 
-const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
-  return (
-    <ThreadPrimitive.Empty>
-      <div className="flex w-full grow flex-col items-center pt-[15vh]">
-        <Avatar name={agentName || 'Agent'} size="lg" />
-        <p className="mt-4 font-medium">How can I help you today?</p>
-      </div>
-    </ThreadPrimitive.Empty>
-  );
-};
 
 interface ComposerProps {
   hasMemory?: boolean;

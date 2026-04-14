@@ -50,7 +50,7 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
   }
 
   return (
-    <div className="overflow-y-auto h-full w-full">
+    <div className="overflow-y-auto h-full w-full bg-surface2">
       <Threads>
         <ThreadList>
           <ThreadItem>

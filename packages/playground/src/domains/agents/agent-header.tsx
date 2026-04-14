@@ -29,7 +29,7 @@ export function AgentHeader({ agentId }: { agentId: string }) {
       <HeaderAction>
         <Button as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank" variant="ghost" size="md">
           <DocsIcon />
-          Agents documentation
+          Docs
         </Button>
       </HeaderAction>
     </Header>

@@ -88,7 +88,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
   }
 
   return (
-    <div className="flex flex-col h-full min-w-0 overflow-y-auto">
+    <div className="flex flex-col h-full min-w-0 overflow-y-auto bg-surface2">
       {/* Memory Configuration at top */}
       <div className="border-b border-border1">
         <AgentMemoryConfig agentId={agentId} />
@@ -103,7 +103,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
 
       {/* Semantic Recall Section - only if enabled, hidden for gateway memory */}
       {isSemanticRecallEnabled && !isGatewayMemory && (
-        <div className="p-4 border-b border-border1">
+        <div className="p-4 border-b border-border1 overflow-hidden flex flex-col max-h-80">
           <div className="mb-2">
             <div className="flex items-center gap-2 mb-2">
               <h3 className="text-sm font-medium text-neutral5">Semantic Recall</h3>

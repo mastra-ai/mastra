@@ -3,6 +3,7 @@ import {
   MainContentLayout,
   AgentPageTabs,
   AgentTopBarControls,
+  AgentTabActions,
   useIsCmsAvailable,
   useHasObservability,
   useAgent,
@@ -55,7 +56,12 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
         activeTab={activeTab}
         showPlayground={showPlayground}
         showObservability={showObservability}
-        rightSlot={showTopBarControls ? <AgentTopBarControls requestContextSchema={requestContextSchema} /> : undefined}
+        rightSlot={
+          <>
+            {showTopBarControls && <AgentTopBarControls requestContextSchema={requestContextSchema} />}
+            <AgentTabActions agentId={agentId!} />
+          </>
+        }
       />
       {children}
     </MainContentLayout>

@@ -26,13 +26,17 @@ test('chat layout exposes relocated controls and actions', async ({ page }) => {
 
   await expect(page).toHaveTitle(/Mastra Studio/);
 
-  // Left sidebar tabs: Conversations and Memory
-  await expect(page.getByRole('tab', { name: /Conversations/i })).toBeVisible();
-  await expect(page.getByRole('tab', { name: /Memory/i })).toBeVisible();
+  // Left sidebar icon tabs visible (conversations + memory)
+  await expect(page.getByTestId('left-sidebar-tabs')).toBeVisible();
+  await expect(page.getByTestId('left-tab-conversations')).toBeVisible();
+  await expect(page.getByTestId('left-tab-memory')).toBeVisible();
+  // Right sidebar toggle visible
+  await expect(page.getByTestId('toggle-right-sidebar')).toBeVisible();
+
   await expect(page.getByRole('link', { name: /New Chat/i })).toBeVisible();
 
-  // Switch to Memory tab and verify configuration section
-  await page.getByRole('tab', { name: /Memory/i }).click();
+  // Switch to Memory tab via icon and verify configuration section
+  await page.getByTestId('left-tab-memory').click();
   await expect(page.getByRole('heading', { name: 'Memory Configuration' })).toBeVisible();
 
   // Chat Settings modal accessible from composer area
