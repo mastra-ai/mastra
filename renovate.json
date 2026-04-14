@@ -42,6 +42,10 @@
       "minimumReleaseAge": "3 days"
     },
     {
+      "matchUpdateTypes": ["lockFileMaintenance"],
+      "prPriority": 10
+    },
+    {
       "matchPackageNames": ["@types/node"],
       "matchUpdateTypes": ["major"],
       "enabled": false
