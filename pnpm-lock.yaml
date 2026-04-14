@@ -3337,7 +3337,7 @@ importers:
         specifier: ^5.0.3
         version: 5.0.3
       tinyglobby:
-        specifier: ^0.2.15
+        specifier: ^0.2.16
         version: 0.2.16
       typescript-paths:
         specifier: ^1.5.1
