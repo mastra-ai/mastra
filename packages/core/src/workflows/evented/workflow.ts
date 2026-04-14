@@ -47,6 +47,7 @@ import type {
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { forwardAgentStreamChunk } from '../stream-utils';
 import type { StreamChunkWriter } from '../stream-utils';
+import type { InferParsedPublicSchema } from '../types';
 import { EventedExecutionEngine } from './execution-engine';
 import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk } from './helpers';
 import type { TripwireChunk } from './helpers';
@@ -166,20 +167,20 @@ function isProcessor(obj: unknown): obj is Processor {
  */
 export function createStep<
   TStepId extends string,
-  TStateSchema extends PublicSchema | undefined,
-  TInputSchema extends PublicSchema,
-  TOutputSchema extends PublicSchema,
-  TResumeSchema extends PublicSchema | undefined = undefined,
-  TSuspendSchema extends PublicSchema | undefined = undefined,
+  TStateSchema extends PublicSchema<any> | undefined,
+  TInputSchema extends PublicSchema<any>,
+  TOutputSchema extends PublicSchema<any>,
+  TResumeSchema extends PublicSchema<any> | undefined = undefined,
+  TSuspendSchema extends PublicSchema<any> | undefined = undefined,
 >(
   params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
 ): Step<
   TStepId,
-  TStateSchema extends PublicSchema ? InferPublicSchema<TStateSchema> : unknown,
+  TStateSchema extends PublicSchema<any> ? InferParsedPublicSchema<TStateSchema> : unknown,
   InferPublicSchema<TInputSchema>,
   InferPublicSchema<TOutputSchema>,
-  TResumeSchema extends PublicSchema ? InferPublicSchema<TResumeSchema> : unknown,
-  TSuspendSchema extends PublicSchema ? InferPublicSchema<TSuspendSchema> : unknown,
+  TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
+  TSuspendSchema extends PublicSchema<any> ? InferPublicSchema<TSuspendSchema> : unknown,
   DefaultEngineType
 >;
 
@@ -261,7 +262,7 @@ export function createStep<
   params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
 ): Step<
   TStepId,
-  TStateSchema extends PublicSchema<any> ? InferPublicSchema<TStateSchema> : unknown,
+  TStateSchema extends PublicSchema<any> ? InferParsedPublicSchema<TStateSchema> : unknown,
   InferPublicSchema<TInputSchema>,
   InferPublicSchema<TOutputSchema>,
   TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
@@ -319,7 +320,7 @@ function createStepFromParams<
   >,
 ): Step<
   TStepId,
-  TStateSchema extends PublicSchema<any> ? InferPublicSchema<TStateSchema> : unknown,
+  TStateSchema extends PublicSchema<any> ? InferParsedPublicSchema<TStateSchema> : unknown,
   InferPublicSchema<TInputSchema>,
   InferPublicSchema<TOutputSchema>,
   TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
@@ -344,7 +345,7 @@ function createStepFromParams<
     metadata: params.metadata,
     execute: params.execute.bind(params) as Step<
       TStepId,
-      TStateSchema extends PublicSchema<any> ? InferPublicSchema<TStateSchema> : unknown,
+      TStateSchema extends PublicSchema<any> ? InferParsedPublicSchema<TStateSchema> : unknown,
       InferPublicSchema<TInputSchema>,
       InferPublicSchema<TOutputSchema>,
       TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
