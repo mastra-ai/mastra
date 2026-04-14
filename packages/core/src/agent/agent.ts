@@ -3084,9 +3084,6 @@ export class Agent<
                   entityId: agentName,
                 }) || `${slugify.default(this.id)}-${agentName}`;
 
-            const subAgentDefaultOptions = await agent.getDefaultOptions?.({ requestContext });
-            const subAgentHasOwnMemoryConfig = subAgentDefaultOptions?.memory !== undefined;
-
             // Save the parent agent's MastraMemory before the sub-agent runs.
             // The sub-agent's prepare-memory-step will overwrite this key with
             // its own thread/resource identity. We restore it after the sub-agent
@@ -3105,18 +3102,6 @@ export class Agent<
             }
             if (savedResourceIdKey !== undefined) {
               requestContext.delete(MASTRA_RESOURCE_ID_KEY);
-            }
-
-            if (
-              (methodType === 'generate' ||
-                methodType === 'generateLegacy' ||
-                methodType === 'stream' ||
-                methodType === 'streamLegacy') &&
-              supportedLanguageModelSpecifications.includes(modelVersion)
-            ) {
-              if (!agent.hasOwnMemory() && this.#memory) {
-                agent.__setMemory(this.#memory as DynamicArgument<MastraMemory>);
-              }
             }
 
             // Call onDelegationStart hook if provided
@@ -3255,10 +3240,6 @@ export class Agent<
             if (agentVersionSelector && this.#mastra) {
               try {
                 resolvedAgent = await this.#mastra.resolveVersionedAgent(agent, agentVersionSelector);
-                // Propagate parent memory to the resolved agent if it doesn't have its own
-                if (!resolvedAgent.hasOwnMemory() && this.#memory) {
-                  resolvedAgent.__setMemory(this.#memory as DynamicArgument<MastraMemory>);
-                }
               } catch (versionError) {
                 this.logger.error('Failed to resolve versioned sub-agent, using code-defined default', {
                   agent: this.name,
@@ -3267,6 +3248,25 @@ export class Agent<
                   versionSelector: agentVersionSelector,
                   error: versionError,
                 });
+              }
+            }
+
+            // Recompute derived values from the resolved agent (may differ from
+            // code-defined agent if a stored version changed the model or defaults)
+            const resolvedModelVersion = (await resolvedAgent.getModel({ requestContext })).specificationVersion;
+            const resolvedDefaultOptions = await resolvedAgent.getDefaultOptions?.({ requestContext });
+            const resolvedHasOwnMemoryConfig = resolvedDefaultOptions?.memory !== undefined;
+
+            // Propagate parent memory to the resolved agent if it doesn't have its own
+            if (
+              (methodType === 'generate' ||
+                methodType === 'generateLegacy' ||
+                methodType === 'stream' ||
+                methodType === 'streamLegacy') &&
+              supportedLanguageModelSpecifications.includes(resolvedModelVersion)
+            ) {
+              if (!resolvedAgent.hasOwnMemory() && this.#memory) {
+                resolvedAgent.__setMemory(this.#memory as DynamicArgument<MastraMemory>);
               }
             }
 
@@ -3327,7 +3327,7 @@ export class Agent<
 
               if (
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
-                supportedLanguageModelSpecifications.includes(modelVersion)
+                supportedLanguageModelSpecifications.includes(resolvedModelVersion)
               ) {
                 const generateResult = resumeData
                   ? await resolvedAgent.resumeGenerate(resumeData, {
@@ -3337,7 +3337,7 @@ export class Agent<
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       context: filteredContextMessages as unknown as ModelMessage[],
-                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
+                      ...(resourceId && threadId && !resolvedHasOwnMemoryConfig
                         ? {
                             memory: {
                               resource: subAgentResourceId,
@@ -3353,7 +3353,7 @@ export class Agent<
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       context: filteredContextMessages as unknown as ModelMessage[],
-                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
+                      ...(resourceId && threadId && !resolvedHasOwnMemoryConfig
                         ? {
                             memory: {
                               resource: subAgentResourceId,
@@ -3428,7 +3428,7 @@ export class Agent<
                 }
 
                 result = { text: generateResult.text, subAgentThreadId, subAgentResourceId, subAgentToolResults };
-              } else if (methodType === 'generate' && modelVersion === 'v1') {
+              } else if (methodType === 'generate' && resolvedModelVersion === 'v1') {
                 const generateResult = await resolvedAgent.generateLegacy(messagesForSubAgent, {
                   requestContext,
                   ...resolveObservabilityContext(context ?? {}),
@@ -3437,7 +3437,7 @@ export class Agent<
                 result = { text: generateResult.text };
               } else if (
                 (methodType === 'stream' || methodType === 'streamLegacy') &&
-                supportedLanguageModelSpecifications.includes(modelVersion)
+                supportedLanguageModelSpecifications.includes(resolvedModelVersion)
               ) {
                 const streamResult = resumeData
                   ? await resolvedAgent.resumeStream(resumeData, {
@@ -3447,7 +3447,7 @@ export class Agent<
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       context: filteredContextMessages as unknown as ModelMessage[],
-                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
+                      ...(resourceId && threadId && !resolvedHasOwnMemoryConfig
                         ? {
                             memory: {
                               resource: subAgentResourceId,
@@ -3465,7 +3465,7 @@ export class Agent<
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       context: filteredContextMessages as unknown as ModelMessage[],
-                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
+                      ...(resourceId && threadId && !resolvedHasOwnMemoryConfig
                         ? {
                             memory: {
                               resource: subAgentResourceId,

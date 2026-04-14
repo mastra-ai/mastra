@@ -18,11 +18,14 @@ export type VersionOverrides = {
  */
 export function mergeVersionOverrides(
   base: VersionOverrides | undefined,
-  overrides: VersionOverrides,
-): VersionOverrides {
+  overrides: VersionOverrides | undefined,
+): VersionOverrides | undefined {
   if (!base) return overrides;
+  if (!overrides) return base;
 
   return {
+    ...base,
+    ...overrides,
     agents: {
       ...base.agents,
       ...overrides.agents,
