@@ -161,8 +161,15 @@ export async function envPullAction(file: string | undefined, opts: { config?: s
   for (const key of keys.sort()) {
     const value = envVars[key]!;
     // Quote values that contain spaces, quotes, or special shell characters
-    const needsQuoting = /[\s"'\\#$]/.test(value);
-    lines.push(`${key}=${needsQuoting ? `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : value}`);
+    const needsQuoting = /[\s"'\\#$`]/.test(value);
+    const escaped = value
+      .replace(/\\/g, '\\\\')
+      .replace(/\r/g, '\\r')
+      .replace(/\n/g, '\\n')
+      .replace(/"/g, '\\"')
+      .replace(/\$/g, '\\$')
+      .replace(/`/g, '\\`');
+    lines.push(`${key}=${needsQuoting ? `"${escaped}"` : value}`);
   }
   lines.push(''); // trailing newline
 

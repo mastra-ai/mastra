@@ -264,4 +264,14 @@ describe('envPullAction', () => {
     expect(content).toContain('SECRET="has spaces and \\"quotes\\""');
     spy.mockRestore();
   });
+
+  it('escapes dollar signs, backticks, and control characters', async () => {
+    mockGetServerProjectEnv.mockResolvedValue({ TOKEN: 'price=$100`cmd`\nline2' });
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { envPullAction } = await import('./env.js');
+    await envPullAction(undefined, {});
+    const [, content] = mockWriteFile.mock.calls[0]!;
+    expect(content).toContain('TOKEN="price=\\$100\\`cmd\\`\\nline2"');
+    spy.mockRestore();
+  });
 });
