@@ -52,7 +52,7 @@ const { mockContainer, mockExec, mockDocker, resetMockDefaults } = vi.hoisted(()
       Id: 'container-abc123',
       Name: '/mastra-sandbox',
       Created: '2024-01-01T00:00:00.000Z',
-      State: { Status: 'running' },
+      State: { Status: 'running', Running: true },
     }),
     exec: vi.fn().mockResolvedValue(mockExec),
   };
@@ -82,7 +82,7 @@ const { mockContainer, mockExec, mockDocker, resetMockDefaults } = vi.hoisted(()
       Id: 'container-abc123',
       Name: '/mastra-sandbox',
       Created: '2024-01-01T00:00:00.000Z',
-      State: { Status: 'running' },
+      State: { Status: 'running', Running: true },
     });
     mockContainer.exec.mockReset().mockResolvedValue(mockExec);
     mockDocker.createContainer.mockReset().mockResolvedValue(mockContainer);
@@ -336,6 +336,11 @@ describe('DockerSandbox', () => {
 
     it('should start a stopped container on reconnect', async () => {
       mockDocker.listContainers.mockResolvedValue([{ Id: 'stopped-container-id', State: 'exited' }]);
+      // Mock inspect to return stopped state
+      mockContainer.inspect.mockResolvedValue({
+        Id: 'stopped-container-id',
+        State: { Status: 'exited', Running: false },
+      });
 
       const sandbox = new DockerSandbox({ id: 'stopped-sandbox' });
       await sandbox._start();

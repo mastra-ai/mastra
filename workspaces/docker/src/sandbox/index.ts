@@ -187,8 +187,13 @@ export class DockerSandbox extends MastraSandbox {
       this.logger.debug(`${LOG_PREFIX} Found existing container ${existing.Id}`);
       this._container = this._docker.getContainer(existing.Id);
 
-      if (existing.State !== 'running') {
-        this.logger.debug(`${LOG_PREFIX} Container exists but not running (${existing.State}), starting...`);
+      // Use inspect() to get authoritative container state — listContainers() state
+      // can be stale immediately after stop() returns but before container fully exits
+      const info = await this._container.inspect();
+      const actualState = info.State?.Running ? 'running' : 'stopped';
+
+      if (actualState !== 'running') {
+        this.logger.debug(`${LOG_PREFIX} Container exists but not running (${actualState}), starting...`);
         await this._container.start();
       }
 
