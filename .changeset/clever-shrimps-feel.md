@@ -2,4 +2,4 @@
 '@mastra/observability': patch
 ---
 
-Updated model pricing data with latest rates
+Cost estimates now use the latest model pricing rates for more accurate calculations
