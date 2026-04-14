@@ -13,6 +13,7 @@ import { initProject } from './commands/actions/init-project';
 import { lintProject } from './commands/actions/lint-project';
 import { listScorers } from './commands/actions/list-scorers';
 import { migrate } from './commands/actions/migrate';
+import { runAgent } from './commands/actions/run-agent';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
 import { startStudio } from './commands/actions/start-studio';
@@ -215,6 +216,24 @@ const studioProjects = studioCommand
   .action(wrapAction(listProjectsAction));
 
 studioProjects.command('create').description('Create a new project').action(wrapAction(createProjectAction));
+
+program
+  .command('run')
+  .description('Run an agent with a prompt in headless mode')
+  .requiredOption('-a, --agent <agent-id>', 'Agent ID to run')
+  .option('-p, --prompt <prompt>', 'Prompt to send to the agent')
+  .option(
+    '-f, --output-format <format>',
+    'Output format: text (default), json (single JSON object), stream-json (NDJSON)',
+    'text',
+  )
+  .option('--json-schema <schema>', 'JSON schema for structured output (requires json or stream-json format)')
+  .option('--strict', 'Treat warnings as errors (exit code 1)', false)
+  .option('-d, --dir <path>', 'Path to your Mastra folder')
+  .option('-r, --root <path>', 'Path to your root folder')
+  .option('-e, --env <env>', 'Custom env file to include')
+  .option('--debug', 'Enable debug logs', false)
+  .action(wrapAction(runAgent));
 
 program
   .command('migrate')
