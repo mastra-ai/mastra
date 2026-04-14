@@ -94,33 +94,81 @@ export async function uploadServerDeploy(
     throw new Error('No upload URL returned');
   }
 
-  // Step 2: Upload artifact to the signed URL
-  if (uploadUrl.startsWith('file://')) {
-    const { writeFile } = await import('node:fs/promises');
-    const { fileURLToPath } = await import('node:url');
-    await writeFile(fileURLToPath(uploadUrl), Buffer.from(zipBuffer));
-  } else {
-    const uploadResp = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/zip' },
-      body: new Uint8Array(zipBuffer),
-    });
-    if (!uploadResp.ok) {
-      throw new Error(`Artifact upload failed: ${uploadResp.status} ${uploadResp.statusText}`);
+  // Best-effort cancel helper — used to clean up orphaned deploys on failure
+  async function cancelDeploy(deployClient: ReturnType<typeof createApiClient>) {
+    try {
+      console.warn(`Cancelling deploy ${id}...`);
+      await deployClient.POST('/v1/server/deploys/{id}/cancel', {
+        params: { path: { id } },
+      });
+    } catch {
+      console.warn(`Warning: failed to cancel deploy ${id}. It may remain in a queued state.`);
     }
   }
 
-  // Step 3: Notify API that upload is complete → triggers build pipeline
-  const { error: completeError, response: completeResponse } = await client.POST(
-    '/v1/server/deploys/{id}/upload-complete',
-    { params: { path: { id } } },
-  );
-
-  if (completeError) {
-    throwApiError('Upload confirmation failed', completeResponse.status);
+  // Step 2: Upload artifact to the signed URL
+  try {
+    if (uploadUrl.startsWith('file://')) {
+      const { writeFile } = await import('node:fs/promises');
+      const { fileURLToPath } = await import('node:url');
+      await writeFile(fileURLToPath(uploadUrl), Buffer.from(zipBuffer));
+    } else {
+      const uploadResp = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/zip' },
+        body: new Uint8Array(zipBuffer),
+      });
+      if (!uploadResp.ok) {
+        throw new Error(`Artifact upload failed: ${uploadResp.status} ${uploadResp.statusText}`);
+      }
+    }
+  } catch (uploadError) {
+    await cancelDeploy(client);
+    throw uploadError;
   }
 
-  return { id, status: 'queued' };
+  // Step 3: Notify API that upload is complete → triggers build pipeline
+  // Retry up to 3 times (4 total attempts) with exponential backoff for transient failures.
+  const maxRetries = 3;
+  let lastError: Error | undefined;
+  let currentClient = client;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const { error: completeError, response: completeResponse } = await currentClient.POST(
+      '/v1/server/deploys/{id}/upload-complete',
+      { params: { path: { id } } },
+    );
+
+    if (!completeError) {
+      return { id, status: 'queued' };
+    }
+
+    const status = completeResponse.status;
+
+    // Only retry on transient failures: 5xx, 401 (token expiry), or network errors
+    const isRetryable = status >= 500 || status === 401;
+    if (!isRetryable || attempt === maxRetries) {
+      lastError = new Error(`Upload confirmation failed: ${status}`);
+      break;
+    }
+
+    const delay = 1000 * Math.pow(2, attempt);
+    console.warn(
+      `Upload confirmation failed (${status}), retrying in ${delay / 1000}s... (attempt ${attempt + 1}/${maxRetries})`,
+    );
+
+    // On 401, refresh the token before retrying (same pattern as pollServerDeploy)
+    if (status === 401) {
+      const freshToken = await getToken();
+      currentClient = createApiClient(freshToken, orgId);
+    }
+
+    // Exponential backoff: 1s, 2s, 4s
+    await new Promise(r => setTimeout(r, delay));
+  }
+
+  // All retries exhausted — cancel the orphaned deploy and throw
+  await cancelDeploy(currentClient);
+  throw lastError ?? new Error('Upload confirmation failed');
 }
 
 export async function pollServerDeploy(
