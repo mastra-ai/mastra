@@ -107,6 +107,7 @@ export function sanitizeAIV4UIMessages(messages: UIMessageV4[]): UIMessageV4[] {
 export function sanitizeV5UIMessages(
   messages: AIV5Type.UIMessage[],
   filterIncompleteToolCalls = false,
+  shouldStripReasoning: (message: AIV5Type.UIMessage) => boolean = () => true,
 ): AIV5Type.UIMessage[] {
   const msgs = messages
     .map(m => {
@@ -118,6 +119,7 @@ export function sanitizeV5UIMessages(
       // parts to prevent item_reference linking to the stripped reasoning items.
       const hasOpenAIReasoning =
         filterIncompleteToolCalls &&
+        shouldStripReasoning(m) &&
         m.parts.some(
           p =>
             p.type === 'reasoning' &&
@@ -351,8 +353,9 @@ export function aiV5UIMessagesToAIV5ModelMessages(
   messages: AIV5Type.UIMessage[],
   dbMessages: MastraDBMessage[],
   filterIncompleteToolCalls = false,
+  shouldStripReasoning?: (message: AIV5Type.UIMessage) => boolean,
 ): AIV5Type.ModelMessage[] {
-  const sanitized = sanitizeV5UIMessages(messages, filterIncompleteToolCalls);
+  const sanitized = sanitizeV5UIMessages(messages, filterIncompleteToolCalls, shouldStripReasoning);
   const preprocessed = addStartStepPartsForAIV5(sanitized);
 
   const result = restoreAssistantFileProviderMetadata(AIV5.convertToModelMessages(preprocessed), preprocessed);
