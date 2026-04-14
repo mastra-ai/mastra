@@ -1234,7 +1234,7 @@ importers:
     dependencies:
       '@hono/node-server':
         specifier: ^1.19.11
-        version: 1.19.11(hono@4.12.12)
+        version: 1.19.14(hono@4.12.12)
       '@mastra/client-js':
         specifier: workspace:*
         version: link:../../../client-sdks/client-js
@@ -3272,7 +3272,7 @@ importers:
         version: 7.29.0
       '@hono/node-ws':
         specifier: ^1.3.0
-        version: 1.3.0(@hono/node-server@1.19.11(hono@4.12.12))(bufferutil@4.1.0)(hono@4.12.12)
+        version: 1.3.0(@hono/node-server@1.19.14(hono@4.12.12))(bufferutil@4.1.0)(hono@4.12.12)
       '@mastra/server':
         specifier: workspace:*
         version: link:../server
@@ -3348,7 +3348,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.19.11
-        version: 1.19.11(hono@4.12.12)
+        version: 1.19.14(hono@4.12.12)
       '@hono/standard-validator':
         specifier: ^0.2.2
         version: 0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.12)
@@ -3436,7 +3436,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.19.11
-        version: 1.19.11(hono@4.12.12)
+        version: 1.19.14(hono@4.12.12)
       '@internal/ai-sdk-v4':
         specifier: workspace:*
         version: link:../_vendored/ai_v4
@@ -3647,7 +3647,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.19.11
-        version: 1.19.11(hono@4.12.12)
+        version: 1.19.14(hono@4.12.12)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -3732,7 +3732,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.19.11
-        version: 1.19.11(hono@4.12.12)
+        version: 1.19.14(hono@4.12.12)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -3790,7 +3790,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.19.11
-        version: 1.19.11(hono@4.12.12)
+        version: 1.19.14(hono@4.12.12)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -4802,7 +4802,7 @@ importers:
     dependencies:
       '@hono/node-ws':
         specifier: ^1.3.0
-        version: 1.3.0(@hono/node-server@1.19.11(hono@4.12.12))(bufferutil@4.1.0)(hono@4.12.12)
+        version: 1.3.0(@hono/node-server@1.19.14(hono@4.12.12))(bufferutil@4.1.0)(hono@4.12.12)
       '@mastra/server':
         specifier: workspace:*
         version: link:../../packages/server
@@ -4818,7 +4818,7 @@ importers:
         version: 2.0.100(zod@4.3.6)
       '@hono/node-server':
         specifier: ^1.19.11
-        version: 1.19.11(hono@4.12.12)
+        version: 1.19.14(hono@4.12.12)
       '@hono/swagger-ui':
         specifier: ^0.5.3
         version: 0.5.3(hono@4.12.12)
@@ -6514,7 +6514,7 @@ importers:
         version: 1.3.24(zod@4.3.6)
       '@hono/node-server':
         specifier: ^1.19.11
-        version: 1.19.11(hono@4.12.12)
+        version: 1.19.14(hono@4.12.12)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -10525,8 +10525,8 @@ packages:
     peerDependencies:
       typescript: ^5.9.3
 
-  '@hono/node-server@1.19.11':
-    resolution: {integrity: sha512-dr8/3zEaB+p0D2n/IUrlPF1HZm586qgJNXK1a9fhg/PzdtkK7Ksd5l312tJX2yBuALqDYBlG20QEbayqPyxn+g==}
+  '@hono/node-server@1.19.14':
+    resolution: {integrity: sha512-GwtvgtXxnWsucXvbQXkRgqksiH2Qed37H9xHZocE5sA3N8O8O8/8FA3uclQXxXVzc9XBZuEOMK7+r02FmSpHtw==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
       hono: ^4
@@ -30784,13 +30784,13 @@ snapshots:
     dependencies:
       typescript: 5.9.3
 
-  '@hono/node-server@1.19.11(hono@4.12.12)':
+  '@hono/node-server@1.19.14(hono@4.12.12)':
     dependencies:
       hono: 4.12.12
 
-  '@hono/node-ws@1.3.0(@hono/node-server@1.19.11(hono@4.12.12))(bufferutil@4.1.0)(hono@4.12.12)':
+  '@hono/node-ws@1.3.0(@hono/node-server@1.19.14(hono@4.12.12))(bufferutil@4.1.0)(hono@4.12.12)':
     dependencies:
-      '@hono/node-server': 1.19.11(hono@4.12.12)
+      '@hono/node-server': 1.19.14(hono@4.12.12)
       hono: 4.12.12
       ws: 8.19.0(bufferutil@4.1.0)
     transitivePeerDependencies:
@@ -31661,7 +31661,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@3.25.76)':
     dependencies:
-      '@hono/node-server': 1.19.11(hono@4.12.12)
+      '@hono/node-server': 1.19.14(hono@4.12.12)
       ajv: 8.18.0
       ajv-formats: 3.0.1(ajv@8.18.0)
       content-type: 1.0.5
@@ -31685,7 +31685,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@4.3.6)':
     dependencies:
-      '@hono/node-server': 1.19.11(hono@4.12.12)
+      '@hono/node-server': 1.19.14(hono@4.12.12)
       ajv: 8.18.0
       ajv-formats: 3.0.1(ajv@8.18.0)
       content-type: 1.0.5
