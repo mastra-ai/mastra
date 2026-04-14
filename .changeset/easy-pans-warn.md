@@ -2,4 +2,8 @@
 '@mastra/inngest': minor
 ---
 
-Migrated to Inngest SDK v4. Updated `inngest` dependency from v3 to v4.2.2 and removed the separate `@inngest/realtime` package (now built into v4). Replaced Inngest API polling with snapshot-based polling for ~83x faster workflow result retrieval. Fixed Docker test connectivity and updated test infrastructure.
+Updated `@mastra/inngest` to use Inngest SDK v4.
+
+**Breaking:** The `@inngest/realtime` package is no longer needed — its functionality is now included in `inngest` v4. Remove it from your dependencies and import realtime helpers from `inngest/realtime` instead.
+
+**Improved:** Workflow result polling now uses snapshot-based polling, resulting in significantly faster retrieval (~83x).
