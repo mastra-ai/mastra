@@ -61,10 +61,6 @@ export class MessageMerger {
       incomingMessage.role === 'assistant' &&
       latestMessage.threadId === incomingMessage.threadId &&
       // If the message is from memory, don't append to the last assistant message
-      // TODO: This means memory-loaded conversations produce a different prompt shape
-      // (separate assistant messages per step) vs streaming (merged). This can hurt
-      // prompt caching since the message boundaries differ between turns. Consider
-      // re-merging consecutive assistant messages after loading from memory.
       messageSource !== 'memory';
 
     // Agent network append flag handling
