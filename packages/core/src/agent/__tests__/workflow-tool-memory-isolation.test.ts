@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../../loop/test-utils/MastraLanguageModelV2Mock';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';

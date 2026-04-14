@@ -88,6 +88,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     instructions,
     memoryConfig,
     memory,
+    isResume: !!resumeContext,
   });
 
   const streamStep = createStreamStep({
@@ -113,6 +114,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     capabilities,
     options,
     resourceId,
+    threadId: threadFromArgs?.id,
     runId,
     requestContext,
     memory,

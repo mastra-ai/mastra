@@ -135,6 +135,8 @@ Fetches provider configurations from the gateway.
 
 Builds the API URL for a specific model/provider combination.
 
+If your provider URL contains placeholders such as `${ACCOUNT_ID}`, resolve them inside `buildUrl()` from `envVars` or `process.env` before returning the final URL.
+
 **Parameters:**
 
 <PropertiesTable
@@ -228,8 +230,8 @@ Examples:
 
 ## Related
 
-- [Custom Gateways Guide](/models/gateways/custom-gateways) - Complete guide to creating custom gateways
-- [Mastra.addGateway()](/reference/core/addGateway) - Add a gateway to Mastra
-- [Mastra.getGateway()](/reference/core/getGateway) - Get gateway by registration key
-- [Mastra.getGatewayById()](/reference/core/getGatewayById) - Get gateway by ID
-- [Mastra.listGateways()](/reference/core/listGateways) - List all gateways
+- [Custom Gateways Guide](/models/gateways/custom-gateways): Complete guide to creating custom gateways
+- [Mastra.addGateway()](/reference/core/addGateway): Add a gateway to Mastra
+- [Mastra.getGateway()](/reference/core/getGateway): Get gateway by registration key
+- [Mastra.getGatewayById()](/reference/core/getGatewayById): Get gateway by ID
+- [Mastra.listGateways()](/reference/core/listGateways): List all gateways

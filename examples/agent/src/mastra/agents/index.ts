@@ -219,8 +219,6 @@ const answerRelevance = createAnswerRelevancyScorer({
   model: openai('gpt-4o'),
 });
 
-console.log(`answerRelevance`, answerRelevance);
-
 export const evalAgent = new Agent({
   id: 'eval-agent',
   name: 'Eval Agent',

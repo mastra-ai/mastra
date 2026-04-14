@@ -1,34 +1,19 @@
-import {
-  AuthRequired,
-  MainSidebarProvider,
-  NavigationCommand,
-  Toaster,
-  TooltipProvider,
-  useAuthCapabilities,
-  isAuthenticated,
-} from '@mastra/playground-ui';
-import { ExperimentalUIProvider, useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
-import { cn } from '@/lib/utils';
-import { useLocation } from 'react-router';
+import { MainSidebarProvider, Toaster, TooltipProvider } from '@mastra/playground-ui';
 import { AppSidebar } from './ui/app-sidebar';
 import { ThemeProvider } from './ui/theme-provider';
+import { AuthRequired } from '@/domains/auth/components/auth-required';
+import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
+import { isAuthenticated } from '@/domains/auth/types';
+import { ExperimentalUIProvider } from '@/domains/experimental-ui/experimental-ui-context';
 import { UI_EXPERIMENTS } from '@/domains/experimental-ui/experiments';
 import { useExperimentalUIEnabled } from '@/domains/experimental-ui/use-experimental-ui-enabled';
+import { NavigationCommand } from '@/lib/command';
+import { cn } from '@/lib/utils';
 
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const { data: authCapabilities, isFetched } = useAuthCapabilities();
   const shouldHideSidebar = isFetched && authCapabilities?.enabled && !isAuthenticated(authCapabilities);
   const shouldShowSidebar = isFetched && !shouldHideSidebar;
-
-  const { variant } = useExperimentalUI('entity-list-page');
-  const { pathname } = useLocation();
-  const agentListExperiment = UI_EXPERIMENTS.find(e => e.key === 'entity-list-page');
-  const experimentPaths: string[] = Array.isArray(agentListExperiment?.path)
-    ? agentListExperiment.path
-    : agentListExperiment?.path
-      ? [agentListExperiment.path]
-      : [];
-  const isPageListNewUIProposal = variant === 'new-proposal' && experimentPaths.includes(pathname);
 
   return (
     <>
@@ -36,9 +21,8 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
       <div className={shouldShowSidebar ? 'grid h-full grid-cols-[auto_1fr]' : 'h-full'}>
         {shouldShowSidebar && <AppSidebar />}
         <div
-          className={cn('bg-surface2 my-3 rounded-lg border border-border1 overflow-y-auto mr-3', {
-            'h-[calc(100%-1.5rem)] mx-3': shouldHideSidebar,
-            'bg-transparent my-0 mr-0': isPageListNewUIProposal,
+          className={cn('bg-transparent overflow-y-auto', {
+            'h-[calc(100%-1.5rem)]': shouldHideSidebar,
           })}
         >
           <AuthRequired>{children}</AuthRequired>

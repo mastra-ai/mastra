@@ -31,9 +31,16 @@ export type ChatStreamHandlerParams<
   trigger?: 'submit-message' | 'regenerate-message';
 };
 
+/**
+ * Extracted from the second parameter of `Mastra.getAgentById` so the type
+ * stays in sync with core automatically.
+ */
+export type AgentVersionOptions = NonNullable<Parameters<Mastra['getAgentById']>[1]>;
+
 export type ChatStreamHandlerOptions<UI_MESSAGE extends SupportedUIMessage = SupportedUIMessage, OUTPUT = undefined> = {
   mastra: Mastra;
   agentId: string;
+  agentVersion?: AgentVersionOptions;
   params: ChatStreamHandlerParams<UI_MESSAGE, OUTPUT>;
   defaultOptions?: AgentExecutionOptions<OUTPUT>;
   version?: 'v5' | 'v6';
@@ -41,6 +48,7 @@ export type ChatStreamHandlerOptions<UI_MESSAGE extends SupportedUIMessage = Sup
   sendFinish?: boolean;
   sendReasoning?: boolean;
   sendSources?: boolean;
+  onError?: (error: unknown) => string;
   messageMetadata?: UI_MESSAGE extends V6UIMessage
     ? UIMessageStreamOptionsV6<UI_MESSAGE>['messageMetadata']
     : UI_MESSAGE extends V5UIMessage
@@ -95,6 +103,7 @@ export function handleChatStream<UI_MESSAGE extends V6UIMessage = V6UIMessage, O
 export async function handleChatStream<OUTPUT = undefined>({
   mastra,
   agentId,
+  agentVersion,
   params,
   defaultOptions,
   version = 'v5',
@@ -102,6 +111,7 @@ export async function handleChatStream<OUTPUT = undefined>({
   sendFinish = true,
   sendReasoning = false,
   sendSources = false,
+  onError,
   messageMetadata,
 }: ChatStreamHandlerOptions<any, OUTPUT>): Promise<ReadableStream<any>> {
   const { messages, resumeData, runId, requestContext, trigger, ...rest } = params;
@@ -110,7 +120,7 @@ export async function handleChatStream<OUTPUT = undefined>({
     throw new Error('runId is required when resumeData is provided');
   }
 
-  const agentObj = mastra.getAgentById(agentId);
+  const agentObj = agentVersion ? await mastra.getAgentById(agentId, agentVersion) : mastra.getAgentById(agentId);
   if (!agentObj) {
     throw new Error(`Agent ${agentId} not found`);
   }
@@ -173,6 +183,7 @@ export async function handleChatStream<OUTPUT = undefined>({
           sendFinish,
           sendReasoning,
           sendSources,
+          onError,
           messageMetadata: messageMetadata as UIMessageStreamOptionsV6<V6UIMessage>['messageMetadata'],
         })) {
           writer.write(part);
@@ -191,6 +202,7 @@ export async function handleChatStream<OUTPUT = undefined>({
         sendFinish,
         sendReasoning,
         sendSources,
+        onError,
         messageMetadata: messageMetadata as UIMessageStreamOptionsV5<V5UIMessage>['messageMetadata'],
       })) {
         writer.write(part);
@@ -202,6 +214,7 @@ export async function handleChatStream<OUTPUT = undefined>({
 export type chatRouteOptions<OUTPUT = undefined> = {
   defaultOptions?: AgentExecutionOptions<OUTPUT>;
   version?: 'v5' | 'v6';
+  agentVersion?: AgentVersionOptions;
 } & (
   | {
       path: `${string}:agentId${string}`;
@@ -266,6 +279,7 @@ export function chatRoute<OUTPUT = undefined>({
   agent,
   defaultOptions,
   version = 'v5',
+  agentVersion,
   sendStart = true,
   sendFinish = true,
   sendReasoning = false,
@@ -289,6 +303,26 @@ export function chatRoute<OUTPUT = undefined>({
           description: 'The ID of the agent to chat with',
           schema: {
             type: 'string',
+          },
+        },
+        {
+          name: 'versionId',
+          in: 'query',
+          required: false,
+          description: 'Specific agent version ID to use. Mutually exclusive with status.',
+          schema: {
+            type: 'string',
+          },
+        },
+        {
+          name: 'status',
+          in: 'query',
+          required: false,
+          description:
+            'Which stored config version to resolve: draft (latest) or published (active version). Mutually exclusive with versionId.',
+          schema: {
+            type: 'string',
+            enum: ['draft', 'published'],
           },
         },
       ],
@@ -412,9 +446,29 @@ export function chatRoute<OUTPUT = undefined>({
         throw new Error('Agent ID is required');
       }
 
+      // Resolve agent version from query params, falling back to static option
+      const queryVersionId = c.req.query('versionId');
+      const rawStatus = c.req.query('status');
+
+      if (queryVersionId && rawStatus) {
+        throw new Error('Query parameters "versionId" and "status" are mutually exclusive');
+      }
+
+      if (rawStatus && rawStatus !== 'draft' && rawStatus !== 'published') {
+        throw new Error('Query parameter "status" must be "draft" or "published"');
+      }
+
+      const queryStatus = rawStatus as 'draft' | 'published' | undefined;
+      const effectiveAgentVersion: AgentVersionOptions | undefined = queryVersionId
+        ? { versionId: queryVersionId }
+        : queryStatus
+          ? { status: queryStatus }
+          : agentVersion;
+
       const handlerOptions = {
         mastra,
         agentId: agentToUse,
+        agentVersion: effectiveAgentVersion,
         params: {
           ...params,
           requestContext: effectiveRequestContext,

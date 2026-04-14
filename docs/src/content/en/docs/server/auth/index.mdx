@@ -7,9 +7,9 @@ packages:
 
 # Auth overview
 
-Mastra lets you choose how you handle authentication, so you can secure access to your API and [Studio](/docs/getting-started/studio) using the identity system that fits your stack.
+Mastra lets you choose how you handle authentication, so you can secure access to your API and [Studio](/docs/studio/overview) using the identity system that fits your stack.
 
-You can start with basic shared secret JWT authentication and switch to providers like Supabase, Firebase Auth, Auth0, Clerk, or WorkOS when you need more advanced identity features.
+You can start with basic shared secret JWT authentication and switch to known providers when you need more advanced identity features.
 
 ## What auth secures
 
@@ -20,7 +20,7 @@ Configuring authentication locks down two things at once:
 
 Authentication is optional. If no auth is configured, all routes and Studio are publicly accessible. Public access can be enabled on individual custom routes using `requiresAuth: false`.
 
-See [Custom API Routes](/docs/server/custom-api-routes#authentication) for controlling authentication on custom endpoints.
+See [Custom API Routes](/docs/server/custom-api-routes#authentication) for controlling authentication on custom endpoints. Visit the [Studio Auth docs](/docs/studio/auth) for more on securing your Studio deployment.
 
 :::note
 
@@ -41,6 +41,7 @@ Authentication for Studio is currently supported by the following providers: Sim
 - [Better Auth](/docs/server/auth/better-auth)
 - [Clerk](/docs/server/auth/clerk)
 - [Firebase](/docs/server/auth/firebase)
+- [Okta](/docs/server/auth/okta)
 - [Supabase](/docs/server/auth/supabase)
 - [WorkOS](/docs/server/auth/workos)
 

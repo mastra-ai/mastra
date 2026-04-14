@@ -1,6 +1,6 @@
 import { jsonSchema } from '@internal/ai-sdk-v5';
 import { describe, it, expect } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { createTool } from '../../../../tools/tool';
 import { prepareToolsAndToolChoice } from './prepare-tools';
 
@@ -151,6 +151,52 @@ describe('prepareToolsAndToolChoice', () => {
         name: 'testTool',
         description: 'A test tool',
       });
+    });
+
+    it('should pass strict through for v3 function tools', () => {
+      const strictTool = createTool({
+        id: 'strict-tool',
+        description: 'A strict test tool',
+        strict: true,
+        inputSchema: z.object({
+          query: z.string(),
+        }),
+        execute: async ({ query }) => `Result for: ${query}`,
+      });
+
+      const result = prepareToolsAndToolChoice({
+        tools: { strictTool: strictTool as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v3',
+      });
+
+      expect(result.tools![0]).toMatchObject({
+        type: 'function',
+        name: 'strictTool',
+        strict: true,
+      });
+    });
+
+    it('should omit strict for v2 function tools', () => {
+      const strictTool = createTool({
+        id: 'strict-tool-v2',
+        description: 'A strict test tool for v2',
+        strict: true,
+        inputSchema: z.object({
+          query: z.string(),
+        }),
+        execute: async ({ query }) => `Result for: ${query}`,
+      });
+
+      const result = prepareToolsAndToolChoice({
+        tools: { strictTool: strictTool as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v2',
+      });
+
+      expect(result.tools![0]).not.toHaveProperty('strict');
     });
 
     it('should not treat regular tools with no id as provider tools', () => {
@@ -340,6 +386,24 @@ describe('prepareToolsAndToolChoice', () => {
         activeTools: undefined,
       });
 
+      expect(result.tools).toBeUndefined();
+      expect(result.toolChoice).toEqual({ type: 'none' });
+    });
+    it('should strip tools when toolChoice is "none" even when tools are non-empty (#14459)', () => {
+      // Regression test: workflow tools injected via listWorkflowTools() were still
+      // being serialized in the HTTP request even when toolChoice was set to none.
+      // Gemini rejects requests combining tools + structured output (response_format: json_schema).
+      const workflowTool = createTool({
+        id: 'workflow-tool',
+        description: 'A workflow tool injected by listWorkflowTools()',
+        inputSchema: z.object({ input: z.string() }),
+        execute: async () => ({ result: 'ok' }),
+      });
+      const result = prepareToolsAndToolChoice({
+        tools: { workflowTool },
+        toolChoice: 'none',
+        activeTools: undefined,
+      });
       expect(result.tools).toBeUndefined();
       expect(result.toolChoice).toEqual({ type: 'none' });
     });

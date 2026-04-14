@@ -84,11 +84,19 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
   tools: PreparedTool[] | undefined;
   toolChoice: PreparedToolChoice | undefined;
 } {
-  if (Object.keys(tools || {}).length === 0) {
-    // Preserve explicit 'none' toolChoice to tell the LLM not to attempt tool calls
+  if (toolChoice === 'none') {
+    // When toolChoice is 'none', strip tools entirely — providers like Gemini reject
+    // requests that combine tools + structured output (response_format: json_schema)
     return {
       tools: undefined,
-      toolChoice: toolChoice === 'none' ? { type: 'none' as const } : undefined,
+      toolChoice: { type: 'none' as const },
+    };
+  }
+
+  if (Object.keys(tools || {}).length === 0) {
+    return {
+      tools: undefined,
+      toolChoice: undefined,
     };
   }
 
@@ -132,6 +140,7 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
             ...tool,
             inputSchema,
           } as any);
+          const strict = 'strict' in tool ? tool.strict : undefined;
 
           const toolType = sdkTool?.type ?? 'function';
 
@@ -183,6 +192,7 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
                 name,
                 description: sdkTool.description,
                 inputSchema: fixTypelessProperties(parameters as Record<string, unknown>),
+                ...(targetVersion === 'v3' && strict != null ? { strict } : {}),
                 providerOptions: sdkTool.providerOptions,
               };
             case 'provider-defined': {

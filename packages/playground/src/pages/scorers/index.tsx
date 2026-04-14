@@ -1,83 +1,98 @@
 import {
-  Button,
   ButtonWithTooltip,
-  DocsIcon,
-  HeaderAction,
-  Icon,
-  MainContentContent,
-  useScorers,
-  Header,
-  HeaderTitle,
-  MainContentLayout,
-  ScorersTable,
-  ScorersList,
-  ListSearch,
-  MainHeader,
-  EntityListPageLayout,
+  ErrorState,
+  NoDataPageLayout,
+  PageHeader,
+  PageLayout,
+  PermissionDenied,
+  SessionExpired,
+  is401UnauthorizedError,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
 import { BookIcon, GaugeIcon } from 'lucide-react';
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { ScorersToolbar, useScorers } from '@/domains/scores';
+import { NoScorersInfo } from '@/domains/scores/components/scorers-list/no-scorers-info';
+import { ScorersList } from '@/domains/scores/components/scorers-list/scorers-list';
 
 export default function Scorers() {
   const { data: scorers = {}, isLoading, error } = useScorers();
-  const { variant } = useExperimentalUI('entity-list-page');
   const [search, setSearch] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('all');
 
-  if (variant === 'new-proposal') {
+  if (error && is401UnauthorizedError(error)) {
     return (
-      <EntityListPageLayout>
-        <EntityListPageLayout.Top>
-          <MainHeader withMargins={false}>
-            <MainHeader.Column>
-              <MainHeader.Title isLoading={isLoading}>
-                <GaugeIcon /> Scorers
-              </MainHeader.Title>
-            </MainHeader.Column>
-            <MainHeader.Column className="flex justify-end gap-2">
-              <ButtonWithTooltip
-                as="a"
-                href="https://mastra.ai/en/docs/evals/overview"
-                target="_blank"
-                rel="noopener noreferrer"
-                tooltipContent="Go to Scorers documentation"
-              >
-                <BookIcon />
-              </ButtonWithTooltip>
-            </MainHeader.Column>
-          </MainHeader>
-          <div className="max-w-[30rem]">
-            <ListSearch onSearch={setSearch} label="Filter scorers" placeholder="Filter by name" />
-          </div>
-        </EntityListPageLayout.Top>
-
-        <ScorersList scorers={scorers} isLoading={isLoading} error={error} search={search} onSearch={setSearch} />
-      </EntityListPageLayout>
+      <NoDataPageLayout title="Scorers" icon={<GaugeIcon />}>
+        <SessionExpired />
+      </NoDataPageLayout>
     );
   }
 
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <NoDataPageLayout title="Scorers" icon={<GaugeIcon />}>
+        <PermissionDenied resource="scorers" />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <NoDataPageLayout title="Scorers" icon={<GaugeIcon />}>
+        <ErrorState title="Failed to load scorers" message={error.message} />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (Object.keys(scorers).length === 0 && !isLoading) {
+    return (
+      <NoDataPageLayout title="Scorers" icon={<GaugeIcon />}>
+        <NoScorersInfo />
+      </NoDataPageLayout>
+    );
+  }
+
+  const hasFilters = sourceFilter !== 'all' || search !== '';
+
+  const resetFilters = () => {
+    setSearch('');
+    setSourceFilter('all');
+  };
+
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>
-          <Icon>
-            <GaugeIcon />
-          </Icon>
-          Scorers
-        </HeaderTitle>
+    <PageLayout>
+      <PageLayout.TopArea>
+        <PageLayout.Row>
+          <PageLayout.Column>
+            <PageHeader>
+              <PageHeader.Title isLoading={isLoading}>
+                <GaugeIcon /> Scorers
+              </PageHeader.Title>
+            </PageHeader>
+          </PageLayout.Column>
+          <PageLayout.Column className="flex justify-end gap-2">
+            <ButtonWithTooltip
+              as="a"
+              href="https://mastra.ai/en/docs/evals/overview"
+              target="_blank"
+              rel="noopener noreferrer"
+              tooltipContent="Go to Scorers documentation"
+            >
+              <BookIcon />
+            </ButtonWithTooltip>
+          </PageLayout.Column>
+        </PageLayout.Row>
+        <ScorersToolbar
+          search={search}
+          onSearchChange={setSearch}
+          sourceFilter={sourceFilter}
+          onSourceFilterChange={setSourceFilter}
+          onReset={resetFilters}
+          hasActiveFilters={hasFilters}
+        />
+      </PageLayout.TopArea>
 
-        <HeaderAction>
-          <Button as={Link} to="https://mastra.ai/en/docs/evals/overview" target="_blank" variant="ghost" size="md">
-            <DocsIcon />
-            Scorers documentation
-          </Button>
-        </HeaderAction>
-      </Header>
-
-      <MainContentContent isCentered={!isLoading && Object.keys(scorers || {}).length === 0}>
-        <ScorersTable isLoading={isLoading} scorers={scorers} error={error} />
-      </MainContentContent>
-    </MainContentLayout>
+      <ScorersList scorers={scorers} isLoading={isLoading} search={search} sourceFilter={sourceFilter} />
+    </PageLayout>
   );
 }

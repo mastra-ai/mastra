@@ -1,10 +1,11 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
-import z from 'zod/v4';
+import { z } from 'zod/v4';
 import type { MastraDBMessage } from '../../../memory';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { ChunkFrom } from '../../../stream/types';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
+import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows';
 import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
@@ -278,12 +279,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // requireApproval can be:
         // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
         // - undefined (no approval needed)
-        // If needsApprovalFn exists, evaluate it with the tool args
+        // If needsApprovalFn exists, evaluate it with the tool args and context
         let toolRequiresApproval = requireToolApproval || (tool as any).requireApproval;
         if ((tool as any).needsApprovalFn) {
-          // Evaluate the function with the parsed args
+          // Evaluate the function with parsed args and available context
           try {
-            const needsApprovalResult = await (tool as any).needsApprovalFn(args);
+            const needsApprovalResult = await (tool as any).needsApprovalFn(args, {
+              requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
+              workspace: _internal?.stepWorkspace,
+            });
             toolRequiresApproval = needsApprovalResult;
           } catch (error) {
             // Log error to help developers debug faulty needsApprovalFn implementations
@@ -545,7 +549,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
-        const result = await tool.execute(args, toolOptions);
+        const rawResult = await tool.execute(args, toolOptions);
+        const result = ensureSerializable(rawResult);
 
         // Call onOutput hook after successful execution
         if (tool && 'onOutput' in tool && typeof (tool as any).onOutput === 'function') {

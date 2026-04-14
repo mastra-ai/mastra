@@ -1,14 +1,14 @@
 {
   "meta": {
     "name": "core-src-agent-__tests__-tool-handling.e2e",
-    "testFile": "packages/core/src/agent/__tests__/tool-handling.e2e.test.ts",
+    "testFile": "src/agent/__tests__/tool-handling.e2e.test.ts",
     "model": "gpt-4o-mini",
     "createdAt": "2026-03-09T19:13:03.662Z",
-    "updatedAt": "2026-03-11T10:14:44.569Z"
+    "updatedAt": "2026-03-24T15:27:07.009Z"
   },
   "recordings": [
     {
-      "hash": "47d74a3efc5440f4",
+      "hash": "1f28f76e7d5d5879",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -77,7 +77,7 @@
                       "anyOf": [
                         {
                           "type": "number",
-                          "minimum": 3
+                          "description": "constraints: greater than or equal to 3"
                         },
                         {
                           "type": "null"
@@ -115,14 +115,22 @@
                     "suspendedToolRunId",
                     "resumeData"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "x-optional": [
+                    "threadId",
+                    "resourceId",
+                    "instructions",
+                    "maxSteps",
+                    "suspendedToolRunId",
+                    "resumeData"
+                  ]
                 }
               }
             }
           ],
           "tool_choice": "required"
         },
-        "timestamp": 1773224058364
+        "timestamp": 1774366005431
       },
       "response": {
         "status": 200,
@@ -131,30 +139,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9da9ca9d5d3e13d7-BRU",
+          "cf-ray": "9e16b22e6a68b75c-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 11 Mar 2026 10:14:20 GMT",
-          "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "2016",
-          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "date": "Tue, 24 Mar 2026 15:26:47 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "1453",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "30000",
-          "x-ratelimit-limit-tokens": "150000000",
-          "x-ratelimit-remaining-requests": "29999",
-          "x-ratelimit-remaining-tokens": "149999967",
-          "x-ratelimit-reset-requests": "2ms",
-          "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_bd9c62cee3df4cc3adb2ab16ab0c0ffb"
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "200000",
+          "x-ratelimit-remaining-requests": "9998",
+          "x-ratelimit-remaining-tokens": "199968",
+          "x-ratelimit-reset-requests": "9.042s",
+          "x-ratelimit-reset-tokens": "9ms",
+          "x-request-id": "req_aa6e611f3d9649faa5806b8ae0d5e866"
         },
         "body": {
-          "id": "chatcmpl-DIAryRrENFT6AqfudLreK2zuhLoK1",
+          "id": "chatcmpl-DMxwTFMVkm00B9RLr8kQFY31Cyh4Y",
           "object": "chat.completion",
-          "created": 1773224058,
+          "created": 1774366005,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -164,11 +172,11 @@
                 "content": null,
                 "tool_calls": [
                   {
-                    "id": "call_MNXBmAP4xpuGFPySY3Ppvg1y",
+                    "id": "call_CpIBrQei8Z6CBbkABrnCwfhQ",
                     "type": "function",
                     "function": {
                       "name": "agent-researchAgent",
-                      "arguments": "{\"prompt\":\"Find comprehensive information about TypeScript, including its features, benefits, use cases, and how it compares to JavaScript. Also, include any notable libraries or frameworks that utilize TypeScript.\",\"threadId\":null,\"resourceId\":null,\"instructions\":null,\"maxSteps\":5,\"suspendedToolRunId\":null,\"resumeData\":null}"
+                      "arguments": "{\"prompt\":\"Find comprehensive information about TypeScript, including its features, benefits, use cases, and any notable differences from JavaScript. Also, include information about its popularity and community support.\",\"threadId\":null,\"resourceId\":null,\"instructions\":null,\"maxSteps\":5,\"suspendedToolRunId\":null,\"resumeData\":null}"
                     }
                   }
                 ],
@@ -180,9 +188,9 @@
             }
           ],
           "usage": {
-            "prompt_tokens": 208,
-            "completion_tokens": 83,
-            "total_tokens": 291,
+            "prompt_tokens": 211,
+            "completion_tokens": 81,
+            "total_tokens": 292,
             "prompt_tokens_details": {
               "cached_tokens": 0,
               "audio_tokens": 0
@@ -195,13 +203,13 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_1883e75a49"
+          "system_fingerprint": "fp_ca3e7d71bf"
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "567c41276a4ac809",
+      "hash": "1ad24a23c00c8ae2",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",
@@ -222,18 +230,18 @@
               "content": "",
               "tool_calls": [
                 {
-                  "id": "call_MNXBmAP4xpuGFPySY3Ppvg1y",
+                  "id": "call_CpIBrQei8Z6CBbkABrnCwfhQ",
                   "type": "function",
                   "function": {
                     "name": "agent-researchAgent",
-                    "arguments": "{\"prompt\":\"Find comprehensive information about TypeScript, including its features, benefits, use cases, and how it compares to JavaScript. Also, include any notable libraries or frameworks that utilize TypeScript.\",\"threadId\":null,\"resourceId\":null,\"instructions\":null,\"maxSteps\":5,\"suspendedToolRunId\":null,\"resumeData\":null}"
+                    "arguments": "{\"prompt\":\"Find comprehensive information about TypeScript, including its features, benefits, use cases, and any notable differences from JavaScript. Also, include information about its popularity and community support.\",\"threadId\":null,\"resourceId\":null,\"instructions\":null,\"maxSteps\":5,\"suspendedToolRunId\":null,\"resumeData\":null}"
                   }
                 }
               ]
             },
             {
               "role": "tool",
-              "tool_call_id": "call_MNXBmAP4xpuGFPySY3Ppvg1y",
+              "tool_call_id": "call_CpIBrQei8Z6CBbkABrnCwfhQ",
               "content": "{\"text\":\"Dummy response\"}"
             }
           ],
@@ -289,7 +297,7 @@
                       "anyOf": [
                         {
                           "type": "number",
-                          "minimum": 3
+                          "description": "constraints: greater than or equal to 3"
                         },
                         {
                           "type": "null"
@@ -327,14 +335,22 @@
                     "suspendedToolRunId",
                     "resumeData"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": false,
+                  "x-optional": [
+                    "threadId",
+                    "resourceId",
+                    "instructions",
+                    "maxSteps",
+                    "suspendedToolRunId",
+                    "resumeData"
+                  ]
                 }
               }
             }
           ],
           "tool_choice": "required"
         },
-        "timestamp": 1773224060621
+        "timestamp": 1774366007218
       },
       "response": {
         "status": 200,
@@ -343,30 +359,30 @@
           "access-control-expose-headers": "X-Request-ID",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9da9caab1ca113d7-BRU",
+          "cf-ray": "9e16b2393f0db75c-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 11 Mar 2026 10:14:23 GMT",
-          "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "2903",
-          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "date": "Tue, 24 Mar 2026 15:26:50 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "1973",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
           "x-openai-proxy-wasm": "v0.1",
-          "x-ratelimit-limit-requests": "30000",
-          "x-ratelimit-limit-tokens": "150000000",
-          "x-ratelimit-remaining-requests": "29999",
-          "x-ratelimit-remaining-tokens": "149999960",
-          "x-ratelimit-reset-requests": "2ms",
-          "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_596ed93a2ef840058d88f29e54c827a5"
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "200000",
+          "x-ratelimit-remaining-requests": "9973",
+          "x-ratelimit-remaining-tokens": "184399",
+          "x-ratelimit-reset-requests": "3m51.186s",
+          "x-ratelimit-reset-tokens": "4.68s",
+          "x-request-id": "req_b08bf6ad0bfb48e4a86b1239b31e2e1c"
         },
         "body": {
-          "id": "chatcmpl-DIAs0ArkaRWj69rETC5UUv9qtOUKe",
+          "id": "chatcmpl-DMxwW0RgFhdCMbEENv1OVtrGBIh8Y",
           "object": "chat.completion",
-          "created": 1773224060,
+          "created": 1774366008,
           "model": "gpt-4o-mini-2024-07-18",
           "choices": [
             {
@@ -376,11 +392,11 @@
                 "content": null,
                 "tool_calls": [
                   {
-                    "id": "call_JY9mZTo9ClItltIfe6GhB68d",
+                    "id": "call_oMEb4Ovvjybxfqi7G6MkvEnn",
                     "type": "function",
                     "function": {
                       "name": "agent-researchAgent",
-                      "arguments": "{\"prompt\":\"Find comprehensive information about TypeScript, including its features, benefits, use cases, and how it compares to JavaScript. Also, include any notable libraries or frameworks that utilize TypeScript.\",\"threadId\":null,\"resourceId\":null,\"instructions\":null,\"maxSteps\":5,\"suspendedToolRunId\":null,\"resumeData\":null}"
+                      "arguments": "{\"prompt\":\"Please provide detailed information about TypeScript, including its key features, advantages over JavaScript, common use cases, and its community support. Additionally, include any recent trends in its adoption and usage in the software development industry.\",\"threadId\":null,\"resourceId\":null,\"instructions\":null,\"maxSteps\":5,\"suspendedToolRunId\":null,\"resumeData\":null}"
                     }
                   }
                 ],
@@ -392,9 +408,9 @@
             }
           ],
           "usage": {
-            "prompt_tokens": 307,
-            "completion_tokens": 83,
-            "total_tokens": 390,
+            "prompt_tokens": 308,
+            "completion_tokens": 90,
+            "total_tokens": 398,
             "prompt_tokens_details": {
               "cached_tokens": 0,
               "audio_tokens": 0
@@ -407,13 +423,13 @@
             }
           },
           "service_tier": "default",
-          "system_fingerprint": "fp_e609550549"
+          "system_fingerprint": "fp_406d6473f8"
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "440146786e1e3213",
+      "hash": "b6e7113bed14add5",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -486,7 +502,7 @@
                     "anyOf": [
                       {
                         "type": "number",
-                        "minimum": 3
+                        "description": "constraints: greater than or equal to 3"
                       },
                       {
                         "type": "null"
@@ -524,14 +540,15 @@
                   "suspendedToolRunId",
                   "resumeData"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "x-optional": ["threadId", "resourceId", "instructions", "maxSteps", "suspendedToolRunId", "resumeData"]
               },
               "strict": false
             }
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773224063728
+        "timestamp": 1774366010225
       },
       "response": {
         "status": 200,
@@ -539,35 +556,35 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9da9cabe89e213d7-BRU",
+          "cf-ray": "9e16b24bfcd4b75c-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 11 Mar 2026 10:14:26 GMT",
-          "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "2228",
-          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "date": "Tue, 24 Mar 2026 15:26:52 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "1807",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-ratelimit-limit-requests": "30000",
-          "x-ratelimit-limit-tokens": "150000000",
-          "x-ratelimit-remaining-requests": "29999",
-          "x-ratelimit-remaining-tokens": "149999577",
-          "x-ratelimit-reset-requests": "2ms",
-          "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_6e3d25bcd5ab43509330cb52247c329f"
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "200000",
+          "x-ratelimit-remaining-requests": "9959",
+          "x-ratelimit-remaining-tokens": "170423",
+          "x-ratelimit-reset-requests": "5m49.863s",
+          "x-ratelimit-reset-tokens": "8.873s",
+          "x-request-id": "req_c80d0671e0a24180b1fd1336918b7f51"
         },
         "body": {
-          "id": "resp_0adeeb50a1e8447e0069b1407fda948197a866235a8af508f0",
+          "id": "resp_03cd59bd45b483b80069c2ad3a551c81978d226376e794465e",
           "object": "response",
-          "created_at": 1773224063,
+          "created_at": 1774366010,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1773224065,
+          "completed_at": 1774366012,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -577,11 +594,11 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "fc_0adeeb50a1e8447e0069b140808fd8819783982585747915ea",
+              "id": "fc_03cd59bd45b483b80069c2ad3ae8508197b831da4c6d48fff7",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"prompt\":\"Find comprehensive information about TypeScript, including its features, benefits, use cases, and any notable differences from JavaScript. Also, include details about its popularity and community support.\",\"threadId\":null,\"resourceId\":null,\"instructions\":null,\"maxSteps\":5,\"suspendedToolRunId\":null,\"resumeData\":null}",
-              "call_id": "call_GVf8TIbN5d5r80sys9FYIwkw",
+              "arguments": "{\"prompt\":\"Find comprehensive information about TypeScript, including its features, benefits, use cases, and any notable differences from JavaScript. Also, include information about its popularity and community support.\",\"threadId\":null,\"resourceId\":null,\"instructions\":null,\"maxSteps\":5,\"suspendedToolRunId\":null,\"resumeData\":null}",
+              "call_id": "call_Ht99NXGAJJpdbwGcXdlkxrol",
               "name": "agent-researchAgent"
             }
           ],
@@ -655,7 +672,7 @@
                     "anyOf": [
                       {
                         "type": "number",
-                        "minimum": 3
+                        "description": "constraints: greater than or equal to 3"
                       },
                       {
                         "type": "null"
@@ -693,7 +710,8 @@
                   "suspendedToolRunId",
                   "resumeData"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "x-optional": ["threadId", "resourceId", "instructions", "maxSteps", "suspendedToolRunId", "resumeData"]
               },
               "strict": false
             }
@@ -702,7 +720,7 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 206,
+            "input_tokens": 209,
             "input_tokens_details": {
               "cached_tokens": 0
             },
@@ -710,7 +728,7 @@
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 288
+            "total_tokens": 291
           },
           "user": null,
           "metadata": {}
@@ -719,7 +737,7 @@
       }
     },
     {
-      "hash": "02c26d989e9e575f",
+      "hash": "75ce4c8748f66153",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -741,11 +759,11 @@
             },
             {
               "type": "item_reference",
-              "id": "fc_0adeeb50a1e8447e0069b140808fd8819783982585747915ea"
+              "id": "fc_03cd59bd45b483b80069c2ad3ae8508197b831da4c6d48fff7"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_GVf8TIbN5d5r80sys9FYIwkw",
+              "call_id": "call_Ht99NXGAJJpdbwGcXdlkxrol",
               "output": "{\"text\":\"Dummy response\",\"subAgentThreadId\":\"00000000-0000-4000-8000-00000000003b\",\"subAgentResourceId\":\"orchestrator-agent-researchAgent\",\"subAgentToolResults\":[]}"
             }
           ],
@@ -801,7 +819,7 @@
                     "anyOf": [
                       {
                         "type": "number",
-                        "minimum": 3
+                        "description": "constraints: greater than or equal to 3"
                       },
                       {
                         "type": "null"
@@ -839,14 +857,15 @@
                   "suspendedToolRunId",
                   "resumeData"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "x-optional": ["threadId", "resourceId", "instructions", "maxSteps", "suspendedToolRunId", "resumeData"]
               },
               "strict": false
             }
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773224066134
+        "timestamp": 1774366012217
       },
       "response": {
         "status": 200,
@@ -854,35 +873,35 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9da9cacd8dc813d7-BRU",
+          "cf-ray": "9e16b25869bbb75c-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 11 Mar 2026 10:14:34 GMT",
-          "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "7969",
-          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "date": "Tue, 24 Mar 2026 15:26:58 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "5694",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-ratelimit-limit-requests": "30000",
-          "x-ratelimit-limit-tokens": "150000000",
-          "x-ratelimit-remaining-requests": "29999",
-          "x-ratelimit-remaining-tokens": "149999435",
-          "x-ratelimit-reset-requests": "2ms",
-          "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_c2478ca5a7db46d0ba586b639356c43a"
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "200000",
+          "x-ratelimit-remaining-requests": "9952",
+          "x-ratelimit-remaining-tokens": "177362",
+          "x-ratelimit-reset-requests": "6m48.348s",
+          "x-ratelimit-reset-tokens": "6.791s",
+          "x-request-id": "req_5611128fcdb34c0d8a9eb49e213b94d0"
         },
         "body": {
-          "id": "resp_0adeeb50a1e8447e0069b1408242148197ad5cca3fb3b96eab",
+          "id": "resp_03cd59bd45b483b80069c2ad3c51a081978a017065c381d7ab",
           "object": "response",
-          "created_at": 1773224066,
+          "created_at": 1774366012,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1773224074,
+          "completed_at": 1774366017,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -892,7 +911,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_0adeeb50a1e8447e0069b14082d8008197ae7e695ab6967a19",
+              "id": "msg_03cd59bd45b483b80069c2ad3cc3f08197b888d4da7447c32e",
               "type": "message",
               "status": "completed",
               "content": [
@@ -900,7 +919,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "It seems there was an issue retrieving the information about TypeScript. However, I can provide a summary based on what I know:\n\n### TypeScript Overview\n- **What is TypeScript?**\n  TypeScript is a superset of JavaScript developed by Microsoft. It adds static typing to the language, which helps catch errors during development rather than at runtime.\n\n### Key Features\n- **Static Typing:** TypeScript allows developers to define types for variables, function parameters, and return values, which can help prevent type-related errors.\n- **Interfaces and Enums:** It supports interfaces and enums, enabling better structure and organization of code.\n- **Type Inference:** TypeScript can infer types based on the assigned values, reducing the need for explicit type annotations.\n- **Compatibility:** TypeScript is fully compatible with JavaScript, meaning any valid JavaScript code is also valid TypeScript code.\n\n### Benefits\n- **Improved Code Quality:** The static type system helps catch errors early in the development process.\n- **Enhanced Tooling:** TypeScript offers better tooling support, including autocompletion, navigation, and refactoring capabilities in IDEs.\n- **Large Ecosystem:** It integrates well with existing JavaScript libraries and frameworks, making it easier to adopt in various projects.\n\n### Use Cases\n- **Large Codebases:** TypeScript is particularly beneficial for large applications where maintaining code quality is crucial.\n- **Team Projects:** It helps teams collaborate more effectively by providing clear contracts through types.\n\n### Popularity and Community Support\n- TypeScript has gained significant popularity in recent years, especially among developers using frameworks like Angular, React, and Vue.js.\n- The community is active, with numerous resources, libraries, and tools available to support TypeScript development.\n\nIf you need more specific information or have particular aspects you'd like to explore, let me know!"
+                  "text": "It seems there was an issue retrieving the information about TypeScript. However, I can provide a summary based on what I know:\n\n### TypeScript Overview\n- **What is TypeScript?**\n  TypeScript is a superset of JavaScript developed by Microsoft. It adds static typing to the language, which helps catch errors during development rather than at runtime.\n\n### Key Features\n- **Static Typing:** TypeScript allows developers to define types for variables, function parameters, and return values, which can help prevent type-related errors.\n- **Interfaces and Enums:** It supports interfaces and enums, enabling better structure and organization of code.\n- **Type Inference:** TypeScript can infer types based on the assigned values, reducing the need for explicit type annotations.\n- **Tooling Support:** Excellent integration with IDEs and editors, providing features like autocompletion, navigation, and refactoring.\n\n### Benefits\n- **Improved Code Quality:** Static typing helps catch errors early in the development process.\n- **Enhanced Readability:** Type annotations make the code more understandable for developers.\n- **Better Collaboration:** Teams can work more effectively with clear type definitions.\n\n### Use Cases\n- **Large Codebases:** Ideal for large applications where maintainability and scalability are crucial.\n- **Frameworks:** Widely used in frameworks like Angular, React, and Vue.js.\n\n### Popularity and Community Support\n- TypeScript has gained significant popularity in recent years, with a growing community and extensive resources available, including documentation, tutorials, and libraries.\n\nIf you need more specific information or have particular aspects you'd like to explore, let me know!"
                 }
               ],
               "role": "assistant"
@@ -976,7 +995,7 @@
                     "anyOf": [
                       {
                         "type": "number",
-                        "minimum": 3
+                        "description": "constraints: greater than or equal to 3"
                       },
                       {
                         "type": "null"
@@ -1014,7 +1033,8 @@
                   "suspendedToolRunId",
                   "resumeData"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "x-optional": ["threadId", "resourceId", "instructions", "maxSteps", "suspendedToolRunId", "resumeData"]
               },
               "strict": false
             }
@@ -1023,15 +1043,15 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 347,
+            "input_tokens": 350,
             "input_tokens_details": {
               "cached_tokens": 0
             },
-            "output_tokens": 373,
+            "output_tokens": 329,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 720
+            "total_tokens": 679
           },
           "user": null,
           "metadata": {}
@@ -1040,7 +1060,7 @@
       }
     },
     {
-      "hash": "02963b1bee89eb73",
+      "hash": "620c7dc184f68715",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -1113,7 +1133,7 @@
                     "anyOf": [
                       {
                         "type": "number",
-                        "minimum": 3
+                        "description": "constraints: greater than or equal to 3"
                       },
                       {
                         "type": "null"
@@ -1151,13 +1171,14 @@
                   "suspendedToolRunId",
                   "resumeData"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "x-optional": ["threadId", "resourceId", "instructions", "maxSteps", "suspendedToolRunId", "resumeData"]
               }
             }
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773224074274
+        "timestamp": 1774366018075
       },
       "response": {
         "status": 200,
@@ -1165,35 +1186,35 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9da9cb007a5f13d7-BRU",
+          "cf-ray": "9e16b27d0b20b75c-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 11 Mar 2026 10:14:36 GMT",
-          "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "2049",
-          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "date": "Tue, 24 Mar 2026 15:27:00 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "1832",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-ratelimit-limit-requests": "30000",
-          "x-ratelimit-limit-tokens": "150000000",
-          "x-ratelimit-remaining-requests": "29999",
-          "x-ratelimit-remaining-tokens": "149999577",
-          "x-ratelimit-reset-requests": "2ms",
-          "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_f23ff9e63e6943199e1f0fcf0b754a56"
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "200000",
+          "x-ratelimit-remaining-requests": "9931",
+          "x-ratelimit-remaining-tokens": "188793",
+          "x-ratelimit-reset-requests": "9m52.573s",
+          "x-ratelimit-reset-tokens": "3.361s",
+          "x-request-id": "req_e42c754572a04d61a393a1cc93c37aa9"
         },
         "body": {
-          "id": "resp_08ec8436db1687f40069b1408a66e881909ff908665bca3422",
+          "id": "resp_05f53171d6347adf0069c2ad422f588193bc228d7e1840ba97",
           "object": "response",
-          "created_at": 1773224074,
+          "created_at": 1774366018,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1773224076,
+          "completed_at": 1774366019,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -1203,11 +1224,11 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "fc_08ec8436db1687f40069b1408b29048190b351679799aaa45e",
+              "id": "fc_05f53171d6347adf0069c2ad42ab148193b85cf0ec807bad14",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"prompt\":\"Find comprehensive information about TypeScript, including its features, benefits, use cases, and any notable differences from JavaScript. Also, include details about its popularity and community support.\",\"threadId\":null,\"resourceId\":null,\"instructions\":null,\"maxSteps\":5,\"suspendedToolRunId\":null,\"resumeData\":null}",
-              "call_id": "call_mDIsU9IrIoV4eIRx3ejSxF0s",
+              "arguments": "{\"prompt\":\"Find comprehensive information about TypeScript, including its features, benefits, use cases, and any notable differences from JavaScript. Also, include information about its popularity and community support.\",\"threadId\":null,\"resourceId\":null,\"instructions\":null,\"maxSteps\":5,\"suspendedToolRunId\":null,\"resumeData\":null}",
+              "call_id": "call_43SvScVLPxHiSWuyA0YaGEV6",
               "name": "agent-researchAgent"
             }
           ],
@@ -1281,7 +1302,7 @@
                     "anyOf": [
                       {
                         "type": "number",
-                        "minimum": 3
+                        "description": "constraints: greater than or equal to 3"
                       },
                       {
                         "type": "null"
@@ -1319,7 +1340,8 @@
                   "suspendedToolRunId",
                   "resumeData"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "x-optional": ["threadId", "resourceId", "instructions", "maxSteps", "suspendedToolRunId", "resumeData"]
               },
               "strict": false
             }
@@ -1328,7 +1350,7 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 206,
+            "input_tokens": 209,
             "input_tokens_details": {
               "cached_tokens": 0
             },
@@ -1336,7 +1358,7 @@
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 288
+            "total_tokens": 291
           },
           "user": null,
           "metadata": {}
@@ -1345,7 +1367,7 @@
       }
     },
     {
-      "hash": "8854aa45264ea381",
+      "hash": "6ef4aaeda449d99d",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -1367,11 +1389,11 @@
             },
             {
               "type": "item_reference",
-              "id": "fc_08ec8436db1687f40069b1408b29048190b351679799aaa45e"
+              "id": "fc_05f53171d6347adf0069c2ad42ab148193b85cf0ec807bad14"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_mDIsU9IrIoV4eIRx3ejSxF0s",
+              "call_id": "call_43SvScVLPxHiSWuyA0YaGEV6",
               "output": "{\"text\":\"Dummy response\",\"subAgentThreadId\":\"00000000-0000-4000-8000-00000000003b\",\"subAgentResourceId\":\"orchestrator-agent-researchAgent\",\"subAgentToolResults\":[]}"
             }
           ],
@@ -1427,7 +1449,7 @@
                     "anyOf": [
                       {
                         "type": "number",
-                        "minimum": 3
+                        "description": "constraints: greater than or equal to 3"
                       },
                       {
                         "type": "null"
@@ -1465,13 +1487,14 @@
                   "suspendedToolRunId",
                   "resumeData"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "x-optional": ["threadId", "resourceId", "instructions", "maxSteps", "suspendedToolRunId", "resumeData"]
               }
             }
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1773224076487
+        "timestamp": 1774366020135
       },
       "response": {
         "status": 200,
@@ -1479,35 +1502,35 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9da9cb0e4a9813d7-BRU",
+          "cf-ray": "9e16b289e89fb75c-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Wed, 11 Mar 2026 10:14:44 GMT",
-          "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "7921",
-          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "date": "Tue, 24 Mar 2026 15:27:07 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "6710",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-ratelimit-limit-requests": "30000",
-          "x-ratelimit-limit-tokens": "150000000",
-          "x-ratelimit-remaining-requests": "29999",
-          "x-ratelimit-remaining-tokens": "149999435",
-          "x-ratelimit-reset-requests": "2ms",
-          "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_0dfce9b1bc72457bb0bb1770435be177"
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "200000",
+          "x-ratelimit-remaining-requests": "9922",
+          "x-ratelimit-remaining-tokens": "191817",
+          "x-ratelimit-reset-requests": "11m8.239s",
+          "x-ratelimit-reset-tokens": "2.454s",
+          "x-request-id": "req_d6508c66f6a6486c870becb07712ac31"
         },
         "body": {
-          "id": "resp_08ec8436db1687f40069b1408c9f30819081d11c3371d16e58",
+          "id": "resp_05f53171d6347adf0069c2ad443f048193970a49c64d062792",
           "object": "response",
-          "created_at": 1773224076,
+          "created_at": 1774366020,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1773224084,
+          "completed_at": 1774366026,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -1517,7 +1540,7 @@
           "model": "gpt-4o-mini-2024-07-18",
           "output": [
             {
-              "id": "msg_08ec8436db1687f40069b1408d19708190b12500da6d7d851d",
+              "id": "msg_05f53171d6347adf0069c2ad44927881939ac118246d524980",
               "type": "message",
               "status": "completed",
               "content": [
@@ -1525,7 +1548,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "It seems there was an issue retrieving the information about TypeScript. Let me summarize some key points for you:\n\n### What is TypeScript?\nTypeScript is a superset of JavaScript developed by Microsoft. It adds static typing to the language, which helps developers catch errors early in the development process.\n\n### Key Features\n- **Static Typing**: TypeScript allows developers to define types for variables, function parameters, and return values, which can help prevent runtime errors.\n- **Interfaces**: It supports interfaces, enabling better structure and organization of code.\n- **Type Inference**: TypeScript can infer types based on the assigned values, reducing the need for explicit type annotations.\n- **Modern JavaScript Features**: TypeScript supports all modern JavaScript features, including async/await, destructuring, and more.\n\n### Benefits\n- **Improved Code Quality**: Static typing helps catch errors during development rather than at runtime.\n- **Better Tooling**: Enhanced IDE support with features like autocompletion, navigation, and refactoring.\n- **Large Community and Ecosystem**: TypeScript has a growing community and a rich ecosystem of libraries and frameworks.\n\n### Use Cases\n- **Large Codebases**: Ideal for large applications where maintainability and scalability are crucial.\n- **Team Projects**: Helps teams collaborate more effectively by providing clear contracts through types.\n\n### Popularity\nTypeScript has gained significant popularity in recent years, especially among developers working with frameworks like Angular, React, and Vue.js. Its adoption is growing due to its ability to improve developer productivity and code quality.\n\n### Community Support\nTypeScript has a vibrant community, with extensive documentation, tutorials, and resources available online. Many popular libraries and frameworks are now written in TypeScript or provide TypeScript definitions.\n\nIf you need more specific information or have any other questions, feel free to ask!"
+                  "text": "It seems there was an issue retrieving the information about TypeScript. However, I can provide a summary based on what I know:\n\n### TypeScript Overview\n- **What is TypeScript?**\n  TypeScript is a superset of JavaScript developed by Microsoft. It adds static typing to the language, which helps catch errors during development rather than at runtime.\n\n### Key Features\n- **Static Typing:** TypeScript allows developers to define types for variables, function parameters, and return values, which can help prevent type-related errors.\n- **Interfaces and Enums:** It supports interfaces and enums, enabling better structure and organization of code.\n- **Type Inference:** TypeScript can infer types based on the assigned values, reducing the need for explicit type annotations.\n- **Tooling Support:** Excellent integration with IDEs like Visual Studio Code, providing features like autocompletion, navigation, and refactoring.\n\n### Benefits\n- **Improved Code Quality:** Static typing helps catch errors early, leading to more robust code.\n- **Better Documentation:** Types serve as a form of documentation, making it easier for developers to understand the codebase.\n- **Enhanced Collaboration:** Teams can work more effectively with clear type definitions, reducing misunderstandings.\n\n### Use Cases\n- **Large Codebases:** TypeScript is particularly beneficial for large applications where maintaining code quality is crucial.\n- **Frameworks:** Many popular frameworks, such as Angular, are built with TypeScript, making it a preferred choice for developers in those ecosystems.\n\n### Popularity and Community Support\n- TypeScript has gained significant popularity in recent years, with a growing community and extensive resources available, including documentation, tutorials, and libraries.\n- Many companies and open-source projects have adopted TypeScript, contributing to its ecosystem.\n\nIf you need more specific information or have particular aspects you'd like to explore, let me know!"
                 }
               ],
               "role": "assistant"
@@ -1601,7 +1624,7 @@
                     "anyOf": [
                       {
                         "type": "number",
-                        "minimum": 3
+                        "description": "constraints: greater than or equal to 3"
                       },
                       {
                         "type": "null"
@@ -1639,7 +1662,8 @@
                   "suspendedToolRunId",
                   "resumeData"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "x-optional": ["threadId", "resourceId", "instructions", "maxSteps", "suspendedToolRunId", "resumeData"]
               },
               "strict": false
             }
@@ -1648,15 +1672,15 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 347,
+            "input_tokens": 350,
             "input_tokens_details": {
               "cached_tokens": 0
             },
-            "output_tokens": 380,
+            "output_tokens": 376,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 727
+            "total_tokens": 726
           },
           "user": null,
           "metadata": {}

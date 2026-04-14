@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import type { AgentModelManagerConfig } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { PROVIDER_REGISTRY } from '@mastra/core/llm';
+import { PROVIDER_REGISTRY, parseModelString } from '@mastra/core/llm';
 import type { ProviderConfig, SystemMessage } from '@mastra/core/llm';
 import type {
   InputProcessor,
@@ -15,7 +15,7 @@ import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-com
 import type { PublicSchema } from '@mastra/schema-compat/schema';
 import { stringify } from 'superjson';
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { WORKSPACE_TOOLS, resolveToolConfig } from '../constants';
 import type { WorkspaceToolName } from '../constants';
 
@@ -45,7 +45,7 @@ import {
   declineNetworkToolCallBodySchema,
 } from '../schemas/agents';
 import { createStoredAgentResponseSchema } from '../schemas/stored-agents';
-import { getAgentSkillResponseSchema } from '../schemas/workspace';
+import { getAgentSkillResponseSchema, skillDisambiguationQuerySchema } from '../schemas/workspace';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
@@ -121,6 +121,7 @@ export interface SerializedSkill {
   name: string;
   description: string;
   license?: string;
+  path: string;
 }
 
 export interface SerializedTool {
@@ -169,6 +170,8 @@ export interface SerializedAgent {
   workflows: Record<string, SerializedWorkflow>;
   skills: SerializedSkill[];
   workspaceTools: string[];
+  /** Browser tool names available to this agent (if browser is configured) */
+  browserTools: string[];
   /** ID of the agent's workspace (if configured) */
   workspaceId?: string;
   inputProcessors: SerializedProcessor[];
@@ -286,6 +289,7 @@ export async function getSerializedSkillsFromAgent(
       name: skill.name,
       description: skill.description,
       license: skill.license,
+      path: skill.path,
     }));
   } catch {
     return [];
@@ -311,7 +315,7 @@ export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: 
     try {
       const mod = await import('@mastra/core/workspace');
       if (typeof mod.createWorkspaceTools === 'function') {
-        return Object.keys(mod.createWorkspaceTools(workspace));
+        return Object.keys(await mod.createWorkspaceTools(workspace));
       }
     } catch {
       // Older core version without workspace module — fall through
@@ -323,59 +327,65 @@ export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: 
     const isReadOnly = workspace.filesystem?.readOnly ?? false;
     const toolsConfig = workspace.getToolsConfig();
 
+    // Build context for dynamic config resolution
+    const configContext = {
+      workspace,
+      requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
+    };
+
     // Helper to check if a tool is enabled
-    const isEnabled = (toolName: WorkspaceToolName) => {
-      return resolveToolConfig(toolsConfig, toolName).enabled;
+    const isEnabled = async (toolName: WorkspaceToolName) => {
+      return (await resolveToolConfig(toolsConfig, toolName, configContext)).enabled;
     };
 
     // Filesystem tools
     if (workspace.filesystem) {
       // Read tools
-      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE)) {
+      if (await isEnabled(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE)) {
         tools.push(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
       }
-      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES)) {
+      if (await isEnabled(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES)) {
         tools.push(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
       }
-      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT)) {
+      if (await isEnabled(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT)) {
         tools.push(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT);
       }
 
       // Write tools only if not readonly
       if (!isReadOnly) {
-        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE)) {
+        if (await isEnabled(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE)) {
           tools.push(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
         }
-        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE)) {
+        if (await isEnabled(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE)) {
           tools.push(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE);
         }
-        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.DELETE)) {
+        if (await isEnabled(WORKSPACE_TOOLS.FILESYSTEM.DELETE)) {
           tools.push(WORKSPACE_TOOLS.FILESYSTEM.DELETE);
         }
-        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.MKDIR)) {
+        if (await isEnabled(WORKSPACE_TOOLS.FILESYSTEM.MKDIR)) {
           tools.push(WORKSPACE_TOOLS.FILESYSTEM.MKDIR);
         }
       }
 
       // Grep tool (filesystem-based, not BM25/vector)
-      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.GREP)) {
+      if (await isEnabled(WORKSPACE_TOOLS.FILESYSTEM.GREP)) {
         tools.push(WORKSPACE_TOOLS.FILESYSTEM.GREP);
       }
     }
 
     // Search tools (available if BM25 or vector search is enabled)
     if (workspace.canBM25 || workspace.canVector) {
-      if (isEnabled(WORKSPACE_TOOLS.SEARCH.SEARCH)) {
+      if (await isEnabled(WORKSPACE_TOOLS.SEARCH.SEARCH)) {
         tools.push(WORKSPACE_TOOLS.SEARCH.SEARCH);
       }
-      if (!isReadOnly && isEnabled(WORKSPACE_TOOLS.SEARCH.INDEX)) {
+      if (!isReadOnly && (await isEnabled(WORKSPACE_TOOLS.SEARCH.INDEX))) {
         tools.push(WORKSPACE_TOOLS.SEARCH.INDEX);
       }
     }
 
     // Sandbox tools
     if (workspace.sandbox) {
-      if (workspace.sandbox.executeCommand && isEnabled(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND)) {
+      if (workspace.sandbox.executeCommand && (await isEnabled(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND))) {
         tools.push(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
       }
     }
@@ -384,6 +394,30 @@ export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: 
   } catch {
     return [];
   }
+}
+
+/**
+ * Get the list of browser tool names for an agent.
+ * Returns the tool names from the agent's browser provider if configured.
+ */
+export function getBrowserToolsFromAgent(agent: Agent, onError?: (error: unknown) => void): string[] {
+  try {
+    const browser = agent.browser;
+    if (!browser) {
+      return [];
+    }
+    return Object.keys(browser.getTools());
+  } catch (error) {
+    onError?.(error);
+    return [];
+  }
+}
+
+function createBrowserToolsErrorLogger(
+  logger: ReturnType<Context['mastra']['getLogger']>,
+  agentId: string,
+): (error: unknown) => void {
+  return error => logger.warn('Failed to get browser tools for agent', { agentId, error });
 }
 
 interface SerializedAgentDefinition {
@@ -481,6 +515,7 @@ async function formatAgentList({
   // Extract skills, workspace tools, and workspaceId from agent's workspace
   const serializedSkills = await getSerializedSkillsFromAgent(agent, requestContext);
   const workspaceTools = await getWorkspaceToolsFromAgent(agent, requestContext);
+  const browserTools = getBrowserToolsFromAgent(agent, createBrowserToolsErrorLogger(logger, agent.id));
 
   // Get workspaceId if agent has a workspace
   let workspaceId: string | undefined;
@@ -522,11 +557,15 @@ async function formatAgentList({
     workflows: serializedAgentWorkflows,
     skills: serializedSkills,
     workspaceTools,
+    browserTools,
     workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
-    provider: llm?.getProvider(),
-    modelId: llm?.getModelId(),
+    provider:
+      typeof agent.model === 'string'
+        ? (parseModelString(agent.model).provider ?? llm?.getProvider())
+        : llm?.getProvider(),
+    modelId: typeof agent.model === 'string' ? parseModelString(agent.model).modelId : llm?.getModelId(),
     modelVersion: model?.specificationVersion,
     defaultOptions,
     modelList,
@@ -546,6 +585,14 @@ async function formatAgentList({
       agent.toRawConfig()!.resolvedVersionId !== agent.toRawConfig()!.activeVersionId
     ),
   };
+}
+
+export function extractVersionOptions(requestContext?: RequestContext): { versionId: string } | undefined {
+  const agentVersionId = requestContext?.get('agentVersionId');
+  if (typeof agentVersionId === 'string' && agentVersionId) {
+    return { versionId: agentVersionId };
+  }
+  return undefined;
 }
 
 export async function getAgentFromSystem({
@@ -572,7 +619,7 @@ export async function getAgentFromSystem({
   }
 
   if (!agent) {
-    logger.debug(`Agent ${agentId} not found, looking through sub-agents`);
+    logger.debug('Agent not found, looking through sub-agents', { agentId });
     const agents = mastra.listAgents();
     if (Object.keys(agents || {}).length) {
       for (const [_, ag] of Object.entries(agents)) {
@@ -595,7 +642,7 @@ export async function getAgentFromSystem({
     try {
       const editorAgent = mastra.getEditor()?.agent;
       if (editorAgent) {
-        agent = await editorAgent.applyStoredOverrides(agent, versionOptions);
+        agent = await editorAgent.applyStoredOverrides(agent, versionOptions ?? { status: 'published' });
       }
     } catch (error) {
       logger.debug('Error applying stored overrides to code agent', error);
@@ -604,9 +651,9 @@ export async function getAgentFromSystem({
 
   // If still not found, try to get stored agent
   if (!agent) {
-    logger.debug(`Agent ${agentId} not found in code-defined agents, looking in stored agents`);
+    logger.debug('Agent not found in code-defined agents, looking in stored agents', { agentId });
     try {
-      agent = (await mastra.getEditor()?.agent.getById(agentId)) ?? null;
+      agent = (await mastra.getEditor()?.agent.getById(agentId, versionOptions)) ?? null;
     } catch (error) {
       logger.debug('Error getting stored agent', error);
     }
@@ -725,6 +772,7 @@ async function formatAgent({
   // Extract skills, workspace tools, and workspaceId from agent's workspace
   const serializedSkills = await getSerializedSkillsFromAgent(agent, proxyRequestContext);
   const workspaceTools = await getWorkspaceToolsFromAgent(agent, proxyRequestContext);
+  const browserTools = getBrowserToolsFromAgent(agent, createBrowserToolsErrorLogger(mastra.getLogger(), agent.id));
 
   // Get workspaceId if agent has a workspace
   let workspaceId: string | undefined;
@@ -754,11 +802,15 @@ async function formatAgent({
     workflows: serializedAgentWorkflows,
     skills: serializedSkills,
     workspaceTools,
+    browserTools,
     workspaceId,
     inputProcessors: serializedInputProcessors,
     outputProcessors: serializedOutputProcessors,
-    provider: llm?.getProvider(),
-    modelId: llm?.getModelId(),
+    provider:
+      typeof agent.model === 'string'
+        ? (parseModelString(agent.model).provider ?? llm?.getProvider())
+        : llm?.getProvider(),
+    modelId: typeof agent.model === 'string' ? parseModelString(agent.model).modelId : llm?.getModelId(),
     modelVersion: model?.specificationVersion,
     modelList,
     defaultOptions,
@@ -879,7 +931,7 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   responseSchema: serializedAgentSchema,
   summary: 'Get agent by ID',
   description:
-    'Returns details for a specific agent including configuration, tools, and memory settings. Use query params to control which stored config version is used for overrides: ?status=draft (latest, default), ?status=published (active version), or ?versionId=<id> (specific version). Use either status or versionId, not both.',
+    'Returns details for a specific agent including configuration, tools, and memory settings. Use query params to control which stored config version is used for overrides: ?status=published (active version, default), ?status=draft (latest draft), or ?versionId=<id> (specific version). Use either status or versionId, not both.',
   tags: ['Agents'],
   requiresAuth: true,
   requiresPermission: 'agents:read',
@@ -927,7 +979,11 @@ export const CLONE_AGENT_ROUTE = createRoute({
         return handleError(new Error('Editor is not configured on the Mastra instance'), 'Error cloning agent');
       }
 
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
 
       const cloneId = toSlug(newId || `${agentId}-clone`);
 
@@ -960,7 +1016,11 @@ export const GENERATE_AGENT_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async ({ agentId, mastra, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(serverRequestContext),
+      });
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
@@ -1040,7 +1100,11 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
@@ -1096,7 +1160,11 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
@@ -1166,17 +1234,25 @@ export const GET_PROVIDERS_ROUTE = createRoute({
       const allProviders: Record<string, ProviderConfig> = {};
 
       for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
-        allProviders[id] = provider;
+        allProviders[id] = provider as ProviderConfig;
       }
 
+      // Include gateway providers (defaults + user-registered)
       if (mastra) {
-        const customGateways = mastra.listGateways();
-        if (customGateways) {
-          for (const gateway of Object.values(customGateways)) {
+        const allGateways = mastra.listGateways();
+        if (allGateways) {
+          for (const gateway of Object.values(allGateways)) {
+            // Skip models.dev gateway (already covered by PROVIDER_REGISTRY)
+            if (gateway.id === 'models.dev') continue;
             try {
-              const customProviders = await gateway.fetchProviders();
-              for (const [providerId, config] of Object.entries(customProviders)) {
-                allProviders[providerId] = config;
+              const gatewayProviders = await gateway.fetchProviders();
+              for (const [providerId, config] of Object.entries(gatewayProviders)) {
+                // Apply the same prefixing logic as registry-generator to avoid
+                // creating duplicate entries alongside PROVIDER_REGISTRY data.
+                // If providerId matches gateway.id, it's a unified gateway — use just the gateway ID.
+                // Otherwise, prefix with gateway.id (e.g., "netlify/anthropic").
+                const prefixedId = providerId === gateway.id ? gateway.id : `${gateway.id}/${providerId}`;
+                allProviders[prefixedId] = config;
               }
             } catch (error) {
               console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, error);
@@ -1233,7 +1309,11 @@ export const STREAM_GENERATE_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(serverRequestContext),
+      });
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
@@ -1325,9 +1405,13 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
   description: 'Approves a pending tool call and continues agent execution',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+  handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
 
       if (!params.runId) {
         throw new HTTPException(400, { message: 'Run id is required' });
@@ -1365,9 +1449,13 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
   description: 'Declines a pending tool call and continues agent execution without executing the tool',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+  handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
 
       if (!params.runId) {
         throw new HTTPException(400, { message: 'Run id is required' });
@@ -1404,9 +1492,13 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
   description: 'Approves a pending tool call and returns the complete response',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+  handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
 
       if (!params.runId) {
         throw new HTTPException(400, { message: 'Run id is required' });
@@ -1443,9 +1535,13 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
   description: 'Declines a pending tool call and returns the complete response',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+  handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
 
       if (!params.runId) {
         throw new HTTPException(400, { message: 'Run id is required' });
@@ -1483,9 +1579,13 @@ export const STREAM_NETWORK_ROUTE = createRoute({
   description: 'Executes an agent network with multiple agents and streams the response',
   tags: ['Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, messages, agentId, ...params }) => {
+  handler: async ({ mastra, messages, agentId, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
@@ -1516,9 +1616,13 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
   description: 'Approves a pending network tool call and continues network agent execution',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, ...params }) => {
+  handler: async ({ mastra, agentId, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
 
       if (!params.runId) {
         throw new HTTPException(400, { message: 'Run id is required' });
@@ -1551,9 +1655,13 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
   description: 'Declines a pending network tool call and continues network agent execution without executing the tool',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, ...params }) => {
+  handler: async ({ mastra, agentId, requestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
 
       if (!params.runId) {
         throw new HTTPException(400, { message: 'Run id is required' });
@@ -1894,11 +2002,12 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
   path: '/agents/:agentId/skills/:skillName',
   responseType: 'json',
   pathParamSchema: agentSkillPathParams,
+  queryParamSchema: skillDisambiguationQuerySchema,
   responseSchema: getAgentSkillResponseSchema,
   summary: 'Get agent skill',
   description: 'Returns details for a specific skill available to the agent via its workspace',
   tags: ['Agents', 'Skills'],
-  handler: async ({ mastra, agentId, skillName, requestContext }) => {
+  handler: async ({ mastra, agentId, skillName, path, requestContext }) => {
     try {
       const agent = agentId ? mastra.getAgentById(agentId) : null;
       if (!agent) {
@@ -1911,10 +2020,13 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Agent does not have skills configured' });
       }
 
+      // Use the optional ?path= query param for disambiguation, otherwise fall back to name
+      const identifier = path ? decodeURIComponent(path) : skillName;
+
       // Get the skill from the workspace
-      const skill = await workspace.skills.get(skillName);
+      const skill = await workspace.skills.get(identifier);
       if (!skill) {
-        throw new HTTPException(404, { message: `Skill "${skillName}" not found` });
+        throw new HTTPException(404, { message: `Skill "${identifier}" not found` });
       }
 
       return {

@@ -2,6 +2,7 @@ import { calculatePagination, normalizePerPage } from '../../base';
 import type {
   Experiment,
   ExperimentResult,
+  ExperimentReviewCounts,
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
@@ -84,9 +85,21 @@ export class ExperimentsInMemory extends ExperimentsStorage {
   async listExperiments(args: ListExperimentsInput): Promise<ListExperimentsOutput> {
     let experiments = Array.from(this.db.experiments.values());
 
-    // Filter by datasetId if provided
+    // Apply filters
     if (args.datasetId) {
       experiments = experiments.filter(r => r.datasetId === args.datasetId);
+    }
+    if (args.targetType) {
+      experiments = experiments.filter(r => r.targetType === args.targetType);
+    }
+    if (args.targetId) {
+      experiments = experiments.filter(r => r.targetId === args.targetId);
+    }
+    if (args.agentVersion) {
+      experiments = experiments.filter(r => r.agentVersion === args.agentVersion);
+    }
+    if (args.status) {
+      experiments = experiments.filter(r => r.status === args.status);
     }
 
     // Sort by createdAt descending (newest first)
@@ -166,6 +179,14 @@ export class ExperimentsInMemory extends ExperimentsStorage {
   async listExperimentResults(args: ListExperimentResultsInput): Promise<ListExperimentResultsOutput> {
     let results = Array.from(this.db.experimentResults.values()).filter(r => r.experimentId === args.experimentId);
 
+    // Apply filters
+    if (args.traceId) {
+      results = results.filter(r => r.traceId === args.traceId);
+    }
+    if (args.status) {
+      results = results.filter(r => r.status === args.status);
+    }
+
     // Sort by startedAt ascending (execution order)
     results.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
 
@@ -191,5 +212,23 @@ export class ExperimentsInMemory extends ExperimentsStorage {
         this.db.experimentResults.delete(resultId);
       }
     }
+  }
+
+  async getReviewSummary(): Promise<ExperimentReviewCounts[]> {
+    const counts = new Map<string, ExperimentReviewCounts>();
+
+    for (const result of this.db.experimentResults.values()) {
+      let entry = counts.get(result.experimentId);
+      if (!entry) {
+        entry = { experimentId: result.experimentId, total: 0, needsReview: 0, reviewed: 0, complete: 0 };
+        counts.set(result.experimentId, entry);
+      }
+      entry.total++;
+      if (result.status === 'needs-review') entry.needsReview++;
+      else if (result.status === 'reviewed') entry.reviewed++;
+      else if (result.status === 'complete') entry.complete++;
+    }
+
+    return Array.from(counts.values());
   }
 }

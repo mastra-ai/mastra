@@ -7,7 +7,7 @@ import type {
   ToolSet,
 } from '@internal/ai-sdk-v5';
 import type { StopCondition as StopConditionV6 } from '@internal/ai-v6';
-import z from 'zod/v4';
+import { z } from 'zod/v4';
 import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/agent.types';
 import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
@@ -20,6 +20,7 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory, MemoryConfigInternal } from '../memory';
 import type { IModelSpanTracker, ObservabilityContext } from '../observability';
 import type {
+  ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
   ProcessInputStepArgs,
@@ -115,6 +116,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   providerOptions?: SharedProviderOptions;
   outputProcessors?: OutputProcessorOrWorkflow[];
   inputProcessors?: InputProcessorOrWorkflow[];
+  errorProcessors?: ErrorProcessorOrWorkflow[];
   tools?: TOOLS;
   experimental_generateMessageId?: () => string;
   stopWhen?: StopCondition | Array<StopCondition>;
@@ -133,9 +135,9 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   requestContext?: RequestContext;
   methodType: ModelMethodType;
   /**
-   * Maximum number of times processors can trigger a retry per generation.
-   * When a processor calls abort({ retry: true }), the agent will retry with feedback.
-   * If not set, no retries are performed.
+   * Maximum number of processor-triggered retries allowed for this generation.
+   * Input/output processor retries require this to be explicitly set.
+   * Error processor retries from processAPIError default to 10 when errorProcessors are configured and this is not set.
    */
   maxProcessorRetries?: number;
 

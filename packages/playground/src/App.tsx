@@ -1,3 +1,9 @@
+import { PlaygroundQueryClient } from '@/lib/tanstack-query';
+import { createFetchWithRefresh } from '@/domains/auth/hooks/fetch-with-refresh';
+import { PlaygroundConfigGuard } from '@/domains/configuration/components/playground-config-guard';
+import { StudioConfigProvider, useStudioConfig } from '@/domains/configuration/context/studio-config-context';
+import { LinkComponentProvider } from '@/lib/framework';
+import type { LinkComponentProviderProps } from '@/lib/framework';
 import { v4 as uuid } from '@lukeed/uuid';
 import { coreFeatures } from '@mastra/core/features';
 
@@ -16,24 +22,16 @@ declare global {
     MASTRA_TEMPLATES?: string;
     MASTRA_AUTO_DETECT_URL?: string;
     MASTRA_REQUEST_CONTEXT_PRESETS?: string;
-    MASTRA_THEME_TOGGLE?: string;
     MASTRA_EXPERIMENTAL_UI?: string;
   }
 }
 
-import type { LinkComponentProviderProps } from '@mastra/playground-ui';
-import {
-  LinkComponentProvider,
-  PlaygroundConfigGuard,
-  PlaygroundQueryClient,
-  StudioConfigProvider,
-  useStudioConfig,
-} from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
+import { useMemo } from 'react';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
-import { Link } from './lib/framework';
+import { Link } from './lib/link';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
@@ -64,13 +62,20 @@ import DatasetItemPage from './pages/datasets/dataset/item';
 import DatasetItemsComparePage from './pages/datasets/dataset/item/compare';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
+import Evaluation from './pages/evaluation';
+import Experiments from './pages/experiments';
+import ExperimentPage from './pages/experiments/experiment';
 import { Login } from './pages/login';
+import Logs from './pages/logs';
 import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
-import Observability from './pages/observability';
+import Metrics from './pages/metrics';
+import ObservabilityOverview from './pages/observability-overview';
+import Primitives from './pages/primitives';
 import PromptBlocks from './pages/prompt-blocks';
 import RequestContext from './pages/request-context';
+import Resources from './pages/resources';
 import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
 import { StudioSettingsPage } from './pages/settings';
@@ -79,6 +84,7 @@ import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';
+import Traces from './pages/traces';
 import Workflows from './pages/workflows';
 import { Workflow } from './pages/workflows/workflow';
 import Workspace from './pages/workspace';
@@ -93,9 +99,9 @@ import Tools from '@/pages/tools';
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}/chat/new`,
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
-  agentSkillLink: (agentId: string, skillName: string, workspaceId?: string) =>
+  agentSkillLink: (agentId: string, skillName: string, skillPath?: string, workspaceId?: string) =>
     workspaceId
-      ? `/workspaces/${workspaceId}/skills/${skillName}?agentId=${encodeURIComponent(agentId)}`
+      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}?agentId=${encodeURIComponent(agentId)}${skillPath ? `&path=${encodeURIComponent(skillPath)}` : ''}`
       : `/workspaces`,
   agentsLink: () => `/agents`,
   agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/new`,
@@ -116,11 +122,15 @@ const paths: LinkComponentProviderProps['paths'] = {
   cmsPromptBlockCreateLink: () => '/cms/prompts/create',
   cmsPromptBlockEditLink: (promptBlockId: string) => `/cms/prompts/${promptBlockId}/edit`,
   toolLink: (toolId: string) => `/tools/${toolId}`,
-  skillLink: (skillName: string, workspaceId?: string) =>
-    workspaceId ? `/workspaces/${workspaceId}/skills/${skillName}` : `/workspaces`,
+  skillLink: (skillName: string, skillPath?: string, workspaceId?: string) =>
+    workspaceId
+      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}${skillPath ? `?path=${encodeURIComponent(skillPath)}` : ''}`
+      : `/workspaces`,
   workspaceLink: (workspaceId?: string) => (workspaceId ? `/workspaces/${workspaceId}` : `/workspaces`),
-  workspaceSkillLink: (skillName: string, workspaceId?: string) =>
-    workspaceId ? `/workspaces/${workspaceId}/skills/${skillName}` : `/workspaces`,
+  workspaceSkillLink: (skillName: string, skillPath?: string, workspaceId?: string) =>
+    workspaceId
+      ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}${skillPath ? `?path=${encodeURIComponent(skillPath)}` : ''}`
+      : `/workspaces`,
   workspacesLink: () => `/workspaces`,
   processorsLink: () => `/processors`,
   processorLink: (processorId: string) => `/processors/${processorId}`,
@@ -131,6 +141,7 @@ const paths: LinkComponentProviderProps['paths'] = {
   datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,
   datasetExperimentLink: (datasetId: string, experimentId: string) =>
     `/datasets/${datasetId}/experiments/${experimentId}`,
+  experimentLink: (experimentId: string) => `/experiments/${experimentId}`,
 };
 
 const RootLayout = () => {
@@ -198,9 +209,15 @@ const routes = [
             { path: '/templates/:templateSlug', element: <Template /> },
           ]),
 
+      { path: '/logs', element: <Logs /> },
+      { path: '/primitives', element: <Primitives /> },
+      { path: '/evaluation', element: <Evaluation /> },
       { path: '/scorers', element: <Scorers /> },
       { path: '/scorers/:scorerId', element: <Scorer /> },
-      { path: '/observability', element: <Observability /> },
+      { path: '/metrics', element: <Metrics /> },
+      { path: '/observability-overview', element: <ObservabilityOverview /> },
+      { path: '/observability', element: <Traces /> },
+      { path: '/resources', element: <Resources /> },
       { path: '/agents', element: <Agents /> },
       {
         path: '/cms/agents/create',
@@ -234,7 +251,7 @@ const routes = [
           { path: 'chat/:threadId', element: <Agent /> },
           ...(isExperimentalFeatures
             ? [
-                { path: 'playground', element: <AgentPlayground /> },
+                { path: 'editor', element: <AgentPlayground /> },
                 { path: 'evaluate', element: <AgentEvaluate /> },
                 { path: 'review', element: <AgentReview /> },
               ]
@@ -281,8 +298,13 @@ const routes = [
             { path: '/datasets', element: <Datasets /> },
             { path: '/datasets/:datasetId', element: <DatasetPage /> },
             { path: '/datasets/:datasetId/items/:itemId', element: <DatasetItemPage /> },
-            { path: '/datasets/:datasetId/items/:itemId/versions', element: <DatasetItemVersionsComparePage /> },
+            {
+              path: '/datasets/:datasetId/items/:itemId/versions',
+              element: <DatasetItemVersionsComparePage />,
+            },
             { path: '/datasets/:datasetId/experiments/:experimentId', element: <DatasetExperiment /> },
+            { path: '/experiments', element: <Experiments /> },
+            { path: '/experiments/:experimentId', element: <ExperimentPage /> },
             { path: '/datasets/:datasetId/experiments', element: <CompareDatasetExperimentsPage /> },
             { path: '/datasets/:datasetId/items', element: <DatasetItemsComparePage /> },
             { path: '/datasets/:datasetId/versions', element: <DatasetCompareDatasetVersions /> },
@@ -299,6 +321,12 @@ function App() {
   const studioBasePath = window.MASTRA_STUDIO_BASE_PATH || '';
   const { baseUrl, headers, apiPrefix, isLoading } = useStudioConfig();
 
+  // Create a stable fetch function that auto-refreshes on 401
+  const customFetch = useMemo(
+    () => (baseUrl ? createFetchWithRefresh(baseUrl, apiPrefix) : undefined),
+    [baseUrl, apiPrefix],
+  );
+
   if (isLoading) {
     // Config is loaded from localStorage. However, there might be a race condition
     // between the first tanstack resolution and the React useLayoutEffect where headers are not set yet on the first HTTP request.
@@ -312,7 +340,7 @@ function App() {
   const router = createBrowserRouter(routes, { basename: studioBasePath });
 
   return (
-    <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix}>
+    <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix} customFetch={customFetch}>
       <PostHogProvider>
         <RouterProvider router={router} />
       </PostHogProvider>
@@ -327,12 +355,11 @@ export default function AppWrapper() {
   const apiPrefix = window.MASTRA_API_PREFIX || '/api';
   const cloudApiEndpoint = window.MASTRA_CLOUD_API_ENDPOINT || '';
   const autoDetectUrl = window.MASTRA_AUTO_DETECT_URL === 'true';
-  const themeToggleEnabled = window.MASTRA_THEME_TOGGLE === 'true';
   const endpoint = cloudApiEndpoint || (autoDetectUrl ? window.location.origin : `${protocol}://${host}:${port}`);
 
   return (
     <PlaygroundQueryClient>
-      <StudioConfigProvider endpoint={endpoint} defaultApiPrefix={apiPrefix} themeToggleEnabled={themeToggleEnabled}>
+      <StudioConfigProvider endpoint={endpoint} defaultApiPrefix={apiPrefix}>
         <App />
       </StudioConfigProvider>
     </PlaygroundQueryClient>
