@@ -75,6 +75,9 @@ export class InngestRun<
   async getRunOutput(_eventId: string, maxWaitMs = 300000) {
     const storage = this.#mastra?.getStorage();
     const workflowsStore = await storage?.getStore('workflows');
+    if (!workflowsStore) {
+      throw new NonRetriableError(`Workflow storage is required to retrieve output for run ${this.runId}`);
+    }
     return new Promise<any>((resolve, reject) => {
       let resolved = false;
       let unsubscribe: (() => void) | null = null;
@@ -178,7 +181,7 @@ export class InngestRun<
           }
 
           try {
-            const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+            const snapshot = await workflowsStore.loadWorkflowSnapshot({
               workflowName: this.workflowId,
               runId: this.runId,
             });
