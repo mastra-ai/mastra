@@ -44,7 +44,7 @@ export class BackgroundTaskManager {
   // Cleanup interval handle
   private cleanupInterval?: ReturnType<typeof setInterval>;
 
-  constructor(config: BackgroundTaskManagerConfig = {}) {
+  constructor(config: BackgroundTaskManagerConfig = { enabled: false }) {
     this.config = {
       globalConcurrency: config.globalConcurrency ?? 10,
       perAgentConcurrency: config.perAgentConcurrency ?? 5,
@@ -751,31 +751,38 @@ export class BackgroundTaskManager {
    * Recovers tasks left in 'running' or 'pending' state from a previous process.
    */
   private async recoverStaleTasks(): Promise<void> {
-    const storage = await this.getStorage();
-    const { tasks: staleTasks } = await storage.listTasks({ status: 'running' });
-    for (const task of staleTasks) {
-      if (task.maxRetries > 0) {
-        await storage.updateTask(task.id, {
-          status: 'pending',
-          startedAt: undefined,
-        });
-      } else {
-        await storage.updateTask(task.id, {
-          status: 'failed',
-          error: { message: 'Worker process terminated before task completed' },
-          completedAt: new Date(),
-        });
+    try {
+      const storage = await this.getStorage();
+      const { tasks: staleTasks } = await storage.listTasks({ status: 'running' });
+      for (const task of staleTasks) {
+        if (task.maxRetries > 0) {
+          await storage.updateTask(task.id, {
+            status: 'pending',
+            startedAt: undefined,
+          });
+        } else {
+          await storage.updateTask(task.id, {
+            status: 'failed',
+            error: { message: 'Worker process terminated before task completed' },
+            completedAt: new Date(),
+          });
+        }
       }
-    }
 
-    const { tasks: pendingTasks } = await storage.listTasks({
-      status: 'pending',
-      orderBy: 'createdAt',
-      orderDirection: 'asc',
-    });
-    for (const task of pendingTasks) {
-      if (await this.checkConcurrency(task.agentId)) {
-        await this.dispatch(task);
+      const { tasks: pendingTasks } = await storage.listTasks({
+        status: 'pending',
+        orderBy: 'createdAt',
+        orderDirection: 'asc',
+      });
+      for (const task of pendingTasks) {
+        if (await this.checkConcurrency(task.agentId)) {
+          await this.dispatch(task);
+        }
+      }
+    } catch (error) {
+      const logger = this.#mastra?.getLogger();
+      if (logger) {
+        logger.error('Failed to recover stale background tasks', error);
       }
     }
   }

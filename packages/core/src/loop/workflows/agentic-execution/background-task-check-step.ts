@@ -38,6 +38,10 @@ export function createBackgroundTaskCheckStep<Tools extends ToolSet = ToolSet, O
       const { threadId, resourceId } = _internal || {};
       const bgManager = _internal?.backgroundTaskManager;
 
+      if (!bgManager) {
+        return typedInput;
+      }
+
       const runningResult = await bgManager?.listTasks({
         agentId,
         status: 'running',
@@ -47,8 +51,8 @@ export function createBackgroundTaskCheckStep<Tools extends ToolSet = ToolSet, O
       const runningTasks = runningResult?.tasks;
 
       // No running tasks or no manager — pass through
-      if (!runningTasks || runningTasks.length === 0 || !bgManager) {
-        return { ...typedInput, backgroundTaskPending: false };
+      if (!runningTasks || runningTasks.length === 0) {
+        return typedInput;
       }
 
       const taskIds = runningTasks.map(task => task.id);
@@ -106,7 +110,7 @@ export function createBackgroundTaskCheckStep<Tools extends ToolSet = ToolSet, O
         // Return WITHOUT setting isContinued so the loop can end.
         // The tasks keep running in the background — results will be
         // picked up on the next user message or stream.
-        return { ...typedInput, backgroundTaskPending: false };
+        return typedInput;
       }
 
       // A task completed within the timeout — force the loop to continue

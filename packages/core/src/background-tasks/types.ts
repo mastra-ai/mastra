@@ -125,8 +125,8 @@ export interface CleanupConfig {
 }
 
 export interface BackgroundTaskManagerConfig {
-  /** Whether background tasks are enabled. Default: true */
-  enabled?: boolean;
+  /** Whether background tasks are enabled. Default: false */
+  enabled: boolean;
   /** Global concurrency limit across all agents. Default: 10 */
   globalConcurrency?: number;
   /** Per-agent concurrency limit. Default: 5 */

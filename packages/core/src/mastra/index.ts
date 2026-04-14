@@ -807,7 +807,7 @@ export class Mastra<
   }
 
   #ensureBackgroundTaskManager(): void {
-    if (this.#backgroundTaskManager || this.#backgroundTaskConfig?.enabled === false || !this.#storage) {
+    if (!this.#backgroundTaskConfig?.enabled || !this.#storage) {
       return;
     }
 
