@@ -4709,6 +4709,8 @@ export class Agent<
       attributes: {
         conversationId: threadFromArgs?.id,
         instructions: this.#convertInstructionsToString(instructions),
+        // @deprecated — use entityVersionId (top-level span context field) instead.
+        // Kept for backward compatibility during migration.
         ...(this.toRawConfig()?.resolvedVersionId
           ? { resolvedVersionId: this.toRawConfig()!.resolvedVersionId as string }
           : {}),
@@ -4717,6 +4719,9 @@ export class Agent<
         runId,
         resourceId,
         threadId: threadFromArgs?.id,
+        ...(this.toRawConfig()?.resolvedVersionId
+          ? { entityVersionId: this.toRawConfig()!.resolvedVersionId as string }
+          : {}),
       },
       tracingPolicy: this.#options?.tracingPolicy,
       tracingOptions: options.tracingOptions,
