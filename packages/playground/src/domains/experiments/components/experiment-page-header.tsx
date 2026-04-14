@@ -3,7 +3,7 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { CopyButton, MainHeader, TextAndIcon } from '@mastra/playground-ui';
 import { format } from 'date-fns';
-import { PlayCircle, Calendar1Icon, CrosshairIcon } from 'lucide-react';
+import { PlayCircle, Calendar1Icon, CrosshairIcon, GitBranch } from 'lucide-react';
 import { useAgents } from '../../agents/hooks/use-agents';
 import { useScorers } from '../../scores/hooks/use-scorers';
 import { useWorkflows } from '../../workflows/hooks/use-workflows';
@@ -72,6 +72,22 @@ export function ExperimentPageHeader({ experimentId, experiment }: ExperimentPag
             <CrosshairIcon /> Target
             <Link href={getTargetPath()}>{getTargetName()}</Link>
           </TextAndIcon>
+          {experiment.agentVersion && (
+            <TextAndIcon>
+              <GitBranch /> Version
+              {experiment.targetType === 'agent' && experiment.targetId ? (
+                <Link
+                  href={`${paths.agentLink(experiment.targetId)}/editor?version=${encodeURIComponent(experiment.agentVersion)}`}
+                  className="font-mono text-xs underline hover:text-accent1"
+                >
+                  {experiment.agentVersion}
+                </Link>
+              ) : (
+                <span className="font-mono text-xs">{experiment.agentVersion}</span>
+              )}
+              <CopyButton content={experiment.agentVersion} />
+            </TextAndIcon>
+          )}
         </MainHeader.Description>
       </MainHeader.Column>
       <MainHeader.Column>
