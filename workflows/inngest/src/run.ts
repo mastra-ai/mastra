@@ -664,25 +664,28 @@ export class InngestRun<
       runId: this.runId,
     });
 
+    let snapshotForRollback = snapshot;
     if (!snapshot) {
+      const pendingSnapshot = {
+        runId: this.runId,
+        serializedStepGraph: this.serializedStepGraph,
+        status: 'pending' as const,
+        value: {},
+        context: {} as any,
+        activePaths: [] as number[],
+        suspendedPaths: {},
+        activeStepsPath: {},
+        resumeLabels: {},
+        waitingPaths: {},
+        timestamp: Date.now(),
+      };
       await workflowsStore.persistWorkflowSnapshot({
         workflowName: this.workflowId,
         runId: this.runId,
         resourceId: this.resourceId,
-        snapshot: {
-          runId: this.runId,
-          serializedStepGraph: this.serializedStepGraph,
-          status: 'pending',
-          value: {},
-          context: {} as any,
-          activePaths: [],
-          suspendedPaths: {},
-          activeStepsPath: {},
-          resumeLabels: {},
-          waitingPaths: {},
-          timestamp: Date.now(),
-        },
+        snapshot: pendingSnapshot,
       });
+      snapshotForRollback = pendingSnapshot;
     }
 
     if (snapshot?.status === 'running') {
@@ -708,7 +711,7 @@ export class InngestRun<
     });
 
     // Save previous snapshot for rollback if send fails
-    const previousSnapshot = snapshot;
+    const previousSnapshot = snapshotForRollback;
 
     // Mark the snapshot as 'running' before sending the event so that
     // snapshot-based polling doesn't return the stale result from a previous run.
