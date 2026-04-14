@@ -350,8 +350,29 @@ Reflection works similarly — the Reflector runs in the background when observa
 | `observation.bufferTokens` | `0.2` | How often to buffer. `0.2` means every 20% of `messageTokens` — with the default 30k threshold, that's roughly every 6k tokens. Can also be an absolute token count (e.g. `5000`). |
 | `observation.bufferActivation` | `0.8` | How aggressively to clear the message window on activation. `0.8` means remove enough messages to keep only 20% of `messageTokens` remaining. Lower values keep more message history. |
 | `observation.blockAfter` | `1.2` | Safety threshold as a multiplier of `messageTokens`. At `1.2`, synchronous observation is forced at 36k tokens (1.2 × 30k). Only matters if buffering can't keep up. |
+| `observation.activationTTL` | none | Forces buffered observations to activate after a period of inactivity, even if `messageTokens` has not been reached yet. Accepts milliseconds or duration strings like `300_000`, `"5m"`, or `"1hr"`. Set this to your prompt cache TTL if you want activation to happen before the next cold prompt. |
 | `reflection.bufferActivation` | `0.5` | When to start background reflection. `0.5` means reflection begins when observations reach 50% of the `observationTokens` threshold. |
 | `reflection.blockAfter` | `1.2` | Safety threshold for reflection, same logic as observation. |
+| `reflection.activationTTL` | none | Forces buffered reflections to activate after a period of inactivity, even if `observationTokens` has not been reached yet. Accepts milliseconds or duration strings like `300_000`, `"5m"`, or `"1hr"`. |
+
+If you're relying on prompt caching, set `activationTTL` to match your cache TTL. That way, once a thread has been idle long enough for the cache to expire, the next request can activate buffered observations or reflections first and send a smaller compressed context window.
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      observation: {
+        activationTTL: '5m',
+      },
+      reflection: {
+        activationTTL: '5m',
+      },
+    },
+  },
+})
+```
+
+With a 5-minute prompt cache TTL, this activates buffered context after 5 minutes of inactivity so the next uncached prompt uses observations and reflections instead of a larger raw message window. If you prefer, `300_000` works the same way.
 
 ### Disabling
 

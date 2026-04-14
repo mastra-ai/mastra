@@ -138,9 +138,13 @@ export interface ObservationConfig {
   bufferActivation?: number;
 
   /**
-   * Time in milliseconds. When the gap between the current time and the last assistant message part's `createdAt` exceeds this value, buffered observations are force-activated regardless of whether the token threshold has been reached.
+   * Time before buffered observations are force-activated after inactivity.
+   * Accepts milliseconds as a number or a duration string like `"5m"` or `"1hr"`.
+   * When the gap between the current time and the last assistant message part's `createdAt`
+   * exceeds this value, buffered observations are force-activated regardless of whether the
+   * token threshold has been reached.
    */
-  activationTTL?: number;
+  activationTTL?: number | string;
 
   /**
    * Token threshold above which synchronous (blocking) observation is forced.
@@ -248,9 +252,13 @@ export interface ReflectionConfig {
   bufferActivation?: number;
 
   /**
-   * Time in milliseconds. When the gap between the current time and the last assistant message part's `createdAt` exceeds this value, buffered reflections are force-activated regardless of whether the token threshold has been reached.
+   * Time before buffered reflections are force-activated after inactivity.
+   * Accepts milliseconds as a number or a duration string like `"5m"` or `"1hr"`.
+   * When the gap between the current time and the last assistant message part's `createdAt`
+   * exceeds this value, buffered reflections are force-activated regardless of whether the
+   * token threshold has been reached.
    */
-  activationTTL?: number;
+  activationTTL?: number | string;
 
   /**
    * Custom instructions to append to the Reflector's system prompt.

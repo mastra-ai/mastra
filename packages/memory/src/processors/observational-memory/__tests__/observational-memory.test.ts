@@ -5147,7 +5147,7 @@ describe('Locking Behavior', () => {
       },
       reflection: {
         observationTokens: 1000,
-        activationTTL: 300_000,
+        activationTTL: '5m',
         model: mockReflectorModel as any,
       },
       scope: 'thread',
@@ -5159,7 +5159,7 @@ describe('Locking Behavior', () => {
       scope: 'thread',
       config: {
         observation: { messageTokens: 100, model: 'test-model' },
-        reflection: { observationTokens: 1000, activationTTL: 300_000, model: 'test-model' },
+        reflection: { observationTokens: 1000, activationTTL: '5m', model: 'test-model' },
       },
     });
 
@@ -10600,6 +10600,18 @@ describe('Observer Context Optimization', () => {
       expect(() => createOM({ previousObserverTokens: 0 })).not.toThrow();
       expect(() => createOM({ previousObserverTokens: 1 })).not.toThrow();
       expect(() => createOM({ previousObserverTokens: 5000 })).not.toThrow();
+    });
+
+    it('should accept duration strings for observation.activationTTL', () => {
+      expect(() => createOM({ activationTTL: '5m' })).not.toThrow();
+      expect(() => createOM({ activationTTL: '1hr' })).not.toThrow();
+      expect(() => createOM({ activationTTL: '30s' })).not.toThrow();
+    });
+
+    it('should throw if observation.activationTTL is an invalid duration string', () => {
+      expect(() => createOM({ activationTTL: 'later' })).toThrow(
+        'observation.activationTTL must be a non-negative number of milliseconds or a duration string like "5m" or "1hr".',
+      );
     });
   });
 

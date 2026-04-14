@@ -58,6 +58,50 @@ export function buildMessageRange(messages: MastraDBMessage[]): string {
   return `${first.id}:${last.id}`;
 }
 
+function parseActivationTTL(value: number | string | undefined, fieldPath: string): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || value < 0) {
+      throw new Error(`${fieldPath} must be a non-negative number of milliseconds or a duration string like "5m".`);
+    }
+    return value;
+  }
+
+  const trimmed = value.trim();
+  const match = trimmed.match(
+    /^(\d+(?:\.\d+)?)\s*(ms|msec|msecs|millisecond|milliseconds|s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours)$/i,
+  );
+
+  if (!match) {
+    throw new Error(
+      `${fieldPath} must be a non-negative number of milliseconds or a duration string like "5m" or "1hr".`,
+    );
+  }
+
+  const rawAmount = match[1]!;
+  const rawUnit = match[2]!;
+  const amount = Number(rawAmount);
+  const unit = rawUnit.toLowerCase();
+
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new Error(`${fieldPath} must be a non-negative number of milliseconds or a duration string like "5m".`);
+  }
+
+  const multiplier =
+    unit === 'ms' || unit === 'msec' || unit === 'msecs' || unit === 'millisecond' || unit === 'milliseconds'
+      ? 1
+      : unit === 's' || unit === 'sec' || unit === 'secs' || unit === 'second' || unit === 'seconds'
+        ? 1_000
+        : unit === 'm' || unit === 'min' || unit === 'mins' || unit === 'minute' || unit === 'minutes'
+          ? 60_000
+          : 3_600_000;
+
+  return amount * multiplier;
+}
+
 import { addRelativeTimeToObservations } from './date-utils';
 import { omDebug, omError } from './debug';
 import { createBufferingStartMarker, createActivationMarker } from './markers';
@@ -357,7 +401,7 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config.observation?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferActivation),
-      activationTTL: config.observation?.activationTTL,
+      activationTTL: parseActivationTTL(config.observation?.activationTTL, 'observation.activationTTL'),
       blockAfter: asyncBufferingDisabled
         ? undefined
         : resolveBlockAfter(
@@ -389,7 +433,7 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config?.reflection?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferActivation),
-      activationTTL: config.reflection?.activationTTL,
+      activationTTL: parseActivationTTL(config.reflection?.activationTTL, 'reflection.activationTTL'),
       blockAfter: asyncBufferingDisabled
         ? undefined
         : resolveBlockAfter(
