@@ -531,6 +531,92 @@ describe('DatadogBridge', () => {
       // Late-arriving span uses scope().activate() with parent context
       expect(mockScopeActivate).toHaveBeenCalled();
     });
+
+    it('preserves unresolved children when root ends before their parent', async () => {
+      // Scenario:
+      // 1. child ends (buffered; its parent hasn't ended yet)
+      // 2. root ends → tree is built, but child's parent isn't in the buffer
+      //    so child is "orphan" during initial tree emission
+      // 3. parent ends later → parent emits (parent's parent is root, in contexts)
+      // 4. child should then also emit (its parent is now in contexts)
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+
+      const rootSpan = createMockSpan({ id: 'root', traceId: 'trace-orphan', isRootSpan: true });
+      const parentSpan = createMockSpan({
+        id: 'parent',
+        traceId: 'trace-orphan',
+        isRootSpan: false,
+        parentSpanId: 'root',
+      });
+      const childSpan = createMockSpan({
+        id: 'child',
+        traceId: 'trace-orphan',
+        isRootSpan: false,
+        parentSpanId: 'parent',
+      });
+
+      // 1. Child ends first (buffered, parent not yet in buffer)
+      await bridge.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, childSpan));
+      expect(mockTrace).not.toHaveBeenCalled();
+
+      // 2. Root ends (triggers tree emission — only root is resolvable)
+      await bridge.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, rootSpan));
+      // Root emits, child stays buffered (its parent is not in contexts yet)
+      expect(mockTrace).toHaveBeenCalledTimes(1);
+
+      // 3. Parent ends late
+      await bridge.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, parentSpan));
+      // Parent and child both emit now
+      expect(mockTrace).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe('model attribute inheritance for late-arriving spans', () => {
+    it('passes MODEL_GENERATION model/provider to a late-arriving MODEL_STEP child', async () => {
+      // Scenario: a MODEL_STEP child arrives after its MODEL_GENERATION parent
+      // has already been emitted as part of the tree. The late-arrival path
+      // should look up the parent's stored childInheritedModelAttrs and pass
+      // them to buildSpanOptions so the LLM-kind span has modelName/modelProvider.
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+
+      const rootSpan = createMockSpan({
+        id: 'root',
+        traceId: 'trace-model-late',
+        isRootSpan: true,
+        type: SpanType.AGENT_RUN,
+      });
+      const genSpan = createMockSpan({
+        id: 'gen',
+        traceId: 'trace-model-late',
+        isRootSpan: false,
+        parentSpanId: 'root',
+        type: SpanType.MODEL_GENERATION,
+        attributes: { model: 'gpt-5.4', provider: 'openai' },
+      });
+      const stepSpan = createMockSpan({
+        id: 'step',
+        traceId: 'trace-model-late',
+        isRootSpan: false,
+        parentSpanId: 'gen',
+        type: SpanType.MODEL_STEP,
+      });
+
+      // Emit tree first: root + gen (step hasn't ended yet)
+      await bridge.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, genSpan));
+      await bridge.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, rootSpan));
+
+      // Now the late-arriving step
+      await bridge.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, stepSpan));
+
+      // Find the LLMObs trace call for the step span (kind: 'llm')
+      const stepCall = mockTrace.mock.calls.find(([opts]: any) => opts.kind === 'llm');
+      expect(stepCall).toBeDefined();
+      expect(stepCall![0]).toMatchObject({
+        kind: 'llm',
+        modelName: 'gpt-5.4',
+        modelProvider: 'openai',
+      });
+    });
   });
 
   describe('span type mapping', () => {

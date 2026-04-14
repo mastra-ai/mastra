@@ -62,7 +62,17 @@ interface TraceContext {
 
 type TraceState = {
   buffer: Map<string, AnyExportedSpan>;
-  contexts: Map<string, { ddSpan: any; exported?: { traceId: string; spanId: string } }>;
+  contexts: Map<
+    string,
+    {
+      ddSpan: any;
+      exported?: { traceId: string; spanId: string };
+      // Effective model/provider to pass DOWN to this span's children. Used so
+      // late-arriving descendants can inherit MODEL_GENERATION attrs the same
+      // way they would during recursive tree emission.
+      childInheritedModelAttrs?: { model?: string; provider?: string };
+    }
+  >;
   rootEnded: boolean;
   treeEmitted: boolean;
   createdAt: number;
@@ -425,6 +435,11 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
     const state = this.traceState.get(traceId);
     if (!state) return;
 
+    // Phase 1: emit the initial tree once the root span ends. Any spans
+    // whose parent wasn't in the buffer at this point (e.g., child ended
+    // before its parent did and the root ended in between) stay buffered
+    // and may be emitted via the late-arrival path below once their parent
+    // shows up in state.contexts.
     if (!state.treeEmitted) {
       if (!state.rootEnded) return;
 
@@ -433,24 +448,34 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
         this.emitSpanTree(tree, state);
       }
 
-      state.buffer.clear();
-      state.treeEmitted = true;
-    } else {
-      let emitted = false;
-      do {
-        emitted = false;
-        for (const [spanId, span] of state.buffer) {
-          const parentCtx = span.parentSpanId ? state.contexts.get(span.parentSpanId) : undefined;
-          if (span.parentSpanId && !parentCtx) {
-            continue;
-          }
-
-          this.emitSingleSpan(span, state, parentCtx?.ddSpan);
+      // Remove only spans that were actually emitted (those now in
+      // state.contexts). Unresolved spans stay buffered.
+      for (const spanId of Array.from(state.buffer.keys())) {
+        if (state.contexts.has(spanId)) {
           state.buffer.delete(spanId);
-          emitted = true;
         }
-      } while (emitted);
+      }
+
+      state.treeEmitted = true;
     }
+
+    // Phase 2: emit late-arriving / previously-unresolved spans whose parent
+    // context now exists. Iterate to a fixed point so a chain of late spans
+    // (parent emits, then child can emit) all flush.
+    let emitted = false;
+    do {
+      emitted = false;
+      for (const [spanId, span] of state.buffer) {
+        const parentCtx = span.parentSpanId ? state.contexts.get(span.parentSpanId) : undefined;
+        if (span.parentSpanId && !parentCtx) {
+          continue;
+        }
+
+        this.emitSingleSpan(span, state, parentCtx?.ddSpan, parentCtx?.childInheritedModelAttrs);
+        state.buffer.delete(spanId);
+        emitted = true;
+      }
+    } while (emitted);
 
     // Schedule cleanup if root has ended and buffer is empty
     if (state.rootEnded && state.buffer.size === 0 && !state.cleanupTimer) {
@@ -547,7 +572,10 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
       }
 
       const exported = tracer.llmobs.exportSpan ? tracer.llmobs.exportSpan(ddSpan) : undefined;
-      state.contexts.set(span.id, { ddSpan, exported });
+      // Store childInheritedModelAttrs so any late-arriving descendants of this
+      // span (emitted via emitSingleSpan) can inherit the same model/provider
+      // attrs that recursive tree emission would have propagated.
+      state.contexts.set(span.id, { ddSpan, exported, childInheritedModelAttrs });
 
       for (const child of node.children) {
         this.emitSpanTree(child, state, childInheritedModelAttrs);
@@ -562,9 +590,28 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
   /**
    * Emit a single span with the proper Datadog parent context.
    * Used for late-arriving spans after the main tree has been emitted.
+   *
+   * Receives `inheritedModelAttrs` from the parent's stored context so that
+   * MODEL_STEP children of MODEL_GENERATION parents get model/provider names
+   * even when they arrive after the initial tree was emitted.
    */
-  private emitSingleSpan(span: AnyExportedSpan, state: TraceState, parent?: any) {
-    const { traceOptions, endTimeMs } = this.buildSpanOptions(span);
+  private emitSingleSpan(
+    span: AnyExportedSpan,
+    state: TraceState,
+    parent?: any,
+    inheritedModelAttrs?: { model?: string; provider?: string },
+  ) {
+    const { traceOptions, endTimeMs } = this.buildSpanOptions(span, inheritedModelAttrs);
+
+    // Compute what THIS span's own descendants should inherit, mirroring the
+    // logic in emitSpanTree.
+    const childInheritedModelAttrs =
+      span.type === SpanTypeEnum.MODEL_GENERATION
+        ? {
+            model: (span.attributes as ModelGenerationAttributes | undefined)?.model,
+            provider: (span.attributes as ModelGenerationAttributes | undefined)?.provider,
+          }
+        : inheritedModelAttrs;
 
     const runTrace = () =>
       tracer.llmobs.trace(traceOptions as any, (ddSpan: any) => {
@@ -578,7 +625,7 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
         }
 
         const exported = tracer.llmobs.exportSpan ? tracer.llmobs.exportSpan(ddSpan) : undefined;
-        state.contexts.set(span.id, { ddSpan, exported });
+        state.contexts.set(span.id, { ddSpan, exported, childInheritedModelAttrs });
 
         if (typeof ddSpan.finish === 'function') {
           ddSpan.finish(endTimeMs);
