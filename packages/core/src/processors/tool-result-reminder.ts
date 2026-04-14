@@ -9,13 +9,16 @@ import type { ProcessInputStepArgs, Processor, ToolCallInfo } from './index';
 const INSTRUCTION_FILE_NAMES = ['AGENTS.md', 'CLAUDE.md', 'CONTEXT.md'] as const;
 const PATH_FIELDS = ['path', 'file', 'filePath', 'target', 'targetPath', 'dest', 'destination'] as const;
 const REMINDER_TYPE = 'dynamic-agents-md';
-const REMINDER_METADATA_KEY = 'dynamicAgentsMdReminder';
+const LEGACY_REMINDER_METADATA_KEY = 'dynamicAgentsMdReminder';
+
+type ReminderMetadataValue = {
+  path?: string;
+  type?: string;
+};
 
 type ReminderMessageMetadata = {
-  [REMINDER_METADATA_KEY]?: {
-    path?: string;
-    type?: string;
-  };
+  systemReminder?: ReminderMetadataValue;
+  dynamicAgentsMdReminder?: ReminderMetadataValue;
 };
 
 type SystemReminderChunk = DataChunkType & {
@@ -142,7 +145,7 @@ function extractReminderPath(messageText: string): string | undefined {
 
 function getReminderMetadata(instructionPath: string): ReminderMessageMetadata {
   return {
-    [REMINDER_METADATA_KEY]: {
+    systemReminder: {
       path: instructionPath,
       type: REMINDER_TYPE,
     },
@@ -155,8 +158,13 @@ function extractReminderPathFromMetadata(message: MastraDBMessage): string | und
     return undefined;
   }
 
-  const reminderMetadata = metadata[REMINDER_METADATA_KEY];
-  if (!isRecord(reminderMetadata)) {
+  const reminderMetadata = isRecord(metadata.systemReminder)
+    ? metadata.systemReminder
+    : isRecord(metadata[LEGACY_REMINDER_METADATA_KEY])
+      ? metadata[LEGACY_REMINDER_METADATA_KEY]
+      : undefined;
+
+  if (!reminderMetadata) {
     return undefined;
   }
 
