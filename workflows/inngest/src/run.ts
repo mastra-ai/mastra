@@ -493,13 +493,19 @@ export class InngestRun<
     const storage = this.#mastra?.getStorage();
 
     const workflowsStore = await storage?.getStore('workflows');
-    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+    if (!workflowsStore) {
+      throw new NonRetriableError(`Workflow storage is required to resume run ${this.runId}`);
+    }
+    const snapshot = await workflowsStore.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
+    if (!snapshot) {
+      throw new NonRetriableError(`Cannot resume run ${this.runId}: snapshot not found`);
+    }
 
     // Support label-based resume: look up step from resumeLabels
-    const snapshotResumeLabel = params.label ? snapshot?.resumeLabels?.[params.label] : undefined;
+    const snapshotResumeLabel = params.label ? snapshot.resumeLabels?.[params.label] : undefined;
     const stepParam = snapshotResumeLabel?.stepId ?? params.step;
 
     let steps: string[] = [];
@@ -524,13 +530,15 @@ export class InngestRun<
 
     // Mark the snapshot as 'running' before sending the event so that
     // snapshot-based polling doesn't return the stale suspended/paused result.
-    await workflowsStore?.persistWorkflowSnapshot({
+    await workflowsStore.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,
       snapshot: {
         ...snapshot,
         status: 'running',
+        result: undefined,
+        error: undefined,
         timestamp: Date.now(),
       } as any,
     });
@@ -633,14 +641,17 @@ export class InngestRun<
 
     const storage = this.#mastra?.getStorage();
     const workflowsStore = await storage?.getStore('workflows');
+    if (!workflowsStore) {
+      throw new NonRetriableError(`Workflow storage is required to time-travel run ${this.runId}`);
+    }
 
-    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+    const snapshot = await workflowsStore.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
 
     if (!snapshot) {
-      await workflowsStore?.persistWorkflowSnapshot({
+      await workflowsStore.persistWorkflowSnapshot({
         workflowName: this.workflowId,
         runId: this.runId,
         resourceId: this.resourceId,
@@ -684,7 +695,7 @@ export class InngestRun<
 
     // Mark the snapshot as 'running' before sending the event so that
     // snapshot-based polling doesn't return the stale result from a previous run.
-    await workflowsStore?.persistWorkflowSnapshot({
+    await workflowsStore.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,
