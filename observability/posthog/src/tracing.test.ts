@@ -733,6 +733,71 @@ describe('PosthogExporter', () => {
         },
       ]);
     });
+
+    it('should unwrap {messages: [...]} wrapper from generation input', async () => {
+      const generation = createSpan({
+        type: SpanType.MODEL_GENERATION,
+        parentSpanId: 'parent-1',
+        input: {
+          messages: [
+            { role: 'system', content: 'You are a helpful assistant.' },
+            { role: 'user', content: 'What is the weather?' },
+          ],
+        },
+      });
+
+      await exportSpanLifecycle(exporter, generation);
+
+      const capturedInput = mockCapture.mock.calls[0][0].properties.$ai_input;
+      expect(capturedInput).toEqual([
+        {
+          role: 'system',
+          content: [{ type: 'text', text: 'You are a helpful assistant.' }],
+        },
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'What is the weather?' }],
+        },
+      ]);
+    });
+
+    it('should extract text from generation output object without tool calls', async () => {
+      const generation = createSpan({
+        type: SpanType.MODEL_GENERATION,
+        parentSpanId: 'parent-1',
+        output: {
+          text: 'The weather is sunny.',
+          files: [],
+          reasoning: [],
+          reasoningText: '',
+          sources: [],
+          warnings: [],
+        },
+      });
+
+      await exportSpanLifecycle(exporter, generation);
+
+      const capturedOutput = mockCapture.mock.calls[0][0].properties.$ai_output_choices;
+      expect(capturedOutput).toEqual([
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'The weather is sunny.' }],
+        },
+      ]);
+    });
+
+    it('should handle empty messages array without stringifying', async () => {
+      const generation = createSpan({
+        type: SpanType.MODEL_GENERATION,
+        parentSpanId: 'parent-1',
+        input: { messages: [] },
+      });
+
+      await exportSpanLifecycle(exporter, generation);
+
+      const capturedInput = mockCapture.mock.calls[0][0].properties.$ai_input;
+      expect(capturedInput).toEqual([]);
+    });
   });
 
   // --- Priority 4: Integration Scenarios ---
