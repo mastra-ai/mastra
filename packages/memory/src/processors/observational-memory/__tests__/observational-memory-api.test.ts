@@ -934,7 +934,7 @@ describe('activate()', () => {
       }
     });
 
-    it('accepts duration strings like "5m" for observation activateAfterIdle', async () => {
+    it('activates from stored messages when activateAfterIdle has expired and messages are omitted', async () => {
       vi.useFakeTimers();
       try {
         const now = new Date('2026-04-14T12:00:00.000Z');
@@ -987,7 +987,7 @@ describe('activate()', () => {
           },
         });
 
-        const result = await om.activate({ threadId, checkThreshold: true, messages });
+        const result = await om.activate({ threadId, checkThreshold: true });
 
         expect(result.activated).toBe(true);
       } finally {

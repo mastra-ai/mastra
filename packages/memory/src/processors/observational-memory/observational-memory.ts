@@ -3081,8 +3081,16 @@ ${formattedMessages}
 
     // Optional threshold guard — skip activation if pending tokens are below threshold
     if (opts.checkThreshold) {
+      const thresholdMessages =
+        opts.messages ??
+        (await this.loadMessagesFromStorage(
+          threadId,
+          resourceId,
+          record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
+        ));
+
       const activateAfterIdle = this.observationConfig.activateAfterIdle;
-      const lastActivityAt = getLastActivityFromMessages(opts.messages);
+      const lastActivityAt = getLastActivityFromMessages(thresholdMessages);
       const ttlExpiredMs =
         activateAfterIdle !== undefined && lastActivityAt !== undefined ? Date.now() - lastActivityAt : undefined;
       const ttlExpired =
@@ -3093,7 +3101,7 @@ ${formattedMessages}
         activationLastActivityAt = lastActivityAt;
         activateAfterIdleExpiredMs = ttlExpiredMs;
       } else {
-        const status = await this.getStatus({ threadId, resourceId, messages: opts.messages });
+        const status = await this.getStatus({ threadId, resourceId, messages: thresholdMessages });
         if (status.pendingTokens < status.threshold) {
           return { activated: false, record };
         }

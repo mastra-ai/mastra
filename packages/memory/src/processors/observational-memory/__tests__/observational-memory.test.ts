@@ -7747,6 +7747,10 @@ describe('Full Async Buffering Flow', () => {
     const { RequestContext } = await import('@mastra/core/di');
 
     // Clear static maps to avoid cross-test pollution
+    const pendingBufferingOps = [...BufferingCoordinator.asyncBufferingOps.values()];
+    if (pendingBufferingOps.length > 0) {
+      await Promise.allSettled(pendingBufferingOps);
+    }
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
@@ -8726,6 +8730,10 @@ describe('Full Async Buffering Flow', () => {
     const { RequestContext } = await import('@mastra/core/di');
 
     // Clear static maps to avoid cross-test pollution
+    const pendingBufferingOps = [...BufferingCoordinator.asyncBufferingOps.values()];
+    if (pendingBufferingOps.length > 0) {
+      await Promise.allSettled(pendingBufferingOps);
+    }
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
@@ -8907,6 +8915,10 @@ describe('Full Async Buffering Flow', () => {
     const { RequestContext } = await import('@mastra/core/di');
 
     // Clear static maps to avoid cross-test pollution
+    const pendingBufferingOps = [...BufferingCoordinator.asyncBufferingOps.values()];
+    if (pendingBufferingOps.length > 0) {
+      await Promise.allSettled(pendingBufferingOps);
+    }
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
