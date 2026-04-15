@@ -64,6 +64,17 @@ type SuspendedClientToolCall = {
   args: any;
 };
 
+type ClientToolExecutionMessages = MessageListInput | UIMessage[] | CoreMessage[] | undefined;
+
+type StreamProcessingContext = {
+  clientTools?: Record<string, Tool>;
+  requestContext?: RequestContext<any> | Record<string, any>;
+  inputMessages?: MessageListInput;
+  memory?: StreamParams<any>['memory'];
+  threadId?: string;
+  resourceId?: string;
+};
+
 function getDelegatedClientToolSuspendData(response: any): {
   suspendPayload: any;
   clientToolCalls: SuspendedClientToolCall[];
@@ -86,6 +97,7 @@ async function executeClientToolsFromCalls({
   clientToolCalls,
   clientTools,
   agentId,
+  messages,
   requestContext,
   threadId,
   resourceId,
@@ -93,11 +105,13 @@ async function executeClientToolsFromCalls({
   clientToolCalls: SuspendedClientToolCall[];
   clientTools: Record<string, Tool>;
   agentId: string;
+  messages?: ClientToolExecutionMessages;
   requestContext?: RequestContext<any>;
   threadId?: string;
   resourceId?: string;
 }): Promise<Array<{ toolCallId: string; toolName: string; result: any }>> {
   const toolResults: Array<{ toolCallId: string; toolName: string; result: any }> = [];
+  const agentMessages = Array.isArray(messages) ? messages : [];
 
   for (const toolCall of clientToolCalls) {
     const clientTool = clientTools[toolCall.toolName] as Tool;
@@ -107,7 +121,7 @@ async function executeClientToolsFromCalls({
         tracingContext: { currentSpan: undefined },
         agent: {
           agentId,
-          messages: [],
+          messages: agentMessages,
           toolCallId: toolCall.toolCallId,
           suspend: async () => {},
           threadId,
@@ -244,6 +258,10 @@ async function executeSuspendedClientToolCallsAndRespond<OUTPUT>({
       clientToolCalls,
       clientTools: params.clientTools as Record<string, Tool>,
       agentId,
+      messages:
+        (currentResponse as any).response?.messages ??
+        (currentResponse as any).messages ??
+        (Array.isArray(params.messages) ? params.messages : undefined),
       requestContext,
       threadId,
       resourceId,
@@ -1488,12 +1506,16 @@ export class Agent extends BaseResource {
     processedParams: any,
     controller: ReadableStreamDefaultController<Uint8Array>,
     route: string = 'stream',
+    streamContext: StreamProcessingContext = {},
   ) {
-    // Extract threadId from memory config if present (matching generate() behavior)
-    const { memory } = processedParams ?? {};
+    const requestContext = streamContext.requestContext ?? processedParams.requestContext;
+    const clientTools = streamContext.clientTools ?? processedParams.clientTools;
+    const inputMessages = streamContext.inputMessages ?? processedParams.messages;
+    const memory = streamContext.memory ?? processedParams.memory;
     const { resource, thread } = memory ?? {};
-    const threadId = processedParams.threadId ?? (typeof thread === 'string' ? thread : thread?.id);
-    const resourceId = processedParams.resourceId ?? resource;
+    const threadId =
+      streamContext.threadId ?? processedParams.threadId ?? (typeof thread === 'string' ? thread : thread?.id);
+    const resourceId = streamContext.resourceId ?? processedParams.resourceId ?? resource;
 
     const response: Response = await this.request(`/agents/${this.agentId}/${route}`, {
       method: 'POST',
@@ -1570,17 +1592,17 @@ export class Agent extends BaseResource {
             let shouldExecuteClientTool = false;
             // Handle tool calls if needed
             for (const toolCall of toolCalls) {
-              const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
+              const clientTool = clientTools?.[toolCall.toolName] as Tool;
               if (clientTool && clientTool.execute) {
                 shouldExecuteClientTool = true;
                 shouldContinueRecursively = true;
                 const result = await clientTool.execute(toolCall?.args, {
-                  requestContext: processedParams.requestContext as RequestContext,
+                  requestContext: requestContext as RequestContext,
                   // TODO: Pass proper tracing context when client-js supports tracing
                   tracingContext: { currentSpan: undefined },
                   agent: {
                     agentId: this.agentId,
-                    messages: (response as unknown as { messages: CoreMessage[] }).messages,
+                    messages: messages.length > 0 ? messages : Array.isArray(inputMessages) ? inputMessages : [],
                     toolCallId: toolCall?.toolCallId,
                     suspend: async () => {},
                     threadId,
@@ -1622,7 +1644,7 @@ export class Agent extends BaseResource {
 
                 const updatedMessages = threadId
                   ? newMessages
-                  : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
+                  : [...(Array.isArray(inputMessages) ? inputMessages : []), ...newMessages];
 
                 // Recursively call stream with updated messages
                 // This will wait for the recursive stream to complete before continuing
@@ -1633,6 +1655,15 @@ export class Agent extends BaseResource {
                       messages: updatedMessages,
                     },
                     controller,
+                    'stream',
+                    {
+                      clientTools,
+                      requestContext,
+                      inputMessages: updatedMessages,
+                      memory,
+                      threadId,
+                      resourceId,
+                    },
                   );
                 } catch (error) {
                   console.error('Error processing recursive stream response:', error);
@@ -1640,7 +1671,7 @@ export class Agent extends BaseResource {
               }
             }
             shouldContinueRecursively = shouldContinueRecursively && shouldExecuteClientTool;
-          } else if (finishReason === 'suspended' && suspendedPayload && processedParams.clientTools) {
+          } else if (finishReason === 'suspended' && suspendedPayload && clientTools) {
             const { clientToolCalls, delegatedReplayState } = getDelegatedClientToolSuspendData({
               suspendPayload: suspendedPayload,
             });
@@ -1648,9 +1679,10 @@ export class Agent extends BaseResource {
             if (clientToolCalls.length > 0 && runId) {
               const toolResults = await executeClientToolsFromCalls({
                 clientToolCalls,
-                clientTools: processedParams.clientTools as Record<string, Tool>,
+                clientTools: clientTools as Record<string, Tool>,
                 agentId: this.agentId,
-                requestContext: processedParams.requestContext as RequestContext,
+                messages: messages.length > 0 ? messages : Array.isArray(inputMessages) ? inputMessages : undefined,
+                requestContext: requestContext as RequestContext,
                 threadId,
                 resourceId,
               });
@@ -1663,8 +1695,7 @@ export class Agent extends BaseResource {
                     {
                       runId,
                       toolCallId: outerToolCallId,
-                      requestContext: processedParams.requestContext,
-                      clientTools: processedParams.clientTools,
+                      requestContext,
                       resumeData: {
                         __mastraClientToolResults: toolResults,
                         ...(delegatedReplayState ? { __mastraDelegatedReplayState: delegatedReplayState } : {}),
@@ -1672,6 +1703,14 @@ export class Agent extends BaseResource {
                     },
                     controller,
                     'approve-tool-call',
+                    {
+                      clientTools,
+                      requestContext,
+                      inputMessages,
+                      memory,
+                      threadId,
+                      resourceId,
+                    },
                   );
                 } catch (error) {
                   console.error('Error processing recursive suspended stream response:', error);

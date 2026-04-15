@@ -14,6 +14,7 @@ class TestAgent extends Agent {
     processedParams: any,
     _controller: ReadableStreamDefaultController<Uint8Array>,
     route: string = 'stream',
+    _streamContext?: any,
   ): Promise<Response> {
     return (this['request'] as typeof this.request)(`/agents/test-agent/${route}`, {
       method: 'POST',
@@ -23,7 +24,7 @@ class TestAgent extends Agent {
   }
 }
 
-function createMastraSseResponse(chunks: any[]): Response {
+function createMastraSseResponse(chunks: any[], contentType: string = 'text/event-stream'): Response {
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -38,7 +39,7 @@ function createMastraSseResponse(chunks: any[]): Response {
   return new Response(stream, {
     status: 200,
     headers: {
-      'Content-Type': 'text/event-stream',
+      'Content-Type': contentType,
     },
   });
 }
@@ -124,7 +125,7 @@ describe('Agent.stream', () => {
     const mockRequest = vi.fn();
     agent['request'] = mockRequest as (typeof agent)['request'];
 
-    const execute = vi.fn().mockResolvedValue('red');
+    const execute = vi.fn().mockResolvedValueOnce('red').mockResolvedValueOnce('blue');
     const clientTool = createTool({
       id: 'changeColor',
       description: 'Change the color on the client side',
@@ -136,6 +137,18 @@ describe('Agent.stream', () => {
       subAgentThreadId: 'sub-thread-1',
       subAgentResourceId: 'sub-resource-1',
       replayMessages: [{ role: 'user', content: 'Change the color to red' }],
+    };
+
+    const secondReplayState = {
+      ...replayState,
+      replayMessages: [
+        ...replayState.replayMessages,
+        {
+          role: 'tool',
+          content: [{ type: 'tool-result', toolCallId: 'ct-1', toolName: 'changeColor', result: 'red' }],
+        },
+        { role: 'assistant', content: 'Changed the first color.' },
+      ],
     };
 
     mockRequest.mockResolvedValueOnce(
@@ -166,10 +179,52 @@ describe('Agent.stream', () => {
     );
 
     mockRequest.mockResolvedValueOnce(
+      createMastraSseResponse(
+        [
+          {
+            type: 'text-start',
+            payload: { id: 'text-1' },
+          },
+          {
+            type: 'text-delta',
+            payload: { id: 'text-1', text: 'Changed the first color.' },
+          },
+          {
+            type: 'text-end',
+            payload: { id: 'text-1' },
+          },
+          {
+            type: 'tool-call-suspended',
+            runId: 'run-1',
+            payload: {
+              toolCallId: 'delegate-1',
+              toolName: 'agent-colorSub',
+              args: { prompt: 'Change the color to blue' },
+              suspendPayload: {
+                __mastraClientToolCalls: [{ toolCallId: 'ct-2', toolName: 'changeColor', args: { color: 'blue' } }],
+                __mastraDelegatedReplayState: secondReplayState,
+              },
+              resumeSchema: { type: 'object' },
+            },
+          },
+          {
+            type: 'finish',
+            runId: 'run-1',
+            payload: {
+              stepResult: { reason: 'suspended' },
+              usage: { completionTokens: 1, promptTokens: 1, totalTokens: 2 },
+            },
+          },
+        ],
+        'text/plain',
+      ),
+    );
+
+    mockRequest.mockResolvedValueOnce(
       createMastraSseResponse([
         {
           type: 'text-delta',
-          payload: { text: 'Color changed to red' },
+          payload: { text: 'Colors updated' },
         },
         {
           type: 'finish',
@@ -183,6 +238,7 @@ describe('Agent.stream', () => {
 
     const response = await agent.stream('Change the color to red', {
       clientTools: { changeColor: clientTool },
+      memory: { thread: 'thread-1', resource: 'resource-1' },
     });
 
     const chunks: any[] = [];
@@ -192,20 +248,36 @@ describe('Agent.stream', () => {
       },
     });
 
-    expect(execute).toHaveBeenCalledTimes(1);
-    expect(mockRequest).toHaveBeenCalledTimes(2);
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(mockRequest).toHaveBeenCalledTimes(3);
 
     const secondCall = mockRequest.mock.calls[1];
+    const thirdCall = mockRequest.mock.calls[2];
     expect(secondCall[0]).toBe('/agents/test-agent/approve-tool-call');
+    expect(thirdCall[0]).toBe('/agents/test-agent/approve-tool-call');
     expect(secondCall[1].body.runId).toBe('run-1');
+    expect(thirdCall[1].body.runId).toBe('run-1');
     expect(secondCall[1].body.toolCallId).toBe('delegate-1');
+    expect(thirdCall[1].body.toolCallId).toBe('delegate-1');
     expect(secondCall[1].body.resumeData).toEqual({
       __mastraClientToolResults: [{ toolCallId: 'ct-1', toolName: 'changeColor', result: 'red' }],
       __mastraDelegatedReplayState: replayState,
     });
-    expect(chunks.some(chunk => chunk.type === 'text-delta' && chunk.payload.text === 'Color changed to red')).toBe(
-      true,
+    expect(thirdCall[1].body.resumeData).toEqual({
+      __mastraClientToolResults: [{ toolCallId: 'ct-2', toolName: 'changeColor', result: 'blue' }],
+      __mastraDelegatedReplayState: secondReplayState,
+    });
+    expect(secondCall[1].body).not.toHaveProperty('messages');
+    expect(secondCall[1].body).not.toHaveProperty('memory');
+    expect(thirdCall[1].body).not.toHaveProperty('messages');
+    expect(thirdCall[1].body).not.toHaveProperty('memory');
+
+    expect(execute.mock.calls[1]?.[1]?.agent?.threadId).toBe('thread-1');
+    expect(execute.mock.calls[1]?.[1]?.agent?.resourceId).toBe('resource-1');
+    expect(execute.mock.calls[1]?.[1]?.agent?.messages).toEqual(
+      expect.arrayContaining([expect.objectContaining({ role: 'assistant' })]),
     );
+    expect(chunks.some(chunk => chunk.type === 'text-delta' && chunk.payload.text === 'Colors updated')).toBe(true);
   });
 });
 
@@ -914,6 +986,14 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
           __mastraDelegatedReplayState: replayState,
         },
       },
+      response: {
+        messages: [
+          {
+            role: 'assistant',
+            content: 'Intermediate delegated response',
+          },
+        ],
+      },
     });
 
     mockRequest.mockResolvedValueOnce({
@@ -951,6 +1031,12 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
       __mastraClientToolResults: [{ toolCallId: 'ct-2', toolName: 'changeColor', result: 'blue' }],
       __mastraDelegatedReplayState: replayState,
     });
+    expect(execute.mock.calls[1]?.[1]?.agent?.messages).toEqual([
+      {
+        role: 'assistant',
+        content: 'Intermediate delegated response',
+      },
+    ]);
   });
 });
 

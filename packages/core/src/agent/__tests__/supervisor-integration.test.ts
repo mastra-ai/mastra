@@ -3890,6 +3890,110 @@ describe('Supervisor Pattern - Client tools forwarded to sub-agents', () => {
     expect(toolNames).toContain('changeColor');
     expect(toolNames.filter((n: string) => n === 'changeColor')).toHaveLength(1);
   });
+
+  it('should include parent client tools in delegated sub-agent stream model calls', async () => {
+    const subAgentToolSets: any[] = [];
+
+    const subAgent = new Agent({
+      id: 'color-agent-stream',
+      name: 'color-agent-stream',
+      description: 'Updates app colors while streaming',
+      instructions: 'Use available client tools when needed.',
+      model: new MockLanguageModelV2({
+        doStream: async ({ tools }) => {
+          subAgentToolSets.push(tools);
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Ready to stream the color change.' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              },
+            ]),
+          };
+        },
+      }),
+    });
+
+    let supervisorCallCount = 0;
+    const supervisor = new Agent({
+      id: 'client-tool-supervisor-stream',
+      name: 'client-tool-supervisor-stream',
+      instructions: 'Delegate color updates to the color agent.',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          supervisorCallCount++;
+          if (supervisorCallCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'delegate-color-agent-stream',
+                  toolName: 'agent-colorAgentStream',
+                  input: JSON.stringify({ prompt: 'Change the color to red' }),
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+            };
+          }
+
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(1) },
+              { type: 'text-start', id: 'text-2' },
+              { type: 'text-delta', id: 'text-2', delta: 'Done' },
+              { type: 'text-end', id: 'text-2' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+          };
+        },
+      }),
+      agents: { colorAgentStream: subAgent },
+      defaultOptions: {
+        clientTools: {
+          changeColor: {
+            id: 'changeColor',
+            description: 'Change the color on the client side',
+            inputSchema: z.object({
+              color: z.string(),
+            }),
+          },
+        },
+      },
+    });
+
+    const stream = await supervisor.stream('Change the color to red', { maxSteps: 5 });
+    for await (const _chunk of stream.fullStream) {
+      // Drain the stream so delegated execution completes.
+    }
+
+    expect(subAgentToolSets).toHaveLength(1);
+    const toolNames = subAgentToolSets[0].map((tool: any) => tool.name ?? tool.toolName);
+    expect(toolNames).toContain('changeColor');
+    expect(toolNames.filter((n: string) => n === 'changeColor')).toHaveLength(1);
+  });
 });
 
 describe('Supervisor Pattern - Client tool call suspension', () => {
@@ -4107,6 +4211,167 @@ describe('Supervisor Pattern - Client tool call suspension', () => {
     expect(resumedPrompt).toContain('Change the color to red');
     expect(resumedPrompt).toContain('changeColor');
     expect(resumedPrompt).toContain('red');
+  });
+
+  it('should keep delegated replay state cumulative across repeated client tool suspensions', async () => {
+    const mockStorage = new InMemoryStore();
+    const subAgentPrompts: any[] = [];
+    let subAgentCallCount = 0;
+    const subAgent = new Agent({
+      id: 'color-sub-cumulative',
+      name: 'color-sub-cumulative',
+      description: 'Changes colors via client tools in sequence',
+      instructions: 'Call the changeColor tool twice.',
+      model: new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          subAgentCallCount++;
+          subAgentPrompts.push(prompt as any[]);
+
+          if (subAgentCallCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'ct-1',
+                  toolName: 'changeColor',
+                  args: JSON.stringify({ color: 'red' }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+
+          if (subAgentCallCount === 2) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'ct-2',
+                  toolName: 'changeColor',
+                  args: JSON.stringify({ color: 'blue' }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            content: [{ type: 'text' as const, text: 'Colors changed' }],
+            warnings: [],
+          };
+        },
+      }),
+    });
+    const subAgentMemory = new MockMemory();
+    subAgent.__setMemory(subAgentMemory);
+
+    let supervisorCallCount = 0;
+    const supervisor = new Agent({
+      id: 'ct-suspend-supervisor-cumulative',
+      name: 'ct-suspend-supervisor-cumulative',
+      instructions: 'Delegate to the color sub-agent.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          supervisorCallCount++;
+          if (supervisorCallCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'delegate-cumulative',
+                  toolName: 'agent-colorSubCumulative',
+                  input: JSON.stringify({ prompt: 'Change the colors in sequence' }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text' as const, text: 'Done' }],
+            warnings: [],
+          };
+        },
+      }),
+      agents: { colorSubCumulative: subAgent },
+      memory: new MockMemory(),
+      defaultOptions: {
+        clientTools: {
+          changeColor: {
+            id: 'changeColor',
+            description: 'Change the color on the client side',
+            inputSchema: z.object({ color: z.string() }),
+          },
+        },
+      },
+    });
+
+    new Mastra({
+      agents: { ctSuspendSupervisorCumulative: supervisor },
+      storage: mockStorage,
+    });
+
+    const firstSuspend = await supervisor.generate('Change the colors in sequence', { maxSteps: 5 });
+    expect(firstSuspend.finishReason).toBe('suspended');
+
+    const firstNestedPayload = firstSuspend.suspendPayload?.suspendPayload ?? firstSuspend.suspendPayload;
+    const firstReplayState = firstNestedPayload?.__mastraDelegatedReplayState;
+    expect(firstReplayState).toBeDefined();
+
+    const secondSuspend = await supervisor.approveToolCallGenerate({
+      runId: firstSuspend.runId!,
+      toolCallId: firstSuspend.suspendPayload?.toolCallId,
+      resumeData: {
+        __mastraClientToolResults: [{ toolCallId: 'ct-1', toolName: 'changeColor', result: 'red' }],
+        __mastraDelegatedReplayState: firstReplayState,
+      },
+    });
+
+    expect(secondSuspend.finishReason).toBe('suspended');
+    const secondNestedPayload = secondSuspend.suspendPayload?.suspendPayload ?? secondSuspend.suspendPayload;
+    const secondReplayState = secondNestedPayload?.__mastraDelegatedReplayState;
+    expect(secondReplayState).toBeDefined();
+
+    const serializedSecondReplay = JSON.stringify(secondReplayState.replayMessages);
+    expect(serializedSecondReplay).toContain('ct-1');
+    expect(serializedSecondReplay).toContain('changeColor');
+    expect(serializedSecondReplay).toContain('red');
+    expect(serializedSecondReplay).toContain('ct-2');
+
+    const recall = vi.spyOn(subAgentMemory, 'recall').mockRejectedValueOnce(new Error('recall failed again'));
+
+    const finalResult = await supervisor.approveToolCallGenerate({
+      runId: secondSuspend.runId!,
+      toolCallId: secondSuspend.suspendPayload?.toolCallId,
+      resumeData: {
+        __mastraClientToolResults: [{ toolCallId: 'ct-2', toolName: 'changeColor', result: 'blue' }],
+        __mastraDelegatedReplayState: secondReplayState,
+      },
+    });
+
+    expect(finalResult.finishReason).toBe('stop');
+    expect(recall).toHaveBeenCalledWith({ threadId: secondReplayState.subAgentThreadId });
+    expect(subAgentPrompts).toHaveLength(3);
+
+    const finalPrompt = JSON.stringify(subAgentPrompts[2]);
+    expect(finalPrompt).toContain('ct-1');
+    expect(finalPrompt).toContain('red');
+    expect(finalPrompt).toContain('ct-2');
+    expect(finalPrompt).toContain('blue');
   });
 });
 

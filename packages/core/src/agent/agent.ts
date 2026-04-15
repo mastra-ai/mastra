@@ -3055,7 +3055,7 @@ export class Agent<
               | {
                   subAgentThreadId?: string;
                   subAgentResourceId?: string;
-                  replayMessages?: MastraDBMessage[];
+                  replayMessages?: MessageListInput;
                 }
               | undefined;
 
@@ -3294,6 +3294,35 @@ export class Agent<
 
               // Pass history as context (not messages) so it reaches the LLM but is not persisted to the sub-agent thread.
               const messagesForSubAgent: MessageListInput = [{ role: 'user' as const, content: effectivePrompt }];
+              const previousReplayMessages = Array.isArray(delegatedReplayState?.replayMessages)
+                ? delegatedReplayState.replayMessages
+                : [];
+              const clientToolResultMessages = (((resumeData as any)?.__mastraClientToolResults as any[]) || []).map(
+                (tr: any) => ({
+                  role: 'tool' as const,
+                  content: [
+                    {
+                      type: 'tool-result' as const,
+                      toolCallId: tr.toolCallId,
+                      toolName: tr.toolName,
+                      result: tr.result,
+                      ...(tr.isError != null && { isError: tr.isError }),
+                    },
+                  ],
+                }),
+              );
+              const buildDelegatedReplayMessages = (responseMessages: MessageListInput): MessageListInput => {
+                const responseMessageList = Array.isArray(responseMessages) ? responseMessages : [];
+                if (clientToolResultMessages.length > 0) {
+                  return [
+                    ...previousReplayMessages,
+                    ...clientToolResultMessages,
+                    ...responseMessageList,
+                  ] as MessageListInput;
+                }
+
+                return [...messagesForSubAgent, ...responseMessageList] as MessageListInput;
+              };
 
               const subAgentPromptCreatedAt = new Date();
 
@@ -3326,35 +3355,20 @@ export class Agent<
                   // Load the sub-agent's previous messages, append the client-provided
                   // tool results, and re-generate so the LLM can continue.
                   const memory = await agent.getMemory({ requestContext });
-                  let previousMessages: MastraDBMessage[] = delegatedReplayState?.replayMessages || [];
+                  let previousMessages: MessageListInput = previousReplayMessages;
                   if (memory) {
                     try {
                       const recalled = await memory.recall({ threadId: subAgentThreadId });
                       if (recalled.messages?.length) {
-                        previousMessages = recalled.messages;
+                        previousMessages = recalled.messages as MessageListInput;
                       }
                     } catch {
                       // Fall back to the serialized replay state when memory is unavailable.
                     }
                   }
 
-                  const toolResultInputMessages = ((resumeData as any).__mastraClientToolResults as any[]).map(
-                    (tr: any) => ({
-                      role: 'tool' as const,
-                      content: [
-                        {
-                          type: 'tool-result' as const,
-                          toolCallId: tr.toolCallId,
-                          toolName: tr.toolName,
-                          result: tr.result,
-                          ...(tr.isError != null && { isError: tr.isError }),
-                        },
-                      ],
-                    }),
-                  );
-
                   generateResult = await agent.generate(
-                    [...(previousMessages as any), ...toolResultInputMessages] as any,
+                    [...(previousMessages as any), ...clientToolResultMessages] as any,
                     subAgentGenerateOptions as any,
                   );
                 } else if (resumeData) {
@@ -3367,6 +3381,9 @@ export class Agent<
                 }
 
                 const agentResponseMessages = generateResult.response.dbMessages ?? [];
+                const delegatedReplayMessages = buildDelegatedReplayMessages(
+                  ((generateResult.response.messages ?? agentResponseMessages) as unknown as MessageListInput) || [],
+                );
                 const subAgentToolResults = generateResult.toolResults?.map(toolResult => ({
                   toolName: toolResult.payload.toolName,
                   toolCallId: toolResult.payload.toolCallId,
@@ -3416,6 +3433,9 @@ export class Agent<
                 }
 
                 if (generateResult.finishReason === 'suspended') {
+                  if (savedMastraMemory !== undefined) {
+                    requestContext.set('MastraMemory', savedMastraMemory);
+                  }
                   if (savedThreadIdKey !== undefined) {
                     requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
                   }
@@ -3437,6 +3457,9 @@ export class Agent<
                   const pendingClientToolCalls = this.#findPendingClientToolCalls(agentResponseMessages, clientTools);
 
                   if (pendingClientToolCalls.length > 0) {
+                    if (savedMastraMemory !== undefined) {
+                      requestContext.set('MastraMemory', savedMastraMemory);
+                    }
                     if (savedThreadIdKey !== undefined) {
                       requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
                     }
@@ -3449,7 +3472,7 @@ export class Agent<
                         __mastraDelegatedReplayState: {
                           subAgentThreadId,
                           subAgentResourceId,
-                          replayMessages: fullSubAgentMessages,
+                          replayMessages: delegatedReplayMessages,
                         },
                       },
                       {
@@ -3494,35 +3517,20 @@ export class Agent<
                 if ((resumeData as any)?.__mastraClientToolResults) {
                   // Resuming from client tool call suspension (stream path).
                   const memory = await agent.getMemory({ requestContext });
-                  let previousMessages: MastraDBMessage[] = delegatedReplayState?.replayMessages || [];
+                  let previousMessages: MessageListInput = previousReplayMessages;
                   if (memory) {
                     try {
                       const recalled = await memory.recall({ threadId: subAgentThreadId });
                       if (recalled.messages?.length) {
-                        previousMessages = recalled.messages;
+                        previousMessages = recalled.messages as MessageListInput;
                       }
                     } catch {
                       // Fall back to the serialized replay state when memory is unavailable.
                     }
                   }
 
-                  const toolResultInputMessages = ((resumeData as any).__mastraClientToolResults as any[]).map(
-                    (tr: any) => ({
-                      role: 'tool' as const,
-                      content: [
-                        {
-                          type: 'tool-result' as const,
-                          toolCallId: tr.toolCallId,
-                          toolName: tr.toolName,
-                          result: tr.result,
-                          ...(tr.isError != null && { isError: tr.isError }),
-                        },
-                      ],
-                    }),
-                  );
-
                   streamResult = await agent.stream(
-                    [...(previousMessages as any), ...toolResultInputMessages] as any,
+                    [...(previousMessages as any), ...clientToolResultMessages] as any,
                     subAgentStreamOptions as any,
                   );
                 } else if (resumeData) {
@@ -3574,7 +3582,12 @@ export class Agent<
                   args: toolResult.payload.args,
                   isError: toolResult.payload.isError,
                 }));
+                const streamSteps = await streamResult.steps;
                 const agentResponseMessages = streamResult.messageList.get.response.db();
+                const delegatedReplayMessages = buildDelegatedReplayMessages(
+                  (streamSteps.flatMap(step => step.response.messages ?? []) ||
+                    agentResponseMessages) as unknown as MessageListInput,
+                );
                 // Create user message with the original prompt
                 const userMessage: MastraDBMessage = {
                   id: this.#mastra?.generateId() || randomUUID(),
@@ -3617,6 +3630,9 @@ export class Agent<
                 }
 
                 if (requireToolApproval || suspendedPayload || resumeSchema) {
+                  if (savedMastraMemory !== undefined) {
+                    requestContext.set('MastraMemory', savedMastraMemory);
+                  }
                   if (savedThreadIdKey !== undefined) {
                     requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
                   }
@@ -3636,6 +3652,9 @@ export class Agent<
                   const pendingClientToolCalls = this.#findPendingClientToolCalls(agentResponseMessages, clientTools);
 
                   if (pendingClientToolCalls.length > 0) {
+                    if (savedMastraMemory !== undefined) {
+                      requestContext.set('MastraMemory', savedMastraMemory);
+                    }
                     if (savedThreadIdKey !== undefined) {
                       requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
                     }
@@ -3648,7 +3667,7 @@ export class Agent<
                         __mastraDelegatedReplayState: {
                           subAgentThreadId,
                           subAgentResourceId,
-                          replayMessages: fullSubAgentMessages,
+                          replayMessages: delegatedReplayMessages,
                         },
                       },
                       {
