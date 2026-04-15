@@ -193,26 +193,50 @@ export function hydrateMastraDBMessageFields(
     message.createdAt = new Date(message.createdAt);
   }
 
-  // Fix toolInvocations with empty args by looking in the parts array
-  // This handles messages restored from database where toolInvocations might have lost their args
-  if (message.content.toolInvocations && message.content.parts) {
-    message.content.toolInvocations = message.content.toolInvocations.map(ti => {
-      if (!ti.args || Object.keys(ti.args).length === 0) {
-        // Find the corresponding tool-invocation part with args
-        const partWithArgs = message.content.parts.find(
-          part =>
-            part.type === 'tool-invocation' &&
-            part.toolInvocation &&
-            part.toolInvocation.toolCallId === ti.toolCallId &&
-            part.toolInvocation.args &&
-            Object.keys(part.toolInvocation.args).length > 0,
+  // Build or fix toolInvocations from the parts array.
+  // During streaming, MastraDBMessages are created with tool-invocation parts
+  // but without a top-level toolInvocations array. When these messages are
+  // saved to storage and later re-loaded, consumers that rely on
+  // content.toolInvocations (e.g. convert-to-mastra-v1, provider-compat)
+  // would find it missing. This block ensures it is always populated.
+  if (message.content.parts) {
+    const toolParts = message.content.parts.filter(
+      (p): p is Extract<typeof p, { type: 'tool-invocation' }> =>
+        p.type === 'tool-invocation' && !!p.toolInvocation?.toolCallId,
+    );
+
+    if (!message.content.toolInvocations || message.content.toolInvocations.length === 0) {
+      // Build toolInvocations from parts when missing entirely
+      if (toolParts.length > 0) {
+        message.content.toolInvocations = toolParts.map(
+          p =>
+            ({
+              toolCallId: p.toolInvocation.toolCallId,
+              toolName: p.toolInvocation.toolName,
+              args: p.toolInvocation.args,
+              state: p.toolInvocation.state,
+              ...('result' in p.toolInvocation ? { result: p.toolInvocation.result } : {}),
+            }) as NonNullable<MastraDBMessage['content']['toolInvocations']>[number],
         );
-        if (partWithArgs && partWithArgs.type === 'tool-invocation') {
-          return { ...ti, args: partWithArgs.toolInvocation.args };
-        }
       }
-      return ti;
-    });
+    } else {
+      // Fix existing toolInvocations with empty args by looking in the parts array
+      // This handles messages restored from database where toolInvocations might have lost their args
+      message.content.toolInvocations = message.content.toolInvocations.map(ti => {
+        if (!ti.args || Object.keys(ti.args).length === 0) {
+          const partWithArgs = toolParts.find(
+            p =>
+              p.toolInvocation.toolCallId === ti.toolCallId &&
+              p.toolInvocation.args &&
+              Object.keys(p.toolInvocation.args).length > 0,
+          );
+          if (partWithArgs) {
+            return { ...ti, args: partWithArgs.toolInvocation.args };
+          }
+        }
+        return ti;
+      });
+    }
   }
 
   if (!message.threadId && context.memoryInfo?.threadId) {
