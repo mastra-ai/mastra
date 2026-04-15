@@ -159,6 +159,20 @@ describe('runHeadless', () => {
       expect(await h.stderrPromise).toContain('Invalid --json-schema');
     });
 
+    it('should exit with config error when jsonSchema is provided with text outputFormat', async () => {
+      const h = createHarness();
+      const streamSpy = vi.fn();
+      const mastra = createMockMastra(() => ({ stream: streamSpy }));
+
+      await runHeadless(mastra, { ...baseOptions, outputFormat: 'text', jsonSchema: '{"type":"object"}' }, h.io);
+      h.stderr.end();
+      h.stdout.end();
+
+      expect(h.exits).toEqual([2]);
+      expect(await h.stderrPromise).toContain('jsonSchema requires outputFormat "json" or "stream-json"');
+      expect(streamSpy).not.toHaveBeenCalled();
+    });
+
     it('should not register sigint handler or call stream when validation fails', async () => {
       const h = createHarness();
       const streamSpy = vi.fn();
@@ -404,6 +418,64 @@ describe('runHeadless', () => {
 
       expect(h.exits).toEqual([1]);
       expect(await h.stdoutPromise).toBe('\n');
+    });
+
+    it('should not call io.exit with success code after SIGINT even when io.exit does not terminate', async () => {
+      const h = createHarness();
+      let resolveFullOutput!: (value: any) => void;
+      const pendingFullOutput = new Promise<any>(r => {
+        resolveFullOutput = r;
+      });
+      const streamOutput = {
+        fullStream: new ReadableStream({
+          start(c) {
+            c.close();
+          },
+        }),
+        getFullOutput: () => pendingFullOutput,
+      } as any;
+      const agent = { stream: vi.fn().mockResolvedValue(streamOutput) };
+      const mastra = createMockMastra(() => agent);
+
+      const runPromise = runHeadless(mastra, { ...baseOptions, outputFormat: 'json' }, h.io);
+      // Let runHeadless reach formatJson and suspend on getFullOutput
+      await new Promise(r => setImmediate(r));
+
+      // Fire SIGINT while runHeadless is mid-await
+      h.sigintHandlers[0]!();
+      // Let SIGINT handler finish its writes/exit
+      await new Promise(r => setImmediate(r));
+
+      // Resolve getFullOutput so runHeadless can continue past formatJson
+      resolveFullOutput(createMockFullOutput({ text: 'done' }));
+      await runPromise;
+
+      h.stdout.end();
+      h.stderr.end();
+      await h.stdoutPromise;
+
+      // exit(1) from SIGINT handler — NOT followed by exit(0) from the success path
+      expect(h.exits).toEqual([1]);
+    });
+
+    it('should ignore repeated SIGINT events', async () => {
+      const h = createHarness();
+      const never = new ReadableStream({ start() {} });
+      const streamOutput = { fullStream: never, getFullOutput: () => new Promise(() => {}) } as any;
+      const agent = { stream: vi.fn().mockResolvedValue(streamOutput) };
+      const mastra = createMockMastra(() => agent);
+
+      void runHeadless(mastra, { ...baseOptions, outputFormat: 'json' }, h.io);
+      await new Promise(r => setImmediate(r));
+
+      h.sigintHandlers[0]!();
+      h.sigintHandlers[0]!();
+      h.stdout.end();
+      h.stderr.end();
+
+      expect(h.exits).toEqual([1]);
+      const lines = (await h.stdoutPromise).trim().split('\n').filter(Boolean);
+      expect(lines).toHaveLength(1);
     });
   });
 });

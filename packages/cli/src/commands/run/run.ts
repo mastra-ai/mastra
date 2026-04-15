@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import process from 'node:process';
 import type { OutputFormat } from '@mastra/core/harness';
-import { FileService } from '@mastra/deployer';
+import { FileService } from '@mastra/deployer/build';
 import { execa } from 'execa';
 import pc from 'picocolors';
 

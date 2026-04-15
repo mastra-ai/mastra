@@ -64,6 +64,11 @@ export async function runHeadless(
 
   let structuredOutput: { schema: unknown } | undefined;
   if (jsonSchema) {
+    if (outputFormat === 'text') {
+      io.stderr.write('Error: jsonSchema requires outputFormat "json" or "stream-json".\n');
+      io.exit(EXIT_CONFIG_ERROR);
+      return;
+    }
     try {
       structuredOutput = { schema: JSON.parse(jsonSchema) };
     } catch (e) {
@@ -73,13 +78,15 @@ export async function runHeadless(
     }
   }
 
+  const abortController = new AbortController();
   const startTime = Date.now();
+
+  registerSigint(outputFormat, io, startTime, abortController);
 
   const streamOutput = await agent.stream([{ role: 'user', content: prompt }], {
     ...(structuredOutput ? { structuredOutput } : {}),
   });
-
-  registerSigint(outputFormat, io, startTime);
+  if (abortController.signal.aborted) return;
 
   let fullOutput: FullOutput<any>;
   if (outputFormat === 'text') {
@@ -89,6 +96,7 @@ export async function runHeadless(
   } else {
     fullOutput = await formatStreamJson(streamOutput, io.stdout, io.stderr);
   }
+  if (abortController.signal.aborted) return;
 
   if (fullOutput.error) {
     io.exit(EXIT_RUNTIME_ERROR);
@@ -105,8 +113,15 @@ export async function runHeadless(
   io.exit(EXIT_SUCCESS);
 }
 
-function registerSigint(outputFormat: OutputFormat, io: RunHeadlessIO, startTime: number): void {
+function registerSigint(
+  outputFormat: OutputFormat,
+  io: RunHeadlessIO,
+  startTime: number,
+  controller: AbortController,
+): void {
   io.onSigint(() => {
+    if (controller.signal.aborted) return;
+    controller.abort();
     if (outputFormat === 'text') {
       io.stdout.write('\n');
     } else if (outputFormat === 'json') {

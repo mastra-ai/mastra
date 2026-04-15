@@ -14,7 +14,16 @@ export const runAgent = async (args: {
 }) => {
   await analytics.trackCommandExecution({
     command: 'run',
-    args,
+    args: {
+      outputFormat: args.outputFormat ?? 'text',
+      strict: args.strict ?? false,
+      debug: args.debug ?? false,
+      hasPrompt: Boolean(args.prompt),
+      hasJsonSchema: Boolean(args.jsonSchema),
+      hasDirOverride: Boolean(args.dir),
+      hasRootOverride: Boolean(args.root),
+      hasEnvOverride: Boolean(args.env),
+    },
     execution: async () => {
       await run({
         prompt: args.prompt,
