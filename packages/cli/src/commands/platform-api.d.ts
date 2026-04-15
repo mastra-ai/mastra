@@ -1548,7 +1548,14 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': {
+          /** Format: uri */
+          returnTo?: string;
+        };
+      };
+    };
     responses: {
       /** @description Logged out */
       200: {
@@ -3367,7 +3374,15 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': {
+          envVars: {
+            [key: string]: string;
+          };
+        };
+      };
+    };
     responses: {
       /** @description Env vars updated */
       200: {
@@ -3401,7 +3416,15 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': {
+          envVars: {
+            [key: string]: string;
+          };
+        };
+      };
+    };
     responses: {
       /** @description Env vars updated and service restarted */
       200: {
@@ -3475,7 +3498,13 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': {
+          domain: string;
+        };
+      };
+    };
     responses: {
       /** @description Custom domain added */
       200: {

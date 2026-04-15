@@ -1,5 +1,6 @@
-import { withPollingRetries } from '../../utils/polling.js';
+import { isRetryablePollingError, withPollingRetries } from '../../utils/polling.js';
 import { authHeaders, createApiClient, MASTRA_PLATFORM_API_URL, platformFetch, throwApiError } from '../auth/client.js';
+import { getToken } from '../auth/credentials.js';
 
 export interface Project {
   id: string;
@@ -73,60 +74,130 @@ export async function uploadDeploy(
   zipBuffer: Buffer,
   meta?: { gitBranch?: string; projectName?: string; envVars?: Record<string, string>; mastraVersion?: string },
 ): Promise<{ id: string; status: string }> {
-  const headers: Record<string, string> = {
-    ...authHeaders(token, orgId),
-    'Content-Type': 'application/json',
-    'x-project-id': projectId,
-  };
-  if (meta?.gitBranch) headers['x-git-branch'] = meta.gitBranch;
-  if (meta?.projectName) headers['x-project-name'] = meta.projectName;
-  if (meta?.mastraVersion) headers['x-mastra-version'] = meta.mastraVersion;
+  const client = createApiClient(token, orgId);
 
-  // Step 1: Create the deploy with optional envVars
-  const createResp = await platformFetch(`${MASTRA_PLATFORM_API_URL}/v1/studio/deploys`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ envVars: meta?.envVars }),
+  // Step 1: Create the deploy — returns upload URL
+  const { data, error, response } = await client.POST('/v1/studio/deploys', {
+    params: {
+      header: {
+        'x-project-id': projectId,
+        'x-project-name': meta?.projectName,
+        'x-git-branch': meta?.gitBranch,
+        'x-mastra-version': meta?.mastraVersion,
+      },
+    },
+    body: { envVars: meta?.envVars },
   });
-  if (!createResp.ok) {
-    const body = (await createResp.json().catch(() => ({}))) as { detail?: string };
-    throwApiError('Deploy failed', createResp.status, body.detail);
-  }
-  const { deploy } = (await createResp.json()) as {
-    deploy: { id: string; status: string; uploadUrl: string };
-  };
 
-  if (deploy.uploadUrl.startsWith('file://')) {
-    // Local FS artifact store — write zip directly to disk
-    const { writeFile } = await import('node:fs/promises');
-    const { fileURLToPath } = await import('node:url');
-    await writeFile(fileURLToPath(deploy.uploadUrl), Buffer.from(zipBuffer));
-  } else {
-    // GCS flow — upload zip directly to GCS via signed URL
-    const uploadResp = await fetch(deploy.uploadUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/zip' },
-      body: new Uint8Array(zipBuffer),
-    });
-    if (!uploadResp.ok) {
-      throw new Error(`Artifact upload failed: ${uploadResp.status} ${uploadResp.statusText}`);
+  if (error) {
+    throwApiError('Deploy failed', response.status, error.detail);
+  }
+
+  const { id, uploadUrl } = data.deploy;
+
+  if (!uploadUrl) {
+    throw new Error('No upload URL returned');
+  }
+
+  // Best-effort cancel helper — used to clean up orphaned deploys on failure
+  async function cancelDeploy(deployClient: ReturnType<typeof createApiClient>) {
+    try {
+      console.warn(`Cancelling deploy ${id}...`);
+      const { error: cancelError, response: cancelResponse } = await deployClient.POST(
+        '/v1/studio/deploys/{id}/cancel',
+        {
+          params: { path: { id } },
+        },
+      );
+      if (cancelError) {
+        console.warn(
+          `Warning: failed to cancel deploy ${id} (${cancelResponse.status}). It may remain in a queued state.`,
+        );
+      }
+    } catch {
+      console.warn(`Warning: failed to cancel deploy ${id}. It may remain in a queued state.`);
     }
   }
 
-  // Notify API that upload is complete → triggers deploy pipeline
-  const completeResp = await platformFetch(
-    `${MASTRA_PLATFORM_API_URL}/v1/studio/deploys/${deploy.id}/upload-complete`,
-    {
-      method: 'POST',
-      headers: authHeaders(token, orgId),
-    },
-  );
-  if (!completeResp.ok) {
-    const body = (await completeResp.json().catch(() => ({}))) as { detail?: string };
-    throwApiError('Upload confirmation failed', completeResp.status, body.detail);
+  // Step 2: Upload artifact to the signed URL
+  try {
+    if (uploadUrl.startsWith('file://')) {
+      const { writeFile } = await import('node:fs/promises');
+      const { fileURLToPath } = await import('node:url');
+      await writeFile(fileURLToPath(uploadUrl), Buffer.from(zipBuffer));
+    } else {
+      const uploadResp = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/zip' },
+        body: new Uint8Array(zipBuffer),
+      });
+      if (!uploadResp.ok) {
+        throw new Error(`Artifact upload failed: ${uploadResp.status} ${uploadResp.statusText}`);
+      }
+    }
+  } catch (uploadError) {
+    await cancelDeploy(client);
+    throw uploadError;
   }
 
-  return deploy;
+  // Step 3: Notify API that upload is complete → triggers build pipeline
+  // Retry up to 3 times (4 total attempts) with exponential backoff for transient failures.
+  const maxRetries = 3;
+  let lastError: Error | undefined;
+  let currentClient = client;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    let completeError: unknown;
+    let status: number | undefined;
+
+    try {
+      const result = await currentClient.POST('/v1/studio/deploys/{id}/upload-complete', {
+        params: { path: { id } },
+      });
+      if (!result.error) {
+        return { id, status: 'queued' };
+      }
+      completeError = result.error;
+      status = result.response.status;
+    } catch (networkError) {
+      // Network-level failure (ECONNRESET, ETIMEDOUT, fetch failed, etc.)
+      completeError = networkError;
+    }
+
+    // Determine if we should retry
+    const isRetryableStatus = status !== undefined && (status >= 500 || status === 401);
+    const isRetryableNetwork = isRetryablePollingError(completeError);
+    const isRetryable = isRetryableStatus || isRetryableNetwork;
+
+    if (!isRetryable || attempt === maxRetries) {
+      const detail = status ? `${status}` : completeError instanceof Error ? completeError.message : 'unknown error';
+      lastError = new Error(`Upload confirmation failed: ${detail}`);
+      break;
+    }
+
+    const delay = 1000 * Math.pow(2, attempt);
+    const detail = status ? `${status}` : completeError instanceof Error ? completeError.message : 'network error';
+    console.warn(
+      `Upload confirmation failed (${detail}), retrying in ${delay / 1000}s... (attempt ${attempt + 1}/${maxRetries})`,
+    );
+
+    // On 401, refresh the token before retrying
+    if (status === 401) {
+      try {
+        const freshToken = await getToken();
+        currentClient = createApiClient(freshToken, orgId);
+      } catch (refreshError) {
+        lastError = refreshError instanceof Error ? refreshError : new Error('Failed to refresh authentication token');
+        break;
+      }
+    }
+
+    // Exponential backoff: 1s, 2s, 4s
+    await new Promise(r => setTimeout(r, delay));
+  }
+
+  // All retries exhausted — cancel the orphaned deploy and throw
+  await cancelDeploy(currentClient);
+  throw lastError ?? new Error('Upload confirmation failed');
 }
 
 async function streamDeployLogs(deployId: string, token: string, orgId: string, signal: AbortSignal): Promise<void> {
