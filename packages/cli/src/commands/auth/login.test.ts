@@ -89,9 +89,12 @@ describe('login() server lifecycle', () => {
     const loginPromise = login();
 
     // Wait for the server to start and openBrowser to be called.
-    await vi.waitFor(() => {
-      extractPort();
-    });
+    await vi.waitFor(
+      () => {
+        extractPort();
+      },
+      { timeout: 5000 },
+    );
     const port = extractPort();
     const state = extractState();
 
@@ -111,9 +114,12 @@ describe('login() server lifecycle', () => {
 
     const loginPromise = login();
 
-    await vi.waitFor(() => {
-      extractPort();
-    });
+    await vi.waitFor(
+      () => {
+        extractPort();
+      },
+      { timeout: 5000 },
+    );
     const port = extractPort();
     const state = extractState();
 
@@ -139,9 +145,12 @@ describe('login() server lifecycle', () => {
 
     const loginPromise = login();
 
-    await vi.waitFor(() => {
-      extractPort();
-    });
+    await vi.waitFor(
+      () => {
+        extractPort();
+      },
+      { timeout: 5000 },
+    );
     const port = extractPort();
     const state = extractState();
 
