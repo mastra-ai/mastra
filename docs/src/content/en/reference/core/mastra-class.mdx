@@ -162,5 +162,49 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     isOptional: true,
     defaultValue: '{}',
   },
+  {
+    name: 'versions',
+    type: 'VersionOverrides',
+    description:
+      'Global version overrides for sub-agent delegation. When a supervisor agent delegates to a sub-agent, these overrides determine which stored version of that sub-agent to use instead of the code-defined default. Requires the editor package to be configured. See [Sub-agent versioning](/docs/editor/overview#sub-agent-versioning) for details.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'VersionOverrides',
+        parameters: [
+          {
+            name: 'agents',
+            type: 'Record<string, VersionSelector>',
+            isOptional: true,
+            description:
+              'A map of agent IDs to their version selectors. Each selector can target a specific version by ID or by publication status.',
+            properties: [
+              {
+                type: 'VersionSelector',
+                parameters: [
+                  {
+                    name: 'versionId',
+                    type: 'string',
+                    isOptional: true,
+                    description: 'The ID of a specific version to use.',
+                  },
+                ],
+              },
+              {
+                parameters: [
+                  {
+                    name: 'status',
+                    type: "'draft' | 'published'",
+                    isOptional: true,
+                    description: 'Select the latest version with this publication status.',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
