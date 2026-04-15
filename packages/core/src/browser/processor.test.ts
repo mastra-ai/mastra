@@ -140,7 +140,11 @@ describe('BrowserContextProcessor', () => {
       const addedMessage = mockMessageList.add.mock.calls[0][0] as MastraDBMessage;
       expect(addedMessage.role).toBe('user');
       expect(addedMessage.content.metadata).toEqual({
-        systemReminder: { type: 'browser-context' },
+        systemReminder: {
+          type: 'browser-context',
+          url: 'https://example.com/page',
+          title: 'Example Page',
+        },
       });
 
       const textPart = addedMessage.content.parts?.[0] as { type: 'text'; text: string };
@@ -199,7 +203,7 @@ describe('BrowserContextProcessor', () => {
       };
       requestContext.set('browser', browserCtx);
 
-      // Create messageList with an existing browser reminder
+      // Create messageList with an existing browser reminder (matching URL/title in metadata)
       const existingReminder: MastraDBMessage = {
         id: 'existing-reminder',
         role: 'user',
@@ -212,7 +216,11 @@ describe('BrowserContextProcessor', () => {
             },
           ],
           metadata: {
-            systemReminder: { type: 'browser-context' },
+            systemReminder: {
+              type: 'browser-context',
+              url: 'https://example.com/page',
+              title: 'Example Page',
+            },
           },
         },
         createdAt: new Date(),
@@ -253,7 +261,11 @@ describe('BrowserContextProcessor', () => {
             },
           ],
           metadata: {
-            systemReminder: { type: 'browser-context' },
+            systemReminder: {
+              type: 'browser-context',
+              url: 'https://example.com/old-page',
+              title: 'Old Page',
+            },
           },
         },
         createdAt: new Date(),
@@ -275,6 +287,60 @@ describe('BrowserContextProcessor', () => {
       const textPart = addedMessage.content.parts?.[0] as { type: 'text'; text: string };
       expect(textPart.text).toContain('https://example.com/new-page');
       expect(textPart.text).toContain('New Page');
+    });
+
+    it('should add reminder for A→B→A navigation (only checks most recent reminder)', () => {
+      const requestContext = new RequestContext();
+      // Current state: back on page A
+      const browserCtx: BrowserContext = {
+        provider: 'agent-browser',
+        currentUrl: 'https://example.com/page-a',
+        pageTitle: 'Page A',
+      };
+      requestContext.set('browser', browserCtx);
+
+      // History: A, then B (most recent is B, so A should be added)
+      const reminderA: MastraDBMessage = {
+        id: 'reminder-a',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: '<system-reminder type="browser-context">Page A</system-reminder>' }],
+          metadata: {
+            systemReminder: { type: 'browser-context', url: 'https://example.com/page-a', title: 'Page A' },
+          },
+        },
+        createdAt: new Date(),
+      };
+      const reminderB: MastraDBMessage = {
+        id: 'reminder-b',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: '<system-reminder type="browser-context">Page B</system-reminder>' }],
+          metadata: {
+            systemReminder: { type: 'browser-context', url: 'https://example.com/page-b', title: 'Page B' },
+          },
+        },
+        createdAt: new Date(),
+      };
+
+      const mockMessageList = createMockMessageList([reminderA, reminderB]);
+
+      const result = processor.processInputStep(
+        createInputStepArgs({
+          requestContext,
+          messageList: mockMessageList as any,
+        }),
+      );
+
+      // Should add new reminder because most recent (B) doesn't match current (A)
+      expect(result).toBe(mockMessageList);
+      expect(mockMessageList.add).toHaveBeenCalledTimes(1);
+
+      const addedMessage = mockMessageList.add.mock.calls[0][0] as MastraDBMessage;
+      const textPart = addedMessage.content.parts?.[0] as { type: 'text'; text: string };
+      expect(textPart.text).toContain('page-a');
     });
   });
 });

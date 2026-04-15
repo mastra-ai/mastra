@@ -93,14 +93,14 @@ export class BrowserContextProcessor {
     const reminderText = parts.join(' | ');
     const reminderMarkup = `<system-reminder type="${REMINDER_TYPE}">${reminderText}</system-reminder>`;
 
-    // Check if we already have this exact reminder to avoid duplicates
+    // Check if we already have a reminder with the same URL/title (scan from newest)
     const existingMessages = args.messageList.get.all.db();
-    if (hasExistingBrowserReminder(existingMessages, reminderMarkup)) {
+    if (hasExistingBrowserReminder(existingMessages, ctx.currentUrl, ctx.pageTitle)) {
       return;
     }
 
     // Add as a new user message at the end of history to preserve prompt cache
-    const reminderMessage = createBrowserReminderMessage(reminderMarkup);
+    const reminderMessage = createBrowserReminderMessage(reminderMarkup, ctx.currentUrl, ctx.pageTitle);
     args.messageList.add(reminderMessage, 'user');
     args.rotateResponseMessageId?.();
 
@@ -108,14 +108,28 @@ export class BrowserContextProcessor {
   }
 }
 
-function createBrowserReminderMessage(reminderMarkup: string): MastraDBMessage {
+interface BrowserReminderMetadata {
+  type: typeof REMINDER_TYPE;
+  url?: string;
+  title?: string;
+}
+
+function createBrowserReminderMessage(
+  reminderMarkup: string,
+  url: string | undefined,
+  title: string | undefined,
+): MastraDBMessage {
+  const reminderMeta: BrowserReminderMetadata = {
+    type: REMINDER_TYPE,
+    url,
+    title,
+  };
+
   const content: MastraMessageContentV2 = {
     format: 2,
     parts: [{ type: 'text', text: reminderMarkup }],
     metadata: {
-      systemReminder: {
-        type: REMINDER_TYPE,
-      },
+      systemReminder: reminderMeta,
     },
   };
 
@@ -127,19 +141,26 @@ function createBrowserReminderMessage(reminderMarkup: string): MastraDBMessage {
   };
 }
 
-function hasExistingBrowserReminder(messages: MastraDBMessage[], reminderMarkup: string): boolean {
-  for (const msg of messages) {
+/**
+ * Check if we already have a browser reminder with the same URL/title.
+ * Scans from the end (newest first) to handle navigation sequences like A→B→A.
+ */
+function hasExistingBrowserReminder(
+  messages: MastraDBMessage[],
+  url: string | undefined,
+  title: string | undefined,
+): boolean {
+  // Scan from end to find the most recent browser reminder
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]!;
     if (msg.role !== 'user') continue;
 
     const metadata = msg.content.metadata;
     if (typeof metadata === 'object' && metadata !== null && 'systemReminder' in metadata) {
-      const reminder = (metadata as { systemReminder?: { type?: string } }).systemReminder;
+      const reminder = (metadata as { systemReminder?: BrowserReminderMetadata }).systemReminder;
       if (reminder?.type === REMINDER_TYPE) {
-        // Check if the content matches (same URL/title)
-        const textPart = msg.content.parts?.find((p): p is { type: 'text'; text: string } => p.type === 'text');
-        if (textPart?.text === reminderMarkup) {
-          return true;
-        }
+        // Found the most recent browser reminder - check if URL/title match
+        return reminder.url === url && reminder.title === title;
       }
     }
   }
