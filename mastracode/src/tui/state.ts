@@ -165,6 +165,7 @@ export interface TUIState {
   activeOMMarker?: OMMarkerComponent;
   activeBufferingMarker?: OMMarkerComponent;
   activeActivationMarker?: OMMarkerComponent;
+  activeActivationTTLMarker?: OMMarkerComponent;
 
   // ── Tasks ─────────────────────────────────────────────────────────────
   taskProgress?: TaskProgressComponent;

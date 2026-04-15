@@ -981,6 +981,7 @@ export class ObservationalMemory {
       messageTokens: getMaxThreshold(this.observationConfig.messageTokens),
       observationTokens: getMaxThreshold(this.reflectionConfig.observationTokens),
       scope: this.scope,
+      activationTTL: this.observationConfig.activationTTL,
     };
   }
 

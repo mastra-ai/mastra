@@ -133,6 +133,7 @@ export class ReflectorRunner {
         record ? this.getEffectiveReflectionTokens(record) : this.reflectionConfig.observationTokens,
       ),
       scope: this.scope,
+      activationTTL: this.reflectionConfig.activationTTL,
     };
   }
 

@@ -154,6 +154,7 @@ export function handleOMBufferingStart(
 ): void {
   const { state } = ctx;
   state.activeActivationMarker = undefined;
+  state.activeActivationTTLMarker = undefined;
   state.activeBufferingMarker = new OMMarkerComponent({
     type: 'om_buffering_start',
     operationType,
@@ -207,18 +208,31 @@ export function handleOMActivation(
   tokensActivated: number,
   observationTokens: number,
   triggeredBy?: 'threshold' | 'ttl',
-  lastActivityAt?: number,
+  activationTTL?: number,
   ttlExpiredMs?: number,
 ): void {
   const { state } = ctx;
+
+  if (triggeredBy === 'ttl' && activationTTL !== undefined && ttlExpiredMs !== undefined) {
+    const ttlData: OMMarkerData = {
+      type: 'om_activation_ttl',
+      activationTTL,
+      ttlExpiredMs,
+    };
+
+    if (state.activeActivationTTLMarker) {
+      state.activeActivationTTLMarker.update(ttlData);
+    } else {
+      state.activeActivationTTLMarker = new OMMarkerComponent(ttlData);
+      addChildBeforeStreaming(ctx, state.activeActivationTTLMarker);
+    }
+  }
+
   const activationData: OMMarkerData = {
     type: 'om_activation',
     operationType,
     tokensActivated,
     observationTokens,
-    triggeredBy,
-    lastActivityAt,
-    ttlExpiredMs,
   };
   state.activeActivationMarker = new OMMarkerComponent(activationData);
   addChildBeforeStreaming(ctx, state.activeActivationMarker);

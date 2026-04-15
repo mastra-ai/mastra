@@ -281,6 +281,7 @@ export interface ObservationMarkerConfig {
   messageTokens: number;
   observationTokens: number;
   scope: 'thread' | 'resource';
+  activationTTL?: number;
 }
 
 /**

@@ -18,16 +18,16 @@ function formatTokens(tokens: number): string {
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
 
-  const seconds = Math.floor(ms / 1000);
-  if (seconds < 60) return `${seconds}s`;
+  const totalSeconds = Math.floor(ms / 1000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
 
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  if (minutes < 60) return remainingSeconds === 0 ? `${minutes}m` : `${minutes}m ${remainingSeconds}s`;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (totalMinutes < 60) return seconds === 0 ? `${totalMinutes}m` : `${totalMinutes}m${seconds}s`;
 
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  return remainingMinutes === 0 ? `${hours}h` : `${hours}h ${remainingMinutes}m`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes === 0 ? `${hours}h` : `${hours}h${minutes}m`;
 }
 export type OMMarkerData =
   | {
@@ -70,9 +70,11 @@ export type OMMarkerData =
       operationType: 'observation' | 'reflection';
       tokensActivated: number;
       observationTokens: number;
-      triggeredBy?: 'threshold' | 'ttl';
-      lastActivityAt?: number;
-      ttlExpiredMs?: number;
+    }
+  | {
+      type: 'om_activation_ttl';
+      activationTTL: number;
+      ttlExpiredMs: number;
     }
   | {
       type: 'om_thread_title_updated';
@@ -150,13 +152,12 @@ function formatMarker(data: OMMarkerData): string {
       const kind = data.operationType === 'reflection' ? 'reflection' : 'observations';
       const msgTokens = formatTokens(data.tokensActivated);
       const obsTokens = formatTokens(data.observationTokens);
-      const triggerDetail =
-        data.triggeredBy === 'ttl' && data.ttlExpiredMs !== undefined
-          ? ` (TTL ${formatDuration(data.ttlExpiredMs)} expired)`
-          : '';
+      return theme.fg('success', `  ✓ Activated ${kind}: -${msgTokens} msg tokens, +${obsTokens} obs tokens`);
+    }
+    case 'om_activation_ttl': {
       return theme.fg(
-        'success',
-        `  ✓ Activated ${kind}${triggerDetail}: -${msgTokens} msg tokens, +${obsTokens} obs tokens`,
+        'muted',
+        `  Observation TTL (${formatDuration(data.activationTTL)}) expired by ${formatDuration(data.ttlExpiredMs)}`,
       );
     }
     case 'om_thread_title_updated': {
