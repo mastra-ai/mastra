@@ -1,6 +1,6 @@
 /**
  * @mastra/auth-okta
- *
+ * 
  * Okta integration for Mastra, providing:
  * - RBAC based on Okta groups (MastraRBACOkta)
  * - JWT authentication via Okta (MastraAuthOkta)
