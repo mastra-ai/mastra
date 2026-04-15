@@ -22,7 +22,8 @@ import {
   wrapTextWithAnsi,
 } from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, TUI } from '@mariozechner/pi-tui';
-import { BOX_INDENT_STR, theme, getSelectListTheme } from '../theme.js';
+import { BOX_INDENT_STR, theme, getSelectListTheme, getEditorTheme } from '../theme.js';
+import { MultilineInput } from './multiline-input.js';
 
 export interface AskQuestionInlineOptions {
   question: string;
@@ -44,7 +45,7 @@ export interface AskQuestionInlineOptions {
 class AskQuestionBorderedBox {
   questionLines: string[];
   private selectList?: SelectList;
-  private input?: Input;
+  private input?: Input | MultilineInput;
   private hintText: string;
   items: Array<{ label: string; description?: string }>;
   private answered = false;
@@ -59,7 +60,7 @@ class AskQuestionBorderedBox {
     hintText: string,
     items: Array<{ label: string; description?: string }>,
     selectList?: SelectList,
-    input?: Input,
+    input?: Input | MultilineInput,
     streaming?: boolean,
   ) {
     this.questionLines = questionLines;
@@ -74,7 +75,7 @@ class AskQuestionBorderedBox {
     this.selectList?.invalidate();
   }
 
-  setInteractive(selectList?: SelectList, input?: Input, hintText?: string) {
+  setInteractive(selectList?: SelectList, input?: Input | MultilineInput, hintText?: string) {
     this.streaming = false;
     this.selectList = selectList;
     this.input = input;
@@ -222,7 +223,8 @@ class AskQuestionBorderedBox {
 export class AskQuestionInlineComponent extends Container implements Focusable {
   private borderedBox: AskQuestionBorderedBox;
   private selectList?: SelectList;
-  private input?: Input;
+  private input?: Input | MultilineInput;
+  private tui?: TUI;
   private onSubmit?: (answer: string) => void;
   private onCancel?: () => void;
   private isNegativeAnswer?: (answer: string) => boolean;
@@ -289,6 +291,8 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
   constructor(options?: AskQuestionInlineOptions, _ui?: TUI) {
     super();
 
+    this.tui = _ui;
+
     if (options) {
       // Full construction with interactive elements
       this.onSubmit = options.onSubmit;
@@ -303,7 +307,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
         hintText = '↑↓ to navigate · Enter to select · Esc to skip';
         this.buildSelectMode(options.options);
       } else {
-        hintText = 'Enter to submit · Esc to skip';
+        hintText = 'Enter to submit · Shift+Enter for new line · Esc to skip';
         this.buildInputMode();
       }
 
@@ -370,7 +374,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
       hintText = '↑↓ to navigate · Enter to select · Esc to skip';
       this.buildSelectMode(options.options);
     } else {
-      hintText = 'Enter to submit · Esc to skip';
+      hintText = 'Enter to submit · Shift+Enter for new line · Esc to skip';
       this.buildInputMode();
     }
 
@@ -413,18 +417,34 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
 
     // Clear items so the answered state renders as free-text, not select
     this.borderedBox.items = [];
-    this.borderedBox.setInteractive(undefined, this.input, 'Enter to submit · Esc to skip');
+    this.borderedBox.setInteractive(undefined, this.input, 'Enter to submit · Shift+Enter for new line · Esc to skip');
   }
 
   private buildInputMode(): void {
-    this.input = new Input();
-    this.input.onSubmit = (value: string) => {
-      const trimmed = value.trim();
-      if (trimmed || this.allowEmptyInput) {
-        this.handleAnswer(trimmed);
-      }
-    };
-    (this.input as any).keybindings = getEditorKeybindings();
+    if (this.tui) {
+      // Use MultilineInput for multiline support when TUI is available
+      const multilineInput = new MultilineInput(this.tui, getEditorTheme());
+      multilineInput.onSubmit = (value: string) => {
+        const trimmed = value.trim();
+        if (trimmed || this.allowEmptyInput) {
+          this.handleAnswer(trimmed);
+        }
+      };
+      multilineInput.onEscape = () => {
+        this.handleCancel();
+      };
+      this.input = multilineInput;
+    } else {
+      // Fallback to single-line Input when TUI is not available
+      this.input = new Input();
+      this.input.onSubmit = (value: string) => {
+        const trimmed = value.trim();
+        if (trimmed || this.allowEmptyInput) {
+          this.handleAnswer(trimmed);
+        }
+      };
+      (this.input as any).keybindings = getEditorKeybindings();
+    }
   }
 
   private handleAnswer(answer: string): void {
@@ -453,12 +473,17 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     if (this.selectList) {
       this.selectList.handleInput(data);
     } else if (this.input) {
-      const kb = getEditorKeybindings();
-      if (kb.matches(data, 'selectCancel')) {
-        this.handleCancel();
-        return;
+      if (this.input instanceof MultilineInput) {
+        // MultilineInput handles its own keybindings internally
+        this.input.handleInput(data);
+      } else {
+        const kb = getEditorKeybindings();
+        if (kb.matches(data, 'selectCancel')) {
+          this.handleCancel();
+          return;
+        }
+        this.input.handleInput(data);
       }
-      this.input.handleInput(data);
     }
   }
 }

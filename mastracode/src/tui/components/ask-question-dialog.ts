@@ -6,7 +6,8 @@
 
 import { Box, getEditorKeybindings, Input, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, Component } from '@mariozechner/pi-tui';
-import { theme, getSelectListTheme } from '../theme.js';
+import { theme, getSelectListTheme, getEditorTheme } from '../theme.js';
+import { MultilineInput } from './multiline-input.js';
 
 export interface AskQuestionDialogOptions {
   question: string;
@@ -19,7 +20,7 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
   private static readonly CUSTOM_RESPONSE_VALUE = '__custom_response__';
 
   private selectList?: SelectList;
-  private input?: Input;
+  private input?: Input | MultilineInput;
   private onSubmit: (answer: string) => void;
   private onCancel: () => void;
 
