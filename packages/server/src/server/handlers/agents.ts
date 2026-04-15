@@ -69,7 +69,11 @@ import {
  */
 function stashVersionOverrides(ctx: RequestContext, versions: VersionOverrides | undefined): void {
   if (!versions) return;
-  const existing = ctx.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+  const existingRaw = ctx.get(MASTRA_VERSIONS_KEY);
+  const existing =
+    existingRaw && typeof existingRaw === 'object' && !Array.isArray(existingRaw)
+      ? (existingRaw as VersionOverrides)
+      : undefined;
   const merged = mergeVersionOverrides(existing, versions);
   if (merged) {
     ctx.set(MASTRA_VERSIONS_KEY, merged);

@@ -3017,8 +3017,6 @@ export class Agent<
             .optional(),
         });
 
-        const modelVersion = (await agent.getModel({ requestContext })).specificationVersion;
-
         const toolObj = createTool({
           id: `agent-${agentName}`,
           description: agent.getDescription() || `Agent: ${agentName}`,
@@ -3104,6 +3102,32 @@ export class Agent<
               requestContext.delete(MASTRA_RESOURCE_ID_KEY);
             }
 
+            // Resolve versioned sub-agent if a version override exists on requestContext.
+            // This must happen before onDelegationStart so the rejection branch can
+            // use the correct model version and memory config from the resolved agent.
+            let resolvedAgent = agent;
+            const versionOverrides = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+            const agentVersionSelector = versionOverrides?.agents?.[agent.id];
+            if (agentVersionSelector && this.#mastra) {
+              try {
+                resolvedAgent = await this.#mastra.resolveVersionedAgent(agent, agentVersionSelector);
+              } catch (versionError) {
+                this.logger.error('Failed to resolve versioned sub-agent, using code-defined default', {
+                  agent: this.name,
+                  targetAgent: agentName,
+                  targetAgentId: agent.id,
+                  versionSelector: agentVersionSelector,
+                  error: versionError,
+                });
+              }
+            }
+
+            // Recompute derived values from the resolved agent (may differ from
+            // code-defined agent if a stored version changed the model or defaults)
+            const resolvedModelVersion = (await resolvedAgent.getModel({ requestContext })).specificationVersion;
+            const resolvedDefaultOptions = await resolvedAgent.getDefaultOptions?.({ requestContext });
+            const resolvedHasOwnMemoryConfig = resolvedDefaultOptions?.memory !== undefined;
+
             // Call onDelegationStart hook if provided
             let effectivePrompt = inputData.prompt;
             let effectiveInstructions = inputData.instructions;
@@ -3124,7 +3148,7 @@ export class Agent<
 
                     if (
                       (methodType === 'stream' || methodType === 'streamLegacy') &&
-                      supportedLanguageModelSpecifications.includes(modelVersion)
+                      supportedLanguageModelSpecifications.includes(resolvedModelVersion)
                     ) {
                       await context.writer?.write({
                         type: 'text-delta',
@@ -3138,7 +3162,7 @@ export class Agent<
                     }
 
                     // Save rejection messages to sub-agent's memory so the UI can display them
-                    const memory = await agent.getMemory({ requestContext });
+                    const memory = await resolvedAgent.getMemory({ requestContext });
                     if (memory) {
                       try {
                         // Create user message with the original prompt
@@ -3232,30 +3256,6 @@ export class Agent<
               modifiedInstructions: effectiveInstructions !== inputData.instructions,
               modifiedMaxSteps: effectiveMaxSteps !== inputData.maxSteps,
             });
-
-            // Resolve versioned sub-agent if a version override exists on requestContext
-            let resolvedAgent = agent;
-            const versionOverrides = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
-            const agentVersionSelector = versionOverrides?.agents?.[agent.id];
-            if (agentVersionSelector && this.#mastra) {
-              try {
-                resolvedAgent = await this.#mastra.resolveVersionedAgent(agent, agentVersionSelector);
-              } catch (versionError) {
-                this.logger.error('Failed to resolve versioned sub-agent, using code-defined default', {
-                  agent: this.name,
-                  targetAgent: agentName,
-                  targetAgentId: agent.id,
-                  versionSelector: agentVersionSelector,
-                  error: versionError,
-                });
-              }
-            }
-
-            // Recompute derived values from the resolved agent (may differ from
-            // code-defined agent if a stored version changed the model or defaults)
-            const resolvedModelVersion = (await resolvedAgent.getModel({ requestContext })).specificationVersion;
-            const resolvedDefaultOptions = await resolvedAgent.getDefaultOptions?.({ requestContext });
-            const resolvedHasOwnMemoryConfig = resolvedDefaultOptions?.memory !== undefined;
 
             // Propagate parent memory to the resolved agent if it doesn't have its own
             if (
