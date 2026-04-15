@@ -32,7 +32,7 @@ export const ToolBadge = ({
   let argSlot = null;
 
   try {
-    const { __mastraMetadata: _, ...formattedArgs } = typeof args === 'object' ? args : JSON.parse(args);
+    const { __mastraMetadata: _, _background, ...formattedArgs } = typeof args === 'object' ? args : JSON.parse(args);
     argSlot = <CodeEditor data={formattedArgs} data-testid="tool-args" />;
   } catch {
     argSlot = <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{args as string}</pre>;

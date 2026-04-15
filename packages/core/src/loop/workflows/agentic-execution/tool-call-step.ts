@@ -555,6 +555,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
+        const llmBgOverrides =
+          typeof args === 'object' && args !== null && '_background' in args ? args._background : undefined;
+
+        if (llmBgOverrides) {
+          delete args._background;
+        }
+
         // --- Background task dispatch ---
         const backgroundTaskManager = _internal?.backgroundTaskManager;
         const agentBgConfigCheck = _internal?.agentBackgroundConfig;
@@ -566,7 +573,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           const managerConfig = _internal?.backgroundTaskManagerConfig;
 
           const bgResolved = resolveBackgroundConfig({
-            args: args as Record<string, unknown>,
+            llmBgOverrides,
             toolName: inputData.toolName,
             toolConfig: toolBgConfig,
             agentConfig: agentBgConfig,

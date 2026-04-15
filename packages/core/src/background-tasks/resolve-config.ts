@@ -24,21 +24,19 @@ export interface ResolvedBackgroundConfig {
  * Strips the `_background` field from args (mutates the args object).
  */
 export function resolveBackgroundConfig({
-  args,
+  llmBgOverrides,
   toolName,
   toolConfig,
   agentConfig,
   managerConfig,
 }: {
-  args: Record<string, unknown>;
+  llmBgOverrides: Record<string, unknown>;
   toolName: string;
   toolConfig?: ToolBackgroundConfig;
   agentConfig?: AgentBackgroundConfig;
   managerConfig?: BackgroundTaskManagerConfig;
 }): ResolvedBackgroundConfig {
-  // Extract and strip the LLM override from args
-  const llmOverride = args._background as LLMBackgroundOverride | undefined;
-  delete args._background;
+  const llmOverride = llmBgOverrides as LLMBackgroundOverride | undefined;
 
   // If this agent has background tasks disabled, short-circuit so no tool can
   // dispatch a background task even if its own config or the LLM override

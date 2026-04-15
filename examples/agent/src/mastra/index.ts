@@ -125,6 +125,7 @@ const config = {
 export const mastra = new Mastra({
   ...config,
   backgroundTasks: {
+    enabled: true,
     globalConcurrency: 10,
     perAgentConcurrency: 5,
   },
