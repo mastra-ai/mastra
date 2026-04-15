@@ -248,6 +248,38 @@ export default function Chat() {
 
 Use [`prepareSendMessagesRequest`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#transport.default-chat-transport.prepare-send-messages-request) to customize the request sent to the chat route, for example to pass additional configuration to the agent.
 
+## Using Mastra Memory
+
+When your agent has [memory](/docs/memory/overview) configured, Mastra loads conversation history from storage on the server. Send only the new message from the client instead of the full conversation history.
+
+Sending the full history is redundant and can cause message ordering bugs because client-side timestamps can conflict with the timestamps stored in your database.
+
+```typescript
+import { useChat } from '@ai-sdk/react'
+import { DefaultChatTransport } from 'ai'
+
+const { messages, sendMessage } = useChat({
+  transport: new DefaultChatTransport({
+    api: 'http://localhost:4111/chat/weatherAgent',
+    prepareSendMessagesRequest({ messages }) {
+      return {
+        body: {
+          messages: [messages[messages.length - 1]],
+          threadId: 'user-thread-123',
+          resourceId: 'user-123',
+        },
+      }
+    },
+  }),
+})
+```
+
+Set `threadId` and `resourceId` from your app's own state, such as URL params, auth context, or your database.
+
+See [Message history](/docs/memory/message-history) for more on how Mastra memory loads and stores messages.
+
+[`chatRoute()`](/reference/ai-sdk/chat-route) and [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream) already work with memory. Configure the client to send only the new message and include the thread and resource identifiers.
+
 ### `useCompletion()`
 
 The `useCompletion()` hook handles single-turn completions between your frontend and a Mastra agent, allowing you to send a prompt and receive a streamed response over HTTP.
