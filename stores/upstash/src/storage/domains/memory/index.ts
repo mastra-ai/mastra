@@ -963,12 +963,44 @@ export class StoreMemoryUpstash extends MemoryStorage {
       // Get all message IDs to update
       const messageIds = messages.map(m => m.id);
 
-      // Find all existing messages by scanning for their keys
+      // Find all existing messages using the msg-idx index first
       const existingMessages: MastraDBMessage[] = [];
       const messageIdToKey: Record<string, string> = {};
 
-      // Scan for all message keys that match any of the IDs
-      for (const messageId of messageIds) {
+      // Try index first for each message (fast path)
+      const indexPipeline = this.client.pipeline();
+      messageIds.forEach(id => indexPipeline.get(getMessageIndexKey(id)));
+      const indexResults = await indexPipeline.exec();
+
+      const indexedKeys: { messageId: string; key: string }[] = [];
+      const unindexedMessageIds: string[] = [];
+
+      messageIds.forEach((messageId, i) => {
+        const threadId = indexResults[i] as string | null;
+        if (threadId) {
+          indexedKeys.push({ messageId, key: getMessageKey(threadId, messageId) });
+        } else {
+          unindexedMessageIds.push(messageId);
+        }
+      });
+
+      // Fetch indexed messages in a single pipeline
+      if (indexedKeys.length > 0) {
+        const messagePipeline = this.client.pipeline();
+        indexedKeys.forEach(({ key }) => messagePipeline.get(key));
+        const messageResults = await messagePipeline.exec();
+
+        indexedKeys.forEach(({ messageId, key }, i) => {
+          const message = messageResults[i] as MastraDBMessage | null;
+          if (message && message.id === messageId) {
+            existingMessages.push(message);
+            messageIdToKey[messageId] = key;
+          }
+        });
+      }
+
+      // Fall back to scan for unindexed messages (backwards compatibility)
+      for (const messageId of unindexedMessageIds) {
         const pattern = getMessageKey('*', messageId);
         const keys = await this.#db.scanKeys(pattern);
 
@@ -977,7 +1009,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
           if (message && message.id === messageId) {
             existingMessages.push(message);
             messageIdToKey[messageId] = key;
-            break; // Found the message, no need to continue scanning
+            break;
           }
         }
       }

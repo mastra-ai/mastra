@@ -226,7 +226,7 @@ describe('StoreMemoryUpstash saveMessages index behavior', () => {
     // Index should be recreated after the save
     await expect(client.get<string>(messageIndexKey)).resolves.toBe(targetThread.id);
 
-    // Message now exists in target thread (source thread still has old copy since no scan found it)
+    // Message now exists in target thread (source still has old copy since no scan found it)
     const { messages: targetMessages } = await memoryDomain.listMessages({ threadId: targetThread.id });
     expect(targetMessages.find(message => message.id === originalMessage.id)?.threadId).toBe(targetThread.id);
   });
