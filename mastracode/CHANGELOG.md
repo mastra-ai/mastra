@@ -1,5 +1,25 @@
 # mastracode
 
+## 0.14.0-alpha.4
+
+### Minor Changes
+
+- Added `/browser set` command for configuring browser profile, executable path, storage state, and CDP URL. Updated the interactive wizard with advanced options for custom browsers and CDP connections. ([#15194](https://github.com/mastra-ai/mastra/pull/15194))
+
+### Patch Changes
+
+- Improved Mastra Code prompt guidance for autonomous decisions and blocked work. ([#15352](https://github.com/mastra-ai/mastra/pull/15352))
+
+- Improved observational memory summaries to use caveman-style custom instructions for terser stored observations. ([#15359](https://github.com/mastra-ai/mastra/pull/15359))
+
+- Updated dependencies [[`8687969`](https://github.com/mastra-ai/mastra/commit/86879696b80f87269bec34fd17fa377bce3a5892), [`cbdf3e1`](https://github.com/mastra-ai/mastra/commit/cbdf3e12b3d0c30a6e5347be658e2009648c130a), [`8fe46d3`](https://github.com/mastra-ai/mastra/commit/8fe46d354027f3f0f0846e64219772348de106dd), [`18c67db`](https://github.com/mastra-ai/mastra/commit/18c67dbb9c9ebc26f26f65f7d3ff836e5691ef46), [`190f452`](https://github.com/mastra-ai/mastra/commit/190f45258b0640e2adfc8219fa3258cdc5b8f071), [`8dcc77e`](https://github.com/mastra-ai/mastra/commit/8dcc77e78a5340f5848f74b9e9f1b3da3513c1f5), [`aa67fc5`](https://github.com/mastra-ai/mastra/commit/aa67fc59ee8a5eeff1f23eb05970b8d7a536c8ff), [`fa8140b`](https://github.com/mastra-ai/mastra/commit/fa8140bcd4251d2e3ac85fdc5547dfc4f372b5be), [`190f452`](https://github.com/mastra-ai/mastra/commit/190f45258b0640e2adfc8219fa3258cdc5b8f071), [`a6b7d82`](https://github.com/mastra-ai/mastra/commit/a6b7d820d5028da1284899baf3a7318b5d573f42), [`8ce5d0d`](https://github.com/mastra-ai/mastra/commit/8ce5d0dab0e13ee9ce01562fc434523e93a71ef9), [`7e7bf60`](https://github.com/mastra-ai/mastra/commit/7e7bf606886bf374a6f9d4ca9b09dd83d0533372), [`184907d`](https://github.com/mastra-ai/mastra/commit/184907d775d8609c03c26e78ccaf37315f3aa287), [`18c67db`](https://github.com/mastra-ai/mastra/commit/18c67dbb9c9ebc26f26f65f7d3ff836e5691ef46), [`5f3d4dd`](https://github.com/mastra-ai/mastra/commit/5f3d4ddf237241f4b238ac062ac61eadabed0770), [`0c4cd13`](https://github.com/mastra-ai/mastra/commit/0c4cd131931c04ac5405373c932a242dbe88edd6), [`190f452`](https://github.com/mastra-ai/mastra/commit/190f45258b0640e2adfc8219fa3258cdc5b8f071), [`b16a753`](https://github.com/mastra-ai/mastra/commit/b16a753d5748440248d7df82e29bb987a9c8386c)]:
+  - @mastra/stagehand@0.2.0-alpha.0
+  - @mastra/core@1.25.0-alpha.3
+  - @mastra/agent-browser@0.2.0-alpha.0
+  - @mastra/pg@1.9.1-alpha.1
+  - @mastra/libsql@1.8.1-alpha.1
+  - @mastra/mcp@1.5.0-alpha.0
+
 ## 0.14.0-alpha.3
 
 ### Minor Changes
