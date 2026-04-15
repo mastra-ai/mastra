@@ -127,6 +127,8 @@
     "@internal/browser-test-utils": "0.0.1"
   },
   "changesets": [
+    "@mastra_arize-15282-dependencies",
+    "@mastra_arthur-15282-dependencies",
     "@mastra_core-15214-dependencies",
     "@mastra_deployer-15210-dependencies",
     "@mastra_playground-ui-15085-dependencies",
@@ -180,6 +182,7 @@
     "stale-worlds-happen",
     "storage-entity-version-id",
     "strong-pillows-admire",
+    "swift-llamas-joke",
     "tall-trams-see",
     "tame-cars-thank",
     "three-bugs-shout",
@@ -187,6 +190,7 @@
     "tough-geese-relax",
     "vast-masks-juggle",
     "warm-monkeys-know",
+    "whole-places-beam",
     "wild-ads-smile",
     "wise-carrots-heal",
     "witty-radios-breathe",
