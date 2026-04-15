@@ -1,6 +1,5 @@
 ---
-'@mastra/ai-sdk': minor
 '@mastra/core': minor
 ---
 
-You can now opt into parent-agent reuse for the structuring agent pass with `structuredOutput: { schema, model, useAgent: true }`, which lets the separate structuring request re-use the parent agents config, including memory.
+You can now opt into parent-agent reuse for the separate structured-output pass with `structuredOutput: { schema, model, useAgent: true }`, which lets the structuring request reuse the parent agent config, including memory.

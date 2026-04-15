@@ -230,7 +230,7 @@ const response = await testAgent.generate('Tell me about TypeScript.', {
 })
 ```
 
-If you want that structuring model to also see the current conversation history, set `useAgent: true`. Mastra will reuse the parent agent with the separate structuring model and attach read-only memory context when a thread is available.
+If you want that structuring model to also see the current conversation history, set `useAgent: true` alongside `model`. Mastra will reuse the parent agent with the separate structuring model and attach read-only memory context when a thread is available.
 
 ```typescript
 const response = await testAgent.generate('Return my profile as structured data.', {

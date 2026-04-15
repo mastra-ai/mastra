@@ -88,8 +88,9 @@ export type StructuredOutputOptionsBase<OUTPUT = {}> = {
   instructions?: string;
 
   /**
-   * When true and a separate structuring model is provided, reuse the parent agent
-   * with read-only memory so the structuring model has full conversation context.
+   * When true and `model` is also provided, reuse the parent agent for the separate
+   * structuring pass. If a thread is available, Mastra attaches read-only memory so
+   * the structuring model has full conversation context.
    */
   useAgent?: boolean;
 
