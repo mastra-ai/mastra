@@ -280,8 +280,9 @@ export class AzureBlobFilesystem extends MastraFilesystem {
         const credential = new StorageSharedKeyCredential(this.accountName, this.accountKey);
         serviceClient = new BlobServiceClient(baseUrl, credential);
       } else if (this.sasToken) {
+        const sas = this.sasToken.replace(/^\?+/, '');
         const separator = baseUrl.includes('?') ? '&' : '?';
-        serviceClient = new BlobServiceClient(`${baseUrl}${separator}${this.sasToken}`);
+        serviceClient = new BlobServiceClient(`${baseUrl}${separator}${sas}`);
       } else if (this.useDefaultCredential) {
         // Dynamically import @azure/identity to avoid requiring it when not used.
         // Must use import() (not require()) because this package is ESM-first.
