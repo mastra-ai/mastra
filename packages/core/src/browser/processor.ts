@@ -5,8 +5,8 @@
  * Similar to ChatChannelProcessor for channels.
  *
  * - `processInput`: Adds a system message with stable context (provider, sessionId, headless mode).
- * - `processInputStep`: At step 0, prepends a `<system-reminder>` to the user's message
- *   with per-request data (current URL, page title).
+ * - `processInputStep`: At step 0, adds a new user message with browser context as a `<system-reminder>`.
+ *   This preserves prompt cache by not modifying existing messages in history.
  *
  * Reads from `requestContext.get('browser')`.
  *
@@ -19,12 +19,11 @@
  * ```
  */
 
-import type {
-  ProcessInputArgs,
-  ProcessInputResult,
-  ProcessInputStepArgs,
-  ProcessInputStepResult,
-} from '../processors/index';
+import type { MessageList, MastraDBMessage } from '../agent/message-list';
+import type { MastraMessageContentV2 } from '../agent/message-list/state/types';
+import type { ProcessInputArgs, ProcessInputResult, ProcessInputStepArgs } from '../processors/index';
+
+const REMINDER_TYPE = 'browser-context';
 
 /**
  * Browser context stored in RequestContext.
@@ -72,7 +71,7 @@ export class BrowserContextProcessor {
     return { messages: args.messages, systemMessages };
   }
 
-  processInputStep(args: ProcessInputStepArgs): ProcessInputStepResult | undefined {
+  processInputStep(args: ProcessInputStepArgs): MessageList | undefined {
     // Only inject per-request context at the first step
     if (args.stepNumber !== 0) return;
 
@@ -91,37 +90,58 @@ export class BrowserContextProcessor {
 
     if (parts.length === 0) return;
 
-    const reminder = `<system-reminder>${parts.join(' | ')}</system-reminder>\n\n`;
+    const reminderText = parts.join(' | ');
+    const reminderMarkup = `<system-reminder type="${REMINDER_TYPE}">${reminderText}</system-reminder>`;
 
-    // Prepend reminder to the last user message's text parts
-    const messages = [...args.messages];
-
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msg = messages[i]!;
-      if (msg.role === 'user') {
-        const content = msg.content;
-        // MastraMessageContentV2: { format: 2, parts: [...] }
-        const existingParts = content.parts ?? [];
-        const firstTextIdx = existingParts.findIndex((p: { type: string }) => p.type === 'text');
-
-        if (firstTextIdx >= 0) {
-          const textPart = existingParts[firstTextIdx] as { type: 'text'; text: string };
-          const newParts = [...existingParts];
-          newParts[firstTextIdx] = { ...textPart, text: reminder + textPart.text };
-          messages[i] = { ...msg, content: { ...content, parts: newParts } };
-        } else {
-          messages[i] = {
-            ...msg,
-            content: {
-              ...content,
-              parts: [{ type: 'text' as const, text: reminder }, ...existingParts],
-            },
-          };
-        }
-        break;
-      }
+    // Check if we already have this exact reminder to avoid duplicates
+    const existingMessages = args.messageList.get.all.db();
+    if (hasExistingBrowserReminder(existingMessages, reminderMarkup)) {
+      return;
     }
 
-    return { messages };
+    // Add as a new user message at the end of history to preserve prompt cache
+    const reminderMessage = createBrowserReminderMessage(reminderMarkup);
+    args.messageList.add(reminderMessage, 'user');
+    args.rotateResponseMessageId?.();
+
+    return args.messageList;
   }
+}
+
+function createBrowserReminderMessage(reminderMarkup: string): MastraDBMessage {
+  const content: MastraMessageContentV2 = {
+    format: 2,
+    parts: [{ type: 'text', text: reminderMarkup }],
+    metadata: {
+      systemReminder: {
+        type: REMINDER_TYPE,
+      },
+    },
+  };
+
+  return {
+    id: crypto.randomUUID(),
+    role: 'user',
+    content,
+    createdAt: new Date(),
+  };
+}
+
+function hasExistingBrowserReminder(messages: MastraDBMessage[], reminderMarkup: string): boolean {
+  for (const msg of messages) {
+    if (msg.role !== 'user') continue;
+
+    const metadata = msg.content.metadata;
+    if (typeof metadata === 'object' && metadata !== null && 'systemReminder' in metadata) {
+      const reminder = (metadata as { systemReminder?: { type?: string } }).systemReminder;
+      if (reminder?.type === REMINDER_TYPE) {
+        // Check if the content matches (same URL/title)
+        const textPart = msg.content.parts?.find((p): p is { type: 'text'; text: string } => p.type === 'text');
+        if (textPart?.text === reminderMarkup) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
 }

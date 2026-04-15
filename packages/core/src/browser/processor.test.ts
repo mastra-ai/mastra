@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import type { MastraDBMessage } from '../agent/message-list';
 import type { ProcessInputArgs, ProcessInputStepArgs } from '../processors';
 import { RequestContext } from '../request-context';
 import { BrowserContextProcessor } from './processor';
@@ -19,11 +20,26 @@ describe('BrowserContextProcessor', () => {
     ...overrides,
   });
 
+  // Helper to create a mock messageList
+  const createMockMessageList = (existingMessages: MastraDBMessage[] = []) => {
+    const messages = [...existingMessages];
+    return {
+      get: {
+        all: {
+          db: () => messages,
+        },
+      },
+      add: vi.fn((msg: MastraDBMessage) => {
+        messages.push(msg);
+      }),
+    };
+  };
+
   // Helper to create minimal args for processInputStep
   const createInputStepArgs = (overrides: Partial<ProcessInputStepArgs> = {}): ProcessInputStepArgs => ({
     messages: [],
     systemMessages: [],
-    messageList: {} as any,
+    messageList: createMockMessageList() as any,
     requestContext: new RequestContext(),
     stepNumber: 0,
     steps: [],
@@ -31,6 +47,7 @@ describe('BrowserContextProcessor', () => {
     model: undefined as any,
     retryCount: 0,
     abort: vi.fn(),
+    rotateResponseMessageId: vi.fn(),
     ...overrides,
   });
 
@@ -97,7 +114,7 @@ describe('BrowserContextProcessor', () => {
       expect(result).toBeUndefined();
     });
 
-    it('should prepend system-reminder to user message with URL and title', () => {
+    it('should add a new user message with system-reminder containing URL and title', () => {
       const requestContext = new RequestContext();
       const browserCtx: BrowserContext = {
         provider: 'agent-browser',
@@ -106,29 +123,35 @@ describe('BrowserContextProcessor', () => {
       };
       requestContext.set('browser', browserCtx);
 
-      const messages = [
-        {
-          role: 'user' as const,
-          content: {
-            format: 2,
-            parts: [{ type: 'text', text: 'Hello' }],
-          },
-        },
-      ] as any;
+      const mockMessageList = createMockMessageList();
+      const rotateResponseMessageId = vi.fn();
 
-      const result = processor.processInputStep(createInputStepArgs({ messages, requestContext }));
+      const result = processor.processInputStep(
+        createInputStepArgs({
+          requestContext,
+          messageList: mockMessageList as any,
+          rotateResponseMessageId,
+        }),
+      );
 
-      expect(result).toBeDefined();
-      const resultMessages = (result as any).messages;
-      expect(resultMessages).toHaveLength(1);
-      const textPart = resultMessages[0].content.parts[0];
-      expect(textPart.text).toContain('<system-reminder>');
+      expect(result).toBe(mockMessageList);
+      expect(mockMessageList.add).toHaveBeenCalledTimes(1);
+
+      const addedMessage = mockMessageList.add.mock.calls[0][0] as MastraDBMessage;
+      expect(addedMessage.role).toBe('user');
+      expect(addedMessage.content.metadata).toEqual({
+        systemReminder: { type: 'browser-context' },
+      });
+
+      const textPart = addedMessage.content.parts?.[0] as { type: 'text'; text: string };
+      expect(textPart.text).toContain('<system-reminder type="browser-context">');
       expect(textPart.text).toContain('https://example.com/page');
       expect(textPart.text).toContain('Example Page');
-      expect(textPart.text).toContain('Hello');
+
+      expect(rotateResponseMessageId).toHaveBeenCalled();
     });
 
-    it('should prepend system-reminder when only page title is available', () => {
+    it('should add system-reminder when only page title is available', () => {
       const requestContext = new RequestContext();
       const browserCtx: BrowserContext = {
         provider: 'agent-browser',
@@ -136,21 +159,21 @@ describe('BrowserContextProcessor', () => {
       };
       requestContext.set('browser', browserCtx);
 
-      const messages = [
-        {
-          role: 'user' as const,
-          content: {
-            format: 2,
-            parts: [{ type: 'text', text: 'Hello' }],
-          },
-        },
-      ] as any;
+      const mockMessageList = createMockMessageList();
 
-      const result = processor.processInputStep(createInputStepArgs({ messages, requestContext }));
+      const result = processor.processInputStep(
+        createInputStepArgs({
+          requestContext,
+          messageList: mockMessageList as any,
+        }),
+      );
 
-      expect(result).toBeDefined();
-      const textPart = (result as any).messages[0].content.parts[0];
-      expect(textPart.text).toContain('<system-reminder>');
+      expect(result).toBe(mockMessageList);
+      expect(mockMessageList.add).toHaveBeenCalledTimes(1);
+
+      const addedMessage = mockMessageList.add.mock.calls[0][0] as MastraDBMessage;
+      const textPart = addedMessage.content.parts?.[0] as { type: 'text'; text: string };
+      expect(textPart.text).toContain('<system-reminder type="browser-context">');
       expect(textPart.text).toContain('Example Page');
     });
 
@@ -165,6 +188,93 @@ describe('BrowserContextProcessor', () => {
       const result = processor.processInputStep(createInputStepArgs({ requestContext }));
 
       expect(result).toBeUndefined();
+    });
+
+    it('should not add duplicate reminder if same content already exists', () => {
+      const requestContext = new RequestContext();
+      const browserCtx: BrowserContext = {
+        provider: 'agent-browser',
+        currentUrl: 'https://example.com/page',
+        pageTitle: 'Example Page',
+      };
+      requestContext.set('browser', browserCtx);
+
+      // Create messageList with an existing browser reminder
+      const existingReminder: MastraDBMessage = {
+        id: 'existing-reminder',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'text',
+              text: '<system-reminder type="browser-context">Current URL: https://example.com/page | Page title: Example Page</system-reminder>',
+            },
+          ],
+          metadata: {
+            systemReminder: { type: 'browser-context' },
+          },
+        },
+        createdAt: new Date(),
+      };
+
+      const mockMessageList = createMockMessageList([existingReminder]);
+
+      const result = processor.processInputStep(
+        createInputStepArgs({
+          requestContext,
+          messageList: mockMessageList as any,
+        }),
+      );
+
+      expect(result).toBeUndefined();
+      expect(mockMessageList.add).not.toHaveBeenCalled();
+    });
+
+    it('should add new reminder if URL changed from previous reminder', () => {
+      const requestContext = new RequestContext();
+      const browserCtx: BrowserContext = {
+        provider: 'agent-browser',
+        currentUrl: 'https://example.com/new-page',
+        pageTitle: 'New Page',
+      };
+      requestContext.set('browser', browserCtx);
+
+      // Create messageList with an existing browser reminder for a different URL
+      const existingReminder: MastraDBMessage = {
+        id: 'existing-reminder',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'text',
+              text: '<system-reminder type="browser-context">Current URL: https://example.com/old-page | Page title: Old Page</system-reminder>',
+            },
+          ],
+          metadata: {
+            systemReminder: { type: 'browser-context' },
+          },
+        },
+        createdAt: new Date(),
+      };
+
+      const mockMessageList = createMockMessageList([existingReminder]);
+
+      const result = processor.processInputStep(
+        createInputStepArgs({
+          requestContext,
+          messageList: mockMessageList as any,
+        }),
+      );
+
+      expect(result).toBe(mockMessageList);
+      expect(mockMessageList.add).toHaveBeenCalledTimes(1);
+
+      const addedMessage = mockMessageList.add.mock.calls[0][0] as MastraDBMessage;
+      const textPart = addedMessage.content.parts?.[0] as { type: 'text'; text: string };
+      expect(textPart.text).toContain('https://example.com/new-page');
+      expect(textPart.text).toContain('New Page');
     });
   });
 });
