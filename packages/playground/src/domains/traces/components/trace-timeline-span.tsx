@@ -19,6 +19,7 @@ type TraceTimelineSpanProps = {
   featuredSpanIds?: string[];
   expandedSpanIds?: string[];
   setExpandedSpanIds?: React.Dispatch<React.SetStateAction<string[]>>;
+  chartWidth?: 'wide' | 'default';
 };
 
 export function TraceTimelineSpan({
@@ -34,6 +35,7 @@ export function TraceTimelineSpan({
   featuredSpanIds,
   expandedSpanIds,
   setExpandedSpanIds,
+  chartWidth,
 }: TraceTimelineSpanProps) {
   const hasChildren = span.spans && span.spans.length > 0;
   const numOfChildren = span.spans ? span.spans.length : 0;
@@ -108,6 +110,7 @@ export function TraceTimelineSpan({
         overallLatency={overallLatency}
         overallStartTime={overallStartTime}
         color={spanUI?.color}
+        chartWidth={chartWidth}
       />
 
       {hasChildren &&
@@ -130,6 +133,7 @@ export function TraceTimelineSpan({
               expandedSpanIds={expandedSpanIds}
               setExpandedSpanIds={setExpandedSpanIds}
               featuredSpanIds={featuredSpanIds}
+              chartWidth={chartWidth}
             />
           );
         })}
