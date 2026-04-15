@@ -414,14 +414,12 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
           } else if (transformedChunk.type === 'tool-network') {
             const payload = transformedChunk.payload;
             const networkChunk = transformNetwork(payload, bufferedSteps, true);
-            if (networkChunk) {
-              if (Array.isArray(networkChunk)) {
-                for (const c of networkChunk) {
-                  controller.enqueue(c);
-                }
-              } else {
-                controller.enqueue(networkChunk);
+            if (Array.isArray(networkChunk)) {
+              for (const c of networkChunk) {
+                if (c) controller.enqueue(c);
               }
+            } else if (networkChunk) {
+              controller.enqueue(networkChunk);
             }
           } else {
             controller.enqueue(transformedChunk as any);
