@@ -357,35 +357,43 @@ export class StoreMemoryUpstash extends MemoryStorage {
     const threadKeysById = new Map(threadIds.map(threadId => [threadId, getKey(TABLE_THREADS, { id: threadId })]));
     let threadCache = new Map<string, StorageThreadType>();
 
+    let threadResults: unknown[];
     try {
       const threadPipeline = this.client.pipeline();
       threadIds.forEach(threadId => threadPipeline.get(threadKeysById.get(threadId)!));
-      const threadResults = await threadPipeline.exec();
-
-      const missingThreadIds: string[] = [];
-      threadIds.forEach((threadId, index) => {
-        const thread = threadResults[index] as StorageThreadType | null;
-        if (!thread) {
-          missingThreadIds.push(threadId);
-          return;
-        }
-
-        threadCache.set(threadId, thread);
-      });
-
-      if (missingThreadIds.length > 0) {
-        const missingThreadLabel =
-          missingThreadIds.length === 1 ? `Thread ${missingThreadIds[0]}` : `Threads ${missingThreadIds.join(', ')}`;
-        throw new Error(`${missingThreadLabel} not found`);
-      }
+      threadResults = await threadPipeline.exec();
     } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('UPSTASH', 'SAVE_MESSAGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+
+    const missingThreadIds: string[] = [];
+    threadIds.forEach((threadId, index) => {
+      const thread = threadResults[index] as StorageThreadType | null;
+      if (!thread) {
+        missingThreadIds.push(threadId);
+        return;
+      }
+
+      threadCache.set(threadId, thread);
+    });
+
+    if (missingThreadIds.length > 0) {
+      const missingThreadLabel =
+        missingThreadIds.length === 1 ? `Thread ${missingThreadIds[0]}` : `Threads ${missingThreadIds.join(', ')}`;
       throw new MastraError(
         {
           id: createStorageErrorId('UPSTASH', 'SAVE_MESSAGES', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
-        error,
+        new Error(`${missingThreadLabel} not found`),
       );
     }
 
