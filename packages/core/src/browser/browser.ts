@@ -408,7 +408,7 @@ export abstract class MastraBrowser extends MastraBase {
   /**
    * Provider type for runtime enforcement.
    * - 'sdk': SDK providers (AgentBrowser, StagehandBrowser) — use with Agent.browser
-   * - 'cli': CLI providers (PlaywrightViewer) — use with Workspace.browser
+   * - 'cli': CLI providers (BrowserViewer) — use with Workspace.browser
    */
   abstract readonly providerType: 'sdk' | 'cli';
 
@@ -619,7 +619,7 @@ export abstract class MastraBrowser extends MastraBase {
 
   /**
    * Get the CDP WebSocket URL for connecting to this browser.
-   * CLI providers (PlaywrightViewer) implement this to expose the URL for CLI tools.
+   * CLI providers (BrowserViewer) implement this to expose the URL for CLI tools.
    * SDK providers typically return null as they manage their own CDP connections.
    *
    * @returns The CDP WebSocket URL (e.g., ws://127.0.0.1:9222/devtools/browser/...)

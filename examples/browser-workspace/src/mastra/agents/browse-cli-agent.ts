@@ -1,8 +1,8 @@
 /**
  * Browse-CLI Agent Example
  *
- * Uses PlaywrightViewer to launch Chrome and browse-cli for automation:
- * - PlaywrightViewer launches Chrome with a known CDP port
+ * Uses BrowserViewer to launch Chrome and browse-cli for automation:
+ * - BrowserViewer launches Chrome with a known CDP port
  * - Agent uses workspace_execute_command to run browse commands
  * - browse-cli connects to our Chrome via --cdp-url
  * - Can also connect to Browserbase cloud for remote browsers
@@ -12,11 +12,11 @@
  */
 import { Agent } from '@mastra/core/agent';
 import { Workspace, LocalSandbox, LocalFilesystem } from '@mastra/core/workspace';
-import { PlaywrightViewer } from '@mastra/browser-viewer';
+import { BrowserViewer } from '@mastra/browser-viewer';
 import { Memory } from '@mastra/memory';
 
-// Create PlaywrightViewer to manage Chrome
-const browserViewer = new PlaywrightViewer({
+// Create BrowserViewer to manage Chrome
+const browserViewer = new BrowserViewer({
   cli: 'browse-cli',
   headless: false,
 });

@@ -4,7 +4,7 @@ Playwright-based browser viewer for Mastra workspaces with CLI provider support.
 
 ## Overview
 
-`@mastra/browser-viewer` provides `PlaywrightViewer`, which launches Chrome via Playwright and exposes the CDP URL for CLI tools (agent-browser, browser-use, browse-cli) to connect. This gives you:
+`@mastra/browser-viewer` provides `BrowserViewer`, which launches Chrome via Playwright and exposes the CDP URL for CLI tools (agent-browser, browser-use, browse-cli) to connect. This gives you:
 
 - **Full screencast support** — Direct page-level CDP sessions
 - **Input injection** — Mouse and keyboard events work correctly  
@@ -24,9 +24,9 @@ pnpm add @mastra/browser-viewer
 ### Basic Setup
 
 ```typescript
-import { PlaywrightViewer } from '@mastra/browser-viewer';
+import { BrowserViewer } from '@mastra/browser-viewer';
 
-const viewer = new PlaywrightViewer({
+const viewer = new BrowserViewer({
   cli: 'agent-browser', // Which CLI the agent will use
   headless: false,      // Show browser window
 });
@@ -42,9 +42,9 @@ console.log(cdpUrl); // ws://127.0.0.1:9222/devtools/browser/...
 ### Connect to Existing Browser
 
 ```typescript
-import { PlaywrightViewer } from '@mastra/browser-viewer';
+import { BrowserViewer } from '@mastra/browser-viewer';
 
-const viewer = new PlaywrightViewer({
+const viewer = new BrowserViewer({
   cli: 'agent-browser',
   cdpUrl: 'ws://127.0.0.1:9222/devtools/browser/abc123',
 });
@@ -73,7 +73,7 @@ The CDP URL will be automatically injected into CLI commands when used with work
 
 ## How It Works
 
-1. **PlaywrightViewer launches Chrome** via Playwright with `--remote-debugging-port`
+1. **BrowserViewer launches Chrome** via Playwright with `--remote-debugging-port`
 2. **Agent calls CLI commands** via `workspace_execute_command`
 3. **CDP URL is auto-injected** so CLI connects to Mastra-managed Chrome
 4. **Screencast streams** directly from page-level CDP sessions

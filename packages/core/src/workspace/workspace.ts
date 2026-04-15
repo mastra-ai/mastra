@@ -171,7 +171,7 @@ export interface WorkspaceConfig<
   /**
    * Browser provider for web automation.
    *
-   * Must be a `MastraBrowser` instance with `providerType: 'cli'` (e.g., `PlaywrightViewer`).
+   * Must be a `MastraBrowser` instance with `providerType: 'cli'` (e.g., `BrowserViewer`).
    * SDK providers (`AgentBrowser`, `StagehandBrowser`) are not supported here —
    * use `Agent.browser` for SDK providers.
    *
@@ -180,11 +180,11 @@ export interface WorkspaceConfig<
    *
    * @example
    * ```typescript
-   * import { PlaywrightViewer } from '@mastra/browser-viewer';
+   * import { BrowserViewer } from '@mastra/browser-viewer';
    *
    * const workspace = new Workspace({
    *   sandbox: new LocalSandbox({ cwd: './workspace' }),
-   *   browser: new PlaywrightViewer({
+   *   browser: new BrowserViewer({
    *     cli: 'agent-browser',
    *     headless: false,
    *   }),
@@ -618,7 +618,7 @@ export class Workspace<
   /**
    * The browser provider (if configured).
    *
-   * Returns the MastraBrowser instance (must be a CLI provider like PlaywrightViewer).
+   * Returns the MastraBrowser instance (must be a CLI provider like BrowserViewer).
    */
   get browser(): MastraBrowser | undefined {
     return this._browser;

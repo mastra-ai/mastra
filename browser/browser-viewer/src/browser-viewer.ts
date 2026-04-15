@@ -1,5 +1,5 @@
 /**
- * PlaywrightViewer - Playwright-managed Chrome for CLI providers
+ * BrowserViewer - Playwright-managed Chrome for CLI providers
  *
  * Launches Chrome via Playwright and exposes the CDP URL for CLI tools
  * (agent-browser, browser-use, browse-cli) to connect as secondary clients.
@@ -31,7 +31,7 @@ import type { Tool } from '@mastra/core/tools';
 import type { BrowserViewerConfig, CLIProvider } from './types';
 
 /**
- * PlaywrightViewer - CLI provider with Playwright-managed Chrome
+ * BrowserViewer - CLI provider with Playwright-managed Chrome
  *
  * Use this with Workspace to enable browser automation via CLI tools.
  * The agent uses skills + workspace_execute_command to drive the CLI,
@@ -40,19 +40,19 @@ import type { BrowserViewerConfig, CLIProvider } from './types';
  * @example
  * ```ts
  * import { Workspace } from '@mastra/core';
- * import { PlaywrightViewer } from '@mastra/browser-viewer';
+ * import { BrowserViewer } from '@mastra/browser-viewer';
  *
  * const workspace = new Workspace({
- *   browser: new PlaywrightViewer({
+ *   browser: new BrowserViewer({
  *     cli: 'agent-browser',
  *     headless: false,
  *   }),
  * });
  * ```
  */
-export class PlaywrightViewer extends MastraBrowser {
+export class BrowserViewer extends MastraBrowser {
   override readonly id: string;
-  override readonly name = 'PlaywrightViewer';
+  override readonly name = 'BrowserViewer';
   override readonly provider = 'browser-viewer';
   override readonly providerType = 'cli' as const;
 

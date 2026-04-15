@@ -325,7 +325,7 @@ export class Agent<
 
     if (config.browser) {
       // Runtime check: Agent requires SDK providers (AgentBrowser, StagehandBrowser)
-      // CLI providers (PlaywrightViewer) should be used with Workspace instead
+      // CLI providers (BrowserViewer) should be used with Workspace instead
       if (config.browser.providerType !== 'sdk') {
         const mastraError = new MastraError({
           id: 'AGENT_INVALID_BROWSER_PROVIDER',

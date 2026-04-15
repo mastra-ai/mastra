@@ -5,5 +5,5 @@
  * Launches Chrome via Playwright and exposes CDP URL for CLI tools.
  */
 
-export { PlaywrightViewer } from './playwright-viewer';
+export { BrowserViewer } from './browser-viewer';
 export type { BrowserViewerConfig, CLIProvider } from './types';

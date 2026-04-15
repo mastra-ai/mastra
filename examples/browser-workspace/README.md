@@ -2,7 +2,7 @@
 
 Demonstrates browser automation in Mastra using different approaches:
 
-1. **CLI Providers** (`PlaywrightViewer`) — Mastra launches Chrome via Playwright, CLI tools connect to it
+1. **CLI Providers** (`BrowserViewer`) — Mastra launches Chrome via Playwright, CLI tools connect to it
 2. **SDK Providers** (`AgentBrowser`, `StagehandBrowser`) — SDK manages Chrome directly
 
 ## Agents
@@ -54,8 +54,8 @@ Demonstrates browser automation in Mastra using different approaches:
 
 ## How it works
 
-### CLI Providers (PlaywrightViewer)
-- `PlaywrightViewer` launches Chrome with `--remote-debugging-port`
+### CLI Providers (BrowserViewer)
+- `BrowserViewer` launches Chrome with `--remote-debugging-port`
 - Agent uses `workspace_execute_command` to run CLI commands
 - CLI connects to our Chrome via `--cdp-url`
 - Screencast streams directly from page-level CDP sessions

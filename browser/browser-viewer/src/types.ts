@@ -5,12 +5,12 @@
 import type { BrowserConfigBase } from '@mastra/core/browser';
 
 /**
- * Supported CLI providers that can be used with PlaywrightViewer.
+ * Supported CLI providers that can be used with BrowserViewer.
  */
 export type CLIProvider = 'agent-browser' | 'browser-use' | 'browse-cli';
 
 /**
- * Configuration for PlaywrightViewer.
+ * Configuration for BrowserViewer.
  */
 export interface BrowserViewerConfig extends BrowserConfigBase {
   /**
