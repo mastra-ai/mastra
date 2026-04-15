@@ -9,6 +9,12 @@ packages:
 
 The `CloudExporter` sends traces, logs, metrics, scores, and feedback to the Mastra platform. Use it to route observability data from any Mastra app to a hosted project in the Mastra platform.
 
+## Version compatibility
+
+- Use `CloudExporter` with `@mastra/observability@1.8.0` or later.
+- If you use `@mastra/observability@1.8.0` through `1.9.1`, set `MASTRA_CLOUD_TRACES_ENDPOINT=https://observability.mastra.ai` in addition to `MASTRA_CLOUD_ACCESS_TOKEN` and `MASTRA_PROJECT_ID`.
+- Starting in `@mastra/observability@1.9.2`, `CloudExporter` defaults to `https://observability.mastra.ai`, so `MASTRA_CLOUD_TRACES_ENDPOINT` is only required when you want to send telemetry to a different collector.
+
 ## Quickstart
 
 To connect `CloudExporter`, create an access token, find the destination `projectId`, and add the exporter to your observability config.
@@ -69,6 +75,12 @@ Set both values in your environment so `CloudExporter` can authenticate and rout
 ```bash title=".env"
 MASTRA_CLOUD_ACCESS_TOKEN=<your-cloud-access-token>
 MASTRA_PROJECT_ID=<your-project-id>
+```
+
+If you use `@mastra/observability@1.8.0` through `1.9.1`, also set the Mastra platform collector explicitly:
+
+```bash title=".env"
+MASTRA_CLOUD_TRACES_ENDPOINT=https://observability.mastra.ai
 ```
 
 If you want to send telemetry somewhere other than Mastra platform, set `MASTRA_CLOUD_TRACES_ENDPOINT` as well. Pass either a base origin or a full traces publish URL ending in `/spans/publish`.
