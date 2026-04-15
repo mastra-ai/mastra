@@ -49,5 +49,11 @@ export type { BrowserContext } from './processor';
 // BrowserViewer (for Workspace browser capabilities)
 // ============================================================================
 
-export { BrowserViewer } from './viewer';
-export type { BrowserViewerConfig, CLIProvider } from './viewer';
+export { BrowserViewer, CLI_PROVIDER_COMMANDS } from './viewer';
+export type {
+  BrowserViewerConfig,
+  CLIProvider,
+  CLIProviderConfig,
+  CLIStatusResponse,
+  BuiltInCLIProvider,
+} from './viewer';

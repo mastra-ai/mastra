@@ -178,6 +178,24 @@ async function executeCommand(input: Record<string, any>, context: any) {
 
     span.end({ success: result.success }, { exitCode: result.exitCode });
 
+    // After any successful command, try to reconnect the browser viewer.
+    // This mirrors SDK providers' event-driven pattern: the agent's command
+    // may have launched a browser (e.g., `agent-browser open ...`), so we
+    // check if we can now connect. No-op if already connected or no viewer.
+    // Skip reconnection for close/quit commands to avoid auto-relaunching.
+    if (result.success) {
+      const isCloseCommand = /\b(close|quit|exit|stop|kill)\b/i.test(command);
+      if (!isCloseCommand) {
+        const viewer = workspace.getBrowserViewer();
+        if (viewer && !viewer.isBrowserRunning()) {
+          // Fire-and-forget — don't block the tool response on reconnection
+          viewer.tryReconnect().catch(() => {
+            // Reconnection failed — that's fine, will try again on next command
+          });
+        }
+      }
+    }
+
     if (!result.success) {
       const parts = [
         await truncateOutput(result.stdout, tail, tokenLimit, tokenFrom),

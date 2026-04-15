@@ -8,7 +8,8 @@
 import type { ProcessHandle, SandboxProcessManager } from '../workspace/sandbox/process-manager';
 import { ThreadManager } from './thread-manager';
 import type { ThreadSession, ThreadManagerConfig } from './thread-manager';
-import type { BrowserViewerConfig, BuiltInCLIProvider, CLIProvider, PageTarget } from './viewer';
+import { CLI_PROVIDER_COMMANDS } from './viewer';
+import type { BrowserViewerConfig, CLIProvider, PageTarget } from './viewer';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -52,14 +53,7 @@ export interface BrowserViewerThreadManagerConfig extends ThreadManagerConfig {
   discoverCdpUrl?: (processHandle: ProcessHandle) => Promise<string | null>;
 }
 
-// ---------------------------------------------------------------------------
-// CLI Provider Commands
-// ---------------------------------------------------------------------------
-
-export const CLI_PROVIDER_COMMANDS: Record<BuiltInCLIProvider, { binary: string; npxPackage: string }> = {
-  'agent-browser': { binary: 'agent-browser', npxPackage: 'agent-browser' },
-  'browser-use': { binary: 'browser-use', npxPackage: '@anthropic-ai/browser-use-cli' },
-};
+// CLI_PROVIDER_COMMANDS is imported from ./viewer
 
 // ---------------------------------------------------------------------------
 // BrowserViewerThreadManager
@@ -175,9 +169,13 @@ export class BrowserViewerThreadManager extends ThreadManager<ThreadCdpConnectio
       // Each thread gets a unique port (or we let Chrome pick one)
       const openArgs = ['open', '--remote-debugging-port=0']; // 0 = auto-assign port
 
-      // Check if binary exists, otherwise use npx
-      const useNpx = !this.commandExists(commands.binary);
-      const cmdParts = useNpx ? ['npx', commands.npxPackage, ...openArgs] : [commands.binary, ...openArgs];
+      // Check if binary exists, otherwise use npx (if available)
+      const binaryExists = this.commandExists(commands.binary);
+      const useNpx = !binaryExists && !!commands.npxPackage;
+      if (!binaryExists && !commands.npxPackage) {
+        throw new Error(`CLI binary '${commands.binary}' not found and no npx fallback available`);
+      }
+      const cmdParts = useNpx ? ['npx', commands.npxPackage!, ...openArgs] : [commands.binary, ...openArgs];
       fullCommand = cmdParts.join(' ');
     } else {
       // Custom CLI provider - use getCdpUrlCommand as-is

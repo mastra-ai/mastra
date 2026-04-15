@@ -5,21 +5,25 @@ A Mastra agent that uses `agent-browser` CLI for web automation via Workspace in
 ## Setup
 
 1. Install dependencies:
+
    ```bash
    pnpm install
    ```
 
 2. Install the agent-browser skill (so the agent knows CLI commands):
+
    ```bash
    npx skills add vercel-labs/agent-browser --skill agent-browser --yes
    ```
 
 3. Set your OpenAI API key:
+
    ```bash
    export OPENAI_API_KEY=your-key
    ```
 
 4. Start the dev server:
+
    ```bash
    pnpm dev
    ```
@@ -36,6 +40,7 @@ A Mastra agent that uses `agent-browser` CLI for web automation via Workspace in
 ## Teardown
 
 To reset all state (database, skills, browser data):
+
 ```bash
 bash scripts/teardown.sh
 ```

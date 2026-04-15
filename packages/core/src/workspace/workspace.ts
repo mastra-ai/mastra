@@ -678,14 +678,16 @@ export class Workspace<
       return null;
     }
 
-    // Auto-connect if not already connected
+    // Try to reconnect if not connected, but don't auto-launch a browser.
+    // tryReconnect() only checks the last known URL and process discovery.
     if (!viewer.isConnected) {
-      try {
-        await viewer.connect();
-      } catch {
-        // Browser might not be running yet - return null context
-        return null;
-      }
+      await viewer.tryReconnect();
+    }
+
+    // If still not connected, the browser isn't running — return null
+    // so no "Browser is not currently running" reminder is injected.
+    if (!viewer.isConnected) {
+      return null;
     }
 
     const url = await viewer.getCurrentUrl();
@@ -699,7 +701,7 @@ export class Workspace<
       provider: providerName,
       currentUrl: url ?? undefined,
       pageTitle: title ?? undefined,
-      isRunning: viewer.isConnected,
+      isRunning: true,
     };
   }
 

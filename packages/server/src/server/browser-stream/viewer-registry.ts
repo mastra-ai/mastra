@@ -286,9 +286,12 @@ export class ViewerRegistry implements ViewerRegistryLike {
     // This ensures screencast reconnects after browser is externally closed
     // Pass threadId so callback only fires when that specific thread's browser is ready
     if (!this.browserReadyCleanups.has(viewerKey)) {
+      console.info(`[ViewerRegistry] Registering onBrowserReady callback for ${viewerKey} (threadId=${threadId})`);
       const cleanup = toolset.onBrowserReady(() => {
+        console.info(`[ViewerRegistry] onBrowserReady callback fired for ${viewerKey}!`);
         // Only start if we still have viewers
         if (!this.viewers.has(viewerKey)) {
+          console.info(`[ViewerRegistry] No viewers for ${viewerKey}, skipping screencast start`);
           return;
         }
 
