@@ -402,8 +402,15 @@ export abstract class MastraBrowser extends MastraBase {
   /** Human-readable name */
   abstract readonly name: string;
 
-  /** Provider type (e.g., 'playwright', 'stagehand', 'browserbase') */
+  /** Provider identifier (e.g., 'playwright', 'stagehand', 'browserbase') */
   abstract readonly provider: string;
+
+  /**
+   * Provider type for runtime enforcement.
+   * - 'sdk': SDK providers (AgentBrowser, StagehandBrowser) — use with Agent.browser
+   * - 'cli': CLI providers (PlaywrightViewer) — use with Workspace.browser
+   */
+  abstract readonly providerType: 'sdk' | 'cli';
 
   // ---------------------------------------------------------------------------
   // State

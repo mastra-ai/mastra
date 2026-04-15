@@ -324,6 +324,22 @@ export class Agent<
     }
 
     if (config.browser) {
+      // Runtime check: Agent requires SDK providers (AgentBrowser, StagehandBrowser)
+      // CLI providers (PlaywrightViewer) should be used with Workspace instead
+      if (config.browser.providerType !== 'sdk') {
+        const mastraError = new MastraError({
+          id: 'AGENT_INVALID_BROWSER_PROVIDER',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: config.name,
+            providerType: config.browser.providerType,
+          },
+          text: `Agent.browser requires an SDK provider (providerType: 'sdk'), but received '${config.browser.providerType}'. Use @mastra/agent-browser or @mastra/stagehand for Agent.browser. For CLI providers like @mastra/browser-viewer, use Workspace.browser instead.`,
+        });
+        this.logger.trackException(mastraError);
+        throw mastraError;
+      }
       this.#browser = config.browser;
     }
 
