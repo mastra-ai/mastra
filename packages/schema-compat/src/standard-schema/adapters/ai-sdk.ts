@@ -1,6 +1,7 @@
 import type { Schema } from '@internal/ai-v6';
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
 import type { JSONSchema7 } from 'json-schema';
+import { cloneJsonWithCycleSafety } from '../clone-json-schema';
 import type { StandardSchemaWithJSON, StandardSchemaWithJSONProps } from '../standard-schema.types';
 
 /**
@@ -139,7 +140,7 @@ export class AiSdkSchemaWrapper<Input = unknown, Output = Input> implements Stan
     const { target } = options;
 
     // Clone the schema to avoid mutations
-    const clonedSchema = JSON.parse(JSON.stringify(this.#schema.jsonSchema)) as Record<string, unknown>;
+    const clonedSchema = cloneJsonWithCycleSafety(this.#schema.jsonSchema) as Record<string, unknown>;
 
     // Add $schema if not present, based on target
     if (!clonedSchema.$schema) {

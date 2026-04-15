@@ -2,6 +2,7 @@ import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/sp
 import Ajv from 'ajv';
 import type { JSONSchema7 } from 'json-schema';
 import traverse from 'json-schema-traverse';
+import { cloneJsonWithCycleSafety } from '../clone-json-schema';
 import type { StandardSchemaWithJSON, StandardSchemaWithJSONProps } from '../standard-schema.types';
 
 /**
@@ -163,7 +164,7 @@ export class JsonSchemaWrapper<Input = unknown, Output = Input> implements Stand
     const { target } = options;
 
     // Clone the schema to avoid mutations
-    const clonedSchema = JSON.parse(JSON.stringify(this.#schema)) as Record<string, unknown>;
+    const clonedSchema = cloneJsonWithCycleSafety(this.#schema) as Record<string, unknown>;
 
     // Add $schema if not present, based on target
     if (!clonedSchema.$schema) {

@@ -207,6 +207,21 @@ describe('json-schema standard-schema adapter', () => {
 
       expect(standardSchema.getSchema()).toEqual(jsonSchema);
     });
+
+    it('should not throw when the in-memory schema graph is circular (dereferenced $ref)', () => {
+      const root: Record<string, unknown> = {
+        type: 'object',
+        properties: {
+          next: {},
+        },
+      };
+      (root.properties as Record<string, unknown>).next = root;
+
+      const standardSchema = toStandardSchema(root as JSONSchema7);
+      const outputSchema = standardSchema['~standard'].jsonSchema.output({ target: 'draft-07' });
+      expect(outputSchema.type).toBe('object');
+      expect((outputSchema.properties as Record<string, unknown>).next).toBe('[Circular]');
+    });
   });
 
   describe('isStandardSchemaWithJSON', () => {

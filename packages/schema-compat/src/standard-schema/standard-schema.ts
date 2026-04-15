@@ -8,6 +8,7 @@ import { toStandardSchema as toStandardSchemaAiSdk } from './adapters/ai-sdk';
 import { toStandardSchema as toStandardSchemaJsonSchema } from './adapters/json-schema';
 import { toStandardSchema as toStandardSchemaZodV3 } from './adapters/zod-v3';
 import { toStandardSchema as toStandardSchemaZodV4 } from './adapters/zod-v4';
+import { cloneJsonWithCycleSafety } from './clone-json-schema';
 import type { StandardSchemaWithJSON } from './standard-schema.types';
 
 /**
@@ -307,7 +308,7 @@ export function standardSchemaToJSONSchema(
   }) as JSONSchema7;
 
   // make sure only jsonSchema is left, no standard schema metadata
-  jsonSchema = JSON.parse(JSON.stringify(jsonSchema));
+  jsonSchema = cloneJsonWithCycleSafety(jsonSchema);
 
   return jsonSchema;
 }
