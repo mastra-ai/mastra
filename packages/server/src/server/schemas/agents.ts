@@ -330,6 +330,7 @@ const toolCallActionBodySchema = z.object({
   runId: z.string(),
   requestContext: z.record(z.string(), z.any()).optional(),
   toolCallId: z.string(),
+  clientTools: z.record(z.string(), z.any()).optional(),
   format: z.string().optional(),
   resumeData: z.any().optional(),
 });

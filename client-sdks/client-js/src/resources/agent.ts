@@ -73,9 +73,49 @@ type StreamProcessingContext = {
   memory?: StreamParams<any>['memory'];
   threadId?: string;
   resourceId?: string;
+  lastMessage?: UIMessage;
 };
 
 const MAX_DELEGATED_CLIENT_TOOL_RESUME_ATTEMPTS = 25;
+
+function formatClientToolName(toolName: string): string {
+  const invalidCharRegex = /[^a-zA-Z0-9_\-]/g;
+  const startingCharRegex = /[a-zA-Z_]/;
+
+  if (toolName.length <= 63 && !toolName.match(invalidCharRegex) && (toolName[0]?.match(startingCharRegex) ?? false)) {
+    return toolName;
+  }
+
+  let formattedToolName = toolName.replace(invalidCharRegex, '_');
+  if (!(formattedToolName[0]?.match(startingCharRegex) ?? false)) {
+    formattedToolName = `_${formattedToolName}`;
+  }
+
+  return formattedToolName.slice(0, 63);
+}
+
+function getClientToolByName(clientTools: Record<string, Tool> | undefined, emittedToolName: string): Tool | undefined {
+  if (!clientTools) {
+    return undefined;
+  }
+
+  if (clientTools[emittedToolName]) {
+    return clientTools[emittedToolName] as Tool;
+  }
+
+  const matchedEntry = Object.entries(clientTools).find(
+    ([toolName]) => formatClientToolName(toolName) === emittedToolName,
+  );
+  return matchedEntry?.[1] as Tool | undefined;
+}
+
+function getResumeClientTools(clientTools: Record<string, Tool> | undefined) {
+  if (!clientTools) {
+    return undefined;
+  }
+
+  return processClientTools(clientTools);
+}
 
 function getDelegatedClientToolSuspendData(response: any): {
   suspendPayload: any;
@@ -116,7 +156,7 @@ async function executeClientToolsFromCalls({
   const agentMessages = Array.isArray(messages) ? messages : [];
 
   for (const toolCall of clientToolCalls) {
-    const clientTool = clientTools[toolCall.toolName] as Tool;
+    const clientTool = getClientToolByName(clientTools, toolCall.toolName);
     if (clientTool?.execute) {
       const result = await clientTool.execute(toolCall.args, {
         requestContext: requestContext as RequestContext,
@@ -167,7 +207,10 @@ async function executeToolCallAndRespond<OUTPUT>({
     }
 
     for (const toolCall of toolCalls) {
-      const clientTool = params.clientTools?.[toolCall.payload.toolName] as Tool;
+      const clientTool = getClientToolByName(
+        params.clientTools as Record<string, Tool> | undefined,
+        toolCall.payload.toolName,
+      );
 
       if (clientTool && clientTool.execute) {
         const result = await clientTool.execute(toolCall?.payload.args, {
@@ -244,6 +287,7 @@ async function executeSuspendedClientToolCallsAndRespond<OUTPUT>({
     toolCallId: string;
     resumeData?: any;
     requestContext?: RequestContext | Record<string, any>;
+    clientTools?: Record<string, any>;
   }) => Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>>;
 }) {
   let currentResponse = response;
@@ -291,6 +335,7 @@ async function executeSuspendedClientToolCallsAndRespond<OUTPUT>({
         ...(delegatedReplayState ? { __mastraDelegatedReplayState: delegatedReplayState } : {}),
       },
       requestContext,
+      clientTools: getResumeClientTools(params.clientTools as Record<string, Tool> | undefined),
     });
 
     if (currentResponse.finishReason === 'tool-calls') {
@@ -624,7 +669,10 @@ export class Agent extends BaseResource {
       }
 
       for (const toolCall of toolCalls) {
-        const clientTool = params.clientTools?.[toolCall.toolName] as Tool;
+        const clientTool = getClientToolByName(
+          params.clientTools as Record<string, Tool> | undefined,
+          toolCall.toolName,
+        );
 
         if (clientTool && clientTool.execute) {
           const result = await clientTool.execute(toolCall?.args, {
@@ -1510,7 +1558,9 @@ export class Agent extends BaseResource {
       },
     });
 
-    onFinish?.({ message, finishReason, usage, suspendedPayload, runId });
+    const resolvedFinishReason =
+      (finishReason === 'unknown' || finishReason === '') && suspendedPayload ? 'suspended' : finishReason;
+    onFinish?.({ message, finishReason: resolvedFinishReason, usage, suspendedPayload, runId });
   }
 
   async processStreamResponse(
@@ -1523,6 +1573,7 @@ export class Agent extends BaseResource {
     const clientTools = streamContext.clientTools ?? processedParams.clientTools;
     const inputMessages = streamContext.inputMessages ?? processedParams.messages;
     const memory = streamContext.memory ?? processedParams.memory;
+    const lastMessage = streamContext.lastMessage;
     const { resource, thread } = memory ?? {};
     const threadId =
       streamContext.threadId ?? processedParams.threadId ?? (typeof thread === 'string' ? thread : thread?.id);
@@ -1603,7 +1654,7 @@ export class Agent extends BaseResource {
             let shouldExecuteClientTool = false;
             // Handle tool calls if needed
             for (const toolCall of toolCalls) {
-              const clientTool = clientTools?.[toolCall.toolName] as Tool;
+              const clientTool = getClientToolByName(clientTools, toolCall.toolName);
               if (clientTool && clientTool.execute) {
                 shouldExecuteClientTool = true;
                 shouldContinueRecursively = true;
@@ -1674,6 +1725,7 @@ export class Agent extends BaseResource {
                       memory,
                       threadId,
                       resourceId,
+                      lastMessage,
                     },
                   );
                 } catch (error) {
@@ -1686,13 +1738,24 @@ export class Agent extends BaseResource {
             const { clientToolCalls, delegatedReplayState } = getDelegatedClientToolSuspendData({
               suspendPayload: suspendedPayload,
             });
+            const currentLastMessageRaw = messages[messages.length - 1] ?? lastMessage;
+            const currentLastMessage: UIMessage | undefined =
+              currentLastMessageRaw != null ? JSON.parse(JSON.stringify(currentLastMessageRaw)) : undefined;
+            const executionMessages =
+              messages.length > 0
+                ? messages
+                : currentLastMessage
+                  ? [currentLastMessage]
+                  : Array.isArray(inputMessages)
+                    ? inputMessages
+                    : undefined;
 
             if (clientToolCalls.length > 0 && runId) {
               const toolResults = await executeClientToolsFromCalls({
                 clientToolCalls,
                 clientTools: clientTools as Record<string, Tool>,
                 agentId: this.agentId,
-                messages: messages.length > 0 ? messages : Array.isArray(inputMessages) ? inputMessages : undefined,
+                messages: executionMessages,
                 requestContext: requestContext as RequestContext,
                 threadId,
                 resourceId,
@@ -1707,6 +1770,7 @@ export class Agent extends BaseResource {
                       runId,
                       toolCallId: outerToolCallId,
                       requestContext,
+                      ...(clientTools ? { clientTools: processClientTools(clientTools as Record<string, Tool>) } : {}),
                       resumeData: {
                         __mastraClientToolResults: toolResults,
                         ...(delegatedReplayState ? { __mastraDelegatedReplayState: delegatedReplayState } : {}),
@@ -1721,6 +1785,7 @@ export class Agent extends BaseResource {
                       memory,
                       threadId,
                       resourceId,
+                      lastMessage: currentLastMessage,
                     },
                   );
                 } catch (error) {
@@ -1737,7 +1802,7 @@ export class Agent extends BaseResource {
             controller.close();
           }
         },
-        lastMessage: undefined,
+        lastMessage,
       }).catch(async error => {
         console.error('Error processing stream response:', error);
         // On error, wait for pipe to complete then close the controller
@@ -2032,6 +2097,7 @@ export class Agent extends BaseResource {
     toolCallId: string;
     resumeData?: any;
     requestContext?: RequestContext | Record<string, any>;
+    clientTools?: Record<string, Tool>;
   }): Promise<
     Response & {
       processDataStream: ({
@@ -2041,8 +2107,12 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
-    const { requestContext, ...rest } = params;
-    const processedParams = { ...rest, requestContext: parseClientRequestContext(requestContext) };
+    const { requestContext, clientTools, ...rest } = params;
+    const processedParams = {
+      ...rest,
+      ...(clientTools ? { clientTools: processClientTools(clientTools) } : {}),
+      requestContext: parseClientRequestContext(requestContext),
+    };
 
     // Create a manually controlled readable stream
     let readableController: ReadableStreamDefaultController<Uint8Array>;
@@ -2147,11 +2217,16 @@ export class Agent extends BaseResource {
     toolCallId: string;
     resumeData?: any;
     requestContext?: RequestContext | Record<string, any>;
+    clientTools?: Record<string, Tool>;
   }): Promise<any> {
-    const { requestContext, ...rest } = params;
+    const { requestContext, clientTools, ...rest } = params;
     return this.request(`/agents/${this.agentId}/approve-tool-call-generate`, {
       method: 'POST',
-      body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
+      body: {
+        ...rest,
+        ...(clientTools ? { clientTools: processClientTools(clientTools) } : {}),
+        requestContext: parseClientRequestContext(requestContext),
+      },
     });
   }
 
@@ -2232,7 +2307,10 @@ export class Agent extends BaseResource {
 
             // Handle tool calls if needed
             for (const toolCall of toolCalls) {
-              const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
+              const clientTool = getClientToolByName(
+                processedParams.clientTools as Record<string, Tool> | undefined,
+                toolCall.toolName,
+              );
               if (clientTool && clientTool.execute) {
                 const result = await clientTool.execute(toolCall?.args, {
                   requestContext: processedParams.requestContext as RequestContext,
