@@ -511,6 +511,11 @@ export class ReflectorRunner {
     lockKey: string,
     writer?: ProcessorStreamWriter,
     messageList?: MessageList,
+    activationMetadata?: {
+      triggeredBy: 'threshold' | 'ttl';
+      lastActivityAt?: number;
+      ttlExpiredMs?: number;
+    },
   ): Promise<boolean> {
     const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
 
@@ -582,6 +587,9 @@ export class ReflectorRunner {
         threadId: freshRecord.threadId ?? '',
         generationCount: afterRecord?.generationCount ?? freshRecord.generationCount ?? 0,
         observations: afterRecord?.activeObservations,
+        triggeredBy: activationMetadata?.triggeredBy,
+        lastActivityAt: activationMetadata?.lastActivityAt,
+        ttlExpiredMs: activationMetadata?.ttlExpiredMs,
         config: this.getObservationMarkerConfig(freshRecord),
       });
       void writer.custom(activationMarker).catch(() => {});
@@ -625,6 +633,7 @@ export class ReflectorRunner {
       requestContext,
       observabilityContext,
       lastActivityAt,
+      threadId: requestedThreadId,
     } = opts;
     const lockKey = this.buffering.getLockKey(record.threadId, record.resourceId);
     const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
@@ -661,12 +670,19 @@ export class ReflectorRunner {
     }
 
     const activationTTL = this.reflectionConfig.activationTTL;
-    const ttlExpired =
-      activationTTL !== undefined && lastActivityAt !== undefined && Date.now() - lastActivityAt >= activationTTL;
+    const ttlExpiredMs =
+      activationTTL !== undefined && lastActivityAt !== undefined ? Date.now() - lastActivityAt : undefined;
+    const ttlExpired = ttlExpiredMs !== undefined && activationTTL !== undefined && ttlExpiredMs >= activationTTL;
 
     if (observationTokens < reflectThreshold && !ttlExpired) {
       return;
     }
+
+    const activationMetadata = {
+      triggeredBy: ttlExpired ? ('ttl' as const) : ('threshold' as const),
+      lastActivityAt: ttlExpired ? lastActivityAt : undefined,
+      ttlExpiredMs: ttlExpired ? ttlExpiredMs : undefined,
+    };
 
     // ═══════════════════════════════════════════════════════════
     // LOCKING: Check if reflection is already in progress
@@ -684,7 +700,13 @@ export class ReflectorRunner {
     // ASYNC ACTIVATION: Try to activate buffered reflection first
     // ════════════════════════════════════════════════════════════════════════
     if (this.buffering.isAsyncReflectionEnabled()) {
-      const activationSuccess = await this.tryActivateBufferedReflection(record, lockKey, writer, messageList);
+      const activationSuccess = await this.tryActivateBufferedReflection(
+        record,
+        lockKey,
+        writer,
+        messageList,
+        activationMetadata,
+      );
       if (activationSuccess) {
         return;
       }
@@ -718,7 +740,7 @@ export class ReflectorRunner {
 
     const cycleId = crypto.randomUUID();
     const startedAt = new Date().toISOString();
-    const threadId = opts.threadId ?? 'unknown';
+    const threadId = requestedThreadId ?? 'unknown';
 
     if (writer) {
       const startMarker = createObservationStartMarker({

@@ -621,6 +621,15 @@ export interface DataOmActivationPart {
 
     /** The actual observations from activated chunks (for UI display) */
     observations?: string;
+
+    /** Whether activation was triggered by threshold crossing or activationTTL expiry */
+    triggeredBy?: 'threshold' | 'ttl';
+
+    /** Unix-ms timestamp of the last assistant message part used for TTL checks */
+    lastActivityAt?: number;
+
+    /** How long activationTTL had been exceeded when activation fired */
+    ttlExpiredMs?: number;
   };
 }
 

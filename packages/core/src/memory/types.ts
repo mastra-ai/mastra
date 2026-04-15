@@ -1173,6 +1173,9 @@ export type SerializedObservationalMemoryConfig = {
   /** Memory scope: 'resource' or 'thread' */
   scope?: 'resource' | 'thread';
 
+  /** Inactivity TTL before forcing buffered observation/reflection activation */
+  activationTTL?: number | string;
+
   /** Share the token budget between messages and observations */
   shareTokenBudget?: boolean;
 

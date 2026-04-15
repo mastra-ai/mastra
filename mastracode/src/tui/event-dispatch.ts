@@ -216,9 +216,23 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       handleOMBufferingFailed(ectx, event.operationType, event.error);
       break;
 
-    case 'om_activation':
-      handleOMActivation(ectx, event.operationType, event.tokensActivated, event.observationTokens);
+    case 'om_activation': {
+      const activationEvent = event as Extract<HarnessEvent, { type: 'om_activation' }> & {
+        triggeredBy?: 'threshold' | 'ttl';
+        lastActivityAt?: number;
+        ttlExpiredMs?: number;
+      };
+      handleOMActivation(
+        ectx,
+        activationEvent.operationType,
+        activationEvent.tokensActivated,
+        activationEvent.observationTokens,
+        activationEvent.triggeredBy,
+        activationEvent.lastActivityAt,
+        activationEvent.ttlExpiredMs,
+      );
       break;
+    }
 
     case 'om_thread_title_updated':
       state.currentThreadTitle = event.newTitle;

@@ -2700,7 +2700,7 @@ ${formattedMessages}
     // Activate any remaining buffered chunks
     const preStatus = await this.getStatus({ threadId, resourceId, messages });
     if (preStatus.canActivate) {
-      const actResult = await this.activate({ threadId, resourceId });
+      const actResult = await this.activate({ threadId, resourceId, messages });
       activated = actResult.activated;
     }
 
@@ -3062,14 +3062,23 @@ ${formattedMessages}
       return { activated: false, record };
     }
 
+    let activationTriggeredBy: 'threshold' | 'ttl' = 'threshold';
+    let activationLastActivityAt: number | undefined;
+    let activationTTLExpiredMs: number | undefined;
+
     // Optional threshold guard — skip activation if pending tokens are below threshold
     if (opts.checkThreshold) {
       const activationTTL = this.observationConfig.activationTTL;
       const lastActivityAt = this.getLastActivityFromMessages(opts.messages);
-      const ttlExpired =
-        activationTTL !== undefined && lastActivityAt !== undefined && Date.now() - lastActivityAt >= activationTTL;
+      const ttlExpiredMs =
+        activationTTL !== undefined && lastActivityAt !== undefined ? Date.now() - lastActivityAt : undefined;
+      const ttlExpired = ttlExpiredMs !== undefined && activationTTL !== undefined && ttlExpiredMs >= activationTTL;
 
-      if (!ttlExpired) {
+      if (ttlExpired) {
+        activationTriggeredBy = 'ttl';
+        activationLastActivityAt = lastActivityAt;
+        activationTTLExpiredMs = ttlExpiredMs;
+      } else {
         const status = await this.getStatus({ threadId, resourceId, messages: opts.messages });
         if (status.pendingTokens < status.threshold) {
           return { activated: false, record };
@@ -3153,6 +3162,9 @@ ${formattedMessages}
           threadId: postSwapRecord.threadId ?? record.threadId ?? '',
           generationCount: postSwapRecord.generationCount ?? 0,
           observations: chunkData?.observations ?? activationResult.observations,
+          triggeredBy: activationTriggeredBy,
+          lastActivityAt: activationLastActivityAt,
+          ttlExpiredMs: activationTTLExpiredMs,
           config: this.getObservationMarkerConfig(),
         });
         void opts.writer.custom(activationMarker).catch(() => {});

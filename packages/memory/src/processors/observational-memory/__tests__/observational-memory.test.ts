@@ -7732,6 +7732,7 @@ describe('Full Async Buffering Flow', () => {
     bufferActivation: number;
     reflectionObservationTokens: number;
     reflectionAsyncActivation?: number;
+    activationTTL?: number | string;
     blockAfter?: number;
     /** Number of messages to pre-save (each ~200 tokens via repeated filler text) */
     messageCount?: number;
@@ -7801,6 +7802,7 @@ describe('Full Async Buffering Flow', () => {
       storage,
       scope: 'thread',
       model: mockModel as any,
+      activationTTL: opts.activationTTL,
       observation: {
         messageTokens: opts.messageTokens,
         bufferTokens: opts.bufferTokens,
@@ -7997,6 +7999,76 @@ describe('Full Async Buffering Flow', () => {
     expect(record!.activeObservations).toBeTruthy();
     expect(record!.activeObservations!.length).toBeGreaterThan(0);
     expect(record!.activeObservations).toContain('Observed');
+  });
+
+  it('should activate buffered observations during prepare when activationTTL expires', async () => {
+    const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
+      messageTokens: 30000,
+      bufferTokens: 500,
+      bufferActivation: 0.7,
+      reflectionObservationTokens: 50000,
+      activationTTL: 1,
+      messageCount: 10,
+    });
+
+    await step(0);
+    await waitForAsyncOps();
+
+    const preRecord = await storage.getObservationalMemory(threadId, resourceId);
+    const preChunks =
+      typeof preRecord?.bufferedObservationChunks === 'string'
+        ? JSON.parse(preRecord.bufferedObservationChunks)
+        : preRecord?.bufferedObservationChunks;
+    expect(Array.isArray(preChunks) ? preChunks.length : 0).toBeGreaterThan(0);
+    expect(observerCalls.length).toBeGreaterThan(0);
+
+    const now = Date.now();
+    const staleAssistantPartTime = now - 10;
+    const userMessage = {
+      id: 'ttl-user-msg',
+      role: 'user' as const,
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: 'hi' }],
+      },
+      type: 'text',
+      createdAt: new Date(now),
+      threadId,
+      resourceId,
+    };
+    const assistantMessage = {
+      id: 'ttl-assistant-msg',
+      role: 'assistant' as const,
+      content: {
+        format: 2 as const,
+        parts: [
+          {
+            type: 'text' as const,
+            text: 'Previously cached response',
+            createdAt: staleAssistantPartTime,
+          },
+        ],
+      },
+      type: 'text',
+      createdAt: new Date(staleAssistantPartTime),
+      threadId,
+      resourceId,
+    };
+
+    await storage.saveMessages({ messages: [assistantMessage, userMessage] });
+
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    expect(record).toBeDefined();
+    expect(record!.activeObservations).toContain('Observed');
+
+    const activatedChunks =
+      typeof record?.bufferedObservationChunks === 'string'
+        ? JSON.parse(record.bufferedObservationChunks)
+        : record?.bufferedObservationChunks;
+    expect(Array.isArray(activatedChunks) ? activatedChunks : []).toHaveLength(0);
   });
 
   it('should trigger reflection after observation tokens exceed reflection threshold', async () => {

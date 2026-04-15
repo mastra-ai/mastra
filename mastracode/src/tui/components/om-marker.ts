@@ -14,6 +14,21 @@ function formatTokens(tokens: number): string {
   const k = tokens / 1000;
   return k % 1 === 0 ? `${k}k` : `${k.toFixed(1)}k`;
 }
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes < 60) return remainingSeconds === 0 ? `${minutes}m` : `${minutes}m ${remainingSeconds}s`;
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes === 0 ? `${hours}h` : `${hours}h ${remainingMinutes}m`;
+}
 export type OMMarkerData =
   | {
       type: 'om_observation_start';
@@ -55,6 +70,9 @@ export type OMMarkerData =
       operationType: 'observation' | 'reflection';
       tokensActivated: number;
       observationTokens: number;
+      triggeredBy?: 'threshold' | 'ttl';
+      lastActivityAt?: number;
+      ttlExpiredMs?: number;
     }
   | {
       type: 'om_thread_title_updated';
@@ -132,7 +150,14 @@ function formatMarker(data: OMMarkerData): string {
       const kind = data.operationType === 'reflection' ? 'reflection' : 'observations';
       const msgTokens = formatTokens(data.tokensActivated);
       const obsTokens = formatTokens(data.observationTokens);
-      return theme.fg('success', `  ✓ Activated ${kind}: -${msgTokens} msg tokens, +${obsTokens} obs tokens`);
+      const triggerDetail =
+        data.triggeredBy === 'ttl' && data.ttlExpiredMs !== undefined
+          ? ` (TTL ${formatDuration(data.ttlExpiredMs)} expired)`
+          : '';
+      return theme.fg(
+        'success',
+        `  ✓ Activated ${kind}${triggerDetail}: -${msgTokens} msg tokens, +${obsTokens} obs tokens`,
+      );
     }
     case 'om_thread_title_updated': {
       return theme.fg('muted', `  thread title updated: ${data.newTitle}`);

@@ -206,6 +206,9 @@ export function handleOMActivation(
   operationType: 'observation' | 'reflection',
   tokensActivated: number,
   observationTokens: number,
+  triggeredBy?: 'threshold' | 'ttl',
+  lastActivityAt?: number,
+  ttlExpiredMs?: number,
 ): void {
   const { state } = ctx;
   const activationData: OMMarkerData = {
@@ -213,6 +216,9 @@ export function handleOMActivation(
     operationType,
     tokensActivated,
     observationTokens,
+    triggeredBy,
+    lastActivityAt,
+    ttlExpiredMs,
   };
   state.activeActivationMarker = new OMMarkerComponent(activationData);
   addChildBeforeStreaming(ctx, state.activeActivationMarker);

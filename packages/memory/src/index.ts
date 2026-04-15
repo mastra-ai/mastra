@@ -1427,6 +1427,7 @@ ${workingMemory}`;
       storage: memoryStore,
       scope: omConfig.scope,
       retrieval: omConfig.retrieval,
+      activationTTL: omConfig.activationTTL,
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
       onIndexObservations,
