@@ -1,6 +1,6 @@
 {
   "name": "@internal/browser-test-utils",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Test utilities for browser providers (Stagehand, AgentBrowser)",
   "type": "module",
   "main": "src/index.ts",
