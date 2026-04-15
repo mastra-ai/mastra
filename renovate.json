@@ -23,6 +23,8 @@
   },
   "schedule": ["before 6am on monday"],
   "vulnerabilityAlerts": {
+    "groupName": "security updates",
+    "labels": ["automation", "security"],
     "schedule": []
   },
   "osvVulnerabilityAlerts": true,

@@ -1,7 +1,7 @@
 import type { MessagePrimitive } from '@assistant-ui/react';
 import { ComposerPrimitive, ThreadPrimitive, useComposerRuntime } from '@assistant-ui/react';
-import { Avatar, IconButton, useAutoscroll } from '@mastra/playground-ui';
-import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
+import { Avatar, Badge, IconButton, useAutoscroll } from '@mastra/playground-ui';
+import { ArrowUp, CheckCircleIcon, Loader2Icon, Mic, PlusIcon, XCircleIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { ComposerAttachments } from './attachments/attachment';
@@ -14,6 +14,7 @@ import { ComposerModelSwitcher } from '@/domains/agents/components/composer-mode
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
 import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recognition';
+import { useBackgroundTaskStream } from '@/hooks';
 
 export interface ThreadProps {
   agentName?: string;
@@ -73,6 +74,7 @@ export const Thread = ({ agentName, agentId, threadId, hasMemory, hasModelList, 
 
       <Composer
         hasMemory={hasMemory}
+        threadId={threadId}
         agentId={agentId}
         hasModelList={hasModelList}
         hideModelSwitcher={hideModelSwitcher}
@@ -106,20 +108,50 @@ const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
 
 interface ComposerProps {
   hasMemory?: boolean;
+  threadId?: string;
   agentId?: string;
   hasModelList?: boolean;
   hideModelSwitcher?: boolean;
 }
 
-const Composer = ({ agentId, hasModelList, hideModelSwitcher }: ComposerProps) => {
+const Composer = ({ threadId, agentId, hasModelList, hideModelSwitcher }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { canExecute } = usePermissions();
   const canExecuteAgent = canExecute('agents');
 
+  const { runningTasks, completedTasks, failedTasks, clearCompletedAndFailedTasks } = useBackgroundTaskStream({
+    threadId,
+    agentId,
+  });
+
   return (
     <div className="mx-4">
-      <ComposerPrimitive.Root>
+      <div className="flex gap-2 items-center">
+        {runningTasks.length > 0 ? (
+          <div className="pt-2">
+            <Badge variant="info" icon={<Loader2Icon className="animate-spin" />}>
+              {runningTasks.length} background task{runningTasks.length > 1 ? 's' : ''}{' '}
+              {runningTasks.length > 1 ? 'are' : 'is'} running
+            </Badge>
+          </div>
+        ) : null}
+        {completedTasks.length > 0 ? (
+          <div className="pt-2">
+            <Badge variant="success" icon={<CheckCircleIcon />}>
+              {completedTasks.length} background task{completedTasks.length > 1 ? 's' : ''} completed
+            </Badge>
+          </div>
+        ) : null}
+        {failedTasks.length > 0 ? (
+          <div className="pt-2">
+            <Badge variant="error" icon={<XCircleIcon />}>
+              {failedTasks.length} background task{failedTasks.length > 1 ? 's' : ''} failed
+            </Badge>
+          </div>
+        ) : null}
+      </div>
+      <ComposerPrimitive.Root onSubmit={clearCompletedAndFailedTasks}>
         <div className="max-w-3xl w-full mx-auto pb-2">
           <ComposerAttachments />
         </div>
@@ -229,12 +261,12 @@ const EditComposer = () => {
 
       <div>
         <ComposerPrimitive.Cancel asChild>
-          <button className="bg-surface2 border border-border1 px-2 text-ui-md inline-flex items-center justify-center rounded-md  h-form-sm gap-1 hover:bg-surface4 text-neutral3 hover:text-neutral6">
+          <button className="bg-surface2 border border-border1 px-2 text-ui-md inline-flex items-center justify-center rounded-md h-form-sm gap-1 hover:bg-surface4 text-neutral3 hover:text-neutral6">
             Cancel
           </button>
         </ComposerPrimitive.Cancel>
         <ComposerPrimitive.Send asChild>
-          <button className="bg-surface2 border border-border1 px-2 text-ui-md inline-flex items-center justify-center rounded-md  h-form-sm gap-1 hover:bg-surface4 text-neutral3 hover:text-neutral6">
+          <button className="bg-surface2 border border-border1 px-2 text-ui-md inline-flex items-center justify-center rounded-md h-form-sm gap-1 hover:bg-surface4 text-neutral3 hover:text-neutral6">
             Send
           </button>
         </ComposerPrimitive.Send>
