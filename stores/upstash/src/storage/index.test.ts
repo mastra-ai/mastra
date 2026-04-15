@@ -198,3 +198,32 @@ describe('saveMessages uses msg-idx index instead of scanning', () => {
     expect(messages.find(m => m.id === message.id)?.threadId).toBe(thread.id);
   });
 });
+
+describe('updateMessages keeps msg-idx index in sync', () => {
+  it('updates the index and returns the moved message when a message changes threads', async () => {
+    const memoryDomain = new StoreMemoryUpstash({ client: createTestClient() });
+    await memoryDomain.init();
+
+    const sourceThread = createThread();
+    const targetThread = createThread(sourceThread.resourceId);
+    await memoryDomain.saveThread({ thread: sourceThread });
+    await memoryDomain.saveThread({ thread: targetThread });
+
+    const originalMessage = createMessage(sourceThread);
+    await memoryDomain.saveMessages({ messages: [originalMessage] });
+
+    const updatedMessages = await memoryDomain.updateMessages({
+      messages: [{ id: originalMessage.id, threadId: targetThread.id }],
+    });
+
+    expect(updatedMessages).toHaveLength(1);
+    expect(updatedMessages[0]!.threadId).toBe(targetThread.id);
+
+    const client = (memoryDomain as any).client as Redis;
+    expect(await client.get<string>(`msg-idx:${originalMessage.id}`)).toBe(targetThread.id);
+
+    const { messages } = await memoryDomain.listMessagesById({ messageIds: [originalMessage.id] });
+    expect(messages).toHaveLength(1);
+    expect(messages[0]!.threadId).toBe(targetThread.id);
+  });
+});

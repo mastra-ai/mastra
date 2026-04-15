@@ -379,14 +379,20 @@ export class StoreMemoryUpstash extends MemoryStorage {
       for (let i = 0; i < messagesWithIndex.length; i += batchSize) {
         const batch = messagesWithIndex.slice(i, i + batchSize);
         const pipeline = this.client.pipeline();
+        const indexLookupPipeline = this.client.pipeline();
 
-        for (const message of batch) {
+        batch.forEach(message => {
+          indexLookupPipeline.get(getMessageIndexKey(message.id));
+        });
+        const existingThreadIds = (await indexLookupPipeline.exec()) as (string | null)[];
+
+        for (const [batchIndex, message] of batch.entries()) {
           const key = getMessageKey(message.threadId!, message.id);
           const createdAtScore = new Date(message.createdAt).getTime();
           const score = message._index !== undefined ? message._index : createdAtScore;
 
           // Check if this message id exists in another thread (index lookup, no scan)
-          const existingThreadId = await this.client.get<string>(getMessageIndexKey(message.id));
+          const existingThreadId = existingThreadIds[batchIndex];
           if (existingThreadId && existingThreadId !== message.threadId) {
             pipeline.del(getMessageKey(existingThreadId, message.id));
             pipeline.zrem(getThreadMessagesKey(existingThreadId), message.id);
@@ -902,20 +908,44 @@ export class StoreMemoryUpstash extends MemoryStorage {
       // Find all existing messages — try index first, fall back to scan
       const existingMessages: MastraDBMessage[] = [];
       const messageIdToKey: Record<string, string> = {};
+      const backfillIndexValues: Record<string, string> = {};
 
-      for (const messageId of messageIds) {
-        // Try the index first (fast path)
-        const indexedThreadId = await this.client.get<string>(getMessageIndexKey(messageId));
+      const indexPipeline = this.client.pipeline();
+      messageIds.forEach(messageId => indexPipeline.get(getMessageIndexKey(messageId)));
+      const indexResults = (await indexPipeline.exec()) as (string | null)[];
+
+      const indexedLookups: { messageId: string; threadId: string }[] = [];
+      const fallbackMessageIds: string[] = [];
+
+      messageIds.forEach((messageId, index) => {
+        const indexedThreadId = indexResults[index];
         if (indexedThreadId) {
-          const key = getMessageKey(indexedThreadId, messageId);
-          const message = await this.client.get<MastraDBMessage>(key);
+          indexedLookups.push({ messageId, threadId: indexedThreadId });
+        } else {
+          fallbackMessageIds.push(messageId);
+        }
+      });
+
+      if (indexedLookups.length > 0) {
+        const messagePipeline = this.client.pipeline();
+        indexedLookups.forEach(({ messageId, threadId }) => {
+          messagePipeline.get(getMessageKey(threadId, messageId));
+        });
+        const indexedMessages = (await messagePipeline.exec()) as (MastraDBMessage | null)[];
+
+        indexedLookups.forEach(({ messageId, threadId }, index) => {
+          const key = getMessageKey(threadId, messageId);
+          const message = indexedMessages[index];
           if (message && message.id === messageId) {
             existingMessages.push(message);
             messageIdToKey[messageId] = key;
-            continue;
+          } else {
+            fallbackMessageIds.push(messageId);
           }
-        }
+        });
+      }
 
+      for (const messageId of fallbackMessageIds) {
         // Fall back to scan for backwards compatibility (old messages without index)
         const pattern = getMessageKey('*', messageId);
         const keys = await this.#db.scanKeys(pattern);
@@ -927,11 +957,19 @@ export class StoreMemoryUpstash extends MemoryStorage {
             messageIdToKey[messageId] = key;
             // Backfill the index for future lookups
             if (message.threadId) {
-              await this.client.set(getMessageIndexKey(messageId), message.threadId);
+              backfillIndexValues[messageId] = message.threadId;
             }
             break;
           }
         }
+      }
+
+      if (Object.keys(backfillIndexValues).length > 0) {
+        const backfillPipeline = this.client.pipeline();
+        for (const [messageId, threadId] of Object.entries(backfillIndexValues)) {
+          backfillPipeline.set(getMessageIndexKey(messageId), threadId);
+        }
+        await backfillPipeline.exec();
       }
 
       if (existingMessages.length === 0) {
@@ -989,6 +1027,8 @@ export class StoreMemoryUpstash extends MemoryStorage {
         if (key) {
           // If the message is being moved to a different thread, we need to handle the key change
           if (updatePayload.threadId && updatePayload.threadId !== existingMessage.threadId) {
+            const newThreadId = updatedMessage.threadId!;
+
             // Remove from old thread's sorted set
             const oldThreadMessagesKey = getThreadMessagesKey(existingMessage.threadId!);
             pipeline.zrem(oldThreadMessagesKey, id);
@@ -997,11 +1037,13 @@ export class StoreMemoryUpstash extends MemoryStorage {
             pipeline.del(key);
 
             // Create new message key with new threadId
-            const newKey = getMessageKey(updatePayload.threadId, id);
+            const newKey = getMessageKey(newThreadId, id);
             pipeline.set(newKey, updatedMessage);
+            pipeline.set(getMessageIndexKey(id), newThreadId);
+            messageIdToKey[id] = newKey;
 
             // Add to new thread's sorted set
-            const newThreadMessagesKey = getThreadMessagesKey(updatePayload.threadId);
+            const newThreadMessagesKey = getThreadMessagesKey(newThreadId);
             const score =
               (updatedMessage as any)._index !== undefined
                 ? (updatedMessage as any)._index
