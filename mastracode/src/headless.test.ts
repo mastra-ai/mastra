@@ -111,6 +111,14 @@ describe('parseHeadlessArgs', () => {
       '600',
       '--format',
       'json',
+      '--model',
+      'anthropic/claude-sonnet-4-20250514',
+      '--mode',
+      'plan',
+      '--thinking-level',
+      'low',
+      '--settings',
+      './settings-ci.json',
     ]);
     expect(args.prompt).toBe('Run tests');
     expect(args.thread).toBe('my-thread');
@@ -119,6 +127,10 @@ describe('parseHeadlessArgs', () => {
     expect(args.resourceId).toBe('my-project');
     expect(args.timeout).toBe(600);
     expect(args.format).toBe('json');
+    expect(args.model).toBe('anthropic/claude-sonnet-4-20250514');
+    expect(args.mode).toBe('plan');
+    expect(args.thinkingLevel).toBe('low');
+    expect(args.settings).toBe('./settings-ci.json');
   });
 
   it('returns defaults when only prompt provided', () => {
@@ -136,6 +148,63 @@ describe('parseHeadlessArgs', () => {
   it('returns undefined prompt when --prompt flag has no value', () => {
     const args = parseHeadlessArgs(['node', 'main.js', '--prompt']);
     expect(args.prompt).toBeUndefined();
+  });
+
+  it('parses --model with value', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--model', 'anthropic/claude-sonnet-4-20250514']);
+    expect(args.model).toBe('anthropic/claude-sonnet-4-20250514');
+  });
+
+  it('parses -m shorthand', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task', '-m', 'anthropic/claude-sonnet-4-20250514']);
+    expect(args.model).toBe('anthropic/claude-sonnet-4-20250514');
+  });
+
+  it('returns undefined model when not provided', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task']);
+    expect(args.model).toBeUndefined();
+  });
+
+  it('parses --mode with value', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--mode', 'fast']);
+    expect(args.mode).toBe('fast');
+  });
+
+  it('throws on invalid --mode value', () => {
+    expect(() => parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--mode', 'turbo'])).toThrow(
+      '--mode must be "build", "plan", "fast"',
+    );
+  });
+
+  it('returns undefined mode when not provided', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task']);
+    expect(args.mode).toBeUndefined();
+  });
+
+  it('parses --thinking-level with value', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--thinking-level', 'high']);
+    expect(args.thinkingLevel).toBe('high');
+  });
+
+  it('throws on invalid --thinking-level value', () => {
+    expect(() => parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--thinking-level', 'extreme'])).toThrow(
+      '--thinking-level must be',
+    );
+  });
+
+  it('returns undefined thinkingLevel when not provided', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task']);
+    expect(args.thinkingLevel).toBeUndefined();
+  });
+
+  it('parses --settings with path', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--settings', './settings-ci.json']);
+    expect(args.settings).toBe('./settings-ci.json');
+  });
+
+  it('returns undefined settings when not provided', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task']);
+    expect(args.settings).toBeUndefined();
   });
 
   it('parses --clone-thread hyphenated boolean flag', () => {
