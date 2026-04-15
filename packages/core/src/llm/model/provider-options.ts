@@ -5,14 +5,14 @@
  * to provide type-safe provider options based on the selected provider.
  */
 
-// Import types from AI SDK v5 packages
-import type { AnthropicProviderOptions } from '@ai-sdk/anthropic-v5';
+// Import types from AI SDK packages
+import type { AnthropicProviderOptions } from '@ai-sdk/anthropic-v6';
 import type { DeepSeekChatOptions } from '@ai-sdk/deepseek-v5';
-import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google-v5';
-import type { OpenAIResponsesProviderOptions } from '@ai-sdk/openai-v5';
+import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google-v6';
+import type { OpenAIResponsesProviderOptions } from '@ai-sdk/openai-v6';
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { SharedV3ProviderOptions } from '@ai-sdk/provider-v6';
-import type { XaiProviderOptions } from '@ai-sdk/xai-v5';
+import type { XaiProviderOptions } from '@ai-sdk/xai-v6';
 
 // Re-export the types
 export type {

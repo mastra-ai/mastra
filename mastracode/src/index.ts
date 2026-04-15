@@ -10,7 +10,7 @@ import type {
 } from '@mastra/core/harness';
 import { GatewayRegistry, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { LanguageModel, ProviderConfig } from '@mastra/core/llm';
-import { AgentsMDInjector } from '@mastra/core/processors';
+import { AgentsMDInjector, PrefillErrorHandler } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { getDynamicInstructions } from './agents/instructions.js';
@@ -81,6 +81,8 @@ export interface MastraCodeConfig {
   storage?: StorageConfig;
   /** Observational memory scope. Default: auto-detected from env/config files, falls back to 'thread' */
   omScope?: 'thread' | 'resource';
+  /** Path to a custom settings.json file. Default: global settings */
+  settingsPath?: string;
   /** Initial state overrides (yolo, thinkingLevel, etc.) */
   initialState?: Record<string, unknown>;
   /** Override heartbeat handlers. Default: gateway-sync */
@@ -111,7 +113,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   // Auth storage (shared with Claude Max / OpenAI providers and Harness)
   const authStorage = createAuthStorage();
-  const globalSettings = loadSettings();
+  const globalSettings = loadSettings(config?.settingsPath);
   const storedGatewayKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER);
   const storedGatewayUrl = globalSettings.memoryGateway?.baseUrl;
 
@@ -205,6 +207,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         },
       }),
     ],
+    errorProcessors: [new PrefillErrorHandler()],
   });
 
   const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];
@@ -451,5 +454,15 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     });
   }
 
-  return { harness, mcpManager, hookManager, authStorage, resolveModel, storageWarning };
+  return {
+    harness,
+    mcpManager,
+    hookManager,
+    authStorage,
+    resolveModel,
+    storageWarning,
+    builtinPacks,
+    builtinOmPacks,
+    effectiveDefaults,
+  };
 }

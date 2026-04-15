@@ -1,4 +1,67 @@
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+
+describe('getMastraVersion', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'mastra-version-test-'));
+    // Write a package.json so createRequire has a valid base
+    writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({ name: 'test' }));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  async function loadGetMastraVersion() {
+    // Dynamic import to get the real (unmocked) function
+    const mod = await import('./deploy.js');
+    return mod.getMastraVersion;
+  }
+
+  it('resolves the installed version of mastra from node_modules', async () => {
+    const getMastraVersion = await loadGetMastraVersion();
+
+    // Create a fake node_modules/mastra/package.json
+    const mastraDir = join(tmpDir, 'node_modules', 'mastra');
+    mkdirSync(mastraDir, { recursive: true });
+    writeFileSync(join(mastraDir, 'package.json'), JSON.stringify({ name: 'mastra', version: '1.2.3' }));
+
+    const result = getMastraVersion(tmpDir);
+    expect(result).toBe('1.2.3');
+  });
+
+  it('returns null when mastra package.json has no version field', async () => {
+    const getMastraVersion = await loadGetMastraVersion();
+
+    // Create a mastra package without a version field
+    const mastraDir = join(tmpDir, 'node_modules', 'mastra');
+    mkdirSync(mastraDir, { recursive: true });
+    writeFileSync(join(mastraDir, 'package.json'), JSON.stringify({ name: 'mastra' }));
+
+    const result = getMastraVersion(tmpDir);
+    expect(result).toBeNull();
+  });
+
+  it('returns the version even when package.json has a catalog: specifier', async () => {
+    const getMastraVersion = await loadGetMastraVersion();
+
+    // Simulate a project that has catalog: in package.json but real version in node_modules
+    writeFileSync(
+      join(tmpDir, 'package.json'),
+      JSON.stringify({ name: 'my-app', dependencies: { mastra: 'catalog:' } }),
+    );
+    const mastraDir = join(tmpDir, 'node_modules', 'mastra');
+    mkdirSync(mastraDir, { recursive: true });
+    writeFileSync(join(mastraDir, 'package.json'), JSON.stringify({ name: 'mastra', version: '0.9.0' }));
+
+    const result = getMastraVersion(tmpDir);
+    expect(result).toBe('0.9.0');
+  });
+});
 
 // Mock all external dependencies
 vi.mock('@clack/prompts', () => ({

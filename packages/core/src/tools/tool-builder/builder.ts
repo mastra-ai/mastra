@@ -12,6 +12,7 @@ import {
   jsonSchema,
 } from '@mastra/schema-compat';
 import { z } from 'zod/v4';
+import { backgroundOverrideJsonSchema, backgroundOverrideZodSchema } from '../../background-tasks';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import type { Mastra } from '../../mastra';
@@ -67,51 +68,75 @@ export class CoreToolBuilder extends MastraBase {
     options: ToolOptions;
     logType?: LogType;
     autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
   }) {
     super({ name: 'CoreToolBuilder' });
     this.originalTool = input.originalTool;
     this.options = input.options;
     this.logType = input.logType;
 
-    if (
-      !isVercelTool(this.originalTool) &&
-      !isProviderDefinedTool(this.originalTool) &&
-      (input.autoResumeSuspendedTools ||
-        (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-') ||
-        (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('workflow-'))
-    ) {
-      let schema = this.originalTool.inputSchema;
-      if (typeof schema === 'function') {
-        schema = schema();
-      }
-      if (!schema) {
-        schema = z.object({});
-      }
+    // Only inject the `_background` override schema for tools that are actually
+    // eligible for background execution — otherwise every user tool's input
+    // schema would be mutated with a v4 Zod field, which breaks v3-authored
+    // tools (keyValidator._parse crashes in schema-compat validation).
+    const isBackgroundEligible = !!input.backgroundTaskEnabled;
+    const isResumableTool =
+      input.autoResumeSuspendedTools ||
+      (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-') ||
+      (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('workflow-');
 
-      if (isZodObject(schema)) {
-        this.originalTool.inputSchema = schema.extend({
-          suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
-          resumeData: z
-            .any()
-            .describe('The resumeData object created from the resumeSchema of suspended tool')
-            .optional(),
-        });
-      } else {
-        // Non-Zod StandardSchemaWithJSON (e.g. JsonSchemaWrapper from JSONSchema7).
-        // Extract JSON Schema, add suspend/resume fields, re-wrap.
-        const jsonSchema = standardSchemaToJSONSchema(schema as any, { io: 'input' });
-        if (jsonSchema && typeof jsonSchema === 'object' && jsonSchema.type === 'object') {
-          jsonSchema.properties = {
-            ...jsonSchema.properties,
-            suspendedToolRunId: {
-              type: ['string', 'null'],
-              description: 'The runId of the suspended tool',
-            },
-            resumeData: {
-              description: 'The resumeData object created from the resumeSchema of suspended tool',
-            },
-          };
-          this.originalTool.inputSchema = toStandardSchema(jsonSchema) as any;
+    if (!isVercelTool(this.originalTool) && !isProviderDefinedTool(this.originalTool)) {
+      if (isBackgroundEligible || isResumableTool) {
+        let schema = this.originalTool.inputSchema;
+        if (typeof schema === 'function') {
+          schema = schema();
+        }
+        if (!schema) {
+          schema = z.object({});
+        }
+
+        if (isZodObject(schema)) {
+          let nextSchema = schema;
+          if (isBackgroundEligible) {
+            nextSchema = nextSchema.extend({
+              _background: backgroundOverrideZodSchema,
+            });
+          }
+          if (isResumableTool) {
+            nextSchema = nextSchema.extend({
+              suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
+              resumeData: z
+                .any()
+                .describe('The resumeData object created from the resumeSchema of suspended tool')
+                .optional(),
+            });
+          }
+          this.originalTool.inputSchema = nextSchema;
+        } else {
+          // Non-Zod StandardSchemaWithJSON (e.g. JsonSchemaWrapper from JSONSchema7).
+          // Extract JSON Schema, add suspend/resume fields, re-wrap.
+          const jsonSchema = standardSchemaToJSONSchema(schema as any, { io: 'input' });
+          if (jsonSchema && typeof jsonSchema === 'object' && jsonSchema.type === 'object') {
+            if (isBackgroundEligible) {
+              jsonSchema.properties = {
+                ...jsonSchema.properties,
+                _background: backgroundOverrideJsonSchema,
+              };
+            }
+            if (isResumableTool) {
+              jsonSchema.properties = {
+                ...jsonSchema.properties,
+                suspendedToolRunId: {
+                  type: ['string', 'null'],
+                  description: 'The runId of the suspended tool',
+                },
+                resumeData: {
+                  description: 'The resumeData object created from the resumeSchema of suspended tool',
+                },
+              };
+            }
+            this.originalTool.inputSchema = toStandardSchema(jsonSchema) as any;
+          }
         }
       }
     }
@@ -271,6 +296,11 @@ export class CoreToolBuilder extends MastraBase {
         ...(processedOutputSchema ? { outputSchema: processedOutputSchema } : {}),
         type: 'provider-defined' as const,
         id: tool.id as `${string}.${string}`,
+        // V5 SDK factories set a hardcoded `name` (e.g. "web_search" for
+        // anthropic.web_search_20250305). Preserve it so that when this tool
+        // is later used with a V6 provider, the bidirectional toolNameMapping
+        // resolves the correct model-facing name instead of the versioned ID.
+        ...('name' in tool && typeof tool.name === 'string' ? { name: tool.name } : {}),
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
         description: tool.description,
         parameters: processedParameters,
@@ -610,7 +640,12 @@ export class CoreToolBuilder extends MastraBase {
     // For provider-defined tools, exclude execute and add name as per v5 spec
     if (builtTool.type === 'provider-defined') {
       const { execute, parameters, ...rest } = base;
-      const name = builtTool.id.split('.')[1] || builtTool.id;
+      // Prefer the preserved provider name (e.g. "web_search" from V5 SDK
+      // factories) over the ID-derived name (e.g. "web_search_20250305").
+      const name =
+        ('name' in builtTool && typeof builtTool.name === 'string' ? builtTool.name : null) ||
+        builtTool.id.split('.')[1] ||
+        builtTool.id;
       return {
         ...rest,
         type: builtTool.type,
@@ -760,6 +795,7 @@ export class CoreToolBuilder extends MastraBase {
       id: 'id' in this.originalTool ? this.originalTool.id : undefined,
       parameters: processedInputSchema ?? z.object({}),
       outputSchema: processedOutputSchema,
+      strict: 'strict' in this.originalTool ? this.originalTool.strict : undefined,
       providerOptions: 'providerOptions' in this.originalTool ? this.originalTool.providerOptions : undefined,
       mcp: 'mcp' in this.originalTool ? this.originalTool.mcp : undefined,
       toModelOutput: 'toModelOutput' in this.originalTool ? this.originalTool.toModelOutput : undefined,
@@ -768,6 +804,9 @@ export class CoreToolBuilder extends MastraBase {
       onInputDelta: 'onInputDelta' in this.originalTool ? this.originalTool.onInputDelta : undefined,
       onInputAvailable: 'onInputAvailable' in this.originalTool ? this.originalTool.onInputAvailable : undefined,
       onOutput: 'onOutput' in this.originalTool ? this.originalTool.onOutput : undefined,
+      // Preserve tool-level background config so the agentic loop can pick it up
+      // from the converted CoreTool at dispatch time.
+      backgroundConfig: this.options.backgroundConfig,
     } as unknown as CoreTool;
   }
 }
