@@ -424,6 +424,10 @@ export type AgentGenerateOptions<
   /**
    * Per-invocation version overrides for sub-agents (and future primitives).
    * Merged on top of Mastra instance-level versions and propagated via requestContext.
+   *
+   * NOTE: This field is intentionally duplicated across AgentGenerateOptions,
+   * AgentStreamOptions, and AgentExecutionOptionsBase because these types are
+   * independent (generate/stream options do not extend the base). Do not remove.
    */
   versions?: VersionOverrides;
   /** Scorers to use for this generation */
@@ -519,6 +523,10 @@ export type AgentStreamOptions<
   /**
    * Per-invocation version overrides for sub-agents (and future primitives).
    * Merged on top of Mastra instance-level versions and propagated via requestContext.
+   *
+   * NOTE: This field is intentionally duplicated across AgentGenerateOptions,
+   * AgentStreamOptions, and AgentExecutionOptionsBase because these types are
+   * independent (generate/stream options do not extend the base). Do not remove.
    */
   versions?: VersionOverrides;
   /**

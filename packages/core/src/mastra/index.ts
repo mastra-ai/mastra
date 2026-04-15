@@ -45,7 +45,7 @@ import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
-import type { VersionOverrides } from './types';
+import type { VersionOverrides, VersionSelector } from './types';
 
 /**
  * Creates an error for when a null/undefined value is passed to an add* method.
@@ -959,9 +959,19 @@ export class Mastra<
     return this.resolveVersionedAgent(agent as TAgents[TAgentName], version);
   }
 
-  async resolveVersionedAgent<TAgent extends Agent>(
+  /**
+   * Resolve a versioned variant of an agent by applying stored overrides from the editor.
+   *
+   * Requires the editor package to be configured — throws
+   * `MASTRA_EDITOR_REQUIRED_FOR_VERSIONED_AGENT_LOOKUP` if it is not.
+   *
+   * @param agent - The code-defined agent to resolve a version for.
+   * @param version - Selects a version by ID or publication status.
+   * @returns A forked agent instance with the stored overrides applied.
+   */
+  public async resolveVersionedAgent<TAgent extends Agent>(
     agent: TAgent,
-    version: { versionId: string } | { status?: 'draft' | 'published' },
+    version: VersionSelector | { status?: 'draft' | 'published' },
   ): Promise<TAgent> {
     const editor = this.getEditor();
 

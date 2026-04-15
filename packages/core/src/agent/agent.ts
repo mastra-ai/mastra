@@ -3112,7 +3112,7 @@ export class Agent<
               try {
                 resolvedAgent = await this.#mastra.resolveVersionedAgent(agent, agentVersionSelector);
               } catch (versionError) {
-                this.logger.error('Failed to resolve versioned sub-agent, using code-defined default', {
+                this.logger.warn('Failed to resolve versioned sub-agent, using code-defined default', {
                   agent: this.name,
                   targetAgent: agentName,
                   targetAgentId: agent.id,
