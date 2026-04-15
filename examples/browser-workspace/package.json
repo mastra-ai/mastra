@@ -10,6 +10,8 @@
     "@mastra/core": "latest",
     "@mastra/memory": "latest",
     "@mastra/libsql": "latest",
+    "@mastra/agent-browser": "latest",
+    "@mastra/stagehand": "latest",
     "mastra": "latest",
     "ws": "^8.18.0",
     "zod": "^4.3.6"
@@ -19,6 +21,8 @@
       "@mastra/core": "link:../../packages/core",
       "@mastra/memory": "link:../../packages/memory",
       "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/agent-browser": "link:../../browser/agent-browser",
+      "@mastra/stagehand": "link:../../browser/stagehand",
       "mastra": "link:../../packages/cli"
     }
   },
