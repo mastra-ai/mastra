@@ -68,8 +68,12 @@ export function getLastActivityFromMessages(messages?: MastraDBMessage[]): numbe
 
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i];
-    if (!message || message.role !== 'assistant' || !message.content || typeof message.content === 'string') {
+    if (!message || message.role !== 'assistant') {
       continue;
+    }
+
+    if (!message.content || typeof message.content === 'string') {
+      return message.createdAt ? new Date(message.createdAt).getTime() : undefined;
     }
 
     for (let j = message.content.parts.length - 1; j >= 0; j--) {
@@ -82,6 +86,8 @@ export function getLastActivityFromMessages(messages?: MastraDBMessage[]): numbe
         return part.createdAt;
       }
     }
+
+    return message.createdAt ? new Date(message.createdAt).getTime() : undefined;
   }
 
   return undefined;

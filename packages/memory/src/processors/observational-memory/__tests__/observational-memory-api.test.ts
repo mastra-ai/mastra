@@ -864,6 +864,76 @@ describe('activate()', () => {
       }
     });
 
+    it('falls back to assistant message createdAt for legacy messages when calculating last activity', async () => {
+      vi.useFakeTimers();
+      try {
+        const now = new Date('2026-04-14T12:00:00.000Z');
+        vi.setSystemTime(now);
+
+        const om = new ObservationalMemory({
+          storage,
+          scope: 'thread',
+          activateAfterIdle: 300_000,
+          observation: {
+            model: createMockObserverModel(),
+            messageTokens: 50_000,
+            bufferTokens: 5_000,
+          },
+          reflection: {
+            model: createMockReflectorModel(),
+            observationTokens: 50_000,
+          },
+        });
+        const staleAssistantMessageTime = now.getTime() - 301_000;
+        const messages: MastraDBMessage[] = [
+          {
+            ...createTestMessage(
+              'Earlier question',
+              'user',
+              'ttl-user-legacy-1',
+              new Date(staleAssistantMessageTime - 1000),
+            ),
+            threadId,
+          },
+          {
+            id: 'ttl-assistant-legacy-1',
+            threadId,
+            resourceId: 'test-resource',
+            role: 'assistant',
+            type: 'text',
+            content: 'Earlier answer',
+            createdAt: new Date(staleAssistantMessageTime),
+          } as unknown as MastraDBMessage,
+          {
+            ...createTestMessage('Latest user follow-up', 'user', 'ttl-user-legacy-2', now),
+            threadId,
+          },
+        ];
+
+        await storage.saveMessages({ messages });
+        await om.buffer({ threadId, messages });
+
+        const { record } = await om.getStatus({ threadId, messages });
+        await storage.updateBufferedObservations({
+          id: record!.id,
+          chunk: {
+            observations: '- Buffered legacy observation',
+            tokenCount: 80,
+            messageIds: ['ttl-user-legacy-1', 'ttl-assistant-legacy-1'],
+            cycleId: 'ttl-cycle-legacy-1',
+            messageTokens: 200,
+            lastObservedAt: new Date(staleAssistantMessageTime),
+          },
+        });
+
+        const result = await om.activate({ threadId, checkThreshold: true, messages });
+
+        expect(result.activated).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('accepts duration strings like "5m" for observation activateAfterIdle', async () => {
       vi.useFakeTimers();
       try {
