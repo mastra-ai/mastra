@@ -78,20 +78,26 @@ const validParams = {
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  vi.spyOn(console, 'info').mockImplementation(() => {});
+  // Reset the module cache so the dynamic import picks up vi.mock factories.
+  // Without this, isolate:false lets a cached credentials.js bypass the mocks.
+  vi.resetModules();
   execFileSyncMock.mockReset();
 });
 
 describe('login() server lifecycle', () => {
   it('returns credentials after a valid callback', async () => {
-    vi.spyOn(console, 'info').mockImplementation(() => {});
     const { login } = await import('./credentials.js');
 
     const loginPromise = login();
 
     // Wait for the server to start and openBrowser to be called.
-    await vi.waitFor(() => {
-      extractPort();
-    });
+    await vi.waitFor(
+      () => {
+        extractPort();
+      },
+      { timeout: 5000 },
+    );
     const port = extractPort();
     const state = extractState();
 
@@ -104,16 +110,16 @@ describe('login() server lifecycle', () => {
   });
 
   it('closes all connections so the process can exit', async () => {
-    vi.spyOn(console, 'info').mockImplementation(() => {});
-    vi.resetModules();
-    execFileSyncMock.mockReset();
     const { login } = await import('./credentials.js');
 
     const loginPromise = login();
 
-    await vi.waitFor(() => {
-      extractPort();
-    });
+    await vi.waitFor(
+      () => {
+        extractPort();
+      },
+      { timeout: 5000 },
+    );
     const port = extractPort();
     const state = extractState();
 
@@ -132,16 +138,16 @@ describe('login() server lifecycle', () => {
   });
 
   it('returns 400 when callback params are missing', async () => {
-    vi.spyOn(console, 'info').mockImplementation(() => {});
-    vi.resetModules();
-    execFileSyncMock.mockReset();
     const { login } = await import('./credentials.js');
 
     const loginPromise = login();
 
-    await vi.waitFor(() => {
-      extractPort();
-    });
+    await vi.waitFor(
+      () => {
+        extractPort();
+      },
+      { timeout: 5000 },
+    );
     const port = extractPort();
     const state = extractState();
 

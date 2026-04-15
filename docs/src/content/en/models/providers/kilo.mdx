@@ -1162,18 +1162,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.11
   },
   {
-    "model": "kilo/inception/mercury",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 32000,
-    "inputCost": 0.25,
-    "outputCost": 0.75
-  },
-  {
     "model": "kilo/inception/mercury-2",
     "imageInput": false,
     "audioInput": false,
@@ -1186,14 +1174,14 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.75
   },
   {
-    "model": "kilo/inception/mercury-coder",
+    "model": "kilo/inception/mercury-edit-2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
+    "toolUsage": false,
+    "reasoning": true,
     "contextWindow": 128000,
-    "maxOutput": 32000,
+    "maxOutput": 8192,
     "inputCost": 0.25,
     "outputCost": 0.75
   },
@@ -2849,6 +2837,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": false,
     "reasoning": false,
     "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "kilo/openrouter/elephant-alpha",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
     "maxOutput": 32768,
     "inputCost": null,
     "outputCost": null
