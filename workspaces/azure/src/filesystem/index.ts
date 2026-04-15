@@ -263,6 +263,12 @@ export class AzureBlobFilesystem extends MastraFilesystem {
     if (this.connectionString) {
       serviceClient = BlobServiceClient.fromConnectionString(this.connectionString);
     } else {
+      if (!this.endpoint && !this.accountName) {
+        throw new Error(
+          'Azure Blob Storage requires either a connectionString, or an accountName/endpoint. ' +
+            'Provide at least one of: connectionString, accountName, or endpoint.',
+        );
+      }
       const baseUrl = this.endpoint ?? `https://${this.accountName}.blob.core.windows.net`;
 
       if (this.accountName && this.accountKey) {
