@@ -486,7 +486,6 @@ export type ProviderModelsMap = {
     'meganova-ai/manta-mini-1.0',
     'meganova-ai/manta-pro-1.0',
     'meituan-longcat/LongCat-Flash-Chat-FP8',
-    'mercury-coder-small',
     'meta-llama/llama-3.1-8b-instruct',
     'meta-llama/llama-3.2-3b-instruct',
     'meta-llama/llama-3.2-90b-vision-instruct',
@@ -907,9 +906,8 @@ export type ProviderModelsMap = {
     'google/gemma-4-26b-a4b-it:free',
     'google/gemma-4-31b-it',
     'google/gemma-4-31b-it:free',
-    'inception/mercury',
     'inception/mercury-2',
-    'inception/mercury-coder',
+    'inception/mercury-edit-2',
     'liquid/lfm-2.5-1.2b-instruct:free',
     'liquid/lfm-2.5-1.2b-thinking:free',
     'meta-llama/llama-3.2-11b-vision-instruct',
@@ -1055,6 +1053,8 @@ export type ProviderModelsMap = {
     'mimo-v2-pro',
     'minimax-m2.5',
     'minimax-m2.7',
+    'qwen3.5-plus',
+    'qwen3.6-plus',
   ];
   readonly 'io-net': readonly [
     'Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar',
@@ -1769,9 +1769,8 @@ export type ProviderModelsMap = {
     'google/lyria-3-pro-preview',
     'gryphe/mythomax-l2-13b',
     'ibm-granite/granite-4.0-h-micro',
-    'inception/mercury',
     'inception/mercury-2',
-    'inception/mercury-coder',
+    'inception/mercury-edit-2',
     'inflection/inflection-3-pi',
     'inflection/inflection-3-productivity',
     'kilo-auto/balanced',
@@ -2069,6 +2068,8 @@ export type ProviderModelsMap = {
     'minimax-m2.5',
     'minimax-m2.5-free',
     'nemotron-3-super-free',
+    'qwen3.5-plus',
+    'qwen3.6-plus',
   ];
   readonly stepfun: readonly ['step-1-32k', 'step-2-16k', 'step-3.5-flash', 'step-3.5-flash-2603'];
   readonly nebius: readonly [
@@ -2607,6 +2608,7 @@ export type ProviderModelsMap = {
     'microsoft/phi-4-mini-instruct',
     'minimaxai/minimax-m2.1',
     'minimaxai/minimax-m2.5',
+    'minimaxai/minimax-m2.7',
     'mistralai/codestral-22b-instruct-v0.1',
     'mistralai/devstral-2-123b-instruct-2512',
     'mistralai/mamba-codestral-7b-v0.1',
@@ -2657,7 +2659,7 @@ export type ProviderModelsMap = {
     'qwen/qwen-2.5-7b-vision-instruct',
     'qwen/qwen3-embedding-4b',
   ];
-  readonly inception: readonly ['mercury', 'mercury-2', 'mercury-coder', 'mercury-edit'];
+  readonly inception: readonly ['mercury-2', 'mercury-edit-2'];
   readonly openai: readonly [
     'chatgpt-image-latest',
     'codex-mini-latest',
@@ -3008,7 +3010,7 @@ export type ProviderModelsMap = {
     'google/text-embedding-005',
     'google/text-multilingual-embedding-002',
     'inception/mercury-2',
-    'inception/mercury-coder-small',
+    'inception/mercury-edit-2',
     'kwaipilot/kat-coder-pro-v1',
     'kwaipilot/kat-coder-pro-v2',
     'meituan/longcat-flash-chat',
