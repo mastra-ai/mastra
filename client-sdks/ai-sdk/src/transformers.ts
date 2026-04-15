@@ -276,6 +276,15 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
         finishEventSent = true;
       }
 
+      if (chunk.type === 'object-result') {
+        controller.enqueue({
+          type: 'data-structured-output',
+          data: {
+            object: chunk.object,
+          },
+        });
+      }
+
       const part = convertMastraChunkToAISDK({ chunk, mode: 'stream' });
 
       const transformedChunk = convertFullStreamChunkToUIMessageStream<any>({

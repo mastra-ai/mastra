@@ -271,6 +271,11 @@ export class CoreToolBuilder extends MastraBase {
         ...(processedOutputSchema ? { outputSchema: processedOutputSchema } : {}),
         type: 'provider-defined' as const,
         id: tool.id as `${string}.${string}`,
+        // V5 SDK factories set a hardcoded `name` (e.g. "web_search" for
+        // anthropic.web_search_20250305). Preserve it so that when this tool
+        // is later used with a V6 provider, the bidirectional toolNameMapping
+        // resolves the correct model-facing name instead of the versioned ID.
+        ...('name' in tool && typeof tool.name === 'string' ? { name: tool.name } : {}),
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
         description: tool.description,
         parameters: processedParameters,
@@ -610,7 +615,12 @@ export class CoreToolBuilder extends MastraBase {
     // For provider-defined tools, exclude execute and add name as per v5 spec
     if (builtTool.type === 'provider-defined') {
       const { execute, parameters, ...rest } = base;
-      const name = builtTool.id.split('.')[1] || builtTool.id;
+      // Prefer the preserved provider name (e.g. "web_search" from V5 SDK
+      // factories) over the ID-derived name (e.g. "web_search_20250305").
+      const name =
+        ('name' in builtTool && typeof builtTool.name === 'string' ? builtTool.name : null) ||
+        builtTool.id.split('.')[1] ||
+        builtTool.id;
       return {
         ...rest,
         type: builtTool.type,
@@ -760,6 +770,7 @@ export class CoreToolBuilder extends MastraBase {
       id: 'id' in this.originalTool ? this.originalTool.id : undefined,
       parameters: processedInputSchema ?? z.object({}),
       outputSchema: processedOutputSchema,
+      strict: 'strict' in this.originalTool ? this.originalTool.strict : undefined,
       providerOptions: 'providerOptions' in this.originalTool ? this.originalTool.providerOptions : undefined,
       mcp: 'mcp' in this.originalTool ? this.originalTool.mcp : undefined,
       toModelOutput: 'toModelOutput' in this.originalTool ? this.originalTool.toModelOutput : undefined,

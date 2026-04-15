@@ -1,5 +1,28 @@
 # @mastra/pg
 
+## 1.9.1-alpha.1
+
+### Patch Changes
+
+- Fixed vector similarity queries to leverage HNSW and IVFFlat indexes. When querying without filters on an HNSW or IVFFlat-indexed table, ORDER BY and LIMIT are now placed inside the CTE so PostgreSQL can use the index for faster approximate nearest neighbor searches instead of scanning all rows. ([#14574](https://github.com/mastra-ai/mastra/pull/14574))
+
+- Fixed vector operations failing when pgvector extension is installed in a custom schema. The search_path is now set before index creation and vector similarity queries, ensuring operator classes (e.g. vector_cosine_ops) and distance operators (e.g. <=>) resolve correctly regardless of where the extension is installed. Previously, only table creation set the search_path, causing CREATE INDEX and query operations to fail with unresolvable operator errors. ([#14526](https://github.com/mastra-ai/mastra/pull/14526))
+
+- Added `entityVersionId`, `parentEntityVersionId`, and `rootEntityVersionId` columns to observability storage tables (spans, metrics, scores, feedback, logs) for filtering and grouping traces by entity version. Added ALTER TABLE migrations for existing databases. Added `targetType`, `targetId`, `agentVersion`, and `status` filters to `listExperiments`, and `traceId` and `status` filters to `listExperimentResults`. ([#15317](https://github.com/mastra-ai/mastra/pull/15317))
+
+- Updated dependencies [[`cbdf3e1`](https://github.com/mastra-ai/mastra/commit/cbdf3e12b3d0c30a6e5347be658e2009648c130a), [`8fe46d3`](https://github.com/mastra-ai/mastra/commit/8fe46d354027f3f0f0846e64219772348de106dd), [`18c67db`](https://github.com/mastra-ai/mastra/commit/18c67dbb9c9ebc26f26f65f7d3ff836e5691ef46), [`8dcc77e`](https://github.com/mastra-ai/mastra/commit/8dcc77e78a5340f5848f74b9e9f1b3da3513c1f5), [`aa67fc5`](https://github.com/mastra-ai/mastra/commit/aa67fc59ee8a5eeff1f23eb05970b8d7a536c8ff), [`fa8140b`](https://github.com/mastra-ai/mastra/commit/fa8140bcd4251d2e3ac85fdc5547dfc4f372b5be), [`190f452`](https://github.com/mastra-ai/mastra/commit/190f45258b0640e2adfc8219fa3258cdc5b8f071), [`7e7bf60`](https://github.com/mastra-ai/mastra/commit/7e7bf606886bf374a6f9d4ca9b09dd83d0533372), [`184907d`](https://github.com/mastra-ai/mastra/commit/184907d775d8609c03c26e78ccaf37315f3aa287), [`0c4cd13`](https://github.com/mastra-ai/mastra/commit/0c4cd131931c04ac5405373c932a242dbe88edd6), [`b16a753`](https://github.com/mastra-ai/mastra/commit/b16a753d5748440248d7df82e29bb987a9c8386c)]:
+  - @mastra/core@1.25.0-alpha.3
+
+## 1.9.1-alpha.0
+
+### Patch Changes
+
+- Fixed `batchInsert` and `batchUpdate` in `@mastra/pg` to run on a single Postgres transaction connection. ([#15312](https://github.com/mastra-ai/mastra/pull/15312))
+
+  This prevents pooled `BEGIN`/`COMMIT`/`ROLLBACK` calls from landing on different connections and leaving idle transactions open during batch writes.
+
+- Fixed "column does not exist" errors when using experiment review features on databases created before the review pipeline was introduced. Startup now automatically migrates older experiment tables to the latest schema. ([#15304](https://github.com/mastra-ai/mastra/pull/15304))
+
 ## 1.9.0
 
 ### Minor Changes

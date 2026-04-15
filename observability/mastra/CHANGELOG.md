@@ -1,5 +1,36 @@
 # @mastra/observability
 
+## 1.9.1-alpha.2
+
+### Patch Changes
+
+- Cost estimates now use the latest model pricing rates for more accurate calculations ([#15362](https://github.com/mastra-ai/mastra/pull/15362))
+
+- Reduced observability overhead for `MODEL_STEP` spans by storing a lightweight message preview of request bodies. ([#15249](https://github.com/mastra-ai/mastra/pull/15249))
+
+  This keeps span previews readable and avoids pulling large payloads into exporter input.
+
+- Fixed cost lookup for models with date suffixes. Providers like OpenAI often return model names with date suffixes (e.g., `gpt-5.4-mini-2026-03-17`) that don't exactly match pricing data entries. The lookup now tries multiple variants including stripping date suffixes and converting dots to dashes. ([#15349](https://github.com/mastra-ai/mastra/pull/15349))
+
+- Added `entityVersionId`, `parentEntityVersionId`, and `rootEntityVersionId` to span correlation context, enabling version information to propagate to scores, metrics, logs, and feedback emitted during traced execution. ([#15317](https://github.com/mastra-ai/mastra/pull/15317))
+
+- Fixed stack traces for errors reported to Sentry. Exceptions now point to the code that threw the error instead of `SentryExporter.handleSpanEnded` inside the exporter, so issues in Sentry are actually debuggable. ([#15343](https://github.com/mastra-ai/mastra/pull/15343))
+
+  This was caused by two issues, both fixed:
+  - `@mastra/sentry` passed the error message as a string to `Sentry.captureException`, which made Sentry synthesize a stack trace from the exporter's call site. It now passes an `Error` instance with the captured stack attached.
+  - `@mastra/observability` stored the wrapping `MastraError`'s stack on the span, hiding the original error's location. When the `MastraError` has a cause, the cause's stack is now preserved.
+
+  Fixes [#15337](https://github.com/mastra-ai/mastra/issues/15337).
+
+- Updated dependencies [[`cbdf3e1`](https://github.com/mastra-ai/mastra/commit/cbdf3e12b3d0c30a6e5347be658e2009648c130a), [`8fe46d3`](https://github.com/mastra-ai/mastra/commit/8fe46d354027f3f0f0846e64219772348de106dd), [`18c67db`](https://github.com/mastra-ai/mastra/commit/18c67dbb9c9ebc26f26f65f7d3ff836e5691ef46), [`8dcc77e`](https://github.com/mastra-ai/mastra/commit/8dcc77e78a5340f5848f74b9e9f1b3da3513c1f5), [`aa67fc5`](https://github.com/mastra-ai/mastra/commit/aa67fc59ee8a5eeff1f23eb05970b8d7a536c8ff), [`fa8140b`](https://github.com/mastra-ai/mastra/commit/fa8140bcd4251d2e3ac85fdc5547dfc4f372b5be), [`190f452`](https://github.com/mastra-ai/mastra/commit/190f45258b0640e2adfc8219fa3258cdc5b8f071), [`7e7bf60`](https://github.com/mastra-ai/mastra/commit/7e7bf606886bf374a6f9d4ca9b09dd83d0533372), [`184907d`](https://github.com/mastra-ai/mastra/commit/184907d775d8609c03c26e78ccaf37315f3aa287), [`0c4cd13`](https://github.com/mastra-ai/mastra/commit/0c4cd131931c04ac5405373c932a242dbe88edd6), [`b16a753`](https://github.com/mastra-ai/mastra/commit/b16a753d5748440248d7df82e29bb987a9c8386c)]:
+  - @mastra/core@1.25.0-alpha.3
+
+## 1.9.1-alpha.1
+
+### Patch Changes
+
+- Fixed double-counting of Anthropic cache tokens in usage metrics ([#15316](https://github.com/mastra-ai/mastra/pull/15316))
+
 ## 1.9.1-alpha.0
 
 ### Patch Changes

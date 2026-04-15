@@ -94,7 +94,10 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
             domain: error.domain,
             message: error.message,
             name: error.name,
-            stack: error.stack,
+            // Prefer the original cause's stack when available. MastraError wraps
+            // thrown errors, so its own stack points to the wrapping site rather
+            // than where the underlying error was thrown.
+            stack: (error.cause instanceof Error && error.cause.stack) || error.stack,
           }
         : {
             message: error.message,

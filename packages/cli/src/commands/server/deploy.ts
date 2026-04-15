@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
 import archiver from 'archiver';
+import { runBuild } from '../../utils/run-build.js';
 import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_STUDIO_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
@@ -26,21 +27,6 @@ function getPackageName(projectDir: string): string | null {
   } catch {
     return null;
   }
-}
-
-function runBuild(projectDir: string): void {
-  const localMastra = join(projectDir, 'node_modules', '.bin', 'mastra');
-  p.log.step('Running mastra build...');
-  try {
-    execSync(`"${localMastra}" build`, {
-      cwd: projectDir,
-      stdio: 'inherit',
-      env: { ...process.env, NODE_ENV: 'production' },
-    });
-  } catch {
-    throw new Error('mastra build failed');
-  }
-  console.info('');
 }
 
 async function zipOutput(projectDir: string): Promise<string> {
@@ -105,6 +91,7 @@ async function resolveOrg(
   projectConfig: { organizationId?: string } | null,
   flagOrg?: string,
 ): Promise<{ orgId: string; orgName: string }> {
+  const isHeadless = Boolean(process.env.MASTRA_API_TOKEN);
   const envOrgId = process.env.MASTRA_ORG_ID;
   if (envOrgId) {
     return { orgId: envOrgId, orgName: envOrgId };
@@ -117,6 +104,9 @@ async function resolveOrg(
   }
 
   if (projectConfig?.organizationId) {
+    if (isHeadless) {
+      return { orgId: projectConfig.organizationId, orgName: projectConfig.organizationId };
+    }
     const orgs = await fetchOrgs(token);
     const match = orgs.find(o => o.id === projectConfig.organizationId);
     if (match) {
@@ -211,7 +201,7 @@ async function resolveProject(
 
 export async function serverDeployAction(
   dir: string | undefined,
-  opts: { org?: string; project?: string; yes?: boolean; config?: string },
+  opts: { org?: string; project?: string; yes?: boolean; config?: string; skipBuild?: boolean; debug?: boolean },
 ) {
   const targetDir = resolve(dir || process.cwd());
   const isHeadless = Boolean(process.env.MASTRA_API_TOKEN);
@@ -292,7 +282,11 @@ export async function serverDeployAction(
   // Step 6: Build + Zip + Upload + Poll
   const s = p.spinner();
 
-  runBuild(targetDir);
+  if (opts.skipBuild) {
+    p.log.step('Skipping build (--skip-build)');
+  } else {
+    await runBuild(targetDir, { debug: opts.debug });
+  }
 
   // Verify build output exists
   const outputEntry = join(targetDir, '.mastra', 'output', 'index.mjs');

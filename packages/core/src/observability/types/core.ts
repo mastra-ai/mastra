@@ -49,12 +49,15 @@ export interface CorrelationContext {
   entityType?: EntityType;
   entityId?: string;
   entityName?: string;
+  entityVersionId?: string;
   parentEntityType?: EntityType;
   parentEntityId?: string;
   parentEntityName?: string;
+  parentEntityVersionId?: string;
   rootEntityType?: EntityType;
   rootEntityId?: string;
   rootEntityName?: string;
+  rootEntityVersionId?: string;
   userId?: string;
   organizationId?: string;
   resourceId?: string;
