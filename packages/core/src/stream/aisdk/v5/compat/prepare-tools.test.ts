@@ -207,7 +207,7 @@ describe('prepareToolsAndToolChoice', () => {
       });
     });
 
-    it('should omit strict for v2 function tools', () => {
+    it('should preserve strict in prepared v2 function tools for downstream router handoff', () => {
       const strictTool = createTool({
         id: 'strict-tool-v2',
         description: 'A strict test tool for v2',
@@ -225,7 +225,11 @@ describe('prepareToolsAndToolChoice', () => {
         targetVersion: 'v2',
       });
 
-      expect(result.tools![0]).not.toHaveProperty('strict');
+      expect(result.tools![0]).toMatchObject({
+        type: 'function',
+        name: 'strictTool',
+        strict: true,
+      });
     });
 
     it('should not treat regular tools with no id as provider tools', () => {

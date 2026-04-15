@@ -126,5 +126,19 @@
     "@mastra/s3": "0.3.0",
     "@mastra/vercel": "0.1.0"
   },
-  "changesets": []
+  "changesets": [
+    "bright-foxes-jump",
+    "calm-tigers-dream",
+    "fancy-buckets-retire",
+    "green-birds-knock",
+    "hungry-kings-fail",
+    "jolly-ants-attend",
+    "mighty-mails-divide",
+    "quiet-lions-fold",
+    "quiet-pots-sparkle",
+    "seven-suns-dress",
+    "shy-owls-drift",
+    "tired-comics-cover",
+    "two-badgers-sin"
+  ]
 }

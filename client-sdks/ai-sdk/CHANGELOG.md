@@ -1,5 +1,16 @@
 # @mastra/ai-sdk
 
+## 1.4.1-alpha.0
+
+### Patch Changes
+
+- Fixed tool call approvals in AI SDK v6: `handleChatStream` now automatically routes to `resumeStream` when the AI SDK v6 native approval flow is used on the client (no extra server-side wiring required). The v6 stream now emits native `tool-approval-request` parts so `useChat` can surface approval UI and call `addToolApprovalResponse()`, while also emitting the existing `data-tool-call-approval` chunk for backwards compatibility. ([#15345](https://github.com/mastra-ai/mastra/pull/15345))
+
+- Fixed AI SDK v6 tool approval streams so requireApproval works with handleChatStream and AssistantChatTransport. ([#15345](https://github.com/mastra-ai/mastra/pull/15345))
+
+- Updated dependencies [[`d63ffdb`](https://github.com/mastra-ai/mastra/commit/d63ffdbb2c11e76fe5ea45faab44bc15460f010c)]:
+  - @mastra/core@1.25.1-alpha.0
+
 ## 1.4.0
 
 ### Minor Changes
