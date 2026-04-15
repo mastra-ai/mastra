@@ -807,7 +807,7 @@ export class Mastra<
   }
 
   #ensureBackgroundTaskManager(): void {
-    if (!this.#backgroundTaskConfig?.enabled || !this.#storage) {
+    if (!this.#backgroundTaskConfig?.enabled || !this.#storage || this.#backgroundTaskManager) {
       return;
     }
 
@@ -817,6 +817,29 @@ export class Mastra<
     void bgManager.init(this.#pubsub).catch(error => {
       this.#logger?.error('Failed to initialize background task manager', error);
     });
+  }
+
+  /**
+   * Auto-enables the background task manager when an agent with sub-agents is
+   * registered. Sub-agent delegation runs in the background by default so the
+   * parent stream stays responsive; that requires the manager to be available.
+   * No-op when the user explicitly opted out via `backgroundTasks.enabled: false`.
+   */
+  #maybeEnableBackgroundTasksForAgent(agent: Agent<any>): void {
+    // Already running — nothing to do
+    if (this.#backgroundTaskManager) return;
+
+    // Explicit opt-out
+    if (this.#backgroundTaskConfig?.enabled === false) return;
+
+    // Check if this agent has sub-agents. The agents field is either a static
+    // record or a function — we only auto-enable for the static case; function
+    // resolvers are evaluated per request anyway.
+    const staticSubAgents = agent.__getStaticAgents?.();
+    if (!staticSubAgents || Object.keys(staticSubAgents).length === 0) return;
+
+    this.#backgroundTaskConfig = { ...(this.#backgroundTaskConfig ?? {}), enabled: true };
+    this.#ensureBackgroundTaskManager();
   }
 
   /**
@@ -1068,6 +1091,10 @@ export class Mastra<
     }
 
     agents[agentKey] = mastraAgent;
+
+    // If this agent has sub-agents, auto-enable the background task manager so
+    // sub-agent delegations can run in the background by default.
+    this.#maybeEnableBackgroundTasksForAgent(mastraAgent);
 
     // Register configured processor workflows from the agent
     // Use .then() to handle async resolution without blocking the constructor

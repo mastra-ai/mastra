@@ -600,9 +600,4 @@ export const subscriptionOrchestratorAgent = new Agent({
   defaultOptions: {
     maxSteps: 10,
   },
-  // backgroundTasks: {
-  //   tools: {
-  //     cryptoResearchAgent: true,
-  //   },
-  // },
 });

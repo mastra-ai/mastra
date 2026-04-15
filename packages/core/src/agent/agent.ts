@@ -371,6 +371,18 @@ export class Agent<
   }
 
   /**
+   * Returns the statically-configured sub-agents without executing dynamic
+   * resolvers. Used by Mastra at registration time to detect whether background
+   * tasks should be auto-enabled. Returns undefined when sub-agents are
+   * configured via a function (those get resolved per-request).
+   * @internal
+   */
+  __getStaticAgents(): Record<string, Agent> | undefined {
+    if (typeof this.#agents === 'function') return undefined;
+    return this.#agents as Record<string, Agent> | undefined;
+  }
+
+  /**
    * Disables background task dispatch for this agent. Every tool call will run
    * synchronously in the agentic loop, regardless of the agent's or tools'
    * background configuration.
@@ -393,50 +405,38 @@ export class Agent<
   }
 
   /**
-   * Inspects a sub-agent (a child agent invoked as a tool) and derives a
-   * ToolBackgroundConfig if any of its tools are background-eligible OR if the
-   * sub-agent itself has a background tasks config that enables tools.
+   * Derives a ToolBackgroundConfig for a sub-agent invocation (a child agent
+   * exposed as a tool on the parent).
    *
-   * Returns undefined when no background dispatch is warranted, so the parent
-   * runs the sub-agent synchronously.
+   * Sub-agents run in the background by default because delegating to another
+   * agent is typically a long-running operation (it drives its own LLM loop,
+   * tool calls, memory I/O). Dispatching the delegation asynchronously keeps
+   * the parent's stream responsive and lets multiple sub-agents run in
+   * parallel. The sub-agent itself disables its own internal background
+   * dispatch via `disableBackgroundTasks: true` on each generate/stream call
+   * so its tools run synchronously inside its loop.
+   *
+   * Opt-out: set `backgroundTasks: { disabled: true }` on the sub-agent to
+   * force synchronous invocation.
    *
    * @internal
    */
   private async deriveSubAgentBackgroundConfig(
     subAgent: Agent<any, any, any, any>,
-    requestContext: RequestContext,
+    _requestContext: RequestContext,
   ): Promise<ToolBackgroundConfig | undefined> {
-    try {
-      const subAgentBgConfig = subAgent.getBackgroundTasksConfig?.();
+    const subAgentBgConfig = subAgent.getBackgroundTasksConfig?.();
 
-      // 1. Sub-agent has its own backgroundTasks config that enables tools
-      if (subAgentBgConfig?.disabled !== true && subAgentBgConfig?.tools) {
-        if (subAgentBgConfig.tools === 'all') {
-          return { enabled: true, waitTimeoutMs: subAgentBgConfig.waitTimeoutMs };
-        }
-        const hasEnabledTool = Object.values(subAgentBgConfig.tools).some(t => {
-          if (typeof t === 'boolean') return t;
-          return t?.enabled === true;
-        });
-        if (hasEnabledTool) {
-          return { enabled: true, waitTimeoutMs: subAgentBgConfig.waitTimeoutMs };
-        }
-      }
-
-      // 2. Any of the sub-agent's tools has background.enabled === true
-      const subAgentTools = await subAgent.convertTools({ requestContext, methodType: 'generate' });
-      if (subAgentTools && typeof subAgentTools === 'object') {
-        for (const tool of Object.values(subAgentTools)) {
-          const bg = (tool as any)?.background as ToolBackgroundConfig | undefined;
-          if (bg?.enabled === true) {
-            return { enabled: true, waitTimeoutMs: subAgentBgConfig?.waitTimeoutMs };
-          }
-        }
-      }
-    } catch {
-      // If anything fails (e.g., dynamic tools throw), skip background derivation
+    // Opt-out: sub-agent explicitly disabled background tasks
+    if (subAgentBgConfig?.disabled === true) {
+      return undefined;
     }
-    return undefined;
+
+    // Default: delegate to this sub-agent as a background task
+    return {
+      enabled: true,
+      waitTimeoutMs: subAgentBgConfig?.waitTimeoutMs,
+    };
   }
 
   /**
