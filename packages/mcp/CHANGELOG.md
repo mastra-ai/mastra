@@ -1,5 +1,14 @@
 # @mastra/mcp
 
+## 1.5.1-alpha.0
+
+### Patch Changes
+
+- Fixed MCP tool strict mode propagation. MCP servers now expose Mastra tool strictness in MCP metadata, and the MCP client restores that flag when rebuilding tools so strict OpenAI tool calling works for MCP-backed tools too. ([#15397](https://github.com/mastra-ai/mastra/pull/15397))
+
+- Updated dependencies [[`7020c06`](https://github.com/mastra-ai/mastra/commit/7020c0690b199d9da337f0e805f16948e557922e)]:
+  - @mastra/core@1.25.1-alpha.1
+
 ## 1.5.0
 
 ### Minor Changes

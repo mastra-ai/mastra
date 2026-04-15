@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.25.1-alpha.1
+
+### Patch Changes
+
+- Fixed OpenAI tool strict mode when requests pass through the model router. `strict: true` on function tools now survives compatibility prep, so OpenAI Responses models receive strict tool definitions instead of silently downgrading them to non-strict. ([#15397](https://github.com/mastra-ai/mastra/pull/15397))
+
 ## 1.25.1-alpha.0
 
 ### Patch Changes
