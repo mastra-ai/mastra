@@ -51,6 +51,7 @@ export async function handleAskQuestion(
             askUserComponent.activate({
               question,
               options,
+              tui: state.ui,
               onSubmit: answer => {
                 state.activeInlineQuestion = undefined;
                 state.harness.respondToQuestion({ questionId, answer });

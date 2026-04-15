@@ -208,7 +208,7 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
   // task_write (streams to pinned TaskProgressComponent),
   // and ask_user (uses AskQuestionInlineComponent)
   if (toolName === 'ask_user') {
-    const askComponent = AskQuestionInlineComponent.createStreaming();
+    const askComponent = AskQuestionInlineComponent.createStreaming(state.ui);
     ctx.addChildBeforeFollowUps(askComponent);
     state.lastAskUserComponent = askComponent;
     state.pendingAskUserComponents.set(toolCallId, askComponent);

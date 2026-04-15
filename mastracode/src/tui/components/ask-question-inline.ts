@@ -257,8 +257,9 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
    * Shows the bordered box with "…" indicator. Call updateArgs() as partial JSON
    * arrives, then activate() when the question event fires.
    */
-  static createStreaming(): AskQuestionInlineComponent {
+  static createStreaming(tui?: TUI): AskQuestionInlineComponent {
     const component = new AskQuestionInlineComponent();
+    component.tui = tui;
     return component;
   }
 
@@ -355,10 +356,12 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     options?: Array<{ label: string; description?: string }>;
     isNegativeAnswer?: (answer: string) => boolean;
     allowEmptyInput?: boolean;
+    tui?: TUI;
     onSubmit: (answer: string) => void;
     onCancel: () => void;
   }): void {
     if (this.answered) return;
+    if (options.tui) this.tui = options.tui;
     this.onSubmit = options.onSubmit;
     this.onCancel = options.onCancel;
     this.isNegativeAnswer = options.isNegativeAnswer;

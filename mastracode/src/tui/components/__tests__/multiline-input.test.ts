@@ -139,6 +139,14 @@ describe('MultilineInput', () => {
     expect(lines).toEqual(['line 1']);
   });
 
+  it('does not strip user content lines containing arrow characters', () => {
+    mocks.editorRender.mockReturnValue(['────', 'use ↑ and ↓ to navigate', '────']);
+
+    const lines = input.render(40);
+
+    expect(lines).toEqual(['use ↑ and ↓ to navigate']);
+  });
+
   it('returns at least one empty line when editor has no content', () => {
     mocks.editorRender.mockReturnValue(['────', '────']);
 

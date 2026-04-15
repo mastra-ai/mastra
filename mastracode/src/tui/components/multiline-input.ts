@@ -99,8 +99,8 @@ export class MultilineInput {
         continue;
       }
 
-      // Skip scroll indicator lines
-      if (stripped.includes('↑') || stripped.includes('↓')) {
+      // Skip scroll indicator lines (pattern: ── ↑ ── or ── ↓ ── with optional numbers)
+      if (/^─+.*[↑↓].*─+$/.test(stripped)) {
         continue;
       }
 
