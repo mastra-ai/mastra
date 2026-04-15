@@ -1,9 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Stream } from 'node:stream';
-import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createTool } from '@mastra/core/tools';
 import type { Tool } from '@mastra/core/tools';
 
@@ -650,32 +648,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private async convertInputSchema(
     inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'],
   ): Promise<JSONSchema7> {
-    try {
-      await $RefParser.dereference(inputSchema);
-      return ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
-    } catch (error: unknown) {
-      let errorDetails: string | undefined;
-      if (error instanceof Error) {
-        errorDetails = error.stack;
-      } else {
-        try {
-          errorDetails = JSON.stringify(error);
-        } catch {
-          errorDetails = String(error);
-        }
-      }
-      this.log('error', 'Failed to dereference JSON schema', {
-        error: errorDetails,
-        originalJsonSchema: inputSchema,
-      });
-
-      throw new MastraError({
-        id: 'MCP_TOOL_INPUT_SCHEMA_CONVERSION_FAILED',
-        domain: ErrorDomain.MCP,
-        category: ErrorCategory.USER,
-        details: { error: errorDetails ?? 'Unknown error' },
-      });
-    }
+    return ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
   }
 
   async tools(): Promise<Record<string, Tool<any, any, any, any>>> {
