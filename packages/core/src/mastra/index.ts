@@ -288,6 +288,8 @@ export interface Config<
    * ```
    */
   versions?: VersionOverrides;
+
+  /**
    * Background task configuration for running tool calls asynchronously.
    * When configured, agents can dispatch tool executions to run in the background
    * while the conversation continues.
