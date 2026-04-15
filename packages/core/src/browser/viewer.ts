@@ -1592,23 +1592,55 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
 
   /**
    * Poll for browser availability and connect when ready.
+   * Uses process discovery only — never launches a new browser.
    */
   private pollForBrowser(): void {
     if (!this._isPollingForBrowser) {
       return;
     }
 
-    // Try to connect to the browser
-    this.connect()
-      .then(() => {
-        // Successfully connected - stop polling
+    // Only discover already-running browsers — don't use getBrowserCdpUrl()
+    // because CLI commands like `agent-browser get cdp-url` auto-launch
+    this.discoverBrowserCdpUrl()
+      .then(async url => {
+        if (!url) {
+          throw new Error('No browser found');
+        }
+        // Found a running browser — connect to it
+        const client = new CdpClient();
+        this.setCdpClient(client);
+        await client.connect(url);
+        this._lastCdpUrl = url;
+
+        this.setupTargetEventHandlers();
+        await client.send('Target.setDiscoverTargets', { discover: true });
+
+        const targetsResult = (await client.send('Target.getTargets')) as {
+          targetInfos: CdpTargetInfo[];
+        };
+        const state = this.getOrCreateThreadState();
+        for (const targetInfo of targetsResult?.targetInfos || []) {
+          if (targetInfo.type === 'page' && !state.pageTargets.has(targetInfo.targetId)) {
+            state.pageTargets.set(targetInfo.targetId, {
+              targetId: targetInfo.targetId,
+              url: targetInfo.url,
+              title: targetInfo.title,
+              type: targetInfo.type,
+            });
+          }
+        }
+        if (!state.activeTargetId && state.pageTargets.size > 0) {
+          state.activeTargetId = [...state.pageTargets.keys()][0] ?? null;
+        }
+
+        this.notifyBrowserReady();
+        client.on('close', () => this.handleDisconnect());
         this.stopPollingForBrowser();
-        // notifyBrowserReady() is called in connect()
       })
       .catch(() => {
         // Browser not ready yet - schedule next poll
         if (this._isPollingForBrowser) {
-          this.browserPollTimer = setTimeout(() => this.pollForBrowser(), 1000);
+          this.browserPollTimer = setTimeout(() => this.pollForBrowser(), 2000);
         }
       });
   }
