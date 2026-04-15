@@ -30,6 +30,7 @@ The key insight: **the agent should install its own skill**. This validates the 
 ```
 
 This removes:
+
 - `workspace-data/` (filesystem + skills)
 - Database files (`mastra.db*`)
 - `.mastra/` directory
@@ -50,6 +51,7 @@ open http://localhost:4111
 5. **Verify**: Skill appears in agent details after server restart
 
 This tests:
+
 - Workspace sandbox execution
 - Skill discovery paths
 - Agent self-setup capability
@@ -110,6 +112,7 @@ src/mastra/public/workspace-data/
 3. [ ] Verify: `ls src/mastra/public/` shows no `workspace-data/`
 
 **Results:**
+
 - [ ] Teardown succeeds ✓/✗
 
 ---
@@ -128,11 +131,13 @@ src/mastra/public/workspace-data/
 8. [ ] Check agent details - should now show `agent-browser` skill
 
 **Results:**
+
 - [ ] Agent executes install command ✓/✗
 - [ ] Skill appears after refresh ✓/✗
 - [ ] Skill directory created at correct path ✓/✗
 
 **Debug if fails:**
+
 ```bash
 # Check if skill was installed
 ls -la src/mastra/public/workspace-data/.agents/skills/
@@ -154,6 +159,7 @@ ls -la src/mastra/public/workspace-data/
 3. [ ] **Expected**: Agent mentions browser automation skill
 
 **Results:**
+
 - [ ] Skill appears in agent details ✓/✗
 - [ ] Agent knows about skill ✓/✗
 
@@ -170,6 +176,7 @@ ls -la src/mastra/public/workspace-data/
    - URL bar shows `https://example.com`
 
 **Results:**
+
 - [ ] Browser launches ✓/✗
 - [ ] Screencast visible ✓/✗
 - [ ] URL bar updates ✓/✗
@@ -184,6 +191,7 @@ ls -la src/mastra/public/workspace-data/
 2. [ ] **Expected**: Browser shows Hacker News, screencast updates
 
 **Results:**
+
 - [ ] Navigation works ✓/✗
 - [ ] Screencast updates ✓/✗
 
@@ -198,6 +206,7 @@ ls -la src/mastra/public/workspace-data/
 3. [ ] **Expected**: Browser responds to click
 
 **Results:**
+
 - [ ] Mouse clicks work ✓/✗
 - [ ] Keyboard input works ✓/✗
 
@@ -211,6 +220,7 @@ ls -la src/mastra/public/workspace-data/
 2. [ ] **Expected**: New tab opens, screencast switches to it
 
 **Results:**
+
 - [ ] New tab created ✓/✗
 - [ ] Screencast shows new tab ✓/✗
 
@@ -222,6 +232,7 @@ ls -la src/mastra/public/workspace-data/
 2. [ ] **Expected**: Screencast switches to first tab
 
 **Results:**
+
 - [ ] Tab switch works ✓/✗
 - [ ] Screencast updates ✓/✗
 
@@ -233,6 +244,7 @@ ls -la src/mastra/public/workspace-data/
 2. [ ] **Expected**: Tab closes, screencast shows remaining tab
 
 **Results:**
+
 - [ ] Tab closes ✓/✗
 - [ ] Screencast updates ✓/✗
 
@@ -251,6 +263,7 @@ ls -la src/mastra/public/workspace-data/
 5. [ ] **Expected**: Original browser still there
 
 **Results:**
+
 - [ ] Each thread has own browser ✓/✗
 - [ ] Screencasts are independent ✓/✗
 
@@ -267,6 +280,7 @@ ls -la src/mastra/public/workspace-data/
 5. [ ] **Expected**: Browser reconnects, shows same state
 
 **Results:**
+
 - [ ] State restored ✓/✗
 - [ ] Multi-tab state restored ✓/✗
 
@@ -279,6 +293,7 @@ ls -la src/mastra/public/workspace-data/
 **Most common cause: Server needs restart after skill installation.**
 
 Skills are discovered at server startup. If you install a skill while the server is running:
+
 1. Stop the server (`Ctrl+C`)
 2. Restart: `pnpm dev`
 3. Refresh the browser
@@ -314,23 +329,24 @@ echo $AGENT_BROWSER_HEADED
 
 ## Test Matrix Summary
 
-| Test | Description | Status | Notes |
-|------|-------------|--------|-------|
-| 0.1 | Teardown works | ✅ | |
-| 0.2 | Agent installs skill | ✅ | Requires server restart for discovery |
-| 1.1 | Skill discovery | ✅ | Agent knows about its skills |
-| 1.2 | Browser launch | ✅ | Screencast streams to UI |
-| 1.3 | Navigation | ✅ | URL bar updates |
-| 1.4 | Input injection | ⏳ | Needs manual testing |
-| 2.1 | Open new tab | ✅ | `--new-tab` flag works |
-| 2.2 | Switch tabs | ⏳ | `tab` command syntax TBD |
-| 2.3 | Close tab | ⏳ | Not yet tested |
-| 3.1 | Thread isolation | ⏳ | Requires `scope: 'thread'` |
-| 4.1 | State persistence | ⏳ | Not yet tested |
+| Test | Description          | Status | Notes                                 |
+| ---- | -------------------- | ------ | ------------------------------------- |
+| 0.1  | Teardown works       | ✅     |                                       |
+| 0.2  | Agent installs skill | ✅     | Requires server restart for discovery |
+| 1.1  | Skill discovery      | ✅     | Agent knows about its skills          |
+| 1.2  | Browser launch       | ✅     | Screencast streams to UI              |
+| 1.3  | Navigation           | ✅     | URL bar updates                       |
+| 1.4  | Input injection      | ⏳     | Needs manual testing                  |
+| 2.1  | Open new tab         | ✅     | `--new-tab` flag works                |
+| 2.2  | Switch tabs          | ⏳     | `tab` command syntax TBD              |
+| 2.3  | Close tab            | ⏳     | Not yet tested                        |
+| 3.1  | Thread isolation     | ⏳     | Requires `scope: 'thread'`            |
+| 4.1  | State persistence    | ⏳     | Not yet tested                        |
 
 ### Last Tested: 2026-04-15
 
 **Key Findings:**
+
 - Skill installation via agent works (`workspace_execute_command`)
 - Server restart required for new skills to be discovered
 - Browser launches in headed mode
