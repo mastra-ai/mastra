@@ -1,65 +1,11 @@
 import { PassThrough } from 'node:stream';
 import { ReadableStream } from 'node:stream/web';
 import { describe, it, expect, vi } from 'vitest';
-import type { FullOutput } from '../stream/base/output';
 import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
 import { runHeadless } from './run-headless';
 import type { RunHeadlessIO, RunHeadlessOptions } from './run-headless';
-
-function createMockFullOutput(overrides: Partial<FullOutput<any>> = {}): FullOutput<any> {
-  return {
-    text: 'Hello world',
-    usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-    steps: [{ text: 'Hello world' } as any],
-    finishReason: 'end_turn' as any,
-    warnings: [],
-    providerMetadata: undefined as any,
-    request: {},
-    reasoning: [],
-    reasoningText: undefined,
-    toolCalls: [],
-    toolResults: [],
-    sources: [],
-    files: [],
-    response: { modelId: 'test-model', id: '1', timestamp: new Date(), messages: [], uiMessages: [] } as any,
-    totalUsage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-    object: undefined,
-    error: undefined,
-    tripwire: undefined,
-    traceId: 'trace-123',
-    spanId: 'span-456',
-    runId: 'run-789',
-    suspendPayload: undefined,
-    resumeSchema: undefined,
-    messages: [],
-    rememberedMessages: [],
-    ...overrides,
-  };
-}
-
-function createMockStreamOutput(chunks: ChunkType<any>[], fullOutput: FullOutput<any>) {
-  const fullStream = new ReadableStream<ChunkType<any>>({
-    start(controller) {
-      for (const chunk of chunks) {
-        controller.enqueue(chunk);
-      }
-      controller.close();
-    },
-  });
-  return {
-    fullStream,
-    getFullOutput: async () => fullOutput,
-  } as any;
-}
-
-async function collectStream(stream: PassThrough): Promise<string> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream) {
-    chunks.push(chunk as Buffer);
-  }
-  return Buffer.concat(chunks).toString('utf-8');
-}
+import { createMockFullOutput, createMockStreamOutput, collectStream } from './test-utils';
 
 interface Harness {
   stdout: PassThrough;
