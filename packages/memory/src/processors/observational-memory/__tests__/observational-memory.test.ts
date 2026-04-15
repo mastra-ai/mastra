@@ -8030,7 +8030,7 @@ describe('Full Async Buffering Flow', () => {
     expect(Array.isArray(preChunks) ? preChunks.length : 0).toBeGreaterThan(0);
     expect(observerCalls.length).toBeGreaterThan(0);
 
-    const now = Date.now();
+    const now = new Date('2026-04-14T12:00:00.000Z').getTime();
     const staleAssistantPartTime = now - 10;
     const userMessage = {
       id: 'ttl-user-msg',
