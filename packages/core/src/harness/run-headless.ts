@@ -1,6 +1,6 @@
 import type { Writable } from 'node:stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
-import { buildInterruptedEnvelope, formatJson, formatStreamJson, formatText, hasWarnings } from './output-formatter';
+import { formatJson, formatStreamJson, formatText, hasWarnings } from './output-formatter';
 import type { OutputFormat } from './output-formatter';
 
 const EXIT_SUCCESS = 0;
@@ -79,9 +79,8 @@ export async function runHeadless(
   }
 
   const abortController = new AbortController();
-  const startTime = Date.now();
 
-  registerSigint(outputFormat, io, startTime, abortController);
+  registerSigint(outputFormat, io, abortController);
 
   const streamOutput = await agent.stream([{ role: 'user', content: prompt }], {
     ...(structuredOutput ? { structuredOutput } : {}),
@@ -92,7 +91,7 @@ export async function runHeadless(
   if (outputFormat === 'text') {
     fullOutput = await formatText(streamOutput, io.stdout, io.stderr);
   } else if (outputFormat === 'json') {
-    fullOutput = await formatJson(streamOutput, io.stdout, startTime);
+    fullOutput = await formatJson(streamOutput, io.stdout, 0);
   } else {
     fullOutput = await formatStreamJson(streamOutput, io.stdout, io.stderr);
   }
@@ -113,20 +112,12 @@ export async function runHeadless(
   io.exit(EXIT_SUCCESS);
 }
 
-function registerSigint(
-  outputFormat: OutputFormat,
-  io: RunHeadlessIO,
-  startTime: number,
-  controller: AbortController,
-): void {
+function registerSigint(outputFormat: OutputFormat, io: RunHeadlessIO, controller: AbortController): void {
   io.onSigint(() => {
     if (controller.signal.aborted) return;
     controller.abort();
     if (outputFormat === 'text') {
       io.stdout.write('\n');
-    } else if (outputFormat === 'json') {
-      const envelope = buildInterruptedEnvelope(Date.now() - startTime);
-      io.stdout.write(JSON.stringify(envelope) + '\n');
     } else {
       io.stdout.write(JSON.stringify({ type: 'abort', payload: { reason: 'interrupted' } }) + '\n');
     }

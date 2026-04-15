@@ -251,7 +251,7 @@ describe('runHeadless', () => {
   });
 
   describe('json mode', () => {
-    it('should emit a single JSON envelope and exit 0', async () => {
+    it('should emit the FullOutput as a single JSON line and exit 0', async () => {
       const h = createHarness();
       const streamOutput = createMockStreamOutput([], createMockFullOutput({ text: 'answer' }));
       const agent = { stream: vi.fn().mockResolvedValue(streamOutput) };
@@ -263,13 +263,12 @@ describe('runHeadless', () => {
 
       expect(h.exits).toEqual([0]);
       const stdoutText = await h.stdoutPromise;
-      const envelope = JSON.parse(stdoutText.trim());
-      expect(envelope.type).toBe('result');
-      expect(envelope.subtype).toBe('success');
-      expect(envelope.result).toBe('answer');
+      const parsed = JSON.parse(stdoutText.trim());
+      expect(parsed.text).toBe('answer');
+      expect(parsed.error).toBeFalsy();
     });
 
-    it('should emit error envelope and exit 1 when FullOutput has error', async () => {
+    it('should emit FullOutput with serialized error and exit 1 when FullOutput has error', async () => {
       const h = createHarness();
       const streamOutput = createMockStreamOutput([], createMockFullOutput({ error: new Error('bad') }));
       const agent = { stream: vi.fn().mockResolvedValue(streamOutput) };
@@ -280,9 +279,9 @@ describe('runHeadless', () => {
       h.stderr.end();
 
       expect(h.exits).toEqual([1]);
-      const envelope = JSON.parse((await h.stdoutPromise).trim());
-      expect(envelope.subtype).toBe('error');
-      expect(envelope.is_error).toBe(true);
+      const parsed = JSON.parse((await h.stdoutPromise).trim());
+      expect(parsed.error).toBeTruthy();
+      expect(parsed.error.message).toBe('bad');
     });
   });
 
@@ -359,7 +358,7 @@ describe('runHeadless', () => {
       }
     });
 
-    it('json sigint handler should emit interrupted envelope and exit 1', async () => {
+    it('json sigint handler should emit abort chunk and exit 1', async () => {
       const h = createHarness();
       // Use a stream that doesn't resolve immediately
       const never = new ReadableStream({ start() {} });
@@ -377,9 +376,9 @@ describe('runHeadless', () => {
       h.stderr.end();
 
       expect(h.exits).toEqual([1]);
-      const envelope = JSON.parse((await h.stdoutPromise).trim());
-      expect(envelope.subtype).toBe('interrupted');
-      expect(envelope.is_error).toBe(true);
+      const chunk = JSON.parse((await h.stdoutPromise).trim());
+      expect(chunk.type).toBe('abort');
+      expect(chunk.payload.reason).toBe('interrupted');
     });
 
     it('stream-json sigint handler should emit abort chunk and exit 1', async () => {

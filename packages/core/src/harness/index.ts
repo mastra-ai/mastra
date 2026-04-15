@@ -1,13 +1,6 @@
 export { Harness } from './harness';
-export {
-  buildJsonEnvelope,
-  buildInterruptedEnvelope,
-  formatText,
-  formatJson,
-  formatStreamJson,
-  hasWarnings,
-} from './output-formatter';
-export type { OutputFormat, JsonResultEnvelope } from './output-formatter';
+export { formatText, formatJson, formatStreamJson, hasWarnings } from './output-formatter';
+export type { OutputFormat } from './output-formatter';
 export { runHeadless } from './run-headless';
 export type { RunHeadlessOptions, RunHeadlessIO } from './run-headless';
 export { askUserTool, parseSubagentMeta, submitPlanTool, taskCheckTool, taskWriteTool } from './tools';
