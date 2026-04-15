@@ -44,6 +44,11 @@ function getMessageIndexKey(messageId: string): string {
   return `msg-idx:${messageId}`;
 }
 
+type ExistingMessageLocation = {
+  key: string;
+  threadId: string;
+};
+
 export class StoreMemoryUpstash extends MemoryStorage {
   private client: Redis;
   #db: UpstashDB;
@@ -330,28 +335,6 @@ export class StoreMemoryUpstash extends MemoryStorage {
     const { messages } = args;
     if (messages.length === 0) return { messages: [] };
 
-    const threadId = messages[0]?.threadId;
-    try {
-      if (!threadId) {
-        throw new Error('Thread ID is required');
-      }
-
-      // Check if thread exists
-      const thread = await this.getThreadById({ threadId });
-      if (!thread) {
-        throw new Error(`Thread ${threadId} not found`);
-      }
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('UPSTASH', 'SAVE_MESSAGES', 'INVALID_ARGS'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-        },
-        error,
-      );
-    }
-
     // Add an index to each message to maintain order
     const messagesWithIndex = messages.map((message, index) => {
       if (!message.threadId) {
@@ -370,38 +353,63 @@ export class StoreMemoryUpstash extends MemoryStorage {
       };
     });
 
-    // Get current thread data once (all messages belong to same thread)
-    const threadKey = getKey(TABLE_THREADS, { id: threadId });
-    const existingThread = await this.client.get<StorageThreadType>(threadKey);
+    const threadIds = Array.from(new Set(messagesWithIndex.map(message => message.threadId!)));
+    const threadKeysById = new Map(threadIds.map(threadId => [threadId, getKey(TABLE_THREADS, { id: threadId })]));
+    let threadCache = new Map<string, StorageThreadType>();
+
+    try {
+      const threadPipeline = this.client.pipeline();
+      threadIds.forEach(threadId => threadPipeline.get(threadKeysById.get(threadId)!));
+      const threadResults = await threadPipeline.exec();
+
+      const missingThreadIds: string[] = [];
+      threadIds.forEach((threadId, index) => {
+        const thread = threadResults[index] as StorageThreadType | null;
+        if (!thread) {
+          missingThreadIds.push(threadId);
+          return;
+        }
+
+        threadCache.set(threadId, thread);
+      });
+
+      if (missingThreadIds.length > 0) {
+        const missingThreadLabel =
+          missingThreadIds.length === 1 ? `Thread ${missingThreadIds[0]}` : `Threads ${missingThreadIds.join(', ')}`;
+        throw new Error(`${missingThreadLabel} not found`);
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('UPSTASH', 'SAVE_MESSAGES', 'INVALID_ARGS'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+        },
+        error,
+      );
+    }
 
     try {
       const batchSize = 1000;
       for (let i = 0; i < messagesWithIndex.length; i += batchSize) {
         const batch = messagesWithIndex.slice(i, i + batchSize);
         const pipeline = this.client.pipeline();
+        const existingLocationsByMessageId = await this._findExistingMessageLocations(batch.map(message => message.id));
+        const touchedThreadIds = new Set(batch.map(message => message.threadId!));
+        const now = new Date();
 
         for (const message of batch) {
           const key = getMessageKey(message.threadId!, message.id);
           const createdAtScore = new Date(message.createdAt).getTime();
           const score = message._index !== undefined ? message._index : createdAtScore;
 
-          // Check if this message id exists in another thread
-          const existingKeyPattern = getMessageKey('*', message.id);
-          const keys = await this.#db.scanKeys(existingKeyPattern);
+          const existingLocations = existingLocationsByMessageId.get(message.id) ?? [];
+          for (const location of existingLocations) {
+            if (location.threadId === message.threadId) continue;
 
-          if (keys.length > 0) {
-            const pipeline2 = this.client.pipeline();
-            keys.forEach(key => pipeline2.get(key));
-            const results = await pipeline2.exec();
-            const existingMessages = results.filter((msg): msg is MastraDBMessage => msg !== null) as MastraDBMessage[];
-            for (const existingMessage of existingMessages) {
-              const existingMessageKey = getMessageKey(existingMessage.threadId!, existingMessage.id);
-              if (existingMessage && existingMessage.threadId !== message.threadId) {
-                pipeline.del(existingMessageKey);
-                // Remove from old thread's sorted set
-                pipeline.zrem(getThreadMessagesKey(existingMessage.threadId!), existingMessage.id);
-              }
-            }
+            touchedThreadIds.add(location.threadId);
+            pipeline.del(location.key);
+            pipeline.zrem(getThreadMessagesKey(location.threadId), message.id);
           }
 
           // Store the message data
@@ -417,13 +425,34 @@ export class StoreMemoryUpstash extends MemoryStorage {
           });
         }
 
-        // Update the thread's updatedAt field (only in the first batch)
-        if (i === 0 && existingThread) {
+        const uncachedThreadIds = Array.from(touchedThreadIds).filter(threadId => !threadCache.has(threadId));
+        if (uncachedThreadIds.length > 0) {
+          const missingThreadPipeline = this.client.pipeline();
+          uncachedThreadIds.forEach(threadId => {
+            const threadKey = threadKeysById.get(threadId) ?? getKey(TABLE_THREADS, { id: threadId });
+            threadKeysById.set(threadId, threadKey);
+            missingThreadPipeline.get(threadKey);
+          });
+          const missingThreadResults = await missingThreadPipeline.exec();
+
+          uncachedThreadIds.forEach((threadId, index) => {
+            const thread = missingThreadResults[index] as StorageThreadType | null;
+            if (thread) {
+              threadCache.set(threadId, thread);
+            }
+          });
+        }
+
+        for (const threadId of touchedThreadIds) {
+          const existingThread = threadCache.get(threadId);
+          if (!existingThread) continue;
+
           const updatedThread = {
             ...existingThread,
-            updatedAt: new Date(),
+            updatedAt: now,
           };
-          pipeline.set(threadKey, processRecord(TABLE_THREADS, updatedThread).processedRecord);
+          threadCache.set(threadId, updatedThread);
+          pipeline.set(threadKeysById.get(threadId)!, processRecord(TABLE_THREADS, updatedThread).processedRecord);
         }
 
         await pipeline.exec();
@@ -438,12 +467,58 @@ export class StoreMemoryUpstash extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            threadId,
+            threadId: threadIds.join(','),
           },
         },
         error,
       );
     }
+  }
+
+  private async _findExistingMessageLocations(messageIds: string[]): Promise<Map<string, ExistingMessageLocation[]>> {
+    const locationsByMessageId = new Map<string, ExistingMessageLocation[]>();
+    if (messageIds.length === 0) {
+      return locationsByMessageId;
+    }
+
+    const indexPipeline = this.client.pipeline();
+    messageIds.forEach(messageId => indexPipeline.get(getMessageIndexKey(messageId)));
+    const indexResults = await indexPipeline.exec();
+
+    const unindexedMessageIds: string[] = [];
+    messageIds.forEach((messageId, index) => {
+      const threadId = indexResults[index] as string | null;
+      if (!threadId) {
+        unindexedMessageIds.push(messageId);
+        return;
+      }
+
+      locationsByMessageId.set(messageId, [{ key: getMessageKey(threadId, messageId), threadId }]);
+    });
+
+    for (const messageId of unindexedMessageIds) {
+      const keys = await this.#db.scanKeys(getMessageKey('*', messageId));
+      if (keys.length === 0) continue;
+
+      const messagePipeline = this.client.pipeline();
+      keys.forEach(key => messagePipeline.get(key));
+      const existingMessages = await messagePipeline.exec();
+
+      const locations: ExistingMessageLocation[] = [];
+      existingMessages.forEach((existingMessage, index) => {
+        const message = existingMessage as MastraDBMessage | null;
+        const key = keys[index];
+        if (!message?.threadId || !key || message.id !== messageId) return;
+
+        locations.push({ key, threadId: message.threadId });
+      });
+
+      if (locations.length > 0) {
+        locationsByMessageId.set(messageId, locations);
+      }
+    }
+
+    return locationsByMessageId;
   }
 
   /**

@@ -1,11 +1,13 @@
+import { randomUUID } from 'node:crypto';
 import {
   createTestSuite,
   createConfigValidationTests,
   createClientAcceptanceTests,
   createDomainDirectTests,
 } from '@internal/storage-test-utils';
+import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { Redis } from '@upstash/redis';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { StoreMemoryUpstash } from './domains/memory';
 import { ScoresUpstash } from './domains/scores';
@@ -25,6 +27,32 @@ const createTestClient = () =>
     url: TEST_CONFIG.url,
     token: TEST_CONFIG.token,
   });
+
+const createThread = (resourceId = `resource-${randomUUID()}`): StorageThreadType => ({
+  id: `thread-${randomUUID()}`,
+  resourceId,
+  title: 'Test Thread',
+  metadata: {},
+  createdAt: new Date(),
+  updatedAt: new Date(),
+});
+
+const createMessage = (thread: StorageThreadType, overrides: Partial<MastraDBMessage> = {}): MastraDBMessage => ({
+  id: overrides.id ?? randomUUID(),
+  threadId: overrides.threadId ?? thread.id,
+  resourceId: overrides.resourceId ?? thread.resourceId,
+  role: overrides.role ?? 'user',
+  createdAt: overrides.createdAt ?? new Date(),
+  content: overrides.content ?? {
+    format: 2,
+    parts: [{ type: 'text', text: 'Test message' }],
+    content: 'Test message',
+  },
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 createTestSuite(
   new UpstashStore({
@@ -109,5 +137,95 @@ describe('Upstash Domain with URL/token config', () => {
     expect(savedThread.id).toBe(thread.id);
 
     await memoryDomain.deleteThread({ threadId: thread.id });
+  });
+});
+
+describe('StoreMemoryUpstash saveMessages index behavior', () => {
+  it('avoids scans for indexed message moves and updates all touched threads', async () => {
+    const memoryDomain = new StoreMemoryUpstash({ client: createTestClient() });
+    await memoryDomain.init();
+
+    const sourceThread = createThread();
+    const targetThread = createThread(sourceThread.resourceId);
+    await memoryDomain.saveThread({ thread: sourceThread });
+    await memoryDomain.saveThread({ thread: targetThread });
+
+    const initialSourceThread = await memoryDomain.getThreadById({ threadId: sourceThread.id });
+    const initialTargetThread = await memoryDomain.getThreadById({ threadId: targetThread.id });
+    const originalMessage = createMessage(sourceThread);
+    await memoryDomain.saveMessages({ messages: [originalMessage] });
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    const client = (memoryDomain as any).client as Redis;
+    const scanSpy = vi.spyOn(client, 'scan');
+
+    const movedMessage = createMessage(targetThread, {
+      id: originalMessage.id,
+      resourceId: targetThread.resourceId,
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'Moved message' }],
+        content: 'Moved message',
+      },
+    });
+
+    await memoryDomain.saveMessages({ messages: [movedMessage] });
+
+    expect(scanSpy).not.toHaveBeenCalled();
+
+    const { messages: sourceMessages } = await memoryDomain.listMessages({ threadId: sourceThread.id });
+    const { messages: targetMessages } = await memoryDomain.listMessages({ threadId: targetThread.id });
+    expect(sourceMessages.find(message => message.id === originalMessage.id)).toBeUndefined();
+    expect(targetMessages.find(message => message.id === originalMessage.id)?.threadId).toBe(targetThread.id);
+
+    const updatedSourceThread = await memoryDomain.getThreadById({ threadId: sourceThread.id });
+    const updatedTargetThread = await memoryDomain.getThreadById({ threadId: targetThread.id });
+    expect(updatedSourceThread).not.toBeNull();
+    expect(updatedTargetThread).not.toBeNull();
+    expect(new Date(updatedSourceThread!.updatedAt).getTime()).toBeGreaterThan(
+      new Date(initialSourceThread!.updatedAt).getTime(),
+    );
+    expect(new Date(updatedTargetThread!.updatedAt).getTime()).toBeGreaterThan(
+      new Date(initialTargetThread!.updatedAt).getTime(),
+    );
+  });
+
+  it('falls back to scan when the index is missing and recreates the index during save', async () => {
+    const memoryDomain = new StoreMemoryUpstash({ client: createTestClient() });
+    await memoryDomain.init();
+
+    const sourceThread = createThread();
+    const targetThread = createThread(sourceThread.resourceId);
+    await memoryDomain.saveThread({ thread: sourceThread });
+    await memoryDomain.saveThread({ thread: targetThread });
+
+    const originalMessage = createMessage(sourceThread);
+    await memoryDomain.saveMessages({ messages: [originalMessage] });
+
+    const client = (memoryDomain as any).client as Redis;
+    const messageIndexKey = `msg-idx:${originalMessage.id}`;
+    await client.del(messageIndexKey);
+
+    const scanSpy = vi.spyOn(client, 'scan');
+    const movedMessage = createMessage(targetThread, {
+      id: originalMessage.id,
+      resourceId: targetThread.resourceId,
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'Recovered message' }],
+        content: 'Recovered message',
+      },
+    });
+
+    await memoryDomain.saveMessages({ messages: [movedMessage] });
+
+    expect(scanSpy).toHaveBeenCalled();
+    await expect(client.get<string>(messageIndexKey)).resolves.toBe(targetThread.id);
+
+    const { messages: sourceMessages } = await memoryDomain.listMessages({ threadId: sourceThread.id });
+    const { messages: targetMessages } = await memoryDomain.listMessages({ threadId: targetThread.id });
+    expect(sourceMessages.find(message => message.id === originalMessage.id)).toBeUndefined();
+    expect(targetMessages.find(message => message.id === originalMessage.id)?.threadId).toBe(targetThread.id);
   });
 });
