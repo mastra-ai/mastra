@@ -746,13 +746,6 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
           // collision === 'overwrite' falls through
         }
 
-        const modeDefaults: Record<string, string> = {
-          plan: imported.models.plan,
-          build: imported.models.build,
-          fast: imported.models.fast,
-        };
-        upsertCustomPackInSettings(s, imported, modeDefaults);
-        saveSettings(s);
         await applyPack(ctx, imported);
         collapseResult(`Imported pack → ${theme.bold(imported.name)}`);
         ctx.showInfo(`Imported and activated ${imported.name} pack`);
