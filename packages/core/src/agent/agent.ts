@@ -4693,8 +4693,7 @@ export class Agent<
         provider: this.#browser.provider,
         sessionId: this.#browser.getSessionId(browserThreadId),
         headless: this.#browser.headless,
-        currentUrl: (await this.#browser.getCurrentUrl(browserThreadId)) ?? undefined,
-        isRunning: isThreadRunning,
+        currentUrl: isThreadRunning ? ((await this.#browser.getCurrentUrl(browserThreadId)) ?? undefined) : undefined,
       };
       requestContext.set('browser', browserCtx);
     }
