@@ -78,12 +78,15 @@ const validParams = {
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  vi.spyOn(console, 'info').mockImplementation(() => {});
+  // Reset the module cache so the dynamic import picks up vi.mock factories.
+  // Without this, isolate:false lets a cached credentials.js bypass the mocks.
+  vi.resetModules();
   execFileSyncMock.mockReset();
 });
 
 describe('login() server lifecycle', () => {
   it('returns credentials after a valid callback', async () => {
-    vi.spyOn(console, 'info').mockImplementation(() => {});
     const { login } = await import('./credentials.js');
 
     const loginPromise = login();
@@ -104,9 +107,6 @@ describe('login() server lifecycle', () => {
   });
 
   it('closes all connections so the process can exit', async () => {
-    vi.spyOn(console, 'info').mockImplementation(() => {});
-    vi.resetModules();
-    execFileSyncMock.mockReset();
     const { login } = await import('./credentials.js');
 
     const loginPromise = login();
@@ -132,9 +132,6 @@ describe('login() server lifecycle', () => {
   });
 
   it('returns 400 when callback params are missing', async () => {
-    vi.spyOn(console, 'info').mockImplementation(() => {});
-    vi.resetModules();
-    execFileSyncMock.mockReset();
     const { login } = await import('./credentials.js');
 
     const loginPromise = login();
