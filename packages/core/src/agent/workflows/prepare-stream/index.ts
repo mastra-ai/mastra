@@ -81,6 +81,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     agentSpan,
     methodType,
     memory,
+    backgroundTaskEnabled: backgroundTaskManager?.config?.enabled,
   });
 
   const prepareMemoryStep = createPrepareMemoryStep({

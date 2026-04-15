@@ -471,8 +471,15 @@ export function makeCoreTool(
   options: ToolOptions,
   logType?: 'tool' | 'toolset' | 'client-tool',
   autoResumeSuspendedTools?: boolean,
+  backgroundTaskEnabled?: boolean,
 ): CoreTool {
-  return new CoreToolBuilder({ originalTool, options, logType, autoResumeSuspendedTools }).build();
+  return new CoreToolBuilder({
+    originalTool,
+    options,
+    logType,
+    autoResumeSuspendedTools,
+    backgroundTaskEnabled,
+  }).build();
 }
 
 export function makeCoreToolV5(
@@ -480,8 +487,15 @@ export function makeCoreToolV5(
   options: ToolOptions,
   logType?: 'tool' | 'toolset' | 'client-tool',
   autoResumeSuspendedTools?: boolean,
+  backgroundTaskEnabled?: boolean,
 ): VercelToolV5 {
-  return new CoreToolBuilder({ originalTool, options, logType, autoResumeSuspendedTools }).buildV5();
+  return new CoreToolBuilder({
+    originalTool,
+    options,
+    logType,
+    autoResumeSuspendedTools,
+    backgroundTaskEnabled,
+  }).buildV5();
 }
 
 /**

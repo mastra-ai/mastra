@@ -68,65 +68,75 @@ export class CoreToolBuilder extends MastraBase {
     options: ToolOptions;
     logType?: LogType;
     autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
   }) {
     super({ name: 'CoreToolBuilder' });
     this.originalTool = input.originalTool;
     this.options = input.options;
     this.logType = input.logType;
 
-    if (!isVercelTool(this.originalTool) && !isProviderDefinedTool(this.originalTool)) {
-      let schema = this.originalTool.inputSchema;
-      if (typeof schema === 'function') {
-        schema = schema();
-      }
-      if (!schema) {
-        schema = z.object({});
-      }
+    // Only inject the `_background` override schema for tools that are actually
+    // eligible for background execution — otherwise every user tool's input
+    // schema would be mutated with a v4 Zod field, which breaks v3-authored
+    // tools (keyValidator._parse crashes in schema-compat validation).
+    const isBackgroundEligible = !!input.backgroundTaskEnabled;
+    const isResumableTool =
+      input.autoResumeSuspendedTools ||
+      (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-') ||
+      (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('workflow-');
 
-      if (isZodObject(schema)) {
-        let nextSchema = schema.extend({
-          _background: backgroundOverrideZodSchema,
-        });
-        if (
-          input.autoResumeSuspendedTools ||
-          (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-') ||
-          (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('workflow-')
-        ) {
-          nextSchema = nextSchema.extend({
-            suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
-            resumeData: z
-              .any()
-              .describe('The resumeData object created from the resumeSchema of suspended tool')
-              .optional(),
-          });
+    if (!isVercelTool(this.originalTool) && !isProviderDefinedTool(this.originalTool)) {
+      if (isBackgroundEligible || isResumableTool) {
+        let schema = this.originalTool.inputSchema;
+        if (typeof schema === 'function') {
+          schema = schema();
         }
-        this.originalTool.inputSchema = nextSchema;
-      } else {
-        // Non-Zod StandardSchemaWithJSON (e.g. JsonSchemaWrapper from JSONSchema7).
-        // Extract JSON Schema, add suspend/resume fields, re-wrap.
-        const jsonSchema = standardSchemaToJSONSchema(schema as any, { io: 'input' });
-        if (jsonSchema && typeof jsonSchema === 'object' && jsonSchema.type === 'object') {
-          jsonSchema.properties = {
-            ...jsonSchema.properties,
-            _background: backgroundOverrideJsonSchema,
-          };
-          if (
-            input.autoResumeSuspendedTools ||
-            (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-') ||
-            (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('workflow-')
-          ) {
-            jsonSchema.properties = {
-              ...jsonSchema.properties,
-              suspendedToolRunId: {
-                type: ['string', 'null'],
-                description: 'The runId of the suspended tool',
-              },
-              resumeData: {
-                description: 'The resumeData object created from the resumeSchema of suspended tool',
-              },
-            };
+        if (!schema) {
+          schema = z.object({});
+        }
+
+        if (isZodObject(schema)) {
+          let nextSchema = schema;
+          if (isBackgroundEligible) {
+            nextSchema = nextSchema.extend({
+              _background: backgroundOverrideZodSchema,
+            });
           }
-          this.originalTool.inputSchema = toStandardSchema(jsonSchema) as any;
+          if (isResumableTool) {
+            nextSchema = nextSchema.extend({
+              suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
+              resumeData: z
+                .any()
+                .describe('The resumeData object created from the resumeSchema of suspended tool')
+                .optional(),
+            });
+          }
+          this.originalTool.inputSchema = nextSchema;
+        } else {
+          // Non-Zod StandardSchemaWithJSON (e.g. JsonSchemaWrapper from JSONSchema7).
+          // Extract JSON Schema, add suspend/resume fields, re-wrap.
+          const jsonSchema = standardSchemaToJSONSchema(schema as any, { io: 'input' });
+          if (jsonSchema && typeof jsonSchema === 'object' && jsonSchema.type === 'object') {
+            if (isBackgroundEligible) {
+              jsonSchema.properties = {
+                ...jsonSchema.properties,
+                _background: backgroundOverrideJsonSchema,
+              };
+            }
+            if (isResumableTool) {
+              jsonSchema.properties = {
+                ...jsonSchema.properties,
+                suspendedToolRunId: {
+                  type: ['string', 'null'],
+                  description: 'The runId of the suspended tool',
+                },
+                resumeData: {
+                  description: 'The resumeData object created from the resumeSchema of suspended tool',
+                },
+              };
+            }
+            this.originalTool.inputSchema = toStandardSchema(jsonSchema) as any;
+          }
         }
       }
     }

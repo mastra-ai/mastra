@@ -2245,6 +2245,7 @@ export class Agent<
     mastraProxy,
     memoryConfig,
     autoResumeSuspendedTools,
+    backgroundTaskEnabled,
     ...rest
   }: {
     runId?: string;
@@ -2254,6 +2255,7 @@ export class Agent<
     mastraProxy?: MastraUnion;
     memoryConfig?: MemoryConfigInternal;
     autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedMemoryTools: Record<string, CoreTool> = {};
@@ -2294,7 +2296,13 @@ export class Agent<
           requireApproval: (toolObj as any).requireApproval,
           backgroundConfig: (toolObj as any).background,
         };
-        const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
+        const convertedToCoreTool = makeCoreTool(
+          toolObj,
+          options,
+          undefined,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+        );
         convertedMemoryTools[toolName] = convertedToCoreTool;
       }
     }
@@ -2313,6 +2321,7 @@ export class Agent<
     requestContext,
     mastraProxy,
     autoResumeSuspendedTools,
+    backgroundTaskEnabled,
     ...rest
   }: {
     runId?: string;
@@ -2321,6 +2330,7 @@ export class Agent<
     requestContext: RequestContext;
     mastraProxy?: MastraUnion;
     autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedWorkspaceTools: Record<string, CoreTool> = {};
@@ -2364,7 +2374,13 @@ export class Agent<
           backgroundConfig: (toolObj as any).background,
           workspace,
         };
-        const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
+        const convertedToCoreTool = makeCoreTool(
+          toolObj,
+          options,
+          undefined,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+        );
         convertedWorkspaceTools[toolName] = convertedToCoreTool;
       }
     }
@@ -2383,6 +2399,7 @@ export class Agent<
     requestContext,
     mastraProxy,
     autoResumeSuspendedTools,
+    backgroundTaskEnabled,
     ...rest
   }: {
     runId?: string;
@@ -2391,6 +2408,7 @@ export class Agent<
     requestContext: RequestContext;
     mastraProxy?: MastraUnion;
     autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     const convertedChannelTools: Record<string, CoreTool> = {};
@@ -2423,6 +2441,7 @@ export class Agent<
           options,
           undefined,
           autoResumeSuspendedTools,
+          backgroundTaskEnabled,
         );
       }
     }
@@ -2444,6 +2463,7 @@ export class Agent<
     requestContext,
     mastraProxy,
     autoResumeSuspendedTools,
+    backgroundTaskEnabled,
     ...rest
   }: {
     runId?: string;
@@ -2452,6 +2472,7 @@ export class Agent<
     requestContext: RequestContext;
     mastraProxy?: MastraUnion;
     autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedSkillTools: Record<string, CoreTool> = {};
@@ -2489,7 +2510,13 @@ export class Agent<
           backgroundConfig: (toolObj as any).background,
           workspace,
         };
-        const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
+        const convertedToCoreTool = makeCoreTool(
+          toolObj,
+          options,
+          undefined,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+        );
         convertedSkillTools[toolName] = convertedToCoreTool;
       }
     }
@@ -2507,6 +2534,7 @@ export class Agent<
     threadId,
     requestContext,
     autoResumeSuspendedTools,
+    backgroundTaskEnabled,
     ...rest
   }: {
     runId?: string;
@@ -2514,6 +2542,7 @@ export class Agent<
     threadId?: string;
     requestContext: RequestContext;
     autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedBrowserTools: Record<string, CoreTool> = {};
@@ -2553,7 +2582,13 @@ export class Agent<
           requireApproval: (toolObj as any).requireApproval,
           backgroundConfig: (toolObj as any).background,
         };
-        const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
+        const convertedToCoreTool = makeCoreTool(
+          toolObj,
+          options,
+          undefined,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+        );
         convertedBrowserTools[toolName] = convertedToCoreTool;
       }
     }
@@ -2827,6 +2862,7 @@ export class Agent<
     mastraProxy,
     outputWriter,
     autoResumeSuspendedTools,
+    backgroundTaskEnabled,
     ...rest
   }: {
     runId?: string;
@@ -2836,6 +2872,7 @@ export class Agent<
     mastraProxy?: MastraUnion;
     outputWriter?: OutputWriter;
     autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
@@ -2871,7 +2908,7 @@ export class Agent<
           requireApproval: (tool as any).requireApproval,
           backgroundConfig: (tool as any).background,
         };
-        return [k, makeCoreTool(tool, options, undefined, autoResumeSuspendedTools)];
+        return [k, makeCoreTool(tool, options, undefined, autoResumeSuspendedTools, backgroundTaskEnabled)];
       }),
     );
 
@@ -2898,6 +2935,7 @@ export class Agent<
     requestContext,
     mastraProxy,
     autoResumeSuspendedTools,
+    backgroundTaskEnabled,
     ...rest
   }: {
     runId?: string;
@@ -2907,6 +2945,7 @@ export class Agent<
     requestContext: RequestContext;
     mastraProxy?: MastraUnion;
     autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
@@ -2940,7 +2979,13 @@ export class Agent<
             requireApproval: (toolObj as any).requireApproval,
             backgroundConfig: (toolObj as any).background,
           };
-          const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset', autoResumeSuspendedTools);
+          const convertedToCoreTool = makeCoreTool(
+            toolObj,
+            options,
+            'toolset',
+            autoResumeSuspendedTools,
+            backgroundTaskEnabled,
+          );
           toolsForRequest[toolName] = convertedToCoreTool;
         }
       }
@@ -2961,6 +3006,7 @@ export class Agent<
     mastraProxy,
     clientTools,
     autoResumeSuspendedTools,
+    backgroundTaskEnabled,
     ...rest
   }: {
     runId?: string;
@@ -2970,6 +3016,7 @@ export class Agent<
     mastraProxy?: MastraUnion;
     clientTools?: ToolsInput;
     autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
@@ -2997,7 +3044,13 @@ export class Agent<
           requireApproval: (tool as any).requireApproval,
           backgroundConfig: (tool as any).background,
         };
-        const convertedToCoreTool = makeCoreTool(toolRest, options, 'client-tool', autoResumeSuspendedTools);
+        const convertedToCoreTool = makeCoreTool(
+          toolRest,
+          options,
+          'client-tool',
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+        );
         toolsForRequest[toolName] = convertedToCoreTool;
       }
     }
@@ -3054,6 +3107,7 @@ export class Agent<
     methodType,
     autoResumeSuspendedTools,
     delegation,
+    backgroundTaskEnabled,
     ...rest
   }: {
     runId?: string;
@@ -3063,6 +3117,7 @@ export class Agent<
     methodType: AgentMethodType;
     autoResumeSuspendedTools?: boolean;
     delegation?: DelegationConfig;
+    backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     const convertedAgentTools: Record<string, CoreTool> = {};
@@ -3896,6 +3951,7 @@ export class Agent<
           options,
           undefined,
           autoResumeSuspendedTools,
+          backgroundTaskEnabled,
         );
       }
     }
@@ -3914,6 +3970,7 @@ export class Agent<
     requestContext,
     methodType,
     autoResumeSuspendedTools,
+    backgroundTaskEnabled,
     ...rest
   }: {
     runId?: string;
@@ -3922,6 +3979,7 @@ export class Agent<
     requestContext: RequestContext;
     methodType: AgentMethodType;
     autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     const convertedWorkflowTools: Record<string, CoreTool> = {};
@@ -4160,6 +4218,7 @@ export class Agent<
           options,
           undefined,
           autoResumeSuspendedTools,
+          backgroundTaskEnabled,
         );
       }
     }
@@ -4183,6 +4242,7 @@ export class Agent<
     memoryConfig,
     autoResumeSuspendedTools,
     delegation,
+    backgroundTaskEnabled,
     ...rest
   }: {
     toolsets?: ToolsetsInput;
@@ -4196,6 +4256,7 @@ export class Agent<
     memoryConfig?: MemoryConfigInternal;
     autoResumeSuspendedTools?: boolean;
     delegation?: DelegationConfig;
+    backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>): Promise<Record<string, CoreTool>> {
     const observabilityContext = resolveObservabilityContext(rest);
     let mastraProxy = undefined;
@@ -4214,6 +4275,7 @@ export class Agent<
       mastraProxy,
       outputWriter,
       autoResumeSuspendedTools,
+      backgroundTaskEnabled,
     });
 
     const memoryTools = await this.listMemoryTools({
@@ -4225,6 +4287,7 @@ export class Agent<
       mastraProxy,
       memoryConfig,
       autoResumeSuspendedTools,
+      backgroundTaskEnabled,
     });
 
     const toolsetTools = await this.listToolsets({
@@ -4236,6 +4299,7 @@ export class Agent<
       mastraProxy,
       toolsets: toolsets!,
       autoResumeSuspendedTools,
+      backgroundTaskEnabled,
     });
 
     const clientSideTools = await this.listClientTools({
@@ -4247,6 +4311,7 @@ export class Agent<
       mastraProxy,
       clientTools: clientTools!,
       autoResumeSuspendedTools,
+      backgroundTaskEnabled,
     });
 
     const agentTools = await this.listAgentTools({
@@ -4278,6 +4343,7 @@ export class Agent<
       ...observabilityContext,
       mastraProxy,
       autoResumeSuspendedTools,
+      backgroundTaskEnabled,
     });
 
     const skillTools = await this.listSkillTools({
@@ -4288,6 +4354,7 @@ export class Agent<
       ...observabilityContext,
       mastraProxy,
       autoResumeSuspendedTools,
+      backgroundTaskEnabled,
     });
 
     const channelTools = await this.listChannelTools({
@@ -4298,6 +4365,7 @@ export class Agent<
       ...observabilityContext,
       mastraProxy,
       autoResumeSuspendedTools,
+      backgroundTaskEnabled,
     });
 
     const browserTools = await this.listBrowserTools({
@@ -4307,6 +4375,7 @@ export class Agent<
       requestContext,
       ...observabilityContext,
       autoResumeSuspendedTools,
+      backgroundTaskEnabled,
     });
 
     const allTools = {
