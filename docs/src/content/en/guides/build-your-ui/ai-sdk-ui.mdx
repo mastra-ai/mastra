@@ -252,7 +252,7 @@ Use [`prepareSendMessagesRequest`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/u
 
 When your agent has [memory](/docs/memory/overview) configured, Mastra loads conversation history from storage on the server. Send only the new message from the client instead of the full conversation history.
 
-Sending the full history is redundant and can cause message ordering bugs because client-side timestamps can conflict with the timestamps stored in your database.
+Sending the full history is redundant and can cause message-ordering bugs because client-side timestamps can conflict with the timestamps stored in your database.
 
 ```typescript
 import { useChat } from '@ai-sdk/react'
