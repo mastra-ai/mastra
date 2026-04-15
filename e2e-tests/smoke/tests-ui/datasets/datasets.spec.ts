@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Datasets', () => {
   test('datasets list page shows create button and heading', async ({ page }) => {
-    await page.goto('/evaluation?tab=datasets');
+    await page.goto('/datasets');
 
     await expect(page.getByRole('heading', { name: 'Datasets', level: 1 })).toBeVisible();
     // "Create Dataset" should always be available
@@ -10,7 +10,7 @@ test.describe('Datasets', () => {
   });
 
   test('create dataset and verify it appears in list', async ({ page }) => {
-    await page.goto('/evaluation?tab=datasets');
+    await page.goto('/datasets');
 
     // Open create dialog
     await page.getByRole('button', { name: 'Create Dataset' }).first().click();
@@ -32,7 +32,7 @@ test.describe('Datasets', () => {
     await expect(page.getByRole('dialog', { name: 'Create Dataset' })).not.toBeVisible({ timeout: 10_000 });
 
     // Reload the page to ensure the new dataset is visible in the list
-    await page.goto('/evaluation?tab=datasets');
+    await page.goto('/datasets');
 
     // Dataset should appear in the list
     await expect(page.getByRole('link', { name: /E2E Test Dataset/ }).first()).toBeVisible({ timeout: 10_000 });
@@ -49,7 +49,7 @@ test.describe('Datasets', () => {
     const datasetId = dataset.id;
 
     // Navigate to dataset detail
-    await page.goto(`/evaluation/datasets/${datasetId}`);
+    await page.goto(`/datasets/${datasetId}`);
     await expect(page.getByRole('heading', { name: 'Items Test Dataset', level: 1 })).toBeVisible({ timeout: 10_000 });
 
     // Should show empty items tab initially — the "Add Item" button should be present
@@ -102,7 +102,7 @@ test.describe('Datasets', () => {
     const dataset = await createRes.json();
     const datasetId = dataset.id;
 
-    await page.goto(`/evaluation/datasets/${datasetId}`);
+    await page.goto(`/datasets/${datasetId}`);
     await expect(page.getByRole('heading', { name: 'Before Edit', level: 1 })).toBeVisible({ timeout: 10_000 });
 
     // Open actions menu → Edit Dataset
@@ -148,7 +148,7 @@ test.describe('Datasets', () => {
     });
     expect(itemRes.ok()).toBeTruthy();
 
-    await page.goto(`/evaluation/datasets/${datasetId}`);
+    await page.goto(`/datasets/${datasetId}`);
     await expect(page.getByRole('heading', { name: 'Edit Item Dataset', level: 1 })).toBeVisible({ timeout: 10_000 });
 
     // Click item button to open detail panel
@@ -196,7 +196,7 @@ test.describe('Datasets', () => {
     });
     expect(itemRes.ok()).toBeTruthy();
 
-    await page.goto(`/evaluation/datasets/${datasetId}`);
+    await page.goto(`/datasets/${datasetId}`);
     await expect(page.getByText('to_delete')).toBeVisible({ timeout: 10_000 });
 
     // Click item button to open detail panel
@@ -233,7 +233,7 @@ test.describe('Datasets', () => {
     const dataset = await createRes.json();
     const datasetId = dataset.id;
 
-    await page.goto(`/evaluation/datasets/${datasetId}`);
+    await page.goto(`/datasets/${datasetId}`);
     await expect(page.getByRole('heading', { name: 'Experiments Tab Dataset', level: 1 })).toBeVisible({ timeout: 10_000 });
 
     // Switch to Experiments tab
@@ -262,7 +262,7 @@ test.describe('Datasets', () => {
     const datasetId = dataset.id;
 
     // Navigate to dataset detail
-    await page.goto(`/evaluation/datasets/${datasetId}`);
+    await page.goto(`/datasets/${datasetId}`);
     await expect(page.getByRole('heading', { name: uniqueName, level: 1 })).toBeVisible({ timeout: 10_000 });
 
     // Open actions menu and click Delete
@@ -275,11 +275,11 @@ test.describe('Datasets', () => {
     await expect(alertDialog.getByText(uniqueName)).toBeVisible();
     await alertDialog.getByRole('button', { name: 'Delete' }).click();
 
-    // Should navigate back to evaluation datasets list
-    await expect(page).toHaveURL(/\/evaluation\?tab=datasets/, { timeout: 10_000 });
+    // Should navigate back to datasets list
+    await expect(page).toHaveURL(/\/datasets/, { timeout: 10_000 });
 
     // The specific dataset link should be removed from the DOM entirely
-    const datasetLink = page.locator(`a[href="/evaluation/datasets/${datasetId}"]`);
+    const datasetLink = page.locator(`a[href="/datasets/${datasetId}"]`);
     await expect(datasetLink).toHaveCount(0, { timeout: 10_000 });
   });
 
@@ -292,7 +292,7 @@ test.describe('Datasets', () => {
     const dataset = await createRes.json();
     const datasetId = dataset.id;
 
-    await page.goto(`/evaluation/datasets/${datasetId}`);
+    await page.goto(`/datasets/${datasetId}`);
     await expect(page.getByRole('heading', { name: 'JSON Import Dataset', level: 1 })).toBeVisible({ timeout: 10_000 });
 
     // On an empty dataset, Import JSON is a direct button in the empty state
@@ -352,7 +352,7 @@ test.describe('Datasets', () => {
     const dataset = await createRes.json();
     const datasetId = dataset.id;
 
-    await page.goto(`/evaluation/datasets/${datasetId}`);
+    await page.goto(`/datasets/${datasetId}`);
     await expect(page.getByRole('heading', { name: 'CSV Import Dataset', level: 1 })).toBeVisible({ timeout: 10_000 });
 
     // On an empty dataset, Import CSV is a direct button in the empty state
@@ -418,7 +418,7 @@ test.describe('Datasets', () => {
     }
 
     // Navigate to dataset page
-    await page.goto(`/evaluation/datasets/${datasetId}`);
+    await page.goto(`/datasets/${datasetId}`);
     await expect(page.getByRole('heading', { name: /Experiment Dataset/ })).toBeVisible({ timeout: 10_000 });
 
     // Click "Run Experiment"
@@ -438,7 +438,7 @@ test.describe('Datasets', () => {
     await dialog.getByRole('button', { name: 'Run' }).click();
 
     // After triggering, the page should navigate to the experiment detail page
-    await page.waitForURL(/\/evaluation\/datasets\/.*\/experiments\//, { timeout: 15_000 });
+    await page.waitForURL(/\/datasets\/.*\/experiments\//, { timeout: 15_000 });
 
     // Wait for the experiment to complete
     await expect(page.getByText('completed', { exact: true })).toBeVisible({ timeout: 30_000 });

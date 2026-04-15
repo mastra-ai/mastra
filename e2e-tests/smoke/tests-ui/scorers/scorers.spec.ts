@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Scorers', () => {
   test('scorers list page shows registered scorers', async ({ page }) => {
-    await page.goto('/evaluation?tab=scorers');
+    await page.goto('/scorers');
 
     await expect(page.getByRole('heading', { name: 'Scorers', level: 1 })).toBeVisible();
 
@@ -33,7 +33,7 @@ test.describe('Scorers', () => {
       expect(body.scores?.some((s: { runId: string }) => s.runId === runId)).toBeTruthy();
     }).toPass({ timeout: 10_000, intervals: [500] });
 
-    await page.goto('/evaluation/scorers/Completeness%20Scorer');
+    await page.goto('/scorers/Completeness%20Scorer');
 
     // Heading and description
     await expect(page.getByRole('heading', { name: 'Completeness Scorer', level: 1 })).toBeVisible({ timeout: 10_000 });
@@ -56,7 +56,7 @@ test.describe('Scorers', () => {
     await page.getByRole('option', { name: 'Length Check Scorer' }).click();
 
     // Page navigates to the other scorer (URL uses scorer id or name depending on version)
-    await expect(page).toHaveURL(/\/evaluation\/scorers\//, { timeout: 5_000 });
+    await expect(page).toHaveURL(/\/scorers\//, { timeout: 5_000 });
     await expect(page.getByRole('heading', { name: 'Length Check Scorer', level: 1 })).toBeVisible();
     await expect(page.getByText('No scores for this scorer yet')).toBeVisible();
   });
