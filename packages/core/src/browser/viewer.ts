@@ -1530,7 +1530,19 @@ export class BrowserViewer extends MastraBrowser implements CdpSessionProvider {
 
   private handleDisconnect(): void {
     this.setCdpClient(null);
+
+    // Clear stale target/session state so reconnect starts fresh
+    if (this.sharedState) {
+      this.sharedState.pageTargets.clear();
+      this.sharedState.activeTargetId = null;
+      this.sharedState.screencastStream = null;
+    }
+
     this.notifyBrowserClosed();
+
+    // Restart polling so we detect when the browser comes back
+    // (e.g., agent runs `agent-browser open` again after closing)
+    this.startPollingForBrowser();
   }
 
   // ---------------------------------------------------------------------------
