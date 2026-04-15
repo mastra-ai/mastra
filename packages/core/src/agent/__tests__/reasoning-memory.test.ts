@@ -905,10 +905,10 @@ describe('Reasoning Data Spy: Response vs Request Comparison (Issue #12980)', ()
    *   - "Item 'rs_*' of type 'reasoning' was provided without its required following item"
    *   - "Item 'msg_*' of type 'message' was provided without its required 'reasoning' item"
    *
-   * The fix strips reasoning parts AND clears providerMetadata.openai from text parts
-   * so the SDK sends inline content instead of item_reference.
+   * With v3 providers, reasoning items are serialized natively via item_reference
+   * and OpenAI resolves them server-side. Reasoning and itemIds must be preserved.
    */
-  it('should strip OpenAI reasoning and providerMetadata through round-trip', async () => {
+  it('should preserve OpenAI reasoning and providerMetadata through round-trip', async () => {
     const threadId = randomUUID();
     const resourceId = 'user-spy-openai';
     const reasoningItemId = 'rs_spy_reasoning_123';
@@ -1045,15 +1045,19 @@ describe('Reasoning Data Spy: Response vs Request Comparison (Issue #12980)', ()
     const turn2Content = turn2AssistantMsg!.content as any[];
 
     // === KEY ASSERTIONS ===
+    // With v3 providers, reasoning and itemIds must be PRESERVED so the SDK can
+    // send item_reference and OpenAI resolves them server-side. Stripping them
+    // caused "item missing its reasoning part" errors in multi-step conversations.
 
-    // 1. Reasoning parts must NOT be sent to the LLM (would cause item pairing errors)
+    // 1. Reasoning parts must be preserved (v3 providers serialize them natively)
     const turn2Reasoning = turn2Content.find((p: any) => p.type === 'reasoning');
-    expect(turn2Reasoning).toBeUndefined();
+    expect(turn2Reasoning).toBeDefined();
+    expect(turn2Reasoning.providerOptions?.openai?.itemId).toBe(reasoningItemId);
 
-    // 2. Text must survive but WITHOUT providerMetadata.openai (would cause item_reference linking)
+    // 2. Text must survive WITH providerOptions.openai (itemId for item_reference)
     const turn2Text = turn2Content.find((p: any) => p.type === 'text');
     expect(turn2Text).toBeDefined();
     expect(turn2Text.text).toBe('The answer is 42.');
-    expect(turn2Text.providerOptions?.openai).toBeUndefined();
+    expect(turn2Text.providerOptions?.openai?.itemId).toBe(textItemId);
   });
 });

@@ -44,4 +44,19 @@ describe('findProviderToolByName', () => {
     // The LLM reports just the suffix (e.g. 'web_search'), not the full id ('openai.web_search')
     expect(findProviderToolByName(tools, 'openai.web_search')).toBeUndefined();
   });
+
+  it('should match versioned Anthropic tools by their name property', () => {
+    const toolsWithAnthropic = {
+      anthropicSearch: {
+        type: 'provider-defined' as const,
+        id: 'anthropic.web_search_20250305',
+        name: 'web_search',
+        args: {},
+      },
+    } as any;
+    // The model returns 'web_search' but getProviderToolName would return 'web_search_20250305'
+    expect(findProviderToolByName(toolsWithAnthropic, 'web_search')).toBe(toolsWithAnthropic.anthropicSearch);
+    // The versioned name should still match via getProviderToolName
+    expect(findProviderToolByName(toolsWithAnthropic, 'web_search_20250305')).toBe(toolsWithAnthropic.anthropicSearch);
+  });
 });
