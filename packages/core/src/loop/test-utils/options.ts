@@ -2761,16 +2761,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                         "type": "step-start",
                       },
                     ],
-                    "toolInvocations": [
-                      {
-                        "args": {
-                          "value": "value",
-                        },
-                        "state": "call",
-                        "toolCallId": "call-1",
-                        "toolName": "tool1",
-                      },
-                    ],
                   },
                   "createdAt": 2024-01-01T00:00:00.003Z,
                   "id": "msg-0",
