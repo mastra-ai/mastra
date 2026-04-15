@@ -1017,6 +1017,10 @@ export class StoreMemoryUpstash extends MemoryStorage {
           if (message && message.id === messageId) {
             existingMessages.push(message);
             messageIdToKey[messageId] = key;
+            // Backfill the index so future lookups hit the fast path
+            if (message.threadId) {
+              await this.client.set(getMessageIndexKey(messageId), message.threadId);
+            }
             break;
           }
         }
