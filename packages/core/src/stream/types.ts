@@ -375,6 +375,34 @@ interface IsTaskCompletePayload {
   suppressFeedback: boolean;
 }
 
+export interface BackgroundTaskStartedPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+}
+
+export interface BackgroundTaskResultPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  result: unknown;
+  runId: string;
+}
+
+export interface BackgroundTaskFailedPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  error: { message: string };
+}
+
+export interface BackgroundTaskProgressPayload {
+  taskIds: string[];
+  runningCount: number;
+  elapsedMs: number;
+}
+
 // Network-specific payload interfaces
 interface RoutingAgentStartPayload {
   agentId: string;
@@ -684,7 +712,23 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'step-output'; payload: StepOutputPayload })
   | (BaseChunkType & { type: 'watch'; payload: WatchPayload })
   | (BaseChunkType & { type: 'tripwire'; payload: TripwirePayload })
-  | (BaseChunkType & { type: 'is-task-complete'; payload: IsTaskCompletePayload });
+  | (BaseChunkType & { type: 'is-task-complete'; payload: IsTaskCompletePayload })
+  | (BaseChunkType & {
+      type: 'background-task-started';
+      payload: BackgroundTaskStartedPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-completed';
+      payload: BackgroundTaskResultPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-failed';
+      payload: BackgroundTaskFailedPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-progress';
+      payload: BackgroundTaskProgressPayload;
+    });
 
 export type WorkflowStreamEvent =
   | (BaseChunkType & {

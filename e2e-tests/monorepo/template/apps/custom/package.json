@@ -19,7 +19,7 @@
     "@inner/hello-world": "workspace:*",
     "date-fns": "^4.1.0",
     "lodash": "^4.17.23",
-    "hono": "^4.11.7",
+    "hono": "^4.12.12",
     "unicorn-magic": "0.4.0",
     "zod": "^4.0.0"
   },

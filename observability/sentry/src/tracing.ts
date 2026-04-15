@@ -287,7 +287,19 @@ export class SentryExporter extends BaseExporter {
         message: span.errorInfo.message,
       });
 
-      Sentry.captureException(span.errorInfo.message, {
+      // Build an Error instance so Sentry can use the real stack trace captured
+      // by observability rather than synthesizing one from this exporter's call site.
+      // Passing a string to Sentry.captureException produces a stack that points to
+      // handleSpanEnded, hiding the real error origin.
+      const error = new Error(span.errorInfo.message);
+      if (span.errorInfo.name) {
+        error.name = span.errorInfo.name;
+      }
+      if (span.errorInfo.stack) {
+        error.stack = span.errorInfo.stack;
+      }
+
+      Sentry.captureException(error, {
         contexts: {
           trace: { trace_id: span.traceId, span_id: span.id },
           span_info: {
