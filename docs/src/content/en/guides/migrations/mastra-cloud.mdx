@@ -52,11 +52,136 @@ The Mastra platform replaces Mastra Cloud with separate Studio and Server produc
 
 ## Replace Mastra Cloud Store with a hosted database
 
-Mastra Cloud provided a managed LibSQL database. The Mastra platform does not host a database for you, so you need to point your storage at an externally hosted instance.
+Mastra Cloud provided a managed libSQL database, backed by [Turso](https://turso.tech). The Mastra platform does not host a database for you, so you need to point your storage at an externally hosted instance.
 
-If you were already using a hosted database ("bring your own"), no changes are needed. Make sure the connection string is set as an environment variable in the dashboard rather than hardcoded.
+If you were already using a hosted database ("bring your own"), no changes are needed. Ensure the connection string is set as an environment variable in the dashboard rather than hardcoded.
 
-If you were using `file:./mastra.db` with Cloud Store, please [contact support](mailto:support@mastra.ai) for a migration path to export and import your data.
+If you were using Cloud Store, follow the steps below to export your data and load it into a new libSQL database that you control.
+
+### Export your Cloud Store data
+
+Cloud Store data lives in a Turso-hosted libSQL database. Exporting it requires the database URL and an auth token, then a SQL dump via the [Turso CLI](https://docs.turso.tech/cli).
+
+<Steps>
+  <StepItem>
+    Request your Cloud Store credentials from support.
+
+    Email [support@mastra.ai](mailto:support@mastra.ai) from the address associated with your Mastra Cloud account and ask for the libSQL URL and auth token for the project you want to export. Support will return:
+
+    - `MASTRA_STORAGE_URL`: A libSQL connection string (e.g. `libsql://<db-name>-<org>.turso.io`).
+    - `MASTRA_STORAGE_AUTH_TOKEN`: A read-capable auth token scoped to that database.
+
+    :::note
+    Self-serve retrieval of these credentials from the dashboard and CLI is on the roadmap. Until it ships, support is the supported path.
+    :::
+  </StepItem>
+
+  <StepItem>
+    Install the Turso CLI.
+
+    ```bash
+    curl -sSfL https://get.tur.so/install.sh | bash
+    ```
+
+    See the [Turso CLI installation docs](https://docs.turso.tech/cli/installation) for alternatives (Homebrew, Windows).
+  </StepItem>
+
+  <StepItem>
+    Export the database to a SQL dump.
+
+    Set the credentials from support as environment variables, then dump the database to a local file:
+
+    ```bash
+    export MASTRA_STORAGE_URL="libsql://<db-name>-<org>.turso.io"
+    export MASTRA_STORAGE_AUTH_TOKEN="<token-from-support>"
+
+    turso db shell "$MASTRA_STORAGE_URL?authToken=$MASTRA_STORAGE_AUTH_TOKEN" ".dump" > mastra-cloud-dump.sql
+    ```
+
+    The resulting `mastra-cloud-dump.sql` contains the full schema and data: thread and message history, workflow snapshots, traces, and eval scores. Store it somewhere safe before continuing.
+  </StepItem>
+</Steps>
+
+### Load the dump into a new libSQL database
+
+The dump is a standard SQL file and can be loaded into any libSQL-compatible database. The example below uses a new Turso-hosted database, which keeps the migration like-for-like and avoids schema translation.
+
+<Steps>
+  <StepItem>
+    Authenticate the Turso CLI against your own Turso account.
+
+    ```bash
+    turso auth login
+    ```
+
+    If you do not have a Turso account, the CLI will prompt you to create one. See [Turso pricing](https://turso.tech/pricing) for plan details.
+  </StepItem>
+
+  <StepItem>
+    Create a new database to receive the dump.
+
+    ```bash
+    turso db create mastra-migrated
+    ```
+
+    Pick a region close to where your Mastra Server runs to minimize latency. List available regions with `turso db locations`.
+  </StepItem>
+
+  <StepItem>
+    Load the dump into the new database.
+
+    ```bash
+    turso db shell mastra-migrated < mastra-cloud-dump.sql
+    ```
+
+    The shell streams each statement from the dump file into the new database. For multi-gigabyte dumps this can take several minutes.
+  </StepItem>
+
+  <StepItem>
+    Generate connection credentials for the new database.
+
+    ```bash
+    turso db show mastra-migrated --url
+    turso db tokens create mastra-migrated
+    ```
+
+    The first command prints the libSQL URL. The second prints an auth token. Both are needed by `LibSQLStore`.
+  </StepItem>
+</Steps>
+
+### Point your Mastra app at the new database
+
+Set the new credentials as environment variables, either locally in `.env` or in the Mastra platform dashboard:
+
+```bash title=".env"
+TURSO_DATABASE_URL="libsql://mastra-migrated-<org>.turso.io"
+TURSO_AUTH_TOKEN="<token-from-turso-db-tokens-create>"
+```
+
+Configure `LibSQLStore` to read from those variables:
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { LibSQLStore } from '@mastra/libsql'
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'libsql-storage',
+    url: process.env.TURSO_DATABASE_URL!,
+    authToken: process.env.TURSO_AUTH_TOKEN,
+  }),
+})
+```
+
+See the [libSQL storage reference](/reference/storage/libsql) for the full set of options.
+
+### Verify the migration
+
+Before decommissioning your Cloud project, confirm the new database serves the data your app expects.
+
+- Run `turso db shell mastra-migrated "SELECT name FROM sqlite_master WHERE type='table';"` to list tables. The output should include the Mastra-managed tables (e.g. `mastra_threads`, `mastra_messages`, `mastra_workflow_snapshot`, `mastra_traces`).
+- Run a row count against a known-populated table, for example `turso db shell mastra-migrated "SELECT COUNT(*) FROM mastra_messages;"`, and compare it to the same query against the Cloud Store URL.
+- Start your Mastra app against the new credentials and confirm that an existing thread or workflow run loads as expected in [Studio](/docs/studio/observability).
 
 ## Update observability configuration
 
