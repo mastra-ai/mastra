@@ -285,17 +285,16 @@ export class AzureBlobFilesystem extends MastraFilesystem {
       } else if (this.useDefaultCredential) {
         // Dynamically import @azure/identity to avoid requiring it when not used.
         // Must use import() (not require()) because this package is ESM-first.
-        let DefaultAzureCredential: new () => unknown;
         try {
           const identity = await import('@azure/identity');
-          DefaultAzureCredential = identity.DefaultAzureCredential;
+          const credential = new identity.DefaultAzureCredential();
+          serviceClient = new BlobServiceClient(baseUrl, credential);
         } catch {
           throw new Error(
             'DefaultAzureCredential requires @azure/identity to be installed. ' +
               'Install it with: npm install @azure/identity',
           );
         }
-        serviceClient = new BlobServiceClient(baseUrl, new DefaultAzureCredential());
       } else {
         // Anonymous access
         serviceClient = new BlobServiceClient(baseUrl);
