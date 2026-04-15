@@ -197,6 +197,61 @@ describe('saveMessages uses msg-idx index instead of scanning', () => {
     const { messages } = await memoryDomain.listMessages({ threadId: thread.id });
     expect(messages.find(m => m.id === message.id)?.threadId).toBe(thread.id);
   });
+
+  it('updates both touched thread timestamps when moving a message between threads', async () => {
+    const memoryDomain = new StoreMemoryUpstash({ client: createTestClient() });
+    await memoryDomain.init();
+
+    const sourceThread = createThread();
+    const targetThread = createThread(sourceThread.resourceId);
+    await memoryDomain.saveThread({ thread: sourceThread });
+    await memoryDomain.saveThread({ thread: targetThread });
+
+    const originalMessage = createMessage(sourceThread);
+    await memoryDomain.saveMessages({ messages: [originalMessage] });
+
+    const beforeMoveSourceThread = await memoryDomain.getThreadById({ threadId: sourceThread.id });
+    const beforeMoveTargetThread = await memoryDomain.getThreadById({ threadId: targetThread.id });
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    const movedMessage = createMessage(targetThread, {
+      id: originalMessage.id,
+      resourceId: targetThread.resourceId,
+    });
+    await memoryDomain.saveMessages({ messages: [movedMessage] });
+
+    const afterMoveSourceThread = await memoryDomain.getThreadById({ threadId: sourceThread.id });
+    const afterMoveTargetThread = await memoryDomain.getThreadById({ threadId: targetThread.id });
+
+    expect(new Date(afterMoveSourceThread!.updatedAt).getTime()).toBeGreaterThan(
+      new Date(beforeMoveSourceThread!.updatedAt).getTime(),
+    );
+    expect(new Date(afterMoveTargetThread!.updatedAt).getTime()).toBeGreaterThan(
+      new Date(beforeMoveTargetThread!.updatedAt).getTime(),
+    );
+  });
+
+  it('rejects the batch when any target thread does not exist', async () => {
+    const memoryDomain = new StoreMemoryUpstash({ client: createTestClient() });
+    await memoryDomain.init();
+
+    const existingThread = createThread();
+    const missingThread = createThread(existingThread.resourceId);
+    await memoryDomain.saveThread({ thread: existingThread });
+
+    const validMessage = createMessage(existingThread);
+    const invalidMessage = createMessage(missingThread);
+
+    await expect(
+      memoryDomain.saveMessages({
+        messages: [validMessage, invalidMessage],
+      }),
+    ).rejects.toThrow(`Thread ${missingThread.id} not found`);
+
+    const { messages } = await memoryDomain.listMessages({ threadId: existingThread.id });
+    expect(messages).toHaveLength(0);
+  });
 });
 
 describe('updateMessages keeps msg-idx index in sync', () => {
@@ -225,5 +280,30 @@ describe('updateMessages keeps msg-idx index in sync', () => {
     const { messages } = await memoryDomain.listMessagesById({ messageIds: [originalMessage.id] });
     expect(messages).toHaveLength(1);
     expect(messages[0]!.threadId).toBe(targetThread.id);
+  });
+
+  it('rejects moving a message to a missing thread without mutating stored data', async () => {
+    const memoryDomain = new StoreMemoryUpstash({ client: createTestClient() });
+    await memoryDomain.init();
+
+    const sourceThread = createThread();
+    const missingThread = createThread(sourceThread.resourceId);
+    await memoryDomain.saveThread({ thread: sourceThread });
+
+    const originalMessage = createMessage(sourceThread);
+    await memoryDomain.saveMessages({ messages: [originalMessage] });
+
+    await expect(
+      memoryDomain.updateMessages({
+        messages: [{ id: originalMessage.id, threadId: missingThread.id }],
+      }),
+    ).rejects.toThrow(`Thread ${missingThread.id} not found`);
+
+    const client = (memoryDomain as any).client as Redis;
+    expect(await client.get<string>(`msg-idx:${originalMessage.id}`)).toBe(sourceThread.id);
+
+    const { messages } = await memoryDomain.listMessages({ threadId: sourceThread.id });
+    expect(messages).toHaveLength(1);
+    expect(messages[0]!.threadId).toBe(sourceThread.id);
   });
 });

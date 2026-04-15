@@ -330,16 +330,16 @@ export class StoreMemoryUpstash extends MemoryStorage {
     const { messages } = args;
     if (messages.length === 0) return { messages: [] };
 
-    const threadId = messages[0]?.threadId;
     try {
-      if (!threadId) {
-        throw new Error('Thread ID is required');
-      }
-
-      // Check if thread exists
-      const thread = await this.getThreadById({ threadId });
-      if (!thread) {
-        throw new Error(`Thread ${threadId} not found`);
+      for (const message of messages) {
+        if (!message.threadId) {
+          throw new Error('Thread ID is required');
+        }
+        if (!message.resourceId) {
+          throw new Error(
+            `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
+          );
+        }
       }
     } catch (error) {
       throw new MastraError(
@@ -354,48 +354,82 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
     // Add an index to each message to maintain order
     const messagesWithIndex = messages.map((message, index) => {
-      if (!message.threadId) {
-        throw new Error(
-          `Expected to find a threadId for message, but couldn't find one. An unexpected error has occurred.`,
-        );
-      }
-      if (!message.resourceId) {
-        throw new Error(
-          `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
-        );
-      }
       return {
         ...message,
         _index: index,
       };
     });
 
-    // Get current thread data once (all messages belong to same thread)
-    const threadKey = getKey(TABLE_THREADS, { id: threadId });
-    const existingThread = await this.client.get<StorageThreadType>(threadKey);
-
     try {
       const batchSize = 1000;
+      const targetThreadIds = new Set(messagesWithIndex.map(message => message.threadId!));
+      const existingThreadIds: (string | null)[] = [];
+      const touchedThreadIds = new Set<string>(targetThreadIds);
+
+      // Read index entries up front so all touched threads can be validated/loaded before writes.
       for (let i = 0; i < messagesWithIndex.length; i += batchSize) {
         const batch = messagesWithIndex.slice(i, i + batchSize);
-        const pipeline = this.client.pipeline();
         const indexLookupPipeline = this.client.pipeline();
 
         batch.forEach(message => {
           indexLookupPipeline.get(getMessageIndexKey(message.id));
         });
-        const existingThreadIds = (await indexLookupPipeline.exec()) as (string | null)[];
+        const batchExistingThreadIds = (await indexLookupPipeline.exec()) as (string | null)[];
+        existingThreadIds.push(...batchExistingThreadIds);
+
+        batchExistingThreadIds.forEach(existingThreadId => {
+          if (existingThreadId) {
+            touchedThreadIds.add(existingThreadId);
+          }
+        });
+      }
+
+      const touchedThreadIdList = Array.from(touchedThreadIds);
+      const threadLookupPipeline = this.client.pipeline();
+      touchedThreadIdList.forEach(touchedThreadId => {
+        threadLookupPipeline.get(getKey(TABLE_THREADS, { id: touchedThreadId }));
+      });
+      const threadLookupResults = (await threadLookupPipeline.exec()) as (StorageThreadType | null)[];
+      const threadRecordsById = new Map<string, StorageThreadType>();
+
+      touchedThreadIdList.forEach((touchedThreadId, index) => {
+        const threadRecord = threadLookupResults[index];
+        if (threadRecord) {
+          threadRecordsById.set(touchedThreadId, threadRecord);
+        }
+      });
+
+      for (const targetThreadId of targetThreadIds) {
+        if (!threadRecordsById.has(targetThreadId)) {
+          throw new MastraError(
+            {
+              id: createStorageErrorId('UPSTASH', 'SAVE_MESSAGES', 'INVALID_ARGS'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+            },
+            new Error(`Thread ${targetThreadId} not found`),
+          );
+        }
+      }
+
+      for (let i = 0; i < messagesWithIndex.length; i += batchSize) {
+        const batch = messagesWithIndex.slice(i, i + batchSize);
+        const pipeline = this.client.pipeline();
+        const batchTouchedThreadIds = new Set<string>();
+        const batchExistingThreadIds = existingThreadIds.slice(i, i + batch.length);
 
         for (const [batchIndex, message] of batch.entries()) {
           const key = getMessageKey(message.threadId!, message.id);
           const createdAtScore = new Date(message.createdAt).getTime();
           const score = message._index !== undefined ? message._index : createdAtScore;
+          batchTouchedThreadIds.add(message.threadId!);
 
           // Check if this message id exists in another thread (index lookup, no scan)
-          const existingThreadId = existingThreadIds[batchIndex];
+          const existingThreadId = batchExistingThreadIds[batchIndex];
           if (existingThreadId && existingThreadId !== message.threadId) {
             pipeline.del(getMessageKey(existingThreadId, message.id));
             pipeline.zrem(getThreadMessagesKey(existingThreadId), message.id);
+            batchTouchedThreadIds.add(existingThreadId);
           }
 
           // Store the message data
@@ -411,13 +445,19 @@ export class StoreMemoryUpstash extends MemoryStorage {
           });
         }
 
-        // Update the thread's updatedAt field (only in the first batch)
-        if (i === 0 && existingThread) {
+        const now = new Date();
+        for (const touchedThreadId of batchTouchedThreadIds) {
+          const existingThread = threadRecordsById.get(touchedThreadId);
+          if (!existingThread) {
+            continue;
+          }
           const updatedThread = {
             ...existingThread,
-            updatedAt: new Date(),
+            updatedAt: now,
           };
+          const threadKey = getKey(TABLE_THREADS, { id: touchedThreadId });
           pipeline.set(threadKey, processRecord(TABLE_THREADS, updatedThread).processedRecord);
+          threadRecordsById.set(touchedThreadId, updatedThread);
         }
 
         await pipeline.exec();
@@ -426,13 +466,16 @@ export class StoreMemoryUpstash extends MemoryStorage {
       const list = new MessageList().add(messages as any, 'memory');
       return { messages: list.get.all.db() };
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('UPSTASH', 'SAVE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            threadId,
+            threadIds: Array.from(new Set(messages.map(message => message.threadId).filter(Boolean))).join(','),
           },
         },
         error,
@@ -904,6 +947,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     try {
       // Get all message IDs to update
       const messageIds = messages.map(m => m.id);
+      const updatesById = new Map(messages.map(message => [message.id, message]));
 
       // Find all existing messages — try index first, fall back to scan
       const existingMessages: MastraDBMessage[] = [];
@@ -977,21 +1021,62 @@ export class StoreMemoryUpstash extends MemoryStorage {
       }
 
       const threadIdsToUpdate = new Set<string>();
+      const destinationThreadIds = new Set<string>();
+
+      for (const existingMessage of existingMessages) {
+        const updatePayload = updatesById.get(existingMessage.id);
+        if (!updatePayload) continue;
+
+        const { id: _id, ...fieldsToUpdate } = updatePayload;
+        if (Object.keys(fieldsToUpdate).length === 0) continue;
+
+        threadIdsToUpdate.add(existingMessage.threadId!);
+        if (updatePayload.threadId && updatePayload.threadId !== existingMessage.threadId) {
+          threadIdsToUpdate.add(updatePayload.threadId);
+          destinationThreadIds.add(updatePayload.threadId);
+        }
+      }
+
+      const threadRecordsById = new Map<string, StorageThreadType>();
+      if (threadIdsToUpdate.size > 0) {
+        const threadIdList = Array.from(threadIdsToUpdate);
+        const threadLookupPipeline = this.client.pipeline();
+
+        threadIdList.forEach(threadId => {
+          threadLookupPipeline.get(getKey(TABLE_THREADS, { id: threadId }));
+        });
+        const threadLookupResults = (await threadLookupPipeline.exec()) as (StorageThreadType | null)[];
+
+        threadIdList.forEach((threadId, index) => {
+          const threadRecord = threadLookupResults[index];
+          if (threadRecord) {
+            threadRecordsById.set(threadId, threadRecord);
+          }
+        });
+      }
+
+      for (const destinationThreadId of destinationThreadIds) {
+        if (!threadRecordsById.has(destinationThreadId)) {
+          throw new MastraError(
+            {
+              id: createStorageErrorId('UPSTASH', 'UPDATE_MESSAGES', 'INVALID_ARGS'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+            },
+            new Error(`Thread ${destinationThreadId} not found`),
+          );
+        }
+      }
+
       const pipeline = this.client.pipeline();
 
       // Process each existing message for updates
       for (const existingMessage of existingMessages) {
-        const updatePayload = messages.find(m => m.id === existingMessage.id);
+        const updatePayload = updatesById.get(existingMessage.id);
         if (!updatePayload) continue;
 
         const { id, ...fieldsToUpdate } = updatePayload;
         if (Object.keys(fieldsToUpdate).length === 0) continue;
-
-        // Track thread IDs that need updating
-        threadIdsToUpdate.add(existingMessage.threadId!);
-        if (updatePayload.threadId && updatePayload.threadId !== existingMessage.threadId) {
-          threadIdsToUpdate.add(updatePayload.threadId);
-        }
 
         // Create updated message object
         const updatedMessage = { ...existingMessage };
@@ -1060,14 +1145,15 @@ export class StoreMemoryUpstash extends MemoryStorage {
       const now = new Date();
       for (const threadId of threadIdsToUpdate) {
         if (threadId) {
-          const threadKey = getKey(TABLE_THREADS, { id: threadId });
-          const existingThread = await this.client.get<StorageThreadType>(threadKey);
+          const existingThread = threadRecordsById.get(threadId);
           if (existingThread) {
             const updatedThread = {
               ...existingThread,
               updatedAt: now,
             };
+            const threadKey = getKey(TABLE_THREADS, { id: threadId });
             pipeline.set(threadKey, processRecord(TABLE_THREADS, updatedThread).processedRecord);
+            threadRecordsById.set(threadId, updatedThread);
           }
         }
       }
@@ -1089,6 +1175,9 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
       return updatedMessages;
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('UPSTASH', 'UPDATE_MESSAGES', 'FAILED'),
