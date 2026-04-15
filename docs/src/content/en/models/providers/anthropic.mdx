@@ -388,8 +388,26 @@ const response = await agent.generate("Hello!", {
         "isOptional": true
     },
     {
+        "name": "metadata",
+        "type": "{ userId?: string | undefined; } | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "mcpServers",
+        "type": "{ type: \"url\"; name: string; url: string; authorizationToken?: string | null | undefined; toolConfiguration?: { enabled?: boolean | null | undefined; allowedTools?: string[] | null | undefined; } | null | undefined; }[] | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
         "name": "container",
         "type": "{ id?: string | undefined; skills?: { type: \"anthropic\" | \"custom\"; skillId: string; version?: string | undefined; }[] | undefined; } | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "toolStreaming",
+        "type": "boolean | undefined",
         "description": "",
         "isOptional": true
     },
@@ -401,13 +419,25 @@ const response = await agent.generate("Hello!", {
     },
     {
         "name": "speed",
-        "type": "\"fast\" | undefined",
+        "type": "\"fast\" | \"standard\" | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "inferenceGeo",
+        "type": "\"us\" | \"global\" | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "anthropicBeta",
+        "type": "string[] | undefined",
         "description": "",
         "isOptional": true
     },
     {
         "name": "contextManagement",
-        "type": "{ edits: ({ type: \"clear_01\"; trigger?: { type: \"input_tokens\"; value: number; } | undefined; keep?: \"all\" | { type: \"thinking_turns\"; value: number; } | undefined; } | { type: \"compact_20260112\"; trigger?: { ...; } | undefined; pauseAfterCompaction?: boolean | undefined; instructions?: string | undefined; })[]; } |...",
+        "type": "{ edits: ({ type: \"clear_tool_uses_20250919\"; trigger?: { type: \"input_tokens\"; value: number; } | { type: \"tool_uses\"; value: number; } | undefined; keep?: { type: \"tool_uses\"; value: number; } | undefined; clearAtLeast?: { ...; } | undefined; clearToolInputs?: boolean | undefined; excludeTools?: string[] | undefin...",
         "description": "",
         "isOptional": true
     }
