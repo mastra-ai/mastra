@@ -6,7 +6,9 @@ import { getProviderToolName, isProviderTool } from './toolchecks';
  */
 export function findProviderToolByName(tools: ToolSet | undefined, toolName: string): Tool | undefined {
   if (!tools) return undefined;
-  return Object.values(tools).find(t => isProviderTool(t) && getProviderToolName(t.id) === toolName);
+  return Object.values(tools).find(
+    t => isProviderTool(t) && (getProviderToolName(t.id) === toolName || (t as any).name === toolName),
+  );
 }
 
 /**

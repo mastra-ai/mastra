@@ -1,5 +1,73 @@
 # mastra
 
+## 1.6.0
+
+### Minor Changes
+
+- Added `mastra server env pull [file]` command. Downloads environment variables from a deployed Mastra Server project into a local `.env` file. This is the inverse of `mastra server env import` and is useful in automated pipelines where you authenticate with a single API token and pull all other variables at runtime. ([#15355](https://github.com/mastra-ai/mastra/pull/15355))
+
+### Patch Changes
+
+- Improved Playground UI: disabled agent tabs now show tooltips with docs links explaining how to enable them. Experiment headers link to the agent version in the editor. Trace details show experiment and version as clickable cross-links. ([#15317](https://github.com/mastra-ai/mastra/pull/15317))
+
+- Update references to "Mastra Cloud" to "Mastra platform" ([#15297](https://github.com/mastra-ai/mastra/pull/15297))
+
+- Fixed headless server deploys so they can use .mastra-project.json for org and project resolution in CI. ([#15299](https://github.com/mastra-ai/mastra/pull/15299))
+
+- Fixed `mastra studio deploy` and `mastra server deploy` so transient polling failures are retried up to 3 times before the CLI exits. ([#15350](https://github.com/mastra-ai/mastra/pull/15350))
+
+- Fixed `mastra server deploy` and `mastra studio deploy` failing when deploying from a subdirectory (e.g. `mastra server deploy src`). ([#15253](https://github.com/mastra-ai/mastra/pull/15253))
+  Added `--debug` flag to both deploy commands for verbose build logs.
+  Fixed build errors displaying as `error: {}` instead of the actual error message.
+
+- Fixed `mastra dev` so shutdown and hot reload fully stop the previous server before continuing, reducing orphaned processes and port-in-use errors after terminal close or restart. ([#15278](https://github.com/mastra-ai/mastra/pull/15278))
+
+- Added `mastra server pause` and `mastra server restart` for Mastra Server projects. Pause stops the running server for your linked project; restart starts a paused or stopped server. ([#15295](https://github.com/mastra-ai/mastra/pull/15295))
+
+- Refresh Studio Evaluation pages with an updated UI and flattened top-level URLs (`/scorers`, `/datasets`, `/experiments`; `/evaluation` remains as the overview). `@mastra/playground-ui` removes `EvaluationDashboard` and all `Evaluation*`-prefixed list components, constants, and hooks — use the per-domain replacements (e.g. `ScorersList`) instead. ([#15258](https://github.com/mastra-ai/mastra/pull/15258))
+
+- Fixed `mastra studio deploy` reporting raw version specifiers (e.g. `catalog:`, `workspace:*`) instead of the actual installed version. The deploy command now resolves the real semver version from node_modules. ([#15378](https://github.com/mastra-ai/mastra/pull/15378))
+
+- Fixed `mastra server deploy` getting stuck in `queued` after transient upload confirmation failures. The CLI now retries these failures and cleans up failed deploys so they no longer remain orphaned. ([#15371](https://github.com/mastra-ai/mastra/pull/15371))
+
+- Updated dependencies [[`87df955`](https://github.com/mastra-ai/mastra/commit/87df955c028660c075873fd5d74af28233ce32eb), [`d135f00`](https://github.com/mastra-ai/mastra/commit/d135f00e9b0ed7c48f91140a1f83035661888f5c), [`8fad147`](https://github.com/mastra-ai/mastra/commit/8fad14759804179c8e080ce4d9dec6ef1a808b31), [`582644c`](https://github.com/mastra-ai/mastra/commit/582644c4a87f83b4f245a84d72b9e8590585012e), [`cbdf3e1`](https://github.com/mastra-ai/mastra/commit/cbdf3e12b3d0c30a6e5347be658e2009648c130a), [`8fe46d3`](https://github.com/mastra-ai/mastra/commit/8fe46d354027f3f0f0846e64219772348de106dd), [`18c67db`](https://github.com/mastra-ai/mastra/commit/18c67dbb9c9ebc26f26f65f7d3ff836e5691ef46), [`4ba3bb1`](https://github.com/mastra-ai/mastra/commit/4ba3bb1e465ad2ddaba3bbf2bc47e0faec32985e), [`5d84914`](https://github.com/mastra-ai/mastra/commit/5d84914e0e520c642a40329b210b413fcd139898), [`8dcc77e`](https://github.com/mastra-ai/mastra/commit/8dcc77e78a5340f5848f74b9e9f1b3da3513c1f5), [`aa67fc5`](https://github.com/mastra-ai/mastra/commit/aa67fc59ee8a5eeff1f23eb05970b8d7a536c8ff), [`fd2f314`](https://github.com/mastra-ai/mastra/commit/fd2f31473d3449b6b97e837ef8641264377f41a7), [`fa8140b`](https://github.com/mastra-ai/mastra/commit/fa8140bcd4251d2e3ac85fdc5547dfc4f372b5be), [`190f452`](https://github.com/mastra-ai/mastra/commit/190f45258b0640e2adfc8219fa3258cdc5b8f071), [`e80fead`](https://github.com/mastra-ai/mastra/commit/e80fead1412cc0d1b2f7d6a1ce5017d9e0098ff7), [`0287b64`](https://github.com/mastra-ai/mastra/commit/0287b644a5c3272755cf3112e71338106664103b), [`7e7bf60`](https://github.com/mastra-ai/mastra/commit/7e7bf606886bf374a6f9d4ca9b09dd83d0533372), [`184907d`](https://github.com/mastra-ai/mastra/commit/184907d775d8609c03c26e78ccaf37315f3aa287), [`075e91a`](https://github.com/mastra-ai/mastra/commit/075e91a4549baf46ad7a42a6a8ac8dfa78cc09e6), [`0c4cd13`](https://github.com/mastra-ai/mastra/commit/0c4cd131931c04ac5405373c932a242dbe88edd6), [`b16a753`](https://github.com/mastra-ai/mastra/commit/b16a753d5748440248d7df82e29bb987a9c8386c)]:
+  - @mastra/core@1.25.0
+  - @mastra/deployer@1.25.0
+
+## 1.6.0-alpha.5
+
+### Patch Changes
+
+- Fixed `mastra server deploy` getting stuck in `queued` after transient upload confirmation failures. The CLI now retries these failures and cleans up failed deploys so they no longer remain orphaned. ([#15371](https://github.com/mastra-ai/mastra/pull/15371))
+
+## 1.6.0-alpha.4
+
+### Minor Changes
+
+- Added `mastra server env pull [file]` command. Downloads environment variables from a deployed Mastra Server project into a local `.env` file. This is the inverse of `mastra server env import` and is useful in automated pipelines where you authenticate with a single API token and pull all other variables at runtime. ([#15355](https://github.com/mastra-ai/mastra/pull/15355))
+
+### Patch Changes
+
+- Improved Playground UI: disabled agent tabs now show tooltips with docs links explaining how to enable them. Experiment headers link to the agent version in the editor. Trace details show experiment and version as clickable cross-links. ([#15317](https://github.com/mastra-ai/mastra/pull/15317))
+
+- Fixed headless server deploys so they can use .mastra-project.json for org and project resolution in CI. ([#15299](https://github.com/mastra-ai/mastra/pull/15299))
+
+- Fixed `mastra studio deploy` and `mastra server deploy` so transient polling failures are retried up to 3 times before the CLI exits. ([#15350](https://github.com/mastra-ai/mastra/pull/15350))
+
+- Fixed `mastra server deploy` and `mastra studio deploy` failing when deploying from a subdirectory (e.g. `mastra server deploy src`). ([#15253](https://github.com/mastra-ai/mastra/pull/15253))
+  Added `--debug` flag to both deploy commands for verbose build logs.
+  Fixed build errors displaying as `error: {}` instead of the actual error message.
+
+- Fixed `mastra dev` so shutdown and hot reload fully stop the previous server before continuing, reducing orphaned processes and port-in-use errors after terminal close or restart. ([#15278](https://github.com/mastra-ai/mastra/pull/15278))
+
+- Added `mastra server pause` and `mastra server restart` for Mastra Server projects. Pause stops the running server for your linked project; restart starts a paused or stopped server. ([#15295](https://github.com/mastra-ai/mastra/pull/15295))
+
+- Fixed `mastra studio deploy` reporting raw version specifiers (e.g. `catalog:`, `workspace:*`) instead of the actual installed version. The deploy command now resolves the real semver version from node_modules. ([#15378](https://github.com/mastra-ai/mastra/pull/15378))
+
+- Updated dependencies [[`d135f00`](https://github.com/mastra-ai/mastra/commit/d135f00e9b0ed7c48f91140a1f83035661888f5c), [`cbdf3e1`](https://github.com/mastra-ai/mastra/commit/cbdf3e12b3d0c30a6e5347be658e2009648c130a), [`8fe46d3`](https://github.com/mastra-ai/mastra/commit/8fe46d354027f3f0f0846e64219772348de106dd), [`18c67db`](https://github.com/mastra-ai/mastra/commit/18c67dbb9c9ebc26f26f65f7d3ff836e5691ef46), [`8dcc77e`](https://github.com/mastra-ai/mastra/commit/8dcc77e78a5340f5848f74b9e9f1b3da3513c1f5), [`aa67fc5`](https://github.com/mastra-ai/mastra/commit/aa67fc59ee8a5eeff1f23eb05970b8d7a536c8ff), [`fa8140b`](https://github.com/mastra-ai/mastra/commit/fa8140bcd4251d2e3ac85fdc5547dfc4f372b5be), [`190f452`](https://github.com/mastra-ai/mastra/commit/190f45258b0640e2adfc8219fa3258cdc5b8f071), [`7e7bf60`](https://github.com/mastra-ai/mastra/commit/7e7bf606886bf374a6f9d4ca9b09dd83d0533372), [`184907d`](https://github.com/mastra-ai/mastra/commit/184907d775d8609c03c26e78ccaf37315f3aa287), [`0c4cd13`](https://github.com/mastra-ai/mastra/commit/0c4cd131931c04ac5405373c932a242dbe88edd6), [`b16a753`](https://github.com/mastra-ai/mastra/commit/b16a753d5748440248d7df82e29bb987a9c8386c)]:
+  - @mastra/deployer@1.25.0-alpha.3
+  - @mastra/core@1.25.0-alpha.3
+
 ## 1.5.1-alpha.3
 
 ## 1.5.1-alpha.2
