@@ -4091,6 +4091,89 @@ describe('Supervisor Pattern - Client tool call suspension', () => {
     });
   });
 
+  it('should detect pending delegated client tools using their formatted names', async () => {
+    const subAgent = new Agent({
+      id: 'color-sub-formatted',
+      name: 'color-sub-formatted',
+      description: 'Changes colors via client tools with formatted names',
+      instructions: 'Call the change.color tool.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'ct-formatted',
+                toolName: 'change_color',
+                args: JSON.stringify({ color: 'red' }),
+              },
+            ],
+            warnings: [],
+          };
+        },
+      }),
+    });
+
+    let supervisorCallCount = 0;
+    const supervisor = new Agent({
+      id: 'ct-suspend-supervisor-formatted',
+      name: 'ct-suspend-supervisor-formatted',
+      instructions: 'Delegate to the color sub-agent.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          supervisorCallCount++;
+          if (supervisorCallCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'delegate-formatted',
+                  toolName: 'agent-colorSubFormatted',
+                  input: JSON.stringify({ prompt: 'Change the color to red' }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text' as const, text: 'Done' }],
+            warnings: [],
+          };
+        },
+      }),
+      agents: { colorSubFormatted: subAgent },
+      defaultOptions: {
+        clientTools: {
+          'change.color': {
+            id: 'change.color',
+            description: 'Change the color on the client side',
+            inputSchema: z.object({ color: z.string() }),
+          },
+        },
+      },
+    });
+
+    const result = await supervisor.generate('Change the color to red', { maxSteps: 5 });
+
+    expect(result.finishReason).toBe('suspended');
+    const clientToolCalls =
+      result.suspendPayload?.suspendPayload?.__mastraClientToolCalls ?? result.suspendPayload?.__mastraClientToolCalls;
+    expect(clientToolCalls).toHaveLength(1);
+    expect(clientToolCalls[0]).toMatchObject({
+      toolCallId: 'ct-formatted',
+      toolName: 'change_color',
+    });
+  });
+
   it('should resume delegated client tool suspensions from replay state when memory recall fails', async () => {
     const mockStorage = new InMemoryStore();
     const subAgentPrompts: any[] = [];

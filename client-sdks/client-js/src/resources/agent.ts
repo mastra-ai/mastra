@@ -75,6 +75,8 @@ type StreamProcessingContext = {
   resourceId?: string;
 };
 
+const MAX_DELEGATED_CLIENT_TOOL_RESUME_ATTEMPTS = 25;
+
 function getDelegatedClientToolSuspendData(response: any): {
   suspendPayload: any;
   clientToolCalls: SuspendedClientToolCall[];
@@ -245,6 +247,7 @@ async function executeSuspendedClientToolCallsAndRespond<OUTPUT>({
   }) => Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>>;
 }) {
   let currentResponse = response;
+  let resumeAttempts = 0;
 
   while (true) {
     const { suspendPayload, clientToolCalls, delegatedReplayState } =
@@ -268,6 +271,14 @@ async function executeSuspendedClientToolCallsAndRespond<OUTPUT>({
     });
 
     const outerToolCallId = suspendPayload?.toolCallId ?? clientToolCalls[0]?.toolCallId;
+    resumeAttempts += 1;
+    if (resumeAttempts > MAX_DELEGATED_CLIENT_TOOL_RESUME_ATTEMPTS) {
+      throw new Error(
+        `Exceeded ${MAX_DELEGATED_CLIENT_TOOL_RESUME_ATTEMPTS} delegated client-tool resume attempts for run ${
+          (currentResponse as any).runId ?? 'unknown'
+        } and tool call ${outerToolCallId ?? 'unknown'}.`,
+      );
+    }
     if (toolResults.length === 0 || !outerToolCallId || !(currentResponse as any).runId) {
       return currentResponse;
     }

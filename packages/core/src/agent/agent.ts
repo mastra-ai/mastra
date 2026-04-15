@@ -2906,13 +2906,16 @@ export class Agent<
     responseMessages: MastraDBMessage[],
     clientTools: ToolsInput,
   ): Array<{ toolCallId: string; toolName: string; args: any }> {
+    const formattedClientToolNames = new Set(
+      Object.keys(clientTools || {}).map(toolName => this.formatToolName(toolName)),
+    );
     const pendingByToolCallId = new Map<string, { toolCallId: string; toolName: string; args: any }>();
     for (const msg of responseMessages) {
       if (msg.role !== 'assistant') continue;
       const parts = (msg.content as any)?.parts || (Array.isArray(msg.content) ? msg.content : []);
       for (const part of parts) {
         // Check raw tool-call parts
-        if (part.type === 'tool-call' && clientTools[part.toolName]) {
+        if (part.type === 'tool-call' && formattedClientToolNames.has(part.toolName)) {
           pendingByToolCallId.set(part.toolCallId, {
             toolCallId: part.toolCallId,
             toolName: part.toolName,
@@ -2923,7 +2926,7 @@ export class Agent<
         // tool calls have state 'call' (no result yet).
         if (part.type === 'tool-invocation' && part.toolInvocation) {
           const inv = part.toolInvocation;
-          if (inv.state === 'call' && clientTools[inv.toolName]) {
+          if (inv.state === 'call' && formattedClientToolNames.has(inv.toolName)) {
             pendingByToolCallId.set(inv.toolCallId, {
               toolCallId: inv.toolCallId,
               toolName: inv.toolName,
@@ -4348,22 +4351,34 @@ export class Agent<
     return this.formatTools(allTools);
   }
 
+  private formatToolName(toolName: string): string {
+    const INVALID_CHAR_REGEX = /[^a-zA-Z0-9_\-]/g;
+    const STARTING_CHAR_REGEX = /[a-zA-Z_]/;
+
+    if (
+      toolName.length <= 63 &&
+      !toolName.match(INVALID_CHAR_REGEX) &&
+      (toolName[0]?.match(STARTING_CHAR_REGEX) ?? false)
+    ) {
+      return toolName;
+    }
+
+    let formattedToolName = toolName.replace(INVALID_CHAR_REGEX, '_');
+    if (!(formattedToolName[0]?.match(STARTING_CHAR_REGEX) ?? false)) {
+      formattedToolName = `_${formattedToolName}`;
+    }
+
+    return formattedToolName.slice(0, 63);
+  }
+
   /**
    * Formats and validates tool names to comply with naming restrictions.
    * @internal
    */
   private formatTools(tools: Record<string, CoreTool>): Record<string, CoreTool> {
-    const INVALID_CHAR_REGEX = /[^a-zA-Z0-9_\-]/g;
-    const STARTING_CHAR_REGEX = /[a-zA-Z_]/;
-
     for (const key of Object.keys(tools)) {
-      if (tools[key] && (key.length > 63 || key.match(INVALID_CHAR_REGEX) || !key[0]!.match(STARTING_CHAR_REGEX))) {
-        let newKey = key.replace(INVALID_CHAR_REGEX, '_');
-        if (!newKey[0]!.match(STARTING_CHAR_REGEX)) {
-          newKey = '_' + newKey;
-        }
-        newKey = newKey.slice(0, 63);
-
+      const newKey = this.formatToolName(key);
+      if (tools[key] && newKey !== key) {
         if (tools[newKey]) {
           const mastraError = new MastraError({
             id: 'AGENT_TOOL_NAME_COLLISION',

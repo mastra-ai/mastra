@@ -1038,6 +1038,48 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
       },
     ]);
   });
+
+  it('should fail clearly when delegated client tool suspensions exceed the max resume attempts', async () => {
+    const execute = vi.fn().mockResolvedValue('red');
+    const clientTool = createTool({
+      id: 'changeColor',
+      description: 'Change the color on the client side',
+      execute,
+      inputSchema: undefined,
+    });
+
+    const suspendedResponse = {
+      finishReason: 'suspended',
+      runId: 'run-loop',
+      suspendPayload: {
+        toolCallId: 'delegate-loop',
+        suspendPayload: {
+          __mastraClientToolCalls: [{ toolCallId: 'ct-loop', toolName: 'changeColor', args: { color: 'red' } }],
+        },
+      },
+    };
+
+    mockRequest.mockImplementation(async (path: string) => {
+      if (path === '/agents/test-agent-id/generate') {
+        return suspendedResponse;
+      }
+
+      if (path === '/agents/test-agent-id/approve-tool-call-generate') {
+        return suspendedResponse;
+      }
+
+      throw new Error(`Unexpected path: ${path}`);
+    });
+
+    await expect(
+      agent.generate('Change the color forever', {
+        clientTools: { changeColor: clientTool },
+      }),
+    ).rejects.toThrow('Exceeded 25 delegated client-tool resume attempts');
+
+    expect(mockRequest).toHaveBeenCalledTimes(26);
+    expect(execute).toHaveBeenCalledTimes(26);
+  });
 });
 
 describe('streaming behavior', () => {
