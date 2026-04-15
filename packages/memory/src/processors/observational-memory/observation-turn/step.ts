@@ -2,7 +2,7 @@ import { getThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
 import { filterObservedMessages } from '../message-utils';
-import { getLatestStepParts } from '../observational-memory';
+import { getLastActivityFromMessages, getLatestStepParts } from '../observational-memory';
 import { resolveRetentionFloor } from '../thresholds';
 
 import type { ObservationTurn } from './turn';
@@ -18,23 +18,6 @@ import type { StepContext } from './types';
 export class ObservationStep {
   private _prepared = false;
   private _context?: StepContext;
-
-  private getLastActivityAt() {
-    const messages = this.turn.messageList.get.all.db();
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const message = messages[i]!;
-      if (message.role !== 'assistant' || !message.content || typeof message.content === 'string') {
-        continue;
-      }
-
-      const lastPart = message.content.parts[message.content.parts.length - 1];
-      if (lastPart?.createdAt !== undefined) {
-        return lastPart.createdAt;
-      }
-    }
-
-    return undefined;
-  }
 
   constructor(
     private readonly turn: ObservationTurn,
@@ -110,7 +93,7 @@ export class ObservationStep {
         writer: this.turn.writer,
         requestContext: this.turn.requestContext,
         observabilityContext: this.turn.observabilityContext,
-        lastActivityAt: this.getLastActivityAt(),
+        lastActivityAt: getLastActivityFromMessages(messageList.get.all.db()),
       });
       await this.turn.refreshRecord();
       if (this.turn.record.generationCount > preReflectGeneration) {
@@ -352,7 +335,7 @@ export class ObservationStep {
           messageList,
           requestContext: this.turn.requestContext,
           observabilityContext: this.turn.observabilityContext,
-          lastActivityAt: this.getLastActivityAt(),
+          lastActivityAt: getLastActivityFromMessages(messageList.get.all.db()),
         });
 
         return {

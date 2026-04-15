@@ -787,6 +787,83 @@ describe('activate()', () => {
       }
     });
 
+    it('ignores trailing data parts when calculating last activity for ttl activation', async () => {
+      vi.useFakeTimers();
+      try {
+        const now = new Date('2026-04-14T12:00:00.000Z');
+        vi.setSystemTime(now);
+
+        const om = new ObservationalMemory({
+          storage,
+          scope: 'thread',
+          activationTTL: 300_000,
+          observation: {
+            model: createMockObserverModel(),
+            messageTokens: 50_000,
+            bufferTokens: 5_000,
+          },
+          reflection: {
+            model: createMockReflectorModel(),
+            observationTokens: 50_000,
+          },
+        });
+        const staleAssistantPartTime = now.getTime() - 301_000;
+        const messages: MastraDBMessage[] = [
+          {
+            ...createTestMessage(
+              'Earlier question',
+              'user',
+              'ttl-user-data-1',
+              new Date(staleAssistantPartTime - 1000),
+            ),
+            threadId,
+          },
+          {
+            ...createTestMessage(
+              'Earlier answer',
+              'assistant',
+              'ttl-assistant-data-1',
+              new Date(staleAssistantPartTime),
+            ),
+            threadId,
+            content: {
+              format: 2,
+              parts: [
+                { type: 'text', text: 'Earlier answer', createdAt: staleAssistantPartTime },
+                { type: 'data-tool-result', data: { ok: true }, createdAt: now.getTime() - 1_000 },
+              ],
+            } as MastraMessageContentV2,
+          },
+          {
+            ...createTestMessage('Latest user follow-up', 'user', 'ttl-user-data-2', now),
+            threadId,
+          },
+        ];
+
+        await storage.saveMessages({ messages });
+        await om.buffer({ threadId, messages });
+
+        const { record } = await om.getStatus({ threadId, messages });
+        await storage.updateBufferedObservations({
+          id: record!.id,
+          chunk: {
+            observations: '- Buffered observation',
+            tokenCount: 80,
+            messageIds: ['ttl-user-data-1', 'ttl-assistant-data-1'],
+            cycleId: 'ttl-cycle-data-1',
+            messageTokens: 200,
+            lastObservedAt: new Date(staleAssistantPartTime),
+          },
+        });
+
+        const result = await om.activate({ threadId, checkThreshold: true, messages });
+
+        expect(result.activated).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('accepts duration strings like "5m" for observation activationTTL', async () => {
       vi.useFakeTimers();
       try {

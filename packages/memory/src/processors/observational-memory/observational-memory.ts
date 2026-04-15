@@ -58,6 +58,35 @@ export function buildMessageRange(messages: MastraDBMessage[]): string {
   return `${first.id}:${last.id}`;
 }
 
+/**
+ * Returns the unix-ms timestamp of the last non-data part in the last assistant
+ * message, representing when the last visible LLM response completed. Used as the
+ * last activity time for activationTTL checks.
+ */
+export function getLastActivityFromMessages(messages?: MastraDBMessage[]): number | undefined {
+  if (!messages) return undefined;
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (!message || message.role !== 'assistant' || !message.content || typeof message.content === 'string') {
+      continue;
+    }
+
+    for (let j = message.content.parts.length - 1; j >= 0; j--) {
+      const part = message.content.parts[j];
+      if (!part || part.type?.startsWith('data-')) {
+        continue;
+      }
+
+      if (part.createdAt !== undefined) {
+        return part.createdAt;
+      }
+    }
+  }
+
+  return undefined;
+}
+
 function parseActivationTTL(value: number | string | undefined, fieldPath: string): number | undefined {
   if (value === undefined) {
     return undefined;
@@ -1184,29 +1213,6 @@ export class ObservationalMemory {
         parts: unobservedParts,
       },
     };
-  }
-
-  /**
-   * Returns the unix-ms timestamp of the last part in the last assistant message,
-   * representing when the last LLM response completed. Used as the last activity
-   * time for activationTTL checks.
-   */
-  private getLastActivityFromMessages(messages?: MastraDBMessage[]): number | undefined {
-    if (!messages) return undefined;
-
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const message = messages[i];
-      if (!message || message.role !== 'assistant' || !message.content || typeof message.content === 'string') {
-        continue;
-      }
-
-      const lastPart = message.content.parts[message.content.parts.length - 1];
-      if (lastPart?.createdAt !== undefined) {
-        return lastPart.createdAt;
-      }
-    }
-
-    return undefined;
   }
 
   /**
@@ -3070,7 +3076,7 @@ ${formattedMessages}
     // Optional threshold guard — skip activation if pending tokens are below threshold
     if (opts.checkThreshold) {
       const activationTTL = this.observationConfig.activationTTL;
-      const lastActivityAt = this.getLastActivityFromMessages(opts.messages);
+      const lastActivityAt = getLastActivityFromMessages(opts.messages);
       const ttlExpiredMs =
         activationTTL !== undefined && lastActivityAt !== undefined ? Date.now() - lastActivityAt : undefined;
       const ttlExpired = ttlExpiredMs !== undefined && activationTTL !== undefined && ttlExpiredMs >= activationTTL;
