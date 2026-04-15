@@ -1,4 +1,5 @@
-import { isRetryablePollingError, withPollingRetries } from '../../utils/polling.js';
+import { bestEffortCancel, confirmUploadWithRetry } from '../../utils/deploy-upload.js';
+import { withPollingRetries } from '../../utils/polling.js';
 import { authHeaders, createApiClient, MASTRA_PLATFORM_API_URL, platformFetch, throwApiError } from '../auth/client.js';
 import { getToken } from '../auth/credentials.js';
 
@@ -99,25 +100,12 @@ export async function uploadDeploy(
     throw new Error('No upload URL returned');
   }
 
-  // Best-effort cancel helper — used to clean up orphaned deploys on failure
-  async function cancelDeploy(deployClient: ReturnType<typeof createApiClient>) {
-    try {
-      console.warn(`Cancelling deploy ${id}...`);
-      const { error: cancelError, response: cancelResponse } = await deployClient.POST(
-        '/v1/studio/deploys/{id}/cancel',
-        {
-          params: { path: { id } },
-        },
-      );
-      if (cancelError) {
-        console.warn(
-          `Warning: failed to cancel deploy ${id} (${cancelResponse.status}). It may remain in a queued state.`,
-        );
-      }
-    } catch {
-      console.warn(`Warning: failed to cancel deploy ${id}. It may remain in a queued state.`);
-    }
-  }
+  const cancel = (c: ReturnType<typeof createApiClient>) =>
+    bestEffortCancel({
+      postCancel: c2 => c2.POST('/v1/studio/deploys/{id}/cancel', { params: { path: { id } } }),
+      client: c,
+      deployId: id,
+    });
 
   // Step 2: Upload artifact to the signed URL
   try {
@@ -136,68 +124,19 @@ export async function uploadDeploy(
       }
     }
   } catch (uploadError) {
-    await cancelDeploy(client);
+    await cancel(client);
     throw uploadError;
   }
 
   // Step 3: Notify API that upload is complete → triggers build pipeline
-  // Retry up to 3 times (4 total attempts) with exponential backoff for transient failures.
-  const maxRetries = 3;
-  let lastError: Error | undefined;
-  let currentClient = client;
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    let completeError: unknown;
-    let status: number | undefined;
+  await confirmUploadWithRetry({
+    postUploadComplete: c => c.POST('/v1/studio/deploys/{id}/upload-complete', { params: { path: { id } } }),
+    cancelDeploy: cancel,
+    client,
+    orgId,
+  });
 
-    try {
-      const result = await currentClient.POST('/v1/studio/deploys/{id}/upload-complete', {
-        params: { path: { id } },
-      });
-      if (!result.error) {
-        return { id, status: 'queued' };
-      }
-      completeError = result.error;
-      status = result.response.status;
-    } catch (networkError) {
-      // Network-level failure (ECONNRESET, ETIMEDOUT, fetch failed, etc.)
-      completeError = networkError;
-    }
-
-    // Determine if we should retry
-    const isRetryableStatus = status !== undefined && (status >= 500 || status === 401);
-    const isRetryableNetwork = isRetryablePollingError(completeError);
-    const isRetryable = isRetryableStatus || isRetryableNetwork;
-
-    if (!isRetryable || attempt === maxRetries) {
-      const detail = status ? `${status}` : completeError instanceof Error ? completeError.message : 'unknown error';
-      lastError = new Error(`Upload confirmation failed: ${detail}`);
-      break;
-    }
-
-    const delay = 1000 * Math.pow(2, attempt);
-    const detail = status ? `${status}` : completeError instanceof Error ? completeError.message : 'network error';
-    console.warn(
-      `Upload confirmation failed (${detail}), retrying in ${delay / 1000}s... (attempt ${attempt + 1}/${maxRetries})`,
-    );
-
-    // On 401, refresh the token before retrying
-    if (status === 401) {
-      try {
-        const freshToken = await getToken();
-        currentClient = createApiClient(freshToken, orgId);
-      } catch (refreshError) {
-        lastError = refreshError instanceof Error ? refreshError : new Error('Failed to refresh authentication token');
-        break;
-      }
-    }
-
-    // Exponential backoff: 1s, 2s, 4s
-    await new Promise(r => setTimeout(r, delay));
-  }
-
-  // All retries exhausted — cancel the orphaned deploy and throw
-  await cancelDeploy(currentClient);
-  throw lastError ?? new Error('Upload confirmation failed');
+  return { id, status: 'queued' };
 }
 
 async function streamDeployLogs(deployId: string, token: string, orgId: string, signal: AbortSignal): Promise<void> {
@@ -255,12 +194,13 @@ export async function pollDeploy(
 ): Promise<DeployStatus> {
   const start = Date.now();
   let lastStatus = '';
+  let currentToken = token;
 
   // Start streaming logs in the background via SSE
   const logAbort = new AbortController();
-  streamDeployLogs(deployId, token, orgId, logAbort.signal).catch(() => {});
+  streamDeployLogs(deployId, currentToken, orgId, logAbort.signal).catch(() => {});
 
-  const client = createApiClient(token, orgId);
+  let client = createApiClient(currentToken, orgId);
 
   try {
     while (Date.now() - start < maxWaitMs) {
@@ -273,6 +213,11 @@ export async function pollDeploy(
       const { data, error, response } = result;
 
       if (error) {
+        if (response.status === 401) {
+          currentToken = await getToken();
+          client = createApiClient(currentToken, orgId);
+          continue;
+        }
         throwApiError('Poll failed', response.status, error.detail);
       }
 
