@@ -128,6 +128,32 @@ describe('BrowserContextProcessor', () => {
       expect(textPart.text).toContain('Hello');
     });
 
+    it('should prepend system-reminder when only page title is available', () => {
+      const requestContext = new RequestContext();
+      const browserCtx: BrowserContext = {
+        provider: 'agent-browser',
+        pageTitle: 'Example Page',
+      };
+      requestContext.set('browser', browserCtx);
+
+      const messages = [
+        {
+          role: 'user' as const,
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Hello' }],
+          },
+        },
+      ] as any;
+
+      const result = processor.processInputStep(createInputStepArgs({ messages, requestContext }));
+
+      expect(result).toBeDefined();
+      const textPart = (result as any).messages[0].content.parts[0];
+      expect(textPart.text).toContain('<system-reminder>');
+      expect(textPart.text).toContain('Example Page');
+    });
+
     it('should return undefined when no per-request data available', () => {
       const requestContext = new RequestContext();
       const browserCtx: BrowserContext = {
