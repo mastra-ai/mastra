@@ -1,5 +1,13 @@
 # mastracode
 
+## 0.15.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`7020c06`](https://github.com/mastra-ai/mastra/commit/7020c0690b199d9da337f0e805f16948e557922e), [`7020c06`](https://github.com/mastra-ai/mastra/commit/7020c0690b199d9da337f0e805f16948e557922e)]:
+  - @mastra/mcp@1.5.1-alpha.0
+  - @mastra/core@1.25.1-alpha.1
+
 ## 0.15.0-alpha.0
 
 ### Minor Changes
