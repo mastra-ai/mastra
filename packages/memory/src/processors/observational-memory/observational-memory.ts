@@ -93,6 +93,44 @@ export function getLastActivityFromMessages(messages?: MastraDBMessage[]): numbe
   return undefined;
 }
 
+function formatModelContext(provider?: string, modelId?: string): string | undefined {
+  if (provider && modelId) {
+    return `${provider}/${modelId}`;
+  }
+
+  return modelId;
+}
+
+export function getLastModelFromMessages(messages?: MastraDBMessage[]): string | undefined {
+  if (!messages) return undefined;
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (!message || message.role !== 'assistant' || !message.content || typeof message.content === 'string') {
+      continue;
+    }
+
+    for (let j = message.content.parts.length - 1; j >= 0; j--) {
+      const part = message.content.parts[j];
+      if (part?.type === 'step-start' && typeof part.model === 'string' && part.model.length > 0) {
+        return part.model;
+      }
+    }
+
+    const metadata = message.content.metadata as { provider?: string; modelId?: string } | undefined;
+    const model = formatModelContext(metadata?.provider, metadata?.modelId);
+    if (model) {
+      return model;
+    }
+  }
+
+  return undefined;
+}
+
+export function getCurrentModel(model?: { provider?: string; modelId?: string }): string | undefined {
+  return formatModelContext(model?.provider, model?.modelId);
+}
+
 function parseActivationTTL(value: number | string | undefined, fieldPath: string): number | undefined {
   if (value === undefined) {
     return undefined;
@@ -178,6 +216,7 @@ import type {
   ResolvedReflectionConfig,
   ThresholdRange,
   ObservationMarkerConfig,
+  ObservationModelContext,
 } from './types';
 
 /**
@@ -437,6 +476,7 @@ export class ObservationalMemory {
         ? undefined
         : (config.observation?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferActivation),
       activateAfterIdle: parseActivationTTL(config.activateAfterIdle, 'activateAfterIdle'),
+      activateOnProviderChange: config.activateOnProviderChange ?? false,
       blockAfter: asyncBufferingDisabled
         ? undefined
         : resolveBlockAfter(
@@ -469,6 +509,7 @@ export class ObservationalMemory {
         ? undefined
         : (config?.reflection?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferActivation),
       activateAfterIdle: parseActivationTTL(config.activateAfterIdle, 'activateAfterIdle'),
+      activateOnProviderChange: config.activateOnProviderChange ?? false,
       blockAfter: asyncBufferingDisabled
         ? undefined
         : resolveBlockAfter(
@@ -3036,6 +3077,8 @@ ${formattedMessages}
     checkThreshold?: boolean;
     /** Messages to use for threshold check (in-memory). If omitted, loads from storage. */
     messages?: MastraDBMessage[];
+    /** Current actor model for provider-change activation checks. */
+    currentModel?: ObservationModelContext;
     /** Stream writer for emitting activation markers to the UI. */
     writer?: ProcessorStreamWriter;
     /** MessageList for persisting activation markers on the last assistant message. */
@@ -3075,9 +3118,11 @@ ${formattedMessages}
       return { activated: false, record };
     }
 
-    let activationTriggeredBy: 'threshold' | 'ttl' = 'threshold';
+    let activationTriggeredBy: 'threshold' | 'ttl' | 'provider_change' = 'threshold';
     let activationLastActivityAt: number | undefined;
     let activateAfterIdleExpiredMs: number | undefined;
+    let previousModel: string | undefined;
+    let currentModel: string | undefined;
 
     // Optional threshold guard — skip activation if pending tokens are below threshold
     if (opts.checkThreshold) {
@@ -3095,8 +3140,19 @@ ${formattedMessages}
         activateAfterIdle !== undefined && lastActivityAt !== undefined ? Date.now() - lastActivityAt : undefined;
       const ttlExpired =
         ttlExpiredMs !== undefined && activateAfterIdle !== undefined && ttlExpiredMs >= activateAfterIdle;
+      const actorModel = getCurrentModel(opts.currentModel);
+      const lastModel = getLastModelFromMessages(opts.messages);
+      const providerChanged =
+        this.observationConfig.activateOnProviderChange === true &&
+        actorModel !== undefined &&
+        lastModel !== undefined &&
+        actorModel !== lastModel;
 
-      if (ttlExpired) {
+      if (providerChanged) {
+        activationTriggeredBy = 'provider_change';
+        previousModel = lastModel;
+        currentModel = actorModel;
+      } else if (ttlExpired) {
         activationTriggeredBy = 'ttl';
         activationLastActivityAt = lastActivityAt;
         activateAfterIdleExpiredMs = ttlExpiredMs;
@@ -3187,6 +3243,8 @@ ${formattedMessages}
           triggeredBy: activationTriggeredBy,
           lastActivityAt: activationLastActivityAt,
           ttlExpiredMs: activateAfterIdleExpiredMs,
+          previousModel,
+          currentModel,
           config: this.getObservationMarkerConfig(),
         });
         void opts.writer.custom(activationMarker).catch(() => {});

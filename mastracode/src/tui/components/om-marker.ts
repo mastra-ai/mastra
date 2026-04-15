@@ -77,6 +77,11 @@ export type OMMarkerData =
       ttlExpiredMs: number;
     }
   | {
+      type: 'om_activation_provider_change';
+      previousModel: string;
+      currentModel: string;
+    }
+  | {
       type: 'om_thread_title_updated';
       oldTitle?: string;
       newTitle: string;
@@ -159,6 +164,9 @@ function formatMarker(data: OMMarkerData): string {
         'muted',
         `  Idle timeout (${formatDuration(data.activateAfterIdle)}) exceeded by ${formatDuration(data.ttlExpiredMs)}, activating observations`,
       );
+    }
+    case 'om_activation_provider_change': {
+      return theme.fg('muted', `  Model changed ${data.previousModel} → ${data.currentModel}, activating observations`);
     }
     case 'om_thread_title_updated': {
       return theme.fg('muted', `  thread title updated: ${data.newTitle}`);

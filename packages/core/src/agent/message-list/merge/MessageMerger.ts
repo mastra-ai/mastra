@@ -1,5 +1,6 @@
 import { CacheKeyGenerator } from '../cache/CacheKeyGenerator';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../state/types';
+import { stampPart } from '../utils/stamp-part';
 
 /**
  * MessageMerger - Handles complex logic for merging assistant messages
@@ -304,16 +305,22 @@ export class MessageMerger {
         latestMessage.content.parts.length > 0 &&
         latestMessage.content.parts.at(-1)?.type === 'tool-invocation';
 
+      const previousStepStart = [...latestMessage.content.parts].reverse().find(p => p.type === 'step-start');
+      const stepStartPart = stampPart({
+        type: 'step-start' as const,
+        model: previousStepStart?.model,
+      });
+
       if (typeof insertAt === 'number') {
         if (needsStepStart) {
-          latestMessage.content.parts.splice(insertAt, 0, { type: 'step-start' });
+          latestMessage.content.parts.splice(insertAt, 0, stepStartPart);
           latestMessage.content.parts.splice(insertAt + 1, 0, part);
         } else {
           latestMessage.content.parts.splice(insertAt, 0, part);
         }
       } else {
         if (needsStepStart) {
-          latestMessage.content.parts.push({ type: 'step-start' });
+          latestMessage.content.parts.push(stepStartPart);
         }
         latestMessage.content.parts.push(part);
       }
