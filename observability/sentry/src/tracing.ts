@@ -24,7 +24,7 @@ import { BaseExporter } from '@mastra/observability';
 import { getAttributes as getGenAIAttributes, getSpanName as getGenAISpanName } from '@mastra/otel-exporter';
 import * as Sentry from '@sentry/node';
 
-const SPAN_TYPE_CONFIG: Record<SpanType, { opType: string; opName: string }> = {
+const SPAN_TYPE_CONFIG: Partial<Record<SpanType, { opType: string; opName: string }>> = {
   [SpanType.AGENT_RUN]: { opType: 'gen_ai.invoke_agent', opName: 'invoke_agent' },
   [SpanType.MODEL_GENERATION]: { opType: 'gen_ai.chat', opName: 'chat' },
   [SpanType.TOOL_CALL]: { opType: 'gen_ai.execute_tool', opName: 'execute_tool' },
@@ -41,6 +41,9 @@ const SPAN_TYPE_CONFIG: Record<SpanType, { opType: string; opName: string }> = {
   [SpanType.GENERIC]: { opType: 'ai.span', opName: 'span' },
   [SpanType.MODEL_STEP]: { opType: 'ai.span', opName: 'step' },
   [SpanType.MODEL_CHUNK]: { opType: 'ai.span', opName: 'step' },
+  [SpanType.SCORER_RUN]: { opType: 'workflow.run', opName: 'eval' },
+  [SpanType.SCORER_STEP]: { opType: 'workflow.step', opName: 'step' },
+  [SpanType.MEMORY_OPERATION]: { opType: 'ai.memory', opName: 'memory' },
 };
 
 const ATTRIBUTE_KEYS = {
@@ -284,7 +287,19 @@ export class SentryExporter extends BaseExporter {
         message: span.errorInfo.message,
       });
 
-      Sentry.captureException(span.errorInfo.message, {
+      // Build an Error instance so Sentry can use the real stack trace captured
+      // by observability rather than synthesizing one from this exporter's call site.
+      // Passing a string to Sentry.captureException produces a stack that points to
+      // handleSpanEnded, hiding the real error origin.
+      const error = new Error(span.errorInfo.message);
+      if (span.errorInfo.name) {
+        error.name = span.errorInfo.name;
+      }
+      if (span.errorInfo.stack) {
+        error.stack = span.errorInfo.stack;
+      }
+
+      Sentry.captureException(error, {
         contexts: {
           trace: { trace_id: span.traceId, span_id: span.id },
           span_info: {

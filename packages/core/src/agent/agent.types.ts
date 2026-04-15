@@ -6,7 +6,7 @@ import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { CompletionConfig, CompletionRunResult } from '../loop/network/validation';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
 import type { ObservabilityContext, TracingOptions } from '../observability';
-import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
+import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { OutputWriter } from '../workflows/types';
 import type { MessageListInput } from './message-list';
@@ -388,7 +388,7 @@ export type NetworkOptions<OUTPUT = undefined> = {
    *
    * @example
    * ```typescript
-   * import { z } from 'zod';
+   * import { z } from 'zod/v4';
    *
    * const resultSchema = z.object({
    *   summary: z.string(),
@@ -486,6 +486,8 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   inputProcessors?: InputProcessorOrWorkflow[];
   /** Output processors to use for this execution (overrides agent's default) */
   outputProcessors?: OutputProcessorOrWorkflow[];
+  /** Error processors to use for this execution (overrides agent's default) */
+  errorProcessors?: ErrorProcessorOrWorkflow[];
   /**
    * Maximum number of times processors can trigger a retry for this generation.
    * Overrides agent's default maxProcessorRetries.

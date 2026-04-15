@@ -981,6 +981,8 @@ export interface BufferedObservationChunk {
   suggestedContinuation?: string;
   /** Optional current task context */
   currentTask?: string;
+  /** Optional thread title from observer output */
+  threadTitle?: string;
 }
 
 /**
@@ -1003,6 +1005,8 @@ export interface BufferedObservationChunkInput {
   suggestedContinuation?: string;
   /** Optional current task context */
   currentTask?: string;
+  /** Optional thread title from observer output */
+  threadTitle?: string;
 }
 
 /**
@@ -1016,6 +1020,17 @@ export interface BufferedObservationChunkInput {
  * - lastReflectionAt: createdAt of most recent reflection record
  * - previousGeneration: record with next-oldest createdAt
  */
+
+/** Options for filtering observational memory history queries. */
+export interface ObservationalMemoryHistoryOptions {
+  /** Only return records created at or after this date */
+  from?: Date;
+  /** Only return records created at or before this date */
+  to?: Date;
+  /** Number of records to skip (for pagination) */
+  offset?: number;
+}
+
 export interface ObservationalMemoryRecord {
   // Identity
   /** Unique record ID */
@@ -1305,6 +1320,15 @@ export interface CreateReflectionGenerationInput {
   currentRecord: ObservationalMemoryRecord;
   reflection: string;
   tokenCount: number;
+}
+
+/**
+ * Input for updating the config of an existing observational memory record.
+ * The provided config is deep-merged into the record's existing config.
+ */
+export interface UpdateObservationalMemoryConfigInput {
+  id: string;
+  config: Record<string, unknown>;
 }
 
 // ============================================
@@ -2149,9 +2173,18 @@ export interface DatasetRecord {
   inputSchema?: Record<string, unknown>;
   groundTruthSchema?: Record<string, unknown>;
   requestContextSchema?: Record<string, unknown>;
+  tags?: string[] | null;
+  targetType?: TargetType | null;
+  targetIds?: string[] | null;
+  scorerIds?: string[] | null;
   version: number;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface DatasetItemSource {
+  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+  referenceId?: string;
 }
 
 export interface DatasetItem {
@@ -2160,8 +2193,10 @@ export interface DatasetItem {
   datasetVersion: number;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  source?: DatasetItemSource;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -2174,8 +2209,10 @@ export interface DatasetItemRow {
   isDeleted: boolean;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  source?: DatasetItemSource;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -2196,6 +2233,9 @@ export interface CreateDatasetInput {
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
   requestContextSchema?: Record<string, unknown> | null;
+  targetType?: TargetType;
+  targetIds?: string[];
+  scorerIds?: string[];
 }
 
 export interface UpdateDatasetInput {
@@ -2206,14 +2246,20 @@ export interface UpdateDatasetInput {
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
   requestContextSchema?: Record<string, unknown> | null;
+  tags?: string[] | null;
+  targetType?: TargetType | null;
+  targetIds?: string[] | null;
+  scorerIds?: string[] | null;
 }
 
 export interface AddDatasetItemInput {
   datasetId: string;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  source?: DatasetItemSource;
 }
 
 export interface UpdateDatasetItemInput {
@@ -2221,8 +2267,10 @@ export interface UpdateDatasetItemInput {
   datasetId: string;
   input?: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  source?: DatasetItemSource;
 }
 
 export interface ListDatasetsInput {
@@ -2261,8 +2309,10 @@ export interface BatchInsertItemsInput {
   items: Array<{
     input: unknown;
     groundTruth?: unknown;
+    expectedTrajectory?: unknown;
     requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
+    source?: DatasetItemSource;
   }>;
 }
 
@@ -2291,11 +2341,14 @@ export interface Experiment {
   succeededCount: number;
   failedCount: number;
   skippedCount: number;
+  agentVersion?: string | null;
   startedAt: Date | null;
   completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
+
+export type ExperimentResultStatus = 'needs-review' | 'reviewed' | 'complete';
 
 export interface ExperimentResult {
   id: string;
@@ -2310,7 +2363,17 @@ export interface ExperimentResult {
   completedAt: Date;
   retryCount: number;
   traceId: string | null;
+  status: ExperimentResultStatus | null;
+  tags: string[] | null;
   createdAt: Date;
+}
+
+export interface UpdateExperimentResultInput {
+  id: string;
+  /** When provided, the update will only succeed if the result belongs to this experiment */
+  experimentId?: string;
+  status?: ExperimentResultStatus | null;
+  tags?: string[] | null;
 }
 
 export interface CreateExperimentInput {
@@ -2320,6 +2383,7 @@ export interface CreateExperimentInput {
   metadata?: Record<string, unknown>;
   datasetId: string | null;
   datasetVersion: number | null;
+  agentVersion?: string;
   targetType: TargetType;
   targetId: string;
   totalItems: number;
@@ -2352,10 +2416,16 @@ export interface AddExperimentResultInput {
   completedAt: Date;
   retryCount: number;
   traceId?: string | null;
+  status?: ExperimentResultStatus | null;
+  tags?: string[] | null;
 }
 
 export interface ListExperimentsInput {
   datasetId?: string;
+  targetType?: TargetType;
+  targetId?: string;
+  agentVersion?: string;
+  status?: ExperimentStatus;
   pagination: StoragePagination;
 }
 
@@ -2366,10 +2436,20 @@ export interface ListExperimentsOutput {
 
 export interface ListExperimentResultsInput {
   experimentId: string;
+  traceId?: string;
+  status?: ExperimentResultStatus;
   pagination: StoragePagination;
 }
 
 export interface ListExperimentResultsOutput {
   results: ExperimentResult[];
   pagination: PaginationInfo;
+}
+
+export interface ExperimentReviewCounts {
+  experimentId: string;
+  total: number;
+  needsReview: number;
+  reviewed: number;
+  complete: number;
 }

@@ -10,6 +10,7 @@ type ExperimentItem = {
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 };
+import type { DatasetRecord } from '../../storage/types';
 import { executeTarget } from './executor';
 import type { Target, ExecutionResult } from './executor';
 import { resolveScorers, runScorersForItem } from './scorer';
@@ -70,6 +71,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     description,
     metadata,
     requestContext: globalRequestContext,
+    agentVersion,
   } = config;
 
   const startedAt = new Date();
@@ -101,6 +103,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   // Phase A — Resolve items
   let items: ExperimentItem[];
   let datasetVersion: number | null;
+  let datasetRecord: DatasetRecord | null | undefined;
 
   try {
     if (config.data) {
@@ -123,8 +126,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         throw new Error('DatasetsStorage not configured. Configure storage in Mastra instance.');
       }
 
-      const dataset = await datasetsStore.getDatasetById({ id: datasetId });
-      if (!dataset) {
+      datasetRecord = await datasetsStore.getDatasetById({ id: datasetId });
+      if (!datasetRecord) {
         throw new MastraError({
           id: 'DATASET_NOT_FOUND',
           text: `Dataset not found: ${datasetId}`,
@@ -133,7 +136,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         });
       }
 
-      datasetVersion = version ?? dataset.version;
+      datasetVersion = version ?? datasetRecord.version;
       const versionItems = await datasetsStore.getItemsByVersion({
         datasetId,
         version: datasetVersion,
@@ -194,7 +197,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       };
     } else if (targetType && targetId) {
       // Registry-based target path (existing)
-      const target = resolveTarget(mastra, targetType, targetId);
+      const target = await resolveTarget(mastra, targetType, targetId, agentVersion);
       if (!target) {
         throw new Error(`Target not found: ${targetType}/${targetId}`);
       }
@@ -202,7 +205,11 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         // Merge global request context with per-item request context (item takes precedence)
         const mergedRequestContext =
           globalRequestContext || item.requestContext ? { ...globalRequestContext, ...item.requestContext } : undefined;
-        return executeTarget(target, targetType, item, { signal: itemSignal, requestContext: mergedRequestContext });
+        return executeTarget(target, targetType, item, {
+          signal: itemSignal,
+          requestContext: mergedRequestContext,
+          experimentId,
+        });
       };
     } else {
       throw new Error('No task: provide targetType+targetId or task');
@@ -212,8 +219,27 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     throw err; // unreachable, but satisfies TS control flow
   }
 
+  // Merge dataset-attached scorers with explicitly provided scorers, then deduplicate
+  let mergedScorerInput = scorerInput;
+  const datasetScorerIds = datasetRecord?.scorerIds ?? [];
+  if (datasetScorerIds.length > 0) {
+    mergedScorerInput = [...(scorerInput ?? []), ...datasetScorerIds];
+  }
+  if (mergedScorerInput && mergedScorerInput.length > 0) {
+    const seen = new Set<string>();
+    mergedScorerInput = mergedScorerInput.filter(entry => {
+      if (typeof entry === 'string') {
+        if (seen.has(entry)) return false;
+        seen.add(entry);
+        return true;
+      }
+      // Keep all scorer instances — they are resolved by reference, not by ID
+      return true;
+    });
+  }
+
   // Resolve scorers
-  const scorers = resolveScorers(mastra, scorerInput);
+  const scorers = resolveScorers(mastra, mergedScorerInput);
 
   // 5. Create experiment record (if storage available and not pre-created)
   if (experimentsStore) {
@@ -229,6 +255,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         targetType: targetType ?? 'agent',
         targetId: targetId ?? 'inline',
         totalItems: items.length,
+        agentVersion,
       });
     }
     // Update status to running (both sync and async paths)
@@ -436,41 +463,66 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
 /**
  * Resolve a target from Mastra's registries by type and ID.
+ * When `agentVersion` is provided for an agent target, the returned agent
+ * will have the versioned config applied (via `applyStoredOverrides`).
  */
-function resolveTarget(mastra: Mastra, targetType: string, targetId: string): Target | null {
+async function resolveTarget(
+  mastra: Mastra,
+  targetType: string,
+  targetId: string,
+  agentVersion?: string,
+): Promise<Target | null> {
+  // NOTE: Workflow is thenable, so we must never return one directly from an
+  // async function — TypeScript would try to unwrap it.  We collect into a
+  // local variable and return once at the end.
+  let resolved: Target | null = null;
+
   switch (targetType) {
     case 'agent':
       try {
-        return mastra.getAgentById(targetId as any);
+        if (agentVersion) {
+          resolved = await mastra.getAgentById(targetId, { versionId: agentVersion });
+        } else {
+          resolved = mastra.getAgentById(targetId);
+        }
       } catch {
         // Try by name if ID lookup fails
         try {
-          return mastra.getAgent(targetId);
+          if (agentVersion) {
+            resolved = await mastra.getAgent(targetId, { versionId: agentVersion });
+          } else {
+            resolved = mastra.getAgent(targetId);
+          }
         } catch {
-          return null;
+          // leave null
         }
       }
+      break;
     case 'workflow':
       try {
-        return mastra.getWorkflowById(targetId as any);
+        resolved = mastra.getWorkflowById(targetId);
       } catch {
         // Try by name if ID lookup fails
         try {
-          return mastra.getWorkflow(targetId);
+          resolved = mastra.getWorkflow(targetId);
         } catch {
-          return null;
+          // leave null
         }
       }
+      break;
     case 'scorer':
       try {
-        return mastra.getScorerById(targetId as any) ?? null;
+        resolved = mastra.getScorerById(targetId) ?? null;
       } catch {
-        return null;
+        // leave null
       }
+      break;
     case 'processor':
       // Processors not yet in registry - Phase 4
-      return null;
+      break;
     default:
-      return null;
+      break;
   }
+
+  return resolved;
 }

@@ -4,6 +4,7 @@
  * Pure functions that operate on TUIState — no class dependency.
  */
 import { Container, Spacer, Text } from '@mariozechner/pi-tui';
+import type { Component } from '@mariozechner/pi-tui';
 import type { HarnessMessage, HarnessMessageContent, TaskItem } from '@mastra/core/harness';
 import { parseSubagentMeta } from '@mastra/core/harness';
 import chalk from 'chalk';
@@ -97,6 +98,20 @@ export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem
 // addUserMessage
 // =============================================================================
 
+function addChildBeforeFollowUps(state: TUIState, child: Component): void {
+  if (state.followUpComponents.length > 0) {
+    const firstFollowUp = state.followUpComponents[0];
+    const idx = state.chatContainer.children.indexOf(firstFollowUp as never);
+    if (idx >= 0) {
+      (state.chatContainer.children as unknown[]).splice(idx, 0, child);
+      state.chatContainer.invalidate();
+      return;
+    }
+  }
+
+  state.chatContainer.addChild(child);
+}
+
 /**
  * Add a user message to the chat container.
  */
@@ -111,15 +126,23 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
   // Strip [image] markers from text since we show count separately
   const displayText = imageCount > 0 ? textContent.replace(/\[image\]\s*/g, '').trim() : textContent.trim();
   // Check for system reminder tags
-  const systemReminderMatch = displayText.match(/<system-reminder>([\s\S]*?)<\/system-reminder>/);
-  if (systemReminderMatch) {
-    const reminderText = systemReminderMatch[1]!.trim();
+  const systemReminderMatch = displayText.match(
+    /<system-reminder(?<attrs>\s+[^>]*)?>(?<body>[\s\S]*?)<\/system-reminder>/,
+  );
+  if (systemReminderMatch?.groups?.body) {
+    const reminderText = systemReminderMatch.groups.body.trim();
+    const attrs = systemReminderMatch.groups.attrs ?? '';
+    const reminderType = attrs.match(/\btype="([^"]*)"/)?.[1];
+    const path = attrs.match(/\bpath="([^"]*)"/)?.[1];
     const reminderComponent = new SystemReminderComponent({
       message: reminderText,
+      reminderType,
+      path,
     });
+    reminderComponent.setExpanded(state.toolOutputExpanded);
+    state.allSystemReminderComponents.push(reminderComponent);
 
-    // System reminders always go at the end (after plan approval)
-    state.chatContainer.addChild(reminderComponent);
+    addChildBeforeFollowUps(state, reminderComponent);
     state.ui.requestRender();
     return;
   }
@@ -168,6 +191,8 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   state.pendingTools.clear();
   state.allToolComponents = [];
   state.allSlashCommandComponents = [];
+  state.allSystemReminderComponents = [];
+  state.allShellComponents = [];
 
   // Local accumulator for detecting task clears during history reconstruction
   let previousTasksAcc: TaskItem[] = [];

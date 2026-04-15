@@ -45,6 +45,7 @@ import { ElicitationClientActions } from './actions/elicitation';
 import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
 import { ResourceClientActions } from './actions/resource';
+import { isReconnectableMCPError } from './error-utils';
 import type {
   FetchLike,
   LogHandler,
@@ -53,6 +54,7 @@ import type {
   MastraMCPServerDefinition,
   InternalMastraMCPClientOptions,
   Root,
+  RequireToolApproval,
 } from './types';
 
 // Re-export types for convenience
@@ -66,6 +68,9 @@ export type {
   MastraMCPServerDefinition,
   InternalMastraMCPClientOptions,
   Root,
+  RequireToolApproval,
+  RequireToolApprovalFn,
+  RequireToolApprovalContext,
 } from './types';
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
@@ -118,6 +123,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private sigTermHandler?: () => void;
   private sigHupHandler?: () => void;
   private _roots: Root[];
+  private readonly requireToolApproval: RequireToolApproval | undefined;
 
   /** Provides access to resource operations (list, read, subscribe, etc.) */
   public readonly resources: ResourceClientActions;
@@ -145,6 +151,7 @@ export class InternalMastraMCPClient extends MastraBase {
     this.enableServerLogs = server.enableServerLogs ?? true;
     this.serverConfig = server;
     this.enableProgressTracking = !!server.enableProgressTracking;
+    this.requireToolApproval = server.requireToolApproval;
 
     // Initialize roots from server config
     this._roots = server.roots ?? [];
@@ -153,7 +160,10 @@ export class InternalMastraMCPClient extends MastraBase {
     const hasRoots = this._roots.length > 0 || !!capabilities.roots;
     const clientCapabilities = {
       ...capabilities,
-      elicitation: {},
+      // Merge elicitation capabilities instead of overwriting
+      elicitation: {
+        ...(capabilities.elicitation ?? {}),
+      },
       // Auto-enable roots capability if roots are provided
       ...(hasRoots ? { roots: { listChanged: true, ...(capabilities.roots ?? {}) } } : {}),
     };
@@ -505,44 +515,6 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   /**
-   * Checks if an error indicates a session invalidation that requires reconnection.
-   *
-   * Common session-related errors include:
-   * - "No valid session ID provided" (HTTP 400)
-   * - "Server not initialized" (HTTP 400)
-   * - "Not connected" (protocol state error)
-   * - Connection refused errors
-   *
-   * @param error - The error to check
-   * @returns true if the error indicates a session problem requiring reconnection
-   *
-   * @internal
-   */
-  private isSessionError(error: unknown): boolean {
-    if (!(error instanceof Error)) {
-      return false;
-    }
-
-    const errorMessage = error.message.toLowerCase();
-
-    // Check for session-related error patterns
-    return (
-      errorMessage.includes('no valid session') ||
-      errorMessage.includes('session') ||
-      errorMessage.includes('server not initialized') ||
-      errorMessage.includes('not connected') ||
-      errorMessage.includes('http 400') ||
-      errorMessage.includes('http 401') ||
-      errorMessage.includes('http 403') ||
-      errorMessage.includes('econnrefused') ||
-      errorMessage.includes('fetch failed') ||
-      errorMessage.includes('connection refused') ||
-      errorMessage.includes('sse stream disconnected') ||
-      errorMessage.includes('typeerror: terminated')
-    );
-  }
-
-  /**
    * Forces a reconnection to the MCP server by disconnecting and reconnecting.
    *
    * This is useful when the session becomes invalid (e.g., after server restart)
@@ -713,6 +685,26 @@ export class InternalMastraMCPClient extends MastraBase {
     for (const tool of tools) {
       this.log('debug', `Processing tool: ${tool.name}`);
       try {
+        // Resolve requireToolApproval for this tool
+        let requireApproval: boolean | undefined;
+        let needsApprovalFn: ((args: any, ctx: any) => boolean | Promise<boolean>) | undefined;
+
+        if (typeof this.requireToolApproval === 'function') {
+          // Wrap the server-level function to match the per-tool needsApprovalFn signature.
+          // Note: ctx may be undefined when called via network/index.ts (which only passes args).
+          // We default ctx to {} so the spread doesn't fail and approval fn receives partial context.
+          const serverApprovalFn = this.requireToolApproval;
+          const toolName = tool.name;
+          requireApproval = true; // Signal that approval check is needed
+          needsApprovalFn = (args: Record<string, unknown>, ctx: Record<string, unknown> = {}) => {
+            return serverApprovalFn({ toolName, args, ...ctx });
+          };
+        } else if (this.requireToolApproval === true) {
+          requireApproval = true;
+        }
+        // When requireToolApproval is false/undefined, requireApproval stays undefined
+        // and createTool defaults it to false
+
         const mastraTool = createTool({
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
@@ -721,27 +713,37 @@ export class InternalMastraMCPClient extends MastraBase {
           // already validates structuredContent against the tool's outputSchema using AJV.
           // Passing it here causes Zod to strip unrecognized keys from the CallToolResult
           // envelope, returning {} for tools without structuredContent.
+          requireApproval,
           mcpMetadata: {
             serverName: this.name,
             serverVersion: this.client.getServerVersion()?.version,
           },
           execute: async (
             input: any,
-            context?: { requestContext?: RequestContext | null; runId?: string; abortSignal?: AbortSignal },
+            context?: {
+              requestContext?: RequestContext | null;
+              runId?: string;
+              abortSignal?: AbortSignal;
+              _meta?: Record<string, unknown>;
+            },
           ) => {
             const operationContext = context?.requestContext ?? null;
 
             return this.operationContextStore.run(operationContext, async () => {
               const executeToolCall = async () => {
                 this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: input, runId: context?.runId });
+                const userMeta = context?._meta;
+                // progressMeta spreads last so Mastra-managed progressToken takes precedence over any user-supplied one
+                const progressMeta = this.enableProgressTracking
+                  ? { progressToken: context?.runId || crypto.randomUUID() }
+                  : undefined;
+                const combinedMeta = userMeta || progressMeta ? { ...userMeta, ...progressMeta } : undefined;
+
                 const res = await this.client.callTool(
                   {
                     name: tool.name,
                     arguments: input,
-                    // Use runId as progress token if available, otherwise generate a random UUID
-                    ...(this.enableProgressTracking
-                      ? { _meta: { progressToken: context?.runId || crypto.randomUUID() } }
-                      : {}),
+                    ...(combinedMeta ? { _meta: combinedMeta } : {}),
                   },
                   CallToolResultSchema,
                   {
@@ -765,7 +767,7 @@ export class InternalMastraMCPClient extends MastraBase {
                 return await executeToolCall();
               } catch (e) {
                 // Check if this is a session-related error that requires reconnection
-                if (this.isSessionError(e)) {
+                if (isReconnectableMCPError(e)) {
                   this.log('debug', `Session error detected for tool ${tool.name}, attempting reconnection...`, {
                     error: e instanceof Error ? e.message : String(e),
                   });
@@ -798,6 +800,12 @@ export class InternalMastraMCPClient extends MastraBase {
             });
           },
         });
+
+        // Set needsApprovalFn directly on the tool instance (same pattern as tool-builder).
+        // This is accessed via (tool as any).needsApprovalFn in tool-call-step.ts.
+        if (needsApprovalFn) {
+          (mastraTool as any).needsApprovalFn = needsApprovalFn;
+        }
 
         if (tool.name) {
           toolsRes[tool.name] = mastraTool;

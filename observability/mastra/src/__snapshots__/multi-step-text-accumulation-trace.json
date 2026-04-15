@@ -23,7 +23,8 @@
         "entityType": "agent",
         "entityId": "multi-step-agent",
         "attributes": {
-          "instructions": "You are a helpful calculator assistant that announces what you will do before doing it."
+          "instructions": "You are a helpful calculator assistant that announces what you will do before doing it.",
+          "availableTools": ["calculator"]
         },
         "metadata": {
           "runId": "<runId-1>"
@@ -60,7 +61,13 @@
               "completionStartTime": "<date>",
               "usage": {
                 "inputTokens": 30,
-                "outputTokens": 25
+                "outputTokens": 25,
+                "inputDetails": {
+                  "text": 30
+                },
+                "outputDetails": {
+                  "text": 25
+                }
               }
             },
             "metadata": {
@@ -109,7 +116,13 @@
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 10,
-                    "outputTokens": 15
+                    "outputTokens": 15,
+                    "inputDetails": {
+                      "text": 10
+                    },
+                    "outputDetails": {
+                      "text": 15
+                    }
                   },
                   "isContinued": true,
                   "finishReason": "tool-calls"
@@ -268,7 +281,13 @@
                   "messageId": "<messageId-1>",
                   "usage": {
                     "inputTokens": 20,
-                    "outputTokens": 10
+                    "outputTokens": 10,
+                    "inputDetails": {
+                      "text": 20
+                    },
+                    "outputDetails": {
+                      "text": 10
+                    }
                   },
                   "isContinued": false,
                   "finishReason": "stop"

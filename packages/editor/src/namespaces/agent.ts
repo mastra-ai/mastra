@@ -44,16 +44,6 @@ import { CrudEditorNamespace } from './base';
 import type { StorageAdapter } from './base';
 import { EditorMCPNamespace } from './mcp';
 
-/**
- * Stores original code-defined agent field values before stored overrides are applied,
- * so they can be restored if the stored config is later removed.
- * Only instructions and tools are tracked — these are the only fields that
- * `applyStoredOverrides` mutates.
- */
-type AgentOverridableFields = Pick<ReturnType<Agent['__getOverridableFields']>, 'instructions' | 'tools'>;
-
-const codeDefaults = new WeakMap<Agent, AgentOverridableFields>();
-
 export class EditorAgentNamespace extends CrudEditorNamespace<
   StorageCreateAgentInput,
   StorageUpdateAgentInput,
@@ -92,6 +82,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
             : await store.getVersionByNumber(id, options.versionNumber!);
 
           if (!version) return null;
+          if (version.agentId !== id) {
+            throw new Error(`Version "${version.id}" does not belong to agent "${id}"`);
+          }
 
           const {
             id: versionId,
@@ -193,23 +186,27 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           ? { versionId: options.versionId }
           : { status: (options as { status?: 'draft' | 'published' } | undefined)?.status ?? 'draft' };
       storedConfig = await adapter.getByIdResolved(agent.id, resolvedOptions);
-    } catch {
-      // Editor not registered, storage not available, or agent not found — restore and return unchanged
-      this.restoreCodeDefaults(agent);
+    } catch (error) {
+      // If a specific versionId was requested, don't fail open — propagate the error
+      if (options && 'versionId' in options) {
+        throw error;
+      }
+      // Editor not registered, storage not available, or agent not found — return unchanged
       return agent;
     }
 
     if (!storedConfig) {
-      // No stored config — restore code defaults if previously overridden
-      this.restoreCodeDefaults(agent);
       return agent;
     }
 
-    // Save the original code-defined values before first override,
-    // then restore to a clean state before re-applying (so updated stored configs work correctly)
-    this.saveCodeDefaults(agent);
-    this.restoreCodeDefaults(agent);
-    this.saveCodeDefaults(agent);
+    // If requesting published status but no version has been published, don't override the code-defined agent
+    const requestedPublished = options && !('versionId' in options) && options.status === 'published';
+    if (requestedPublished && !storedConfig.activeVersionId) {
+      return agent;
+    }
+
+    // Fork the agent so overrides don't mutate the singleton instance
+    const fork = agent.__fork();
 
     this.logger?.debug(`[applyStoredOverrides] Applying stored overrides to code agent "${agent.id}"`);
 
@@ -217,7 +214,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     if (storedConfig.instructions !== undefined && storedConfig.instructions !== null) {
       const resolved = this.resolveStoredInstructions(storedConfig.instructions);
       if (resolved !== undefined) {
-        agent.__updateInstructions(resolved);
+        fork.__updateInstructions(resolved);
       }
     }
 
@@ -236,7 +233,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
       if (isDynamicTools) {
         // Wrap in a dynamic function that merges at request time
-        const originalTools = agent.listTools.bind(agent);
+        const originalTools = fork.listTools.bind(fork);
         const toolsFn = async ({ requestContext }: { requestContext: RequestContext }): Promise<ToolsInput> => {
           const codeTools = await originalTools({ requestContext });
           const ctx = requestContext.toJSON();
@@ -269,10 +266,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
           return { ...codeTools, ...registryTools, ...mcpTools, ...integrationTools };
         };
-        agent.__setTools(toolsFn);
+        fork.__setTools(toolsFn);
       } else {
         // Static tools — resolve once and merge
-        const codeTools = await agent.listTools();
+        const codeTools = await fork.listTools();
         const registryTools = this.resolveStoredTools(
           storedConfig.tools as Record<string, StorageToolConfig> | undefined,
         );
@@ -282,40 +279,17 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         const integrationTools = await this.resolveStoredIntegrationTools(
           storedConfig.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined,
         );
-        agent.__setTools({ ...codeTools, ...registryTools, ...mcpTools, ...integrationTools });
+        fork.__setTools({ ...codeTools, ...registryTools, ...mcpTools, ...integrationTools });
       }
     }
 
-    return agent;
-  }
+    // Persist the resolved version ID so it can be read by span attributes / handlers
+    if (storedConfig.resolvedVersionId) {
+      const existing = fork.toRawConfig() ?? {};
+      fork.__setRawConfig({ ...existing, resolvedVersionId: storedConfig.resolvedVersionId });
+    }
 
-  /**
-   * Save the agent's current field values to the module-level WeakMap
-   * so they can be restored if the stored config is later removed.
-   * Only saves on the first call (guards against overwriting originals with overridden values).
-   *
-   * Only instructions and tools are saved — these are the only fields
-   * that `applyStoredOverrides` mutates.
-   */
-  private saveCodeDefaults(agent: Agent): void {
-    if (codeDefaults.has(agent)) return;
-    const fields = agent.__getOverridableFields();
-    codeDefaults.set(agent, {
-      instructions: fields.instructions,
-      tools: fields.tools,
-    });
-  }
-
-  /**
-   * Restore the agent's original code-defined field values from the WeakMap.
-   * Clears the saved snapshot afterward.
-   */
-  private restoreCodeDefaults(agent: Agent): void {
-    const saved = codeDefaults.get(agent);
-    if (!saved) return;
-    agent.__updateInstructions(saved.instructions);
-    agent.__setTools(saved.tools);
-    codeDefaults.delete(agent);
+    return fork;
   }
 
   // ============================================================================

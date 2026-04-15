@@ -125,16 +125,44 @@ app.listen({ port: 3000 }, (err, address) => {
 ]}
 />
 
+## Protecting raw routes
+
+When you want Mastra-managed auth and route metadata such as `requiresAuth`, prefer [`registerApiRoute()`](/reference/server/register-api-route). For raw Fastify routes mounted directly on the app, use `createAuthMiddleware()`:
+
+```typescript title="server.ts"
+import Fastify from 'fastify'
+import { createAuthMiddleware, MastraServer } from '@mastra/fastify'
+import { mastra } from './mastra'
+
+const app = Fastify()
+const server = new MastraServer({ app, mastra })
+
+await server.init()
+
+app.get('/custom/protected', { preHandler: createAuthMiddleware({ mastra }) }, async request => {
+  const user = request.requestContext.get('user')
+  return { user }
+})
+
+app.get(
+  '/custom/public',
+  { preHandler: createAuthMiddleware({ mastra, requiresAuth: false }) },
+  async () => {
+    return { ok: true }
+  },
+)
+```
+
 ## Manual initialization
 
 For custom middleware ordering, call each method separately instead of `init()`. See [manual initialization](/docs/server/server-adapters#manual-initialization) for details.
 
 ## Examples
 
-- [Fastify Adapter](https://github.com/mastra-ai/mastra/tree/main/examples/server-fastify-adapter) - Basic Fastify server setup
+- [Fastify Adapter](https://github.com/mastra-ai/mastra/tree/main/examples/server-fastify-adapter): Basic Fastify server setup
 
 ## Related
 
-- [Server Adapters](/docs/server/server-adapters) - Shared adapter concepts
-- [MastraServer Reference](/reference/server/mastra-server) - Full API reference
-- [createRoute() Reference](/reference/server/create-route) - Creating type-safe custom routes
+- [Server Adapters](/docs/server/server-adapters): Shared adapter concepts
+- [MastraServer Reference](/reference/server/mastra-server): Full API reference
+- [createRoute() Reference](/reference/server/create-route): Creating type-safe custom routes

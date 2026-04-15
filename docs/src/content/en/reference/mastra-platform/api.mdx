@@ -1,0 +1,115 @@
+---
+title: "API Reference: Mastra Platform"
+description: API Reference for the Mastra platform REST API.
+packages:
+  - "mastra"
+---
+
+# API reference
+
+## Members API
+
+The root URL for the endpoints below is: `/v1/org/members`
+
+| Method | Endpoint | Description |
+| - | - | - |
+| GET | `/` | List members |
+| POST | `/invitations` | Send an invitation |
+| GET | `/invitations` | List invitations |
+| DELETE | `/invitations/:id` | Revoke an invitation |
+| PATCH | `/:id` | Update member role |
+| DELETE | `/:id` | Remove a member |
+
+## API tokens
+
+The root URL for the endpoints below is: `/v1/auth/tokens`
+
+| Method | Endpoint | Description |
+| - | - | - |
+| POST | `/` | Create an API token |
+| GET | `/` | List API tokens |
+| DELETE | `/:id` | Delete an API token |
+
+## Studio API
+
+The root URL for the endpoints below is: `/v1/studio`
+
+| Method | Endpoint | Description |
+| - | - | - |
+| GET | `/projects` | List studio projects |
+| POST | `/projects` | Create a project |
+| GET | `/projects/:id` | Get project detail and deploys |
+| DELETE | `/projects/:id` | Delete a project |
+| POST | `/deploys` | Create a deploy |
+| POST | `/deploys/:id/upload-complete` | Confirm artifact upload |
+| GET | `/deploys/:id` | Get deploy status |
+| GET | `/deploys/:id/logs` | Get deploy logs |
+| GET | `/deploys/:id/logs/stream` | Stream deploy logs (SSE) |
+
+## Server API
+
+The root URL for the endpoints below is: `/v1/server`
+
+| Method | Endpoint | Description |
+| - | - | - |
+| GET | `/projects` | List server projects |
+| POST | `/projects` | Create a project |
+| GET | `/projects/:id` | Get project detail |
+| DELETE | `/projects/:id` | Delete a project |
+| PUT | `/projects/:id/env` | Set environment variables |
+| GET | `/projects/:id/env` | Get environment variables |
+| POST | `/projects/:id/env/restart` | Restart after env change |
+| GET | `/projects/:id/domains` | List domains |
+| POST | `/projects/:id/domains` | Add a custom domain |
+| GET | `/projects/:id/runtime-logs` | Get runtime logs |
+| POST | `/projects/:id/redeploy` | Trigger redeploy |
+| POST | `/projects/:id/always-on` | Enable always-on |
+| DELETE | `/projects/:id/always-on` | Disable always-on |
+| POST | `/deploys` | Create a deploy |
+| POST | `/deploys/:id/upload-complete` | Confirm artifact upload |
+| GET | `/deploys/:id` | Get deploy status |
+| GET | `/deploys/:id/logs` | Get deploy logs |
+| POST | `/deploys/:id/cancel` | Cancel a queued or in-progress deploy |
+| DELETE | `/deploys/:id` | Stop a running deploy |
+
+## Gateway API
+
+The root URL for the endpoints below is: `/v1/gateway`
+
+| Method | Endpoint | Description |
+| - | - | - |
+| GET | `/projects` | List gateway projects |
+| GET | `/projects/:id` | Get project detail |
+| PATCH | `/projects/:id` | Update project settings |
+| DELETE | `/projects/:id` | Delete a project |
+| POST | `/projects/provision` | Provision a new gateway project |
+| GET | `/projects/:id/keys` | List API keys |
+| POST | `/projects/:id/keys` | Create an API key |
+| DELETE | `/projects/:id/keys/:keyId` | Revoke an API key |
+| GET | `/projects/:id/keys/:keyId/bindings` | List key-level provider bindings |
+| POST | `/projects/:id/keys/:keyId/bindings` | Add a key-level provider binding (BYOK) |
+| DELETE | `/projects/:id/keys/:keyId/bindings/:provider` | Remove a key-level binding |
+| GET | `/projects/:id/bindings` | List project-level provider bindings |
+| POST | `/projects/:id/bindings` | Add a project-level provider binding (BYOK) |
+| DELETE | `/projects/:id/bindings/:provider` | Remove a project-level binding |
+| GET | `/projects/:id/usage/has-activity` | Check whether project has any requests |
+| GET | `/projects/:id/usage/activity` | Get aggregated usage activity |
+| GET | `/projects/:id/usage/memory-activity` | Get memory-token totals over a time range |
+| GET | `/projects/:id/usage/logs` | Get request logs |
+| GET | `/projects/:id/usage/logs/facets` | Get log filter facets |
+| GET | `/projects/:id/usage/logs/:requestId` | Get specific request detail |
+| GET | `/projects/:id/memory/threads` | List threads (dashboard) |
+| POST | `/projects/:id/memory/threads` | Create a thread (dashboard) |
+| GET | `/projects/:id/memory/threads/:threadId` | Get thread (dashboard) |
+| PATCH | `/projects/:id/memory/threads/:threadId` | Update thread (dashboard) |
+| DELETE | `/projects/:id/memory/threads/:threadId` | Delete thread (dashboard) |
+| POST | `/projects/:id/memory/threads/:threadId/clone` | Clone thread (dashboard) |
+| GET | `/projects/:id/memory/threads/:threadId/messages` | List messages (dashboard) |
+| POST | `/projects/:id/memory/threads/:threadId/messages` | Save messages (dashboard) |
+| DELETE | `/projects/:id/memory/threads/:threadId/messages` | Delete messages (dashboard) |
+| GET | `/projects/:id/memory/threads/:threadId/observations/history` | Observation history (dashboard) |
+| GET | `/models` | List available models |
+
+## Gateway proxy endpoints
+
+Visit the [Memory Gateway documentation](https://gateway.mastra.ai/docs) for more details.

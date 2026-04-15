@@ -268,7 +268,7 @@ for await (const chunk of stream) {
     "outputCost": 0.5
   },
   {
-    "model": "xai/grok-4.20-beta-latest-non-reasoning",
+    "model": "xai/grok-4.20-0309-non-reasoning",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -280,7 +280,7 @@ for await (const chunk of stream) {
     "outputCost": 6
   },
   {
-    "model": "xai/grok-4.20-beta-latest-reasoning",
+    "model": "xai/grok-4.20-0309-reasoning",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -292,7 +292,7 @@ for await (const chunk of stream) {
     "outputCost": 6
   },
   {
-    "model": "xai/grok-4.20-multi-agent-beta-latest",
+    "model": "xai/grok-4.20-multi-agent-0309",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -396,6 +396,18 @@ const response = await agent.generate("Hello!", {
     {
         "name": "reasoningEffort",
         "type": "\"low\" | \"high\" | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "logprobs",
+        "type": "boolean | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "topLogprobs",
+        "type": "number | undefined",
         "description": "",
         "isOptional": true
     },

@@ -8,6 +8,7 @@ import stripAnsi from 'strip-ansi';
 import { getTermWidth, theme } from '../theme.js';
 
 const MAX_LINES = 200;
+const COLLAPSED_LINES = 20;
 
 /** Truncate a string with ANSI codes to a visible width.
  *  Handles both SGR sequences (\x1b[...m) and OSC 8 hyperlinks (\x1b]8;...;\x07).
@@ -64,6 +65,7 @@ export class ShellStreamComponent extends Container {
   private trailingPartial = '';
   private exitCode?: number;
   private startTime = Date.now();
+  private expanded = false;
 
   constructor(command: string) {
     super();
@@ -81,6 +83,15 @@ export class ShellStreamComponent extends Container {
       this.lines = this.lines.slice(-MAX_LINES);
     }
     this.rebuild();
+  }
+
+  setExpanded(expanded: boolean): void {
+    this.expanded = expanded;
+    this.rebuild();
+  }
+
+  isExpanded(): boolean {
+    return this.expanded;
   }
 
   finish(exitCode: number): void {
@@ -127,10 +138,21 @@ export class ShellStreamComponent extends Container {
     while (displayLines.length > 0 && displayLines[0] === '') displayLines.shift();
 
     if (displayLines.length > 0) {
-      const borderedLines = displayLines.map(line => {
-        const truncated = truncateAnsi(line, maxLineWidth);
-        return border('│') + ' ' + truncated;
+      const maxVisible = this.expanded ? MAX_LINES : COLLAPSED_LINES;
+      const truncated = displayLines.length > maxVisible;
+      const visibleLines = truncated ? displayLines.slice(-maxVisible) : displayLines;
+
+      const borderedLines = visibleLines.map(line => {
+        const truncatedLine = truncateAnsi(line, maxLineWidth);
+        return border('│') + ' ' + truncatedLine;
       });
+
+      if (truncated) {
+        const remaining = displayLines.length - maxVisible;
+        const action = this.expanded ? 'collapse' : 'expand';
+        borderedLines.push(border('│') + ' ' + theme.fg('muted', `... ${remaining} more lines (Ctrl+E to ${action})`));
+      }
+
       const displayOutput = borderedLines.join('\n');
       if (displayOutput.trim()) {
         this.addChild(new Text(displayOutput, 0, 0));
