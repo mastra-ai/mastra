@@ -622,17 +622,19 @@ export abstract class MastraBrowser extends MastraBase {
    * CLI providers (BrowserViewer) implement this to expose the URL for CLI tools.
    * SDK providers typically return null as they manage their own CDP connections.
    *
+   * @param _threadId - Thread identifier (for thread-scoped browsers)
    * @returns The CDP WebSocket URL (e.g., ws://127.0.0.1:9222/devtools/browser/...)
    */
-  getCdpUrl(): string | null {
+  getCdpUrl(_threadId?: string): string | null {
     return null;
   }
 
   /**
    * Launch the browser.
    * Race-condition-safe - handles concurrent calls, status management, and lifecycle hooks.
+   * @param _threadId - Thread identifier (for thread-scoped browsers, launches a browser for that thread)
    */
-  async launch(): Promise<void> {
+  async launch(_threadId?: string): Promise<void> {
     // Already ready
     if (this.status === 'ready') {
       return;
@@ -794,8 +796,9 @@ export abstract class MastraBrowser extends MastraBase {
 
   /**
    * Check if the browser is currently running.
+   * @param _threadId - Thread identifier (for thread-scoped browsers)
    */
-  isBrowserRunning(): boolean {
+  isBrowserRunning(_threadId?: string): boolean {
     return this.status === 'ready';
   }
 

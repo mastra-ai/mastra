@@ -899,16 +899,9 @@ export class Workspace<
         await callLifecycle(this._sandbox, 'start');
       }
 
-      // Launch browser if configured
-      if (this._browser) {
-        await this._browser.launch();
-
-        // Inject CDP URL into sandbox environment for CLI tools
-        const cdpUrl = this._browser.getCdpUrl();
-        if (cdpUrl && this._sandbox?.addEnv) {
-          this._sandbox.addEnv({ BROWSER_CDP_URL: cdpUrl });
-        }
-      }
+      // Note: Browser is NOT launched here - it's launched lazily in execute-command
+      // when a browser CLI command is detected. This matches SDK provider behavior
+      // and enables thread-scoped browsers.
 
       // Auto-index files if autoIndexPaths is configured
       if (this._searchEngine && this._config.autoIndexPaths && this._config.autoIndexPaths.length > 0) {

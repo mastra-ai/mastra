@@ -68,6 +68,13 @@ const CLI_CDP_PATTERNS: Record<string, { pattern: RegExp; flag: string }> = {
 };
 
 /**
+ * Check if a command is a browser CLI command.
+ */
+function isBrowserCliCommand(command: string): boolean {
+  return Object.values(CLI_CDP_PATTERNS).some(config => config.pattern.test(command));
+}
+
+/**
  * Inject CDP URL into browser CLI commands if not already present.
  * Returns the modified command or the original if no injection needed.
  */
@@ -107,10 +114,19 @@ async function executeCommand(input: Record<string, any>, context: any) {
     }
   }
 
-  // Inject CDP URL for browser CLI commands if workspace has a browser configured
+  // Lazy browser launch and CDP URL injection for browser CLI commands
   const browser = workspace.browser;
-  if (browser) {
-    const cdpUrl = browser.getCdpUrl();
+  if (browser && isBrowserCliCommand(command)) {
+    // Get threadId from context for thread-scoped browsers
+    const threadId = context?.threadId;
+
+    // Launch browser if not already running (for this thread if thread-scoped)
+    if (!browser.isBrowserRunning(threadId)) {
+      await browser.launch(threadId);
+    }
+
+    // Inject CDP URL into command
+    const cdpUrl = browser.getCdpUrl(threadId);
     command = injectCdpUrl(command, cdpUrl);
   }
 

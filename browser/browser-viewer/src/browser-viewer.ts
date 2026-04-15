@@ -8,14 +8,14 @@
  * - Direct page-level CDP sessions (fixes screencast sessionId issues)
  * - Full browser lifecycle control
  * - Predictable CDP URL for CLI injection
+ * - Thread-scoped browser isolation
  */
 
 import { chromium } from 'playwright-core';
-import type { Browser, BrowserContext, Page, CDPSession } from 'playwright-core';
+import type { Page } from 'playwright-core';
 import {
   MastraBrowser,
   ScreencastStreamImpl,
-  DEFAULT_THREAD_ID,
 } from '@mastra/core/browser';
 import type {
   BrowserState,
@@ -29,6 +29,7 @@ import type {
 } from '@mastra/core/browser';
 import type { Tool } from '@mastra/core/tools';
 import type { BrowserViewerConfig, CLIProvider } from './types';
+import { BrowserViewerThreadManager } from './thread-manager';
 
 /**
  * BrowserViewer - CLI provider with Playwright-managed Chrome
@@ -56,34 +57,49 @@ export class BrowserViewer extends MastraBrowser {
   override readonly provider = 'browser-viewer';
   override readonly providerType = 'cli' as const;
 
-  /** Playwright browser instance */
-  private browser: Browser | null = null;
-
-  /** Browser context */
-  private context: BrowserContext | null = null;
-
-  /** CDP session for the active page */
-  private cdpSession: CDPSession | null = null;
-
-  /** CDP WebSocket URL (either discovered from launched browser or provided in config) */
-  private _cdpUrl: string | null = null;
-
   /** Which CLI the agent uses */
   readonly cli: CLIProvider;
 
-  /** Viewer-specific config */
-  private readonly viewerConfig: BrowserViewerConfig;
+  /** Viewer-specific config (stored for reference) */
+  readonly viewerConfig: BrowserViewerConfig;
+
+  /** Thread manager for browser sessions */
+  declare protected threadManager: BrowserViewerThreadManager;
 
   constructor(config: BrowserViewerConfig) {
+    // Default to 'thread' scope (each thread gets its own Chrome)
+    // Use 'shared' if connecting to an existing browser
+    const effectiveScope = config.cdpUrl ? (config.scope ?? 'shared') : (config.scope ?? 'thread');
+
+    // Build base config (exclude CLI-specific options)
+    // Use type assertion because BrowserConfig is a discriminated union
+    const { cli: _cli, cdpPort: _cdpPort, userDataDir: _userDataDir, ...baseConfig } = config;
+
     super({
-      ...config,
-      // BrowserViewer always uses shared scope (single browser for all threads)
-      scope: 'shared',
-    });
+      ...baseConfig,
+      scope: effectiveScope,
+    } as any);
 
     this.id = `browser-viewer-${Date.now()}`;
     this.cli = config.cli;
     this.viewerConfig = config;
+
+    // Initialize thread manager
+    this.threadManager = new BrowserViewerThreadManager({
+      scope: effectiveScope,
+      browserConfig: config,
+      logger: this.logger,
+      onSessionCreated: session => {
+        // Notify listeners so screencast can start for this thread
+        this.notifyBrowserReady(session.threadId);
+      },
+      onBrowserCreated: (_browser, threadId, _cdpUrl) => {
+        this.logger?.debug?.(`Browser created for thread ${threadId}`);
+      },
+      onBrowserClosed: threadId => {
+        this.logger?.debug?.(`Browser closed for thread ${threadId}`);
+      },
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -92,10 +108,14 @@ export class BrowserViewer extends MastraBrowser {
 
   /**
    * Get the CDP WebSocket URL for CLI tools to connect.
-   * Returns null if browser is not running.
+   * For thread scope, returns the CDP URL for the specified thread.
+   * For shared scope, returns the single shared CDP URL.
+   *
+   * @param threadId - Thread identifier (optional, uses current thread if not specified)
+   * @returns CDP URL or null if browser not running for that thread
    */
-  override getCdpUrl(): string | null {
-    return this._cdpUrl;
+  override getCdpUrl(threadId?: string): string | null {
+    return this.threadManager.getCdpUrlForThread(threadId ?? this.getCurrentThread());
   }
 
   // ---------------------------------------------------------------------------
@@ -103,40 +123,22 @@ export class BrowserViewer extends MastraBrowser {
   // ---------------------------------------------------------------------------
 
   protected override async doLaunch(): Promise<void> {
+    const scope = this.threadManager.getScope();
     const cdpUrl = this.config.cdpUrl;
+
     if (cdpUrl) {
-      // Connect mode: connect to existing browser
+      // Connect mode: connect to existing browser (always shared)
       const url = typeof cdpUrl === 'function' ? await cdpUrl() : cdpUrl;
       await this.connectToExisting(url);
-    } else {
-      // Launch mode: start our own Chrome
-      await this.launchChrome();
+    } else if (scope === 'shared') {
+      // Shared mode: launch single browser
+      await this.threadManager.createSharedSession();
     }
+    // For thread scope, browsers are launched lazily per thread via ensureReady()
   }
 
   protected override async doClose(): Promise<void> {
-    // Clean up CDP session
-    if (this.cdpSession) {
-      try {
-        await this.cdpSession.detach();
-      } catch {
-        // Ignore detach errors
-      }
-      this.cdpSession = null;
-    }
-
-    // Close browser
-    if (this.browser) {
-      try {
-        await this.browser.close();
-      } catch {
-        // Ignore close errors
-      }
-      this.browser = null;
-      this.context = null;
-    }
-
-    this._cdpUrl = null;
+    await this.threadManager.closeAll();
   }
 
   /**
@@ -145,107 +147,67 @@ export class BrowserViewer extends MastraBrowser {
   private async connectToExisting(cdpUrl: string): Promise<void> {
     this.logger?.debug?.(`Connecting to existing browser at ${cdpUrl}`);
 
-    this.browser = await chromium.connectOverCDP(cdpUrl);
-    this._cdpUrl = cdpUrl;
+    const browser = await chromium.connectOverCDP(cdpUrl);
 
     // Get or create context
-    const contexts = this.browser.contexts();
-    this.context = contexts[0] ?? await this.browser.newContext();
+    const contexts = browser.contexts();
+    const context = contexts[0] ?? await browser.newContext();
 
     // Create initial page if none exists
-    const pages = this.context.pages();
+    const pages = context.pages();
     if (pages.length === 0) {
-      await this.context.newPage();
+      await context.newPage();
     }
 
-    // Set up CDP session for active page
-    await this.setupCdpSession();
+    // Set up as shared session by setting shared manager
+    this.threadManager.setSharedManager(browser);
 
     this.logger?.debug?.('Connected to existing browser');
   }
 
   /**
-   * Launch Chrome via Playwright.
+   * Ensure browser is ready for the current thread.
+   * For thread scope, creates a new browser if needed.
    */
-  private async launchChrome(): Promise<void> {
-    const port = this.viewerConfig.cdpPort ?? 0;
+  override async ensureReady(): Promise<void> {
+    const scope = this.threadManager.getScope();
+    const threadId = this.getCurrentThread();
 
-    this.logger?.debug?.(`Launching Chrome with remote-debugging-port=${port}`);
-
-    const launchOptions: Parameters<typeof chromium.launch>[0] = {
-      headless: this.viewerConfig.headless ?? false,
-      args: [
-        `--remote-debugging-port=${port}`,
-        '--no-first-run',
-        '--no-default-browser-check',
-      ],
-    };
-
-    // Use custom executable if provided
-    if (this.viewerConfig.executablePath) {
-      launchOptions.executablePath = this.viewerConfig.executablePath;
+    // For thread scope, create browser for this thread if needed
+    if (scope === 'thread' && !this.threadManager.isBrowserRunning(threadId)) {
+      await this.threadManager.getManagerForThread(threadId);
     }
 
-    // Use custom user data dir if provided
-    // Note: For persistent context, we'd use launchPersistentContext
-    // For now, we use launch() which creates a temporary profile
-
-    this.browser = await chromium.launch(launchOptions);
-
-    // Extract CDP URL from browser
-    // Playwright exposes this via browser.wsEndpoint() but that's the Playwright endpoint
-    // We need the Chrome DevTools endpoint
-    this._cdpUrl = this.extractCdpUrl();
-
-    // Create context and initial page
-    this.context = await this.browser.newContext({
-      viewport: this.viewerConfig.viewport ?? { width: 1280, height: 720 },
-    });
-
-    await this.context.newPage();
-
-    // Set up CDP session for active page
-    await this.setupCdpSession();
-
-    // Set up close listener
-    this.browser.on('disconnected', () => {
-      this.handleBrowserDisconnected();
-    });
-
-    this.logger?.debug?.(`Chrome launched, CDP URL: ${this._cdpUrl}`);
+    await super.ensureReady();
   }
 
   /**
-   * Extract the Chrome DevTools Protocol URL from the launched browser.
+   * Check if browser is running (for current thread in thread scope).
    */
-  private extractCdpUrl(): string {
-    if (!this.browser) {
-      throw new Error('Browser not launched');
-    }
-
-    // Playwright's wsEndpoint() returns the Playwright debugging endpoint
-    // which is also a valid CDP endpoint
-    const wsEndpoint = (this.browser as Browser & { wsEndpoint?: () => string }).wsEndpoint?.();
-
-    if (wsEndpoint) {
-      return wsEndpoint;
-    }
-
-    // Fallback: this shouldn't happen with chromium.launch()
-    throw new Error('Could not extract CDP URL from browser');
+  override isBrowserRunning(threadId?: string): boolean {
+    return this.threadManager.isBrowserRunning(threadId ?? this.getCurrentThread());
   }
 
   /**
-   * Set up CDP session for the active page.
+   * Launch browser, optionally for a specific thread.
+   * For thread scope, creates a browser for that thread.
+   * For shared scope, launches the single shared browser.
    */
-  private async setupCdpSession(): Promise<void> {
-    const page = await this.getActivePage();
-    if (!page) {
-      return;
-    }
+  override async launch(threadId?: string): Promise<void> {
+    const scope = this.threadManager.getScope();
+    const effectiveThreadId = threadId ?? this.getCurrentThread();
 
-    // Create CDP session directly on the page
-    this.cdpSession = await (page as Page).context().newCDPSession(page as Page);
+    if (scope === 'shared') {
+      // For shared scope, use base class launch (handles racing, status, etc.)
+      if (!this.threadManager.isBrowserRunning()) {
+        await super.launch();
+      }
+    } else {
+      // For thread scope, launch for this specific thread
+      if (!this.threadManager.isBrowserRunning(effectiveThreadId)) {
+        await this.threadManager.getManagerForThread(effectiveThreadId);
+      }
+    }
   }
 
   /**
@@ -253,11 +215,6 @@ export class BrowserViewer extends MastraBrowser {
    * Overrides base class method.
    */
   override handleBrowserDisconnected(): void {
-    this.logger?.debug?.('Browser disconnected');
-    this.browser = null;
-    this.context = null;
-    this.cdpSession = null;
-    this._cdpUrl = null;
     // Call parent to handle status and notifications
     super.handleBrowserDisconnected();
   }
@@ -266,21 +223,17 @@ export class BrowserViewer extends MastraBrowser {
   // Browser State (implements MastraBrowser abstract methods)
   // ---------------------------------------------------------------------------
 
-  protected override async getActivePage(_threadId?: string): Promise<Page | null> {
-    if (!this.context) {
-      return null;
-    }
-
-    const pages = this.context.pages();
-    return pages[0] ?? null;
+  protected override async getActivePage(threadId?: string): Promise<Page | null> {
+    return this.threadManager.getActivePageForThread(threadId ?? this.getCurrentThread());
   }
 
-  protected override getBrowserStateForThread(_threadId?: string): BrowserState | null {
-    if (!this.context) {
+  protected override getBrowserStateForThread(threadId?: string): BrowserState | null {
+    const context = this.threadManager.getContextForThread(threadId ?? this.getCurrentThread());
+    if (!context) {
       return null;
     }
 
-    const pages = this.context.pages();
+    const pages = context.pages();
     const tabs: BrowserTabState[] = pages.map((page, index) => ({
       url: page.url(),
       title: '', // Would need async call to get title
@@ -293,101 +246,79 @@ export class BrowserViewer extends MastraBrowser {
     };
   }
 
-  override isBrowserRunning(): boolean {
-    return this.browser !== null && this.browser.isConnected();
-  }
-
   // ---------------------------------------------------------------------------
-  // Screencast (overrides MastraBrowser)
+  // Screencast Support
   // ---------------------------------------------------------------------------
 
   override async startScreencast(options?: ScreencastOptions): Promise<ScreencastStream> {
-    const page = await this.getActivePage();
-    if (!page) {
-      throw new Error('No active page for screencast');
+    const threadId = this.getCurrentThread();
+    const cdpSession = this.threadManager.getCdpSessionForThread(threadId);
+
+    if (!cdpSession) {
+      throw new Error('CDP session not available for screencast');
     }
 
-    // Create fresh CDP session for screencast
-    const cdpSession = await (page as Page).context().newCDPSession(page as Page);
-
-    // Create provider that returns the CDP session
-    const provider: CdpSessionProvider = {
-      getCdpSession: async () => cdpSession as unknown as CdpSessionLike,
-      isBrowserRunning: () => this.isBrowserRunning(),
+    // Create a CDP session wrapper that implements CdpSessionLike
+    const cdpSessionLike: CdpSessionLike = {
+      send: async (method: string, params?: Record<string, unknown>) => {
+        return cdpSession.send(method as any, params);
+      },
+      on: (event: string, handler: (params: unknown) => void) => {
+        cdpSession.on(event as any, handler);
+      },
+      off: (event: string, handler: (params: unknown) => void) => {
+        cdpSession.off(event as any, handler);
+      },
     };
 
-    const stream = new ScreencastStreamImpl(provider, options);
+    // Create CDP session provider
+    const provider: CdpSessionProvider = {
+      getCdpSession: async () => cdpSessionLike,
+      isBrowserRunning: () => this.isBrowserRunning(threadId),
+    };
 
-    // Store stream for potential reconnection
-    const streamKey = this.getStreamKey(DEFAULT_THREAD_ID);
-    this.activeScreencastStreams.set(streamKey, stream);
-
-    await stream.start();
-
-    // Clean up on stop
-    stream.once('stop', () => {
-      if (this.activeScreencastStreams.get(streamKey) === stream) {
-        this.activeScreencastStreams.delete(streamKey);
-      }
-      cdpSession.detach().catch(() => {});
+    // Create and start screencast stream
+    const stream = new ScreencastStreamImpl(provider, {
+      format: options?.format ?? 'jpeg',
+      quality: options?.quality ?? 80,
+      maxWidth: options?.maxWidth ?? 1280,
+      maxHeight: options?.maxHeight ?? 720,
+      everyNthFrame: options?.everyNthFrame ?? 1,
     });
 
+    await stream.start();
     return stream;
   }
 
   // ---------------------------------------------------------------------------
-  // Input Injection (overrides MastraBrowser)
+  // Input Injection
   // ---------------------------------------------------------------------------
 
-  override async injectMouseEvent(params: MouseEventParams, _threadId?: string): Promise<void> {
-    if (!this.cdpSession) {
-      await this.setupCdpSession();
+  override async injectMouseEvent(params: MouseEventParams, threadId?: string): Promise<void> {
+    const cdpSession = this.threadManager.getCdpSessionForThread(threadId ?? this.getCurrentThread());
+    if (!cdpSession) {
+      throw new Error('CDP session not available for mouse injection');
     }
 
-    if (!this.cdpSession) {
-      throw new Error('No CDP session available for input injection');
-    }
-
-    await this.cdpSession.send('Input.dispatchMouseEvent', {
-      type: params.type,
-      x: params.x,
-      y: params.y,
-      button: params.button ?? 'left',
-      clickCount: params.clickCount ?? 1,
-      deltaX: params.deltaX ?? 0,
-      deltaY: params.deltaY ?? 0,
-      modifiers: params.modifiers ?? 0,
-    });
+    await cdpSession.send('Input.dispatchMouseEvent', params);
   }
 
-  override async injectKeyboardEvent(params: KeyboardEventParams, _threadId?: string): Promise<void> {
-    if (!this.cdpSession) {
-      await this.setupCdpSession();
+  override async injectKeyboardEvent(params: KeyboardEventParams, threadId?: string): Promise<void> {
+    const cdpSession = this.threadManager.getCdpSessionForThread(threadId ?? this.getCurrentThread());
+    if (!cdpSession) {
+      throw new Error('CDP session not available for keyboard injection');
     }
 
-    if (!this.cdpSession) {
-      throw new Error('No CDP session available for input injection');
-    }
-
-    await this.cdpSession.send('Input.dispatchKeyEvent', {
-      type: params.type,
-      key: params.key,
-      code: params.code,
-      text: params.text,
-      modifiers: params.modifiers ?? 0,
-      windowsVirtualKeyCode: params.windowsVirtualKeyCode,
-    });
+    await cdpSession.send('Input.dispatchKeyEvent', params);
   }
 
   // ---------------------------------------------------------------------------
-  // Tools (implements MastraBrowser abstract method)
+  // Tools (CLI agents don't use SDK tools - they use workspace commands)
   // ---------------------------------------------------------------------------
 
-  /**
-   * BrowserViewer doesn't provide its own tools.
-   * The agent uses CLI tools via workspace_execute_command.
-   */
-  override getTools(): Record<string, Tool<any, any>> {
+  getTools(): Record<string, Tool> {
+    // CLI agents use workspace_execute_command with CLI skills
+    // No SDK tools needed
     return {};
   }
 }

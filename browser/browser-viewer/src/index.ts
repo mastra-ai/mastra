@@ -6,4 +6,6 @@
  */
 
 export { BrowserViewer } from './browser-viewer';
+export { BrowserViewerThreadManager } from './thread-manager';
 export type { BrowserViewerConfig, CLIProvider } from './types';
+export type { BrowserViewerThreadManagerConfig } from './thread-manager';
