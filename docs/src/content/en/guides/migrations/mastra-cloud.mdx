@@ -60,30 +60,40 @@ If you were using Cloud Store, follow the steps below to export your data and lo
 
 ### Export your Cloud Store data
 
-Cloud Store data lives in a Turso-hosted libSQL database. Exporting it requires the database URL and an auth token, then a SQL dump via the [Turso CLI](https://docs.turso.tech/cli).
+Cloud Store data lives in a Turso-hosted libSQL database. Exporting it requires the database URL and an auth token (both surfaced in the dashboard), then a SQL dump via the [Turso CLI](https://docs.turso.tech/cli).
 
 <Steps>
   <StepItem>
-    Request your Cloud Store credentials from support.
+    Retrieve your Cloud Store credentials from the dashboard.
 
-    Email [support@mastra.ai](mailto:support@mastra.ai) from the address associated with your Mastra Cloud account and ask for the libSQL URL and auth token for the project you want to export. Support will return:
+    Open your project in the [Mastra dashboard](https://projects.mastra.ai) and navigate to **Runtime → Settings → Env Variables**. For Cloud Store–backed projects, two variables are injected alongside your own:
 
     - `MASTRA_STORAGE_URL`: A libSQL connection string (e.g. `libsql://<db-name>-<org>.turso.io`).
     - `MASTRA_STORAGE_AUTH_TOKEN`: A read-capable auth token scoped to that database.
 
+    Each row supports the standard environment variable actions — show/hide via the eye toggle, Edit, Delete, and Copy Value. Use **Copy Value** to grab both values for the dump command below.
+
     :::note
-    Self-serve retrieval of these credentials from the dashboard and CLI is on the roadmap. Until it ships, support is the supported path.
+    These variables only appear for projects that were provisioned with Cloud Store. If you brought your own database to Mastra Cloud, you already have these credentials and can skip ahead to [Point your Mastra app at the new database](#point-your-mastra-app-at-the-new-database).
+    :::
+
+    :::info
+    If the variables are missing, the values do not decrypt, or the Turso CLI rejects the token, email [support@mastra.ai](mailto:support@mastra.ai) from the address associated with your Mastra Cloud account and ask for the libSQL URL and auth token for the project you want to export. Include the project name/ID. Support can also run the dump on your behalf if CLI access is blocked on your network.
     :::
   </StepItem>
 
   <StepItem>
     Install the Turso CLI.
 
-    ```bash
+    ```bash title="macOS"
+    brew install tursodatabase/tap/turso
+    ```
+
+    ```bash title="Linux / WSL"
     curl -sSfL https://get.tur.so/install.sh | bash
     ```
 
-    See the [Turso CLI installation docs](https://docs.turso.tech/cli/installation) for alternatives (Homebrew, Windows).
+    See the [Turso CLI introduction](https://docs.turso.tech/cli/introduction) for Windows and headless-install options.
   </StepItem>
 
   <StepItem>
@@ -118,23 +128,15 @@ The dump is a standard SQL file and can be loaded into any libSQL-compatible dat
   </StepItem>
 
   <StepItem>
-    Create a new database to receive the dump.
+    Create a new database and load the dump in one step.
 
     ```bash
-    turso db create mastra-migrated
+    turso db create mastra-migrated --from-dump ./mastra-cloud-dump.sql
     ```
 
-    Pick a region close to where your Mastra Server runs to minimize latency. List available regions with `turso db locations`.
-  </StepItem>
+    `--from-dump` restores a local SQLite/libSQL dump at create time, which is faster and safer than piping statements through `turso db shell` after the fact. Pick a region close to where your Mastra Server runs to minimize latency — list available regions with `turso db locations` and pass `--group <group-name>` if you manage multiple groups.
 
-  <StepItem>
-    Load the dump into the new database.
-
-    ```bash
-    turso db shell mastra-migrated < mastra-cloud-dump.sql
-    ```
-
-    The shell streams each statement from the dump file into the new database. For multi-gigabyte dumps this can take several minutes.
+    For multi-gigabyte dumps, add `--wait` so the CLI blocks until the database is fully available.
   </StepItem>
 
   <StepItem>
