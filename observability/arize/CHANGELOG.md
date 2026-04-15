@@ -1,5 +1,12 @@
 # @mastra/arize
 
+## 1.0.17-alpha.3
+
+### Patch Changes
+
+- dependencies updates: ([#15282](https://github.com/mastra-ai/mastra/pull/15282))
+  - Updated dependency [`@arizeai/openinference-genai@0.1.7` ↗︎](https://www.npmjs.com/package/@arizeai/openinference-genai/v/0.1.7) (from `0.1.6`, in `dependencies`)
+
 ## 1.0.17-alpha.2
 
 ### Patch Changes

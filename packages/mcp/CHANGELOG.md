@@ -1,5 +1,11 @@
 # @mastra/mcp
 
+## 1.5.0-alpha.1
+
+### Patch Changes
+
+- Preserve forwarded MCP client elicitation capabilities so client-supported URL and form elicitations work correctly. ([#15233](https://github.com/mastra-ai/mastra/pull/15233))
+
 ## 1.5.0-alpha.0
 
 ### Minor Changes
