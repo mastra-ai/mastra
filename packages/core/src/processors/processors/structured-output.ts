@@ -39,6 +39,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
   public schema: StandardSchemaWithJSON<OUTPUT>;
   private structuringAgent: Agent<any, any, undefined>;
   private structuringModel: MastraModelConfig;
+  private structuringInstructions: string;
   private agent?: Agent<any, any, any>;
   private useAgent = false;
   private errorStrategy: 'strict' | 'warn' | 'fallback';
@@ -74,11 +75,12 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     this.jsonPromptInjection = options.jsonPromptInjection;
     this.providerOptions = options.providerOptions;
     this.logger = options.logger;
+    this.structuringInstructions = options.instructions || this.generateInstructions();
     // Create internal structuring agent as fallback (used when no explicit agent is set)
     this.structuringAgent = new Agent({
       id: 'structured-output-structurer',
       name: 'structured-output-structurer',
-      instructions: options.instructions || this.generateInstructions(),
+      instructions: this.structuringInstructions,
       model: options.model,
     });
   }
@@ -221,6 +223,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     if (this.useAgent && this.agent && threadId) {
       return this.agent.stream(prompt, {
         model: this.structuringModel,
+        instructions: this.structuringInstructions,
         structuredOutput: {
           schema: this.schema,
           jsonPromptInjection: this.jsonPromptInjection,

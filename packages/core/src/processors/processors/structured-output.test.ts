@@ -260,6 +260,7 @@ describe('StructuredOutputProcessor', () => {
         expect.stringContaining('# Assistant Response'),
         expect.objectContaining({
           model: mockModel,
+          instructions: expect.any(String),
           structuredOutput: {
             schema: testSchema,
             jsonPromptInjection: undefined,
@@ -334,6 +335,7 @@ describe('StructuredOutputProcessor', () => {
         expect.stringContaining('# Assistant Response'),
         expect.objectContaining({
           model: mockModel,
+          instructions: expect.any(String),
           structuredOutput: {
             schema: testSchema,
             jsonPromptInjection: undefined,
@@ -416,6 +418,7 @@ describe('StructuredOutputProcessor', () => {
         expect.stringContaining('# Assistant Response'),
         expect.objectContaining({
           model: mockModel,
+          instructions: expect.any(String),
           structuredOutput: {
             schema: testSchema,
             jsonPromptInjection: undefined,
