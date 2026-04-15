@@ -13,7 +13,7 @@ const { closeSpy, wsFetch } = vi.hoisted(() => {
   return { closeSpy, wsFetch };
 });
 
-vi.mock('@ai-sdk/openai-v5', async () => {
+vi.mock('@ai-sdk/openai-v6', async () => {
   return {
     createOpenAI: vi.fn(),
   };
@@ -25,7 +25,7 @@ vi.mock('./openai-websocket-fetch.js', async () => {
   };
 });
 
-const { createOpenAI } = await import('@ai-sdk/openai-v5');
+const { createOpenAI } = await import('@ai-sdk/openai-v6');
 
 describe('ModelRouter - OpenAI WebSocket transport', () => {
   beforeEach(() => {

@@ -1,5 +1,77 @@
 # @mastra/core
 
+## 1.25.0-alpha.3
+
+### Minor Changes
+
+- Added `processAPIError` hook to the Processor interface for intercepting LLM API call failures before they surface as errors. New built-in `PrefillErrorHandler` automatically recovers from Anthropic "assistant message prefill" errors by appending a `<system-reminder>continue</system-reminder>` user message and retrying once. ([#14435](https://github.com/mastra-ai/mastra/pull/14435))
+
+- **Experiments now run the correct agent version** ([#15317](https://github.com/mastra-ai/mastra/pull/15317))
+
+  When an experiment specifies `agentVersion`, the experiment pipeline now resolves and executes against that specific version instead of ignoring it. Previously, the version was stored as metadata but the agent always ran with its current default configuration.
+
+  **`entityVersionId` is now a first-class observability dimension**
+
+  New `entityVersionId`, `parentEntityVersionId`, and `rootEntityVersionId` fields are available on all observability records (spans, metrics, scores, feedback, logs). This enables filtering and grouping OLAP queries by version at any level of the span tree. `rootEntityVersionId` is particularly useful for aggregating all signals within a versioned agent's trace. This replaces the previous `resolvedVersionId` attribute which was buried in span attributes and unfilterable.
+
+  **`experimentId` propagated to agent spans**
+
+  Agent spans created during experiment execution now carry the `experimentId`, enabling trace-to-experiment cross-referencing.
+
+  **Scorer correlation context**
+
+  Scorers running in the experiment pipeline now receive full `targetCorrelationContext` (including `experimentId`), so scores emitted via observability carry experiment context.
+
+  **New experiment query filters**
+
+  `listExperiments` now supports filtering by `targetType`, `targetId`, `agentVersion`, and `status`. `listExperimentResults` now supports filtering by `traceId` and `status`.
+
+- Added `profile` and `executablePath` options to browser config for persistent sessions and custom browser support. Automatically cleans up stale Chrome lock files on browser close. ([#15194](https://github.com/mastra-ai/mastra/pull/15194))
+
+- **Added** ([#15313](https://github.com/mastra-ai/mastra/pull/15313))
+  Added per-tool strict mode for providers that support strict tool calling. You can now set `strict: true` on `createTool()` and Mastra will forward it when preparing tool definitions.
+
+  ```ts
+  const weatherTool = createTool({
+    id: 'weather',
+    description: 'Get weather for a city',
+    strict: true,
+    inputSchema: z.object({ city: z.string() }),
+    execute: async ({ city }) => ({ city }),
+  });
+  ```
+
+### Patch Changes
+
+- Fixed `mastra_workspace_list_files` silently returning no files when agents passed an empty `pattern` (e.g. `pattern: []` or `pattern: ''`). Empty and whitespace-only patterns are now treated as "no filter" and return the full listing instead of a dirs-only view or a picomatch error. ([#15360](https://github.com/mastra-ai/mastra/pull/15360))
+
+  Fixed harness tool approval, decline, and resume handlers hardcoding `requireToolApproval: true`. They now follow the harness `yolo` state like `sendMessage` already does, so resumed tool calls in yolo mode no longer get unexpectedly re-gated on approval.
+
+- AgentBrowser with default thread scope now initializes correctly. Previously, calling launch() followed by getPage() would throw "Browser not launched" when no explicit thread ID was provided. ([#15285](https://github.com/mastra-ai/mastra/pull/15285))
+
+- fix: ensure listVectorStores always returns a string id ([#15239](https://github.com/mastra-ai/mastra/pull/15239))
+
+- Agent instances can now create lightweight clones that preserve all configuration, so version overrides and tools are isolated without mutating the shared runtime agent. ([#15314](https://github.com/mastra-ai/mastra/pull/15314))
+
+- Upgraded model router providers to AI SDK v3 spec: OpenAI, Anthropic, Google, xAI, Groq, and Mistral now use the latest v6 SDK packages. Providers built on `openai-compatible` (Cerebras, DeepInfra, DeepSeek, Perplexity, TogetherAI) remain on v2 spec until their base package is updated. All provider packages (both v5 and v6) bumped to their latest stable patch versions. ([#15358](https://github.com/mastra-ai/mastra/pull/15358))
+
+  Fixed 'item missing its reasoning part' error for OpenAI reasoning models (gpt-5-mini, gpt-5.2). The v5 SDK couldn't serialize reasoning items for OpenAI's Responses API, so Mastra stripped them from prompts — but this caused errors in multi-turn conversations with memory enabled. With v3 providers, reasoning items are serialized natively and the stripping workaround has been removed.
+
+- Fixed Channels not working on Vercel serverless (and other serverless platforms). Webhook handlers now await initialization on cold starts instead of immediately returning 503, and pass the platform's `waitUntil` to the Chat SDK so agent processing survives after the HTTP response is sent. See #15300. ([#15335](https://github.com/mastra-ai/mastra/pull/15335))
+
+- fix(core): Restore AI SDK v6 provider option typings for vector embeddings ([#15306](https://github.com/mastra-ai/mastra/pull/15306))
+
+  The vendored AI SDK v6 declaration build now re-exports `ProviderOptions` after type bundling renames it to `ProviderOptions_2`. This fixes `TS2724` errors in `@mastra/core` when vector embeddings import AI SDK v6 provider option types.
+
+## 1.25.0-alpha.2
+
+### Patch Changes
+
+- Update references to "Mastra Cloud" to "Mastra platform" ([#15297](https://github.com/mastra-ai/mastra/pull/15297))
+
+- Updated dependencies [[`2a69802`](https://github.com/mastra-ai/mastra/commit/2a69802a0fc6d8a25a77fa6a42276e9d59a83914)]:
+  - @mastra/schema-compat@1.2.8-alpha.0
+
 ## 1.25.0-alpha.1
 
 ### Minor Changes

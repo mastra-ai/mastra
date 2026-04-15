@@ -46,6 +46,7 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import type {
+  ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
   ProcessorWorkflow,
@@ -182,10 +183,12 @@ export class Agent<
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[], TRequestContext>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[], TRequestContext>;
   #maxProcessorRetries?: number;
+  #errorProcessors?: DynamicArgument<ErrorProcessorOrWorkflow[], TRequestContext>;
   #browser?: MastraBrowser;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
+  #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>;
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
@@ -211,6 +214,8 @@ export class Agent<
    */
   constructor(config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>) {
     super({ component: RegisteredLogger.AGENT, rawConfig: config.rawConfig });
+
+    this.#config = config;
 
     this.name = config.name;
     this.id = config.id ?? config.name;
@@ -334,6 +339,10 @@ export class Agent<
 
     if (config.maxProcessorRetries !== undefined) {
       this.#maxProcessorRetries = config.maxProcessorRetries;
+    }
+
+    if (config.errorProcessors) {
+      this.#errorProcessors = config.errorProcessors;
     }
 
     if (config.requestContextSchema) {
@@ -516,20 +525,30 @@ export class Agent<
     requestContext,
     inputProcessorOverrides,
     outputProcessorOverrides,
+    errorProcessorOverrides,
     processorStates,
   }: {
     requestContext: RequestContext;
     inputProcessorOverrides?: InputProcessorOrWorkflow[];
     outputProcessorOverrides?: OutputProcessorOrWorkflow[];
+    errorProcessorOverrides?: ErrorProcessorOrWorkflow[];
     processorStates?: Map<string, ProcessorState>;
   }): Promise<ProcessorRunner> {
     // Resolve processors - overrides replace user-configured but auto-derived (memory, skills) are kept
     const inputProcessors = await this.listResolvedInputProcessors(requestContext, inputProcessorOverrides);
     const outputProcessors = await this.listResolvedOutputProcessors(requestContext, outputProcessorOverrides);
+    const errorProcessors =
+      errorProcessorOverrides ??
+      (this.#errorProcessors
+        ? typeof this.#errorProcessors === 'function'
+          ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
+          : this.#errorProcessors
+        : []);
 
     return new ProcessorRunner({
       inputProcessors,
       outputProcessors,
+      errorProcessors,
       logger: this.logger,
       agentName: this.name,
       processorStates,
@@ -821,13 +840,13 @@ export class Agent<
   }
 
   /**
-   * Returns the IDs of the raw configured input and output processors,
+   * Returns the IDs of the raw configured input, output, and error processors,
    * without combining them into workflows. Used by the editor to clone
    * agent processor configuration to storage.
    */
   public async getConfiguredProcessorIds(
     requestContext?: RequestContext,
-  ): Promise<{ inputProcessorIds: string[]; outputProcessorIds: string[] }> {
+  ): Promise<{ inputProcessorIds: string[]; outputProcessorIds: string[]; errorProcessorIds: string[] }> {
     const ctx = requestContext || new RequestContext();
 
     let inputProcessorIds: string[] = [];
@@ -848,7 +867,16 @@ export class Agent<
       outputProcessorIds = processors.map(p => p.id).filter(Boolean);
     }
 
-    return { inputProcessorIds, outputProcessorIds };
+    let errorProcessorIds: string[] = [];
+    if (this.#errorProcessors) {
+      const processors =
+        typeof this.#errorProcessors === 'function'
+          ? await this.#errorProcessors({ requestContext: ctx as RequestContext<TRequestContext> })
+          : this.#errorProcessors;
+      errorProcessorIds = processors.map(p => p.id).filter(Boolean);
+    }
+
+    return { inputProcessorIds, outputProcessorIds, errorProcessorIds };
   }
 
   /**
@@ -1945,6 +1973,35 @@ export class Agent<
    */
   __setTools(tools: DynamicArgument<TTools, any>) {
     this.#tools = tools as DynamicArgument<TTools, TRequestContext>;
+  }
+
+  /**
+   * Create a lightweight clone of this agent that can be independently mutated
+   * without affecting the original instance. Used by the editor to apply
+   * version overrides without mutating the singleton agent.
+   * @internal
+   */
+  __fork(): Agent<TAgentId, TTools, TOutput, TRequestContext> {
+    const fork = new Agent<TAgentId, TTools, TOutput, TRequestContext>({
+      ...this.#config,
+      rawConfig: this.toRawConfig(),
+    });
+
+    // Preserve runtime state that may have been set after construction
+    // (e.g. when Mastra registers agents via __registerMastra / __registerPrimitives).
+    // Assign fields directly to avoid re-triggering tool/processor registration
+    // side effects that __registerMastra would cause.
+    if (this.#mastra && !this.#config.mastra) {
+      fork.#mastra = this.#mastra;
+    }
+    if (this.#primitives) {
+      fork.#primitives = this.#primitives;
+    }
+
+    fork.source = this.source;
+    fork._agentNetworkAppend = this._agentNetworkAppend;
+
+    return fork;
   }
 
   async generateTitleFromUserMessage({
@@ -4748,6 +4805,8 @@ export class Agent<
       attributes: {
         conversationId: threadFromArgs?.id,
         instructions: this.#convertInstructionsToString(instructions),
+        // @deprecated — use entityVersionId (top-level span context field) instead.
+        // Kept for backward compatibility during migration.
         ...(this.toRawConfig()?.resolvedVersionId
           ? { resolvedVersionId: this.toRawConfig()!.resolvedVersionId as string }
           : {}),
@@ -4756,6 +4815,9 @@ export class Agent<
         runId,
         resourceId,
         threadId: threadFromArgs?.id,
+        ...(this.toRawConfig()?.resolvedVersionId
+          ? { entityVersionId: this.toRawConfig()!.resolvedVersionId as string }
+          : {}),
       },
       tracingPolicy: this.#options?.tracingPolicy,
       tracingOptions: options.tracingOptions,
@@ -4803,6 +4865,19 @@ export class Agent<
         requestContext: RequestContext;
         overrides?: OutputProcessorOrWorkflow[];
       }) => this.listResolvedOutputProcessors(requestContext, overrides),
+      errorProcessors: async ({
+        requestContext,
+        overrides,
+      }: {
+        requestContext: RequestContext;
+        overrides?: ErrorProcessorOrWorkflow[];
+      }) =>
+        overrides ??
+        (this.#errorProcessors
+          ? typeof this.#errorProcessors === 'function'
+            ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
+            : this.#errorProcessors
+          : []),
       llm,
     };
 
@@ -5553,6 +5628,8 @@ export class Agent<
         snapshot: existingSnapshot,
       },
       methodType: 'stream',
+      // Use agent's maxProcessorRetries as default, allow options to override
+      maxProcessorRetries: mergedStreamOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
     } as unknown as InnerAgentExecutionOptions<OUTPUT>);
 
     if (result.status !== 'success') {

@@ -1,5 +1,39 @@
 # @mastra/sentry
 
+## 1.0.16-alpha.2
+
+### Patch Changes
+
+- Fixed stack traces for errors reported to Sentry. Exceptions now point to the code that threw the error instead of `SentryExporter.handleSpanEnded` inside the exporter, so issues in Sentry are actually debuggable. ([#15343](https://github.com/mastra-ai/mastra/pull/15343))
+
+  This was caused by two issues, both fixed:
+  - `@mastra/sentry` passed the error message as a string to `Sentry.captureException`, which made Sentry synthesize a stack trace from the exporter's call site. It now passes an `Error` instance with the captured stack attached.
+  - `@mastra/observability` stored the wrapping `MastraError`'s stack on the span, hiding the original error's location. When the `MastraError` has a cause, the cause's stack is now preserved.
+
+  Fixes [#15337](https://github.com/mastra-ai/mastra/issues/15337).
+
+- Updated dependencies [[`cbdf3e1`](https://github.com/mastra-ai/mastra/commit/cbdf3e12b3d0c30a6e5347be658e2009648c130a), [`8fe46d3`](https://github.com/mastra-ai/mastra/commit/8fe46d354027f3f0f0846e64219772348de106dd), [`18c67db`](https://github.com/mastra-ai/mastra/commit/18c67dbb9c9ebc26f26f65f7d3ff836e5691ef46), [`a6525f2`](https://github.com/mastra-ai/mastra/commit/a6525f24a63c40fc18ade92ff1bb26e6cb6a4847), [`a6fbf2d`](https://github.com/mastra-ai/mastra/commit/a6fbf2dfe251b2c7f6bf063bdfc7db70ba65f15d), [`8dcc77e`](https://github.com/mastra-ai/mastra/commit/8dcc77e78a5340f5848f74b9e9f1b3da3513c1f5), [`e44480a`](https://github.com/mastra-ai/mastra/commit/e44480a6de15335367bc11b265df4477331ef198), [`aa67fc5`](https://github.com/mastra-ai/mastra/commit/aa67fc59ee8a5eeff1f23eb05970b8d7a536c8ff), [`fa8140b`](https://github.com/mastra-ai/mastra/commit/fa8140bcd4251d2e3ac85fdc5547dfc4f372b5be), [`190f452`](https://github.com/mastra-ai/mastra/commit/190f45258b0640e2adfc8219fa3258cdc5b8f071), [`18c67db`](https://github.com/mastra-ai/mastra/commit/18c67dbb9c9ebc26f26f65f7d3ff836e5691ef46), [`7e7bf60`](https://github.com/mastra-ai/mastra/commit/7e7bf606886bf374a6f9d4ca9b09dd83d0533372), [`184907d`](https://github.com/mastra-ai/mastra/commit/184907d775d8609c03c26e78ccaf37315f3aa287), [`ee14752`](https://github.com/mastra-ai/mastra/commit/ee1475205c88cf6d8961a0b90451be78a4d1bb36), [`0c4cd13`](https://github.com/mastra-ai/mastra/commit/0c4cd131931c04ac5405373c932a242dbe88edd6), [`b16a753`](https://github.com/mastra-ai/mastra/commit/b16a753d5748440248d7df82e29bb987a9c8386c)]:
+  - @mastra/core@1.25.0-alpha.3
+  - @mastra/observability@1.9.1-alpha.2
+  - @mastra/otel-exporter@1.0.16-alpha.2
+
+## 1.0.16-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`b687d14`](https://github.com/mastra-ai/mastra/commit/b687d14b8c038f38cd73bc7f3b1f9b5c2fe526ee)]:
+  - @mastra/observability@1.9.1-alpha.1
+  - @mastra/otel-exporter@1.0.16-alpha.1
+
+## 1.0.16-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`4ba3bb1`](https://github.com/mastra-ai/mastra/commit/4ba3bb1e465ad2ddaba3bbf2bc47e0faec32985e)]:
+  - @mastra/observability@1.9.1-alpha.0
+  - @mastra/core@1.25.0-alpha.2
+  - @mastra/otel-exporter@1.0.16-alpha.0
+
 ## 1.0.15
 
 ### Patch Changes

@@ -3,8 +3,7 @@ import { DataKeysAndValues } from './data-keys-and-values';
 import type { DataKeysAndValuesProps } from './data-keys-and-values-root';
 import { forwardRef } from 'react';
 import { TooltipProvider } from '@/ds/components/Tooltip';
-import { LinkComponentProvider } from '@/lib/framework';
-import type { LinkComponentProps } from '@/lib/framework';
+import type { LinkComponentProps } from '@/ds/types/link-component';
 
 const meta: Meta<typeof DataKeysAndValues> = {
   title: 'Elements/DataKeysAndValues',
@@ -129,19 +128,16 @@ const StoryLink = forwardRef<HTMLAnchorElement, LinkComponentProps>(({ href, chi
 ));
 
 export const ValueLink: Story = {
-  decorators: [
-    Story => (
-      <LinkComponentProvider Link={StoryLink} navigate={() => {}} paths={{} as never}>
-        <Story />
-      </LinkComponentProvider>
-    ),
-  ],
   render: () => (
     <DataKeysAndValues>
       <DataKeysAndValues.Key>Agent</DataKeysAndValues.Key>
-      <DataKeysAndValues.ValueLink href="/agents/my-agent">my-agent</DataKeysAndValues.ValueLink>
+      <DataKeysAndValues.ValueLink href="/agents/my-agent" LinkComponent={StoryLink}>
+        my-agent
+      </DataKeysAndValues.ValueLink>
       <DataKeysAndValues.Key>Workflow</DataKeysAndValues.Key>
-      <DataKeysAndValues.ValueLink href="/workflows/data-pipeline">data-pipeline</DataKeysAndValues.ValueLink>
+      <DataKeysAndValues.ValueLink href="/workflows/data-pipeline" LinkComponent={StoryLink}>
+        data-pipeline
+      </DataKeysAndValues.ValueLink>
     </DataKeysAndValues>
   ),
 };
@@ -195,11 +191,9 @@ export const ValueWithCopyBtn: Story = {
 export const MixedValueTypes: Story = {
   decorators: [
     Story => (
-      <LinkComponentProvider Link={StoryLink} navigate={() => {}} paths={{} as never}>
-        <TooltipProvider>
-          <Story />
-        </TooltipProvider>
-      </LinkComponentProvider>
+      <TooltipProvider>
+        <Story />
+      </TooltipProvider>
     ),
   ],
   render: () => (
@@ -207,7 +201,9 @@ export const MixedValueTypes: Story = {
       <DataKeysAndValues.Key>Status</DataKeysAndValues.Key>
       <DataKeysAndValues.Value>Running</DataKeysAndValues.Value>
       <DataKeysAndValues.Key>Agent</DataKeysAndValues.Key>
-      <DataKeysAndValues.ValueLink href="/agents/my-agent">my-agent</DataKeysAndValues.ValueLink>
+      <DataKeysAndValues.ValueLink href="/agents/my-agent" LinkComponent={StoryLink}>
+        my-agent
+      </DataKeysAndValues.ValueLink>
       <DataKeysAndValues.Key>Trace ID</DataKeysAndValues.Key>
       <DataKeysAndValues.ValueWithCopyBtn copyValue="abc123def456">abc123def456</DataKeysAndValues.ValueWithCopyBtn>
       <DataKeysAndValues.Key>Description</DataKeysAndValues.Key>

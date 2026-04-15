@@ -229,7 +229,7 @@ Organization ID. Can also be set via the `MASTRA_ORG_ID` environment variable.
 
 #### `--project`
 
-Project ID. Can also be set via the `MASTRA_PROJECT_ID` environment variable.
+Project ID or slug. Can also be set via the `MASTRA_PROJECT_ID` environment variable.
 
 #### `-y, --yes`
 
@@ -242,6 +242,10 @@ Path to the project config file. Defaults to `.mastra-project.json`.
 #### `--skip-build`
 
 Skip the build step and deploy the existing `.mastra/output` directory.
+
+#### `--debug`
+
+Enable debug logs during the build step.
 
 ### CI/CD usage
 
@@ -293,6 +297,101 @@ Builds and deploys your project to Server on Mastra platform. Works the same as 
 
 ```bash
 mastra server deploy [dir]
+```
+
+## `mastra server pause`
+
+Pauses the running server instance for the linked project. Organization and project resolution work the same as [`mastra server deploy`](#mastra-server-deploy).
+
+```bash
+mastra server pause
+```
+
+### Flags
+
+#### `--org`
+
+Organization ID. Can also be set via the `MASTRA_ORG_ID` environment variable.
+
+#### `--project`
+
+Project ID or slug when `MASTRA_PROJECT_ID` is not set. Slugs are resolved against projects in the current organization.
+
+#### `-c, --config`
+
+Path to the project config file. Defaults to `.mastra-project.json`.
+
+Fails if the instance is not running.
+
+## `mastra server restart`
+
+Restarts a paused or stopped server instance for the linked project. After the platform accepts the restart, the CLI resolves the deploy id (from the API response or by polling project and deploy metadata when the response omits an id), then streams build and deploy logs the same way as [`mastra server deploy`](#mastra-server-deploy) until the deploy reaches a terminal state.
+
+### Flags
+
+Same flags as [`mastra server pause`](#mastra-server-pause): **`--org`**, **`--project`**, and **`-c` / `--config`**, with the same defaults and behavior.
+
+```bash
+mastra server restart
+```
+
+Fails if a deployment is still active for this project (running, building, deploying, etc.); that is a platform restriction so you cannot restart while another deploy is in progress.
+
+## `mastra server env`
+
+Manages environment variables for the linked server deployment. Organization and project resolution work the same as [`mastra server deploy`](#mastra-server-deploy).
+
+Every subcommand accepts `-c` / `--config` for the project config file path (defaults to `.mastra-project.json`).
+
+### `mastra server env list`
+
+Lists all environment variables for the linked project. Values are partially masked in the output.
+
+### `mastra server env set`
+
+Sets an environment variable. The CLI reads the current map, applies the change, and uploads the result.
+
+```bash
+mastra server env set <key> <value>
+```
+
+### `mastra server env unset`
+
+Removes an environment variable.
+
+```bash
+mastra server env unset <key>
+```
+
+### `mastra server env import`
+
+Imports variables from a file (for example a `.env` file) and merges them into the existing map. New values override keys that already exist on the server.
+
+```bash
+mastra server env import <file>
+```
+
+### `mastra server env pull`
+
+Downloads environment variables from the linked project and writes them to a local file. This is the inverse of [`mastra server env import`](#mastra-server-env-import).
+
+```bash
+mastra server env pull [file]
+```
+
+The file defaults to `.env` when no argument is given. All values are double-quoted and escaped for safe shell sourcing. Keys that aren't valid shell identifiers are skipped. The output file is created with restrictive permissions (`0600`) since it contains secrets.
+
+#### `--project`
+
+Project ID or slug. Overrides the linked project when `MASTRA_PROJECT_ID` isn't set.
+
+#### CI usage
+
+In a continuous-integration pipeline, authenticate with `MASTRA_API_TOKEN` and pull the environment before running your app:
+
+```bash
+export MASTRA_API_TOKEN="..."
+mastra server env pull .env.production --project my-project
 ```
 
 ## `mastra auth`

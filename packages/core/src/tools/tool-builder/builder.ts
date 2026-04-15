@@ -1,3 +1,4 @@
+import type { Schema } from '@internal/ai-v6';
 import type { ProviderDefinedTool, ToolExecutionOptions } from '@internal/external-types';
 import {
   OpenAIReasoningSchemaCompatLayer,
@@ -19,6 +20,7 @@ import type { AnySpan } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
 import { RequestContext } from '../../request-context';
 import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
+import type { StandardSchemaWithJSON } from '../../schema';
 import { isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { safeStringify } from '../../utils';
@@ -231,7 +233,7 @@ export class CoreToolBuilder extends MastraBase {
         } else if (isStandardSchemaWithJSON(parameters)) {
           // StandardSchemaWithJSON - extract the JSON schema and wrap it
           // Use input since parameters represent tool input
-          const jsonSchema = standardSchemaToJSONSchema(parameters, { io: 'output' });
+          const jsonSchema = standardSchemaToJSONSchema(parameters, { io: 'input' });
           processedParameters = { jsonSchema };
         } else {
           // Assume Zod schema - convert to AI SDK Schema
@@ -269,6 +271,11 @@ export class CoreToolBuilder extends MastraBase {
         ...(processedOutputSchema ? { outputSchema: processedOutputSchema } : {}),
         type: 'provider-defined' as const,
         id: tool.id as `${string}.${string}`,
+        // V5 SDK factories set a hardcoded `name` (e.g. "web_search" for
+        // anthropic.web_search_20250305). Preserve it so that when this tool
+        // is later used with a V6 provider, the bidirectional toolNameMapping
+        // resolves the correct model-facing name instead of the versioned ID.
+        ...('name' in tool && typeof tool.name === 'string' ? { name: tool.name } : {}),
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
         description: tool.description,
         parameters: processedParameters,
@@ -608,7 +615,12 @@ export class CoreToolBuilder extends MastraBase {
     // For provider-defined tools, exclude execute and add name as per v5 spec
     if (builtTool.type === 'provider-defined') {
       const { execute, parameters, ...rest } = base;
-      const name = builtTool.id.split('.')[1] || builtTool.id;
+      // Prefer the preserved provider name (e.g. "web_search" from V5 SDK
+      // factories) over the ID-derived name (e.g. "web_search_20250305").
+      const name =
+        ('name' in builtTool && typeof builtTool.name === 'string' ? builtTool.name : null) ||
+        builtTool.id.split('.')[1] ||
+        builtTool.id;
       return {
         ...rest,
         type: builtTool.type,
@@ -651,27 +663,58 @@ export class CoreToolBuilder extends MastraBase {
       );
     }
 
-    let processedInputSchema: any;
-
     const originalSchema = this.getParameters();
+    let processedInputSchema: Schema | undefined;
 
-    // Find the first applicable compatibility layer
-    const applicableLayer = schemaCompatLayers.find(layer => layer.shouldApply());
-    if (isStandardSchemaWithJSON(originalSchema)) {
-      const inputJsonSchema = applicableLayer
-        ? applicableLayer.toJSONSchema(originalSchema as any)
-        : standardSchemaToJSONSchema(originalSchema, { io: 'input' });
+    if (originalSchema) {
+      if (isStandardSchemaWithJSON(originalSchema)) {
+        // Find the first applicable compatibility layer
+        const applicableLayer = schemaCompatLayers.find(layer => layer.shouldApply());
 
-      processedInputSchema = jsonSchema(inputJsonSchema);
-    } else {
-      if (originalSchema) {
+        let schemaToUse: StandardSchemaWithJSON;
+        if (applicableLayer) {
+          schemaToUse = applicableLayer.processToCompatSchema(originalSchema as any);
+        } else {
+          schemaToUse = toStandardSchema(originalSchema);
+        }
+
+        processedInputSchema = jsonSchema(
+          standardSchemaToJSONSchema(schemaToUse, {
+            io: 'input',
+          }),
+          {
+            validate: (value: unknown) => {
+              const result = schemaToUse['~standard'].validate(value);
+              // standard-schema validate may return a Promise
+              if (result instanceof Promise) {
+                return result.then(r => {
+                  if ('issues' in r && r.issues) {
+                    return {
+                      success: false as const,
+                      error: new Error(r.issues.map((i: any) => i.message).join(', ')),
+                    };
+                  }
+                  return { success: true as const, value: (r as { value: unknown }).value };
+                });
+              }
+              // standard-schema returns { value } on success or { issues } on failure,
+              // but AI SDK expects { success: boolean, value/error }
+              if ('issues' in result && result.issues) {
+                return {
+                  success: false as const,
+                  error: new Error(result.issues.map((i: any) => i.message).join(', ')),
+                };
+              }
+              return { success: true as const, value: (result as { value: unknown }).value };
+            },
+          },
+        );
+      } else {
         processedInputSchema = applyCompatLayer({
           schema: originalSchema,
           compatLayers: schemaCompatLayers,
           mode: 'aiSdkSchema',
         });
-      } else {
-        processedInputSchema = undefined;
       }
     }
 
@@ -727,6 +770,7 @@ export class CoreToolBuilder extends MastraBase {
       id: 'id' in this.originalTool ? this.originalTool.id : undefined,
       parameters: processedInputSchema ?? z.object({}),
       outputSchema: processedOutputSchema,
+      strict: 'strict' in this.originalTool ? this.originalTool.strict : undefined,
       providerOptions: 'providerOptions' in this.originalTool ? this.originalTool.providerOptions : undefined,
       mcp: 'mcp' in this.originalTool ? this.originalTool.mcp : undefined,
       toModelOutput: 'toModelOutput' in this.originalTool ? this.originalTool.toModelOutput : undefined,

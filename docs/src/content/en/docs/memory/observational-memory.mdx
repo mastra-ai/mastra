@@ -47,6 +47,14 @@ const memory = new Memory({
 
 See [configuration options](/reference/memory/observational-memory) for full API details.
 
+:::warning
+When you use OM with a client application, send **only the new message** from the client instead of the full conversation history.
+
+Observational memory still relies on stored conversation history. Sending the full history is redundant and can cause message ordering bugs when client-side timestamps conflict with stored timestamps.
+
+For an AI SDK example, see [Using Mastra Memory](/guides/build-your-ui/ai-sdk-ui#using-mastra-memory).
+:::
+
 :::note
 
 OM currently only supports `@mastra/pg`, `@mastra/libsql`, and `@mastra/mongodb` storage adapters.
@@ -170,7 +178,7 @@ With retrieval mode enabled, OM:
 - Keeps range metadata visible in the agent's context so the agent knows which observations map to which messages
 - Registers a `recall` tool the agent can call to:
   - Page through the raw messages behind any observation group range
-  - Search by semantic similarity (`mode: "search"` with a `query` string) — requires `vector: true`
+  - Search by semantic similarity (`mode: "search"` with a `query` string); requires `vector: true`
   - List all threads (`mode: "threads"`), browse other threads (`threadId`), and search across all threads (default `scope: 'resource'`)
   - When `scope: 'thread'`: restrict browsing and search to the current thread only
 
