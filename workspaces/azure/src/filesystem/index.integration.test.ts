@@ -10,17 +10,37 @@
  * - AZURE_STORAGE_CONNECTION_STRING: Connection string for Azure or Azurite (required)
  */
 
+import { BlobServiceClient } from '@azure/storage-blob';
 import {
   createFilesystemTestSuite,
   createWorkspaceIntegrationTests,
   cleanupCompositeMounts,
 } from '@internal/workspace-test-utils';
 import { Workspace } from '@mastra/core/workspace';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 
 import { AzureBlobFilesystem } from './index';
 
 const hasAzureCredentials = !!(process.env.AZURE_STORAGE_CONNECTION_STRING && process.env.TEST_AZURE_CONTAINER);
+
+/**
+ * Ensure the test container exists in Azurite/Azure.
+ * Uses the SDK directly instead of requiring the 1GB azure-cli Docker image.
+ */
+async function ensureTestContainer(): Promise<void> {
+  const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING!;
+  const containerName = process.env.TEST_AZURE_CONTAINER!;
+  const serviceClient = BlobServiceClient.fromConnectionString(connectionString);
+  const containerClient = serviceClient.getContainerClient(containerName);
+  await containerClient.createIfNotExists();
+}
+
+// Ensure test container exists before any test suite runs
+beforeAll(async () => {
+  if (hasAzureCredentials) {
+    await ensureTestContainer();
+  }
+});
 
 describe.skipIf(!hasAzureCredentials)('AzureBlobFilesystem Integration', () => {
   const testContainer = process.env.TEST_AZURE_CONTAINER!;

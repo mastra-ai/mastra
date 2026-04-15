@@ -4,7 +4,7 @@
  * A filesystem implementation backed by Azure Blob Storage.
  */
 
-import { BlobServiceClient, StorageSharedKeyCredential } from '@azure/storage-blob';
+import { BlobSASPermissions, BlobServiceClient, StorageSharedKeyCredential } from '@azure/storage-blob';
 import type { ContainerClient, RestError } from '@azure/storage-blob';
 
 import type {
@@ -191,8 +191,11 @@ export class AzureBlobFilesystem extends MastraFilesystem {
    *
    * Use this when you need features not exposed through the WorkspaceFilesystem
    * interface (e.g., SAS URL generation, lease management, etc.).
+   *
+   * This is async because DefaultAzureCredential requires a dynamic import.
+   * For non-DefaultAzureCredential auth methods, the promise resolves immediately.
    */
-  get container(): ContainerClient {
+  getContainer(): Promise<ContainerClient> {
     return this.getContainerClient();
   }
 
@@ -204,8 +207,10 @@ export class AzureBlobFilesystem extends MastraFilesystem {
 
     if (this.connectionString) {
       config.connectionString = this.connectionString;
-    } else if (this.accountName) {
-      config.accountName = this.accountName;
+    } else {
+      if (this.accountName) {
+        config.accountName = this.accountName;
+      }
       if (this.accountKey) {
         config.accountKey = this.accountKey;
       }
@@ -255,7 +260,7 @@ export class AzureBlobFilesystem extends MastraFilesystem {
     return `Azure Blob Storage in container "${this.containerName}". ${access} storage - files are retained across sessions.`;
   }
 
-  private getContainerClient(): ContainerClient {
+  private async getContainerClient(): Promise<ContainerClient> {
     if (this._containerClient) return this._containerClient;
 
     let serviceClient: BlobServiceClient;
@@ -278,17 +283,19 @@ export class AzureBlobFilesystem extends MastraFilesystem {
         const separator = baseUrl.includes('?') ? '&' : '?';
         serviceClient = new BlobServiceClient(`${baseUrl}${separator}${this.sasToken}`);
       } else if (this.useDefaultCredential) {
-        // Dynamic import to avoid requiring @azure/identity when not used
+        // Dynamically import @azure/identity to avoid requiring it when not used.
+        // Must use import() (not require()) because this package is ESM-first.
+        let DefaultAzureCredential: new () => unknown;
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const { DefaultAzureCredential } = require('@azure/identity');
-          serviceClient = new BlobServiceClient(baseUrl, new DefaultAzureCredential());
+          const identity = await import('@azure/identity');
+          DefaultAzureCredential = identity.DefaultAzureCredential;
         } catch {
           throw new Error(
             'DefaultAzureCredential requires @azure/identity to be installed. ' +
               'Install it with: npm install @azure/identity',
           );
         }
+        serviceClient = new BlobServiceClient(baseUrl, new DefaultAzureCredential());
       } else {
         // Anonymous access
         serviceClient = new BlobServiceClient(baseUrl);
@@ -410,16 +417,44 @@ export class AzureBlobFilesystem extends MastraFilesystem {
       throw new FileExistsError(dest);
     }
 
-    // Read source and write to destination.
-    // This avoids issues with beginCopyFromURL failing on private containers
-    // where the source blob URL is not directly accessible to the storage service.
+    const containerClient = await this.getReadyContainer();
+    const srcBlob = containerClient.getBlobClient(this.toKey(src));
+    const destBlob = containerClient.getBlobClient(this.toKey(dest));
+
     try {
-      const content = await this.readFile(src);
-      await this.writeFile(dest, content);
-    } catch (error: unknown) {
-      if (error instanceof FileNotFoundError) {
-        throw error;
+      const sasUrl = await srcBlob.generateSasUrl({
+        permissions: BlobSASPermissions.parse('r'),
+        expiresOn: new Date(Date.now() + 5 * 60 * 1000),
+      });
+
+      const properties = await srcBlob.getProperties();
+
+      if (properties.contentLength === 0) {
+        // Azure bug: syncCopyFromURL fails on zero-length blobs with CannotVerifyCopySource
+        await destBlob.getBlockBlobClient().upload(Buffer.alloc(0), 0);
+        return;
       }
+
+      const MAX_SYNC_COPY_SIZE = 256 * 1024 * 1024;
+      if ((properties.contentLength ?? 0) <= MAX_SYNC_COPY_SIZE) {
+        await destBlob.syncCopyFromURL(sasUrl);
+      } else {
+        const poller = await destBlob.beginCopyFromURL(sasUrl);
+        await poller.pollUntilDone();
+      }
+    } catch (error: unknown) {
+      if (isNotFoundError(error)) {
+        throw new FileNotFoundError(src);
+      }
+
+      // SAS generation fails without StorageSharedKeyCredential (e.g. DefaultAzureCredential).
+      // Fall back to download+reupload.
+      if (error instanceof Error && error.message.includes('generateSasUrl')) {
+        const content = await this.readFile(src);
+        await this.writeFile(dest, content);
+        return;
+      }
+
       throw this.handleError(error);
     }
   }
@@ -651,7 +686,7 @@ export class AzureBlobFilesystem extends MastraFilesystem {
   // ---------------------------------------------------------------------------
 
   async init(): Promise<void> {
-    const containerClient = this.getContainerClient();
+    const containerClient = await this.getContainerClient();
     try {
       const exists = await containerClient.exists();
       if (!exists) {

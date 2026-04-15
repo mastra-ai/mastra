@@ -47,6 +47,9 @@ vi.mock('@azure/storage-blob', () => {
   };
 
   return {
+    BlobSASPermissions: {
+      parse: vi.fn().mockReturnValue({ toString: () => 'r' }),
+    },
     BlobServiceClient: Object.assign(
       vi.fn().mockImplementation(function () {
         return mockServiceClient;
@@ -342,7 +345,7 @@ describe('AzureBlobFilesystem', () => {
       });
 
       // Access container to trigger client creation
-      fs.container;
+      await fs.getContainer();
 
       expect(MockBlobServiceClient.fromConnectionString).toHaveBeenCalled();
     });
@@ -358,7 +361,7 @@ describe('AzureBlobFilesystem', () => {
         accountKey: 'mykey',
       });
 
-      fs.container;
+      await fs.getContainer();
 
       expect(MockCredential).toHaveBeenCalledWith('myaccount', 'mykey');
     });
@@ -388,6 +391,10 @@ describe('AzureBlobFilesystem SDK Operations', () => {
       delete: vi.fn(),
       exists: vi.fn(),
       getProperties: vi.fn(),
+      generateSasUrl: vi.fn(),
+      syncCopyFromURL: vi.fn(),
+      beginCopyFromURL: vi.fn(),
+      getBlockBlobClient: vi.fn().mockReturnValue(mockBlockBlobClient),
     };
 
     mockContainerClient = {
@@ -601,7 +608,44 @@ describe('AzureBlobFilesystem SDK Operations', () => {
   });
 
   describe('copyFile()', () => {
-    it('reads source and writes to destination', async () => {
+    it('uses server-side copy via SAS URL for non-empty blobs', async () => {
+      mockBlobClient.generateSasUrl.mockResolvedValueOnce('https://account.blob.core.windows.net/c/src?sas=token');
+      mockBlobClient.getProperties.mockResolvedValueOnce({ contentLength: 1024 });
+      mockBlobClient.syncCopyFromURL.mockResolvedValueOnce({});
+
+      await fs.copyFile('/src.txt', '/dest.txt');
+
+      expect(mockBlobClient.generateSasUrl).toHaveBeenCalled();
+      expect(mockBlobClient.syncCopyFromURL).toHaveBeenCalled();
+    });
+
+    it('uses beginCopyFromURL for blobs over 256MB', async () => {
+      const poller = { pollUntilDone: vi.fn().mockResolvedValue({}) };
+      mockBlobClient.generateSasUrl.mockResolvedValueOnce('https://account.blob.core.windows.net/c/src?sas=token');
+      mockBlobClient.getProperties.mockResolvedValueOnce({ contentLength: 300 * 1024 * 1024 });
+      mockBlobClient.beginCopyFromURL.mockResolvedValueOnce(poller);
+
+      await fs.copyFile('/large.bin', '/large-copy.bin');
+
+      expect(mockBlobClient.beginCopyFromURL).toHaveBeenCalled();
+      expect(poller.pollUntilDone).toHaveBeenCalled();
+    });
+
+    it('handles zero-length blobs with direct upload', async () => {
+      mockBlobClient.generateSasUrl.mockResolvedValueOnce('https://account.blob.core.windows.net/c/src?sas=token');
+      mockBlobClient.getProperties.mockResolvedValueOnce({ contentLength: 0 });
+      mockBlockBlobClient.upload.mockResolvedValueOnce({});
+
+      await fs.copyFile('/empty.txt', '/empty-copy.txt');
+
+      expect(mockBlobClient.syncCopyFromURL).not.toHaveBeenCalled();
+      expect(mockBlockBlobClient.upload).toHaveBeenCalledWith(Buffer.alloc(0), 0);
+    });
+
+    it('falls back to download+reupload when SAS generation is unsupported', async () => {
+      mockBlobClient.generateSasUrl.mockRejectedValueOnce(
+        new Error('generateSasUrl is only supported with StorageSharedKeyCredential'),
+      );
       mockBlockBlobClient.download.mockResolvedValueOnce({
         readableStreamBody: createReadableStream(Buffer.from('content')),
       });
@@ -615,7 +659,7 @@ describe('AzureBlobFilesystem SDK Operations', () => {
 
     it('throws FileNotFoundError when source does not exist', async () => {
       const error = Object.assign(new Error('BlobNotFound'), { statusCode: 404 });
-      mockBlockBlobClient.download.mockRejectedValueOnce(error);
+      mockBlobClient.generateSasUrl.mockRejectedValueOnce(error);
 
       await expect(fs.copyFile('/missing.txt', '/dest.txt')).rejects.toThrow(/missing\.txt/);
     });
