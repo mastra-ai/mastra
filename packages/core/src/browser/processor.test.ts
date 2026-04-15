@@ -128,37 +128,11 @@ describe('BrowserContextProcessor', () => {
       expect(textPart.text).toContain('Hello');
     });
 
-    it('should indicate browser not running', () => {
-      const requestContext = new RequestContext();
-      const browserCtx: BrowserContext = {
-        provider: 'agent-browser',
-        isRunning: false,
-      };
-      requestContext.set('browser', browserCtx);
-
-      const messages = [
-        {
-          role: 'user' as const,
-          content: {
-            format: 2,
-            parts: [{ type: 'text', text: 'Hello' }],
-          },
-        },
-      ] as any;
-
-      const result = processor.processInputStep(createInputStepArgs({ messages, requestContext }));
-
-      expect(result).toBeDefined();
-      const resultMessages = (result as any).messages;
-      const textPart = resultMessages[0].content.parts[0];
-      expect(textPart.text).toContain('Browser is not currently running');
-    });
-
     it('should return undefined when no per-request data available', () => {
       const requestContext = new RequestContext();
       const browserCtx: BrowserContext = {
         provider: 'agent-browser',
-        // No currentUrl, pageTitle, or isRunning=false
+        // No currentUrl or pageTitle
       };
       requestContext.set('browser', browserCtx);
 
