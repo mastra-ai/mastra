@@ -3128,6 +3128,21 @@ export class Agent<
             const resolvedDefaultOptions = await resolvedAgent.getDefaultOptions?.({ requestContext });
             const resolvedHasOwnMemoryConfig = resolvedDefaultOptions?.memory !== undefined;
 
+            // Propagate parent memory to the resolved agent if it doesn't have its own.
+            // This must happen before onDelegationStart so the rejection path can
+            // save messages via resolvedAgent.getMemory().
+            if (
+              (methodType === 'generate' ||
+                methodType === 'generateLegacy' ||
+                methodType === 'stream' ||
+                methodType === 'streamLegacy') &&
+              supportedLanguageModelSpecifications.includes(resolvedModelVersion)
+            ) {
+              if (!resolvedAgent.hasOwnMemory() && this.#memory) {
+                resolvedAgent.__setMemory(this.#memory as DynamicArgument<MastraMemory>);
+              }
+            }
+
             // Call onDelegationStart hook if provided
             let effectivePrompt = inputData.prompt;
             let effectiveInstructions = inputData.instructions;
@@ -3256,19 +3271,6 @@ export class Agent<
               modifiedInstructions: effectiveInstructions !== inputData.instructions,
               modifiedMaxSteps: effectiveMaxSteps !== inputData.maxSteps,
             });
-
-            // Propagate parent memory to the resolved agent if it doesn't have its own
-            if (
-              (methodType === 'generate' ||
-                methodType === 'generateLegacy' ||
-                methodType === 'stream' ||
-                methodType === 'streamLegacy') &&
-              supportedLanguageModelSpecifications.includes(resolvedModelVersion)
-            ) {
-              if (!resolvedAgent.hasOwnMemory() && this.#memory) {
-                resolvedAgent.__setMemory(this.#memory as DynamicArgument<MastraMemory>);
-              }
-            }
 
             // Append LLM-provided instructions to the sub-agent's own instructions
             if (effectiveInstructions) {
