@@ -1278,7 +1278,7 @@ export function transformNetwork(
         step[PRIMITIVE_CACHE_SYMBOL] = step[PRIMITIVE_CACHE_SYMBOL] || new Map();
         const result = transformWorkflow(payload.payload as WorkflowStreamEvent, step[PRIMITIVE_CACHE_SYMBOL]);
         const workflowResult = Array.isArray(result)
-          ? result.find(item => item.type === 'data-workflow' || item.type === 'data-tool-workflow')
+          ? result.find(item => item?.type === 'data-workflow' || item?.type === 'data-tool-workflow')
           : result;
         if (workflowResult && 'data' in workflowResult) {
           const data = workflowResult.data;
@@ -1299,7 +1299,7 @@ export function transformNetwork(
           },
         } as const;
         if (Array.isArray(result)) {
-          return [networkChunk, ...result];
+          return [networkChunk, ...result.filter((r): r is TransformNetworkResult => r != null)];
         }
         return networkChunk;
       }
