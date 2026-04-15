@@ -86,7 +86,7 @@ async function discoverProjects(): Promise<TestProjectConfiguration[]> {
             ...projectConfig,
             test: {
               ...projectConfig.test,
-              root: `./${projectDir}`,
+              root: `${projectDir}`,
             },
           });
         }
