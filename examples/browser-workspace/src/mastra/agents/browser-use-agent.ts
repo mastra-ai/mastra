@@ -30,8 +30,7 @@ const browserUseWorkspace = new Workspace({
     workingDirectory: './workspace-data',
   }),
   skills: ['.agents/skills/browser-use'],
-  // TODO: Pass browserViewer to workspace once integration is complete
-  // browser: browserViewer,
+  browser: browserViewer,
 });
 
 const memory = new Memory();

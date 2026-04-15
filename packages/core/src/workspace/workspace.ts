@@ -31,6 +31,7 @@
  */
 
 import * as path from 'node:path';
+import type { MastraBrowser } from '../browser';
 import type { IMastraLogger } from '../logger';
 import type { RequestContext } from '../request-context';
 import type { MastraVector } from '../vector';
@@ -162,6 +163,35 @@ export interface WorkspaceConfig<
    * ```
    */
   onMount?: OnMountHook;
+
+  // ---------------------------------------------------------------------------
+  // Browser Configuration
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Browser provider for web automation.
+   *
+   * Must be a `MastraBrowser` instance with `providerType: 'cli'` (e.g., `PlaywrightViewer`).
+   * SDK providers (`AgentBrowser`, `StagehandBrowser`) are not supported here —
+   * use `Agent.browser` for SDK providers.
+   *
+   * The browser is launched via Playwright and exposes a CDP URL that CLI tools
+   * (`agent-browser`, `browser-use`, `browse-cli`) can connect to.
+   *
+   * @example
+   * ```typescript
+   * import { PlaywrightViewer } from '@mastra/browser-viewer';
+   *
+   * const workspace = new Workspace({
+   *   sandbox: new LocalSandbox({ cwd: './workspace' }),
+   *   browser: new PlaywrightViewer({
+   *     cli: 'agent-browser',
+   *     headless: false,
+   *   }),
+   * });
+   * ```
+   */
+  browser?: MastraBrowser;
 
   // ---------------------------------------------------------------------------
   // Search Configuration
@@ -412,6 +442,7 @@ export class Workspace<
   private _status: WorkspaceStatus = 'pending';
   private readonly _fs?: WorkspaceFilesystem;
   private readonly _sandbox?: WorkspaceSandbox;
+  private readonly _browser?: MastraBrowser;
   private readonly _config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>;
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
@@ -457,6 +488,19 @@ export class Workspace<
       }
     } else {
       this._fs = config.filesystem;
+    }
+
+    // Validate and store browser provider
+    if (config.browser) {
+      if (config.browser.providerType !== 'cli') {
+        throw new WorkspaceError(
+          `Workspace.browser requires a CLI provider (providerType: 'cli'), but got '${config.browser.providerType}'. ` +
+            `SDK providers should be used with Agent.browser instead.`,
+          'INVALID_CONFIG',
+          this.id,
+        );
+      }
+      this._browser = config.browser;
     }
 
     // Validate vector search config - embedder is required with vectorStore
@@ -569,6 +613,15 @@ export class Workspace<
    */
   get sandbox(): TSandbox {
     return this._sandbox as any;
+  }
+
+  /**
+   * The browser provider (if configured).
+   *
+   * Returns the MastraBrowser instance (must be a CLI provider like PlaywrightViewer).
+   */
+  get browser(): MastraBrowser | undefined {
+    return this._browser;
   }
 
   /**
@@ -846,6 +899,17 @@ export class Workspace<
         await callLifecycle(this._sandbox, 'start');
       }
 
+      // Launch browser if configured
+      if (this._browser) {
+        await this._browser.launch();
+
+        // Inject CDP URL into sandbox environment for CLI tools
+        const cdpUrl = this._browser.getCdpUrl();
+        if (cdpUrl && this._sandbox?.addEnv) {
+          this._sandbox.addEnv({ BROWSER_CDP_URL: cdpUrl });
+        }
+      }
+
       // Auto-index files if autoIndexPaths is configured
       if (this._searchEngine && this._config.autoIndexPaths && this._config.autoIndexPaths.length > 0) {
         await this.rebuildSearchIndex(this._config.autoIndexPaths ?? []);
@@ -873,6 +937,15 @@ export class Workspace<
           // LSP shutdown errors are non-blocking
         }
         this._lsp = undefined;
+      }
+
+      // Close browser before sandbox
+      if (this._browser) {
+        try {
+          await this._browser.close();
+        } catch {
+          // Browser close errors are non-blocking
+        }
       }
 
       if (this._sandbox) {

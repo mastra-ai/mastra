@@ -29,8 +29,7 @@ const browseCLIWorkspace = new Workspace({
   sandbox: new LocalSandbox({
     workingDirectory: './workspace-data',
   }),
-  // TODO: Pass browserViewer to workspace once integration is complete
-  // browser: browserViewer,
+  browser: browserViewer,
 });
 
 const memory = new Memory();

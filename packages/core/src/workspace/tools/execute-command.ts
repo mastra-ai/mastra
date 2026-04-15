@@ -57,6 +57,39 @@ function extractTailPipe(command: string): { command: string; tail?: number } {
   return { command };
 }
 
+/**
+ * CLI provider patterns for CDP URL injection.
+ * Maps CLI command prefixes to their CDP URL flag format.
+ */
+const CLI_CDP_PATTERNS: Record<string, { pattern: RegExp; flag: string }> = {
+  'agent-browser': { pattern: /^agent-browser\b/, flag: '--cdp' },
+  'browser-use': { pattern: /^(?:browser-use|bu)\b/, flag: '--cdp-url' },
+  browse: { pattern: /^browse\b/, flag: '--cdp-url' },
+};
+
+/**
+ * Inject CDP URL into browser CLI commands if not already present.
+ * Returns the modified command or the original if no injection needed.
+ */
+function injectCdpUrl(command: string, cdpUrl: string | null): string {
+  if (!cdpUrl) return command;
+
+  for (const [, config] of Object.entries(CLI_CDP_PATTERNS)) {
+    if (config.pattern.test(command)) {
+      // Check if CDP flag is already present
+      const flagPattern = new RegExp(`${config.flag}\\s+\\S+`);
+      if (flagPattern.test(command)) {
+        return command; // Already has CDP URL, don't override
+      }
+
+      // Inject CDP URL after the CLI command name
+      return command.replace(config.pattern, `$& ${config.flag} "${cdpUrl}"`);
+    }
+  }
+
+  return command;
+}
+
 /** Shared execute function used by both foreground-only and background-capable tool variants. */
 async function executeCommand(input: Record<string, any>, context: any) {
   let { command, cwd, tail } = input;
@@ -72,6 +105,13 @@ async function executeCommand(input: Record<string, any>, context: any) {
     if (extracted.tail != null) {
       tail = extracted.tail;
     }
+  }
+
+  // Inject CDP URL for browser CLI commands if workspace has a browser configured
+  const browser = workspace.browser;
+  if (browser) {
+    const cdpUrl = browser.getCdpUrl();
+    command = injectCdpUrl(command, cdpUrl);
   }
 
   await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);

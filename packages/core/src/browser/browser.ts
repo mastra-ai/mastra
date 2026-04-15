@@ -618,6 +618,17 @@ export abstract class MastraBrowser extends MastraBase {
   protected abstract doClose(): Promise<void>;
 
   /**
+   * Get the CDP WebSocket URL for connecting to this browser.
+   * CLI providers (PlaywrightViewer) implement this to expose the URL for CLI tools.
+   * SDK providers typically return null as they manage their own CDP connections.
+   *
+   * @returns The CDP WebSocket URL (e.g., ws://127.0.0.1:9222/devtools/browser/...)
+   */
+  getCdpUrl(): string | null {
+    return null;
+  }
+
+  /**
    * Launch the browser.
    * Race-condition-safe - handles concurrent calls, status management, and lifecycle hooks.
    */

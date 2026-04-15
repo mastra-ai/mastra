@@ -94,7 +94,7 @@ export class PlaywrightViewer extends MastraBrowser {
    * Get the CDP WebSocket URL for CLI tools to connect.
    * Returns null if browser is not running.
    */
-  getCdpUrl(): string | null {
+  override getCdpUrl(): string | null {
     return this._cdpUrl;
   }
 

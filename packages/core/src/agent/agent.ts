@@ -4688,8 +4688,13 @@ export class Agent<
     }
     const requestContext = options.requestContext || new RequestContext();
 
+    // Resolve workspace early so we can get browser from it if needed
+    const earlyWorkspace = await this.getWorkspace({ requestContext });
+
     // Inject browser context for BrowserContextProcessor
-    if (this.#browser && !requestContext.has('browser')) {
+    // Check both agent's browser (SDK providers) and workspace's browser (CLI providers)
+    const browser = this.#browser ?? earlyWorkspace?.browser;
+    if (browser && !requestContext.has('browser')) {
       // Get threadId early for browser context - can come from requestContext, options, or snapshot
       // Normalize memory.thread which can be a string or { id, ... } object
       const memoryThread = options.memory?.thread;
@@ -4702,14 +4707,14 @@ export class Agent<
       // Use thread-aware running check to avoid cross-thread state leakage
       // In thread scope, only report running if this specific thread has a session
       const isThreadRunning = browserThreadId
-        ? this.#browser.hasThreadSession(browserThreadId) && this.#browser.isBrowserRunning()
-        : this.#browser.isBrowserRunning();
+        ? browser.hasThreadSession(browserThreadId) && browser.isBrowserRunning()
+        : browser.isBrowserRunning();
 
       const browserCtx: BrowserContext = {
-        provider: this.#browser.provider,
-        sessionId: this.#browser.getSessionId(browserThreadId),
-        headless: this.#browser.headless,
-        currentUrl: (await this.#browser.getCurrentUrl(browserThreadId)) ?? undefined,
+        provider: browser.provider,
+        sessionId: browser.getSessionId(browserThreadId),
+        headless: browser.headless,
+        currentUrl: (await browser.getCurrentUrl(browserThreadId)) ?? undefined,
         isRunning: isThreadRunning,
       };
       requestContext.set('browser', browserCtx);
