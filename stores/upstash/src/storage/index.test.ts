@@ -191,7 +191,7 @@ describe('StoreMemoryUpstash saveMessages index behavior', () => {
     );
   });
 
-  it('falls back to scan when the index is missing and recreates the index during save', async () => {
+  it('skips scan when the index is missing and treats message as new', async () => {
     const memoryDomain = new StoreMemoryUpstash({ client: createTestClient() });
     await memoryDomain.init();
 
@@ -220,12 +220,14 @@ describe('StoreMemoryUpstash saveMessages index behavior', () => {
 
     await memoryDomain.saveMessages({ messages: [movedMessage] });
 
-    expect(scanSpy).toHaveBeenCalled();
+    // No scan should occur — unindexed messages are treated as new
+    expect(scanSpy).not.toHaveBeenCalled();
+
+    // Index should be recreated after the save
     await expect(client.get<string>(messageIndexKey)).resolves.toBe(targetThread.id);
 
-    const { messages: sourceMessages } = await memoryDomain.listMessages({ threadId: sourceThread.id });
+    // Message now exists in target thread (source thread still has old copy since no scan found it)
     const { messages: targetMessages } = await memoryDomain.listMessages({ threadId: targetThread.id });
-    expect(sourceMessages.find(message => message.id === originalMessage.id)).toBeUndefined();
     expect(targetMessages.find(message => message.id === originalMessage.id)?.threadId).toBe(targetThread.id);
   });
 });

@@ -485,38 +485,15 @@ export class StoreMemoryUpstash extends MemoryStorage {
     messageIds.forEach(messageId => indexPipeline.get(getMessageIndexKey(messageId)));
     const indexResults = await indexPipeline.exec();
 
-    const unindexedMessageIds: string[] = [];
     messageIds.forEach((messageId, index) => {
       const threadId = indexResults[index] as string | null;
       if (!threadId) {
-        unindexedMessageIds.push(messageId);
+        // No index entry — treat as a new message (skip expensive scan)
         return;
       }
 
       locationsByMessageId.set(messageId, [{ key: getMessageKey(threadId, messageId), threadId }]);
     });
-
-    for (const messageId of unindexedMessageIds) {
-      const keys = await this.#db.scanKeys(getMessageKey('*', messageId));
-      if (keys.length === 0) continue;
-
-      const messagePipeline = this.client.pipeline();
-      keys.forEach(key => messagePipeline.get(key));
-      const existingMessages = await messagePipeline.exec();
-
-      const locations: ExistingMessageLocation[] = [];
-      existingMessages.forEach((existingMessage, index) => {
-        const message = existingMessage as MastraDBMessage | null;
-        const key = keys[index];
-        if (!message?.threadId || !key || message.id !== messageId) return;
-
-        locations.push({ key, threadId: message.threadId });
-      });
-
-      if (locations.length > 0) {
-        locationsByMessageId.set(messageId, locations);
-      }
-    }
 
     return locationsByMessageId;
   }
