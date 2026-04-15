@@ -4,15 +4,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { google } from '@ai-sdk/google-v5';
 import { getLLMTestMode } from '@internal/llm-recorder';
-import { setupDummyApiKeys, shouldSkipLLMTest } from '@internal/test-utils';
+import { setupDummyApiKeys, createGatewayMock } from '@internal/test-utils';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { transformRequest } from './transform-request';
 
 const RECORDING_NAME = 'memory-integration-tests-src-observer-thread-title';
 const MODE = getLLMTestMode();
-const skipGoogle = shouldSkipLLMTest(MODE, 'google', RECORDING_NAME);
 setupDummyApiKeys(MODE, ['google']);
 
 const createMessage = (
@@ -36,16 +36,23 @@ const createMessage = (
 
 describe('Observer thread title generation', () => {
   let dbDir: string;
+  const mock = createGatewayMock({
+    name: RECORDING_NAME,
+    exactMatch: true,
+    transformRequest,
+  });
 
   beforeAll(async () => {
     dbDir = await mkdtemp(join(tmpdir(), 'memory-om-thread-title-'));
+    await mock.start();
   });
 
   afterAll(async () => {
     await rm(dbDir, { recursive: true, force: true });
+    await mock.saveAndStop();
   });
 
-  it.skipIf(skipGoogle)('should generate and persist a thread title through Memory observational memory', async () => {
+  it('should generate and persist a thread title through Memory observational memory', async () => {
     const threadId = randomUUID();
     const resourceId = randomUUID();
     const storage = new LibSQLStore({

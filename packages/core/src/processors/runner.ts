@@ -12,10 +12,12 @@ import type { ObservabilityContext, Span } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
+
 import type { ProcessorStepOutput } from './step-schema';
 import { isMaybeClaude46, TrailingAssistantGuard } from './trailing-assistant-guard';
 import { isProcessorWorkflow } from './index';
 import type {
+  ErrorProcessorOrWorkflow,
   OutputResult,
   ProcessInputStepResult,
   Processor,
@@ -115,6 +117,7 @@ type ProcessorOrWorkflow = Processor | ProcessorWorkflow;
 export class ProcessorRunner {
   public readonly inputProcessors: ProcessorOrWorkflow[];
   public readonly outputProcessors: ProcessorOrWorkflow[];
+  public readonly errorProcessors: ErrorProcessorOrWorkflow[];
   private readonly logger: IMastraLogger;
   private readonly agentName: string;
   /**
@@ -127,18 +130,21 @@ export class ProcessorRunner {
   constructor({
     inputProcessors,
     outputProcessors,
+    errorProcessors,
     logger,
     agentName,
     processorStates,
   }: {
     inputProcessors?: ProcessorOrWorkflow[];
     outputProcessors?: ProcessorOrWorkflow[];
+    errorProcessors?: ErrorProcessorOrWorkflow[];
     logger: IMastraLogger;
     agentName: string;
     processorStates?: Map<string, ProcessorState>;
   }) {
     this.inputProcessors = inputProcessors ?? [];
     this.outputProcessors = outputProcessors ?? [];
+    this.errorProcessors = errorProcessors ?? [];
     this.logger = logger;
     this.agentName = agentName;
     this.processorStates = processorStates ?? new Map();
@@ -1279,6 +1285,141 @@ export class ProcessorRunner {
     }
 
     return messageList;
+  }
+
+  /**
+   * Run processAPIError on all processors that implement it.
+   * Called when an LLM API call fails with a non-retryable error.
+   * Iterates through both input and output processors.
+   *
+   * @returns { retry: boolean } indicating whether to retry the LLM call
+   */
+  async runProcessAPIError(
+    args: {
+      error: unknown;
+      messages: MastraDBMessage[];
+      messageList: MessageList;
+      stepNumber: number;
+      steps: Array<StepResult<any>>;
+      messageId?: string;
+      requestContext?: RequestContext;
+      retryCount?: number;
+      writer?: ProcessorStreamWriter;
+      abortSignal?: AbortSignal;
+      rotateResponseMessageId?: () => string;
+    } & Partial<ObservabilityContext>,
+  ): Promise<{ retry: boolean }> {
+    const { error, messageList, stepNumber, steps, requestContext, retryCount = 0, writer, abortSignal } = args;
+    const observabilityContext = resolveObservabilityContext(args);
+
+    const allProcessors: ProcessorOrWorkflow[] = [
+      ...this.inputProcessors,
+      ...this.outputProcessors,
+      ...this.errorProcessors,
+    ];
+
+    for (const [index, processorOrWorkflow] of allProcessors.entries()) {
+      // Skip workflows — processAPIError is only available on Processor instances
+      if (isProcessorWorkflow(processorOrWorkflow)) {
+        continue;
+      }
+
+      const processor = processorOrWorkflow;
+      const processMethod = processor.processAPIError?.bind(processor);
+
+      if (!processMethod) {
+        continue;
+      }
+
+      const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+      };
+
+      const currentSpan = observabilityContext.tracingContext?.currentSpan;
+      const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+      const processorSpan = parentSpan?.createChildSpan({
+        type: SpanType.PROCESSOR_RUN,
+        name: `request error processor: ${processor.id}`,
+        entityType: EntityType.OUTPUT_STEP_PROCESSOR,
+        entityId: processor.id,
+        entityName: processor.name,
+        attributes: {
+          processorExecutor: 'legacy',
+          processorIndex: index,
+        },
+        input: { error: error instanceof Error ? error.message : String(error), stepNumber },
+      });
+
+      // Start recording MessageList mutations for this processor
+      messageList.startRecording();
+
+      const processableMessages: MastraDBMessage[] = messageList.get.all.db();
+
+      // Get or create processor state (persists across steps within a request)
+      const processorState = this.getProcessorState(processor.id);
+
+      try {
+        const result = await processMethod({
+          messages: processableMessages,
+          messageList,
+          stepNumber,
+          steps,
+          state: processorState.customState,
+          error,
+          abort,
+          ...createObservabilityContext({ currentSpan: processorSpan }),
+          requestContext,
+          retryCount,
+          writer,
+          abortSignal,
+          messageId: args.messageId,
+          ...(args.rotateResponseMessageId
+            ? {
+                rotateResponseMessageId: args.rotateResponseMessageId,
+              }
+            : {}),
+        });
+
+        // Stop recording and get mutations for this processor
+        const mutations = messageList.stopRecording();
+
+        processorSpan?.end({
+          output: { retry: result?.retry ?? false },
+          attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
+        });
+
+        if (result?.retry) {
+          return { retry: true };
+        }
+      } catch (processorError) {
+        // Stop recording on error
+        messageList.stopRecording();
+
+        if (processorError instanceof TripWire) {
+          processorSpan?.error({
+            error: processorError,
+            endSpan: true,
+            attributes: {
+              tripwireAbort: {
+                reason: processorError.message,
+                retry: processorError.options?.retry,
+                metadata: processorError.options?.metadata,
+              },
+            },
+          });
+          throw processorError;
+        }
+
+        processorSpan?.error({ error: processorError as Error, endSpan: true });
+        this.logger.error(
+          `[Agent:${this.agentName}] - Request error processor ${processor.id} failed:`,
+          processorError,
+        );
+        // Don't re-throw — if the error processor itself fails, fall through to original error handling
+      }
+    }
+
+    return { retry: false };
   }
 
   static applyMessagesToMessageList(

@@ -1,23 +1,23 @@
 import {
-  ButtonWithTooltip,
-  useAgents,
-  AgentsList,
   AgentIcon,
-  NoAgentsInfo,
+  ButtonWithTooltip,
+  ErrorState,
   ListSearch,
   NoDataPageLayout,
-  PageLayout,
   PageHeader,
+  PageLayout,
   PermissionDenied,
   SessionExpired,
-  ErrorState,
   is401UnauthorizedError,
   is403ForbiddenError,
-  useCanCreateAgent,
-  useLinkComponent,
 } from '@mastra/playground-ui';
 import { BookIcon, Plus } from 'lucide-react';
 import { useState } from 'react';
+import { AgentsList } from '@/domains/agents/components/agent-list/agents-list';
+import { NoAgentsInfo } from '@/domains/agents/components/agent-list/no-agents-info';
+import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { useCanCreateAgent } from '@/domains/agents/hooks/use-can-create-agent';
+import { useLinkComponent } from '@/lib/framework';
 
 function Agents() {
   const { data: agents = {}, isLoading, error } = useAgents();

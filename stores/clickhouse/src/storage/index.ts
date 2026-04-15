@@ -3,6 +3,7 @@ import { createClient } from '@clickhouse/client';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageDomains, TABLE_SCHEMAS } from '@mastra/core/storage';
+import { BackgroundTasksStorageClickhouse } from './domains/background-tasks';
 import { MemoryStorageClickhouse } from './domains/memory';
 import { ObservabilityStorageClickhouse } from './domains/observability';
 import { ObservabilityStorageClickhouseVNext } from './domains/observability/v-next';
@@ -12,6 +13,7 @@ import { WorkflowsStorageClickhouse } from './domains/workflows';
 
 // Export domain classes for direct use with MastraStorage composition
 export {
+  BackgroundTasksStorageClickhouse,
   MemoryStorageClickhouse,
   ObservabilityStorageClickhouse,
   ObservabilityStorageClickhouseVNext,
@@ -225,6 +227,7 @@ export class ClickhouseStore extends MastraCompositeStore {
       scores,
       memory,
       observability,
+      backgroundTasks: new BackgroundTasksStorageClickhouse(domainConfig),
     };
   }
 

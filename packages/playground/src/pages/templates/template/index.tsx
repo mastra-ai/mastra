@@ -1,21 +1,13 @@
 import { version } from '@mastra/core/package.json';
-import {
-  Breadcrumb,
-  Crumb,
-  Header,
-  MainContentLayout,
-  TemplateInfo,
-  TemplateForm,
-  TemplateInstallation,
-  TemplateSuccess,
-  ToolsIcon,
-  AgentIcon,
-  TemplateFailure,
-  Icon,
-} from '@mastra/playground-ui';
+import { AgentIcon, Breadcrumb, Crumb, Header, Icon, MainContentLayout, ToolsIcon } from '@mastra/playground-ui';
 import { BrainIcon, PackageIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
+import { TemplateFailure } from '@/domains/templates/template-failure';
+import { TemplateForm } from '@/domains/templates/template-form';
+import { TemplateInfo } from '@/domains/templates/template-info';
+import { TemplateInstallation } from '@/domains/templates/template-installation';
+import { TemplateSuccess } from '@/domains/templates/template-success';
 import {
   useTemplateRepo,
   useTemplateRepoEnvVars,

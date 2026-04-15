@@ -93,7 +93,7 @@ describe('applyStoredOverrides', () => {
     expect(result).toBe(agent);
   });
 
-  it('mutates the same agent instance (does not create a new one)', async () => {
+  it('returns a forked agent instance (does not mutate the original)', async () => {
     const { editor, codeAgent } = await setup({
       name: 'Stored Agent',
       instructions: 'Updated instructions.',
@@ -102,8 +102,17 @@ describe('applyStoredOverrides', () => {
 
     const result = await editor.agent.applyStoredOverrides(codeAgent);
 
-    // Should be the same object reference
-    expect(result).toBe(codeAgent);
+    // Should be a different object reference — the original is not mutated
+    expect(result).not.toBe(codeAgent);
+    expect(result.id).toBe(codeAgent.id);
+
+    // Original agent should retain its code-defined instructions
+    const originalInstructions = await codeAgent.getInstructions();
+    expect(originalInstructions).toBe('You are a code-defined agent.');
+
+    // Forked agent should have the overridden instructions
+    const forkedInstructions = await result.getInstructions();
+    expect(forkedInstructions).toBe('Updated instructions.');
   });
 
   it('resolves with the published (active) version when status is "published"', async () => {

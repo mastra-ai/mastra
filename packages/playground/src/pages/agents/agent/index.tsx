@@ -1,31 +1,25 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import {
-  AgentChat,
-  AgentLayout,
-  AgentSettingsProvider,
-  WorkingMemoryProvider,
-  ThreadInputProvider,
-  BrowserToolCallsProvider,
-  BrowserSessionProvider,
-  BrowserViewPanel,
-  useAgent,
-  useMemory,
-  useThreads,
-  AgentInformation,
-  TracingSettingsProvider,
-  ObservationalMemoryProvider,
-  ActivatedSkillsProvider,
-  SchemaRequestContextProvider,
-  PermissionDenied,
-  SessionExpired,
-  is403ForbiddenError,
-  is401UnauthorizedError,
-} from '@mastra/playground-ui';
-import type { AgentSettingsType } from '@mastra/playground-ui';
+import { PermissionDenied, SessionExpired, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
-
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
+import { AgentChat } from '@/domains/agents/components/agent-chat';
+import { AgentInformation } from '@/domains/agents/components/agent-information/agent-information';
+import { AgentLayout } from '@/domains/agents/components/agent-layout';
+import { BrowserViewPanel } from '@/domains/agents/components/browser-view';
+import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
+import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
+import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
+import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
+import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-context';
+import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
+import { useAgent } from '@/domains/agents/hooks/use-agent';
+import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
+import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
+import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
+import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
+
+import type { AgentSettingsType } from '@/types';
 
 function Agent() {
   const { agentId, threadId } = useParams();
