@@ -31,6 +31,7 @@ import type {
   TABLE_SKILLS,
   TABLE_SKILL_VERSIONS,
   TABLE_SKILL_BLOBS,
+  TABLE_ROLLOUTS,
   SpanRecord,
   StorageAgentType,
   StoragePromptBlockType,
@@ -161,6 +162,7 @@ export type RecordTypes = {
   [TABLE_SKILLS]: StorageSkillType;
   [TABLE_SKILL_VERSIONS]: SkillVersion;
   [TABLE_SKILL_BLOBS]: StorageBlobEntry;
+  [TABLE_ROLLOUTS]: Record<string, any>;
 };
 
 export type ListOptions = {

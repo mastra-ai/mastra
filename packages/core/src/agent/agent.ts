@@ -4351,6 +4351,7 @@ export class Agent<
           entity: {
             id: this.id,
             name: this.name,
+            resolvedVersionId: this.toRawConfig()?.resolvedVersionId as string | undefined,
           },
           source: 'LIVE',
           entityType: 'AGENT',

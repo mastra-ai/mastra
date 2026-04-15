@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
+import { RolloutAccumulator } from '@mastra/core/agent';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core';
 import { Workspace, CompositeVersionedSkillSource } from '@mastra/core/workspace';
@@ -53,6 +54,12 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
   StorageResolvedAgentType,
   Agent
 > {
+  #rolloutAccumulator: RolloutAccumulator = new RolloutAccumulator();
+
+  getRolloutAccumulator(): RolloutAccumulator {
+    return this.#rolloutAccumulator;
+  }
+
   protected async getStorageAdapter(): Promise<
     StorageAdapter<
       StorageCreateAgentInput,

@@ -107,6 +107,14 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       // skill publish requires blob storage not available in InMemoryStore
       '/stored/skills/:storedSkillId/publish',
     ];
+    // Rollout routes that require complex pre-populated state (valid version IDs,
+    // agent records in the store, etc.) — tested separately in dedicated tests
+    // Rollout mutation routes that need complex pre-populated state beyond what
+    // createDefaultTestContext provides (agent record in store, no pre-existing rollout, etc.)
+    const rolloutRoutesRequiringState = new Set([
+      'POST /agents/:agentId/rollout', // discriminated-union body + conflicts with pre-seeded rollout
+      'POST /agents/:agentId/rollout/promote', // needs agent record in agents store for agentsStore.update()
+    ]);
     // Routes under these prefixes are excluded (e.g. /datasets needs a datasets storage domain)
     const excludedPrefixes = ['/datasets'];
     const isExcluded = (r: ServerRoute) =>
@@ -115,6 +123,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       r.responseType === 'mcp-sse' ||
       authRoutesRequiringProviders.includes(r.path) ||
       routesRequiringExternalDeps.includes(r.path) ||
+      rolloutRoutesRequiringState.has(`${r.method} ${r.path}`) ||
       excludedPrefixes.some(prefix => r.path.startsWith(prefix));
     const activeRoutes = SERVER_ROUTES.filter(r => !isExcluded(r));
 
@@ -449,8 +458,8 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         });
       });
 
-      // Test error response structure for ALL routes with agentId
-      const agentRoutes = SERVER_ROUTES.filter(r => r.path.includes(':agentId') && !r.deprecated);
+      // Test error response structure for ALL routes with agentId (excluding routes that can't return a clean 404)
+      const agentRoutes = SERVER_ROUTES.filter(r => r.path.includes(':agentId') && !isExcluded(r));
       agentRoutes.forEach(route => {
         it(`should return valid error response structure for ${route.method} ${route.path}`, async () => {
           const request = buildRouteRequest(route, {

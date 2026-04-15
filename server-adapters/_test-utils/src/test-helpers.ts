@@ -489,6 +489,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
         createdAt: new Date(),
         updatedAt: new Date(),
       }),
+      getRolloutAccumulator: vi.fn().mockReturnValue(undefined),
     },
     scorer: {
       clearCache: vi.fn(),
@@ -654,6 +655,21 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
           description: 'A test stored skill',
           instructions: 'Test skill instructions',
         },
+      });
+    }
+
+    // Add test rollout for rollout routes (test-agent must have an active rollout)
+    const rollouts = await storage.getStore('rollouts');
+    if (rollouts) {
+      await rollouts.createRollout({
+        id: 'test-rollout',
+        agentId: 'test-agent',
+        type: 'canary',
+        stableVersionId: 'stable-v1',
+        allocations: [
+          { versionId: 'stable-v1', weight: 90, label: 'stable' },
+          { versionId: 'candidate-v2', weight: 10, label: 'candidate' },
+        ],
       });
     }
 

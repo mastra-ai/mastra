@@ -1,4 +1,4 @@
-import { Agent } from '@mastra/core/agent';
+import { Agent, resolveVersionFromRollout } from '@mastra/core/agent';
 import type { AgentModelManagerConfig } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY, parseModelString } from '@mastra/core/llm';
@@ -599,15 +599,23 @@ export async function getAgentFromSystem({
   mastra,
   agentId,
   versionOptions,
+  requestContext,
 }: {
   mastra: Context['mastra'];
   agentId: string;
   versionOptions?: { status?: 'draft' | 'published' } | { versionId: string };
+  requestContext?: RequestContext;
 }) {
   const logger = mastra.getLogger();
 
   if (!agentId) {
     throw new HTTPException(400, { message: 'Agent ID is required' });
+  }
+
+  // If no explicit version was requested, check for an active rollout
+  let effectiveVersionOptions = versionOptions;
+  if (!effectiveVersionOptions && requestContext) {
+    effectiveVersionOptions = await resolveRolloutVersionOptions(mastra, agentId, requestContext, logger);
   }
 
   let agent;
@@ -642,7 +650,7 @@ export async function getAgentFromSystem({
     try {
       const editorAgent = mastra.getEditor()?.agent;
       if (editorAgent) {
-        agent = await editorAgent.applyStoredOverrides(agent, versionOptions ?? { status: 'published' });
+        agent = await editorAgent.applyStoredOverrides(agent, effectiveVersionOptions ?? { status: 'published' });
       }
     } catch (error) {
       logger.debug('Error applying stored overrides to code agent', error);
@@ -653,7 +661,7 @@ export async function getAgentFromSystem({
   if (!agent) {
     logger.debug('Agent not found in code-defined agents, looking in stored agents', { agentId });
     try {
-      agent = (await mastra.getEditor()?.agent.getById(agentId, versionOptions)) ?? null;
+      agent = (await mastra.getEditor()?.agent.getById(agentId, effectiveVersionOptions)) ?? null;
     } catch (error) {
       logger.debug('Error getting stored agent', error);
     }
@@ -664,6 +672,36 @@ export async function getAgentFromSystem({
   }
 
   return agent;
+}
+
+/**
+ * Check for an active rollout and resolve the version to use.
+ * Returns version options if a rollout is active, undefined otherwise.
+ */
+async function resolveRolloutVersionOptions(
+  mastra: Context['mastra'],
+  agentId: string,
+  requestContext: RequestContext,
+  logger: ReturnType<Context['mastra']['getLogger']>,
+): Promise<{ versionId: string } | undefined> {
+  try {
+    const storage = mastra.getStorage();
+    if (!storage) return undefined;
+
+    const rolloutsStore = await storage.getStore('rollouts');
+    if (!rolloutsStore) return undefined;
+
+    const rollout = await rolloutsStore.getActiveRollout(agentId);
+    if (!rollout) return undefined;
+
+    const versionId = resolveVersionFromRollout(rollout, requestContext);
+    logger.debug('Resolved version from rollout', { agentId, rolloutId: rollout.id, versionId });
+
+    return { versionId };
+  } catch (error) {
+    logger.debug('Error resolving rollout version, falling back to default', error);
+    return undefined;
+  }
 }
 
 async function formatAgent({
@@ -1016,12 +1054,6 @@ export const GENERATE_AGENT_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async ({ agentId, mastra, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(serverRequestContext),
-      });
-
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
@@ -1031,8 +1063,9 @@ export const GENERATE_AGENT_ROUTE = createRoute({
       validateBody({ messages });
 
       // Merge body's requestContext values into the server's RequestContext instance
-      // Only set values that don't already exist on the server context to prevent
-      // clients from overwriting server-populated auth/tenant values
+      // before resolving the agent version, so rollout routing has access to client-supplied
+      // values like resourceId. Only set values that don't already exist on the server
+      // context to prevent clients from overwriting server-populated auth/tenant values.
       if (bodyRequestContext && typeof bodyRequestContext === 'object') {
         for (const [key, value] of Object.entries(bodyRequestContext)) {
           if (serverRequestContext.get(key) === undefined) {
@@ -1040,6 +1073,13 @@ export const GENERATE_AGENT_ROUTE = createRoute({
           }
         }
       }
+
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(serverRequestContext),
+        requestContext: serverRequestContext,
+      });
 
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
@@ -1104,6 +1144,7 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       // UI Frameworks may send "client tools" in the body,
@@ -1164,6 +1205,7 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       // UI Frameworks may send "client tools" in the body,
@@ -1309,12 +1351,6 @@ export const STREAM_GENERATE_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        versionOptions: extractVersionOptions(serverRequestContext),
-      });
-
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
@@ -1323,8 +1359,9 @@ export const STREAM_GENERATE_ROUTE = createRoute({
       validateBody({ messages });
 
       // Merge body's requestContext values into the server's RequestContext instance
-      // Only set values that don't already exist on the server context to prevent
-      // clients from overwriting server-populated auth/tenant values
+      // before resolving the agent version, so rollout routing has access to client-supplied
+      // values like resourceId. Only set values that don't already exist on the server
+      // context to prevent clients from overwriting server-populated auth/tenant values.
       if (bodyRequestContext && typeof bodyRequestContext === 'object') {
         for (const [key, value] of Object.entries(bodyRequestContext)) {
           if (serverRequestContext.get(key) === undefined) {
@@ -1332,6 +1369,13 @@ export const STREAM_GENERATE_ROUTE = createRoute({
           }
         }
       }
+
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(serverRequestContext),
+        requestContext: serverRequestContext,
+      });
 
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
@@ -1585,6 +1629,7 @@ export const STREAM_NETWORK_ROUTE = createRoute({
         mastra,
         agentId,
         versionOptions: extractVersionOptions(requestContext),
+        requestContext,
       });
 
       // UI Frameworks may send "client tools" in the body,

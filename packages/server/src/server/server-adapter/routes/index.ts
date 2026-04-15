@@ -7,6 +7,7 @@ import type { InMemoryTaskStore } from '../../a2a/store';
 import type { OpenAPIRoute } from '../openapi-utils';
 import { A2A_ROUTES } from './a2a';
 import { AGENT_BUILDER_ROUTES } from './agent-builder';
+import { AGENT_ROLLOUT_ROUTES } from './agent-rollouts';
 import { AGENTS_ROUTES } from './agents';
 import type { AgentRoutes } from './agents';
 import { AUTH_ROUTES } from './auth';
@@ -142,6 +143,7 @@ export type ServerRoute<
 
 export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...AGENTS_ROUTES,
+  ...AGENT_ROLLOUT_ROUTES,
   ...AUTH_ROUTES,
   ...WORKFLOWS_ROUTES,
   ...TOOLS_ROUTES,

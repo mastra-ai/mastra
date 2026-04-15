@@ -17,6 +17,7 @@ import type {
   DatasetVersion,
   Experiment,
   ExperimentResult,
+  RolloutRecord,
 } from '../types';
 import type { AgentVersion } from './agents';
 import type { MCPClientVersion } from './mcp-clients';
@@ -75,6 +76,9 @@ export class InMemoryDB {
   readonly experiments = new Map<string, Experiment>();
   readonly experimentResults = new Map<string, ExperimentResult>();
 
+  // Rollout domain maps
+  readonly rollouts = new Map<string, RolloutRecord>();
+
   /**
    * Clears all data from all collections.
    * Useful for testing.
@@ -110,5 +114,6 @@ export class InMemoryDB {
     this.datasetVersions.clear();
     this.experiments.clear();
     this.experimentResults.clear();
+    this.rollouts.clear();
   }
 }
