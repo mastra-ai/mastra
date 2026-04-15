@@ -2770,7 +2770,15 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody?: {
+      content: {
+        'application/json': {
+          envVars?: {
+            [key: string]: string;
+          };
+        };
+      };
+    };
     responses: {
       /** @description Deploy queued */
       202: {
