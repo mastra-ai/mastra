@@ -99,14 +99,18 @@ Cloud Store data lives in a Turso-hosted libSQL database. Exporting it requires 
   <StepItem>
     Export the database to a SQL dump.
 
-    Set the credentials from support as environment variables, then dump the database to a local file:
+    Set the credentials provided by support (or use the dashboard values if you already copied them earlier) as environment variables, then dump the database to a local file:
 
     ```bash
     export MASTRA_STORAGE_URL="libsql://<db-name>-<org>.turso.io"
-    export MASTRA_STORAGE_AUTH_TOKEN="<token-from-support>"
+    export MASTRA_STORAGE_AUTH_TOKEN="<token-from-dashboard-or-support>"
 
     turso db shell "$MASTRA_STORAGE_URL?authToken=$MASTRA_STORAGE_AUTH_TOKEN" ".dump" > mastra-cloud-dump.sql
     ```
+
+    :::warning
+    Embedding the auth token in the connection string is less secure than Turso's recommended pattern — the full URL (with token) can end up in shell history, process listings, and terminal logs. Turso officially recommends running `turso auth login` and then dumping by database name only: `turso db shell <database-name> ".dump" > mastra-cloud-dump.sql`. That flow requires the database to live in a Turso account you own, which is not the case for Cloud Store, so the env-var example above is provided as an alternative for this one-time export. If you prefer to avoid token interpolation entirely, ask support to run the dump on your behalf and send you the resulting SQL file.
+    :::
 
     The resulting `mastra-cloud-dump.sql` contains the full schema and data: thread and message history, workflow snapshots, traces, and eval scores. Store it somewhere safe before continuing.
   </StepItem>
