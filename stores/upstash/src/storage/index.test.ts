@@ -140,8 +140,8 @@ describe('Upstash Domain with URL/token config', () => {
   });
 });
 
-describe('StoreMemoryUpstash saveMessages index behavior', () => {
-  it('avoids scans for indexed message moves and updates all touched threads', async () => {
+describe('saveMessages uses msg-idx index instead of scanning', () => {
+  it('uses index lookup instead of scan when moving a message between threads', async () => {
     const memoryDomain = new StoreMemoryUpstash({ client: createTestClient() });
     await memoryDomain.init();
 
@@ -150,8 +150,7 @@ describe('StoreMemoryUpstash saveMessages index behavior', () => {
     await memoryDomain.saveThread({ thread: sourceThread });
     await memoryDomain.saveThread({ thread: targetThread });
 
-    const initialSourceThread = await memoryDomain.getThreadById({ threadId: sourceThread.id });
-    const initialTargetThread = await memoryDomain.getThreadById({ threadId: targetThread.id });
+    // Save message to source thread (creates msg-idx entry)
     const originalMessage = createMessage(sourceThread);
     await memoryDomain.saveMessages({ messages: [originalMessage] });
 
@@ -160,74 +159,42 @@ describe('StoreMemoryUpstash saveMessages index behavior', () => {
     const client = (memoryDomain as any).client as Redis;
     const scanSpy = vi.spyOn(client, 'scan');
 
+    // Move same message ID to target thread
     const movedMessage = createMessage(targetThread, {
       id: originalMessage.id,
       resourceId: targetThread.resourceId,
-      content: {
-        format: 2,
-        parts: [{ type: 'text', text: 'Moved message' }],
-        content: 'Moved message',
-      },
     });
-
     await memoryDomain.saveMessages({ messages: [movedMessage] });
 
+    // Should not scan — used msg-idx index
     expect(scanSpy).not.toHaveBeenCalled();
 
+    // Message should be removed from source and exist in target
     const { messages: sourceMessages } = await memoryDomain.listMessages({ threadId: sourceThread.id });
     const { messages: targetMessages } = await memoryDomain.listMessages({ threadId: targetThread.id });
-    expect(sourceMessages.find(message => message.id === originalMessage.id)).toBeUndefined();
-    expect(targetMessages.find(message => message.id === originalMessage.id)?.threadId).toBe(targetThread.id);
-
-    const updatedSourceThread = await memoryDomain.getThreadById({ threadId: sourceThread.id });
-    const updatedTargetThread = await memoryDomain.getThreadById({ threadId: targetThread.id });
-    expect(updatedSourceThread).not.toBeNull();
-    expect(updatedTargetThread).not.toBeNull();
-    expect(new Date(updatedSourceThread!.updatedAt).getTime()).toBeGreaterThan(
-      new Date(initialSourceThread!.updatedAt).getTime(),
-    );
-    expect(new Date(updatedTargetThread!.updatedAt).getTime()).toBeGreaterThan(
-      new Date(initialTargetThread!.updatedAt).getTime(),
-    );
+    expect(sourceMessages.find(m => m.id === originalMessage.id)).toBeUndefined();
+    expect(targetMessages.find(m => m.id === originalMessage.id)?.threadId).toBe(targetThread.id);
   });
 
-  it('skips scan when the index is missing and treats message as new', async () => {
+  it('does not scan for new messages without an index entry', async () => {
     const memoryDomain = new StoreMemoryUpstash({ client: createTestClient() });
     await memoryDomain.init();
 
-    const sourceThread = createThread();
-    const targetThread = createThread(sourceThread.resourceId);
-    await memoryDomain.saveThread({ thread: sourceThread });
-    await memoryDomain.saveThread({ thread: targetThread });
-
-    const originalMessage = createMessage(sourceThread);
-    await memoryDomain.saveMessages({ messages: [originalMessage] });
+    const thread = createThread();
+    await memoryDomain.saveThread({ thread });
 
     const client = (memoryDomain as any).client as Redis;
-    const messageIndexKey = `msg-idx:${originalMessage.id}`;
-    await client.del(messageIndexKey);
-
     const scanSpy = vi.spyOn(client, 'scan');
-    const movedMessage = createMessage(targetThread, {
-      id: originalMessage.id,
-      resourceId: targetThread.resourceId,
-      content: {
-        format: 2,
-        parts: [{ type: 'text', text: 'Recovered message' }],
-        content: 'Recovered message',
-      },
-    });
 
-    await memoryDomain.saveMessages({ messages: [movedMessage] });
+    // Save a brand new message
+    const message = createMessage(thread);
+    await memoryDomain.saveMessages({ messages: [message] });
 
-    // No scan should occur — unindexed messages are treated as new
+    // Should not scan — new message, no index, just skip
     expect(scanSpy).not.toHaveBeenCalled();
 
-    // Index should be recreated after the save
-    await expect(client.get<string>(messageIndexKey)).resolves.toBe(targetThread.id);
-
-    // Message now exists in target thread (source still has old copy since no scan found it)
-    const { messages: targetMessages } = await memoryDomain.listMessages({ threadId: targetThread.id });
-    expect(targetMessages.find(message => message.id === originalMessage.id)?.threadId).toBe(targetThread.id);
+    // Message should exist
+    const { messages } = await memoryDomain.listMessages({ threadId: thread.id });
+    expect(messages.find(m => m.id === message.id)?.threadId).toBe(thread.id);
   });
 });
