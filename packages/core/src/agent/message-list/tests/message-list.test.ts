@@ -434,6 +434,142 @@ describe('MessageList', () => {
       expect(uiMessages[0].toolInvocations![0].args).toEqual({ query: 'mastra framework' });
     });
 
+    it('should build toolInvocations from parts when toolInvocations is missing', () => {
+      // This test simulates messages restored from storage where
+      // toolInvocations was never populated (e.g. created during streaming
+      // by llm-execution-step which only sets content.parts)
+      const dbMessage: MastraDBMessage = {
+        id: 'db-hydrate-1',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-hydrate-1',
+                toolName: 'weatherTool',
+                args: { city: 'London' },
+                result: { temp: 20 },
+              },
+            },
+          ],
+          // toolInvocations intentionally omitted
+        },
+      };
+
+      const list = new MessageList().add(dbMessage, 'memory');
+
+      const v2Messages = list.get.all.db();
+      expect(v2Messages).toHaveLength(1);
+      expect(v2Messages[0].content.toolInvocations).toHaveLength(1);
+      expect(v2Messages[0].content.toolInvocations![0]).toMatchObject({
+        toolCallId: 'call-hydrate-1',
+        toolName: 'weatherTool',
+        args: { city: 'London' },
+        state: 'result',
+        result: { temp: 20 },
+      });
+    });
+
+    it('should build toolInvocations from multiple tool-invocation parts when missing', () => {
+      const dbMessage: MastraDBMessage = {
+        id: 'db-hydrate-2',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Let me look that up' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-a',
+                toolName: 'searchTool',
+                args: { query: 'weather' },
+                result: { results: [] },
+              },
+            },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-b',
+                toolName: 'weatherTool',
+                args: { city: 'Paris' },
+                result: { temp: 25 },
+              },
+            },
+          ],
+        },
+      };
+
+      const list = new MessageList().add(dbMessage, 'memory');
+
+      const v2Messages = list.get.all.db();
+      expect(v2Messages[0].content.toolInvocations).toHaveLength(2);
+      expect(v2Messages[0].content.toolInvocations![0].toolCallId).toBe('call-a');
+      expect(v2Messages[0].content.toolInvocations![1].toolCallId).toBe('call-b');
+    });
+
+    it('should build toolInvocations from parts when existing array is empty', () => {
+      const dbMessage: MastraDBMessage = {
+        id: 'db-hydrate-3',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-empty',
+                toolName: 'myTool',
+                args: { x: 1 },
+                result: 42,
+              },
+            },
+          ],
+          toolInvocations: [],
+        },
+      };
+
+      const list = new MessageList().add(dbMessage, 'memory');
+
+      const v2Messages = list.get.all.db();
+      expect(v2Messages[0].content.toolInvocations).toHaveLength(1);
+      expect(v2Messages[0].content.toolInvocations![0].toolCallId).toBe('call-empty');
+    });
+
+    it('should not create toolInvocations when there are no tool-invocation parts', () => {
+      const dbMessage: MastraDBMessage = {
+        id: 'db-hydrate-4',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Hello world' }],
+        },
+      };
+
+      const list = new MessageList().add(dbMessage, 'memory');
+
+      const v2Messages = list.get.all.db();
+      expect(v2Messages[0].content.toolInvocations).toBeUndefined();
+    });
+
     it('should preserve tool args when tool-result arrives in a separate message', () => {
       // This test reproduces the issue where tool args are lost when tool-result
       // messages arrive separately from tool-call messages
