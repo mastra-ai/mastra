@@ -94,7 +94,7 @@ export async function uploadDeploy(
     throwApiError('Deploy failed', response.status, error.detail);
   }
 
-  const { id, uploadUrl } = data.deploy;
+  const { id, status, uploadUrl } = data.deploy;
 
   if (!uploadUrl) {
     throw new Error('No upload URL returned');
@@ -136,7 +136,7 @@ export async function uploadDeploy(
     orgId,
   });
 
-  return { id, status: 'queued' };
+  return { id, status };
 }
 
 async function streamDeployLogs(deployId: string, token: string, orgId: string, signal: AbortSignal): Promise<void> {

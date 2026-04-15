@@ -89,7 +89,7 @@ export async function uploadServerDeploy(
     throwApiError('Deploy failed', response.status);
   }
 
-  const { id, uploadUrl } = data;
+  const { id, status, uploadUrl } = data;
 
   if (!uploadUrl) {
     throw new Error('No upload URL returned');
@@ -131,7 +131,7 @@ export async function uploadServerDeploy(
     orgId,
   });
 
-  return { id, status: 'queued' };
+  return { id, status };
 }
 
 export async function pollServerDeploy(

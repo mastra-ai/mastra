@@ -144,7 +144,7 @@ describe('uploadDeploy', () => {
       envVars: { FOO: 'bar' },
     });
 
-    expect(result).toMatchObject({ id: 'dep-1', status: 'queued' });
+    expect(result).toMatchObject({ id: 'dep-1', status: 'starting' });
 
     // createApiClient().POST called twice: create + upload-complete
     expect(mockPOST).toHaveBeenCalledTimes(2);
