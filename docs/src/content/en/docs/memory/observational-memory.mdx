@@ -368,6 +368,7 @@ If you're relying on prompt caching, set `activateAfterIdle` to match your cache
 const memory = new Memory({
   options: {
     observationalMemory: {
+      model: 'google/gemini-2.5-flash',
       activateAfterIdle: '5m',
     },
   },
