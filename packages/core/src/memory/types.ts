@@ -737,7 +737,7 @@ export interface ObservationalMemoryOptions {
    * @example "5m"
    * @example "1hr"
    */
-  activationTTL?: number | string;
+  activateAfterIdle?: number | string;
 
   /**
    * Share the token budget between messages and observations.
@@ -1174,7 +1174,7 @@ export type SerializedObservationalMemoryConfig = {
   scope?: 'resource' | 'thread';
 
   /** Inactivity TTL before forcing buffered observation/reflection activation */
-  activationTTL?: number | string;
+  activateAfterIdle?: number | string;
 
   /** Share the token budget between messages and observations */
   shareTokenBudget?: boolean;

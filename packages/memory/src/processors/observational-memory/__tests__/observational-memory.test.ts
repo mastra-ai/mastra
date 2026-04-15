@@ -5110,7 +5110,7 @@ describe('Locking Behavior', () => {
     expect(updatedRecord!.isReflecting).toBe(false);
   });
 
-  it('should force reflection when activationTTL has expired even below threshold', async () => {
+  it('should force reflection when activateAfterIdle has expired even below threshold', async () => {
     vi.useFakeTimers();
     const now = new Date('2026-04-14T12:00:00.000Z');
     vi.setSystemTime(now);
@@ -5132,7 +5132,7 @@ describe('Locking Behavior', () => {
 
     const om = new ObservationalMemory({
       storage,
-      activationTTL: '5m',
+      activateAfterIdle: '5m',
       observation: {
         messageTokens: 100,
         bufferTokens: false,
@@ -5158,7 +5158,7 @@ describe('Locking Behavior', () => {
       resourceId: 'resource-ttl',
       scope: 'thread',
       config: {
-        activationTTL: '5m',
+        activateAfterIdle: '5m',
         observation: { messageTokens: 100, model: 'test-model' },
         reflection: { observationTokens: 1000, model: 'test-model' },
       },
@@ -7732,7 +7732,7 @@ describe('Full Async Buffering Flow', () => {
     bufferActivation: number;
     reflectionObservationTokens: number;
     reflectionAsyncActivation?: number;
-    activationTTL?: number | string;
+    activateAfterIdle?: number | string;
     blockAfter?: number;
     /** Number of messages to pre-save (each ~200 tokens via repeated filler text) */
     messageCount?: number;
@@ -7802,7 +7802,7 @@ describe('Full Async Buffering Flow', () => {
       storage,
       scope: 'thread',
       model: mockModel as any,
-      activationTTL: opts.activationTTL,
+      activateAfterIdle: opts.activateAfterIdle,
       observation: {
         messageTokens: opts.messageTokens,
         bufferTokens: opts.bufferTokens,
@@ -8001,13 +8001,13 @@ describe('Full Async Buffering Flow', () => {
     expect(record!.activeObservations).toContain('Observed');
   });
 
-  it('should activate buffered observations during prepare when activationTTL expires', async () => {
+  it('should activate buffered observations during prepare when activateAfterIdle expires', async () => {
     const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
       messageTokens: 30000,
       bufferTokens: 500,
       bufferActivation: 0.7,
       reflectionObservationTokens: 50000,
-      activationTTL: 1,
+      activateAfterIdle: 1,
       messageCount: 10,
     });
 
@@ -10625,11 +10625,11 @@ describe('threadId validation in thread scope', () => {
 
 describe('Observer Context Optimization', () => {
   function createOM({
-    activationTTL,
+    activateAfterIdle,
     observation,
     ...observationOverrides
   }: {
-    activationTTL?: number | string;
+    activateAfterIdle?: number | string;
     observation?: Record<string, unknown>;
     [key: string]: unknown;
   } = {}) {
@@ -10637,7 +10637,7 @@ describe('Observer Context Optimization', () => {
       storage: createInMemoryStorage(),
       scope: 'thread',
       model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' } as any),
-      activationTTL,
+      activateAfterIdle,
       observation: {
         messageTokens: 50000,
         bufferTokens: false,
@@ -10685,15 +10685,15 @@ describe('Observer Context Optimization', () => {
       expect(() => createOM({ previousObserverTokens: 5000 })).not.toThrow();
     });
 
-    it('should accept duration strings for activationTTL', () => {
-      expect(() => createOM({ activationTTL: '5m' })).not.toThrow();
-      expect(() => createOM({ activationTTL: '1hr' })).not.toThrow();
-      expect(() => createOM({ activationTTL: '30s' })).not.toThrow();
+    it('should accept duration strings for activateAfterIdle', () => {
+      expect(() => createOM({ activateAfterIdle: '5m' })).not.toThrow();
+      expect(() => createOM({ activateAfterIdle: '1hr' })).not.toThrow();
+      expect(() => createOM({ activateAfterIdle: '30s' })).not.toThrow();
     });
 
-    it('should throw if activationTTL is an invalid duration string', () => {
-      expect(() => createOM({ activationTTL: 'later' as any })).toThrow(
-        'activationTTL must be a non-negative number of milliseconds or a duration string like "5m" or "1hr".',
+    it('should throw if activateAfterIdle is an invalid duration string', () => {
+      expect(() => createOM({ activateAfterIdle: 'later' as any })).toThrow(
+        'activateAfterIdle must be a non-negative number of milliseconds or a duration string like "5m" or "1hr".',
       );
     });
   });

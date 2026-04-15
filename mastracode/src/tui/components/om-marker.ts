@@ -73,7 +73,7 @@ export type OMMarkerData =
     }
   | {
       type: 'om_activation_ttl';
-      activationTTL: number;
+      activateAfterIdle: number;
       ttlExpiredMs: number;
     }
   | {
@@ -157,7 +157,7 @@ function formatMarker(data: OMMarkerData): string {
     case 'om_activation_ttl': {
       return theme.fg(
         'muted',
-        `  Observation TTL (${formatDuration(data.activationTTL)}) expired by ${formatDuration(data.ttlExpiredMs)}`,
+        `  Idle timeout (${formatDuration(data.activateAfterIdle)}) exceeded by ${formatDuration(data.ttlExpiredMs)}, activating observations`,
       );
     }
     case 'om_thread_title_updated': {

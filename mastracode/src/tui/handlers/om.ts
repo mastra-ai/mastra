@@ -208,15 +208,15 @@ export function handleOMActivation(
   tokensActivated: number,
   observationTokens: number,
   triggeredBy?: 'threshold' | 'ttl',
-  activationTTL?: number,
+  activateAfterIdle?: number,
   ttlExpiredMs?: number,
 ): void {
   const { state } = ctx;
 
-  if (triggeredBy === 'ttl' && activationTTL !== undefined && ttlExpiredMs !== undefined) {
+  if (triggeredBy === 'ttl' && activateAfterIdle !== undefined && ttlExpiredMs !== undefined) {
     const ttlData: OMMarkerData = {
       type: 'om_activation_ttl',
-      activationTTL,
+      activateAfterIdle,
       ttlExpiredMs,
     };
 

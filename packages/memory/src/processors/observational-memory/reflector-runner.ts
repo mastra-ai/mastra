@@ -133,7 +133,7 @@ export class ReflectorRunner {
         record ? this.getEffectiveReflectionTokens(record) : this.reflectionConfig.observationTokens,
       ),
       scope: this.scope,
-      activationTTL: this.reflectionConfig.activationTTL,
+      activateAfterIdle: this.reflectionConfig.activateAfterIdle,
     };
   }
 
@@ -670,10 +670,11 @@ export class ReflectorRunner {
       }
     }
 
-    const activationTTL = this.reflectionConfig.activationTTL;
+    const activateAfterIdle = this.reflectionConfig.activateAfterIdle;
     const ttlExpiredMs =
-      activationTTL !== undefined && lastActivityAt !== undefined ? Date.now() - lastActivityAt : undefined;
-    const ttlExpired = ttlExpiredMs !== undefined && activationTTL !== undefined && ttlExpiredMs >= activationTTL;
+      activateAfterIdle !== undefined && lastActivityAt !== undefined ? Date.now() - lastActivityAt : undefined;
+    const ttlExpired =
+      ttlExpiredMs !== undefined && activateAfterIdle !== undefined && ttlExpiredMs >= activateAfterIdle;
 
     if (observationTokens < reflectThreshold && !ttlExpired) {
       return;

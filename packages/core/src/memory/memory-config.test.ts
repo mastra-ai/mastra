@@ -26,7 +26,7 @@ describe('MastraMemory config serialization', () => {
 
     expect(memory.getConfig().observationalMemory).toEqual({
       scope: 'thread',
-      activationTTL: undefined,
+      activateAfterIdle: undefined,
       retrieval: true,
       observation: {
         messageTokens: 500,
@@ -63,7 +63,7 @@ describe('MastraMemory config serialization', () => {
 
     expect(memory.getConfig().observationalMemory).toEqual({
       scope: 'resource',
-      activationTTL: undefined,
+      activateAfterIdle: undefined,
       retrieval: true,
       model: 'test-model',
       shareTokenBudget: undefined,
@@ -108,13 +108,13 @@ describe('MastraMemory config serialization', () => {
     }
   });
 
-  it('should serialize top-level activationTTL for observational memory', () => {
+  it('should serialize top-level activateAfterIdle for observational memory', () => {
     const memory = new MockMemory({
       storage: new InMemoryStore(),
       options: {
         observationalMemory: {
           scope: 'thread',
-          activationTTL: '5m',
+          activateAfterIdle: '5m',
           model: 'test-model',
         },
       },
@@ -122,7 +122,7 @@ describe('MastraMemory config serialization', () => {
 
     expect(memory.getConfig().observationalMemory).toEqual({
       scope: 'thread',
-      activationTTL: '5m',
+      activateAfterIdle: '5m',
       model: 'test-model',
       shareTokenBudget: undefined,
       retrieval: undefined,

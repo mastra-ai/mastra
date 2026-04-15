@@ -221,7 +221,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
         triggeredBy?: 'threshold' | 'ttl';
         lastActivityAt?: number;
         ttlExpiredMs?: number;
-        activationTTL?: number;
+        activateAfterIdle?: number;
       };
       handleOMActivation(
         ectx,
@@ -229,7 +229,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
         activationEvent.tokensActivated,
         activationEvent.observationTokens,
         activationEvent.triggeredBy,
-        activationEvent.activationTTL,
+        activationEvent.activateAfterIdle,
         activationEvent.ttlExpiredMs,
       );
       break;

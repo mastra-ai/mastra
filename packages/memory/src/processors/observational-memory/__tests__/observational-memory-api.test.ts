@@ -132,13 +132,13 @@ function createOM(
     scope?: 'thread' | 'resource';
     observerModel?: any;
     reflectorModel?: any;
-    activationTTL?: number | string;
+    activateAfterIdle?: number | string;
   },
 ) {
   return new ObservationalMemory({
     storage,
     scope: opts?.scope ?? 'thread',
-    activationTTL: opts?.activationTTL,
+    activateAfterIdle: opts?.activateAfterIdle,
     observation: {
       model: opts?.observerModel ?? createMockObserverModel(),
       messageTokens: opts?.messageTokens ?? 100,
@@ -658,7 +658,7 @@ describe('activate()', () => {
     expect(second.activated).toBe(false);
   });
 
-  describe('with activationTTL', () => {
+  describe('with activateAfterIdle', () => {
     it('activates buffered observations when the ttl has expired even below threshold', async () => {
       vi.useFakeTimers();
       try {
@@ -668,7 +668,7 @@ describe('activate()', () => {
         const om = new ObservationalMemory({
           storage,
           scope: 'thread',
-          activationTTL: 300_000,
+          activateAfterIdle: 300_000,
           observation: {
             model: createMockObserverModel(),
             messageTokens: 50_000,
@@ -732,7 +732,7 @@ describe('activate()', () => {
         const om = new ObservationalMemory({
           storage,
           scope: 'thread',
-          activationTTL: 300_000,
+          activateAfterIdle: 300_000,
           observation: {
             model: createMockObserverModel(),
             messageTokens: 50_000,
@@ -796,7 +796,7 @@ describe('activate()', () => {
         const om = new ObservationalMemory({
           storage,
           scope: 'thread',
-          activationTTL: 300_000,
+          activateAfterIdle: 300_000,
           observation: {
             model: createMockObserverModel(),
             messageTokens: 50_000,
@@ -864,13 +864,13 @@ describe('activate()', () => {
       }
     });
 
-    it('accepts duration strings like "5m" for observation activationTTL', async () => {
+    it('accepts duration strings like "5m" for observation activateAfterIdle', async () => {
       vi.useFakeTimers();
       try {
         const now = new Date('2026-04-14T12:00:00.000Z');
         vi.setSystemTime(now);
 
-        const om = createOM(storage, { messageTokens: 50_000, bufferTokens: 5_000, activationTTL: '5m' });
+        const om = createOM(storage, { messageTokens: 50_000, bufferTokens: 5_000, activateAfterIdle: '5m' });
         const staleAssistantPartTime = now.getTime() - 301_000;
         const messages: MastraDBMessage[] = [
           {
@@ -925,7 +925,7 @@ describe('activate()', () => {
       }
     });
 
-    it('keeps existing threshold behavior when activationTTL is undefined', async () => {
+    it('keeps existing threshold behavior when activateAfterIdle is undefined', async () => {
       vi.useFakeTimers();
       try {
         const now = new Date('2026-04-14T12:00:00.000Z');
@@ -969,7 +969,7 @@ describe('activate()', () => {
         const now = new Date('2026-04-14T12:00:00.000Z');
         vi.setSystemTime(now);
 
-        const om = createOM(storage, { messageTokens: 50_000, bufferTokens: 5_000, activationTTL: 300_000 });
+        const om = createOM(storage, { messageTokens: 50_000, bufferTokens: 5_000, activateAfterIdle: 300_000 });
         const messages: MastraDBMessage[] = [
           {
             ...createTestMessage('First user message', 'user', 'ttl-user-7', new Date(now.getTime() - 600_000)),
@@ -998,7 +998,7 @@ describe('activate()', () => {
         const now = new Date('2026-04-14T12:00:00.000Z');
         vi.setSystemTime(now);
 
-        const om = createOM(storage, { messageTokens: 50_000, bufferTokens: 5_000, activationTTL: 300_000 });
+        const om = createOM(storage, { messageTokens: 50_000, bufferTokens: 5_000, activateAfterIdle: 300_000 });
         const staleAssistantPartTime = now.getTime() - 301_000;
         const messages: MastraDBMessage[] = [
           {

@@ -61,7 +61,7 @@ export function buildMessageRange(messages: MastraDBMessage[]): string {
 /**
  * Returns the unix-ms timestamp of the last non-data part in the last assistant
  * message, representing when the last visible LLM response completed. Used as the
- * last activity time for activationTTL checks.
+ * last activity time for activateAfterIdle checks.
  */
 export function getLastActivityFromMessages(messages?: MastraDBMessage[]): number | undefined {
   if (!messages) return undefined;
@@ -430,7 +430,7 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config.observation?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferActivation),
-      activationTTL: parseActivationTTL(config.activationTTL, 'activationTTL'),
+      activateAfterIdle: parseActivationTTL(config.activateAfterIdle, 'activateAfterIdle'),
       blockAfter: asyncBufferingDisabled
         ? undefined
         : resolveBlockAfter(
@@ -462,7 +462,7 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config?.reflection?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferActivation),
-      activationTTL: parseActivationTTL(config.activationTTL, 'activationTTL'),
+      activateAfterIdle: parseActivationTTL(config.activateAfterIdle, 'activateAfterIdle'),
       blockAfter: asyncBufferingDisabled
         ? undefined
         : resolveBlockAfter(
@@ -1010,7 +1010,7 @@ export class ObservationalMemory {
       messageTokens: getMaxThreshold(this.observationConfig.messageTokens),
       observationTokens: getMaxThreshold(this.reflectionConfig.observationTokens),
       scope: this.scope,
-      activationTTL: this.observationConfig.activationTTL,
+      activateAfterIdle: this.observationConfig.activateAfterIdle,
     };
   }
 
@@ -3071,20 +3071,21 @@ ${formattedMessages}
 
     let activationTriggeredBy: 'threshold' | 'ttl' = 'threshold';
     let activationLastActivityAt: number | undefined;
-    let activationTTLExpiredMs: number | undefined;
+    let activateAfterIdleExpiredMs: number | undefined;
 
     // Optional threshold guard — skip activation if pending tokens are below threshold
     if (opts.checkThreshold) {
-      const activationTTL = this.observationConfig.activationTTL;
+      const activateAfterIdle = this.observationConfig.activateAfterIdle;
       const lastActivityAt = getLastActivityFromMessages(opts.messages);
       const ttlExpiredMs =
-        activationTTL !== undefined && lastActivityAt !== undefined ? Date.now() - lastActivityAt : undefined;
-      const ttlExpired = ttlExpiredMs !== undefined && activationTTL !== undefined && ttlExpiredMs >= activationTTL;
+        activateAfterIdle !== undefined && lastActivityAt !== undefined ? Date.now() - lastActivityAt : undefined;
+      const ttlExpired =
+        ttlExpiredMs !== undefined && activateAfterIdle !== undefined && ttlExpiredMs >= activateAfterIdle;
 
       if (ttlExpired) {
         activationTriggeredBy = 'ttl';
         activationLastActivityAt = lastActivityAt;
-        activationTTLExpiredMs = ttlExpiredMs;
+        activateAfterIdleExpiredMs = ttlExpiredMs;
       } else {
         const status = await this.getStatus({ threadId, resourceId, messages: opts.messages });
         if (status.pendingTokens < status.threshold) {
@@ -3171,7 +3172,7 @@ ${formattedMessages}
           observations: chunkData?.observations ?? activationResult.observations,
           triggeredBy: activationTriggeredBy,
           lastActivityAt: activationLastActivityAt,
-          ttlExpiredMs: activationTTLExpiredMs,
+          ttlExpiredMs: activateAfterIdleExpiredMs,
           config: this.getObservationMarkerConfig(),
         });
         void opts.writer.custom(activationMarker).catch(() => {});

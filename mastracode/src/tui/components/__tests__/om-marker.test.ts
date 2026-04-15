@@ -27,7 +27,7 @@ describe('OMMarkerComponent activation rendering', () => {
   it('renders TTL expiry as a separate muted line', () => {
     const ttlMarker = new OMMarkerComponent({
       type: 'om_activation_ttl',
-      activationTTL: 300_000,
+      activateAfterIdle: 300_000,
       ttlExpiredMs: 66_000_000,
     });
 
@@ -41,7 +41,7 @@ describe('OMMarkerComponent activation rendering', () => {
     const ttlText = stripAnsi(ttlMarker.render(120).join('\n'));
     const activationText = stripAnsi(activationMarker.render(120).join('\n'));
 
-    expect(ttlText).toContain('Observation TTL (5m) expired by 18h20m');
+    expect(ttlText).toContain('Idle timeout (5m) exceeded by 18h20m, activating observations');
     expect(activationText).toContain('✓ Activated observations: -7.3k msg tokens, +0.4k obs tokens');
     expect(activationText).not.toContain('TTL');
   });

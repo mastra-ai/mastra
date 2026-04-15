@@ -281,7 +281,7 @@ export interface ObservationMarkerConfig {
   messageTokens: number;
   observationTokens: number;
   scope: 'thread' | 'resource';
-  activationTTL?: number;
+  activateAfterIdle?: number;
 }
 
 /**
@@ -623,13 +623,13 @@ export interface DataOmActivationPart {
     /** The actual observations from activated chunks (for UI display) */
     observations?: string;
 
-    /** Whether activation was triggered by threshold crossing or activationTTL expiry */
+    /** Whether activation was triggered by threshold crossing or activateAfterIdle expiry */
     triggeredBy?: 'threshold' | 'ttl';
 
     /** Unix-ms timestamp of the last assistant message part used for TTL checks */
     lastActivityAt?: number;
 
-    /** How long activationTTL had been exceeded when activation fired */
+    /** How long activateAfterIdle had been exceeded when activation fired */
     ttlExpiredMs?: number;
   };
 }
@@ -843,7 +843,7 @@ export interface ObservationalMemoryConfig {
    * exceeds this value, buffered observational memory activates regardless of whether the
    * token threshold has been reached.
    */
-  activationTTL?: number | string;
+  activateAfterIdle?: number | string;
 }
 
 /**
@@ -866,7 +866,7 @@ export interface ResolvedObservationConfig {
   /** Ratio of buffered observations to activate (0-1 float) */
   bufferActivation?: number;
   /** Time in milliseconds before buffered observations are force-activated based on the last assistant message part timestamp */
-  activationTTL?: number;
+  activateAfterIdle?: number;
   /** Token threshold above which synchronous observation is forced */
   blockAfter?: number;
   /** Optional token budget for observer context optimization (0 = full truncation, false = disabled) */
@@ -889,7 +889,7 @@ export interface ResolvedReflectionConfig {
   /** Ratio (0-1) controlling when async reflection buffering starts */
   bufferActivation?: number;
   /** Time in milliseconds before buffered reflections are force-activated based on the last assistant message part timestamp */
-  activationTTL?: number;
+  activateAfterIdle?: number;
   /** Token threshold above which synchronous reflection is forced */
   blockAfter?: number;
   /** Custom instructions to append to the Reflector's system prompt */
