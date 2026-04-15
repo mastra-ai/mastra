@@ -42,8 +42,8 @@ export async function run(args: RunArgs) {
   const mastraDir = args.dir
     ? args.dir.startsWith('/')
       ? args.dir
-      : join(process.cwd(), args.dir)
-    : join(process.cwd(), 'src', 'mastra');
+      : join(rootDir, args.dir)
+    : join(rootDir, 'src', 'mastra');
   const dotMastraPath = join(rootDir, '.mastra');
 
   // Resolve prompt: -p flag takes priority, then stdin pipe
