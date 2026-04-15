@@ -1,6 +1,6 @@
 {
   "name": "@mastra/react",
-  "version": "0.2.26-alpha.2",
+  "version": "0.2.26",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",

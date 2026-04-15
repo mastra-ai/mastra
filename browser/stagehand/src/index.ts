@@ -1,6 +1,9 @@
 // Main exports
 export { StagehandBrowser } from './stagehand-browser';
 
+// Utilities
+export { getStagehandChromePid } from './utils';
+
 // Type exports
 export type {
   StagehandBrowserConfig,

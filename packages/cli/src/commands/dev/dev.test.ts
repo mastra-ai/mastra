@@ -1,4 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('node:fs', () => ({
@@ -91,39 +92,62 @@ vi.mock('./DevBundler', () => {
   };
 });
 
+class MockChildProcess extends EventEmitter {
+  pid = 12345;
+  exitCode: number | null = null;
+  signalCode: NodeJS.Signals | null = null;
+  stdout = {
+    on: vi.fn(),
+  } as any;
+  stderr = {
+    on: vi.fn(),
+  } as any;
+  kill = vi.fn((signal?: NodeJS.Signals | number) => {
+    if (signal === 'SIGKILL') {
+      return true;
+    }
+
+    if (signal === 'SIGINT') {
+      setTimeout(() => {
+        this.signalCode = 'SIGINT';
+        this.emit('exit', null, 'SIGINT');
+      }, 0);
+      return true;
+    }
+
+    return true;
+  });
+
+  override on(event: string | symbol, listener: (...args: any[]) => void): this {
+    if (event === 'message') {
+      setTimeout(() => {
+        listener({ type: 'server-ready' });
+      }, 10);
+    }
+
+    return super.on(event, listener);
+  }
+}
+
 describe('dev command - inspect flag behavior', () => {
   let execaMock: any;
-  let mockChildProcess: Partial<ChildProcess>;
+  let mockChildProcess: MockChildProcess;
 
   beforeEach(async () => {
+    vi.resetModules();
     vi.clearAllMocks();
 
-    mockChildProcess = {
-      pid: 12345,
-      exitCode: null,
-      stdout: {
-        on: vi.fn(),
-      } as any,
-      stderr: {
-        on: vi.fn(),
-      } as any,
-      on: vi.fn((event, handler) => {
-        if (event === 'message') {
-          setTimeout(() => {
-            handler({ type: 'server-ready' });
-          }, 10);
-        }
-        return mockChildProcess as ChildProcess;
-      }),
-      kill: vi.fn(),
-    };
+    mockChildProcess = new MockChildProcess();
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('server unavailable')));
 
     const { execa } = await import('execa');
     execaMock = vi.mocked(execa);
-    execaMock.mockReturnValue(mockChildProcess as any);
+    execaMock.mockReturnValue(mockChildProcess as unknown as ChildProcess);
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
     vi.clearAllMocks();
   });
 

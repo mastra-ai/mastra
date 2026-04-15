@@ -17,6 +17,14 @@ You can also retrieve message history to display past conversations in your UI.
 Each message belongs to a thread (the conversation) and a resource (the user or entity it's associated with). See [Threads and resources](/docs/memory/storage#threads-and-resources) for more detail.
 :::
 
+:::warning
+When you use memory with a client application, send **only the new message** from the client instead of the full conversation history.
+
+Sending the full history is redundant because Mastra loads messages from storage, and it can cause message ordering bugs when client-side timestamps conflict with stored timestamps.
+
+For an AI SDK example, see [Using Mastra Memory](/guides/build-your-ui/ai-sdk-ui#using-mastra-memory).
+:::
+
 ## Getting started
 
 Install the Mastra memory module along with a [storage adapter](/docs/memory/storage#supported-providers) for your database. The examples below use `@mastra/libsql`, which stores data locally in a `mastra.db` file.

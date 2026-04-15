@@ -197,7 +197,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       };
     } else if (targetType && targetId) {
       // Registry-based target path (existing)
-      const target = resolveTarget(mastra, targetType, targetId);
+      const target = await resolveTarget(mastra, targetType, targetId, agentVersion);
       if (!target) {
         throw new Error(`Target not found: ${targetType}/${targetId}`);
       }
@@ -205,7 +205,11 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         // Merge global request context with per-item request context (item takes precedence)
         const mergedRequestContext =
           globalRequestContext || item.requestContext ? { ...globalRequestContext, ...item.requestContext } : undefined;
-        return executeTarget(target, targetType, item, { signal: itemSignal, requestContext: mergedRequestContext });
+        return executeTarget(target, targetType, item, {
+          signal: itemSignal,
+          requestContext: mergedRequestContext,
+          experimentId,
+        });
       };
     } else {
       throw new Error('No task: provide targetType+targetId or task');
@@ -459,41 +463,66 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
 /**
  * Resolve a target from Mastra's registries by type and ID.
+ * When `agentVersion` is provided for an agent target, the returned agent
+ * will have the versioned config applied (via `applyStoredOverrides`).
  */
-function resolveTarget(mastra: Mastra, targetType: string, targetId: string): Target | null {
+async function resolveTarget(
+  mastra: Mastra,
+  targetType: string,
+  targetId: string,
+  agentVersion?: string,
+): Promise<Target | null> {
+  // NOTE: Workflow is thenable, so we must never return one directly from an
+  // async function — TypeScript would try to unwrap it.  We collect into a
+  // local variable and return once at the end.
+  let resolved: Target | null = null;
+
   switch (targetType) {
     case 'agent':
       try {
-        return mastra.getAgentById(targetId as any);
+        if (agentVersion) {
+          resolved = await mastra.getAgentById(targetId, { versionId: agentVersion });
+        } else {
+          resolved = mastra.getAgentById(targetId);
+        }
       } catch {
         // Try by name if ID lookup fails
         try {
-          return mastra.getAgent(targetId);
+          if (agentVersion) {
+            resolved = await mastra.getAgent(targetId, { versionId: agentVersion });
+          } else {
+            resolved = mastra.getAgent(targetId);
+          }
         } catch {
-          return null;
+          // leave null
         }
       }
+      break;
     case 'workflow':
       try {
-        return mastra.getWorkflowById(targetId as any);
+        resolved = mastra.getWorkflowById(targetId);
       } catch {
         // Try by name if ID lookup fails
         try {
-          return mastra.getWorkflow(targetId);
+          resolved = mastra.getWorkflow(targetId);
         } catch {
-          return null;
+          // leave null
         }
       }
+      break;
     case 'scorer':
       try {
-        return mastra.getScorerById(targetId as any) ?? null;
+        resolved = mastra.getScorerById(targetId) ?? null;
       } catch {
-        return null;
+        // leave null
       }
+      break;
     case 'processor':
       // Processors not yet in registry - Phase 4
-      return null;
+      break;
     default:
-      return null;
+      break;
   }
+
+  return resolved;
 }

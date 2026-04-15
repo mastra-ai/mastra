@@ -1298,7 +1298,8 @@ export function isProcessor(obj: unknown): obj is Processor {
       typeof (obj as any).processInputStep === 'function' ||
       typeof (obj as any).processOutputStream === 'function' ||
       typeof (obj as any).processOutputResult === 'function' ||
-      typeof (obj as any).processOutputStep === 'function')
+      typeof (obj as any).processOutputStep === 'function' ||
+      typeof (obj as any).processAPIError === 'function')
   );
 }
 

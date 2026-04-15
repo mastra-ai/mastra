@@ -4,6 +4,65 @@ import { describe, expect, it } from 'vitest';
 import { toAISdkV5Stream } from '../convert-streams';
 
 describe('Custom Data Handling', () => {
+  describe('agent structured output', () => {
+    it('should emit a custom data event for structured output object chunks', async () => {
+      const mockStream = new ReadableStream({
+        async start(controller) {
+          controller.enqueue({
+            type: 'start',
+            runId: 'structured-output-run-id',
+            payload: { id: 'test-id' },
+          });
+
+          controller.enqueue({
+            type: 'object-result',
+            runId: 'structured-output-run-id',
+            object: {
+              suggestions: ['First idea', 'Second idea'],
+            },
+          });
+
+          controller.enqueue({
+            type: 'finish',
+            runId: 'structured-output-run-id',
+            payload: {
+              stepResult: {
+                reason: 'stop',
+                warnings: [],
+              },
+              output: {
+                usage: {
+                  inputTokens: 10,
+                  outputTokens: 20,
+                  totalTokens: 30,
+                },
+              },
+            },
+          });
+
+          controller.close();
+        },
+      });
+
+      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
+
+      const chunks: any[] = [];
+      for await (const chunk of aiSdkStream) {
+        chunks.push(chunk);
+      }
+
+      const structuredOutputChunk = chunks.find(chunk => chunk.type === 'data-structured-output');
+
+      expect(structuredOutputChunk).toBeDefined();
+      expect(structuredOutputChunk.data).toEqual({
+        object: {
+          suggestions: ['First idea', 'Second idea'],
+        },
+      });
+      expect(chunks.find(chunk => chunk.type === 'finish')).toBeDefined();
+    });
+  });
+
   describe('workflow tool output with custom data', () => {
     it('should process custom data from workflow tool output', async () => {
       const mockStream = new ReadableStream({

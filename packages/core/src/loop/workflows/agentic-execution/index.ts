@@ -4,6 +4,7 @@ import { createWorkflow } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
+import { createBackgroundTaskCheckStep } from './background-task-check-step';
 import { createIsTaskCompleteStep } from './is-task-complete-step';
 import { createLLMExecutionStep } from './llm-execution-step';
 import { createLLMMappingStep } from './llm-mapping-step';
@@ -41,6 +42,12 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     },
     llmExecutionStep,
   );
+
+  const backgroundTaskCheckStep = createBackgroundTaskCheckStep({
+    models,
+    _internal,
+    ...rest,
+  });
 
   const isTaskCompleteStep = createIsTaskCompleteStep({
     models,
@@ -131,6 +138,7 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     )
     .foreach(toolCallStep, { concurrency: sequentialExecutionRequired ? 1 : toolCallConcurrency })
     .then(llmMappingStep)
+    .then(backgroundTaskCheckStep)
     .then(isTaskCompleteStep)
     .commit();
 }
