@@ -1,5 +1,30 @@
 # mastracode
 
+## 0.14.0
+
+### Minor Changes
+
+- Added `/browser set` command for configuring browser profile, executable path, storage state, and CDP URL. Updated the interactive wizard with advanced options for custom browsers and CDP connections. ([#15194](https://github.com/mastra-ai/mastra/pull/15194))
+
+- Added /api-keys command to manage API keys for model providers. You can add, update, or remove keys directly, or access it from the settings menu. ([#15014](https://github.com/mastra-ai/mastra/pull/15014))
+
+### Patch Changes
+
+- Fixed symlinked skill paths so workspace skills resolve consistently and allowed path checks work through both symlink and real paths. ([#15228](https://github.com/mastra-ai/mastra/pull/15228))
+
+- Improved Mastra Code prompt guidance for autonomous decisions and blocked work. ([#15352](https://github.com/mastra-ai/mastra/pull/15352))
+
+- Improved observational memory summaries to use caveman-style custom instructions for terser stored observations. ([#15359](https://github.com/mastra-ai/mastra/pull/15359))
+
+- Updated dependencies [[`87df955`](https://github.com/mastra-ai/mastra/commit/87df955c028660c075873fd5d74af28233ce32eb), [`8687969`](https://github.com/mastra-ai/mastra/commit/86879696b80f87269bec34fd17fa377bce3a5892), [`8fad147`](https://github.com/mastra-ai/mastra/commit/8fad14759804179c8e080ce4d9dec6ef1a808b31), [`582644c`](https://github.com/mastra-ai/mastra/commit/582644c4a87f83b4f245a84d72b9e8590585012e), [`cbdf3e1`](https://github.com/mastra-ai/mastra/commit/cbdf3e12b3d0c30a6e5347be658e2009648c130a), [`8fe46d3`](https://github.com/mastra-ai/mastra/commit/8fe46d354027f3f0f0846e64219772348de106dd), [`18c67db`](https://github.com/mastra-ai/mastra/commit/18c67dbb9c9ebc26f26f65f7d3ff836e5691ef46), [`4ba3bb1`](https://github.com/mastra-ai/mastra/commit/4ba3bb1e465ad2ddaba3bbf2bc47e0faec32985e), [`190f452`](https://github.com/mastra-ai/mastra/commit/190f45258b0640e2adfc8219fa3258cdc5b8f071), [`5d84914`](https://github.com/mastra-ai/mastra/commit/5d84914e0e520c642a40329b210b413fcd139898), [`8dcc77e`](https://github.com/mastra-ai/mastra/commit/8dcc77e78a5340f5848f74b9e9f1b3da3513c1f5), [`aa67fc5`](https://github.com/mastra-ai/mastra/commit/aa67fc59ee8a5eeff1f23eb05970b8d7a536c8ff), [`fd2f314`](https://github.com/mastra-ai/mastra/commit/fd2f31473d3449b6b97e837ef8641264377f41a7), [`fa8140b`](https://github.com/mastra-ai/mastra/commit/fa8140bcd4251d2e3ac85fdc5547dfc4f372b5be), [`190f452`](https://github.com/mastra-ai/mastra/commit/190f45258b0640e2adfc8219fa3258cdc5b8f071), [`e80fead`](https://github.com/mastra-ai/mastra/commit/e80fead1412cc0d1b2f7d6a1ce5017d9e0098ff7), [`0287b64`](https://github.com/mastra-ai/mastra/commit/0287b644a5c3272755cf3112e71338106664103b), [`a6b7d82`](https://github.com/mastra-ai/mastra/commit/a6b7d820d5028da1284899baf3a7318b5d573f42), [`f5e254f`](https://github.com/mastra-ai/mastra/commit/f5e254f2984c4aae25e26a34ac2e2bbd637b27a6), [`6544c97`](https://github.com/mastra-ai/mastra/commit/6544c974182bccfb31f48efff07671ac528d1533), [`8ce5d0d`](https://github.com/mastra-ai/mastra/commit/8ce5d0dab0e13ee9ce01562fc434523e93a71ef9), [`7e7bf60`](https://github.com/mastra-ai/mastra/commit/7e7bf606886bf374a6f9d4ca9b09dd83d0533372), [`184907d`](https://github.com/mastra-ai/mastra/commit/184907d775d8609c03c26e78ccaf37315f3aa287), [`18c67db`](https://github.com/mastra-ai/mastra/commit/18c67dbb9c9ebc26f26f65f7d3ff836e5691ef46), [`075e91a`](https://github.com/mastra-ai/mastra/commit/075e91a4549baf46ad7a42a6a8ac8dfa78cc09e6), [`5cf84a3`](https://github.com/mastra-ai/mastra/commit/5cf84a3e2b7aa69b3f674a6f312f1bf0ed7ebead), [`5f3d4dd`](https://github.com/mastra-ai/mastra/commit/5f3d4ddf237241f4b238ac062ac61eadabed0770), [`0c4cd13`](https://github.com/mastra-ai/mastra/commit/0c4cd131931c04ac5405373c932a242dbe88edd6), [`190f452`](https://github.com/mastra-ai/mastra/commit/190f45258b0640e2adfc8219fa3258cdc5b8f071), [`b16a753`](https://github.com/mastra-ai/mastra/commit/b16a753d5748440248d7df82e29bb987a9c8386c)]:
+  - @mastra/core@1.25.0
+  - @mastra/stagehand@0.2.0
+  - @mastra/agent-browser@0.2.0
+  - @mastra/pg@1.9.1
+  - @mastra/libsql@1.8.1
+  - @mastra/memory@1.15.1
+  - @mastra/mcp@1.5.0
+
 ## 0.14.0-alpha.5
 
 ### Patch Changes
