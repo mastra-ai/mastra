@@ -81,11 +81,11 @@ export class BrowserContextProcessor {
     const parts: string[] = [];
 
     if (ctx.currentUrl) {
-      parts.push(`Current URL: ${ctx.currentUrl}`);
+      parts.push(`Current URL: ${escapeXml(ctx.currentUrl)}`);
     }
 
     if (ctx.pageTitle) {
-      parts.push(`Page title: ${ctx.pageTitle}`);
+      parts.push(`Page title: ${escapeXml(ctx.pageTitle)}`);
     }
 
     if (parts.length === 0) return;
@@ -93,9 +93,9 @@ export class BrowserContextProcessor {
     const reminderText = parts.join(' | ');
     const reminderMarkup = `<system-reminder type="${REMINDER_TYPE}">${reminderText}</system-reminder>`;
 
-    // Check if we already have a reminder with the same URL/title (scan from newest)
+    // Only suppress if the trailing message is already the same browser reminder
     const existingMessages = args.messageList.get.all.db();
-    if (hasExistingBrowserReminder(existingMessages, ctx.currentUrl, ctx.pageTitle)) {
+    if (hasTrailingBrowserReminder(existingMessages, ctx.currentUrl, ctx.pageTitle)) {
       return;
     }
 
@@ -142,27 +142,31 @@ function createBrowserReminderMessage(
 }
 
 /**
- * Check if we already have a browser reminder with the same URL/title.
- * Scans from the end (newest first) to handle navigation sequences like A→B→A.
+ * Escape XML special characters in browser-derived values.
+ * Prevents URLs or page titles containing <, &, or </system-reminder> from breaking the markup.
  */
-function hasExistingBrowserReminder(
+function escapeXml(value: string): string {
+  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+/**
+ * Check if the trailing message is already a browser reminder with the same URL/title.
+ * Only checks the last message to avoid suppressing reminders when the browser context
+ * is no longer at the tail (e.g., user → reminder(A) → assistant → user should get a fresh reminder).
+ */
+function hasTrailingBrowserReminder(
   messages: MastraDBMessage[],
   url: string | undefined,
   title: string | undefined,
 ): boolean {
-  // Scan from end to find the most recent browser reminder
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i]!;
-    if (msg.role !== 'user') continue;
+  const msg = messages[messages.length - 1];
+  if (!msg || msg.role !== 'user') return false;
 
-    const metadata = msg.content.metadata;
-    if (typeof metadata === 'object' && metadata !== null && 'systemReminder' in metadata) {
-      const reminder = (metadata as { systemReminder?: BrowserReminderMetadata }).systemReminder;
-      if (reminder?.type === REMINDER_TYPE) {
-        // Found the most recent browser reminder - check if URL/title match
-        return reminder.url === url && reminder.title === title;
-      }
-    }
+  const metadata = msg.content.metadata;
+  if (typeof metadata !== 'object' || metadata === null || !('systemReminder' in metadata)) {
+    return false;
   }
-  return false;
+
+  const reminder = (metadata as { systemReminder?: BrowserReminderMetadata }).systemReminder;
+  return reminder?.type === REMINDER_TYPE && reminder.url === url && reminder.title === title;
 }

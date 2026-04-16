@@ -289,7 +289,7 @@ describe('BrowserContextProcessor', () => {
       expect(textPart.text).toContain('New Page');
     });
 
-    it('should add reminder for A→B→A navigation (only checks most recent reminder)', () => {
+    it('should add reminder for A→B→A navigation (trailing reminder B differs from current A)', () => {
       const requestContext = new RequestContext();
       // Current state: back on page A
       const browserCtx: BrowserContext = {
@@ -299,7 +299,7 @@ describe('BrowserContextProcessor', () => {
       };
       requestContext.set('browser', browserCtx);
 
-      // History: A, then B (most recent is B, so A should be added)
+      // History: A, then B (trailing is B, so A should be added)
       const reminderA: MastraDBMessage = {
         id: 'reminder-a',
         role: 'user',
@@ -334,13 +334,97 @@ describe('BrowserContextProcessor', () => {
         }),
       );
 
-      // Should add new reminder because most recent (B) doesn't match current (A)
+      // Should add new reminder because trailing (B) doesn't match current (A)
       expect(result).toBe(mockMessageList);
       expect(mockMessageList.add).toHaveBeenCalledTimes(1);
 
       const addedMessage = mockMessageList.add.mock.calls[0][0] as MastraDBMessage;
       const textPart = addedMessage.content.parts?.[0] as { type: 'text'; text: string };
       expect(textPart.text).toContain('page-a');
+    });
+
+    it('should add reminder when trailing message is not a browser reminder (user → reminder → assistant → user)', () => {
+      const requestContext = new RequestContext();
+      const browserCtx: BrowserContext = {
+        provider: 'agent-browser',
+        currentUrl: 'https://example.com/page-a',
+        pageTitle: 'Page A',
+      };
+      requestContext.set('browser', browserCtx);
+
+      // History: reminder(A), then assistant response, then new user message
+      const reminderA: MastraDBMessage = {
+        id: 'reminder-a',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: '<system-reminder type="browser-context">Page A</system-reminder>' }],
+          metadata: {
+            systemReminder: { type: 'browser-context', url: 'https://example.com/page-a', title: 'Page A' },
+          },
+        },
+        createdAt: new Date(),
+      };
+      const assistantResponse: MastraDBMessage = {
+        id: 'assistant-response',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Here is the page content...' }],
+        },
+        createdAt: new Date(),
+      };
+      const userMessage: MastraDBMessage = {
+        id: 'user-message',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Now do something else' }],
+        },
+        createdAt: new Date(),
+      };
+
+      const mockMessageList = createMockMessageList([reminderA, assistantResponse, userMessage]);
+
+      const result = processor.processInputStep(
+        createInputStepArgs({
+          requestContext,
+          messageList: mockMessageList as any,
+        }),
+      );
+
+      // Should add reminder because trailing message is a regular user message, not a browser reminder
+      expect(result).toBe(mockMessageList);
+      expect(mockMessageList.add).toHaveBeenCalledTimes(1);
+    });
+
+    it('should escape XML special characters in URL and title', () => {
+      const requestContext = new RequestContext();
+      const browserCtx: BrowserContext = {
+        provider: 'agent-browser',
+        currentUrl: 'https://example.com/search?q=foo&bar=1',
+        pageTitle: 'Search <Results> & More',
+      };
+      requestContext.set('browser', browserCtx);
+
+      const mockMessageList = createMockMessageList();
+
+      processor.processInputStep(
+        createInputStepArgs({
+          requestContext,
+          messageList: mockMessageList as any,
+        }),
+      );
+
+      const addedMessage = mockMessageList.add.mock.calls[0][0] as MastraDBMessage;
+      const textPart = addedMessage.content.parts?.[0] as { type: 'text'; text: string };
+
+      // Should escape &, <, > in the markup text
+      expect(textPart.text).toContain('&amp;');
+      expect(textPart.text).toContain('&lt;');
+      expect(textPart.text).toContain('&gt;');
+      expect(textPart.text).not.toContain('q=foo&bar'); // Should be escaped
+      expect(textPart.text).not.toContain('<Results>'); // Should be escaped
     });
   });
 });
