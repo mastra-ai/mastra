@@ -11,10 +11,7 @@
  * - Thread-scoped browser isolation
  */
 
-import {
-  MastraBrowser,
-  ScreencastStreamImpl,
-} from '@mastra/core/browser';
+import { MastraBrowser, ScreencastStreamImpl } from '@mastra/core/browser';
 import type {
   BrowserState,
   BrowserTabState,
@@ -151,7 +148,7 @@ export class BrowserViewer extends MastraBrowser {
 
     // Get or create context
     const contexts = browser.contexts();
-    const context = contexts[0] ?? await browser.newContext();
+    const context = contexts[0] ?? (await browser.newContext());
 
     // Create initial page if none exists
     const pages = context.pages();

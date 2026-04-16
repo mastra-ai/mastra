@@ -7,7 +7,7 @@ Playwright-based browser viewer for Mastra workspaces with CLI provider support.
 `@mastra/browser-viewer` provides `BrowserViewer`, which launches Chrome via Playwright and exposes the CDP URL for CLI tools (agent-browser, browser-use, browse-cli) to connect. This gives you:
 
 - **Full screencast support** — Direct page-level CDP sessions
-- **Input injection** — Mouse and keyboard events work correctly  
+- **Input injection** — Mouse and keyboard events work correctly
 - **Browser lifecycle control** — Browser starts/stops with the server
 - **CLI flexibility** — Agent uses skills + workspace commands to drive any CLI
 
@@ -28,7 +28,7 @@ import { BrowserViewer } from '@mastra/browser-viewer';
 
 const viewer = new BrowserViewer({
   cli: 'agent-browser', // Which CLI the agent will use
-  headless: false,      // Show browser window
+  headless: false, // Show browser window
 });
 
 // Launch browser
@@ -61,15 +61,15 @@ The CDP URL will be automatically injected into CLI commands when used with work
 
 ## Configuration
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `cli` | `'agent-browser' \| 'browser-use' \| 'browse-cli'` | Required | Which CLI the agent uses |
-| `cdpUrl` | `string` | - | Connect to existing browser instead of launching |
-| `headless` | `boolean` | `false` | Run browser in headless mode |
-| `cdpPort` | `number` | `0` (auto) | Port for Chrome remote debugging |
-| `viewport` | `{ width, height }` | `1280x720` | Browser viewport size |
-| `userDataDir` | `string` | - | Chrome profile directory |
-| `executablePath` | `string` | - | Path to Chrome executable |
+| Option           | Type                                               | Default    | Description                                      |
+| ---------------- | -------------------------------------------------- | ---------- | ------------------------------------------------ |
+| `cli`            | `'agent-browser' \| 'browser-use' \| 'browse-cli'` | Required   | Which CLI the agent uses                         |
+| `cdpUrl`         | `string`                                           | -          | Connect to existing browser instead of launching |
+| `headless`       | `boolean`                                          | `false`    | Run browser in headless mode                     |
+| `cdpPort`        | `number`                                           | `0` (auto) | Port for Chrome remote debugging                 |
+| `viewport`       | `{ width, height }`                                | `1280x720` | Browser viewport size                            |
+| `userDataDir`    | `string`                                           | -          | Chrome profile directory                         |
+| `executablePath` | `string`                                           | -          | Path to Chrome executable                        |
 
 ## How It Works
 

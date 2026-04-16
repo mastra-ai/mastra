@@ -7,13 +7,13 @@ Demonstrates browser automation in Mastra using different approaches:
 
 ## Agents
 
-| Agent | Provider | Description |
-|-------|----------|-------------|
-| `browser-agent` | CLI: agent-browser | Uses Vercel's agent-browser CLI |
-| `browser-use-agent` | CLI: browser-use | Uses Python browser-use CLI |
-| `browse-cli-agent` | CLI: browse-cli | Uses Browserbase's Stagehand CLI |
-| `sdk-agent-browser` | SDK: @mastra/agent-browser | Direct Playwright SDK |
-| `sdk-stagehand` | SDK: @mastra/stagehand | Direct Stagehand SDK |
+| Agent               | Provider                   | Description                      |
+| ------------------- | -------------------------- | -------------------------------- |
+| `browser-agent`     | CLI: agent-browser         | Uses Vercel's agent-browser CLI  |
+| `browser-use-agent` | CLI: browser-use           | Uses Python browser-use CLI      |
+| `browse-cli-agent`  | CLI: browse-cli            | Uses Browserbase's Stagehand CLI |
+| `sdk-agent-browser` | SDK: @mastra/agent-browser | Direct Playwright SDK            |
+| `sdk-stagehand`     | SDK: @mastra/stagehand     | Direct Stagehand SDK             |
 
 ## Setup
 
@@ -55,12 +55,14 @@ Demonstrates browser automation in Mastra using different approaches:
 ## How it works
 
 ### CLI Providers (BrowserViewer)
+
 - `BrowserViewer` launches Chrome with `--remote-debugging-port`
 - Agent uses `workspace_execute_command` to run CLI commands
 - CLI connects to our Chrome via `--cdp-url`
 - Screencast streams directly from page-level CDP sessions
 
 ### SDK Providers (AgentBrowser, StagehandBrowser)
+
 - SDK launches and manages Chrome directly
 - Agent uses browser tools (navigate, click, extract, etc.)
 - Screencast built into the SDK

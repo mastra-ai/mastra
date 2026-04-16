@@ -80,9 +80,7 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
    */
   async getActivePageForThread(threadId?: string): Promise<Page | null> {
     const effectiveThreadId = threadId ?? DEFAULT_THREAD_ID;
-    const session = this.scope === 'shared'
-      ? this.sharedSession
-      : this.threadSessions.get(effectiveThreadId);
+    const session = this.scope === 'shared' ? this.sharedSession : this.threadSessions.get(effectiveThreadId);
 
     if (!session?.context) {
       return null;
@@ -97,9 +95,7 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
    */
   getCdpSessionForThread(threadId?: string): CDPSession | null {
     const effectiveThreadId = threadId ?? DEFAULT_THREAD_ID;
-    const session = this.scope === 'shared'
-      ? this.sharedSession
-      : this.threadSessions.get(effectiveThreadId);
+    const session = this.scope === 'shared' ? this.sharedSession : this.threadSessions.get(effectiveThreadId);
 
     return session?.cdpSession ?? null;
   }
@@ -109,9 +105,7 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
    */
   getContextForThread(threadId?: string): BrowserContext | null {
     const effectiveThreadId = threadId ?? DEFAULT_THREAD_ID;
-    const session = this.scope === 'shared'
-      ? this.sharedSession
-      : this.threadSessions.get(effectiveThreadId);
+    const session = this.scope === 'shared' ? this.sharedSession : this.threadSessions.get(effectiveThreadId);
 
     return session?.context ?? null;
   }
@@ -129,11 +123,7 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
 
     const launchOptions: Parameters<typeof chromium.launch>[0] = {
       headless: this.browserConfig.headless ?? false,
-      args: [
-        `--remote-debugging-port=${port}`,
-        '--no-first-run',
-        '--no-default-browser-check',
-      ],
+      args: [`--remote-debugging-port=${port}`, '--no-first-run', '--no-default-browser-check'],
     };
 
     if (this.browserConfig.executablePath) {
@@ -199,11 +189,7 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
 
     const launchOptions: Parameters<typeof chromium.launch>[0] = {
       headless: this.browserConfig.headless ?? false,
-      args: [
-        `--remote-debugging-port=${port}`,
-        '--no-first-run',
-        '--no-default-browser-check',
-      ],
+      args: [`--remote-debugging-port=${port}`, '--no-first-run', '--no-default-browser-check'],
     };
 
     if (this.browserConfig.executablePath) {

@@ -47,7 +47,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": "workspace:*",
+    "@mastra/core": ">=1.22.0-0 <2.0.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "homepage": "https://mastra.ai",
