@@ -70,27 +70,18 @@ const mastra = new Mastra({
 
 ### Configuration Options
 
-| Option               | Type      | Description                                                                                     |
-| -------------------- | --------- | ----------------------------------------------------------------------------------------------- |
-| `publicKey`          | `string`  | Langfuse public key. Defaults to `LANGFUSE_PUBLIC_KEY` env var                                  |
-| `secretKey`          | `string`  | Langfuse secret key. Defaults to `LANGFUSE_SECRET_KEY` env var                                  |
-| `baseUrl`            | `string`  | Langfuse host URL. Defaults to `LANGFUSE_BASE_URL` env var or Langfuse cloud                    |
-| `realtime`           | `boolean` | Flush after each event for immediate visibility. Defaults to `false`                            |
-| `flushAt`            | `number`  | Maximum number of spans per OTEL export batch                                                   |
-| `flushInterval`      | `number`  | Maximum time in seconds before pending spans are exported                                       |
-| `includeModelChunks` | `boolean` | Export `MODEL_CHUNK` spans. Defaults to `true`; set to `false` to reduce streaming trace volume |
-| `environment`        | `string`  | Langfuse tracing environment tag                                                                |
-| `release`            | `string`  | Langfuse release tag                                                                            |
+| Option          | Type      | Description                                                                  |
+| --------------- | --------- | ---------------------------------------------------------------------------- |
+| `publicKey`     | `string`  | Langfuse public key. Defaults to `LANGFUSE_PUBLIC_KEY` env var               |
+| `secretKey`     | `string`  | Langfuse secret key. Defaults to `LANGFUSE_SECRET_KEY` env var               |
+| `baseUrl`       | `string`  | Langfuse host URL. Defaults to `LANGFUSE_BASE_URL` env var or Langfuse cloud |
+| `realtime`      | `boolean` | Flush after each event for immediate visibility. Defaults to `false`         |
+| `flushAt`       | `number`  | Maximum number of spans per OTEL export batch                                |
+| `flushInterval` | `number`  | Maximum time in seconds before pending spans are exported                    |
+| `environment`   | `string`  | Langfuse tracing environment tag                                             |
+| `release`       | `string`  | Langfuse release tag                                                         |
 
 ### High-Volume Streaming
-
-`MODEL_CHUNK` spans stay enabled by default for backward compatibility. If you want lower-volume streaming traces in Langfuse, disable them explicitly:
-
-```typescript
-new LangfuseExporter({
-  includeModelChunks: false,
-});
-```
 
 For self-hosted Langfuse deployments under load, increase the OTEL batch size and flush interval to reduce request pressure:
 
@@ -102,6 +93,8 @@ new LangfuseExporter({
 ```
 
 `flushAt` and `flushInterval` map directly to the upstream `LangfuseSpanProcessor` options, so you can cross-reference Langfuse OTEL documentation when tuning them.
+
+To suppress high-volume `MODEL_CHUNK` spans, use the observability-level `excludeSpanTypes` option. See the [span filtering reference](https://mastra.ai/reference/observability/tracing/span-filtering) for details.
 
 ## Features
 
@@ -115,4 +108,3 @@ new LangfuseExporter({
 - **Error tracking**: Preserves span failures and error details in exported traces
 - **Hierarchical traces**: Maintains parent-child relationships across exported spans
 - **Batch tuning for self-hosted deployments**: Exposes OTEL batch size and interval controls
-- **Optional chunk filtering**: Set `includeModelChunks: false` to suppress high-volume `MODEL_CHUNK` spans

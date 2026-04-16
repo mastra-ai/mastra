@@ -242,39 +242,6 @@ describe('LangfuseExporter', () => {
       expect(processedSpans.length).toBe(0);
     });
 
-    it('exports MODEL_CHUNK spans by default', async () => {
-      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
-      await exportSpan(
-        exporter,
-        makeSpan({
-          id: 'chunk-1',
-          type: SpanType.MODEL_CHUNK,
-          name: 'chunk: text',
-        }),
-      );
-
-      expect(processedSpans.length).toBe(1);
-      expect(processedSpans[0].attributes['mastra.span.type']).toBe(SpanType.MODEL_CHUNK);
-    });
-
-    it('does not export MODEL_CHUNK spans when includeModelChunks is disabled', async () => {
-      exporter = new LangfuseExporter({
-        publicKey: 'pk-test',
-        secretKey: 'sk-test',
-        includeModelChunks: false,
-      });
-      await exportSpan(
-        exporter,
-        makeSpan({
-          id: 'chunk-1',
-          type: SpanType.MODEL_CHUNK,
-          name: 'chunk: text',
-        }),
-      );
-
-      expect(processedSpans.length).toBe(0);
-    });
-
     it('uses serviceName from init() when available', async () => {
       exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
       exporter.init({ config: { serviceName: 'my-custom-service' } } as any);
