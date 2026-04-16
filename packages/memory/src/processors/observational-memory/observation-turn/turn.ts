@@ -6,6 +6,7 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import type { ObservationalMemory } from '../observational-memory';
 import type { MemoryContextProvider } from '../processor';
+import type { ObservationModelContext } from '../types';
 
 import { ObservationStep } from './step';
 import type { ObservationTurnHooks, TurnContext, TurnResult } from './types';
@@ -54,6 +55,9 @@ export class ObservationTurn {
 
   /** Optional observability context for nested OM spans. */
   observabilityContext?: ObservabilityContext;
+
+  /** Current actor model for this step. Updated by the processor before prepare(). */
+  actorModelContext?: ObservationModelContext;
 
   /** Optional processor-provided hooks for turn/step lifecycle integration. */
   readonly hooks?: ObservationTurnHooks;

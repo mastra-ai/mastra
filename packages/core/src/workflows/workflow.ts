@@ -2203,6 +2203,7 @@ export class Workflow<
   // To run a workflow use `.createRun` and then `.start` or `.resume`
   async execute({
     runId,
+    resourceId,
     inputData,
     resumeData,
     state,
@@ -2225,6 +2226,7 @@ export class Workflow<
     ...rest
   }: {
     runId?: string;
+    resourceId?: string;
     inputData: TInput;
     resumeData?: unknown;
     state: TState;
@@ -2284,7 +2286,11 @@ export class Workflow<
 
     const isTimeTravel = !!(timeTravel && timeTravel.steps.length > 0);
 
-    const run = isResume ? await this.createRun({ runId: resume.runId }) : await this.createRun({ runId });
+    // Forward the parent run's resourceId into the nested run so that
+    // child workflow snapshots preserve the tenant/resource association.
+    const run = isResume
+      ? await this.createRun({ runId: resume.runId, resourceId })
+      : await this.createRun({ runId, resourceId });
     const nestedAbortCb = () => {
       abort();
     };

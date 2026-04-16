@@ -32,12 +32,52 @@ import { withOmTracingSpan } from './tracing';
 import type {
   ObservationDebugEvent,
   ObservationMarkerConfig,
+  ObservationModelContext,
   ObserveHookUsage,
   ObserveHooks,
   ResolvedObservationConfig,
   ResolvedReflectionConfig,
   ThresholdRange,
 } from './types';
+
+function formatModelContext(provider?: string, modelId?: string): string | undefined {
+  if (provider && modelId) {
+    return `${provider}/${modelId}`;
+  }
+
+  return modelId;
+}
+
+function getCurrentModel(model?: ObservationModelContext): string | undefined {
+  return formatModelContext(model?.provider, model?.modelId);
+}
+
+function getLastModelFromMessageList(messageList?: MessageList): string | undefined {
+  const messages = messageList?.get.all.db();
+  if (!messages) return undefined;
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (!message || message.role !== 'assistant' || !message.content || typeof message.content === 'string') {
+      continue;
+    }
+
+    for (let j = message.content.parts.length - 1; j >= 0; j--) {
+      const part = message.content.parts[j];
+      if (part?.type === 'step-start' && typeof part.model === 'string' && part.model.length > 0) {
+        return part.model;
+      }
+    }
+
+    const metadata = message.content.metadata as { provider?: string; modelId?: string } | undefined;
+    const model = formatModelContext(metadata?.provider, metadata?.modelId);
+    if (model) {
+      return model;
+    }
+  }
+
+  return undefined;
+}
 
 type ConcreteReflectionModel = Exclude<ResolvedReflectionConfig['model'], ModelByInputTokens>;
 
@@ -513,9 +553,11 @@ export class ReflectorRunner {
     writer?: ProcessorStreamWriter,
     messageList?: MessageList,
     activationMetadata?: {
-      triggeredBy: 'threshold' | 'ttl';
+      triggeredBy: 'threshold' | 'ttl' | 'provider_change';
       lastActivityAt?: number;
       ttlExpiredMs?: number;
+      previousModel?: string;
+      currentModel?: string;
     },
   ): Promise<boolean> {
     const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
@@ -591,6 +633,8 @@ export class ReflectorRunner {
         triggeredBy: activationMetadata?.triggeredBy,
         lastActivityAt: activationMetadata?.lastActivityAt,
         ttlExpiredMs: activationMetadata?.ttlExpiredMs,
+        previousModel: activationMetadata?.previousModel,
+        currentModel: activationMetadata?.currentModel,
         config: this.getObservationMarkerConfig(freshRecord),
       });
       void writer.custom(activationMarker).catch(() => {});
@@ -619,6 +663,7 @@ export class ReflectorRunner {
     writer?: ProcessorStreamWriter;
     abortSignal?: AbortSignal;
     messageList?: MessageList;
+    currentModel?: ObservationModelContext;
     reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
     requestContext?: RequestContext;
     observabilityContext?: ObservabilityContext;
@@ -630,6 +675,7 @@ export class ReflectorRunner {
       writer,
       abortSignal,
       messageList,
+      currentModel,
       reflectionHooks,
       requestContext,
       observabilityContext,
@@ -675,15 +721,28 @@ export class ReflectorRunner {
       activateAfterIdle !== undefined && lastActivityAt !== undefined ? Date.now() - lastActivityAt : undefined;
     const ttlExpired =
       ttlExpiredMs !== undefined && activateAfterIdle !== undefined && ttlExpiredMs >= activateAfterIdle;
+    const actorModel = getCurrentModel(currentModel);
+    const lastModel = getLastModelFromMessageList(messageList);
+    const providerChanged =
+      this.reflectionConfig.activateOnProviderChange === true &&
+      actorModel !== undefined &&
+      lastModel !== undefined &&
+      actorModel !== lastModel;
 
-    if (observationTokens < reflectThreshold && !ttlExpired) {
+    if (observationTokens < reflectThreshold && !ttlExpired && !providerChanged) {
       return;
     }
 
     const activationMetadata = {
-      triggeredBy: ttlExpired ? ('ttl' as const) : ('threshold' as const),
+      triggeredBy: providerChanged
+        ? ('provider_change' as const)
+        : ttlExpired
+          ? ('ttl' as const)
+          : ('threshold' as const),
       lastActivityAt: ttlExpired ? lastActivityAt : undefined,
       ttlExpiredMs: ttlExpired ? ttlExpiredMs : undefined,
+      previousModel: providerChanged ? lastModel : undefined,
+      currentModel: providerChanged ? actorModel : undefined,
     };
 
     // ═══════════════════════════════════════════════════════════
