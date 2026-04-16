@@ -65,7 +65,7 @@ function extractTailPipe(command: string): { command: string; tail?: number } {
  */
 const CLI_CDP_PATTERNS: Record<string, { pattern: RegExp; flag: string }> = {
   'agent-browser': { pattern: /^agent-browser\b/, flag: '--cdp' },
-  'browser-use': { pattern: /^(?:browser-use|bu)\b/, flag: '--cdp-url' },
+  'browser-use': { pattern: /^(?:browser-use|browseruse|bu)\b/, flag: '--cdp-url' },
   browse: { pattern: /^browse\b/, flag: '--ws' },
 };
 
