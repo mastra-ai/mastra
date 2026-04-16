@@ -102,8 +102,13 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
     execute: async ({ inputData, getStepResult, bail }) => {
       const initialResult = getStepResult(llmExecutionStep);
 
-      // Compute toModelOutput for a successful tool call and return providerMetadata
-      // with the result stored at mastra.modelOutput
+      /**
+       * Compute toModelOutput for a successful tool call and return providerMetadata
+       * with the result stored at mastra.modelOutput.
+       *
+       * Looks up the tool from dynamically loaded tools (`_internal.stepTools`, e.g. via
+       * ToolSearchProcessor) first, then falls back to the agent's static tool definitions.
+       */
       async function getProviderMetadataWithModelOutput(toolCall: {
         toolName: string;
         result?: unknown;
