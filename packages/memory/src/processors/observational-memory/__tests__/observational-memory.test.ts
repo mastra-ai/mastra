@@ -5191,6 +5191,7 @@ describe('Locking Behavior', () => {
     const setupBufferedReflectionEnv = async (opts: {
       activateAfterIdle?: string | number;
       activateOnProviderChange?: boolean;
+      reflectionObservationTokens?: number;
     }) => {
       const storage = createInMemoryStorage();
       let reflectorCalled = false;
@@ -5216,7 +5217,7 @@ describe('Locking Behavior', () => {
           model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }) as any,
         },
         reflection: {
-          observationTokens: 40000,
+          observationTokens: opts.reflectionObservationTokens ?? 40000,
           bufferActivation: 0.5,
           model: mockReflectorModel as any,
         },
@@ -5306,7 +5307,13 @@ describe('Locking Behavior', () => {
         const now = new Date('2026-04-14T12:00:00.000Z');
         vi.setSystemTime(now);
 
-        const { storage, om, getReflectorCalled } = await setupBufferedReflectionEnv({ activateAfterIdle: '5m' });
+        // Use a small reflectThreshold so the combined-size floor (75% of regular
+        // activation target) is low enough for the 40-line tail + small reflection
+        // to clear it.
+        const { storage, om, getReflectorCalled } = await setupBufferedReflectionEnv({
+          activateAfterIdle: '5m',
+          reflectionObservationTokens: 500,
+        });
 
         const threadId = 'thread-overshoot';
         const resourceId = 'resource-overshoot';
@@ -5428,7 +5435,10 @@ describe('Locking Behavior', () => {
     it('should proceed with provider-change activation when unreflected tail is at least the buffered reflection size', async () => {
       const { MessageList } = await import('@mastra/core/agent');
 
-      const { storage, om, getReflectorCalled } = await setupBufferedReflectionEnv({ activateOnProviderChange: true });
+      const { storage, om, getReflectorCalled } = await setupBufferedReflectionEnv({
+        activateOnProviderChange: true,
+        reflectionObservationTokens: 500,
+      });
 
       const threadId = 'thread-overshoot';
       const resourceId = 'resource-overshoot';
@@ -5492,6 +5502,132 @@ describe('Locking Behavior', () => {
       const activationMarkers = customCalls.filter(part => part?.type === 'data-om-activation');
       expect(activationMarkers).toHaveLength(1);
       expect(activationMarkers[0]?.data?.triggeredBy).toBe('provider_change');
+    });
+
+    it('should suppress TTL activation when combined reflection + tail is below the size floor even if tail is larger than buffered reflection', async () => {
+      vi.useFakeTimers();
+      try {
+        const now = new Date('2026-04-14T12:00:00.000Z');
+        vi.setSystemTime(now);
+
+        // reflectThreshold=40000, bufferActivation=0.5 → regular activation target=20000,
+        // minCombinedTokens = 20000 * 0.75 = 15000. The combined tokens below
+        // (~small reflection + handful of short lines) will be far under 15000 even
+        // though the tail clearly exceeds the buffered reflection.
+        const { storage, om, getReflectorCalled } = await setupBufferedReflectionEnv({
+          activateAfterIdle: '5m',
+          reflectionObservationTokens: 40000,
+        });
+
+        const threadId = 'thread-overshoot';
+        const resourceId = 'resource-overshoot';
+        const record = (await storage.getObservationalMemory(threadId, resourceId))!;
+
+        // Tail tokens (~small) > buffered reflection tokens (~smaller), so the 50/50
+        // composition check passes. But combined ≪ 15000, so the size floor blocks.
+        const reflectedLines = ['- 🔴 R1'];
+        const tailLines = Array.from({ length: 20 }, (_, i) => `- 🟢 T${i + 1}`);
+        const allLines = [...reflectedLines, ...tailLines];
+        const activeObservations = allLines.join('\n');
+        await storage.updateActiveObservations({
+          id: record.id,
+          observations: activeObservations,
+          tokenCount: om.getTokenCounter().countObservations(activeObservations),
+          lastObservedAt: new Date(now.getTime() - 301_000),
+        });
+
+        const reflection = '- 🔴 Small reflection';
+        const reflectionTokens = om.getTokenCounter().countObservations(reflection);
+        await storage.updateBufferedReflection({
+          id: record.id,
+          reflection,
+          tokenCount: reflectionTokens,
+          inputTokenCount: reflectionTokens * 3,
+          reflectedObservationLineCount: reflectedLines.length,
+        });
+
+        const { writer, customCalls } = makeCapturingWriter();
+
+        const freshRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
+        await om.reflector.maybeReflect({
+          record: freshRecord,
+          observationTokens: freshRecord.observationTokenCount ?? 0,
+          lastActivityAt: now.getTime() - 301_000,
+          threadId,
+          writer,
+        });
+
+        const afterRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
+        expect(afterRecord.bufferedReflection).toBe(reflection);
+        expect(afterRecord.activeObservations).toBe(activeObservations);
+        expect(getReflectorCalled()).toBe(false);
+        const activationMarkers = customCalls.filter(part => part?.type === 'data-om-activation');
+        expect(activationMarkers).toHaveLength(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should proceed with TTL activation when combined reflection + tail clears the size floor', async () => {
+      vi.useFakeTimers();
+      try {
+        const now = new Date('2026-04-14T12:00:00.000Z');
+        vi.setSystemTime(now);
+
+        // Small reflectThreshold makes the size floor modest (regular target=250,
+        // minCombinedTokens≈187) so the 40-line tail easily clears it.
+        const { storage, om, getReflectorCalled } = await setupBufferedReflectionEnv({
+          activateAfterIdle: '5m',
+          reflectionObservationTokens: 500,
+        });
+
+        const threadId = 'thread-overshoot';
+        const resourceId = 'resource-overshoot';
+        const record = (await storage.getObservationalMemory(threadId, resourceId))!;
+
+        const reflectedLines = ['- 🔴 Reflected line 1', '- 🟡 Reflected line 2'];
+        const tailLines = Array.from({ length: 40 }, (_, i) => `- 🟢 Tail observation line ${i + 1}`);
+        const allLines = [...reflectedLines, ...tailLines];
+        const activeObservations = allLines.join('\n');
+        await storage.updateActiveObservations({
+          id: record.id,
+          observations: activeObservations,
+          tokenCount: om.getTokenCounter().countObservations(activeObservations),
+          lastObservedAt: new Date(now.getTime() - 301_000),
+        });
+
+        const reflection = '- 🔴 Condensed reflection';
+        const reflectionTokens = om.getTokenCounter().countObservations(reflection);
+        await storage.updateBufferedReflection({
+          id: record.id,
+          reflection,
+          tokenCount: reflectionTokens,
+          inputTokenCount: reflectionTokens * 3,
+          reflectedObservationLineCount: reflectedLines.length,
+        });
+
+        const { writer, customCalls } = makeCapturingWriter();
+
+        const freshRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
+        await om.reflector.maybeReflect({
+          record: freshRecord,
+          observationTokens: freshRecord.observationTokenCount ?? 0,
+          lastActivityAt: now.getTime() - 301_000,
+          threadId,
+          writer,
+        });
+
+        const afterRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
+        expect(afterRecord.bufferedReflection).toBeFalsy();
+        expect(afterRecord.activeObservations).toContain('Condensed reflection');
+        expect(afterRecord.activeObservations).toContain('Tail observation line 1');
+        expect(getReflectorCalled()).toBe(false);
+        const activationMarkers = customCalls.filter(part => part?.type === 'data-om-activation');
+        expect(activationMarkers).toHaveLength(1);
+        expect(activationMarkers[0]?.data?.triggeredBy).toBe('ttl');
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

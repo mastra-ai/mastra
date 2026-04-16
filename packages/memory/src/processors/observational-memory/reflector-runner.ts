@@ -604,18 +604,39 @@ export class ReflectorRunner {
     // Early-trigger overshoot guard:
     // TTL and provider-change triggers can fire immediately after a buffered reflection
     // is written — before observations have grown enough to produce a healthy
-    // reflection/raw mix on activation. If we activated now, the result would collapse
-    // to ~just the buffered reflection with an empty (or near-empty) raw tail,
-    // destroying the high-quality recent observations. Require the unreflected tail
-    // to be at least as large as the buffered reflection (≥ 50/50 post-activation
-    // mix) before consuming the buffer on an early trigger. Otherwise keep the buffer
-    // in place for the eventual threshold activation.
+    // activation outcome. Two checks guard against this:
+    //
+    // 1. Composition floor (≥ 50/50 mix): unreflected tail must be at least as
+    //    large as the buffered reflection. Prevents post-activation active
+    //    observations from collapsing to ~just the buffered reflection.
+    //
+    // 2. Size floor (≥ 75% of regular activation target): combined
+    //    reflection + tail must be at least 75% of what a normal threshold
+    //    activation would leave. Regular activation target ≈ reflectThreshold
+    //    × (1 − bufferActivation) (the raw tail remaining when a threshold
+    //    activation fires). 75% keeps early fires close to the system's tuned
+    //    post-activation size while still allowing them to happen sooner than
+    //    normal. Prevents cliff cases like 17k → 4k active observations.
+    //
+    // If either check fails, keep the buffer in place for the eventual
+    // threshold activation.
     if (activationMetadata?.triggeredBy === 'ttl' || activationMetadata?.triggeredBy === 'provider_change') {
       const unreflectedTailTokens = unreflectedContent ? this.tokenCounter.countObservations(unreflectedContent) : 0;
       const bufferedReflectionTokens = freshRecord.bufferedReflectionTokens ?? 0;
       if (unreflectedTailTokens < bufferedReflectionTokens) {
         omDebug(
           `[OM:reflect] tryActivateBufferedReflection: suppressing early ${activationMetadata.triggeredBy} activation — unreflectedTailTokens=${unreflectedTailTokens} < bufferedReflectionTokens=${bufferedReflectionTokens}; keeping buffer for threshold activation`,
+        );
+        return false;
+      }
+
+      const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(freshRecord));
+      const bufferActivation = this.reflectionConfig.bufferActivation ?? 0.5;
+      const regularActivationTarget = reflectThreshold * (1 - bufferActivation);
+      const minCombinedTokens = regularActivationTarget * 0.75;
+      if (combinedTokenCount < minCombinedTokens) {
+        omDebug(
+          `[OM:reflect] tryActivateBufferedReflection: suppressing early ${activationMetadata.triggeredBy} activation — combinedTokenCount=${combinedTokenCount} < minCombinedTokens=${minCombinedTokens} (75% of regular activation target ${regularActivationTarget}, threshold=${reflectThreshold}, bufferActivation=${bufferActivation}); keeping buffer for threshold activation`,
         );
         return false;
       }
