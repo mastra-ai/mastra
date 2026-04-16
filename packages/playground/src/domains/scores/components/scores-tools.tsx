@@ -19,6 +19,7 @@ export function ScoresTools({ onEntityChange, onReset, selectedEntity, entityOpt
         labelIsHidden={true}
         name="select-entity"
         placeholder="Select..."
+        size="md"
         options={entityOptions || []}
         onValueChange={(val: string) => {
           const entity = entityOptions?.find(entity => entity.value === val);

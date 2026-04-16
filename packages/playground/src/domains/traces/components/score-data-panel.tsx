@@ -78,10 +78,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext }: ScoreData
             {score.traceId && (
               <>
                 <DataKeysAndValues.Key>Trace Id</DataKeysAndValues.Key>
-                <DataKeysAndValues.ValueLink
-                  href={`/observability?traceId=${encodeURIComponent(score.traceId)}`}
-                  as={Link}
-                >
+                <DataKeysAndValues.ValueLink href={`/traces/${encodeURIComponent(score.traceId)}`} as={Link}>
                   {score.traceId}
                 </DataKeysAndValues.ValueLink>
               </>
@@ -90,7 +87,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext }: ScoreData
               <>
                 <DataKeysAndValues.Key>Span Id</DataKeysAndValues.Key>
                 <DataKeysAndValues.ValueLink
-                  href={`/observability?traceId=${encodeURIComponent(score.traceId)}&spanId=${encodeURIComponent(score.spanId)}`}
+                  href={`/traces/${encodeURIComponent(score.traceId)}?spanId=${encodeURIComponent(score.spanId)}`}
                   as={Link}
                 >
                   {score.spanId}

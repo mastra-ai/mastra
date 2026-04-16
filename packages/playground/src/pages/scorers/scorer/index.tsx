@@ -169,7 +169,7 @@ export default function Scorer() {
         <Crumb as={Link} to={`/scorers`}>
           Scorers
         </Crumb>
-        <ScorerCombobox value={scorerId} variant="ghost" />
+        <ScorerCombobox value={scorerId} variant="link" />
       </Breadcrumb>
       <PageLayout.Row>
         <PageHeader>
