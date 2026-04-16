@@ -8,11 +8,13 @@
  */
 export function didProviderChange(actorModel?: string, lastModel?: string): boolean {
   if (actorModel === undefined || lastModel === undefined) return false;
-  if (actorModel === lastModel) return false;
 
   const actorHasSlash = actorModel.includes('/');
   const lastHasSlash = lastModel.includes('/');
-  if (actorHasSlash && lastHasSlash) return true;
+
+  if (actorHasSlash && lastHasSlash) {
+    return actorModel !== lastModel;
+  }
 
   const actorModelId = actorHasSlash ? actorModel.slice(actorModel.indexOf('/') + 1) : actorModel;
   const lastModelId = lastHasSlash ? lastModel.slice(lastModel.indexOf('/') + 1) : lastModel;
