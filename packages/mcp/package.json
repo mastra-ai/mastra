@@ -59,7 +59,7 @@
     "@vitest/ui": "catalog:",
     "ai": "^5.0.154",
     "eslint": "^9.39.4",
-    "hono": "^4.12.8",
+    "hono": "^4.12.14",
     "hono-mcp-server-sse-transport": "0.0.7",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
