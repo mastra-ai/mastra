@@ -60,7 +60,23 @@ If you were using Cloud Store, follow the steps below to export your data and lo
 
 ### Export your Cloud Store data
 
-Cloud Store data lives in a Turso-hosted libSQL database. Exporting it requires the database URL and an auth token (both surfaced in the dashboard), then a SQL dump via the [Turso CLI](https://docs.turso.tech/cli).
+There are two ways to export your Cloud Store data: a one-click download from the dashboard, or a manual dump via the Turso CLI.
+
+#### Option A — Export from the dashboard (recommended)
+
+Open your project in the [Mastra dashboard](https://projects.mastra.ai) and navigate to **Runtime → Settings → Storage**. Click the **Export Database** button. The dashboard generates a full `.sql` dump of your Cloud Store and downloads it directly to your Downloads folder.
+
+Once the download completes, convert the dump into a SQLite database file:
+
+```bash
+sqlite3 mydb.db < ~/Downloads/mastra-cloud-dump.sql
+```
+
+You now have a portable `mydb.db` file you can inspect locally, back up, or use as the source for the new database in the steps that follow.
+
+#### Option B — Export via the Turso CLI
+
+If you prefer to work from the command line, or need to script the export, you can dump the database directly using the [Turso CLI](https://docs.turso.tech/cli). This approach requires the database URL and an auth token, both surfaced in the dashboard.
 
 <Steps>
   <StepItem>
