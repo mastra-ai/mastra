@@ -9,6 +9,16 @@ packages:
 
 The `CloudExporter` sends traces, logs, metrics, scores, and feedback to the Mastra platform. Use it to route observability data from any Mastra app to a hosted project in the Mastra platform.
 
+:::note[Self-hosted or standalone apps]
+
+If you host your Mastra application on your own infrastructure (not on Mastra Platform), you still need a deployed Studio project to view traces, logs, and metrics. `CloudExporter` sends data to a Studio project, so one must exist before you can use it.
+
+1. [Create a Mastra project](/docs/getting-started/manual-install) if you don't have one yet, or use the [quickstart](/guides/getting-started/quickstart) CLI command.
+1. [Deploy Studio](/docs/studio/deployment#mastra-platform) to the Mastra platform with `mastra studio deploy`.
+1. Follow the [quickstart steps below](#quickstart) to create an access token and find your project ID.
+
+:::
+
 ## Version compatibility
 
 - Use `CloudExporter` with `@mastra/observability@1.8.0` or later.
