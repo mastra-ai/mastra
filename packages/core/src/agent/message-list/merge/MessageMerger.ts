@@ -84,6 +84,13 @@ export class MessageMerger {
     // Update timestamp
     latestMessage.createdAt = incomingMessage.createdAt || latestMessage.createdAt;
 
+    if (incomingMessage.content.metadata) {
+      latestMessage.content.metadata = {
+        ...(latestMessage.content.metadata ?? {}),
+        ...incomingMessage.content.metadata,
+      };
+    }
+
     // Used for mapping indexes for incomingMessage parts to corresponding indexes in latestMessage
     const toolResultAnchorMap = new Map<number, number>();
     const partsToAdd = new Map<number, MastraMessageContentV2['parts'][number]>();
