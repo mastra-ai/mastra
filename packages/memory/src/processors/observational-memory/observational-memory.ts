@@ -131,26 +131,7 @@ export function getCurrentModel(model?: { provider?: string; modelId?: string })
   return formatModelContext(model?.provider, model?.modelId);
 }
 
-/**
- * Compare a model string derived from past messages against the current actor
- * model. Persisted messages from older code paths may carry a bare `modelId`
- * (no `provider/` prefix) while the current actor always formats as
- * `provider/modelId`. If either side is bare, fall back to comparing just the
- * `modelId` part so a missing provider in history doesn't trigger a spurious
- * provider change.
- */
-export function didProviderChange(actorModel?: string, lastModel?: string): boolean {
-  if (actorModel === undefined || lastModel === undefined) return false;
-  if (actorModel === lastModel) return false;
-
-  const actorHasSlash = actorModel.includes('/');
-  const lastHasSlash = lastModel.includes('/');
-  if (actorHasSlash && lastHasSlash) return true;
-
-  const actorModelId = actorHasSlash ? actorModel.slice(actorModel.indexOf('/') + 1) : actorModel;
-  const lastModelId = lastHasSlash ? lastModel.slice(lastModel.indexOf('/') + 1) : lastModel;
-  return actorModelId !== lastModelId;
-}
+export { didProviderChange } from './model-context';
 
 function parseActivationTTL(value: number | string | undefined, fieldPath: string): number | undefined {
   if (value === undefined) {
@@ -206,6 +187,7 @@ import {
   stripThreadTags,
 } from './message-utils';
 import { ModelByInputTokens } from './model-by-input-tokens';
+import { didProviderChange as hasProviderChanged } from './model-context';
 import { renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
 import { ObservationStrategy } from './observation-strategies/index';
 import { ObservationTurn } from './observation-turn/index';
@@ -3164,7 +3146,7 @@ ${formattedMessages}
       const actorModel = getCurrentModel(opts.currentModel);
       const lastModel = getLastModelFromMessages(thresholdMessages);
       const providerChanged =
-        this.observationConfig.activateOnProviderChange === true && didProviderChange(actorModel, lastModel);
+        this.observationConfig.activateOnProviderChange === true && hasProviderChanged(actorModel, lastModel);
 
       if (providerChanged) {
         activationTriggeredBy = 'provider_change';
