@@ -1,5 +1,5 @@
 {
-  "name": "@mastra/azure",
+  "name": "@mastra/azure-blob",
   "version": "0.1.0",
   "description": "Azure Blob Storage filesystem provider for Mastra workspaces",
   "type": "module",
