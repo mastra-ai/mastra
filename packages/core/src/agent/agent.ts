@@ -260,15 +260,7 @@ export class Agent<
         this.logger.trackException(mastraError);
         throw mastraError;
       }
-      this.model = config.model.map(mdl => ({
-        id: mdl.id ?? randomUUID(),
-        model: mdl.model,
-        maxRetries: mdl.maxRetries ?? config?.maxRetries ?? 0,
-        enabled: mdl.enabled ?? true,
-        modelSettings: mdl.modelSettings,
-        providerOptions: mdl.providerOptions,
-        headers: mdl.headers,
-      })) as ModelFallbacks;
+      this.model = config.model.map(mdl => Agent.toFallbackEntry(mdl, config?.maxRetries ?? 0)) as ModelFallbacks;
       this.#originalModel = [...this.model];
     } else {
       this.model = config.model;
@@ -1716,15 +1708,24 @@ export class Agent<
       return models;
     }
 
-    return models.map(m => ({
-      id: m.id ?? randomUUID(),
-      model: m.model as DynamicArgument<MastraModelConfig>,
-      maxRetries: m.maxRetries ?? this.maxRetries,
-      enabled: m.enabled ?? true,
-      modelSettings: m.modelSettings as DynamicArgument<ModelFallbackSettings> | undefined,
-      providerOptions: m.providerOptions as DynamicArgument<ProviderOptions> | undefined,
-      headers: m.headers as DynamicArgument<Record<string, string>> | undefined,
-    })) as ModelFallbacks;
+    return models.map(m => Agent.toFallbackEntry(m, this.maxRetries ?? 0)) as ModelFallbacks;
+  }
+
+  /**
+   * Builds a single normalized fallback entry from a user-supplied `ModelWithRetries`.
+   * Shared by the constructor and `normalizeModelFallbacks` to keep the mapping in one place.
+   * @internal
+   */
+  private static toFallbackEntry(mdl: ModelWithRetries, defaultMaxRetries: number): ModelFallbacks[number] {
+    return {
+      id: mdl.id ?? randomUUID(),
+      model: mdl.model as DynamicArgument<MastraModelConfig>,
+      maxRetries: mdl.maxRetries ?? defaultMaxRetries,
+      enabled: mdl.enabled ?? true,
+      modelSettings: mdl.modelSettings,
+      providerOptions: mdl.providerOptions,
+      headers: mdl.headers,
+    };
   }
 
   /**

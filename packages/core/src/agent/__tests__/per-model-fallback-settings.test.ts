@@ -199,6 +199,35 @@ describe('Per-fallback-entry settings', () => {
       expect(po?.google).toEqual({ thinkingConfig: { thinkingBudget: 8000 } });
       expect(po?.openai).toBeUndefined();
     });
+
+    it('should resolve a function-form providerOptions using requestContext', async () => {
+      const primary = createRecordingStreamModel('dynamic-provider', 'ok');
+      const requestContext = new RequestContext();
+      requestContext.set('tier', 'premium');
+
+      const agent = new Agent({
+        id: 'dynamic-providerOptions',
+        name: 'Dynamic ProviderOptions Test',
+        instructions: 'You are a test agent',
+        model: [
+          {
+            model: primary,
+            maxRetries: 0,
+            providerOptions: ({ requestContext }) =>
+              requestContext.get('tier') === 'premium'
+                ? ({ openai: { reasoningEffort: 'high' } } as any)
+                : ({ openai: { reasoningEffort: 'low' } } as any),
+          },
+        ],
+      });
+
+      await (
+        await agent.stream('Hello', { requestContext })
+      ).text;
+
+      const po = primary.doStreamCalls[0]?.providerOptions as Record<string, Record<string, unknown>>;
+      expect(po?.openai?.reasoningEffort).toBe('high');
+    });
   });
 
   describe('headers', () => {
@@ -237,6 +266,32 @@ describe('Per-fallback-entry settings', () => {
 
       const sent = (primary.doStreamCalls[0]?.headers ?? {}) as Record<string, string>;
       expect(sent['x-region']).toBe('us');
+    });
+
+    it('should resolve a function-form headers using requestContext', async () => {
+      const primary = createRecordingStreamModel('dynamic-headers', 'ok');
+      const requestContext = new RequestContext();
+      requestContext.set('tenant', 'acme');
+
+      const agent = new Agent({
+        id: 'dynamic-headers',
+        name: 'Dynamic Headers Test',
+        instructions: 'You are a test agent',
+        model: [
+          {
+            model: primary,
+            maxRetries: 0,
+            headers: ({ requestContext }) => ({ 'x-tenant': String(requestContext.get('tenant')) }),
+          },
+        ],
+      });
+
+      await (
+        await agent.stream('Hello', { requestContext })
+      ).text;
+
+      const sent = (primary.doStreamCalls[0]?.headers ?? {}) as Record<string, string>;
+      expect(sent['x-tenant']).toBe('acme');
     });
   });
 });
