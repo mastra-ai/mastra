@@ -1,9 +1,9 @@
-import * as React from 'react';
-import { cn } from '@/lib/utils';
-import { transitions, focusRing } from '@/ds/primitives/transitions';
-import { CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { ChevronRight } from 'lucide-react';
+import * as React from 'react';
 import { useTreeDepth } from './tree-context';
+import { CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { transitions, focusRing } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export interface TreeFolderTriggerProps {
   className?: string;

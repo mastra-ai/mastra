@@ -1,34 +1,39 @@
 ---
 title: "Auth overview | Auth"
-description: Learn about different Auth options for your Mastra applications
+description: Learn about different auth options for securing your Mastra API and Studio.
 packages:
   - "@mastra/auth"
 ---
 
 # Auth overview
 
-Mastra lets you choose how you handle authentication, so you can secure access to your application's endpoints using the identity system that fits your stack.
+Mastra lets you choose how you handle authentication, so you can secure access to your API and [Studio](/docs/studio/overview) using the identity system that fits your stack.
 
-You can start with basic shared secret JWT authentication and switch to providers like Supabase, Firebase Auth, Auth0, Clerk, or WorkOS when you need more advanced identity features.
+You can start with basic shared secret JWT authentication and switch to known providers when you need more advanced identity features.
 
-## Default behavior
+## What auth secures
 
-Authentication is optional in Mastra. When you configure authentication:
+Configuring authentication locks down two things at once:
 
-- **All built-in API routes** (`/api/agents/*`, `/api/workflows/*`, etc.) require authentication by default
-- **Custom API routes** also require authentication by default
-- **Public access** can be enabled on custom routes using `requiresAuth: false`
+- **Studio UI**: Studio displays a login screen (SSO, email/password, or both) and enforces role-based access control to determine what each team member can see and do.
+- **API routes**: All built-in routes (`/api/agents/*`, `/api/workflows/*`, etc.) and custom routes require authentication, whether requests come from Studio or direct API calls.
 
-If no authentication is configured, all routes are publicly accessible.
+Authentication is optional. If no auth is configured, all routes and Studio are publicly accessible. Public access can be enabled on individual custom routes using `requiresAuth: false`.
 
-See [Custom API Routes](/docs/server/custom-api-routes#authentication) for controlling authentication on custom endpoints.
+See [Custom API Routes](/docs/server/custom-api-routes#authentication) for controlling authentication on custom endpoints. Visit the [Studio Auth docs](/docs/studio/auth) for more on securing your Studio deployment.
+
+:::note
+
+Authentication for Studio is currently supported by the following providers: Simple Auth, JWT, WorkOS, and Better Auth.
+
+:::
 
 ## Available providers
 
 ### Built-in
 
-- [Simple Auth](/docs/server/auth/simple-auth) - Token-to-user mapping for development and API keys
-- [JSON Web Token (JWT)](/docs/server/auth/jwt) - HMAC-signed JWT verification
+- [Simple Auth](/docs/server/auth/simple-auth): Token-to-user mapping for development and API keys
+- [JSON Web Token (JWT)](/docs/server/auth/jwt): HMAC-signed JWT verification
 
 ### Third-party integrations
 
@@ -36,10 +41,11 @@ See [Custom API Routes](/docs/server/custom-api-routes#authentication) for contr
 - [Better Auth](/docs/server/auth/better-auth)
 - [Clerk](/docs/server/auth/clerk)
 - [Firebase](/docs/server/auth/firebase)
+- [Okta](/docs/server/auth/okta)
 - [Supabase](/docs/server/auth/supabase)
 - [WorkOS](/docs/server/auth/workos)
 
 ### Advanced
 
-- [Composite Auth](/docs/server/auth/composite-auth) - Combine multiple auth providers
-- [Custom Auth Provider](/docs/server/auth/custom-auth-provider) - Build your own provider
+- [Composite Auth](/docs/server/auth/composite-auth): Combine multiple auth providers
+- [Custom Auth Provider](/docs/server/auth/custom-auth-provider): Build your own provider

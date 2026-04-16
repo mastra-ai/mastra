@@ -10,7 +10,7 @@ import type {
 import type { Agent } from '@mastra/core/agent';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { RequestContext } from '@mastra/core/request-context';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { convertToCoreMessage, normalizeError, createSuccessResponse, createErrorResponse } from '../a2a/protocol';
 import type { InMemoryTaskStore } from '../a2a/store';
 import { applyUpdateToTask, createTaskContext, loadOrCreateTask } from '../a2a/tasks';

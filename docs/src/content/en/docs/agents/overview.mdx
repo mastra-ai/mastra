@@ -1,5 +1,5 @@
 ---
-title: "Using agents | Agents"
+title: "Agents overview"
 description: Overview of agents in Mastra, detailing their capabilities and how they interact with tools, workflows, and external systems.
 packages:
   - "@mastra/core"
@@ -7,121 +7,39 @@ packages:
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
-import Steps from "@site/src/components/Steps";
-import StepItem from "@site/src/components/StepItem";
 
-# Using agents
+# Agents overview
 
-Agents use LLMs and tools to solve open-ended tasks. They reason about goals, decide which tools to use, retain conversation memory, and iterate internally until the model emits a final answer or an optional stop condition is met. Agents produce structured responses you can render in your UI or process programmatically. Use agents directly or compose them into workflows or agent networks.
+Agents use LLMs and tools to solve open-ended tasks. They reason about goals, decide which tools to use, retain conversation memory, and iterate internally until the model emits a final answer or an optional stop condition is met. Agents produce structured responses you can render in your UI or process programmatically. Use agents directly or compose them into workflows or multi-agent systems.
 
-![Agents overview](/img/agents/agents-overview.jpg)
+## When to use agents
 
-:::tip[Watch an introduction]
+Use agents when the task is open-ended and the steps aren't known in advance. An agent decides which tools to call, how many times to loop, and when to stop. You provide the goal and constraints instead of defining each step. For predetermined, multi-step processes with explicit control flow, use [workflows](/docs/workflows/overview) instead.
 
-An introduction to agents, and how they compare to workflows on [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw)
+:::tip
+
+Watch an introduction to agents, and how they compare to workflows on [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw).
 
 :::
 
-## Setting up agents
+## Quickstart
 
-### Installation
+Create an agent by instantiating the `Agent` class from `@mastra/core` and provide the required properties:
 
-<Steps>
-  <StepItem>
-    Add the Mastra core package to your project:
+```typescript title="src/mastra/agents/test-agent.ts"
+import { Agent } from '@mastra/core/agent'
 
-    ```bash npm2yarn
-    npm install @mastra/core@latest
-    ```
-  </StepItem>
-
-  <StepItem>
-    Mastra's model router auto-detects environment variables for your chosen provider. For OpenAI, set `OPENAI_API_KEY`:
-
-    ```bash title=".env"
-    OPENAI_API_KEY=<your-api-key>
-    ```
-
-    :::note
-
-    Mastra supports more than 600 models. Choose from the [full list](/models).
-
-    :::
-  </StepItem>
-
-  <StepItem>
-    Create an agent by instantiating the `Agent` class with system `instructions` and a `model`:
-
-    ```typescript title="src/mastra/agents/test-agent.ts"
-    import { Agent } from '@mastra/core/agent'
-
-    export const testAgent = new Agent({
-      id: 'test-agent',
-      name: 'Test Agent',
-      instructions: 'You are a helpful assistant.',
-      model: 'openai/gpt-5.1',
-    })
-    ```
-  </StepItem>
-</Steps>
-
-### Instruction formats
-
-Instructions define the agent's behavior, personality, and capabilities.
-They're system-level prompts that establish the agent's core identity and expertise.
-
-Instructions can be provided in multiple formats for greater flexibility. The examples below illustrate the supported shapes:
-
-```typescript
-// String (most common)
-instructions: 'You are a helpful assistant.'
-
-// Array of strings
-instructions: ['You are a helpful assistant.', 'Always be polite.', 'Provide detailed answers.']
-
-// Array of system messages
-instructions: [
-  { role: 'system', content: 'You are a helpful assistant.' },
-  { role: 'system', content: 'You have expertise in TypeScript.' },
-]
+export const testAgent = new Agent({
+  id: 'test-agent',
+  name: 'Test Agent',
+  instructions: 'You are a helpful assistant.',
+  model: 'openai/gpt-5.4',
+})
 ```
 
-### Provider-specific options
+The `instructions` define the agent's behavior, personality, and capabilities. They're system-level prompts that establish the agent's core identity and expertise. The `model` is specified as `'provider/model-name'` using Mastra's [model router](/models).
 
-Each model provider also enables a few different options, including prompt caching and configuring reasoning. We provide a `providerOptions` flag to manage these. You can set `providerOptions` on the instruction level to set different caching strategy per system instruction/prompt.
-
-```typescript prettier:false
-// With provider-specific options (e.g., caching, reasoning)
-instructions: {
-  role: "system",
-  content:
-    "You are an expert code reviewer. Analyze code for bugs, performance issues, and best practices.",
-  providerOptions: {
-    openai: { reasoningEffort: "high" },        // OpenAI's reasoning models
-    anthropic: { cacheControl: { type: "ephemeral" } }  // Anthropic's prompt caching
-  }
-}
-```
-
-:::info
-
-Visit [Agent reference](/reference/agents/agent) for more information.
-
-:::
-
-### Dynamic instructions
-
-Instructions can be provided as an async function, allowing you to resolve prompts at runtime. This enables patterns like personalizing instructions based on user context, fetching prompts from external registry services, and running A/B tests with different variants.
-
-:::info
-
-See [Dynamic instructions](/docs/server/request-context#dynamic-instructions) for examples.
-
-:::
-
-### Registering an agent
-
-Register your agent in the Mastra instance to make it available throughout your application. Once registered, it can be called from workflows, tools, or other agents, and has access to shared resources such as memory, logging, and observability features:
+To make the agent available throughout your application, register it in your Mastra instance (typically located in `src/mastra/index.ts`):
 
 ```typescript {5} title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -132,85 +50,47 @@ export const mastra = new Mastra({
 })
 ```
 
-### Registering subagents
+Once registered, it can be called from workflows, tools, or other agents, and has access to shared resources such as memory, logging, and observability features.
 
-You can register subagents within an agent using the `agents` property. Adding subagents makes the parent agent a supervisor. A supervisor can delegate tasks to subagents, control delegations with hooks, filter context, and monitor progress using the [supervisor pattern](/docs/agents/supervisor-agents). Read the [using agents as tools](/docs/agents/using-tools#using-agents-as-tools) documentation for setup details.
+:::tip
 
-### Registering subworkflows
+Use [Studio](/docs/studio/overview) to test your agent with different messages, inspect tool calls and responses, and debug agent behavior.
 
-You can register subworkflows within an agent. They'll be executed as tools from the parent agent. Read the [using workflows as tools](/docs/agents/using-tools#using-workflows-as-tools) documentation to learn more.
+:::
 
-## Referencing an agent
+:::note
 
-You can call agents from workflow steps, tools, the Mastra Client, or the command line. Get a reference by calling `.getAgent()` on your `mastra` or `mastraClient` instance, depending on your setup:
+Visit the [agent reference](/reference/agents/agent) for more information on available properties and configurations.
 
-```typescript
-const testAgent = mastra.getAgent('testAgent')
-```
+:::
 
-::::info
+## Use your agent
 
-`mastra.getAgent()` is preferred over a direct import, since it provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores).
+After registration, retrieve your agent with [`mastra.getAgentById()`](/reference/core/getAgentById). Call `.generate()` for a complete response or `.stream()` to deliver tokens in real time. You can call agents from [workflow steps](/docs/workflows/agents-and-tools), [tools](/docs/agents/using-tools), the [Mastra Client](/reference/client-js/mastra-client), route handlers, [server adapters](/docs/server/server-adapters), or the command line. Visit the [guides section](/guides) to learn how to use agents in your framework of choice.
 
-::::
-
-## Generating responses
-
-Agents can return results in two ways: generating the full output before returning it or streaming tokens in real time. Choose the approach that fits your use case: generate for short, internal responses or debugging, and stream to deliver pixels to end users as quickly as possible.
+When referencing an agent from your Mastra instance, use `mastra.getAgentById()` to ensure it has access to shared services such as instance-level storage, logging, and agent registry. A directly imported agent can still work with its own local configuration, but it won't have access to those shared services.
 
 <Tabs>
-  <TabItem value="generate" label="Generate">
-    Pass a single string for simple prompts, an array of strings when providing multiple pieces of context, or an array of message objects with `role` and `content`.
+  <TabItem value="generate" label=".generate()">
+    Returns the full response after all tool calls and steps complete. The result includes `text`, `toolCalls`, `toolResults`, `steps`, and token `usage` statistics.
 
-    (The `role` defines the speaker for each message. Typical roles are `user` for human input, `assistant` for agent responses, and `system` for instructions.)
+    See the [`Agent.generate()` reference](/reference/agents/generate) for the response shape, including tool call and tool result payloads.
 
-    ```typescript
-    const response = await testAgent.generate([
-      { role: 'user', content: 'Help me organize my day' },
-      { role: 'user', content: 'My day starts at 9am and finishes at 5.30pm' },
-      { role: 'user', content: 'I take lunch between 12:30 and 13:30' },
-      {
-        role: 'user',
-        content: 'I have meetings Monday to Friday between 10:30 and 11:30',
-      },
-    ])
-
+    ```ts
+    const agent = mastra.getAgentById('test-agent')
+    const response = await agent.generate('Help me organize my day')
     console.log(response.text)
     ```
   </TabItem>
 
-  <TabItem value="stream" label="Stream">
-    Pass a single string for simple prompts, an array of strings when providing multiple pieces of context, or an array of message objects with `role` and `content`.
+  <TabItem value="stream" label=".stream()">
+    Returns a stream you can consume as tokens arrive. The result exposes `textStream` for incremental output and promises for `toolCalls`, `toolResults`, `steps`, and token `usage` that resolve when the stream finishes.
 
-    (The `role` defines the speaker for each message. Typical roles are `user` for human input, `assistant` for agent responses, and `system` for instructions.)
+    See the [`MastraModelOutput` reference](/reference/streaming/agents/MastraModelOutput) for the stream shape, including tool call and tool result payloads.
 
-    ```typescript
-    const stream = await testAgent.stream([
-      { role: 'user', content: 'Help me organize my day' },
-      { role: 'user', content: 'My day starts at 9am and finishes at 5.30pm' },
-      { role: 'user', content: 'I take lunch between 12:30 and 13:30' },
-      {
-        role: 'user',
-        content: 'I have meetings Monday to Friday between 10:30 and 11:30',
-      },
-    ])
-
-    for await (const chunk of stream.textStream) {
-      process.stdout.write(chunk)
-    }
-    ```
-
-    <h3 id="completion-using-onfinish">Completion using `onFinish()`</h3>
-
-    When streaming responses, the `onFinish()` callback runs after the LLM finishes generating its response and all tool executions are complete.
-    It provides the final `text`, execution `steps`, `finishReason`, token `usage` statistics, and other metadata useful for monitoring or logging.
-
-    ```typescript
-    const stream = await testAgent.stream('Help me organize my day', {
-      onFinish: ({ steps, text, finishReason, usage }) => {
-        console.log({ steps, text, finishReason, usage })
-      },
-    })
+    ```ts
+    const agent = mastra.getAgentById('test-agent')
+    const stream = await agent.stream('Help me organize my day')
 
     for await (const chunk of stream.textStream) {
       process.stdout.write(chunk)
@@ -219,130 +99,26 @@ Agents can return results in two ways: generating the full output before returni
   </TabItem>
 </Tabs>
 
-:::info
+## Expand your agent
 
-Visit [.generate()](/reference/agents/generate) or [.stream()](/reference/streaming/agents/stream) for more information.
+Once your agent is running, use this table to find the right page for what you want to do next:
 
-:::
+| Goal | Start here |
+| - | - |
+| Give your agent tools to call external APIs or services | [Tools](/docs/agents/using-tools) |
+| Keep context and preferences across conversations | [Memory](/docs/memory/overview) |
+| Get typed objects back instead of plain text | [Structured output](/docs/agents/structured-output) |
+| Human-in-the-loop: Pause execution and wait for human approval | [Approval](/docs/agents/agent-approval) |
+| Build a multi-agent network | [Supervisor agents](/docs/agents/supervisor-agents) |
+| Register subagents | [Tools](/docs/agents/using-tools#agents-as-tools) |
+| Intercept or transform messages before and after generation | [Processors](/docs/agents/processors) |
+| Keep your agent safe | [Guardrails](/docs/agents/guardrails) |
+| Swap instructions or models based on request context | [Dynamic configuration](/docs/server/request-context) |
+| Add speech-to-text or text-to-speech | [Voice](/docs/agents/adding-voice) |
+| Connect to Slack, Discord, or Telegram | [Channels](/docs/agents/channels) |
 
-## Structured output
+## Multi-agent systems
 
-Agents can return structured, type-safe data using Zod or JSON Schema. The parsed result is available on `response.object`.
+A multi-agent system uses multiple agents to solve a task that's too broad or too specialized for a single agent. Instead of building one agent with dozens of tools and a long instruction set, you split responsibilities across focused agents and let a coordinator bring results together.
 
-:::info
-
-Visit [Structured Output](/docs/agents/structured-output) for more information.
-
-:::
-
-## Analyzing images
-
-Agents can analyze and describe images by processing both the visual content and any text within them. To enable image analysis, pass an object with `type: 'image'` and the image URL in the `content` array. You can combine image content with text prompts to guide the agent's analysis.
-
-```typescript
-const response = await testAgent.generate([
-  {
-    role: 'user',
-    content: [
-      {
-        type: 'image',
-        image: 'https://placebear.com/cache/395-205.jpg',
-        mimeType: 'image/jpeg',
-      },
-      {
-        type: 'text',
-        text: 'Describe the image in detail, and extract all the text in the image.',
-      },
-    ],
-  },
-])
-
-console.log(response.text)
-```
-
-## Using `maxSteps`
-
-The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step includes generating a response, executing any tool calls, and processing the result. Limiting steps helps prevent infinite loops, reduce latency, and control token usage for agents that use tools. The default is 1, but can be increased:
-
-```typescript
-const response = await testAgent.generate('Help me organize my day', {
-  maxSteps: 10,
-})
-
-console.log(response.text)
-```
-
-## Using `onStepFinish`
-
-You can monitor the progress of multi-step operations using the `onStepFinish` callback. This is useful for debugging or providing progress updates to users.
-
-`onStepFinish` is only available when streaming or generating text without structured output.
-
-```typescript
-const response = await testAgent.generate('Help me organize my day', {
-  onStepFinish: ({ text, toolCalls, toolResults, finishReason, usage }) => {
-    console.log({ text, toolCalls, toolResults, finishReason, usage })
-  },
-})
-```
-
-## Using tools
-
-Agents can use tools to go beyond language generation, enabling structured interactions with external APIs and services. Tools allow agents to access data and perform clearly defined operations in a reliable, repeatable way.
-
-```typescript title="src/mastra/agents/test-agent.ts"
-export const testAgent = new Agent({
-  id: 'test-agent',
-  name: 'Test Agent',
-  tools: { testTool },
-})
-```
-
-:::info
-
-Visit [Using Tools](/docs/agents/using-tools) for more information.
-
-:::
-
-## Using `RequestContext`
-
-Use `RequestContext` to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
-
-```typescript title="src/mastra/agents/test-agent.ts"
-export type UserTier = {
-  'user-tier': 'enterprise' | 'pro'
-}
-
-export const testAgent = new Agent({
-  id: 'test-agent',
-  name: 'Test Agent',
-  model: ({ requestContext }) => {
-    const userTier = requestContext.get('user-tier') as UserTier['user-tier']
-
-    return userTier === 'enterprise' ? 'openai/gpt-5' : 'openai/gpt-4.1-nano'
-  },
-})
-```
-
-:::info
-
-See [Request Context](/docs/server/request-context) for more information.
-
-:::
-
-:::tip
-
-For type-safe request context schema validation, see [Schema Validation](/docs/server/request-context#schema-validation).
-
-:::
-
-## Testing with Studio
-
-Use [Studio](/docs/getting-started/studio) to test agents with different messages, inspect tool calls and responses, and debug agent behavior.
-
-## Related
-
-- [Using Tools](/docs/agents/using-tools)
-- [Agent Memory](/docs/agents/agent-memory)
-- [Supervisor Agents](/docs/agents/supervisor-agents)
-- [Request Context](/docs/server/request-context)
+Read the [conceptual overview of multi-agent systems](/guides/concepts/multi-agent-systems) to learn how you can apply different patterns with Mastra.

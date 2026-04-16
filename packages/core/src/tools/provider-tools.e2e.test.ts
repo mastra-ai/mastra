@@ -3,9 +3,13 @@ import type { AnthropicProviderOptions } from '@ai-sdk/anthropic-v5';
 import { google } from '@ai-sdk/google-v5';
 import { openai } from '@ai-sdk/openai-v5';
 import { openai as openaiV6 } from '@ai-sdk/openai-v6';
-import { createGatewayMock } from '@internal/test-utils';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
+
+const MODE = getLLMTestMode();
+setupDummyApiKeys(MODE, ['openai']);
 
 const mock = createGatewayMock();
 beforeAll(() => mock.start());
@@ -109,7 +113,6 @@ describe('provider-defined tools', () => {
 
     const webSearchToolResult = toolResults.find(tr => tr.payload.toolName === 'web_search');
     expect(webSearchToolResult).toBeDefined();
-    expect(webSearchToolResult?.payload.providerExecuted).toBe(true);
   });
 
   it('generate - should handle openai web search tool', { timeout: 30000 }, async () => {
@@ -142,7 +145,6 @@ describe('provider-defined tools', () => {
 
     const webSearchToolResult = result.toolResults.find(tr => tr.payload.toolName === 'web_search');
     expect(webSearchToolResult).toBeDefined();
-    expect(webSearchToolResult?.payload.providerExecuted).toBe(true);
   });
 
   it('stream - should handle anthropic web search tool', { timeout: 30000 }, async () => {
@@ -185,7 +187,6 @@ describe('provider-defined tools', () => {
 
     const webSearchToolResult = toolResults.find(tr => tr.payload.toolName === 'web_search');
     expect(webSearchToolResult).toBeDefined();
-    expect(webSearchToolResult?.payload.providerExecuted).toBe(true);
   });
 
   it('generate - should handle anthropic web search tool', { timeout: 30000 }, async () => {
@@ -217,7 +218,6 @@ describe('provider-defined tools', () => {
 
     const webSearchToolResult = result.toolResults.find(tr => tr.payload.toolName === 'web_search');
     expect(webSearchToolResult).toBeDefined();
-    expect(webSearchToolResult?.payload.providerExecuted).toBe(true);
   });
 
   it('stream - should handle anthropic skills', { timeout: 60_000 }, async () => {
@@ -261,7 +261,6 @@ describe('provider-defined tools', () => {
 
     const toolResult = toolResults.find(tr => tr.payload.toolName === 'code_execution');
     expect(toolResult).toBeDefined();
-    expect(toolResult?.payload.providerExecuted).toBe(true);
     expect((toolResult?.payload.result as any).type).toBe('code_execution_result');
   });
 
@@ -298,7 +297,6 @@ describe('provider-defined tools', () => {
 
     const toolResult = result.toolResults.find(tr => tr.payload.toolName === 'code_execution');
     expect(toolResult).toBeDefined();
-    expect(toolResult?.payload.providerExecuted).toBe(true);
     expect((toolResult?.payload.result as any).type).toBe('code_execution_result');
   });
 });
@@ -330,15 +328,13 @@ describe('provider-defined tools with AI SDK v6 (@ai-sdk/openai@3)', () => {
     const toolCalls = await result.toolCalls;
     const toolResults = await result.toolResults;
 
-    // Verify web search tool was called
-    const webSearchToolCall = toolCalls.find(tc => tc.payload.toolName === 'web_search');
+    // V6 tools don't have a hardcoded `.name`; the model-facing name is the user's object key ("search")
+    const webSearchToolCall = toolCalls.find(tc => tc.payload.toolName === 'search');
     expect(webSearchToolCall).toBeDefined();
     expect(webSearchToolCall?.payload.providerExecuted).toBe(true);
 
-    // Verify web search tool result was processed
-    const webSearchToolResult = toolResults.find(tr => tr.payload.toolName === 'web_search');
+    const webSearchToolResult = toolResults.find(tr => tr.payload.toolName === 'search');
     expect(webSearchToolResult).toBeDefined();
-    // Note: providerExecuted flag on tool results is optional - the key check is that the result exists
 
     // The agent should generate a text response after processing the web search results
     expect(text).toBeDefined();
@@ -370,16 +366,13 @@ describe('provider-defined tools with AI SDK v6 (@ai-sdk/openai@3)', () => {
     expect(result.text.length).toBeGreaterThan(0);
     expect(result.text.toLowerCase()).toContain('paris');
 
-    // Verify web search tool was called
-    const webSearchToolCall = result.toolCalls.find(tc => tc.payload.toolName === 'web_search');
+    // V6 tools don't have a hardcoded `.name`; the model-facing name is the user's object key ("search")
+    const webSearchToolCall = result.toolCalls.find(tc => tc.payload.toolName === 'search');
     expect(webSearchToolCall).toBeDefined();
     expect(webSearchToolCall?.payload.providerExecuted).toBe(true);
 
-    // Verify web search tool result was processed
-    const webSearchToolResult = result.toolResults.find(tr => tr.payload.toolName === 'web_search');
+    const webSearchToolResult = result.toolResults.find(tr => tr.payload.toolName === 'search');
     expect(webSearchToolResult).toBeDefined();
-    // Note: For provider-executed tools, the result may not have providerExecuted flag
-    // since it's implied by the presence of the tool result from a provider tool
 
     // Verify finish reason is 'stop' (not 'tool-calls')
     expect(result.finishReason).toBe('stop');

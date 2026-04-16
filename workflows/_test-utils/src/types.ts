@@ -343,6 +343,8 @@ export type SkippableTest =
   | 'diRequestContextBeforeSuspension'
   // Storage - resourceId preservation on resume
   | 'storageResourceIdResume'
+  // Storage - resourceId preservation through loop execution
+  | 'storageResourceIdLoop'
   // Storage - shouldPersistSnapshot option
   | 'storageShouldPersistSnapshot'
   // Time travel to a non-existent step should fail

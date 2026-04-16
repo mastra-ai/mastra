@@ -1,10 +1,11 @@
 import { Combobox as BaseCombobox } from '@base-ui/react/combobox';
-import { ButtonProps, buttonVariants } from '@/ds/components/Button/Button';
-import { cn } from '@/lib/utils';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import * as React from 'react';
-import { type FormElementSize } from '@/ds/primitives/form-element';
 import { comboboxStyles } from './combobox-styles';
+import type { ButtonProps } from '@/ds/components/Button/Button';
+import { buttonVariants } from '@/ds/components/Button/Button';
+import type { FormElementSize } from '@/ds/primitives/form-element';
+import { cn } from '@/lib/utils';
 
 export type ComboboxOption = {
   label: string;

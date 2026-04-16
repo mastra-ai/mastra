@@ -1,0 +1,66 @@
+---
+title: "AgentBrowser | Browser"
+description: "Use the AgentBrowser provider for Playwright-based web automation with accessibility-first element targeting."
+packages:
+  - "@mastra/agent-browser"
+---
+
+# AgentBrowser
+
+The `@mastra/agent-browser` package provides browser automation using Playwright with accessibility-first element targeting. Elements are identified by refs from the page's accessibility tree, making interactions reliable across different page layouts.
+
+## When to use AgentBrowser
+
+Use AgentBrowser when you need:
+
+- Reliable element targeting through accessibility refs
+- Fine-grained control over browser actions
+- Playwright's robust automation capabilities
+- Support for keyboard shortcuts and complex interactions
+
+## Quickstart
+
+Install the package:
+
+```bash npm2yarn
+npm install @mastra/agent-browser
+```
+
+Create a browser instance and assign it to an agent:
+
+```typescript title="src/mastra/agents/browser-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { AgentBrowser } from '@mastra/agent-browser'
+
+const browser = new AgentBrowser({
+  headless: false,
+})
+
+export const browserAgent = new Agent({
+  id: 'browser-agent',
+  model: 'openai/gpt-5.4',
+  browser,
+  instructions: `You are a web automation assistant.
+
+When interacting with pages:
+1. Use browser_snapshot to get the current page state and element refs
+2. Use the refs (like @e1, @e2) to target elements for clicks and typing
+3. After actions, take another snapshot to verify the result`,
+})
+```
+
+## Element refs
+
+AgentBrowser uses accessibility tree refs to identify elements. When an agent calls `browser_snapshot`, it receives a text representation of the page with refs like `@e1`, `@e2`, etc. The agent then uses these refs with other tools to interact with elements.
+
+:::note
+
+See [AgentBrowser reference](/reference/browser/agent-browser) for all configuration options and tool details.
+
+:::
+
+## Related
+
+- [Browser overview](/docs/browser/overview)
+- [Stagehand](/docs/browser/stagehand)
+- [AgentBrowser reference](/reference/browser/agent-browser)

@@ -1,12 +1,12 @@
 import React from 'react';
-import { cn } from '@/lib/utils';
 import {
   formElementSizes,
   sharedFormElementStyle,
   sharedFormElementFocusStyle,
   sharedFormElementDisabledStyle,
-  type FormElementSize,
 } from '@/ds/primitives/form-element';
+import type { FormElementSize } from '@/ds/primitives/form-element';
+import { cn } from '@/lib/utils';
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   as?: React.ElementType;
@@ -16,7 +16,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   prefetch?: boolean | null;
   children: React.ReactNode;
   size?: FormElementSize;
-  variant?: 'default' | 'primary' | 'cta' | 'ghost' | 'inputLike' | 'light' | 'outline';
+  variant?: 'default' | 'primary' | 'cta' | 'ghost' | 'inputLike' | 'light' | 'outline' | 'link';
   target?: string;
   type?: 'button' | 'submit' | 'reset';
   onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
@@ -31,16 +31,15 @@ const sizeClasses = {
 
 // Enhanced variant classes with transitions and subtle interactions
 const variantClasses = {
-  default:
-    'bg-white/10 border-2 border-transparent hover:text-white hover:bg-white/15 active:bg-white/20 text-neutral4',
-  primary:
-    'bg-white/20 border-2 border-transparent hover:text-white hover:bg-white/25 active:bg-white/30 text-neutral5',
+  default: 'bg-surface3 border-2 border-border1 hover:text-neutral6 hover:bg-surface4 active:bg-surface5 text-neutral5',
+  primary: 'bg-surface4 border-2 border-border2 hover:text-neutral6 hover:bg-surface5 active:bg-surface6 text-neutral6',
   cta: 'bg-accent1/50 hover:bg-accent1/80 text-neutral5 font-semibold',
   ghost:
-    'bg-transparent border-2 border-transparent hover:text-neutral4 hover:bg-white/10 active:bg-white/15 text-neutral3',
+    'bg-transparent border-2 border-transparent hover:text-neutral6 hover:bg-surface4 active:bg-surface5 text-neutral4',
   inputLike: sharedFormElementStyle,
   light: '',
   outline: '',
+  link: 'inline-flex justify-start rounded-none h-auto px-0 bg-transparent text-neutral3 hover:text-neutral4 gap-1 [&>svg]:mx-0 w-auto [&>svg]:opacity-70',
 };
 
 const sharedStyles = cn(
@@ -68,7 +67,7 @@ export function buttonVariants(options?: {
   const variant = resolveVariant(options?.variant || 'default');
   const size = options?.size || 'default';
 
-  return cn(sharedStyles, variantClasses[variant], sizeClasses[size], options?.iconOnly && '[&>svg]:opacity-75');
+  return cn(sharedStyles, sizeClasses[size], variantClasses[variant], options?.iconOnly && '[&>svg]:opacity-75');
 }
 
 function flattenChildren(children: React.ReactNode): React.ReactNode[] {

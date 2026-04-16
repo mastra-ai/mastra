@@ -82,7 +82,7 @@ export const mastraClient = new MastraClient({
     description: 'Retrieves a specific agent instance by ID.',
   },
   {
-    name: 'getMemoryThreads(params)',
+    name: 'listMemoryThreads(params)',
     type: 'Promise<StorageThreadType[]>',
     description:
       'Retrieves memory threads for the specified resource and agent. Requires a `resourceId` and an `agentId`.',
@@ -126,6 +126,17 @@ export const mastraClient = new MastraClient({
     name: 'getWorkflow(workflowId)',
     type: 'Workflow',
     description: 'Retrieves a specific workflow instance by ID.',
+  },
+  {
+    name: 'responses',
+    type: 'Responses',
+    description:
+      'Provides OpenAI-style Responses API helpers with `create()`, `retrieve()`, `stream()`, and `delete()`.',
+  },
+  {
+    name: 'conversations',
+    type: 'Conversations',
+    description: 'Provides conversation helpers with `create()`, `retrieve()`, `delete()`, and `items.list()`.',
   },
   {
     name: 'getVector(vectorName)',

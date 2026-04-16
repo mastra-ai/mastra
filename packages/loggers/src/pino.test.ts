@@ -136,6 +136,99 @@ describe('createLogger', () => {
   });
 });
 
+describe('PinoLogger mixin option', () => {
+  let memoryStream: MemoryStream;
+
+  beforeEach(() => {
+    memoryStream = new MemoryStream();
+  });
+
+  it('should merge mixin fields into every log entry', async () => {
+    const logger = new PinoLogger({
+      name: 'TracedApp',
+      level: LogLevel.INFO,
+      transports: { memory: memoryStream },
+      mixin() {
+        return { traceId: 'trace-1', service: 'api' };
+      },
+    });
+
+    logger.info('hello', { userId: 'u1' });
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const logs = await memoryStream.listLogs();
+
+    expect(logs[0]).toMatchObject({
+      msg: 'hello',
+      traceId: 'trace-1',
+      service: 'api',
+      userId: 'u1',
+    });
+  });
+
+  it('should apply mixin on child loggers', async () => {
+    const logger = new PinoLogger({
+      name: 'TracedApp',
+      level: LogLevel.INFO,
+      transports: { memory: memoryStream },
+      mixin() {
+        return { traceId: 'parent-trace' };
+      },
+    });
+
+    const child = logger.child({ requestId: 'req-9' });
+    child.info('handled');
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const logs = await memoryStream.listLogs();
+
+    expect(logs[0]).toMatchObject({
+      msg: 'handled',
+      traceId: 'parent-trace',
+      requestId: 'req-9',
+    });
+  });
+});
+
+type AuditLevel = 'audit';
+
+class PinoLoggerWithAudit extends PinoLogger<AuditLevel> {
+  audit(message: string, args: Record<string, any> = {}) {
+    this.logger.audit(args, message);
+  }
+}
+
+describe('PinoLogger customLevels option', () => {
+  let memoryStream: MemoryStream;
+
+  beforeEach(() => {
+    memoryStream = new MemoryStream();
+  });
+
+  it('should emit logs at a custom level', async () => {
+    const logger = new PinoLoggerWithAudit({
+      name: 'AuditApp',
+      level: LogLevel.INFO,
+      transports: { memory: memoryStream },
+      customLevels: { audit: 35 },
+    });
+
+    logger.audit('access granted', { resource: '/admin' });
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const logs = await memoryStream.listLogs();
+
+    expect(logs[0]).toMatchObject({
+      level: 35,
+      msg: 'access granted',
+      resource: '/admin',
+    });
+  });
+});
+
 describe('PinoLogger redact option', () => {
   let memoryStream: MemoryStream;
 

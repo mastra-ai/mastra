@@ -32,8 +32,8 @@ export interface OMSettingsConfig {
 }
 
 export interface OMSettingsCallbacks {
-  onObserverModelChange: (modelId: string) => void;
-  onReflectorModelChange: (modelId: string) => void;
+  onObserverModelChange: (modelId: string) => void | Promise<void>;
+  onReflectorModelChange: (modelId: string) => void | Promise<void>;
   onObservationThresholdChange: (value: number) => void;
   onReflectionThresholdChange: (value: number) => void;
   onClose: () => void;
@@ -221,7 +221,7 @@ export class ModelSelectSubmenu extends Container {
   private filteredModels: ModelOption[];
   private selectedIndex = 0;
   private currentModelId: string;
-  private onSelect: (modelId: string) => void;
+  private onSelect: (modelId: string) => void | Promise<void>;
   private onCancel: () => void;
   private tui: TUI;
 
@@ -229,7 +229,7 @@ export class ModelSelectSubmenu extends Container {
     title: string,
     models: ModelOption[],
     currentModelId: string,
-    onSelect: (modelId: string) => void,
+    onSelect: (modelId: string) => void | Promise<void>,
     onCancel: () => void,
     tui: TUI,
   ) {
@@ -313,7 +313,7 @@ export class ModelSelectSubmenu extends Container {
       this.tui.requestRender();
     } else if (kb.matches(data, 'selectConfirm')) {
       const selected = this.filteredModels[this.selectedIndex];
-      if (selected) this.onSelect(selected.id);
+      if (selected) void this.onSelect(selected.id);
     } else if (kb.matches(data, 'selectCancel')) {
       this.onCancel();
     } else {
@@ -360,9 +360,9 @@ export class OMSettingsComponent extends Box implements Focusable {
             'Observer Model',
             models,
             config.observerModelId,
-            modelId => {
+            async modelId => {
+              await callbacks.onObserverModelChange(modelId);
               config.observerModelId = modelId;
-              callbacks.onObserverModelChange(modelId);
               done(getShortModelName(modelId));
             },
             () => done(),
@@ -379,9 +379,9 @@ export class OMSettingsComponent extends Box implements Focusable {
             'Reflector Model',
             models,
             config.reflectorModelId,
-            modelId => {
+            async modelId => {
+              await callbacks.onReflectorModelChange(modelId);
               config.reflectorModelId = modelId;
-              callbacks.onReflectorModelChange(modelId);
               done(getShortModelName(modelId));
             },
             () => done(),

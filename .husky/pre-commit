@@ -4,5 +4,5 @@ pnpm --version || {
 }
 
 # Formatting on staged files
-pnpm dlx lint-staged --quiet
+pnpm lint-staged --quiet
 

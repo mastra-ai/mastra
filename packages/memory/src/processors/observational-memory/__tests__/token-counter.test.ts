@@ -765,6 +765,37 @@ describe('TokenCounter', () => {
       expect(second).toBeGreaterThan(first);
       expect(secondEstimate.key).not.toBe(firstEstimate.key);
     });
+
+    it('sanitizes and truncates raw tool results while counting tokens', () => {
+      const counter = new TokenCounter();
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'web_search_20250305',
+              args: { q: 'search query' },
+              result: {
+                encryptedContent: 'z'.repeat(10000),
+                snippet: 'result '.repeat(5000),
+              },
+            },
+          },
+        ],
+      });
+
+      const tokens = counter.countMessage(message);
+      const estimate = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
+
+      expect(tokens).toBeGreaterThan(0);
+      expect(estimate?.key).toContain('tool-result-json');
+      expect(estimate?.tokens).toBeLessThan(
+        counter.countString(JSON.stringify(message.content.parts[0].toolInvocation.result)),
+      );
+    });
   });
 
   describe('countObservations', () => {

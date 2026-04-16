@@ -26,7 +26,7 @@ export function MainHeaderRoot({
       className={cn(
         'grid grid-cols-[1fr_auto] gap-16 w-full ',
         {
-          'mt-10 mb-6': withMargins,
+          'mt-[6vh] mb-[4vh]': withMargins,
         },
         className,
       )}
@@ -34,7 +34,7 @@ export function MainHeaderRoot({
       {children}
     </header>
   ) : (
-    <header className={cn('grid gap-2 pt-6 pb-6', className)}>
+    <header className={cn('grid gap-2 pt-8 pb-8 ', className)}>
       <h1
         className={cn(
           'text-neutral6 text-xl font-normal flex items-center gap-2',

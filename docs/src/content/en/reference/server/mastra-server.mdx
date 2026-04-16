@@ -127,7 +127,7 @@ abstract registerContextMiddleware(): void
 
 ### `registerAuthMiddleware()`
 
-Register authentication and authorization middleware.
+Run the adapter auth hook during initialization. Official adapters may implement this as a no-op when auth is enforced per-route.
 
 ```typescript prettier:false
 abstract registerAuthMiddleware(): void
@@ -324,7 +324,8 @@ export class MyServer extends MastraServer<MyApp, MyRequest, MyResponse> {
   registerAuthMiddleware(): void {
     const auth = this.mastra.getServer()?.auth
     if (!auth) return
-    // Implement auth
+    // Register global auth middleware, or leave this empty and
+    // enforce auth when routes are registered.
   }
 
   async registerRoute(app, route, { prefix }) {
@@ -351,6 +352,6 @@ export class MyServer extends MastraServer<MyApp, MyRequest, MyResponse> {
 
 ## Related
 
-- [Server Adapters](/docs/server/server-adapters) - Using adapters
-- [Custom Adapters](/docs/server/custom-adapters) - Creating custom adapters
-- [createRoute()](/reference/server/create-route) - Creating custom routes
+- [Server Adapters](/docs/server/server-adapters): Using adapters
+- [Custom Adapters](/docs/server/custom-adapters): Creating custom adapters
+- [createRoute()](/reference/server/create-route): Creating custom routes

@@ -18,12 +18,12 @@ import type {
   DeepPartial,
 } from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod/v3';
 import type { MessageList } from '../../agent/types';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
 import type { ObservabilityContext, TracingProperties } from '../../observability';
 import type { OutputProcessorOrWorkflow } from '../../processors';
 import type { RequestContext } from '../../request-context';
+import type { ZodSchema } from '../../schema';
 import type { inferOutput, ScoringProperties, TripwireProperties } from './shared.types';
 
 export type { ToolSet } from '@internal/ai-sdk-v4';
@@ -58,6 +58,32 @@ export type StreamTextOnStepFinishCallback<Tools extends ToolSet> = (
   event: Parameters<OriginalStreamTextOnStepFinishCallback<Tools>>[0] & { runId: string },
 ) => Promise<void> | void;
 
+type OverloadedParameters<T> = T extends {
+  (...args: infer A1): unknown;
+  (...args: infer A2): unknown;
+  (...args: infer A3): unknown;
+  (...args: infer A4): unknown;
+}
+  ? A1 | A2 | A3 | A4
+  : T extends {
+        (...args: infer A1): unknown;
+        (...args: infer A2): unknown;
+        (...args: infer A3): unknown;
+      }
+    ? A1 | A2 | A3
+    : T extends {
+          (...args: infer A1): unknown;
+          (...args: infer A2): unknown;
+        }
+      ? A1 | A2
+      : T extends (...args: infer A1) => unknown
+        ? A1
+        : never;
+
+type FirstParameter<T> = T extends [infer First, ...unknown[]] ? First : never;
+type GenerateObjectOptionsFromSdk = FirstParameter<OverloadedParameters<typeof generateObject>>;
+type StreamObjectOptionsFromSdk = FirstParameter<OverloadedParameters<typeof streamObject>>;
+
 // #region scoringData
 export type ScoringData = {
   input: Omit<ScorerRunInputForAgent, 'runId'>;
@@ -74,7 +100,7 @@ type GenerateTextOptions<Tools extends ToolSet, Output extends ZodSchema | JSONS
   MastraCustomLLMOptionsKeys | 'model' | 'onStepFinish'
 > &
   MastraCustomLLMOptions & {
-    onStepFinish?: GenerateTextOnStepFinishCallback<inferOutput<Output>>;
+    onStepFinish?: GenerateTextOnStepFinishCallback<Tools>;
     experimental_output?: Output;
   };
 
@@ -96,11 +122,8 @@ export type GenerateTextResult<
   ScoringProperties &
   TracingProperties;
 
-export type OriginalGenerateObjectOptions<Output extends ZodSchema | JSONSchema7 | undefined = undefined> =
-  | Parameters<typeof generateObject<inferOutput<Output>>>[0]
-  | (Parameters<typeof generateObject<inferOutput<Output>>>[0] & { output: 'array' })
-  | (Parameters<typeof generateObject<string>>[0] & { output: 'enum' })
-  | (Parameters<typeof generateObject>[0] & { output: 'no-schema' });
+export type OriginalGenerateObjectOptions<_Output extends ZodSchema | JSONSchema7 | undefined = undefined> =
+  GenerateObjectOptionsFromSdk;
 
 type GenerateObjectOptions<Output extends ZodSchema | JSONSchema7 | undefined = undefined> = Omit<
   OriginalGenerateObjectOptions<Output>,
@@ -138,8 +161,8 @@ type StreamTextOptions<Tools extends ToolSet, Output extends ZodSchema | JSONSch
   MastraCustomLLMOptionsKeys | 'model' | 'onStepFinish' | 'onFinish'
 > &
   MastraCustomLLMOptions & {
-    onStepFinish?: StreamTextOnStepFinishCallback<inferOutput<Output>>;
-    onFinish?: StreamTextOnFinishCallback<inferOutput<Output>>;
+    onStepFinish?: StreamTextOnStepFinishCallback<Tools>;
+    onFinish?: StreamTextOnFinishCallback<Tools>;
     experimental_output?: Output;
   };
 
@@ -159,11 +182,7 @@ export type StreamTextResult<
 } & TripwireProperties &
   TracingProperties;
 
-export type OriginalStreamObjectOptions<Output extends ZodSchema | JSONSchema7> =
-  | Parameters<typeof streamObject<inferOutput<Output>>>[0]
-  | (Parameters<typeof streamObject<inferOutput<Output>>>[0] & { output: 'array' })
-  | (Parameters<typeof streamObject<string>>[0] & { output: 'enum' })
-  | (Parameters<typeof streamObject>[0] & { output: 'no-schema' });
+export type OriginalStreamObjectOptions<_Output extends ZodSchema | JSONSchema7> = StreamObjectOptionsFromSdk;
 
 type StreamObjectOptions<Output extends ZodSchema | JSONSchema7> = Omit<
   OriginalStreamObjectOptions<Output>,
@@ -182,7 +201,7 @@ export type StreamObjectWithMessagesArgs<Output extends ZodSchema | JSONSchema7>
 export type StreamObjectResult<Output extends ZodSchema | JSONSchema7> = OriginalStreamObjectResult<
   DeepPartial<inferOutput<Output>>,
   inferOutput<Output>,
-  any
+  unknown
 > &
   TripwireProperties;
 

@@ -1,4 +1,4 @@
-import z from 'zod';
+import { z } from 'zod/v4';
 import { createCombinedPaginationSchema, tracingOptionsSchema, messageResponseSchema } from './common';
 
 export const workflowRunStatusSchema = z.enum([

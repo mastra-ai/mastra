@@ -2,7 +2,7 @@
 import type { ServerResponse } from 'http';
 import type { ServerResponse as ServerResponse_2 } from 'node:http';
 import type { JSONSchema7 } from 'json-schema';
-import type { z } from 'zod';
+import type { z } from 'zod/v4';
 
 /**
  * Custom error class for AI SDK related errors.

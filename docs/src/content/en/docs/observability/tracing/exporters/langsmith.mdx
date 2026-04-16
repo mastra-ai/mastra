@@ -2,7 +2,6 @@
 title: "LangSmith exporter | Tracing | Observability"
 description: "Send traces to LangSmith for LLM observability and evaluation"
 packages:
-  - "@mastra/core"
   - "@mastra/langsmith"
   - "@mastra/observability"
 ---
@@ -132,7 +131,7 @@ export const supportAgent = new Agent({
   id: 'support-agent',
   name: 'support-agent',
   instructions: 'You are a helpful support agent.',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   defaultOptions: {
     tracingOptions: buildTracingOptions(withLangsmithMetadata({ projectName: 'customer-support' })),
   },
@@ -152,7 +151,7 @@ export const supportAgent = new Agent({
   id: 'support-agent',
   name: 'support-agent',
   instructions: 'You are a helpful support agent.',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   defaultOptions: ({ requestContext }) => {
     const userTier = requestContext?.get('user-tier') as string
     const userId = requestContext?.get('user-id') as string

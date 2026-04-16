@@ -258,7 +258,7 @@ describe('MessageList', () => {
         createdAt: input.createdAt,
         content: {
           format: 2,
-          parts: [{ type: 'text', text: 'Hello from UI!' }],
+          parts: [expect.objectContaining({ type: 'text', text: 'Hello from UI!', createdAt: expect.any(Number) })],
           experimental_attachments: [],
         },
         threadId,
@@ -287,7 +287,11 @@ describe('MessageList', () => {
         content: {
           format: 2,
           content: 'Hello from Core!',
-          parts: [{ type: 'text', text: 'Hello from Core!' }],
+          parts: [expect.objectContaining({ type: 'text', text: 'Hello from Core!', createdAt: expect.any(Number) })],
+          experimental_attachments: undefined,
+          metadata: undefined,
+          reasoning: undefined,
+          toolInvocations: undefined,
         },
         threadId,
         resourceId,
@@ -321,7 +325,9 @@ describe('MessageList', () => {
           role: `user` as const,
           experimental_attachments: [],
           createdAt: expect.any(Date),
-          parts: [{ type: 'text' as const, text: messageOne.content }],
+          parts: [
+            expect.objectContaining({ type: 'text' as const, text: messageOne.content, createdAt: expect.any(Number) }),
+          ],
         },
         {
           id: expect.any(String),
@@ -336,6 +342,7 @@ describe('MessageList', () => {
               toolCallId: 'call-3',
               args: messageTwo.content[0].args,
               result: messageThree.content[0].result,
+              step: undefined,
             },
           ],
           parts: [
@@ -347,6 +354,7 @@ describe('MessageList', () => {
                 toolCallId: 'call-3',
                 args: messageTwo.content[0].args,
                 result: messageThree.content[0].result,
+                step: undefined,
               },
             },
           ],
@@ -476,8 +484,9 @@ describe('MessageList', () => {
 
       // Check parts array has correct args and only one tool-invocation (no duplicate call part)
       expect(assistantV2Message.content.parts).toEqual([
-        {
+        expect.objectContaining({
           type: 'tool-invocation',
+          createdAt: expect.any(Number),
           toolInvocation: {
             state: 'result',
             toolCallId: 'toolu_01Y9o5yfKqKvdueRhupfT9Jf',
@@ -487,8 +496,9 @@ describe('MessageList', () => {
               temperature: 24.3,
               conditions: 'Partly cloudy',
             },
+            step: undefined,
           },
-        },
+        }),
       ]);
 
       // Check toolInvocations array has correct args
@@ -502,6 +512,7 @@ describe('MessageList', () => {
             temperature: 24.3,
             conditions: 'Partly cloudy',
           },
+          step: undefined,
         },
       ]);
 
@@ -559,16 +570,22 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
-              { type: 'text', text: 'Okay, checking the weather.' },
-              {
+              expect.objectContaining({
+                type: 'text',
+                text: 'Okay, checking the weather.',
+                createdAt: expect.any(Number),
+              }),
+              expect.objectContaining({
                 type: 'tool-invocation',
+                createdAt: expect.any(Number),
                 toolInvocation: {
                   state: 'call',
                   toolName: 'weather-tool',
                   toolCallId: 'call-2',
                   args: { location: 'London' },
+                  step: undefined,
                 },
-              },
+              }),
             ],
           },
           threadId,
@@ -598,7 +615,9 @@ describe('MessageList', () => {
           content: {
             format: 2,
             content: 'Hello from V1!',
-            parts: [{ type: 'text', text: inputV1Message.content }],
+            parts: [
+              expect.objectContaining({ type: 'text', text: inputV1Message.content, createdAt: expect.any(Number) }),
+            ],
           },
           threadId,
           resourceId,
@@ -630,16 +649,18 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
-              { type: 'text', text: 'Okay, I can do that.' },
-              {
+              expect.objectContaining({ type: 'text', text: 'Okay, I can do that.', createdAt: expect.any(Number) }),
+              expect.objectContaining({
                 type: 'tool-invocation',
+                createdAt: expect.any(Number),
                 toolInvocation: {
                   state: 'call',
                   toolName: 'calculator',
                   toolCallId: 'call-1',
                   args: { operation: 'add', numbers: [1, 2] },
+                  step: undefined,
                 },
-              },
+              }),
             ],
           },
           threadId,
@@ -688,7 +709,7 @@ describe('MessageList', () => {
           createdAt: msg1.createdAt,
           content: {
             format: 2,
-            parts: [{ type: 'text', text: msg1.content }],
+            parts: [expect.objectContaining({ type: 'text', text: msg1.content, createdAt: expect.any(Number) })],
             experimental_attachments: [],
           },
           threadId,
@@ -701,22 +722,25 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
-              { type: 'text', text: msg2.content[0].text },
-              {
+              expect.objectContaining({ type: 'text', text: msg2.content[0].text, createdAt: expect.any(Number) }),
+              expect.objectContaining({
                 type: 'tool-invocation',
+                createdAt: expect.any(Number),
                 toolInvocation: {
                   state: 'result',
                   toolName: msg2.content[1].toolName,
                   toolCallId: msg2.content[1].toolCallId,
                   args: msg2.content[1].args,
                   result: msg3.content[0].result,
+                  step: undefined,
                 },
-              },
+              }),
               { type: 'step-start' },
-              {
+              expect.objectContaining({
                 type: 'text',
                 text: msg4.content,
-              },
+                createdAt: expect.any(Number),
+              }),
             ],
             toolInvocations: [
               {
@@ -725,6 +749,7 @@ describe('MessageList', () => {
                 toolCallId: msg2.content[1].toolCallId,
                 args: msg2.content[1].args,
                 result: msg3.content[0].result,
+                step: undefined,
               },
             ],
           },
@@ -770,19 +795,117 @@ describe('MessageList', () => {
 
       // msg3
       messages = appendResponseMessages({ messages, responseMessages: [{ id: randomUUID(), ...msg3 }] });
-      expect(new MessageList().add(messages, 'response').get.all.ui()).toEqual(
-        messages.map(m => ({ ...m, createdAt: expect.any(Date) })),
-      );
+      expect(new MessageList().add(messages, 'response').get.all.ui()).toMatchObject([
+        expect.objectContaining({
+          role: 'user',
+          createdAt: expect.any(Date),
+          parts: [expect.objectContaining({ type: 'text', text: msg1.content, createdAt: expect.any(Number) })],
+        }),
+        expect.objectContaining({
+          role: 'assistant',
+          createdAt: expect.any(Date),
+          parts: expect.arrayContaining([
+            expect.objectContaining({ type: 'step-start' }),
+            expect.objectContaining({ type: 'text', text: msg2.content[0].text, createdAt: expect.any(Number) }),
+            expect.objectContaining({
+              type: 'tool-invocation',
+              toolInvocation: expect.objectContaining({
+                state: 'result',
+                toolName: msg2.content[1].toolName,
+                toolCallId: msg2.content[1].toolCallId,
+                args: msg2.content[1].args,
+                result: msg3.content[0].result,
+                step: expect.any(Number),
+              }),
+            }),
+          ]),
+        }),
+      ]);
       list.add(messages, 'response');
-      expect(list.get.all.ui()).toEqual(messages.map(m => ({ ...m, createdAt: expect.any(Date) })));
+      expect(list.get.all.ui()).toMatchObject([
+        expect.objectContaining({
+          role: 'user',
+          createdAt: expect.any(Date),
+          parts: [expect.objectContaining({ type: 'text', text: msg1.content, createdAt: expect.any(Number) })],
+        }),
+        expect.objectContaining({
+          role: 'assistant',
+          createdAt: expect.any(Date),
+          parts: expect.arrayContaining([
+            expect.objectContaining({ type: 'step-start' }),
+            expect.objectContaining({ type: 'text', text: msg2.content[0].text, createdAt: expect.any(Number) }),
+            expect.objectContaining({
+              type: 'tool-invocation',
+              toolInvocation: expect.objectContaining({
+                state: 'result',
+                toolName: msg2.content[1].toolName,
+                toolCallId: msg2.content[1].toolCallId,
+                args: msg2.content[1].args,
+                result: msg3.content[0].result,
+                step: expect.any(Number),
+              }),
+            }),
+          ]),
+        }),
+      ]);
 
       // msg4
       messages = appendResponseMessages({ messages, responseMessages: [msg4] });
-      expect(new MessageList().add(messages, 'response').get.all.ui()).toEqual(
-        messages.map(m => ({ ...m, createdAt: expect.any(Date) })),
-      );
+      expect(new MessageList().add(messages, 'response').get.all.ui()).toMatchObject([
+        expect.objectContaining({
+          role: 'user',
+          createdAt: expect.any(Date),
+          parts: [expect.objectContaining({ type: 'text', text: msg1.content, createdAt: expect.any(Number) })],
+        }),
+        expect.objectContaining({
+          role: 'assistant',
+          createdAt: expect.any(Date),
+          parts: expect.arrayContaining([
+            expect.objectContaining({ type: 'step-start' }),
+            expect.objectContaining({ type: 'text', text: msg2.content[0].text, createdAt: expect.any(Number) }),
+            expect.objectContaining({
+              type: 'tool-invocation',
+              toolInvocation: expect.objectContaining({
+                state: 'result',
+                toolName: msg2.content[1].toolName,
+                toolCallId: msg2.content[1].toolCallId,
+                args: msg2.content[1].args,
+                result: msg3.content[0].result,
+                step: expect.any(Number),
+              }),
+            }),
+            expect.objectContaining({ type: 'text', text: msg4.content, createdAt: expect.any(Number) }),
+          ]),
+        }),
+      ]);
       list.add(messages, 'response');
-      expect(list.get.all.ui()).toEqual(messages.map(m => ({ ...m, createdAt: expect.any(Date) })));
+      expect(list.get.all.ui()).toMatchObject([
+        expect.objectContaining({
+          role: 'user',
+          createdAt: expect.any(Date),
+          parts: [expect.objectContaining({ type: 'text', text: msg1.content, createdAt: expect.any(Number) })],
+        }),
+        expect.objectContaining({
+          role: 'assistant',
+          createdAt: expect.any(Date),
+          parts: expect.arrayContaining([
+            expect.objectContaining({ type: 'step-start' }),
+            expect.objectContaining({ type: 'text', text: msg2.content[0].text, createdAt: expect.any(Number) }),
+            expect.objectContaining({
+              type: 'tool-invocation',
+              toolInvocation: expect.objectContaining({
+                state: 'result',
+                toolName: msg2.content[1].toolName,
+                toolCallId: msg2.content[1].toolCallId,
+                args: msg2.content[1].args,
+                result: msg3.content[0].result,
+                step: expect.any(Number),
+              }),
+            }),
+            expect.objectContaining({ type: 'text', text: msg4.content, createdAt: expect.any(Number) }),
+          ]),
+        }),
+      ]);
     });
 
     it('should correctly convert and add a Vercel CoreMessage with reasoning and redacted-reasoning parts', () => {
@@ -805,13 +928,19 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
-              {
+              expect.objectContaining({
                 type: 'reasoning',
+                createdAt: expect.any(Number),
                 reasoning: '',
                 details: [{ type: 'text', text: 'Step 1: Analyze', signature: 'sig-a' }],
-              },
-              { type: 'reasoning', reasoning: '', details: [{ type: 'redacted', data: 'sensitive data' }] },
-              { type: 'text', text: 'Result of step 1.' },
+              }),
+              expect.objectContaining({
+                type: 'reasoning',
+                createdAt: expect.any(Number),
+                reasoning: '',
+                details: [{ type: 'redacted', data: 'sensitive data' }],
+              }),
+              expect.objectContaining({ type: 'text', text: 'Result of step 1.', createdAt: expect.any(Number) }),
             ],
           },
           threadId,
@@ -839,8 +968,13 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
-              { type: 'text', text: 'Here is an image:' },
-              { type: 'file', mimeType: 'image/png', data: 'AQIDBA==' }, // Base64 of [1, 2, 3, 4]
+              expect.objectContaining({ type: 'text', text: 'Here is an image:', createdAt: expect.any(Number) }),
+              expect.objectContaining({
+                type: 'file',
+                mimeType: 'image/png',
+                data: 'AQIDBA==',
+                createdAt: expect.any(Number),
+              }), // Base64 of [1, 2, 3, 4]
             ],
           },
           threadId,
@@ -874,13 +1008,19 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
-              {
+              expect.objectContaining({
                 type: 'reasoning',
+                createdAt: expect.any(Number),
                 reasoning: '',
                 details: [{ type: 'text', text: 'Analyzing data...', signature: 'sig-b' }],
-              },
-              { type: 'reasoning', reasoning: '', details: [{ type: 'redacted', data: 'more sensitive data' }] },
-              { type: 'text', text: 'Analysis complete.' },
+              }),
+              expect.objectContaining({
+                type: 'reasoning',
+                createdAt: expect.any(Number),
+                reasoning: '',
+                details: [{ type: 'redacted', data: 'more sensitive data' }],
+              }),
+              expect.objectContaining({ type: 'text', text: 'Analysis complete.', createdAt: expect.any(Number) }),
             ],
           },
           threadId,
@@ -913,8 +1053,13 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
-              { type: 'text', text: 'Here is a document:' },
-              { type: 'file', mimeType: 'application/pdf', data: 'JVBERi0xLjQKJ...' },
+              expect.objectContaining({ type: 'text', text: 'Here is a document:', createdAt: expect.any(Number) }),
+              expect.objectContaining({
+                type: 'file',
+                mimeType: 'application/pdf',
+                data: 'JVBERi0xLjQKJ...',
+                createdAt: expect.any(Number),
+              }),
             ],
           },
           threadId,
@@ -964,31 +1109,35 @@ describe('MessageList', () => {
             content: 'Final response.',
             format: 2,
             parts: [
-              { type: 'text', text: 'Step 1: Call tool A' },
-              {
+              expect.objectContaining({ type: 'text', text: 'Step 1: Call tool A', createdAt: expect.any(Number) }),
+              expect.objectContaining({
                 type: 'tool-invocation',
+                createdAt: expect.any(Number),
                 toolInvocation: {
                   state: 'result',
                   toolName: 'tool-a',
                   toolCallId: 'call-a-1',
                   args: {},
                   result: 'Result A',
+                  step: undefined,
                 },
-              },
+              }),
               { type: 'step-start' },
-              { type: 'text', text: 'Step 2: Call tool B' },
-              {
+              expect.objectContaining({ type: 'text', text: 'Step 2: Call tool B', createdAt: expect.any(Number) }),
+              expect.objectContaining({
                 type: 'tool-invocation',
+                createdAt: expect.any(Number),
                 toolInvocation: {
                   state: 'result',
                   toolName: 'tool-b',
                   toolCallId: 'call-b-1',
                   args: {},
                   result: 'Result B',
+                  step: undefined,
                 },
-              },
+              }),
               { type: 'step-start' },
-              { type: 'text', text: 'Final response.' },
+              expect.objectContaining({ type: 'text', text: 'Final response.', createdAt: expect.any(Number) }),
             ],
             toolInvocations: [
               {
@@ -997,6 +1146,7 @@ describe('MessageList', () => {
                 toolCallId: 'call-a-1',
                 args: {},
                 result: 'Result A',
+                step: undefined,
               },
               {
                 state: 'result',
@@ -1004,6 +1154,7 @@ describe('MessageList', () => {
                 toolCallId: 'call-b-1',
                 args: {},
                 result: 'Result B',
+                step: undefined,
               },
             ],
           },
@@ -1055,7 +1206,11 @@ describe('MessageList', () => {
           content: {
             format: 2,
             content: userMsg.content,
-            parts: [{ type: 'text', text: userMsg.content }],
+            parts: [expect.objectContaining({ type: 'text', text: userMsg.content, createdAt: expect.any(Number) })],
+            experimental_attachments: undefined,
+            metadata: undefined,
+            reasoning: undefined,
+            toolInvocations: undefined,
           },
           threadId,
           resourceId,
@@ -1067,28 +1222,36 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
-              {
+              expect.objectContaining({
                 type: 'reasoning',
+                createdAt: expect.any(Number),
                 reasoning: '',
                 details: [{ type: 'text', text: 'First, I need to gather some data.', signature: 'sig-gather' }],
-              },
-              { type: 'text', text: 'Calling data tool...' },
-              {
+              }),
+              expect.objectContaining({ type: 'text', text: 'Calling data tool...', createdAt: expect.any(Number) }),
+              expect.objectContaining({
                 type: 'tool-invocation',
+                createdAt: expect.any(Number),
                 toolInvocation: {
                   state: 'result', // State should be updated to result
                   toolName: 'data-tool',
                   toolCallId: 'call-data-1',
                   args: { query: 'required data' },
                   result: '{"data": "gathered"}', // Result from the tool message
+                  step: undefined,
                 },
-              },
-              {
+              }),
+              expect.objectContaining({
                 type: 'reasoning',
+                createdAt: expect.any(Number),
                 reasoning: '',
                 details: [{ type: 'text', text: 'Data gathered, now processing.', signature: 'sig-process' }],
-              },
-              { type: 'text', text: 'Task completed successfully with gathered data.' },
+              }),
+              expect.objectContaining({
+                type: 'text',
+                text: 'Task completed successfully with gathered data.',
+                createdAt: expect.any(Number),
+              }),
             ],
             toolInvocations: [
               {
@@ -1097,6 +1260,7 @@ describe('MessageList', () => {
                 toolCallId: 'call-data-1',
                 args: { query: 'required data' },
                 result: '{"data": "gathered"}', // Result from the tool message
+                step: undefined,
               },
             ],
           },
@@ -1174,12 +1338,17 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
-              { type: 'text', text: 'Here is another image URL:' },
+              expect.objectContaining({
+                type: 'text',
+                text: 'Here is another image URL:',
+                createdAt: expect.any(Number),
+              }),
               expect.objectContaining({
                 type: 'file',
                 data: 'https://example.com/another-image.png',
                 filename: 'another-image.png',
                 mimeType: 'image/png',
+                createdAt: expect.any(Number),
               }),
             ],
           },
@@ -1216,7 +1385,9 @@ describe('MessageList', () => {
         createdAt: expect.any(Date),
         content: {
           format: 2,
-          parts: [{ type: 'text', text: 'Message with attachment' }],
+          parts: [
+            expect.objectContaining({ type: 'text', text: 'Message with attachment', createdAt: expect.any(Number) }),
+          ],
           experimental_attachments: [
             {
               name: 'report.pdf',
@@ -1257,7 +1428,9 @@ describe('MessageList', () => {
         createdAt: expect.any(Date),
         content: {
           format: 2,
-          parts: [{ type: 'text', text: 'Check out this image:' }],
+          parts: [
+            expect.objectContaining({ type: 'text', text: 'Check out this image:', createdAt: expect.any(Number) }),
+          ],
           experimental_attachments: [
             {
               name: 'example.png',
@@ -1328,7 +1501,7 @@ describe('MessageList', () => {
           content: {
             format: 2,
             content: userMsgV1.content,
-            parts: [{ type: 'text', text: userMsgV1.content }],
+            parts: [expect.objectContaining({ type: 'text', text: userMsgV1.content, createdAt: expect.any(Number) })],
           },
           threadId,
           resourceId,
@@ -1340,19 +1513,25 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
-              { type: 'text', text: 'Searching...' },
-              {
+              expect.objectContaining({ type: 'text', text: 'Searching...', createdAt: expect.any(Number) }),
+              expect.objectContaining({
                 type: 'tool-invocation',
+                createdAt: expect.any(Number),
                 toolInvocation: {
                   state: 'result', // State should be updated to result
                   toolName: 'search-tool',
                   toolCallId: 'call-mix-1',
                   args: { query: 'info' },
                   result: 'Found relevant data.', // Result from the tool message
+                  step: undefined,
                 },
-              },
+              }),
               { type: 'step-start' },
-              { type: 'text', text: 'Here is the information I found.' }, // Text from the Vercel UIMessage
+              expect.objectContaining({
+                type: 'text',
+                text: 'Here is the information I found.',
+                createdAt: expect.any(Number),
+              }), // Text from the Vercel UIMessage
             ],
             toolInvocations: [
               {
@@ -1361,6 +1540,7 @@ describe('MessageList', () => {
                 toolCallId: 'call-mix-1',
                 args: { query: 'info' },
                 result: 'Found relevant data.', // Result from the tool message
+                step: undefined,
               },
             ],
           },
@@ -1413,7 +1593,11 @@ describe('MessageList', () => {
           content: {
             format: 2,
             content: userMsg.content,
-            parts: [{ type: 'text', text: userMsg.content }],
+            parts: [expect.objectContaining({ type: 'text', text: userMsg.content, createdAt: expect.any(Number) })],
+            experimental_attachments: undefined,
+            metadata: undefined,
+            reasoning: undefined,
+            toolInvocations: undefined,
           },
           threadId,
           resourceId,
@@ -1425,19 +1609,29 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
-              { type: 'text', text: 'Okay, I will perform the task.' },
-              {
+              expect.objectContaining({
+                type: 'text',
+                text: 'Okay, I will perform the task.',
+                createdAt: expect.any(Number),
+              }),
+              expect.objectContaining({
                 type: 'tool-invocation',
+                createdAt: expect.any(Number),
                 toolInvocation: {
                   state: 'result',
                   toolName: 'task-tool',
                   toolCallId: 'call-task-1',
                   args: { task: 'perform' },
                   result: 'Task completed successfully.',
+                  step: undefined,
                 },
-              },
+              }),
               { type: 'step-start' },
-              { type: 'text', text: 'The task is now complete.' },
+              expect.objectContaining({
+                type: 'text',
+                text: 'The task is now complete.',
+                createdAt: expect.any(Number),
+              }),
             ],
             toolInvocations: [
               {
@@ -1446,6 +1640,7 @@ describe('MessageList', () => {
                 toolCallId: 'call-task-1',
                 args: { task: 'perform' },
                 result: 'Task completed successfully.',
+                step: undefined,
               },
             ],
             content: 'The task is now complete.',
@@ -1479,12 +1674,17 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
-              { type: 'text', text: 'Here is an embedded image:' },
-              {
+              expect.objectContaining({
+                type: 'text',
+                text: 'Here is an embedded image:',
+                createdAt: expect.any(Number),
+              }),
+              expect.objectContaining({
                 type: 'file',
                 mimeType: 'image/gif',
                 data: 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==',
-              },
+                createdAt: expect.any(Number),
+              }),
             ],
           },
           threadId,
@@ -1591,7 +1791,11 @@ describe('MessageList', () => {
           content: {
             format: 2,
             content: userMsg.content,
-            parts: [{ type: 'text', text: userMsg.content }],
+            parts: [expect.objectContaining({ type: 'text', text: userMsg.content, createdAt: expect.any(Number) })],
+            experimental_attachments: undefined,
+            metadata: undefined,
+            reasoning: undefined,
+            toolInvocations: undefined,
           },
           threadId,
           resourceId,
@@ -1604,31 +1808,43 @@ describe('MessageList', () => {
             format: 2,
             content: "The weather in London is 20°C and sunny, and in Paris it's 15°C and cloudy.",
             parts: [
-              { type: 'text', text: 'Okay, I will check the weather for both cities.' },
-              {
+              expect.objectContaining({
+                type: 'text',
+                text: 'Okay, I will check the weather for both cities.',
+                createdAt: expect.any(Number),
+              }),
+              expect.objectContaining({
                 type: 'tool-invocation',
+                createdAt: expect.any(Number),
                 toolInvocation: {
                   state: 'result',
                   toolName: 'weather-tool',
                   toolCallId: 'call-london',
                   args: { city: 'London' },
                   result: '20°C, sunny',
+                  step: undefined,
                 },
-              },
-              { type: 'step-start' },
-              { type: 'text', text: 'And now for Paris.' },
-              {
+              }),
+              expect.objectContaining({ type: 'step-start', createdAt: expect.any(Number) }),
+              expect.objectContaining({ type: 'text', text: 'And now for Paris.', createdAt: expect.any(Number) }),
+              expect.objectContaining({
                 type: 'tool-invocation',
+                createdAt: expect.any(Number),
                 toolInvocation: {
                   state: 'result',
                   toolName: 'weather-tool',
                   toolCallId: 'call-paris',
                   args: { city: 'Paris' },
                   result: '15°C, cloudy',
+                  step: undefined,
                 },
-              },
+              }),
               { type: 'step-start' },
-              { type: 'text', text: "The weather in London is 20°C and sunny, and in Paris it's 15°C and cloudy." },
+              expect.objectContaining({
+                type: 'text',
+                text: "The weather in London is 20°C and sunny, and in Paris it's 15°C and cloudy.",
+                createdAt: expect.any(Number),
+              }),
             ],
             toolInvocations: [
               {
@@ -1637,6 +1853,7 @@ describe('MessageList', () => {
                 toolCallId: 'call-london',
                 args: { city: 'London' },
                 result: '20°C, sunny',
+                step: undefined,
               },
               {
                 state: 'result',
@@ -1644,6 +1861,7 @@ describe('MessageList', () => {
                 toolCallId: 'call-paris',
                 args: { city: 'Paris' },
                 result: '15°C, cloudy',
+                step: undefined,
               },
             ],
           },
@@ -1849,7 +2067,7 @@ describe('MessageList', () => {
           role: 'user',
           content: 'hi',
           createdAt: expect.any(Date),
-          parts: [{ type: 'text', text: 'hi' }],
+          parts: [expect.objectContaining({ type: 'text', text: 'hi', createdAt: expect.any(Number) })],
           experimental_attachments: [],
         },
         {
@@ -1857,7 +2075,13 @@ describe('MessageList', () => {
           role: 'assistant',
           content: 'Hello! How can I assist you today?',
           createdAt: expect.any(Date),
-          parts: [{ type: 'text', text: 'Hello! How can I assist you today?' }],
+          parts: [
+            expect.objectContaining({
+              type: 'text',
+              text: 'Hello! How can I assist you today?',
+              createdAt: expect.any(Number),
+            }),
+          ],
           reasoning: undefined,
           toolInvocations: undefined,
         },
@@ -1866,7 +2090,7 @@ describe('MessageList', () => {
           role: 'user',
           content: 'LA',
           createdAt: expect.any(Date),
-          parts: [{ type: 'text', text: 'LA' }],
+          parts: [expect.objectContaining({ type: 'text', text: 'LA', createdAt: expect.any(Number) })],
           experimental_attachments: [],
         },
         {
@@ -1875,7 +2099,7 @@ describe('MessageList', () => {
           content: "Got it! You're in LA. What would you like to talk about or do today?",
           createdAt: expect.any(Date),
           parts: [
-            {
+            expect.objectContaining({
               type: 'tool-invocation',
               toolInvocation: {
                 state: 'result',
@@ -1883,15 +2107,17 @@ describe('MessageList', () => {
                 toolName: 'updateWorkingMemory',
                 args: { memory: '<user><location>LA</location></user>' },
                 result: { success: true },
+                step: undefined,
               },
-            },
+            }),
             {
               type: 'step-start',
             },
-            {
+            expect.objectContaining({
               type: 'text',
               text: "Got it! You're in LA. What would you like to talk about or do today?",
-            },
+              createdAt: expect.any(Number),
+            }),
           ],
           reasoning: undefined,
           toolInvocations: [
@@ -1901,6 +2127,7 @@ describe('MessageList', () => {
               toolName: 'updateWorkingMemory',
               args: { memory: '<user><location>LA</location></user>' },
               result: { success: true },
+              step: undefined,
             },
           ],
         },
@@ -1909,7 +2136,7 @@ describe('MessageList', () => {
           role: 'user',
           content: 'Hello',
           createdAt: expect.any(Date),
-          parts: [{ type: 'text', text: 'Hello' }],
+          parts: [expect.objectContaining({ type: 'text', text: 'Hello', createdAt: expect.any(Number) })],
           experimental_attachments: [],
         },
         {
@@ -1917,7 +2144,13 @@ describe('MessageList', () => {
           role: 'assistant',
           content: 'Hello again! How can I help you today?',
           createdAt: expect.any(Date),
-          parts: [{ type: 'text', text: 'Hello again! How can I help you today?' }],
+          parts: [
+            expect.objectContaining({
+              type: 'text',
+              text: 'Hello again! How can I help you today?',
+              createdAt: expect.any(Number),
+            }),
+          ],
           reasoning: undefined,
           toolInvocations: undefined,
         },
@@ -1926,7 +2159,7 @@ describe('MessageList', () => {
           role: 'user',
           content: 'Hi',
           createdAt: expect.any(Date),
-          parts: [{ type: 'text', text: 'Hi' }],
+          parts: [expect.objectContaining({ type: 'text', text: 'Hi', createdAt: expect.any(Number) })],
           experimental_attachments: [],
         },
         {
@@ -1934,7 +2167,13 @@ describe('MessageList', () => {
           role: 'assistant',
           content: "Hi there! What's on your mind?",
           createdAt: expect.any(Date),
-          parts: [{ type: 'text', text: "Hi there! What's on your mind?" }],
+          parts: [
+            expect.objectContaining({
+              type: 'text',
+              text: "Hi there! What's on your mind?",
+              createdAt: expect.any(Number),
+            }),
+          ],
           reasoning: undefined,
           toolInvocations: undefined,
         },
@@ -1943,7 +2182,7 @@ describe('MessageList', () => {
           role: 'user',
           content: 'hello',
           createdAt: expect.any(Date), // MessageList generates createdAt for messages without one
-          parts: [{ type: 'text', text: 'hello' }],
+          parts: [expect.objectContaining({ type: 'text', text: 'hello', createdAt: expect.any(Number) })],
           experimental_attachments: [],
         },
       ];
@@ -1971,7 +2210,13 @@ describe('MessageList', () => {
           id: newId,
           content: 'As a large language model...',
           createdAt: expect.any(Date),
-          parts: [{ type: 'text', text: 'As a large language model...' }],
+          parts: [
+            expect.objectContaining({
+              type: 'text',
+              text: 'As a large language model...',
+              createdAt: expect.any(Number),
+            }),
+          ],
           reasoning: undefined,
           toolInvocations: undefined,
         } satisfies UIMessage,
@@ -2024,10 +2269,14 @@ describe('MessageList', () => {
           id: expect.any(String),
           createdAt: expect.any(Date),
           parts: [
-            { type: 'step-start' },
-            { type: 'text', text: "Ok fine I'll call a tool then" },
-            { type: 'step-start' },
-            {
+            expect.objectContaining({ type: 'step-start', createdAt: expect.any(Number) }),
+            expect.objectContaining({
+              type: 'text',
+              text: "Ok fine I'll call a tool then",
+              createdAt: expect.any(Number),
+            }),
+            expect.objectContaining({ type: 'step-start', createdAt: expect.any(Number) }),
+            expect.objectContaining({
               type: 'tool-invocation',
               toolInvocation: {
                 result: { lets: 'go' },
@@ -2037,7 +2286,7 @@ describe('MessageList', () => {
                 state: 'result',
                 step: 1,
               },
-            },
+            }),
           ],
           reasoning: undefined,
           toolInvocations: [
@@ -2278,10 +2527,17 @@ describe('MessageList', () => {
       list.add(messageV2, 'response');
 
       expect(list.get.all.db()[0].content.parts).toEqual([
-        { type: 'step-start' },
+        expect.objectContaining({ type: 'step-start', createdAt: expect.any(Number) }),
         {
           type: 'tool-invocation',
-          toolInvocation: { state: 'result', toolCallId: 'call-xyz', toolName: 'foo', args: {}, result: 123 },
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'call-xyz',
+            toolName: 'foo',
+            args: {},
+            result: 123,
+            step: undefined,
+          },
         },
       ]);
     });
@@ -2323,11 +2579,18 @@ describe('MessageList', () => {
       list.add(messageV2, 'response');
 
       expect(list.get.all.db()[0].content.parts).toEqual([
-        { type: 'step-start' },
-        { type: 'text', text: 'Let me do this.' },
+        expect.objectContaining({ type: 'step-start', createdAt: expect.any(Number) }),
+        expect.objectContaining({ type: 'text', text: 'Let me do this.', createdAt: expect.any(Number) }),
         {
           type: 'tool-invocation',
-          toolInvocation: { state: 'result', toolCallId: 'call-1', toolName: 'foo', args: {}, result: 42 },
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'call-1',
+            toolName: 'foo',
+            args: {},
+            result: 42,
+            step: undefined,
+          },
         },
       ]);
     });
@@ -2369,11 +2632,18 @@ describe('MessageList', () => {
       list.add(messageV2, 'response');
 
       expect(list.get.all.db()[0].content.parts).toEqual([
-        { type: 'step-start' },
+        expect.objectContaining({ type: 'step-start', createdAt: expect.any(Number) }),
         { type: 'text', text: 'Doing it.' },
         {
           type: 'tool-invocation',
-          toolInvocation: { state: 'result', toolCallId: 'call-2', toolName: 'bar', args: {}, result: 100 },
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'call-2',
+            toolName: 'bar',
+            args: {},
+            result: 100,
+            step: undefined,
+          },
         },
       ]);
     });
@@ -2557,7 +2827,9 @@ describe('MessageList', () => {
       expect(coreMessages.length).toBe(2);
       const assistantMsg = coreMessages.find(m => m.role === 'assistant');
       expect(assistantMsg).toBeDefined();
-      expect(assistantMsg?.content).toEqual([{ type: 'text', text: 'Okay' }]); // Should only have the text part
+      expect(assistantMsg?.content).toEqual([
+        expect.objectContaining({ type: 'text', text: 'Okay', createdAt: expect.any(Number) }),
+      ]); // Should only have the text part
     });
 
     it('should handle an assistant message with mixed valid and orphaned tool calls', () => {
@@ -2583,7 +2855,9 @@ describe('MessageList', () => {
 
       const finalAssistantMsg = [...coreMessages].reverse().find(m => m.role === 'assistant');
       expect(finalAssistantMsg).toBeDefined();
-      expect(finalAssistantMsg?.content).toEqual([{ type: 'text', text: 'Some text in between' }]);
+      expect(finalAssistantMsg?.content).toEqual([
+        expect.objectContaining({ type: 'text', text: 'Some text in between', createdAt: expect.any(Number) }),
+      ]);
 
       const finalToolMsg = coreMessages.find(m => m.role === 'tool');
       expect(finalToolMsg).toBeDefined();
@@ -2634,10 +2908,11 @@ describe('MessageList', () => {
       expect(messages[0].content.content).toBe('{"data": "value", "number": 42}'); // Should stay as string
       expect(typeof messages[0].content.content).toBe('string'); // Should be a string, not an object
       expect(messages[0].content.parts).toEqual([
-        {
+        expect.objectContaining({
           type: 'text',
           text: '{"data": "value", "number": 42}',
-        },
+          createdAt: expect.any(Number),
+        }),
       ]);
     });
   });
@@ -2685,13 +2960,15 @@ describe('MessageList', () => {
       const uiMessage = uiMessages[0];
       expect(uiMessage.role).toBe('assistant');
       expect(uiMessage.parts).toEqual([
-        {
+        expect.objectContaining({
           type: 'step-start',
-        },
-        {
+          createdAt: expect.any(Number),
+        }),
+        expect.objectContaining({
           type: 'text',
           text: 'Let me check that for you.',
-        },
+          createdAt: expect.any(Number),
+        }),
       ]);
 
       // Check that the tool invocation with state="call" is filtered out from parts
@@ -2699,7 +2976,10 @@ describe('MessageList', () => {
       expect(toolInvocationParts.length).toBe(0);
 
       // Check that text and step-start parts are preserved
-      expect(uiMessage.parts).toEqual([{ type: 'step-start' }, { type: 'text', text: 'Let me check that for you.' }]);
+      expect(uiMessage.parts).toEqual([
+        expect.objectContaining({ type: 'step-start', createdAt: expect.any(Number) }),
+        expect.objectContaining({ type: 'text', text: 'Let me check that for you.', createdAt: expect.any(Number) }),
+      ]);
 
       // Check that toolInvocations array is also filtered
       expect(uiMessage.toolInvocations).toEqual([]);
@@ -2749,13 +3029,15 @@ describe('MessageList', () => {
       const uiMessage = uiMessages[0];
       expect(uiMessage.role).toBe('assistant');
       expect(uiMessage.parts).toEqual([
-        {
+        expect.objectContaining({
           type: 'step-start',
-        },
-        {
+          createdAt: expect.any(Number),
+        }),
+        expect.objectContaining({
           type: 'text',
           text: 'Your lucky number is:',
-        },
+          createdAt: expect.any(Number),
+        }),
         {
           type: 'tool-invocation',
           toolInvocation: {
@@ -2912,13 +3194,8 @@ describe('MessageList', () => {
       const uiMessage = uiMessages[0];
       expect(uiMessage.role).toBe('assistant');
       expect(uiMessage.parts).toEqual([
-        {
-          type: 'step-start',
-        },
-        {
-          type: 'text',
-          text: 'Let me get your lucky number.',
-        },
+        { type: 'step-start' },
+        { type: 'text', text: 'Let me get your lucky number.' },
       ]);
 
       // Tool invocations with "call" state should be filtered out from parts
@@ -3670,9 +3947,11 @@ describe('MessageList', () => {
 
         const firstPart = (retrievedMessage?.content as any[])?.[0];
         expect(firstPart?.type).toBe('text');
-        expect(firstPart?.providerOptions).toEqual({
-          anthropic: { cacheControl: { type: 'ephemeral' } },
-        });
+        expect(firstPart?.providerOptions).toEqual(
+          expect.objectContaining({
+            anthropic: { cacheControl: { type: 'ephemeral' } },
+          }),
+        );
       });
 
       it('should preserve part-level providerOptions', async () => {
@@ -3705,13 +3984,17 @@ describe('MessageList', () => {
         expect(Array.isArray(retrievedMessage?.content)).toBe(true);
 
         const firstPart = (retrievedMessage?.content as any[])?.[0];
-        expect(firstPart?.providerOptions).toEqual({
-          anthropic: { cacheControl: { type: 'ephemeral' } }, // from part-level
-        });
+        expect(firstPart?.providerOptions).toEqual(
+          expect.objectContaining({
+            anthropic: { cacheControl: { type: 'ephemeral' } }, // from part-level
+          }),
+        );
 
-        // Second part should have no providerOptions
+        // Second part should only carry Mastra's stamped timestamp metadata
         const secondPart = (retrievedMessage?.content as any[])?.[1];
-        expect(secondPart?.providerOptions).toBeUndefined();
+        expect(secondPart?.providerOptions).toEqual({
+          mastra: { createdAt: expect.any(Number) },
+        });
       });
     });
 
@@ -3794,11 +4077,15 @@ describe('MessageList', () => {
 
         const textPart = (retrievedMessage?.content as any[])?.[0];
         expect(textPart?.type).toBe('text');
-        expect(textPart?.providerOptions).toEqual({
-          anthropic: { cacheControl: { type: 'ephemeral' } },
-        });
+        expect(textPart?.providerOptions).toEqual(
+          expect.objectContaining({
+            anthropic: { cacheControl: { type: 'ephemeral' } },
+          }),
+        );
         const secondPart = (retrievedMessage?.content as any[])?.[1];
-        expect(secondPart?.providerOptions).toBeUndefined();
+        expect(secondPart?.providerOptions).toEqual({
+          mastra: { createdAt: expect.any(Number) },
+        });
       });
     });
 
@@ -3856,9 +4143,11 @@ describe('MessageList', () => {
 
         // User message should have providerOptions on content part
         const userMsg = llmPrompt.find((msg: any) => msg.role === 'user');
-        expect((userMsg?.content as any[])?.[0]?.providerOptions).toEqual({
-          anthropic: { cacheControl: { type: 'ephemeral' } },
-        });
+        expect((userMsg?.content as any[])?.[0]?.providerOptions).toEqual(
+          expect.objectContaining({
+            anthropic: { cacheControl: { type: 'ephemeral' } },
+          }),
+        );
 
         // Assistant message should have providerOptions on message
         const assistantMsg = llmPrompt.find((msg: any) => msg.role === 'assistant');

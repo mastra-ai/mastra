@@ -1,0 +1,61 @@
+name: Upload Studio to R2
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'CLI version to build (e.g. 1.3.14)'
+        required: true
+        type: string
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.version }}
+
+jobs:
+  upload-studio:
+    name: Build and Upload Studio
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: ubuntu-latest
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+    steps:
+      - name: Initial checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          ref: mastra@${{ inputs.version }}
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Build packages
+        run: pnpm turbo build --filter="mastra"
+
+      - name: Upload studio assets to R2 (staging)
+        if: ${{ !inputs.dry_run }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.STUDIO_R2_ACCESS_KEY_ID_STAGING }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.STUDIO_R2_ACCESS_SECRET_STAGING }}
+          STUDIO_BUCKET_NAME: ${{ vars.STUDIO_R2_BUCKET_STAGING }}
+          STUDIO_ENDPOINT_URL: ${{ vars.STUDIO_R2_ENDPOINT_URL_STAGING }}
+        run: |
+          aws s3 sync packages/cli/dist/studio "s3://${STUDIO_BUCKET_NAME}/${{ steps.cli-version.outputs.version }}/studio/" \
+            --endpoint-url "${STUDIO_ENDPOINT_URL}" \
+            --delete
+
+      # TODO: Remove continue-on-error once production CF R2 credentials are configured.
+      - name: Upload studio assets to R2 (production)
+        if: ${{ !inputs.dry_run }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.STUDIO_R2_ACCESS_KEY_ID_PROD }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.STUDIO_R2_ACCESS_SECRET_PROD }}
+          STUDIO_BUCKET_NAME: ${{ vars.STUDIO_R2_BUCKET_PROD }}
+          STUDIO_ENDPOINT_URL: ${{ vars.STUDIO_R2_ENDPOINT_URL_PROD }}
+        run: |
+          aws s3 sync packages/cli/dist/studio "s3://${STUDIO_BUCKET_NAME}/${{ steps.cli-version.outputs.version }}/studio/" \
+            --endpoint-url "${STUDIO_ENDPOINT_URL}" \
+            --delete

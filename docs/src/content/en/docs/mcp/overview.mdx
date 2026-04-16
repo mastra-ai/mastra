@@ -80,7 +80,7 @@ export const testAgent = new Agent({
       - US National Weather Service
 
       Answer questions using the information you find using the MCP Servers.`,
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   tools: await testMcpClient.listTools(),
 })
 ```
@@ -90,6 +90,23 @@ export const testAgent = new Agent({
 Visit [Agent Class](/reference/agents/agent) for a full list of configuration options.
 
 :::
+
+## Tool approval
+
+You can require human approval before MCP tools are executed by setting `requireToolApproval` on a server definition. This integrates with the existing [human-in-the-loop](/docs/workflows/human-in-the-loop) approval flow.
+
+```typescript
+export const mcp = new MCPClient({
+  servers: {
+    github: {
+      url: new URL('http://localhost:3000/mcp'),
+      requireToolApproval: true,
+    },
+  },
+})
+```
+
+You can also pass a function to decide dynamically per-call. See the [MCPClient reference](/reference/tools/mcp-client#tool-approval) for the full API.
 
 ## Configuring `MCPServer`
 

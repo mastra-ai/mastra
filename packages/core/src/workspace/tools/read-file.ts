@@ -4,6 +4,7 @@ import { WORKSPACE_TOOLS } from '../constants';
 import { extractLinesWithLimit, formatWithLineNumbers } from '../line-utils';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
 import { applyTokenLimit } from './output-helpers';
+import { startWorkspaceSpan } from './tracing';
 
 export const readFileTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.READ_FILE,
@@ -30,45 +31,63 @@ export const readFileTool = createTool({
     const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
 
-    const effectiveEncoding = (encoding as BufferEncoding) ?? 'utf-8';
-    const fullContent = await filesystem.readFile(path, { encoding: effectiveEncoding });
-    const stat = await filesystem.stat(path);
+    const span = startWorkspaceSpan(context, workspace, {
+      category: 'filesystem',
+      operation: 'readFile',
+      input: { path, encoding, offset, limit },
+      attributes: { filesystemProvider: filesystem.provider },
+    });
 
-    const isTextEncoding = !encoding || encoding === 'utf-8' || encoding === 'utf8';
+    try {
+      const effectiveEncoding = (encoding as BufferEncoding) ?? 'utf-8';
+      const fullContent = await filesystem.readFile(path, { encoding: effectiveEncoding });
+      const stat = await filesystem.stat(path);
 
-    const tokenLimit = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]?.maxOutputTokens;
+      const isTextEncoding = !encoding || encoding === 'utf-8' || encoding === 'utf8';
 
-    if (!isTextEncoding) {
-      return await applyTokenLimit(
-        `${stat.path} (${stat.size} bytes, ${effectiveEncoding})\n${fullContent}`,
-        tokenLimit,
-        'end',
-      );
+      const tokenLimit = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]?.maxOutputTokens;
+
+      if (!isTextEncoding) {
+        const output = await applyTokenLimit(
+          `${stat.path} (${stat.size} bytes, ${effectiveEncoding})\n${fullContent}`,
+          tokenLimit,
+          'end',
+        );
+        span.end({ success: true }, { bytesTransferred: stat.size });
+        return output;
+      }
+
+      if (typeof fullContent !== 'string') {
+        const output = await applyTokenLimit(
+          `${stat.path} (${stat.size} bytes, base64)\n${fullContent.toString('base64')}`,
+          tokenLimit,
+          'end',
+        );
+        span.end({ success: true }, { bytesTransferred: stat.size });
+        return output;
+      }
+
+      const hasLineRange = offset !== undefined || limit !== undefined;
+      const result = extractLinesWithLimit(fullContent, offset, limit);
+
+      const shouldShowLineNumbers = showLineNumbers !== false;
+      const formattedContent = shouldShowLineNumbers
+        ? formatWithLineNumbers(result.content, result.lines.start)
+        : result.content;
+
+      let header: string;
+      if (hasLineRange) {
+        header = `${stat.path} (lines ${result.lines.start}-${result.lines.end} of ${result.totalLines}, ${stat.size} bytes)`;
+      } else {
+        header = `${stat.path} (${stat.size} bytes)`;
+      }
+
+      const output = await applyTokenLimit(`${header}\n${formattedContent}`, tokenLimit, 'end');
+      span.end({ success: true }, { bytesTransferred: stat.size });
+      return output;
+    } catch (err) {
+      span.error(err);
+      throw err;
     }
-
-    if (typeof fullContent !== 'string') {
-      return await applyTokenLimit(
-        `${stat.path} (${stat.size} bytes, base64)\n${fullContent.toString('base64')}`,
-        tokenLimit,
-        'end',
-      );
-    }
-
-    const hasLineRange = offset !== undefined || limit !== undefined;
-    const result = extractLinesWithLimit(fullContent, offset, limit);
-
-    const shouldShowLineNumbers = showLineNumbers !== false;
-    const formattedContent = shouldShowLineNumbers
-      ? formatWithLineNumbers(result.content, result.lines.start)
-      : result.content;
-
-    let header: string;
-    if (hasLineRange) {
-      header = `${stat.path} (lines ${result.lines.start}-${result.lines.end} of ${result.totalLines}, ${stat.size} bytes)`;
-    } else {
-      header = `${stat.path} (${stat.size} bytes)`;
-    }
-
-    return await applyTokenLimit(`${header}\n${formattedContent}`, tokenLimit, 'end');
   },
 });

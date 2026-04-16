@@ -70,11 +70,11 @@ Add a sample guide so the agent can see the existing documentation style:
 ````markdown title="workspace/docs/guides/getting-started.md"
 # Getting Started
 
-Quick start guide for the project.
+Quickstart guide for the project.
 
 ## Installation
 
-```bash
+```bash npm2yarn
 npm install example-package
 ```
 
@@ -116,7 +116,7 @@ When updating existing docs:
 
 Use kebab-case naming for files (getting-started.md).
 Always explain what you're creating and why.`,
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
 })
 ```
 
@@ -144,7 +144,7 @@ export const mastra = new Mastra({
 
 ## Test the docs manager
 
-Start Mastra Studio and interact with the agent to see it in action.
+Start [Studio](/docs/studio/overview) and interact with the agent to see it in action.
 
 ```bash npm2yarn
 npm run dev
@@ -171,7 +171,7 @@ Learn how to add authentication to your application.
 
 Install the auth package:
 
-```bash
+```bash npm2yarn
 npm install @example/auth
 ```
 

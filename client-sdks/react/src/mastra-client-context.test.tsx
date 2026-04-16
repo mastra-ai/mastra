@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { isLocalUrl } from './mastra-client-context';
 
@@ -60,5 +60,82 @@ describe('isLocalUrl', () => {
   it('should return false for URLs that contain localhost as a substring of a domain', () => {
     expect(isLocalUrl('https://notlocalhost.com')).toBe(false);
     expect(isLocalUrl('https://localhost.evil.com')).toBe(false);
+  });
+});
+
+// Mock MastraClient to capture construction options
+const mockMastraClientOptions: any[] = [];
+vi.mock('@mastra/client-js', () => ({
+  MastraClient: class MockMastraClient {
+    options: any;
+    constructor(options: any) {
+      this.options = options;
+      mockMastraClientOptions.push(options);
+    }
+  },
+}));
+
+// Re-import after mock is set up — need the actual createMastraClient logic
+// which is invoked inside MastraClientProvider
+const { MastraClientProvider, useMastraClient } = await import('./mastra-client-context');
+
+describe('createMastraClient credentials', () => {
+  // See: https://github.com/mastra-ai/mastra/issues/14770
+
+  beforeEach(() => {
+    mockMastraClientOptions.length = 0;
+  });
+
+  it('should pass credentials: include for local URLs so session cookies are sent', async () => {
+    const { createElement } = await import('react');
+    const { renderToString } = await import('react-dom/server');
+
+    let capturedClient: any;
+    function Inspector() {
+      capturedClient = useMastraClient();
+      return null;
+    }
+
+    renderToString(createElement(MastraClientProvider, { baseUrl: 'http://localhost:4000' }, createElement(Inspector)));
+
+    expect(capturedClient.options.credentials).toBe('include');
+  });
+
+  it('should allow overriding credentials via prop', async () => {
+    const { createElement } = await import('react');
+    const { renderToString } = await import('react-dom/server');
+
+    let capturedClient: any;
+    function Inspector() {
+      capturedClient = useMastraClient();
+      return null;
+    }
+
+    renderToString(
+      createElement(
+        MastraClientProvider,
+        { baseUrl: 'http://localhost:4000', credentials: 'same-origin' },
+        createElement(Inspector),
+      ),
+    );
+
+    expect(capturedClient.options.credentials).toBe('same-origin');
+  });
+
+  it('should pass credentials: include for remote URLs', async () => {
+    const { createElement } = await import('react');
+    const { renderToString } = await import('react-dom/server');
+
+    let capturedClient: any;
+    function Inspector() {
+      capturedClient = useMastraClient();
+      return null;
+    }
+
+    renderToString(
+      createElement(MastraClientProvider, { baseUrl: 'https://api.example.com' }, createElement(Inspector)),
+    );
+
+    expect(capturedClient.options.credentials).toBe('include');
   });
 });

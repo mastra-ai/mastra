@@ -1,0 +1,75 @@
+name: Cron Alpha Version
+
+permissions:
+  contents: write
+
+on:
+  schedule:
+    - cron: '0 4,16 * * *'
+
+concurrency:
+  group: alpha-prerelease-main
+  cancel-in-progress: false
+
+jobs:
+  alpha-version:
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Initial checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Dane App Auth
+        id: app-auth
+        uses: ./.github/actions/app-auth
+        with:
+          app-id: ${{ vars.DANE_APP_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+
+      - name: Re-checkout with app token
+        uses: actions/checkout@v5
+        with:
+          token: ${{ steps.app-auth.outputs.token }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Version packages (alpha prerelease)
+        env:
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+          HUSKY: 0
+        run: pnpm changeset-cli version
+
+      - name: Check for changes
+        id: check-changes
+        run: |
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No version changes detected"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "Version changes detected:"
+            git diff --stat
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Bump mcp-docs-server prerelease version
+        if: steps.check-changes.outputs.has_changes == 'true'
+        run: |
+          cd packages/mcp-docs-server
+          pnpm version prerelease --preid alpha --no-git-tag-version
+          cd ../..
+
+      - name: Commit and push version changes
+        if: steps.check-changes.outputs.has_changes == 'true'
+        env:
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+          HUSKY: 0
+        run: |
+          git add -A
+          git commit -m "chore: version packages"
+          git push

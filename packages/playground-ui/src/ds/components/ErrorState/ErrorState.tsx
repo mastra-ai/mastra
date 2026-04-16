@@ -7,7 +7,7 @@ export type ErrorStateProps = {
 
 export function ErrorState({ title, message }: ErrorStateProps) {
   return (
-    <div className="flex h-full items-center justify-center">
+    <div className="flex items-center justify-center h-[30vh]">
       <div className="flex flex-col items-center justify-center text-center py-10 px-6">
         <div className="mb-4">
           <CircleXIcon className="h-8 w-8 text-red-900" />

@@ -1,12 +1,12 @@
-import { EntryListRoot } from './entry-list-root';
-import { EntryListHeader } from './entry-list-header';
 import { EntryListEntries } from './entry-list-entries';
-import { EntryListTrim } from './entry-list-trim';
 import { EntryListEntry } from './entry-list-entry';
+import { EntryListEntryStatusCol, EntryListEntryTextCol } from './entry-list-entry-col';
+import { EntryListHeader } from './entry-list-header';
 import { EntryListMessage } from './entry-list-message';
 import { EntryListNextPageLoading } from './entry-list-next-page-loading';
 import { EntryListPagination } from './entry-list-pagination';
-import { EntryListEntryStatusCol, EntryListEntryTextCol } from './entry-list-entry-col';
+import { EntryListRoot } from './entry-list-root';
+import { EntryListTrim } from './entry-list-trim';
 
 export const EntryList = Object.assign(EntryListRoot, {
   Header: EntryListHeader,

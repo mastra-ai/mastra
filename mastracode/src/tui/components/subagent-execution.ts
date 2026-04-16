@@ -10,7 +10,8 @@
 
 import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import type { TUI } from '@mariozechner/pi-tui';
-import { theme } from '../theme.js';
+import { safeStringify } from '@mastra/core/utils';
+import { BOX_INDENT, getTermWidth, theme } from '../theme.js';
 import type { IToolExecutionComponent } from './tool-execution-interface.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -76,7 +77,7 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
       if (toolCall.name === name && !toolCall.done) {
         toolCall.done = true;
         toolCall.isError = isError;
-        toolCall.result = typeof result === 'string' ? result : JSON.stringify(result ?? '');
+        toolCall.result = typeof result === 'string' ? result : safeStringify(result ?? '');
         break;
       }
     }
@@ -112,11 +113,10 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
 
   private rebuild(): void {
     this.clear();
-    this.addChild(new Spacer(1));
 
     const border = (char: string) => theme.bold(theme.fg('accent', char));
-    const termWidth = process.stdout.columns || 80;
-    const maxLineWidth = termWidth - 6;
+    const termWidth = getTermWidth();
+    const maxLineWidth = termWidth - 6 - BOX_INDENT * 2;
 
     // ── Bottom border with info (always rendered) ──
     const typeLabel = theme.bold(theme.fg('accent', this.agentType));
@@ -131,14 +131,14 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
 
     // When collapse-on-complete is enabled, render only the single-line footer summary
     if (this.collapseOnComplete && this.done && !this.expanded) {
-      this.addChild(new Text(`${border('└──')} ${footerText}`, 0, 0));
+      this.addChild(new Text(`${border('╰──')} ${footerText}`, BOX_INDENT, 0));
       this.invalidate();
       this.ui.requestRender();
       return;
     }
 
     // ── Top border ──
-    this.addChild(new Text(border('┌──'), 0, 0));
+    this.addChild(new Text(border('╭──'), BOX_INDENT, 0));
 
     // ── Task description (capped when collapsed) ──
     const taskLines = this.task.split('\n');
@@ -162,17 +162,17 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
     const displayTaskLines = taskTruncated ? wrappedTaskLines.slice(0, maxTaskLines) : wrappedTaskLines;
 
     const taskContent = displayTaskLines.map(line => `${border('│')} ${line}`).join('\n');
-    this.addChild(new Text(taskContent, 0, 0));
+    this.addChild(new Text(taskContent, BOX_INDENT, 0));
 
     if (taskTruncated) {
       const moreText = theme.fg('muted', `... ${wrappedTaskLines.length - maxTaskLines} more lines (ctrl+e to expand)`);
-      this.addChild(new Text(`${border('│')} ${moreText}`, 0, 0));
+      this.addChild(new Text(`${border('│')} ${moreText}`, BOX_INDENT, 0));
     }
 
     // ── Activity lines (tool calls — capped rolling window) ──
     if (this.toolCalls.length > 0) {
       // Separator between task and activity
-      this.addChild(new Text(`${border('│')} ${theme.fg('muted', '───')}`, 0, 0));
+      this.addChild(new Text(`${border('│')} ${theme.fg('muted', '───')}`, BOX_INDENT, 0));
 
       const activityLines = this.toolCalls.map(tc => formatToolCallLine(tc, maxLineWidth));
 
@@ -194,21 +194,21 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
 
       if (!this.done && hiddenCount > 0) {
         const hiddenText = theme.fg('muted', `  ... ${hiddenCount} more above`);
-        this.addChild(new Text(`${border('│')} ${hiddenText}`, 0, 0));
+        this.addChild(new Text(`${border('│')} ${hiddenText}`, BOX_INDENT, 0));
       }
 
       const activityContent = displayLines.map(line => `${border('│')} ${line}`).join('\n');
-      this.addChild(new Text(activityContent, 0, 0));
+      this.addChild(new Text(activityContent, BOX_INDENT, 0));
 
       if (this.done && hiddenCount > 0) {
         const moreText = theme.fg('muted', `... ${hiddenCount} more (ctrl+e to expand)`);
-        this.addChild(new Text(`${border('│')} ${moreText}`, 0, 0));
+        this.addChild(new Text(`${border('│')} ${moreText}`, BOX_INDENT, 0));
       }
     }
 
     // ── Final result (shown after completion, only when expanded) ──
     if (this.done && this.finalResult && this.expanded) {
-      this.addChild(new Text(`${border('│')} ${theme.fg('muted', '───')}`, 0, 0));
+      this.addChild(new Text(`${border('│')} ${theme.fg('muted', '───')}`, BOX_INDENT, 0));
       const resultLines = this.finalResult!.split('\n');
 
       const resultContent = resultLines
@@ -218,12 +218,13 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
         })
         .join('\n');
       if (resultContent.trim()) {
-        this.addChild(new Text(resultContent, 0, 0));
+        this.addChild(new Text(resultContent, BOX_INDENT, 0));
       }
     }
 
     // ── Bottom border ──
-    this.addChild(new Text(`${border('└──')} ${footerText}`, 0, 0));
+    this.addChild(new Text(`${border('╰──')} ${footerText}`, BOX_INDENT, 0));
+    this.addChild(new Spacer(1));
 
     this.invalidate();
     this.ui.requestRender();

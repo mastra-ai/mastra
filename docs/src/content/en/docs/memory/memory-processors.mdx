@@ -56,7 +56,7 @@ const agent = new Agent({
   id: 'test-agent',
   name: 'Test Agent',
   instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'memory-store',
@@ -106,7 +106,7 @@ import { openai } from '@ai-sdk/openai'
 const agent = new Agent({
   name: 'semantic-agent',
   instructions: 'You are a helpful assistant with semantic memory',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'memory-store',
@@ -159,7 +159,7 @@ import { openai } from '@ai-sdk/openai'
 const agent = new Agent({
   name: 'working-memory-agent',
   instructions: 'You are an assistant with working memory',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'memory-store',
@@ -191,7 +191,7 @@ const customMessageHistory = new MessageHistory({
 const agent = new Agent({
   name: 'custom-memory-agent',
   instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   memory: new Memory({
     storage: new LibSQLStore({ id: 'memory-store', url: 'file:memory.db' }),
     lastMessages: 10, // This would normally add MessageHistory(10)
@@ -261,7 +261,7 @@ const contentBlocker = {
 const agent = new Agent({
   name: 'safe-agent',
   instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   memory: new Memory({ lastMessages: 10 }),
   // Your guardrail runs BEFORE memory saves
   outputProcessors: [contentBlocker],
@@ -300,7 +300,7 @@ const inputValidator = {
 const agent = new Agent({
   name: 'validated-agent',
   instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-4o',
+  model: 'openai/gpt-5.4',
   memory: new Memory({ lastMessages: 10 }),
   // Your guardrail runs AFTER memory loads history
   inputProcessors: [inputValidator],
@@ -318,8 +318,8 @@ Both scenarios are safe - guardrails prevent inappropriate content from being pe
 
 ## Related documentation
 
-- [Processors](/docs/agents/processors) - General processor concepts and custom processor creation
-- [Guardrails](/docs/agents/guardrails) - Security and validation processors
-- [Memory Overview](/docs/memory/overview) - Memory types and configuration
+- [Processors](/docs/agents/processors): General processor concepts and custom processor creation
+- [Guardrails](/docs/agents/guardrails): Security and validation processors
+- [Memory Overview](/docs/memory/overview): Memory types and configuration
 
 When creating custom processors avoid mutating the input `messages` array or its objects directly.

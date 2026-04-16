@@ -6,6 +6,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import type { MastraBrowser } from '@mastra/core/browser';
 import type { LSPConfig } from '@mastra/core/workspace';
 import { getAppDataDir } from '../utils/project.js';
 
@@ -56,8 +57,59 @@ export interface StorageSettings {
   pg: PgStorageSettings;
 }
 
+/** Memory gateway provider key used in AuthStorage. */
+export const MEMORY_GATEWAY_PROVIDER = 'mastra-gateway';
+
+/** Default gateway URL. */
+export const MEMORY_GATEWAY_DEFAULT_URL = 'https://gateway-api.mastra.ai';
+
 /** Valid persisted thinking level values. */
 export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+
+/** Browser provider type. */
+export type BrowserProvider = 'stagehand' | 'agent-browser';
+
+/** Stagehand environment type. */
+export type StagehandEnv = 'LOCAL' | 'BROWSERBASE';
+
+/** Stagehand-specific browser settings. */
+export interface StagehandSettings {
+  env: StagehandEnv;
+  apiKey?: string;
+  projectId?: string;
+  /** Whether to preserve the user data directory after the browser closes. */
+  preserveUserDataDir?: boolean;
+}
+
+/** AgentBrowser-specific browser settings. */
+export interface AgentBrowserSettings {
+  /** Path to a Playwright storage state file (JSON) containing cookies and localStorage. */
+  storageState?: string;
+}
+
+/** Browser configuration persisted in global settings. */
+export interface BrowserSettings {
+  /** Whether browser automation is enabled. */
+  enabled: boolean;
+  /** Which browser provider to use. */
+  provider: BrowserProvider;
+  /** Whether to run headless (no visible browser window). */
+  headless: boolean;
+  /** Browser viewport dimensions. */
+  viewport?: { width: number; height: number };
+  /** CDP URL for connecting to an existing browser. */
+  cdpUrl?: string;
+  /** Path to a Chrome/Chromium user data directory (profile). */
+  profile?: string;
+  /** Path to the browser executable to use. */
+  executablePath?: string;
+  /** Browser scope — 'shared' (all threads share one browser) or 'thread' (each thread gets its own). */
+  scope?: 'shared' | 'thread';
+  /** Stagehand-specific settings. */
+  stagehand?: StagehandSettings;
+  /** AgentBrowser-specific settings. */
+  agentBrowser?: AgentBrowserSettings;
+}
 
 export interface GlobalSettings {
   // Onboarding tracking
@@ -67,8 +119,6 @@ export interface GlobalSettings {
     version: number;
     modePackId: string | null;
     omPackId: string | null;
-    /** ISO timestamp when the user acknowledged the Claude Max OAuth ToS warning. */
-    claudeMaxOAuthWarningAcknowledgedAt: string | null;
   };
   // Global model preferences (applied to new threads)
   models: {
@@ -91,6 +141,10 @@ export interface GlobalSettings {
     activeOmPackId: string | null;
     /** Explicit OM model override — used for custom OM pack or /om manual changes. */
     omModelOverride: string | null;
+    /** Default OM observation threshold used for new threads unless overridden per-thread. */
+    omObservationThreshold: number | null;
+    /** Default OM reflection threshold used for new threads unless overridden per-thread. */
+    omReflectionThreshold: number | null;
     /** Per-agent-type subagent model overrides (e.g. { explore: "openai/gpt-5.1-codex-mini" }) */
     subagentModels: Record<string, string>;
   };
@@ -113,8 +167,12 @@ export interface GlobalSettings {
   modelUseCounts: Record<string, number>;
   // Version the user dismissed the update prompt for (skip until they manually update past this)
   updateDismissedVersion: string | null;
+  // Memory gateway configuration
+  memoryGateway: { baseUrl?: string };
   // LSP configuration forwarded to the workspace
   lsp?: LSPConfig;
+  // Browser automation configuration
+  browser: BrowserSettings;
 }
 
 export const STORAGE_DEFAULTS: StorageSettings = {
@@ -130,13 +188,14 @@ const DEFAULTS: GlobalSettings = {
     version: 0,
     modePackId: null,
     omPackId: null,
-    claudeMaxOAuthWarningAcknowledgedAt: null,
   },
   models: {
     activeModelPackId: null,
     modeDefaults: {},
     activeOmPackId: null,
     omModelOverride: null,
+    omObservationThreshold: null,
+    omReflectionThreshold: null,
     subagentModels: {},
   },
   preferences: {
@@ -150,7 +209,15 @@ const DEFAULTS: GlobalSettings = {
   customProviders: [],
   modelUseCounts: {},
   updateDismissedVersion: null,
+  memoryGateway: {},
   lsp: {},
+  browser: {
+    enabled: false,
+    provider: 'stagehand',
+    headless: false,
+    viewport: { width: 1280, height: 720 },
+    stagehand: { env: 'LOCAL' },
+  },
 };
 
 const THINKING_LEVEL_VALUES: ThinkingLevelSetting[] = ['off', 'low', 'medium', 'high', 'xhigh'];
@@ -238,6 +305,59 @@ export function parseCustomProviders(rawProviders: unknown): CustomProviderSetti
   return parsedProviders;
 }
 
+const BROWSER_PROVIDERS = new Set<BrowserProvider>(['stagehand', 'agent-browser']);
+const STAGEHAND_ENVS = new Set<StagehandEnv>(['LOCAL', 'BROWSERBASE']);
+
+/**
+ * Deep-merge and validate browser settings from JSON.
+ * Explicitly validates types to handle malformed settings.json gracefully.
+ */
+function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
+  const raw = rawBrowser && typeof rawBrowser === 'object' ? (rawBrowser as Record<string, unknown>) : {};
+  const rawViewport = raw.viewport && typeof raw.viewport === 'object' ? (raw.viewport as Record<string, unknown>) : {};
+  const rawStagehand =
+    raw.stagehand && typeof raw.stagehand === 'object' ? (raw.stagehand as Record<string, unknown>) : {};
+  const rawAgentBrowser =
+    raw.agentBrowser && typeof raw.agentBrowser === 'object' ? (raw.agentBrowser as Record<string, unknown>) : {};
+
+  return {
+    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULTS.browser.enabled,
+    provider:
+      typeof raw.provider === 'string' && BROWSER_PROVIDERS.has(raw.provider as BrowserProvider)
+        ? (raw.provider as BrowserProvider)
+        : DEFAULTS.browser.provider,
+    headless: typeof raw.headless === 'boolean' ? raw.headless : DEFAULTS.browser.headless,
+    cdpUrl: typeof raw.cdpUrl === 'string' && raw.cdpUrl.trim() ? raw.cdpUrl.trim() : undefined,
+    profile: typeof raw.profile === 'string' && raw.profile.trim() ? raw.profile.trim() : undefined,
+    executablePath:
+      typeof raw.executablePath === 'string' && raw.executablePath.trim() ? raw.executablePath.trim() : undefined,
+    viewport: {
+      width: typeof rawViewport.width === 'number' ? rawViewport.width : DEFAULTS.browser.viewport!.width,
+      height: typeof rawViewport.height === 'number' ? rawViewport.height : DEFAULTS.browser.viewport!.height,
+    },
+    scope: typeof raw.scope === 'string' && (raw.scope === 'shared' || raw.scope === 'thread') ? raw.scope : undefined,
+    stagehand: {
+      env:
+        typeof rawStagehand.env === 'string' && STAGEHAND_ENVS.has(rawStagehand.env as StagehandEnv)
+          ? (rawStagehand.env as StagehandEnv)
+          : DEFAULTS.browser.stagehand!.env,
+      ...(typeof rawStagehand.apiKey === 'string' && rawStagehand.apiKey.trim()
+        ? { apiKey: rawStagehand.apiKey.trim() }
+        : {}),
+      ...(typeof rawStagehand.projectId === 'string' && rawStagehand.projectId.trim()
+        ? { projectId: rawStagehand.projectId.trim() }
+        : {}),
+      ...(typeof rawStagehand.preserveUserDataDir === 'boolean'
+        ? { preserveUserDataDir: rawStagehand.preserveUserDataDir }
+        : {}),
+    },
+    agentBrowser:
+      typeof rawAgentBrowser.storageState === 'string' && rawAgentBrowser.storageState.trim()
+        ? { storageState: rawAgentBrowser.storageState.trim() }
+        : undefined,
+  };
+}
+
 /**
  * One-time migration: move model-related data from auth.json to settings.json.
  * Reads `_modelRanks`, `_modeModelId_*`, `_subagentModelId*` from auth.json,
@@ -277,7 +397,9 @@ function migrateFromAuth(settingsPath: string): boolean {
         customProviders: parseCustomProviders(raw.customProviders),
         modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
         updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
+        memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
         lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
+        browser: parseBrowserSettings(raw.browser),
       };
     } catch {
       settings = structuredClone(DEFAULTS);
@@ -327,7 +449,7 @@ function migrateFromAuth(settingsPath: string): boolean {
 }
 
 const LEGACY_VARIED_MODELS: Record<string, string> = {
-  plan: 'openai/gpt-5.3-codex',
+  plan: 'openai/gpt-5.4',
   build: 'anthropic/claude-sonnet-4-5',
   fast: 'anthropic/claude-haiku-4-5',
 };
@@ -393,7 +515,9 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       customProviders: parseCustomProviders(raw.customProviders),
       modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
       updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
+      memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
       lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
+      browser: parseBrowserSettings(raw.browser),
     };
 
     // Migrate legacy omModelId → omModelOverride
@@ -556,4 +680,97 @@ export function saveSettings(settings: GlobalSettings, filePath: string = getSet
     mkdirSync(dir, { recursive: true });
   }
   writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf-8');
+}
+
+/** Marker file name to track which provider last used a profile. */
+const PROFILE_PROVIDER_MARKER = '.mastra-provider';
+
+/**
+ * Check which provider last used a profile directory.
+ * Returns the provider name if the marker exists, undefined otherwise.
+ */
+export function getProfileProvider(profilePath: string): BrowserProvider | undefined {
+  const markerPath = join(profilePath, PROFILE_PROVIDER_MARKER);
+  if (!existsSync(markerPath)) {
+    return undefined;
+  }
+  try {
+    const content = readFileSync(markerPath, 'utf-8').trim();
+    if (content === 'stagehand' || content === 'agent-browser') {
+      return content;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Write the provider marker to a profile directory.
+ * Creates the directory if it doesn't exist.
+ */
+export function setProfileProvider(profilePath: string, provider: BrowserProvider): void {
+  const markerPath = join(profilePath, PROFILE_PROVIDER_MARKER);
+  if (!existsSync(profilePath)) {
+    mkdirSync(profilePath, { recursive: true });
+  }
+  writeFileSync(markerPath, provider, 'utf-8');
+}
+
+/**
+ * Check if a profile has a provider mismatch.
+ * Returns the existing provider if there's a mismatch, undefined otherwise.
+ */
+export function checkProfileProviderMismatch(
+  profilePath: string | undefined,
+  targetProvider: BrowserProvider,
+): BrowserProvider | undefined {
+  if (!profilePath) {
+    return undefined;
+  }
+  const existingProvider = getProfileProvider(profilePath);
+  if (existingProvider && existingProvider !== targetProvider) {
+    return existingProvider;
+  }
+  return undefined;
+}
+
+/**
+ * Create a browser instance from settings.
+ * Shared by startup (main.ts) and live reconfiguration (/browser command).
+ * Returns undefined if browser is disabled.
+ */
+export async function createBrowserFromSettings(settings: BrowserSettings): Promise<MastraBrowser | undefined> {
+  if (!settings.enabled) {
+    return undefined;
+  }
+
+  const { provider, headless, viewport, cdpUrl, profile, executablePath, stagehand, agentBrowser } = settings;
+
+  // Chrome only allows one process per profile directory, so force 'shared' scope
+  // when a profile is set. Otherwise use the user's setting (or provider default).
+  const scope = profile ? ('shared' as const) : settings.scope;
+
+  // Common launch options (no CDP)
+  const launchConfig = { headless, viewport, profile, executablePath, scope } as const;
+
+  if (provider === 'stagehand') {
+    const { StagehandBrowser } = await import('@mastra/stagehand');
+    const stagehandOpts = {
+      env: stagehand?.env ?? 'LOCAL',
+      apiKey: stagehand?.apiKey ?? process.env.BROWSERBASE_API_KEY,
+      projectId: stagehand?.projectId ?? process.env.BROWSERBASE_PROJECT_ID,
+      preserveUserDataDir: stagehand?.preserveUserDataDir,
+    };
+    return cdpUrl
+      ? new StagehandBrowser({ ...launchConfig, cdpUrl, scope: 'shared', ...stagehandOpts })
+      : new StagehandBrowser({ ...launchConfig, ...stagehandOpts });
+  } else if (provider === 'agent-browser') {
+    const { AgentBrowser } = await import('@mastra/agent-browser');
+    return cdpUrl
+      ? new AgentBrowser({ ...launchConfig, cdpUrl, scope: 'shared', storageState: agentBrowser?.storageState })
+      : new AgentBrowser({ ...launchConfig, storageState: agentBrowser?.storageState, scope });
+  }
+
+  throw new Error(`Unsupported browser provider: ${provider}`);
 }

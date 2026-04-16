@@ -3,10 +3,30 @@
   "extends": ["//"],
   "tasks": {
     "build": {
+      "inputs": [
+        "src/**",
+        "tsup.config.ts",
+        "tsconfig.json",
+        "package.json",
+        "!**/*.md",
+        "!**/*.test.ts",
+        "!**/*.spec.ts",
+        "!**/__tests__/**"
+      ],
       "outputs": ["dist/**", "!dist/docs/**"],
       "dependsOn": ["^build"]
     },
     "build:cli": {
+      "inputs": [
+        "src/**",
+        "tsup.config.ts",
+        "tsconfig.json",
+        "package.json",
+        "!**/*.md",
+        "!**/*.test.ts",
+        "!**/*.spec.ts",
+        "!**/__tests__/**"
+      ],
       "outputs": ["dist/**", "!dist/docs/**"],
       "dependsOn": ["^build"]
     },

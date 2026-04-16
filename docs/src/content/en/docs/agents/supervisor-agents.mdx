@@ -1,6 +1,6 @@
 ---
 title: "Supervisor agents | Agents"
-description: Learn how to coordinate multiple agents using the supervisor pattern with delegation hooks, iteration monitoring, message filtering, and task completion scoring.
+description: Learn how to coordinate multiple agents with delegation hooks, iteration monitoring, message filtering, and task completion scoring.
 packages:
   - "@mastra/core"
   - "@mastra/memory"
@@ -8,7 +8,9 @@ packages:
 
 # Supervisor agents
 
-A supervisor agent coordinates multiple subagents using `agent.stream()` or `agent.generate()`. You configure subagents on the supervisor's `agents` property, and the supervisor uses its instructions and each subagent's `description` to decide when and how to delegate tasks.
+**Added in:** `@mastra/core@1.8.0`
+
+A supervisor agent coordinates multiple subagents using [`Agent.stream()`](/reference/streaming/agents/stream) or [`Agent.generate()`](/reference/agents/generate). You configure subagents on the supervisor's `agents` property, and the supervisor uses its instructions and each subagent's `description` to decide when and how to delegate tasks.
 
 ## When to use supervisor agents
 
@@ -20,7 +22,13 @@ Common use cases:
 - Multi-step tasks that need different expertise at each stage
 - Tasks where you need fine-grained control over delegation behavior
 
-## Quick start
+:::note
+
+Supervisor agents are one approach to building multi-agent systems in Mastra. For other patterns, read the [conceptual overview](/guides/concepts/multi-agent-systems).
+
+:::
+
+## Quickstart
 
 Define subagents with clear descriptions, then create a supervisor agent that references them:
 
@@ -33,14 +41,14 @@ const researchAgent = new Agent({
   id: 'research-agent',
   // highlight-next-line
   description: 'Gathers factual information and returns bullet-point summaries.',
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5-mini',
 })
 
 const writingAgent = new Agent({
   id: 'writing-agent',
   // highlight-next-line
   description: 'Transforms research into well-structured articles.',
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5-mini',
 })
 
 // highlight-start
@@ -48,7 +56,7 @@ const supervisor = new Agent({
   id: 'supervisor',
   instructions: `You coordinate research and writing using specialized agents.
     Delegate to research-agent for facts, then writing-agent for content.`,
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   agents: { researchAgent, writingAgent },
   memory: new Memory({
     storage: new LibSQLStore({ id: 'storage', url: 'file:mastra.db' }),
@@ -73,10 +81,10 @@ Delegation hooks let you intercept, modify, or reject delegations as they happen
 
 Called before the supervisor delegates to a subagent. Return an object to control the delegation:
 
-- `proceed: true` — allow the delegation (default behavior)
-- `proceed: false` — reject the delegation with a `rejectionReason`
-- `modifiedPrompt` — rewrite the prompt sent to the subagent
-- `modifiedMaxSteps` — limit the subagent's iteration count
+- `proceed: true`: Allow the delegation (default behavior)
+- `proceed: false`: Reject the delegation with a `rejectionReason`
+- `modifiedPrompt`: Rewrite the prompt sent to the subagent
+- `modifiedMaxSteps`: Limit the subagent's iteration count
 
 ```typescript title="src/mastra/agents/supervisor.ts"
 const stream = await supervisor.stream('Research AI trends', {
@@ -120,8 +128,8 @@ The `context` object includes:
 
 Called after a delegation finishes. Use it to inspect results, provide feedback, or stop execution:
 
-- `context.bail()` — stop the supervisor loop immediately
-- Return `{ feedback: '...' }` — add feedback that gets saved to the supervisor's memory and is visible to subsequent iterations
+- `context.bail()`: Stop the supervisor loop immediately
+- Return `{ feedback: '...' }`: Add feedback that gets saved to the supervisor's memory and is visible to subsequent iterations
 
 ```typescript title="src/mastra/agents/supervisor.ts"
 const stream = await supervisor.stream('Research AI trends', {
@@ -208,15 +216,21 @@ Return `{ continue: true }` to keep iterating, or `{ continue: false }` to stop.
 
 ## Memory isolation
 
-The supervisor pattern implements memory isolation — subagents receive the full conversation context for better decision-making, but only their specific delegation prompt and response are saved to their memory.
+Supervisor agents implement memory isolation. Subagents receive the full conversation context for better decision-making, but only their specific delegation prompt and response are saved to their memory.
 
 How it works:
 
-1. **Full context forwarded** — When the supervisor delegates, the subagent receives all messages from the supervisor's conversation
-1. **Scoped memory saves** — Only the delegation prompt and the subagent's response are saved to the subagent's memory
-1. **Fresh thread per invocation** — Each delegation uses a unique thread ID, ensuring clean separation
+1. **Full context forwarded**: When the supervisor delegates, the subagent receives all messages from the supervisor's conversation
+1. **Scoped memory saves**: Only the delegation prompt and the subagent's response are saved to the subagent's memory
+1. **Fresh thread per invocation**: Each delegation uses a unique thread ID, ensuring clean separation
 
 This ensures subagents have the context they need without cluttering their memory with the entire supervisor conversation.
+
+:::note
+
+Visit [memory in multi-agent systems](/docs/memory/overview#memory-in-multi-agent-systems) for more details.
+
+:::
 
 ## Tool approval propagation
 
@@ -308,9 +322,9 @@ Success criteria:
 
 ## Related
 
-- [Agent Networks](./networks)
-- [Migration: .network() to Supervisor Pattern](/guides/migrations/network-to-supervisor)
-- [Guide: Research Coordinator](/guides/guide/research-coordinator)
-- [Agent.stream() Reference](/reference/streaming/agents/stream)
-- [Agent.generate() Reference](/reference/agents/generate)
-- [Agent Approval](./agent-approval)
+- [Guide: Research coordinator](/guides/guide/research-coordinator)
+- [Agent.stream() reference](/reference/streaming/agents/stream)
+- [Agent.generate() reference](/reference/agents/generate)
+- [Agent approval](./agent-approval)
+- [Memory in multi-agent systems](/docs/memory/overview#memory-in-multi-agent-systems)
+- [Concept: Multi-agent systems](/guides/concepts/multi-agent-systems)

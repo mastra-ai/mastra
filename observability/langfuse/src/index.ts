@@ -2,7 +2,7 @@
  * Langfuse Observability Provider for Mastra
  *
  * This package provides Langfuse-specific observability features for Mastra applications.
- * Currently includes tracing support with plans for additional observability features.
+ * Uses the official Langfuse v5 SDK (@langfuse/otel + @langfuse/client) for full feature support.
  */
 
 // Tracing

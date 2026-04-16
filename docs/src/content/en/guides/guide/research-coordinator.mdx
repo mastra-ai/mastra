@@ -1,14 +1,14 @@
 ---
-title: "Guide: Building a research coordinator with supervisor pattern"
+title: "Guide: Build a research coordinator with supervisor agents"
 description: Build a research coordinator that orchestrates multiple specialized agents to research topics and produce comprehensive reports.
 ---
 
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
-# Building a research coordinator with supervisor pattern
+# Build a research coordinator with supervisor agents
 
-In this guide, you'll build a research coordinator that orchestrates multiple specialized agents using the supervisor pattern. The coordinator will delegate research tasks to a research agent and writing tasks to a writing agent, then synthesize the results into a comprehensive report.
+In this guide, you'll build a research coordinator that orchestrates multiple specialized agents using supervisor agents. The coordinator will delegate research tasks to a research agent and writing tasks to a writing agent, then synthesize the results into a comprehensive report.
 
 You'll learn how to set up subagents with clear roles, configure a supervisor agent to coordinate them, use delegation hooks to control execution, and validate task completion with scorers.
 
@@ -102,7 +102,7 @@ Success criteria:
 - Information is accurate and well-sourced
 - Final output is well-formatted and complete
 - If anything is missing or uncertain, continue gathering information`,
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   agents: {
     researchAgent,
     writingAgent,
@@ -279,7 +279,7 @@ Success criteria:
 - Information is accurate and well-sourced
 - Final output is well-formatted and complete
 - If anything is missing or uncertain, continue gathering information`,
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   agents: {
     researchAgent,
     writingAgent,

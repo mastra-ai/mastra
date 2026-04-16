@@ -1,6 +1,6 @@
-import type { JsonSchema, JsonSchemaProperty } from '@/lib/json-schema';
 import type { SchemaField, FieldType } from './types';
 import { createField } from './types';
+import type { JsonSchema, JsonSchemaProperty } from '@/lib/json-schema';
 
 function fieldTypeToJSONSchemaType(type: FieldType): string {
   switch (type) {

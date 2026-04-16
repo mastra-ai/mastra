@@ -1,15 +1,15 @@
-import * as React from 'react';
 import { Plus, X, Component } from 'lucide-react';
+import * as React from 'react';
 
-import { cn } from '@/lib/utils';
 import type { Rule, RuleGroup, RuleGroupDepth1 } from '../types';
 import { isRule, createDefaultRule, createDefaultRuleGroup } from '../utils';
 
 import { RuleRow } from './rule-row';
 import type { RuleBuilderProps, RuleGroupViewProps } from './types';
-import { Icon } from '@/ds/icons';
 import { Button } from '@/ds/components/Button';
 import { IconButton } from '@/ds/components/IconButton';
+import { Icon } from '@/ds/icons';
+import { cn } from '@/lib/utils';
 
 const DEFAULT_MAX_DEPTH = 3;
 

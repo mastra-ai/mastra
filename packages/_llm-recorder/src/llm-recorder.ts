@@ -126,6 +126,15 @@ export function getLLMTestMode(): LLMTestMode {
 /**
  * Recorded request/response pair
  */
+export interface LLMBinaryArtifact {
+  /** Relative path from recordingsDir to the stored artifact */
+  path: string;
+  /** MIME type of the binary payload */
+  contentType: string;
+  /** Byte length of the payload */
+  size: number;
+}
+
 export interface LLMRecording {
   /** Unique hash of the request for matching */
   hash: string;
@@ -135,6 +144,8 @@ export interface LLMRecording {
     method: string;
     body: unknown;
     timestamp: number;
+    /** Optional binary request payload stored as a sidecar artifact */
+    binaryArtifact?: LLMBinaryArtifact;
   };
   /** Response details */
   response: {
@@ -143,6 +154,8 @@ export interface LLMRecording {
     headers: Record<string, string>;
     /** For non-streaming responses - parsed JSON or text */
     body?: unknown;
+    /** Optional binary response payload stored as a sidecar artifact */
+    binaryArtifact?: LLMBinaryArtifact;
     /** For streaming responses - individual chunks */
     chunks?: string[];
     /** Timing between chunks in ms */
@@ -266,6 +279,16 @@ export interface LLMRecorderOptions {
    */
   debug?: boolean;
   /**
+   * When true, only accept exact hash matches during replay.
+   * Disables fuzzy/similarity matching.
+   */
+  exactMatch?: boolean;
+  /**
+   * Override the test mode instead of reading from `LLM_TEST_MODE` env var.
+   * Useful for tests that must always replay regardless of environment.
+   */
+  mode?: LLMTestMode;
+  /**
    * Additional metadata context to include in the recording file.
    * Automatically populated by `createLLMMock` but can be set manually.
    */
@@ -288,6 +311,8 @@ export interface LLMRecorderInstance {
   stop(): void;
   /** Save recordings to disk (only in record mode) */
   save(): Promise<void>;
+  /** Reset fuzzy match tracking so recordings can be reused across tests */
+  resetFuzzyMatches(): void;
   /** Current test mode */
   mode: LLMTestMode;
   /** Whether we're in record mode (legacy, use .mode instead) */
@@ -343,7 +368,9 @@ function relativizeTestFile(filepath: string): string {
  * Deep sort object keys for stable serialization
  */
 function stableSortKeys(value: unknown): unknown {
+  if (typeof value === 'string') return canonicalizeISODateString(value);
   if (value === null || typeof value !== 'object') return value;
+  if (value instanceof Date) return value.toISOString();
   if (Array.isArray(value)) return value.map(stableSortKeys);
   const sorted: Record<string, unknown> = {};
   for (const key of Object.keys(value as Record<string, unknown>).sort()) {
@@ -352,12 +379,70 @@ function stableSortKeys(value: unknown): unknown {
   return sorted;
 }
 
+function canonicalizeISODateString(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value)) return value;
+  return new Date(value).toISOString();
+}
+
+interface ParsedRequestBody {
+  value: unknown;
+  binary?: {
+    bytes: Uint8Array;
+    contentType: string;
+  };
+}
+
+/**
+ * Parse request payload into a JSON/text value or binary bytes.
+ */
+async function parseRequestBody(request: Request): Promise<ParsedRequestBody> {
+  const contentType = request.headers.get('content-type')?.toLowerCase() || '';
+  const cloned = request.clone();
+
+  if (contentType.includes('application/json') || contentType.includes('+json')) {
+    const json = await cloned.json().catch(() => ({}));
+    return { value: json };
+  }
+
+  if (contentType.startsWith('text/')) {
+    const text = await cloned.text().catch(() => '');
+    return { value: text };
+  }
+
+  const buffer = await cloned.arrayBuffer().catch(() => new ArrayBuffer(0));
+  const bytes = new Uint8Array(buffer);
+  if (bytes.length === 0) {
+    return { value: {} };
+  }
+
+  const digest = crypto.createHash('md5').update(bytes).digest('hex').slice(0, 16);
+
+  return {
+    value: {
+      __binary: true,
+      contentType: contentType || 'application/octet-stream',
+      size: bytes.length,
+      digest,
+    },
+    binary: {
+      bytes,
+      contentType: contentType || 'application/octet-stream',
+    },
+  };
+}
+
 /**
  * Serialize request content for hashing and fuzzy matching.
  */
+function normalizeRequestBody(body: unknown): unknown {
+  if (typeof body === 'string') return canonicalizeISODateString(body);
+  if (body !== null && typeof body === 'object') return stableSortKeys(body);
+  return body;
+}
+
 function serializeRequestContent(url: string, body: unknown): string {
-  const normalizedBody = typeof body === 'object' ? JSON.stringify(stableSortKeys(body)) : String(body);
-  return `${url}:${normalizedBody}`;
+  const normalizedBody = normalizeRequestBody(body);
+  return `${url}:${typeof normalizedBody === 'string' ? normalizedBody : JSON.stringify(normalizedBody)}`;
 }
 
 /**
@@ -386,6 +471,45 @@ function filterHeaders(headers: Headers): Record<string, string> {
     }
   });
   return filtered;
+}
+
+function writeBinaryArtifact(params: {
+  recordingsDir: string;
+  hash: string;
+  kind: 'request' | 'response';
+  contentType: string;
+  bytes: Uint8Array;
+}): LLMBinaryArtifact {
+  fs.mkdirSync(params.recordingsDir, { recursive: true });
+
+  const ext = params.contentType.includes('mpeg')
+    ? 'mp3'
+    : params.contentType.includes('wav')
+      ? 'wav'
+      : params.contentType.includes('ogg')
+        ? 'ogg'
+        : params.contentType.includes('webm')
+          ? 'webm'
+          : 'bin';
+
+  const payloadDigest = crypto.createHash('md5').update(params.bytes).digest('hex').slice(0, 12);
+  const fileName = `${params.hash}-${params.kind}-${payloadDigest}.${ext}`;
+  const absolutePath = path.join(params.recordingsDir, fileName);
+  fs.writeFileSync(absolutePath, Buffer.from(params.bytes));
+  return {
+    path: fileName,
+    contentType: params.contentType,
+    size: params.bytes.byteLength,
+  };
+}
+
+function readBinaryArtifact(recordingsDir: string, artifact: LLMBinaryArtifact): Uint8Array {
+  const baseDir = path.resolve(recordingsDir);
+  const absolutePath = path.resolve(baseDir, artifact.path);
+  if (!absolutePath.startsWith(`${baseDir}${path.sep}`)) {
+    throw new Error(`[llm-recorder] Invalid binary artifact path: ${artifact.path}`);
+  }
+  return new Uint8Array(fs.readFileSync(absolutePath));
 }
 
 /**
@@ -472,8 +596,21 @@ const SIMILARITY_THRESHOLD = 0.6;
  * The fuzzy fallback handles cases where the request body changed slightly
  * between test runs (e.g. different prompt wording, extra metadata fields)
  * but the intent is clearly the same recording.
+ *
+ * `usedHashes` tracks recordings already consumed by **binary** fuzzy matches
+ * so that multiple similar requests (e.g. audio transcription calls that all
+ * serialize to near-identical strings) don't all resolve to the same recording.
+ * It is only applied to binary request matching — non-binary recordings are
+ * intentionally reusable across tests (e.g. v1/v2 model variants sharing one
+ * recording).  Exact hash matches are always exempt.
  */
-function findRecording(recordings: LLMRecording[], hash: string, url: string, body: unknown): LLMRecording | undefined {
+function findRecording(
+  recordings: LLMRecording[],
+  hash: string,
+  url: string,
+  body: unknown,
+  usedHashes?: Set<string>,
+): LLMRecording | undefined {
   // 1. Exact hash match (fast path)
   const exact = recordings.find(r => r.hash === hash);
   if (exact) {
@@ -484,9 +621,55 @@ function findRecording(recordings: LLMRecording[], hash: string, url: string, bo
     return undefined;
   }
 
-  // 2. Fuzzy match via string similarity on serialized request content.
-  //    Prefer recordings that match the request URL to avoid cross-API mismatches
-  //    (e.g. /v1/chat/completions vs /v1/responses).
+  // 2. Fuzzy match fallback.
+  //    Skip recordings already consumed by a previous fuzzy match.
+
+  // For binary requests, string similarity is unreliable because the serialized
+  // form mainly differs in the random multipart boundary and binary digest, making
+  // all candidates score nearly identically.  Instead, match by body size proximity
+  // (replayed audio is deterministic so sizes should be very close).
+  const isBinary = typeof body === 'object' && body !== null && (body as Record<string, unknown>).__binary === true;
+
+  if (isBinary) {
+    const incomingSize = (body as Record<string, unknown>).size as number;
+    let bestIndex: number | undefined;
+    let bestSizeDiff = Infinity;
+
+    for (let i = 0; i < recordings.length; i++) {
+      if (usedHashes?.has(recordings[i]!.hash)) continue;
+      if (recordings[i]!.request.url !== url) continue;
+
+      const recBody = recordings[i]!.request.body as Record<string, unknown> | undefined;
+      if (!recBody?.__binary) continue;
+
+      const recSize = recBody.size as number;
+      const diff = Math.abs(incomingSize - recSize);
+
+      // Reject candidates whose size diverges too much — the same TTS output
+      // varies by only a few bytes across runs, so a 10% relative tolerance
+      // is generous while still preventing clearly-wrong matches.
+      const maxSize = Math.max(incomingSize, recSize) || 1;
+      if (diff / maxSize > 0.1) continue;
+
+      if (diff < bestSizeDiff) {
+        bestSizeDiff = diff;
+        bestIndex = i;
+      }
+    }
+
+    if (bestIndex != null) {
+      usedHashes?.add(recordings[bestIndex]!.hash);
+      return recordings[bestIndex]!;
+    }
+    // Fall through to string similarity if no binary match found
+  }
+
+  // For non-binary requests, use string similarity on serialized request content.
+  // Prefer recordings that match the request URL to avoid cross-API mismatches
+  // (e.g. /v1/chat/completions vs /v1/responses).
+  //
+  // NOTE: usedHashes is NOT applied here.  Non-binary recordings are intentionally
+  // reusable across tests — e.g. v1 and v2 model variants share the same recording.
   const incoming = serializeRequestContent(url, body);
   let bestRating = -1;
   let bestIndex = -1;
@@ -527,7 +710,7 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
   const recordingExists = fs.existsSync(recordingPath);
 
   // Determine mode
-  let mode = getLLMTestMode();
+  let mode = options.mode ?? getLLMTestMode();
 
   // Force record if explicitly requested
   if (options.forceRecord) {
@@ -597,12 +780,16 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
       async save() {
         // no-op
       },
+      resetFuzzyMatches() {
+        // no-op in live mode
+      },
     };
     return instance;
   }
 
   const recordings: LLMRecording[] = [];
   const isRecordMode = mode === 'record';
+  const fuzzyUsedHashes = new Set<string>();
   let saved = false;
 
   // Create handlers for each LLM API host (or a filtered subset)
@@ -611,10 +798,8 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
   const handlers = interceptHosts.flatMap(baseUrl => [
     http.post(`${baseUrl}/*`, async ({ request }) => {
       let url = request.url;
-      let body: unknown = await request
-        .clone()
-        .json()
-        .catch(() => ({}));
+      const parsedRequest = await parseRequestBody(request);
+      const body = parsedRequest.value;
 
       // Extract model from request body for debug logging
       const model =
@@ -641,10 +826,25 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
 
           if (isStreaming) {
             const { chunks, timings, headers } = await captureStreamingResponse(realResponse.clone());
+            const requestBinaryArtifact = parsedRequest.binary
+              ? writeBinaryArtifact({
+                  recordingsDir,
+                  hash,
+                  kind: 'request',
+                  contentType: parsedRequest.binary.contentType,
+                  bytes: parsedRequest.binary.bytes,
+                })
+              : undefined;
 
             recordings.push({
               hash,
-              request: { url, method: 'POST', body, timestamp: currentDate },
+              request: {
+                url,
+                method: 'POST',
+                body,
+                timestamp: currentDate,
+                ...(requestBinaryArtifact ? { binaryArtifact: requestBinaryArtifact } : {}),
+              },
               response: {
                 status: realResponse.status,
                 statusText: realResponse.statusText,
@@ -657,29 +857,76 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
 
             return createStreamingResponse(recordings[recordings.length - 1]!, options);
           } else {
-            const responseText = await realResponse.text();
-            let responseBody: unknown;
-            try {
-              responseBody = JSON.parse(responseText);
-            } catch {
-              responseBody = responseText;
-            }
-
             const headers = filterHeaders(realResponse.headers);
+            const responseContentType = realResponse.headers.get('content-type')?.toLowerCase() || '';
+            const requestBinaryArtifact = parsedRequest.binary
+              ? writeBinaryArtifact({
+                  recordingsDir,
+                  hash,
+                  kind: 'request',
+                  contentType: parsedRequest.binary.contentType,
+                  bytes: parsedRequest.binary.bytes,
+                })
+              : undefined;
+
+            let responseBody: unknown;
+            let responseBinaryArtifact: LLMBinaryArtifact | undefined;
+
+            if (responseContentType.includes('application/json') || responseContentType.includes('+json')) {
+              const responseText = await realResponse.text();
+              try {
+                responseBody = JSON.parse(responseText);
+              } catch {
+                responseBody = responseText;
+              }
+            } else if (responseContentType.startsWith('text/')) {
+              responseBody = await realResponse.text();
+            } else {
+              const responseBuffer = await realResponse.arrayBuffer();
+              const responseBytes = new Uint8Array(responseBuffer);
+              responseBinaryArtifact = writeBinaryArtifact({
+                recordingsDir,
+                hash,
+                kind: 'response',
+                contentType: responseContentType || 'application/octet-stream',
+                bytes: responseBytes,
+              });
+              responseBody = {
+                __binary: true,
+                contentType: responseBinaryArtifact.contentType,
+                size: responseBinaryArtifact.size,
+              };
+            }
 
             recordings.push({
               hash,
-              request: { url, method: 'POST', body, timestamp: currentDate },
+              request: {
+                url,
+                method: 'POST',
+                body,
+                timestamp: currentDate,
+                ...(requestBinaryArtifact ? { binaryArtifact: requestBinaryArtifact } : {}),
+              },
               response: {
                 status: realResponse.status,
                 statusText: realResponse.statusText,
                 headers,
                 body: responseBody,
+                ...(responseBinaryArtifact ? { binaryArtifact: responseBinaryArtifact } : {}),
                 isStreaming: false,
               },
             });
 
-            return new HttpResponse(JSON.stringify(responseBody), {
+            if (responseBinaryArtifact) {
+              return new HttpResponse(readBinaryArtifact(recordingsDir, responseBinaryArtifact), {
+                status: realResponse.status,
+                statusText: realResponse.statusText,
+                headers,
+              });
+            }
+
+            const responseText = typeof responseBody === 'string' ? responseBody : JSON.stringify(responseBody);
+            return new HttpResponse(responseText, {
               status: realResponse.status,
               statusText: realResponse.statusText,
               headers,
@@ -696,7 +943,7 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
           console.log(`[llm-recorder]   Available hashes: ${savedRecordings.map(r => r.hash).join(', ')}`);
         }
 
-        const recording = findRecording(savedRecordings, hash, url, body);
+        const recording = findRecording(savedRecordings, hash, url, body, fuzzyUsedHashes);
 
         if (!recording) {
           console.error(`[llm-recorder] No recording found for: ${url}${model ? ` (model: ${model})` : ''}`);
@@ -724,7 +971,10 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
           const transformedReqBody = options.transformRequest
             ? options.transformRequest({ url, body: recording.request.body }).body
             : recording.request.body;
-          const changes = diffJson(transformedReqBody!, transformedBody ?? {});
+          const changes = diffJson(
+            normalizeRequestBody(transformedReqBody)!,
+            normalizeRequestBody(transformedBody) ?? {},
+          );
           const formatted = changes
             .map(part => {
               const prefix = part.added ? '+' : part.removed ? '-' : ' ';
@@ -736,11 +986,26 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
             })
             .join('\n');
           console.warn(`[llm-recorder] Diff (recorded vs actual):\n${formatted}`);
+
+          if (options.exactMatch) {
+            throw new Error(
+              `No exact match for hash ${hash}, using fuzzy match (recorded hash: ${recording.hash}). ` +
+                `Consider re-recording with UPDATE_RECORDINGS=true.`,
+            );
+          }
         }
 
         if (recording.response.isStreaming) {
           return createStreamingResponse(recording, options);
         } else {
+          if (recording.response.binaryArtifact) {
+            return new HttpResponse(readBinaryArtifact(recordingsDir, recording.response.binaryArtifact), {
+              status: recording.response.status,
+              statusText: recording.response.statusText,
+              headers: recording.response.headers,
+            });
+          }
+
           const body =
             typeof recording.response.body === 'string'
               ? recording.response.body
@@ -829,6 +1094,10 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
           (deduped > 0 ? ` (${deduped} duplicates removed)` : ''),
       );
     },
+
+    resetFuzzyMatches() {
+      fuzzyUsedHashes.clear();
+    },
   };
 
   return instance;
@@ -854,6 +1123,10 @@ export function useLLMRecording(name: string, options: Omit<LLMRecorderOptions, 
 
   beforeAll(() => {
     recorder.start();
+  });
+
+  beforeEach(() => {
+    recorder.resetFuzzyMatches();
   });
 
   afterAll(async () => {

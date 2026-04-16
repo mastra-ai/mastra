@@ -416,6 +416,7 @@ export class Workspace<
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
   private _lsp?: LSPManager;
+  private _logger?: IMastraLogger;
 
   constructor(config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>) {
     this.id = config.id ?? this.generateId();
@@ -615,7 +616,7 @@ export class Workspace<
    * @example
    * ```typescript
    * const skills = await workspace.skills?.list();
-   * const skill = await workspace.skills?.get('brand-guidelines');
+   * const skill = await workspace.skills?.get('skills/brand-guidelines');
    * const results = await workspace.skills?.search('brand colors');
    * ```
    */
@@ -791,14 +792,18 @@ export class Workspace<
    * Index a single file for search. Skips files that can't be read as text.
    */
   private async indexFileForSearch(filePath: string): Promise<void> {
+    let content: string;
     try {
-      const content = await this._fs!.readFile(filePath, { encoding: 'utf-8' });
-      await this._searchEngine!.index({
-        id: filePath,
-        content: content as string,
-      });
+      content = (await this._fs!.readFile(filePath, { encoding: 'utf-8' })) as string;
     } catch {
-      // Skip files that can't be read as text
+      // Skip files that can't be read as text (e.g. binary files, invalid UTF-8)
+      return;
+    }
+
+    try {
+      await this._searchEngine!.index({ id: filePath, content });
+    } catch (error) {
+      this._logger?.warn(`Failed to index file "${filePath}" for search`, { error });
     }
   }
 
@@ -1038,6 +1043,8 @@ export class Workspace<
    * @internal
    */
   __setLogger(logger: IMastraLogger): void {
+    this._logger = logger;
+
     // Propagate logger to filesystem provider if it extends MastraFilesystem
     if (this._fs instanceof MastraFilesystem) {
       this._fs.__setLogger(logger);

@@ -5,7 +5,7 @@ import {
   MockLanguageModelV3,
 } from '@internal/ai-v6/test';
 import { describe, expect, it } from 'vitest';
-import z from 'zod';
+import { z } from 'zod/v4';
 import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 import { getSingleDummyResponseModel } from './mock-model';

@@ -181,8 +181,9 @@ function createMockFilesystem(
 // Mock Skills Factory
 // =============================================================================
 
-interface SkillSearchResult {
+interface MockSkillSearchResult {
   skillName: string;
+  skillPath: string;
   source: string;
   content: string;
   score: number;
@@ -190,6 +191,7 @@ interface SkillSearchResult {
 
 /**
  * Creates mock skills implementation for testing.
+ * skillsData map is keyed by skill path.
  */
 function createMockSkills(skillsData: Map<string, any> = new Map()) {
   return {
@@ -198,11 +200,12 @@ function createMockSkills(skillsData: Map<string, any> = new Map()) {
         name: s.name,
         description: s.description,
         license: s.license,
+        path: s.path ?? s.name,
       })),
     ),
-    get: vi.fn(async (name: string) => skillsData.get(name) ?? null),
-    has: vi.fn(async (name: string) => skillsData.has(name)),
-    search: vi.fn(async (): Promise<SkillSearchResult[]> => []),
+    get: vi.fn(async (skillPath: string) => skillsData.get(skillPath) ?? null),
+    has: vi.fn(async (skillPath: string) => skillsData.has(skillPath)),
+    search: vi.fn(async (): Promise<MockSkillSearchResult[]> => []),
     listReferences: vi.fn(async () => ['api.md', 'guide.md']),
     getReference: vi.fn(async (): Promise<string | null> => 'Reference content'),
     listScripts: vi.fn(async () => []),
@@ -932,8 +935,8 @@ describe('Workspace Handlers', () => {
 
     it('should list all skills', async () => {
       const skillsData = new Map([
-        ['skill1', { name: 'skill1', description: 'Skill 1', license: 'MIT' }],
-        ['skill2', { name: 'skill2', description: 'Skill 2' }],
+        ['skills/skill1', { name: 'skill1', description: 'Skill 1', license: 'MIT', path: 'skills/skill1' }],
+        ['skills/skill2', { name: 'skill2', description: 'Skill 2', path: 'skills/skill2' }],
       ]);
       const skills = createMockSkills(skillsData);
       const workspace = createWorkspace('test-workspace', { skills });
@@ -947,6 +950,42 @@ describe('Workspace Handlers', () => {
       expect(result.isSkillsConfigured).toBe(true);
       expect(result.skills).toHaveLength(2);
       expect(result.skills[0].name).toBe('skill1');
+    });
+
+    it('should return same-named skills from different paths', async () => {
+      const skillsData = new Map([
+        [
+          'skills/brand-guidelines',
+          {
+            name: 'brand-guidelines',
+            description: 'Local brand skill',
+            path: 'skills/brand-guidelines',
+          },
+        ],
+        [
+          'node_modules/@myorg/skills/brand-guidelines',
+          {
+            name: 'brand-guidelines',
+            description: 'Package brand skill',
+            path: 'node_modules/@myorg/skills/brand-guidelines',
+          },
+        ],
+      ]);
+      const skills = createMockSkills(skillsData);
+      const workspace = createWorkspace('test-workspace', { skills });
+      const mastra = createMastra(workspace);
+
+      const result = await WORKSPACE_LIST_SKILLS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+      });
+
+      expect(result.skills).toHaveLength(2);
+      expect(result.skills.map(s => s.path).sort()).toEqual([
+        'node_modules/@myorg/skills/brand-guidelines',
+        'skills/brand-guidelines',
+      ]);
+      expect(result.skills.map(s => s.name)).toEqual(['brand-guidelines', 'brand-guidelines']);
     });
   });
 
@@ -975,6 +1014,33 @@ describe('Workspace Handlers', () => {
 
       expect(result.name).toBe('my-skill');
       expect(result.instructions).toBe('Do things');
+    });
+
+    it('should get skill details using path query param for disambiguation', async () => {
+      const skill = {
+        name: 'my-skill',
+        description: 'My skill',
+        instructions: 'Do things',
+        path: '/skills/my-skill',
+        source: { type: 'local', path: '/skills/my-skill' },
+        references: ['api.md'],
+        scripts: [],
+        assets: [],
+      };
+      const skillsData = new Map([['/skills/my-skill', skill]]);
+      const skills = createMockSkills(skillsData);
+      const workspace = createWorkspace('test-workspace', { skills });
+      const mastra = createMastra(workspace);
+
+      const result = await WORKSPACE_GET_SKILL_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+        skillName: 'my-skill',
+        path: '/skills/my-skill',
+      });
+
+      expect(result.name).toBe('my-skill');
+      expect(skills.get).toHaveBeenCalledWith('/skills/my-skill');
     });
 
     it('should throw 404 for non-existent skill', async () => {
@@ -1026,7 +1092,7 @@ describe('Workspace Handlers', () => {
 
   describe('WORKSPACE_LIST_SKILL_REFERENCES_ROUTE', () => {
     it('should list skill references', async () => {
-      const skillsData = new Map([['my-skill', { name: 'my-skill' }]]);
+      const skillsData = new Map([['my-skill', { name: 'my-skill', path: '/skills/my-skill' }]]);
       const skills = createMockSkills(skillsData);
       const workspace = createWorkspace('test-workspace', { skills });
       const mastra = createMastra(workspace);
@@ -1068,7 +1134,7 @@ describe('Workspace Handlers', () => {
 
   describe('WORKSPACE_GET_SKILL_REFERENCE_ROUTE', () => {
     it('should get reference content', async () => {
-      const skillsData = new Map([['my-skill', { name: 'my-skill' }]]);
+      const skillsData = new Map([['my-skill', { name: 'my-skill', path: '/skills/my-skill' }]]);
       const skills = createMockSkills(skillsData);
       const workspace = createWorkspace('test-workspace', { skills });
       const mastra = createMastra(workspace);
@@ -1085,7 +1151,7 @@ describe('Workspace Handlers', () => {
     });
 
     it('should throw 404 when reference not found', async () => {
-      const skillsData = new Map([['my-skill', { name: 'my-skill' }]]);
+      const skillsData = new Map([['my-skill', { name: 'my-skill', path: '/skills/my-skill' }]]);
       const skills = createMockSkills(skillsData);
       skills.getReference = vi.fn(async (): Promise<string | null> => null);
       const workspace = createWorkspace('test-workspace', { skills });
@@ -1131,7 +1197,7 @@ describe('Workspace Handlers', () => {
     it('should search skills', async () => {
       const skills = createMockSkills();
       skills.search = vi.fn(async () => [
-        { skillName: 'skill1', source: 'instructions', content: 'match', score: 0.9 },
+        { skillName: 'skill1', skillPath: 'skills/skill1', source: 'instructions', content: 'match', score: 0.9 },
       ]);
       const workspace = createWorkspace('test-workspace', { skills });
       const mastra = createMastra(workspace);
@@ -1146,6 +1212,7 @@ describe('Workspace Handlers', () => {
 
       expect(result.results).toHaveLength(1);
       expect(result.results[0].skillName).toBe('skill1');
+      expect(result.results[0].skillPath).toBe('skills/skill1');
     });
 
     it('should parse comma-separated skill names', async () => {
@@ -1177,7 +1244,9 @@ describe('Workspace Handlers', () => {
   // ===========================================================================
   describe('Dynamic Skills Context', () => {
     it('WORKSPACE_LIST_SKILLS_ROUTE should call maybeRefresh with requestContext', async () => {
-      const skillsData = new Map([['skill1', { name: 'skill1', description: 'Skill 1' }]]);
+      const skillsData = new Map([
+        ['skills/skill1', { name: 'skill1', description: 'Skill 1', path: 'skills/skill1' }],
+      ]);
       const skills = createMockSkills(skillsData);
       const workspace = createWorkspace('test-workspace', { skills });
       const mastra = createMastra(workspace);
@@ -1224,7 +1293,7 @@ describe('Workspace Handlers', () => {
     });
 
     it('WORKSPACE_LIST_SKILL_REFERENCES_ROUTE should call maybeRefresh with requestContext', async () => {
-      const skillsData = new Map([['my-skill', { name: 'my-skill' }]]);
+      const skillsData = new Map([['my-skill', { name: 'my-skill', path: '/skills/my-skill' }]]);
       const skills = createMockSkills(skillsData);
       const workspace = createWorkspace('test-workspace', { skills });
       const mastra = createMastra(workspace);
@@ -1239,11 +1308,11 @@ describe('Workspace Handlers', () => {
       });
 
       expect(skills.maybeRefresh).toHaveBeenCalledWith({ requestContext: mockRequestContext });
-      expect(skills.has).toHaveBeenCalledWith('my-skill');
+      expect(skills.get).toHaveBeenCalledWith('my-skill');
     });
 
     it('WORKSPACE_GET_SKILL_REFERENCE_ROUTE should call maybeRefresh with requestContext', async () => {
-      const skillsData = new Map([['my-skill', { name: 'my-skill' }]]);
+      const skillsData = new Map([['my-skill', { name: 'my-skill', path: '/skills/my-skill' }]]);
       const skills = createMockSkills(skillsData);
       const workspace = createWorkspace('test-workspace', { skills });
       const mastra = createMastra(workspace);
@@ -1284,7 +1353,9 @@ describe('Workspace Handlers', () => {
     });
 
     it('should handle undefined requestContext gracefully', async () => {
-      const skillsData = new Map([['skill1', { name: 'skill1', description: 'Skill 1' }]]);
+      const skillsData = new Map([
+        ['skills/skill1', { name: 'skill1', description: 'Skill 1', path: 'skills/skill1' }],
+      ]);
       const skills = createMockSkills(skillsData);
       const workspace = createWorkspace('test-workspace', { skills });
       const mastra = createMastra(workspace);

@@ -171,6 +171,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -180,6 +181,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Hello, world!",
                 "type": "text",
               },
@@ -191,6 +193,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Hello, world!",
                 "type": "text",
               },
@@ -202,6 +205,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -225,7 +229,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -237,6 +241,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
                 {
                   "content": [
                     {
+                      "providerOptions": undefined,
                       "text": "Hello, world!",
                       "type": "text",
                     },
@@ -284,6 +289,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -293,6 +299,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Hello, world!",
                 "type": "text",
               },
@@ -304,6 +311,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Hello, world!",
                 "type": "text",
               },
@@ -315,6 +323,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -338,7 +347,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -350,6 +359,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
                 {
                   "content": [
                     {
+                      "providerOptions": undefined,
                       "text": "Hello, world!",
                       "type": "text",
                     },
@@ -415,50 +425,74 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
   {
     "from": "AGENT",
     "payload": {
-      "id": "text-1",
-      "providerMetadata": undefined,
+      "error": {
+        "actual": [
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "assistant",
+          },
+          {
+            "content": [
+              {
+                "providerOptions": undefined,
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+        "expected": [
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "assistant",
+          },
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+        "message": "expected [ { role: 'user', …(1) }, …(2) ] to strictly equal [ { role: 'user', …(1) }, …(2) ]",
+        "operator": "deepStrictEqual",
+        "showDiff": true,
+      },
+      "type": "error",
     },
     "runId": "test-run-id",
-    "type": "text-start",
-  },
-  {
-    "from": "AGENT",
-    "payload": {
-      "id": "text-1",
-      "providerMetadata": undefined,
-      "text": "Hello",
-    },
-    "runId": "test-run-id",
-    "type": "text-delta",
-  },
-  {
-    "from": "AGENT",
-    "payload": {
-      "id": "text-1",
-      "providerMetadata": undefined,
-      "text": ", ",
-    },
-    "runId": "test-run-id",
-    "type": "text-delta",
-  },
-  {
-    "from": "AGENT",
-    "payload": {
-      "id": "text-1",
-      "providerMetadata": undefined,
-      "text": "world!",
-    },
-    "runId": "test-run-id",
-    "type": "text-delta",
-  },
-  {
-    "from": "AGENT",
-    "payload": {
-      "id": "text-1",
-      "type": "text-end",
-    },
-    "runId": "test-run-id",
-    "type": "text-end",
+    "type": "error",
   },
   {
     "from": "AGENT",
@@ -478,15 +512,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
           {
             "content": [
               {
-                "text": "Hello, world!",
-                "type": "text",
-              },
-            ],
-            "role": "assistant",
-          },
-          {
-            "content": [
-              {
                 "text": "test-input",
                 "type": "text",
               },
@@ -496,6 +521,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -503,21 +529,12 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
             "role": "user",
           },
         ],
-        "nonUser": [
-          {
-            "content": [
-              {
-                "text": "Hello, world!",
-                "type": "text",
-              },
-            ],
-            "role": "assistant",
-          },
-        ],
+        "nonUser": [],
         "user": [
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -528,64 +545,58 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
       },
       "metadata": {
         "headers": undefined,
-        "id": "response-id",
-        "modelId": "response-model-id",
+        "id": "id-1",
+        "modelId": "mock-model-id",
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
         "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:05.000Z,
+        "timestamp": 2024-01-01T00:00:00.000Z,
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
-            "finishReason": undefined,
+            "finishReason": "error",
             "providerMetadata": undefined,
             "request": {},
             "response": {
               "headers": undefined,
-              "id": "response-id",
-              "messages": [
-                {
-                  "content": [
-                    {
-                      "text": "Hello, world!",
-                      "type": "text",
-                    },
-                  ],
-                  "role": "assistant",
-                },
-              ],
-              "modelId": "response-model-id",
-              "timestamp": 1970-01-01T00:00:05.000Z,
+              "id": "id-1",
+              "messages": [],
+              "modelId": "mock-model-id",
+              "modelProvider": "mock-provider",
+              "modelVersion": "v2",
+              "timestamp": 2024-01-01T00:00:00.000Z,
             },
             "tripwire": undefined,
             "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
+              "inputTokens": undefined,
+              "outputTokens": undefined,
+              "totalTokens": undefined,
             },
             "warnings": [],
           },
         ],
-        "text": "Hello, world!",
+        "text": "",
         "toolCalls": [],
         "usage": {
-          "inputTokens": 3,
-          "outputTokens": 10,
-          "totalTokens": 13,
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0,
         },
       },
       "processorRetryCount": 0,
       "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
-        "reason": "stop",
-        "warnings": undefined,
+        "reason": "error",
+        "warnings": [],
       },
     },
     "runId": "test-run-id",
@@ -609,15 +620,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
           {
             "content": [
               {
-                "text": "Hello, world!",
-                "type": "text",
-              },
-            ],
-            "role": "assistant",
-          },
-          {
-            "content": [
-              {
                 "text": "test-input",
                 "type": "text",
               },
@@ -627,6 +629,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -634,21 +637,12 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
             "role": "user",
           },
         ],
-        "nonUser": [
-          {
-            "content": [
-              {
-                "text": "Hello, world!",
-                "type": "text",
-              },
-            ],
-            "role": "assistant",
-          },
-        ],
+        "nonUser": [],
         "user": [
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -659,64 +653,58 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
       },
       "metadata": {
         "headers": undefined,
-        "id": "response-id",
-        "modelId": "response-model-id",
+        "id": "id-1",
+        "modelId": "mock-model-id",
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
         "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:05.000Z,
+        "timestamp": 2024-01-01T00:00:00.000Z,
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
-            "finishReason": undefined,
+            "finishReason": "error",
             "providerMetadata": undefined,
             "request": {},
             "response": {
               "headers": undefined,
-              "id": "response-id",
-              "messages": [
-                {
-                  "content": [
-                    {
-                      "text": "Hello, world!",
-                      "type": "text",
-                    },
-                  ],
-                  "role": "assistant",
-                },
-              ],
-              "modelId": "response-model-id",
-              "timestamp": 1970-01-01T00:00:05.000Z,
+              "id": "id-1",
+              "messages": [],
+              "modelId": "mock-model-id",
+              "modelProvider": "mock-provider",
+              "modelVersion": "v2",
+              "timestamp": 2024-01-01T00:00:00.000Z,
             },
             "tripwire": undefined,
             "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
+              "inputTokens": undefined,
+              "outputTokens": undefined,
+              "totalTokens": undefined,
             },
             "warnings": [],
           },
         ],
-        "text": "Hello, world!",
+        "text": "",
         "toolCalls": [],
         "usage": {
-          "inputTokens": 3,
-          "outputTokens": 10,
-          "totalTokens": 13,
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0,
         },
       },
       "processorRetryCount": 0,
       "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
-        "reason": "stop",
-        "warnings": undefined,
+        "reason": "error",
+        "warnings": [],
       },
     },
     "runId": "test-run-id",
@@ -784,6 +772,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -859,6 +848,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -882,7 +872,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -898,6 +888,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
                         "value": "value",
                       },
                       "providerExecuted": undefined,
+                      "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -921,7 +912,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
             },
             "warnings": [],
           },
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -964,6 +955,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
                 {
                   "content": [
                     {
+                      "providerOptions": undefined,
                       "text": "Done",
                       "type": "text",
                     },
@@ -1059,6 +1051,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -1099,6 +1092,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Done",
                 "type": "text",
               },
@@ -1141,6 +1135,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Done",
                 "type": "text",
               },
@@ -1152,6 +1147,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -1175,7 +1171,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -1191,6 +1187,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
                         "value": "value",
                       },
                       "providerExecuted": undefined,
+                      "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -1214,7 +1211,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
             },
             "warnings": [],
           },
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -1257,6 +1254,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
                 {
                   "content": [
                     {
+                      "providerOptions": undefined,
                       "text": "Done",
                       "type": "text",
                     },
@@ -1304,6 +1302,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -1344,6 +1343,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Done",
                 "type": "text",
               },
@@ -1386,6 +1386,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Done",
                 "type": "text",
               },
@@ -1397,6 +1398,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -1420,7 +1422,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -1436,6 +1438,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
                         "value": "value",
                       },
                       "providerExecuted": undefined,
+                      "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -1459,7 +1462,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
             },
             "warnings": [],
           },
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -1502,6 +1505,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
                 {
                   "content": [
                     {
+                      "providerOptions": undefined,
                       "text": "Done",
                       "type": "text",
                     },
@@ -1621,6 +1625,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -1633,9 +1638,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                 "data": "data:text/plain;base64,Hello World",
                 "filename": undefined,
                 "mediaType": "text/plain",
+                "providerOptions": undefined,
                 "type": "file",
               },
               {
+                "providerOptions": undefined,
                 "text": "Hello!",
                 "type": "text",
               },
@@ -1643,6 +1650,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                 "data": "data:image/jpeg;base64,QkFVRw==",
                 "filename": undefined,
                 "mediaType": "image/jpeg",
+                "providerOptions": undefined,
                 "type": "file",
               },
             ],
@@ -1656,9 +1664,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                 "data": "data:text/plain;base64,Hello World",
                 "filename": undefined,
                 "mediaType": "text/plain",
+                "providerOptions": undefined,
                 "type": "file",
               },
               {
+                "providerOptions": undefined,
                 "text": "Hello!",
                 "type": "text",
               },
@@ -1666,6 +1676,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                 "data": "data:image/jpeg;base64,QkFVRw==",
                 "filename": undefined,
                 "mediaType": "image/jpeg",
+                "providerOptions": undefined,
                 "type": "file",
               },
             ],
@@ -1676,6 +1687,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -1699,7 +1711,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -1714,9 +1726,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                       "data": "data:text/plain;base64,Hello World",
                       "filename": undefined,
                       "mediaType": "text/plain",
+                      "providerOptions": undefined,
                       "type": "file",
                     },
                     {
+                      "providerOptions": undefined,
                       "text": "Hello!",
                       "type": "text",
                     },
@@ -1724,6 +1738,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                       "data": "data:image/jpeg;base64,QkFVRw==",
                       "filename": undefined,
                       "mediaType": "image/jpeg",
+                      "providerOptions": undefined,
                       "type": "file",
                     },
                   ],
@@ -1770,6 +1785,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -1782,9 +1798,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                 "data": "data:text/plain;base64,Hello World",
                 "filename": undefined,
                 "mediaType": "text/plain",
+                "providerOptions": undefined,
                 "type": "file",
               },
               {
+                "providerOptions": undefined,
                 "text": "Hello!",
                 "type": "text",
               },
@@ -1792,6 +1810,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                 "data": "data:image/jpeg;base64,QkFVRw==",
                 "filename": undefined,
                 "mediaType": "image/jpeg",
+                "providerOptions": undefined,
                 "type": "file",
               },
             ],
@@ -1805,9 +1824,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                 "data": "data:text/plain;base64,Hello World",
                 "filename": undefined,
                 "mediaType": "text/plain",
+                "providerOptions": undefined,
                 "type": "file",
               },
               {
+                "providerOptions": undefined,
                 "text": "Hello!",
                 "type": "text",
               },
@@ -1815,6 +1836,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                 "data": "data:image/jpeg;base64,QkFVRw==",
                 "filename": undefined,
                 "mediaType": "image/jpeg",
+                "providerOptions": undefined,
                 "type": "file",
               },
             ],
@@ -1825,6 +1847,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -1848,7 +1871,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -1863,9 +1886,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                       "data": "data:text/plain;base64,Hello World",
                       "filename": undefined,
                       "mediaType": "text/plain",
+                      "providerOptions": undefined,
                       "type": "file",
                     },
                     {
+                      "providerOptions": undefined,
                       "text": "Hello!",
                       "type": "text",
                     },
@@ -1873,6 +1898,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                       "data": "data:image/jpeg;base64,QkFVRw==",
                       "filename": undefined,
                       "mediaType": "image/jpeg",
+                      "providerOptions": undefined,
                       "type": "file",
                     },
                   ],
@@ -2199,6 +2225,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -2253,6 +2280,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
                 "type": "reasoning",
               },
               {
+                "providerOptions": undefined,
                 "text": "Hi there!",
                 "type": "text",
               },
@@ -2309,6 +2337,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
                 "type": "reasoning",
               },
               {
+                "providerOptions": undefined,
                 "text": "Hi there!",
                 "type": "text",
               },
@@ -2320,6 +2349,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -2343,7 +2373,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -2400,6 +2430,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
                       "type": "reasoning",
                     },
                     {
+                      "providerOptions": undefined,
                       "text": "Hi there!",
                       "type": "text",
                     },
@@ -2447,6 +2478,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -2501,6 +2533,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
                 "type": "reasoning",
               },
               {
+                "providerOptions": undefined,
                 "text": "Hi there!",
                 "type": "text",
               },
@@ -2557,6 +2590,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
                 "type": "reasoning",
               },
               {
+                "providerOptions": undefined,
                 "text": "Hi there!",
                 "type": "text",
               },
@@ -2568,6 +2602,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -2591,7 +2626,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -2648,6 +2683,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
                       "type": "reasoning",
                     },
                     {
+                      "providerOptions": undefined,
                       "text": "Hi there!",
                       "type": "text",
                     },
@@ -2783,6 +2819,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -2792,6 +2829,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Hello!",
                 "type": "text",
               },
@@ -2803,6 +2841,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Hello!",
                 "type": "text",
               },
@@ -2814,6 +2853,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -2837,7 +2877,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -2849,6 +2889,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
                 {
                   "content": [
                     {
+                      "providerOptions": undefined,
                       "text": "Hello!",
                       "type": "text",
                     },
@@ -2896,6 +2937,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -2905,6 +2947,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Hello!",
                 "type": "text",
               },
@@ -2916,6 +2959,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Hello!",
                 "type": "text",
               },
@@ -2927,6 +2971,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -2950,7 +2995,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -2962,6 +3007,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
                 {
                   "content": [
                     {
+                      "providerOptions": undefined,
                       "text": "Hello!",
                       "type": "text",
                     },
@@ -3027,50 +3073,38 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
   {
     "from": "AGENT",
     "payload": {
-      "id": "text-1",
-      "providerMetadata": undefined,
+      "error": {
+        "actual": [
+          {
+            "content": [
+              {
+                "providerOptions": undefined,
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+        "expected": [
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+        "message": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
+        "operator": "deepStrictEqual",
+        "showDiff": true,
+      },
+      "type": "error",
     },
     "runId": "test-run-id",
-    "type": "text-start",
-  },
-  {
-    "from": "AGENT",
-    "payload": {
-      "id": "text-1",
-      "providerMetadata": undefined,
-      "text": "Hello",
-    },
-    "runId": "test-run-id",
-    "type": "text-delta",
-  },
-  {
-    "from": "AGENT",
-    "payload": {
-      "id": "text-1",
-      "providerMetadata": undefined,
-      "text": ", ",
-    },
-    "runId": "test-run-id",
-    "type": "text-delta",
-  },
-  {
-    "from": "AGENT",
-    "payload": {
-      "id": "text-1",
-      "providerMetadata": undefined,
-      "text": "world!",
-    },
-    "runId": "test-run-id",
-    "type": "text-delta",
-  },
-  {
-    "from": "AGENT",
-    "payload": {
-      "id": "text-1",
-      "type": "text-end",
-    },
-    "runId": "test-run-id",
-    "type": "text-end",
+    "type": "error",
   },
   {
     "from": "AGENT",
@@ -3081,37 +3115,20 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
             ],
             "role": "user",
           },
-          {
-            "content": [
-              {
-                "text": "Hello, world!",
-                "type": "text",
-              },
-            ],
-            "role": "assistant",
-          },
         ],
-        "nonUser": [
-          {
-            "content": [
-              {
-                "text": "Hello, world!",
-                "type": "text",
-              },
-            ],
-            "role": "assistant",
-          },
-        ],
+        "nonUser": [],
         "user": [
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -3122,64 +3139,58 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
       },
       "metadata": {
         "headers": undefined,
-        "id": "response-id",
-        "modelId": "response-model-id",
+        "id": "id-1",
+        "modelId": "mock-model-id",
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
         "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:05.000Z,
+        "timestamp": 2024-01-01T00:00:00.000Z,
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
-            "finishReason": undefined,
+            "finishReason": "error",
             "providerMetadata": undefined,
             "request": {},
             "response": {
               "headers": undefined,
-              "id": "response-id",
-              "messages": [
-                {
-                  "content": [
-                    {
-                      "text": "Hello, world!",
-                      "type": "text",
-                    },
-                  ],
-                  "role": "assistant",
-                },
-              ],
-              "modelId": "response-model-id",
-              "timestamp": 1970-01-01T00:00:05.000Z,
+              "id": "id-1",
+              "messages": [],
+              "modelId": "mock-model-id",
+              "modelProvider": "mock-provider",
+              "modelVersion": "v2",
+              "timestamp": 2024-01-01T00:00:00.000Z,
             },
             "tripwire": undefined,
             "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
+              "inputTokens": undefined,
+              "outputTokens": undefined,
+              "totalTokens": undefined,
             },
             "warnings": [],
           },
         ],
-        "text": "Hello, world!",
+        "text": "",
         "toolCalls": [],
         "usage": {
-          "inputTokens": 3,
-          "outputTokens": 10,
-          "totalTokens": 13,
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0,
         },
       },
       "processorRetryCount": 0,
       "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
-        "reason": "stop",
-        "warnings": undefined,
+        "reason": "error",
+        "warnings": [],
       },
     },
     "runId": "test-run-id",
@@ -3194,37 +3205,20 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
             ],
             "role": "user",
           },
-          {
-            "content": [
-              {
-                "text": "Hello, world!",
-                "type": "text",
-              },
-            ],
-            "role": "assistant",
-          },
         ],
-        "nonUser": [
-          {
-            "content": [
-              {
-                "text": "Hello, world!",
-                "type": "text",
-              },
-            ],
-            "role": "assistant",
-          },
-        ],
+        "nonUser": [],
         "user": [
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -3235,64 +3229,58 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
       },
       "metadata": {
         "headers": undefined,
-        "id": "response-id",
-        "modelId": "response-model-id",
+        "id": "id-1",
+        "modelId": "mock-model-id",
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
         "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:05.000Z,
+        "timestamp": 2024-01-01T00:00:00.000Z,
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
-            "finishReason": undefined,
+            "finishReason": "error",
             "providerMetadata": undefined,
             "request": {},
             "response": {
               "headers": undefined,
-              "id": "response-id",
-              "messages": [
-                {
-                  "content": [
-                    {
-                      "text": "Hello, world!",
-                      "type": "text",
-                    },
-                  ],
-                  "role": "assistant",
-                },
-              ],
-              "modelId": "response-model-id",
-              "timestamp": 1970-01-01T00:00:05.000Z,
+              "id": "id-1",
+              "messages": [],
+              "modelId": "mock-model-id",
+              "modelProvider": "mock-provider",
+              "modelVersion": "v2",
+              "timestamp": 2024-01-01T00:00:00.000Z,
             },
             "tripwire": undefined,
             "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
+              "inputTokens": undefined,
+              "outputTokens": undefined,
+              "totalTokens": undefined,
             },
             "warnings": [],
           },
         ],
-        "text": "Hello, world!",
+        "text": "",
         "toolCalls": [],
         "usage": {
-          "inputTokens": 3,
-          "outputTokens": 10,
-          "totalTokens": 13,
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0,
         },
       },
       "processorRetryCount": 0,
       "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
-        "reason": "stop",
-        "warnings": undefined,
+        "reason": "error",
+        "warnings": [],
       },
     },
     "runId": "test-run-id",
@@ -3444,6 +3432,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -3457,6 +3446,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
                   "value": "Sparkle Day",
                 },
                 "providerExecuted": undefined,
+                "providerOptions": undefined,
                 "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
                 "toolName": "test-tool",
                 "type": "tool-call",
@@ -3477,6 +3467,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
                   "value": "Sparkle Day",
                 },
                 "providerExecuted": undefined,
+                "providerOptions": undefined,
                 "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
                 "toolName": "test-tool",
                 "type": "tool-call",
@@ -3493,6 +3484,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -3516,7 +3508,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -3532,6 +3524,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
                         "value": "Sparkle Day",
                       },
                       "providerExecuted": undefined,
+                      "providerOptions": undefined,
                       "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
                       "toolName": "test-tool",
                       "type": "tool-call",
@@ -3599,6 +3592,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -3612,6 +3606,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
                   "value": "Sparkle Day",
                 },
                 "providerExecuted": undefined,
+                "providerOptions": undefined,
                 "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
                 "toolName": "test-tool",
                 "type": "tool-call",
@@ -3632,6 +3627,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
                   "value": "Sparkle Day",
                 },
                 "providerExecuted": undefined,
+                "providerOptions": undefined,
                 "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
                 "toolName": "test-tool",
                 "type": "tool-call",
@@ -3648,6 +3644,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -3671,7 +3668,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -3687,6 +3684,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
                         "value": "Sparkle Day",
                       },
                       "providerExecuted": undefined,
+                      "providerOptions": undefined,
                       "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
                       "toolName": "test-tool",
                       "type": "tool-call",
@@ -3772,20 +3770,38 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
   {
     "from": "AGENT",
     "payload": {
-      "args": {
-        "value": "value",
+      "error": {
+        "actual": [
+          {
+            "content": [
+              {
+                "providerOptions": undefined,
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+        "expected": [
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+        "message": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
+        "operator": "deepStrictEqual",
+        "showDiff": true,
       },
-      "providerExecuted": undefined,
-      "providerMetadata": {
-        "testProvider": {
-          "signature": "sig",
-        },
-      },
-      "toolCallId": "call-1",
-      "toolName": "tool1",
+      "type": "error",
     },
     "runId": "test-run-id",
-    "type": "tool-call",
+    "type": "error",
   },
   {
     "from": "AGENT",
@@ -3796,65 +3812,20 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
             ],
             "role": "user",
           },
-          {
-            "content": [
-              {
-                "input": {
-                  "value": "value",
-                },
-                "providerExecuted": undefined,
-                "providerOptions": {
-                  "testProvider": {
-                    "signature": "sig",
-                  },
-                },
-                "toolCallId": "call-1",
-                "toolName": "tool1",
-                "type": "tool-call",
-              },
-            ],
-            "role": "assistant",
-          },
-          {
-            "content": [],
-            "role": "tool",
-          },
         ],
-        "nonUser": [
-          {
-            "content": [
-              {
-                "input": {
-                  "value": "value",
-                },
-                "providerExecuted": undefined,
-                "providerOptions": {
-                  "testProvider": {
-                    "signature": "sig",
-                  },
-                },
-                "toolCallId": "call-1",
-                "toolName": "tool1",
-                "type": "tool-call",
-              },
-            ],
-            "role": "assistant",
-          },
-          {
-            "content": [],
-            "role": "tool",
-          },
-        ],
+        "nonUser": [],
         "user": [
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -3865,92 +3836,58 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
       },
       "metadata": {
         "headers": undefined,
-        "id": "id-0",
+        "id": "id-1",
         "modelId": "mock-model-id",
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
         "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": 2024-01-01T00:00:00.000Z,
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
-            "finishReason": undefined,
+            "finishReason": "error",
             "providerMetadata": undefined,
             "request": {},
             "response": {
               "headers": undefined,
-              "id": "id-0",
-              "messages": [
-                {
-                  "content": [
-                    {
-                      "input": {
-                        "value": "value",
-                      },
-                      "providerExecuted": undefined,
-                      "providerOptions": {
-                        "testProvider": {
-                          "signature": "sig",
-                        },
-                      },
-                      "toolCallId": "call-1",
-                      "toolName": "tool1",
-                      "type": "tool-call",
-                    },
-                  ],
-                  "role": "assistant",
-                },
-                {
-                  "content": [],
-                  "role": "tool",
-                },
-              ],
+              "id": "id-1",
+              "messages": [],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "modelProvider": "mock-provider",
+              "modelVersion": "v2",
+              "timestamp": 2024-01-01T00:00:00.000Z,
             },
             "tripwire": undefined,
             "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
+              "inputTokens": undefined,
+              "outputTokens": undefined,
+              "totalTokens": undefined,
             },
             "warnings": [],
           },
         ],
         "text": "",
-        "toolCalls": [
-          {
-            "args": {
-              "value": "value",
-            },
-            "providerExecuted": undefined,
-            "providerMetadata": {
-              "testProvider": {
-                "signature": "sig",
-              },
-            },
-            "toolCallId": "call-1",
-            "toolName": "tool1",
-          },
-        ],
+        "toolCalls": [],
         "usage": {
-          "inputTokens": 3,
-          "outputTokens": 10,
-          "totalTokens": 13,
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0,
         },
       },
       "processorRetryCount": 0,
       "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
-        "reason": "stop",
-        "warnings": undefined,
+        "reason": "error",
+        "warnings": [],
       },
     },
     "runId": "test-run-id",
@@ -3965,65 +3902,20 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
             ],
             "role": "user",
           },
-          {
-            "content": [
-              {
-                "input": {
-                  "value": "value",
-                },
-                "providerExecuted": undefined,
-                "providerOptions": {
-                  "testProvider": {
-                    "signature": "sig",
-                  },
-                },
-                "toolCallId": "call-1",
-                "toolName": "tool1",
-                "type": "tool-call",
-              },
-            ],
-            "role": "assistant",
-          },
-          {
-            "content": [],
-            "role": "tool",
-          },
         ],
-        "nonUser": [
-          {
-            "content": [
-              {
-                "input": {
-                  "value": "value",
-                },
-                "providerExecuted": undefined,
-                "providerOptions": {
-                  "testProvider": {
-                    "signature": "sig",
-                  },
-                },
-                "toolCallId": "call-1",
-                "toolName": "tool1",
-                "type": "tool-call",
-              },
-            ],
-            "role": "assistant",
-          },
-          {
-            "content": [],
-            "role": "tool",
-          },
-        ],
+        "nonUser": [],
         "user": [
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -4034,92 +3926,58 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
       },
       "metadata": {
         "headers": undefined,
-        "id": "id-0",
+        "id": "id-1",
         "modelId": "mock-model-id",
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
         "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": 2024-01-01T00:00:00.000Z,
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
-            "finishReason": undefined,
+            "finishReason": "error",
             "providerMetadata": undefined,
             "request": {},
             "response": {
               "headers": undefined,
-              "id": "id-0",
-              "messages": [
-                {
-                  "content": [
-                    {
-                      "input": {
-                        "value": "value",
-                      },
-                      "providerExecuted": undefined,
-                      "providerOptions": {
-                        "testProvider": {
-                          "signature": "sig",
-                        },
-                      },
-                      "toolCallId": "call-1",
-                      "toolName": "tool1",
-                      "type": "tool-call",
-                    },
-                  ],
-                  "role": "assistant",
-                },
-                {
-                  "content": [],
-                  "role": "tool",
-                },
-              ],
+              "id": "id-1",
+              "messages": [],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "modelProvider": "mock-provider",
+              "modelVersion": "v2",
+              "timestamp": 2024-01-01T00:00:00.000Z,
             },
             "tripwire": undefined,
             "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
+              "inputTokens": undefined,
+              "outputTokens": undefined,
+              "totalTokens": undefined,
             },
             "warnings": [],
           },
         ],
         "text": "",
-        "toolCalls": [
-          {
-            "args": {
-              "value": "value",
-            },
-            "providerExecuted": undefined,
-            "providerMetadata": {
-              "testProvider": {
-                "signature": "sig",
-              },
-            },
-            "toolCallId": "call-1",
-            "toolName": "tool1",
-          },
-        ],
+        "toolCalls": [],
         "usage": {
-          "inputTokens": 3,
-          "outputTokens": 10,
-          "totalTokens": 13,
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0,
         },
       },
       "processorRetryCount": 0,
       "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
-        "reason": "stop",
-        "warnings": undefined,
+        "reason": "error",
+        "warnings": [],
       },
     },
     "runId": "test-run-id",
@@ -4169,14 +4027,40 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
       "args": {
         "value": "value",
       },
-      "providerExecuted": undefined,
+      "error": {
+        "actual": [
+          {
+            "content": [
+              {
+                "providerOptions": undefined,
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+        "expected": [
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+        "message": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
+        "operator": "deepStrictEqual",
+        "showDiff": true,
+      },
       "providerMetadata": undefined,
-      "result": "value-result",
       "toolCallId": "call-1",
       "toolName": "tool1",
     },
     "runId": "test-run-id",
-    "type": "tool-result",
+    "type": "tool-error",
   },
   {
     "from": "AGENT",
@@ -4187,6 +4071,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -4215,7 +4100,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                 },
                 "output": {
                   "type": "text",
-                  "value": "value-result",
+                  "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                 },
                 "toolCallId": "call-1",
                 "toolName": "tool1",
@@ -4248,7 +4133,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                 },
                 "output": {
                   "type": "text",
-                  "value": "value-result",
+                  "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                 },
                 "toolCallId": "call-1",
                 "toolName": "tool1",
@@ -4262,6 +4147,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -4285,7 +4171,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -4301,6 +4187,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                         "value": "value",
                       },
                       "providerExecuted": undefined,
+                      "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -4324,7 +4211,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
             },
             "warnings": [],
           },
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -4355,7 +4242,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                       },
                       "output": {
                         "type": "text",
-                        "value": "value-result",
+                        "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                       },
                       "toolCallId": "call-1",
                       "toolName": "tool1",
@@ -4367,6 +4254,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                 {
                   "content": [
                     {
+                      "providerOptions": undefined,
                       "text": "Done",
                       "type": "text",
                     },
@@ -4408,7 +4296,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
       "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": true,
-        "reason": "stop",
+        "reason": "tool-calls",
         "warnings": undefined,
       },
     },
@@ -4462,6 +4350,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -4490,7 +4379,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                 },
                 "output": {
                   "type": "text",
-                  "value": "value-result",
+                  "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                 },
                 "toolCallId": "call-1",
                 "toolName": "tool1",
@@ -4502,6 +4391,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Done",
                 "type": "text",
               },
@@ -4532,7 +4422,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                 },
                 "output": {
                   "type": "text",
-                  "value": "value-result",
+                  "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                 },
                 "toolCallId": "call-1",
                 "toolName": "tool1",
@@ -4544,6 +4434,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Done",
                 "type": "text",
               },
@@ -4555,6 +4446,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -4578,7 +4470,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -4594,6 +4486,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                         "value": "value",
                       },
                       "providerExecuted": undefined,
+                      "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -4617,7 +4510,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
             },
             "warnings": [],
           },
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -4648,7 +4541,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                       },
                       "output": {
                         "type": "text",
-                        "value": "value-result",
+                        "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                       },
                       "toolCallId": "call-1",
                       "toolName": "tool1",
@@ -4660,6 +4553,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                 {
                   "content": [
                     {
+                      "providerOptions": undefined,
                       "text": "Done",
                       "type": "text",
                     },
@@ -4707,6 +4601,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -4735,7 +4630,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                 },
                 "output": {
                   "type": "text",
-                  "value": "value-result",
+                  "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                 },
                 "toolCallId": "call-1",
                 "toolName": "tool1",
@@ -4747,6 +4642,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Done",
                 "type": "text",
               },
@@ -4777,7 +4673,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                 },
                 "output": {
                   "type": "text",
-                  "value": "value-result",
+                  "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                 },
                 "toolCallId": "call-1",
                 "toolName": "tool1",
@@ -4789,6 +4685,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Done",
                 "type": "text",
               },
@@ -4800,6 +4697,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -4823,7 +4721,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -4839,6 +4737,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                         "value": "value",
                       },
                       "providerExecuted": undefined,
+                      "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -4862,7 +4761,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
             },
             "warnings": [],
           },
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -4893,7 +4792,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                       },
                       "output": {
                         "type": "text",
-                        "value": "value-result",
+                        "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                       },
                       "toolCallId": "call-1",
                       "toolName": "tool1",
@@ -4905,6 +4804,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                 {
                   "content": [
                     {
+                      "providerOptions": undefined,
                       "text": "Done",
                       "type": "text",
                     },
@@ -4970,50 +4870,38 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
   {
     "from": "AGENT",
     "payload": {
-      "id": "text-1",
-      "providerMetadata": undefined,
+      "error": {
+        "actual": [
+          {
+            "content": [
+              {
+                "providerOptions": undefined,
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+        "expected": [
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+        "message": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
+        "operator": "deepStrictEqual",
+        "showDiff": true,
+      },
+      "type": "error",
     },
     "runId": "test-run-id",
-    "type": "text-start",
-  },
-  {
-    "from": "AGENT",
-    "payload": {
-      "id": "text-1",
-      "providerMetadata": undefined,
-      "text": "Hello",
-    },
-    "runId": "test-run-id",
-    "type": "text-delta",
-  },
-  {
-    "from": "AGENT",
-    "payload": {
-      "id": "text-1",
-      "providerMetadata": undefined,
-      "text": ", ",
-    },
-    "runId": "test-run-id",
-    "type": "text-delta",
-  },
-  {
-    "from": "AGENT",
-    "payload": {
-      "id": "text-1",
-      "providerMetadata": undefined,
-      "text": "world!",
-    },
-    "runId": "test-run-id",
-    "type": "text-delta",
-  },
-  {
-    "from": "AGENT",
-    "payload": {
-      "id": "text-1",
-      "type": "text-end",
-    },
-    "runId": "test-run-id",
-    "type": "text-end",
+    "type": "error",
   },
   {
     "from": "AGENT",
@@ -5024,37 +4912,20 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
             ],
             "role": "user",
           },
-          {
-            "content": [
-              {
-                "text": "Hello, world!",
-                "type": "text",
-              },
-            ],
-            "role": "assistant",
-          },
         ],
-        "nonUser": [
-          {
-            "content": [
-              {
-                "text": "Hello, world!",
-                "type": "text",
-              },
-            ],
-            "role": "assistant",
-          },
-        ],
+        "nonUser": [],
         "user": [
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -5080,25 +4951,15 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
-            "finishReason": undefined,
+            "finishReason": "error",
             "providerMetadata": undefined,
             "request": {},
             "response": {
               "headers": undefined,
               "id": "id-2000",
-              "messages": [
-                {
-                  "content": [
-                    {
-                      "text": "Hello, world!",
-                      "type": "text",
-                    },
-                  ],
-                  "role": "assistant",
-                },
-              ],
+              "messages": [],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
               "modelVersion": "v2",
@@ -5106,27 +4967,27 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
             },
             "tripwire": undefined,
             "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
+              "inputTokens": undefined,
+              "outputTokens": undefined,
+              "totalTokens": undefined,
             },
             "warnings": [],
           },
         ],
-        "text": "Hello, world!",
+        "text": "",
         "toolCalls": [],
         "usage": {
-          "inputTokens": 3,
-          "outputTokens": 10,
-          "totalTokens": 13,
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0,
         },
       },
       "processorRetryCount": 0,
       "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
-        "reason": "stop",
-        "warnings": undefined,
+        "reason": "error",
+        "warnings": [],
       },
     },
     "runId": "test-run-id",
@@ -5141,37 +5002,20 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
             ],
             "role": "user",
           },
-          {
-            "content": [
-              {
-                "text": "Hello, world!",
-                "type": "text",
-              },
-            ],
-            "role": "assistant",
-          },
         ],
-        "nonUser": [
-          {
-            "content": [
-              {
-                "text": "Hello, world!",
-                "type": "text",
-              },
-            ],
-            "role": "assistant",
-          },
-        ],
+        "nonUser": [],
         "user": [
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -5197,25 +5041,15 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
-            "finishReason": undefined,
+            "finishReason": "error",
             "providerMetadata": undefined,
             "request": {},
             "response": {
               "headers": undefined,
               "id": "id-2000",
-              "messages": [
-                {
-                  "content": [
-                    {
-                      "text": "Hello, world!",
-                      "type": "text",
-                    },
-                  ],
-                  "role": "assistant",
-                },
-              ],
+              "messages": [],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
               "modelVersion": "v2",
@@ -5223,27 +5057,27 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
             },
             "tripwire": undefined,
             "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
+              "inputTokens": undefined,
+              "outputTokens": undefined,
+              "totalTokens": undefined,
             },
             "warnings": [],
           },
         ],
-        "text": "Hello, world!",
+        "text": "",
         "toolCalls": [],
         "usage": {
-          "inputTokens": 3,
-          "outputTokens": 10,
-          "totalTokens": 13,
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0,
         },
       },
       "processorRetryCount": 0,
       "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
-        "reason": "stop",
-        "warnings": undefined,
+        "reason": "error",
+        "warnings": [],
       },
     },
     "runId": "test-run-id",
@@ -5346,7 +5180,6 @@ exports[`Loop Tests > AISDK v5 > result.response > should resolve with response 
           },
         ],
       },
-      "createdAt": 2024-01-01T00:00:00.001Z,
       "id": "msg-0",
       "role": "assistant",
     },
@@ -5359,6 +5192,7 @@ exports[`Loop Tests > AISDK v5 > result.response > should resolve with response 
     {
       "content": [
         {
+          "providerOptions": undefined,
           "text": "Hello",
           "type": "text",
         },
@@ -5377,11 +5211,13 @@ exports[`Loop Tests > AISDK v5 > result.response > should resolve with response 
     {
       "id": "msg-0",
       "metadata": {
-        "createdAt": 2024-01-01T00:00:00.001Z,
         "modelId": "mock-model-id",
       },
       "parts": [
         {
+          "providerMetadata": {
+            "mastra": {},
+          },
           "text": "Hello",
           "type": "text",
         },
@@ -5447,6 +5283,11 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
         "type": "file",
       },
       {
+        "providerOptions": {
+          "mastra": {
+            "createdAt": 1704067200000,
+          },
+        },
         "text": "Hello!",
         "type": "text",
       },
@@ -5518,27 +5359,42 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
             },
             "parts": [
               {
+                "createdAt": 1704067200000,
                 "data": "Hello World",
                 "mimeType": "text/plain",
                 "type": "file",
               },
               {
+                "createdAt": 1704067200000,
                 "text": "Hello!",
                 "type": "text",
               },
               {
+                "createdAt": 1704067200000,
                 "data": "QkFVRw==",
                 "mimeType": "image/jpeg",
                 "type": "file",
               },
               {
+                "createdAt": 1704067200000,
                 "data": "data:text/plain;base64,Hello World",
                 "mimeType": "text/plain",
+                "providerMetadata": {
+                  "mastra": {
+                    "createdAt": 1704067200000,
+                  },
+                },
                 "type": "file",
               },
               {
+                "createdAt": 1704067200000,
                 "data": "data:image/jpeg;base64,QkFVRw==",
                 "mimeType": "image/jpeg",
+                "providerMetadata": {
+                  "mastra": {
+                    "createdAt": 1704067200000,
+                  },
+                },
                 "type": "file",
               },
             ],
@@ -5557,9 +5413,19 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
               "data": "data:text/plain;base64,Hello World",
               "filename": undefined,
               "mediaType": "text/plain",
+              "providerOptions": {
+                "mastra": {
+                  "createdAt": 1704067200000,
+                },
+              },
               "type": "file",
             },
             {
+              "providerOptions": {
+                "mastra": {
+                  "createdAt": 1704067200000,
+                },
+              },
               "text": "Hello!",
               "type": "text",
             },
@@ -5567,6 +5433,11 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
               "data": "data:image/jpeg;base64,QkFVRw==",
               "filename": undefined,
               "mediaType": "image/jpeg",
+              "providerOptions": {
+                "mastra": {
+                  "createdAt": 1704067200000,
+                },
+              },
               "type": "file",
             },
           ],
@@ -5592,25 +5463,50 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
           "parts": [
             {
               "mediaType": "text/plain",
+              "providerMetadata": {
+                "mastra": {
+                  "createdAt": 1704067200000,
+                },
+              },
               "type": "file",
               "url": "data:text/plain;base64,Hello World",
             },
             {
+              "providerMetadata": {
+                "mastra": {
+                  "createdAt": 1704067200000,
+                },
+              },
               "text": "Hello!",
               "type": "text",
             },
             {
               "mediaType": "image/jpeg",
+              "providerMetadata": {
+                "mastra": {
+                  "createdAt": 1704067200000,
+                },
+              },
               "type": "file",
               "url": "data:image/jpeg;base64,QkFVRw==",
             },
             {
               "mediaType": "text/plain",
+              "providerMetadata": {
+                "mastra": {
+                  "createdAt": 1704067200000,
+                },
+              },
               "type": "file",
               "url": "data:text/plain;base64,Hello World",
             },
             {
               "mediaType": "image/jpeg",
+              "providerMetadata": {
+                "mastra": {
+                  "createdAt": 1704067200000,
+                },
+              },
               "type": "file",
               "url": "data:image/jpeg;base64,QkFVRw==",
             },
@@ -5697,6 +5593,11 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
+                "providerOptions": {
+                  "mastra": {
+                    "createdAt": 1704067200000,
+                  },
+                },
                 "text": "test-input",
                 "type": "text",
               },
@@ -5772,6 +5673,11 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
+                "providerOptions": {
+                  "mastra": {
+                    "createdAt": 1704067200000,
+                  },
+                },
                 "text": "test-input",
                 "type": "text",
               },
@@ -5811,6 +5717,11 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                         "value": "value",
                       },
                       "providerExecuted": undefined,
+                      "providerOptions": {
+                        "mastra": {
+                          "createdAt": 1704067200000,
+                        },
+                      },
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -5877,6 +5788,11 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                 {
                   "content": [
                     {
+                      "providerOptions": {
+                        "mastra": {
+                          "createdAt": 1704067200000,
+                        },
+                      },
                       "text": "I see the tool failed, let me help.",
                       "type": "text",
                     },
@@ -5972,6 +5888,11 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
+                "providerOptions": {
+                  "mastra": {
+                    "createdAt": 1704067200000,
+                  },
+                },
                 "text": "test-input",
                 "type": "text",
               },
@@ -6012,6 +5933,11 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
+                "providerOptions": {
+                  "mastra": {
+                    "createdAt": 1704067200000,
+                  },
+                },
                 "text": "I see the tool failed, let me help.",
                 "type": "text",
               },
@@ -6054,6 +5980,11 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
+                "providerOptions": {
+                  "mastra": {
+                    "createdAt": 1704067200000,
+                  },
+                },
                 "text": "I see the tool failed, let me help.",
                 "type": "text",
               },
@@ -6065,6 +5996,11 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
+                "providerOptions": {
+                  "mastra": {
+                    "createdAt": 1704067200000,
+                  },
+                },
                 "text": "test-input",
                 "type": "text",
               },
@@ -6104,6 +6040,11 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                         "value": "value",
                       },
                       "providerExecuted": undefined,
+                      "providerOptions": {
+                        "mastra": {
+                          "createdAt": 1704067200000,
+                        },
+                      },
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -6170,6 +6111,11 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                 {
                   "content": [
                     {
+                      "providerOptions": {
+                        "mastra": {
+                          "createdAt": 1704067200000,
+                        },
+                      },
                       "text": "I see the tool failed, let me help.",
                       "type": "text",
                     },
@@ -6217,6 +6163,11 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
+                "providerOptions": {
+                  "mastra": {
+                    "createdAt": 1704067200000,
+                  },
+                },
                 "text": "test-input",
                 "type": "text",
               },
@@ -6257,6 +6208,11 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
+                "providerOptions": {
+                  "mastra": {
+                    "createdAt": 1704067200000,
+                  },
+                },
                 "text": "I see the tool failed, let me help.",
                 "type": "text",
               },
@@ -6299,6 +6255,11 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
+                "providerOptions": {
+                  "mastra": {
+                    "createdAt": 1704067200000,
+                  },
+                },
                 "text": "I see the tool failed, let me help.",
                 "type": "text",
               },
@@ -6310,6 +6271,11 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           {
             "content": [
               {
+                "providerOptions": {
+                  "mastra": {
+                    "createdAt": 1704067200000,
+                  },
+                },
                 "text": "test-input",
                 "type": "text",
               },
@@ -6349,6 +6315,11 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                         "value": "value",
                       },
                       "providerExecuted": undefined,
+                      "providerOptions": {
+                        "mastra": {
+                          "createdAt": 1704067200000,
+                        },
+                      },
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -6415,6 +6386,11 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                 {
                   "content": [
                     {
+                      "providerOptions": {
+                        "mastra": {
+                          "createdAt": 1704067200000,
+                        },
+                      },
                       "text": "I see the tool failed, let me help.",
                       "type": "text",
                     },
@@ -6480,16 +6456,11 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
   {
     "from": "AGENT",
     "payload": {
-      "args": {
-        "value": "value",
-      },
-      "providerExecuted": undefined,
-      "providerMetadata": undefined,
-      "toolCallId": "call-1",
-      "toolName": "tool1",
+      "error": [AssertionError: expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]],
+      "type": "error",
     },
     "runId": "test-run-id",
-    "type": "tool-call",
+    "type": "error",
   },
   {
     "from": "AGENT",
@@ -6500,55 +6471,28 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
           {
             "content": [
               {
+                "providerOptions": {
+                  "mastra": {
+                    "createdAt": 1704067200000,
+                  },
+                },
                 "text": "test-input",
                 "type": "text",
               },
             ],
             "role": "user",
           },
-          {
-            "content": [
-              {
-                "input": {
-                  "value": "value",
-                },
-                "providerExecuted": undefined,
-                "toolCallId": "call-1",
-                "toolName": "tool1",
-                "type": "tool-call",
-              },
-            ],
-            "role": "assistant",
-          },
-          {
-            "content": [],
-            "role": "tool",
-          },
         ],
-        "nonUser": [
-          {
-            "content": [
-              {
-                "input": {
-                  "value": "value",
-                },
-                "providerExecuted": undefined,
-                "toolCallId": "call-1",
-                "toolName": "tool1",
-                "type": "tool-call",
-              },
-            ],
-            "role": "assistant",
-          },
-          {
-            "content": [],
-            "role": "tool",
-          },
-        ],
+        "nonUser": [],
         "user": [
           {
             "content": [
               {
+                "providerOptions": {
+                  "mastra": {
+                    "createdAt": 1704067200000,
+                  },
+                },
                 "text": "test-input",
                 "type": "text",
               },
@@ -6559,83 +6503,58 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
       },
       "metadata": {
         "headers": undefined,
-        "id": "id-0",
+        "id": "id-1",
         "modelId": "mock-model-id",
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
         "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": 2024-01-01T00:00:00.000Z,
       },
       "output": {
         "steps": [
           DefaultStepResult {
             "content": [],
-            "finishReason": undefined,
+            "finishReason": "error",
             "providerMetadata": undefined,
             "request": {},
             "response": {
               "headers": undefined,
-              "id": "id-0",
-              "messages": [
-                {
-                  "content": [
-                    {
-                      "input": {
-                        "value": "value",
-                      },
-                      "providerExecuted": undefined,
-                      "toolCallId": "call-1",
-                      "toolName": "tool1",
-                      "type": "tool-call",
-                    },
-                  ],
-                  "role": "assistant",
-                },
-                {
-                  "content": [],
-                  "role": "tool",
-                },
-              ],
+              "id": "id-1",
+              "messages": [],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "modelProvider": "mock-provider",
+              "modelVersion": "v2",
+              "timestamp": 2024-01-01T00:00:00.000Z,
             },
             "tripwire": undefined,
             "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
+              "inputTokens": undefined,
+              "outputTokens": undefined,
+              "totalTokens": undefined,
             },
             "warnings": [],
           },
         ],
         "text": "",
-        "toolCalls": [
-          {
-            "args": {
-              "value": "value",
-            },
-            "providerExecuted": undefined,
-            "providerMetadata": undefined,
-            "toolCallId": "call-1",
-            "toolName": "tool1",
-          },
-        ],
+        "toolCalls": [],
         "usage": {
-          "inputTokens": 3,
-          "outputTokens": 10,
-          "totalTokens": 13,
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0,
         },
       },
       "processorRetryCount": 0,
       "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
-        "reason": "stop",
-        "warnings": undefined,
+        "reason": "error",
+        "warnings": [],
       },
     },
     "runId": "test-run-id",
@@ -6650,55 +6569,28 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
           {
             "content": [
               {
+                "providerOptions": {
+                  "mastra": {
+                    "createdAt": 1704067200000,
+                  },
+                },
                 "text": "test-input",
                 "type": "text",
               },
             ],
             "role": "user",
           },
-          {
-            "content": [
-              {
-                "input": {
-                  "value": "value",
-                },
-                "providerExecuted": undefined,
-                "toolCallId": "call-1",
-                "toolName": "tool1",
-                "type": "tool-call",
-              },
-            ],
-            "role": "assistant",
-          },
-          {
-            "content": [],
-            "role": "tool",
-          },
         ],
-        "nonUser": [
-          {
-            "content": [
-              {
-                "input": {
-                  "value": "value",
-                },
-                "providerExecuted": undefined,
-                "toolCallId": "call-1",
-                "toolName": "tool1",
-                "type": "tool-call",
-              },
-            ],
-            "role": "assistant",
-          },
-          {
-            "content": [],
-            "role": "tool",
-          },
-        ],
+        "nonUser": [],
         "user": [
           {
             "content": [
               {
+                "providerOptions": {
+                  "mastra": {
+                    "createdAt": 1704067200000,
+                  },
+                },
                 "text": "test-input",
                 "type": "text",
               },
@@ -6709,83 +6601,58 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
       },
       "metadata": {
         "headers": undefined,
-        "id": "id-0",
+        "id": "id-1",
         "modelId": "mock-model-id",
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
         "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": 2024-01-01T00:00:00.000Z,
       },
       "output": {
         "steps": [
           DefaultStepResult {
             "content": [],
-            "finishReason": undefined,
+            "finishReason": "error",
             "providerMetadata": undefined,
             "request": {},
             "response": {
               "headers": undefined,
-              "id": "id-0",
-              "messages": [
-                {
-                  "content": [
-                    {
-                      "input": {
-                        "value": "value",
-                      },
-                      "providerExecuted": undefined,
-                      "toolCallId": "call-1",
-                      "toolName": "tool1",
-                      "type": "tool-call",
-                    },
-                  ],
-                  "role": "assistant",
-                },
-                {
-                  "content": [],
-                  "role": "tool",
-                },
-              ],
+              "id": "id-1",
+              "messages": [],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "modelProvider": "mock-provider",
+              "modelVersion": "v2",
+              "timestamp": 2024-01-01T00:00:00.000Z,
             },
             "tripwire": undefined,
             "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
+              "inputTokens": undefined,
+              "outputTokens": undefined,
+              "totalTokens": undefined,
             },
             "warnings": [],
           },
         ],
         "text": "",
-        "toolCalls": [
-          {
-            "args": {
-              "value": "value",
-            },
-            "providerExecuted": undefined,
-            "providerMetadata": undefined,
-            "toolCallId": "call-1",
-            "toolName": "tool1",
-          },
-        ],
+        "toolCalls": [],
         "usage": {
-          "inputTokens": 3,
-          "outputTokens": 10,
-          "totalTokens": 13,
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0,
         },
       },
       "processorRetryCount": 0,
       "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
-        "reason": "stop",
-        "warnings": undefined,
+        "reason": "error",
+        "warnings": [],
       },
     },
     "runId": "test-run-id",
@@ -6897,6 +6764,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -6906,6 +6774,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Hello, world!",
                 "type": "text",
               },
@@ -6917,6 +6786,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Hello, world!",
                 "type": "text",
               },
@@ -6928,6 +6798,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -6951,7 +6822,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -6963,6 +6834,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
                 {
                   "content": [
                     {
+                      "providerOptions": undefined,
                       "text": "Hello, world!",
                       "type": "text",
                     },
@@ -7010,6 +6882,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -7019,6 +6892,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Hello, world!",
                 "type": "text",
               },
@@ -7030,6 +6904,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Hello, world!",
                 "type": "text",
               },
@@ -7041,6 +6916,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -7064,7 +6940,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -7076,6 +6952,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
                 {
                   "content": [
                     {
+                      "providerOptions": undefined,
                       "text": "Hello, world!",
                       "type": "text",
                     },
@@ -7141,50 +7018,74 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
   {
     "from": "AGENT",
     "payload": {
-      "id": "text-1",
-      "providerMetadata": undefined,
+      "error": {
+        "actual": [
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "assistant",
+          },
+          {
+            "content": [
+              {
+                "providerOptions": undefined,
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+        "expected": [
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "assistant",
+          },
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+        "message": "expected [ { role: 'user', …(1) }, …(2) ] to strictly equal [ { role: 'user', …(1) }, …(2) ]",
+        "operator": "deepStrictEqual",
+        "showDiff": true,
+      },
+      "type": "error",
     },
     "runId": "test-run-id",
-    "type": "text-start",
-  },
-  {
-    "from": "AGENT",
-    "payload": {
-      "id": "text-1",
-      "providerMetadata": undefined,
-      "text": "Hello",
-    },
-    "runId": "test-run-id",
-    "type": "text-delta",
-  },
-  {
-    "from": "AGENT",
-    "payload": {
-      "id": "text-1",
-      "providerMetadata": undefined,
-      "text": ", ",
-    },
-    "runId": "test-run-id",
-    "type": "text-delta",
-  },
-  {
-    "from": "AGENT",
-    "payload": {
-      "id": "text-1",
-      "providerMetadata": undefined,
-      "text": "world!",
-    },
-    "runId": "test-run-id",
-    "type": "text-delta",
-  },
-  {
-    "from": "AGENT",
-    "payload": {
-      "id": "text-1",
-      "type": "text-end",
-    },
-    "runId": "test-run-id",
-    "type": "text-end",
+    "type": "error",
   },
   {
     "from": "AGENT",
@@ -7204,15 +7105,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
           {
             "content": [
               {
-                "text": "Hello, world!",
-                "type": "text",
-              },
-            ],
-            "role": "assistant",
-          },
-          {
-            "content": [
-              {
                 "text": "test-input",
                 "type": "text",
               },
@@ -7222,6 +7114,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -7229,21 +7122,12 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
             "role": "user",
           },
         ],
-        "nonUser": [
-          {
-            "content": [
-              {
-                "text": "Hello, world!",
-                "type": "text",
-              },
-            ],
-            "role": "assistant",
-          },
-        ],
+        "nonUser": [],
         "user": [
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -7254,64 +7138,58 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
       },
       "metadata": {
         "headers": undefined,
-        "id": "response-id",
-        "modelId": "response-model-id",
+        "id": "id-1",
+        "modelId": "mock-model-id",
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
           "modelVersion": "v3",
         },
+        "modelProvider": "mock-provider",
+        "modelVersion": "v3",
         "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:05.000Z,
+        "timestamp": 2024-01-01T00:00:00.000Z,
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
-            "finishReason": undefined,
+            "finishReason": "error",
             "providerMetadata": undefined,
             "request": {},
             "response": {
               "headers": undefined,
-              "id": "response-id",
-              "messages": [
-                {
-                  "content": [
-                    {
-                      "text": "Hello, world!",
-                      "type": "text",
-                    },
-                  ],
-                  "role": "assistant",
-                },
-              ],
-              "modelId": "response-model-id",
-              "timestamp": 1970-01-01T00:00:05.000Z,
+              "id": "id-1",
+              "messages": [],
+              "modelId": "mock-model-id",
+              "modelProvider": "mock-provider",
+              "modelVersion": "v3",
+              "timestamp": 2024-01-01T00:00:00.000Z,
             },
             "tripwire": undefined,
             "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
+              "inputTokens": undefined,
+              "outputTokens": undefined,
+              "totalTokens": undefined,
             },
             "warnings": [],
           },
         ],
-        "text": "Hello, world!",
+        "text": "",
         "toolCalls": [],
         "usage": {
-          "inputTokens": 3,
-          "outputTokens": 10,
-          "totalTokens": 13,
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0,
         },
       },
       "processorRetryCount": 0,
       "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
-        "reason": "stop",
-        "warnings": undefined,
+        "reason": "error",
+        "warnings": [],
       },
     },
     "runId": "test-run-id",
@@ -7335,15 +7213,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
           {
             "content": [
               {
-                "text": "Hello, world!",
-                "type": "text",
-              },
-            ],
-            "role": "assistant",
-          },
-          {
-            "content": [
-              {
                 "text": "test-input",
                 "type": "text",
               },
@@ -7353,6 +7222,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -7360,21 +7230,12 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
             "role": "user",
           },
         ],
-        "nonUser": [
-          {
-            "content": [
-              {
-                "text": "Hello, world!",
-                "type": "text",
-              },
-            ],
-            "role": "assistant",
-          },
-        ],
+        "nonUser": [],
         "user": [
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -7385,64 +7246,58 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
       },
       "metadata": {
         "headers": undefined,
-        "id": "response-id",
-        "modelId": "response-model-id",
+        "id": "id-1",
+        "modelId": "mock-model-id",
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
           "modelVersion": "v3",
         },
+        "modelProvider": "mock-provider",
+        "modelVersion": "v3",
         "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:05.000Z,
+        "timestamp": 2024-01-01T00:00:00.000Z,
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
-            "finishReason": undefined,
+            "finishReason": "error",
             "providerMetadata": undefined,
             "request": {},
             "response": {
               "headers": undefined,
-              "id": "response-id",
-              "messages": [
-                {
-                  "content": [
-                    {
-                      "text": "Hello, world!",
-                      "type": "text",
-                    },
-                  ],
-                  "role": "assistant",
-                },
-              ],
-              "modelId": "response-model-id",
-              "timestamp": 1970-01-01T00:00:05.000Z,
+              "id": "id-1",
+              "messages": [],
+              "modelId": "mock-model-id",
+              "modelProvider": "mock-provider",
+              "modelVersion": "v3",
+              "timestamp": 2024-01-01T00:00:00.000Z,
             },
             "tripwire": undefined,
             "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
+              "inputTokens": undefined,
+              "outputTokens": undefined,
+              "totalTokens": undefined,
             },
             "warnings": [],
           },
         ],
-        "text": "Hello, world!",
+        "text": "",
         "toolCalls": [],
         "usage": {
-          "inputTokens": 3,
-          "outputTokens": 10,
-          "totalTokens": 13,
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0,
         },
       },
       "processorRetryCount": 0,
       "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
-        "reason": "stop",
-        "warnings": undefined,
+        "reason": "error",
+        "warnings": [],
       },
     },
     "runId": "test-run-id",
@@ -7510,6 +7365,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -7585,6 +7441,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -7608,7 +7465,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -7624,6 +7481,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
                         "value": "value",
                       },
                       "providerExecuted": undefined,
+                      "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -7647,7 +7505,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
             },
             "warnings": [],
           },
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -7690,6 +7548,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
                 {
                   "content": [
                     {
+                      "providerOptions": undefined,
                       "text": "Done",
                       "type": "text",
                     },
@@ -7785,6 +7644,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -7825,6 +7685,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Done",
                 "type": "text",
               },
@@ -7867,6 +7728,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Done",
                 "type": "text",
               },
@@ -7878,6 +7740,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -7901,7 +7764,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -7917,6 +7780,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
                         "value": "value",
                       },
                       "providerExecuted": undefined,
+                      "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -7940,7 +7804,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
             },
             "warnings": [],
           },
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -7983,6 +7847,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
                 {
                   "content": [
                     {
+                      "providerOptions": undefined,
                       "text": "Done",
                       "type": "text",
                     },
@@ -8030,6 +7895,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -8070,6 +7936,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Done",
                 "type": "text",
               },
@@ -8112,6 +7979,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Done",
                 "type": "text",
               },
@@ -8123,6 +7991,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -8146,7 +8015,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -8162,6 +8031,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
                         "value": "value",
                       },
                       "providerExecuted": undefined,
+                      "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -8185,7 +8055,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
             },
             "warnings": [],
           },
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -8228,6 +8098,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
                 {
                   "content": [
                     {
+                      "providerOptions": undefined,
                       "text": "Done",
                       "type": "text",
                     },
@@ -8347,6 +8218,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -8359,9 +8231,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                 "data": "data:text/plain;base64,Hello World",
                 "filename": undefined,
                 "mediaType": "text/plain",
+                "providerOptions": undefined,
                 "type": "file",
               },
               {
+                "providerOptions": undefined,
                 "text": "Hello!",
                 "type": "text",
               },
@@ -8369,6 +8243,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                 "data": "data:image/jpeg;base64,QkFVRw==",
                 "filename": undefined,
                 "mediaType": "image/jpeg",
+                "providerOptions": undefined,
                 "type": "file",
               },
             ],
@@ -8382,9 +8257,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                 "data": "data:text/plain;base64,Hello World",
                 "filename": undefined,
                 "mediaType": "text/plain",
+                "providerOptions": undefined,
                 "type": "file",
               },
               {
+                "providerOptions": undefined,
                 "text": "Hello!",
                 "type": "text",
               },
@@ -8392,6 +8269,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                 "data": "data:image/jpeg;base64,QkFVRw==",
                 "filename": undefined,
                 "mediaType": "image/jpeg",
+                "providerOptions": undefined,
                 "type": "file",
               },
             ],
@@ -8402,6 +8280,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -8425,7 +8304,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -8440,9 +8319,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                       "data": "data:text/plain;base64,Hello World",
                       "filename": undefined,
                       "mediaType": "text/plain",
+                      "providerOptions": undefined,
                       "type": "file",
                     },
                     {
+                      "providerOptions": undefined,
                       "text": "Hello!",
                       "type": "text",
                     },
@@ -8450,6 +8331,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                       "data": "data:image/jpeg;base64,QkFVRw==",
                       "filename": undefined,
                       "mediaType": "image/jpeg",
+                      "providerOptions": undefined,
                       "type": "file",
                     },
                   ],
@@ -8496,6 +8378,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -8508,9 +8391,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                 "data": "data:text/plain;base64,Hello World",
                 "filename": undefined,
                 "mediaType": "text/plain",
+                "providerOptions": undefined,
                 "type": "file",
               },
               {
+                "providerOptions": undefined,
                 "text": "Hello!",
                 "type": "text",
               },
@@ -8518,6 +8403,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                 "data": "data:image/jpeg;base64,QkFVRw==",
                 "filename": undefined,
                 "mediaType": "image/jpeg",
+                "providerOptions": undefined,
                 "type": "file",
               },
             ],
@@ -8531,9 +8417,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                 "data": "data:text/plain;base64,Hello World",
                 "filename": undefined,
                 "mediaType": "text/plain",
+                "providerOptions": undefined,
                 "type": "file",
               },
               {
+                "providerOptions": undefined,
                 "text": "Hello!",
                 "type": "text",
               },
@@ -8541,6 +8429,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                 "data": "data:image/jpeg;base64,QkFVRw==",
                 "filename": undefined,
                 "mediaType": "image/jpeg",
+                "providerOptions": undefined,
                 "type": "file",
               },
             ],
@@ -8551,6 +8440,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -8574,7 +8464,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -8589,9 +8479,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                       "data": "data:text/plain;base64,Hello World",
                       "filename": undefined,
                       "mediaType": "text/plain",
+                      "providerOptions": undefined,
                       "type": "file",
                     },
                     {
+                      "providerOptions": undefined,
                       "text": "Hello!",
                       "type": "text",
                     },
@@ -8599,6 +8491,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                       "data": "data:image/jpeg;base64,QkFVRw==",
                       "filename": undefined,
                       "mediaType": "image/jpeg",
+                      "providerOptions": undefined,
                       "type": "file",
                     },
                   ],
@@ -8925,6 +8818,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -8979,6 +8873,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
                 "type": "reasoning",
               },
               {
+                "providerOptions": undefined,
                 "text": "Hi there!",
                 "type": "text",
               },
@@ -9035,6 +8930,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
                 "type": "reasoning",
               },
               {
+                "providerOptions": undefined,
                 "text": "Hi there!",
                 "type": "text",
               },
@@ -9046,6 +8942,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -9069,7 +8966,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -9126,6 +9023,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
                       "type": "reasoning",
                     },
                     {
+                      "providerOptions": undefined,
                       "text": "Hi there!",
                       "type": "text",
                     },
@@ -9173,6 +9071,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -9227,6 +9126,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
                 "type": "reasoning",
               },
               {
+                "providerOptions": undefined,
                 "text": "Hi there!",
                 "type": "text",
               },
@@ -9283,6 +9183,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
                 "type": "reasoning",
               },
               {
+                "providerOptions": undefined,
                 "text": "Hi there!",
                 "type": "text",
               },
@@ -9294,6 +9195,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -9317,7 +9219,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -9374,6 +9276,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
                       "type": "reasoning",
                     },
                     {
+                      "providerOptions": undefined,
                       "text": "Hi there!",
                       "type": "text",
                     },
@@ -9509,6 +9412,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -9518,6 +9422,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Hello!",
                 "type": "text",
               },
@@ -9529,6 +9434,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Hello!",
                 "type": "text",
               },
@@ -9540,6 +9446,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -9563,7 +9470,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -9575,6 +9482,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
                 {
                   "content": [
                     {
+                      "providerOptions": undefined,
                       "text": "Hello!",
                       "type": "text",
                     },
@@ -9622,6 +9530,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -9631,6 +9540,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Hello!",
                 "type": "text",
               },
@@ -9642,6 +9552,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Hello!",
                 "type": "text",
               },
@@ -9653,6 +9564,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -9676,7 +9588,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -9688,6 +9600,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
                 {
                   "content": [
                     {
+                      "providerOptions": undefined,
                       "text": "Hello!",
                       "type": "text",
                     },
@@ -9753,50 +9666,38 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
   {
     "from": "AGENT",
     "payload": {
-      "id": "text-1",
-      "providerMetadata": undefined,
+      "error": {
+        "actual": [
+          {
+            "content": [
+              {
+                "providerOptions": undefined,
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+        "expected": [
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+        "message": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
+        "operator": "deepStrictEqual",
+        "showDiff": true,
+      },
+      "type": "error",
     },
     "runId": "test-run-id",
-    "type": "text-start",
-  },
-  {
-    "from": "AGENT",
-    "payload": {
-      "id": "text-1",
-      "providerMetadata": undefined,
-      "text": "Hello",
-    },
-    "runId": "test-run-id",
-    "type": "text-delta",
-  },
-  {
-    "from": "AGENT",
-    "payload": {
-      "id": "text-1",
-      "providerMetadata": undefined,
-      "text": ", ",
-    },
-    "runId": "test-run-id",
-    "type": "text-delta",
-  },
-  {
-    "from": "AGENT",
-    "payload": {
-      "id": "text-1",
-      "providerMetadata": undefined,
-      "text": "world!",
-    },
-    "runId": "test-run-id",
-    "type": "text-delta",
-  },
-  {
-    "from": "AGENT",
-    "payload": {
-      "id": "text-1",
-      "type": "text-end",
-    },
-    "runId": "test-run-id",
-    "type": "text-end",
+    "type": "error",
   },
   {
     "from": "AGENT",
@@ -9807,37 +9708,20 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
             ],
             "role": "user",
           },
-          {
-            "content": [
-              {
-                "text": "Hello, world!",
-                "type": "text",
-              },
-            ],
-            "role": "assistant",
-          },
         ],
-        "nonUser": [
-          {
-            "content": [
-              {
-                "text": "Hello, world!",
-                "type": "text",
-              },
-            ],
-            "role": "assistant",
-          },
-        ],
+        "nonUser": [],
         "user": [
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -9848,64 +9732,58 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
       },
       "metadata": {
         "headers": undefined,
-        "id": "response-id",
-        "modelId": "response-model-id",
+        "id": "id-1",
+        "modelId": "mock-model-id",
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
           "modelVersion": "v3",
         },
+        "modelProvider": "mock-provider",
+        "modelVersion": "v3",
         "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:05.000Z,
+        "timestamp": 2024-01-01T00:00:00.000Z,
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
-            "finishReason": undefined,
+            "finishReason": "error",
             "providerMetadata": undefined,
             "request": {},
             "response": {
               "headers": undefined,
-              "id": "response-id",
-              "messages": [
-                {
-                  "content": [
-                    {
-                      "text": "Hello, world!",
-                      "type": "text",
-                    },
-                  ],
-                  "role": "assistant",
-                },
-              ],
-              "modelId": "response-model-id",
-              "timestamp": 1970-01-01T00:00:05.000Z,
+              "id": "id-1",
+              "messages": [],
+              "modelId": "mock-model-id",
+              "modelProvider": "mock-provider",
+              "modelVersion": "v3",
+              "timestamp": 2024-01-01T00:00:00.000Z,
             },
             "tripwire": undefined,
             "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
+              "inputTokens": undefined,
+              "outputTokens": undefined,
+              "totalTokens": undefined,
             },
             "warnings": [],
           },
         ],
-        "text": "Hello, world!",
+        "text": "",
         "toolCalls": [],
         "usage": {
-          "inputTokens": 3,
-          "outputTokens": 10,
-          "totalTokens": 13,
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0,
         },
       },
       "processorRetryCount": 0,
       "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
-        "reason": "stop",
-        "warnings": undefined,
+        "reason": "error",
+        "warnings": [],
       },
     },
     "runId": "test-run-id",
@@ -9920,37 +9798,20 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
             ],
             "role": "user",
           },
-          {
-            "content": [
-              {
-                "text": "Hello, world!",
-                "type": "text",
-              },
-            ],
-            "role": "assistant",
-          },
         ],
-        "nonUser": [
-          {
-            "content": [
-              {
-                "text": "Hello, world!",
-                "type": "text",
-              },
-            ],
-            "role": "assistant",
-          },
-        ],
+        "nonUser": [],
         "user": [
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -9961,64 +9822,58 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
       },
       "metadata": {
         "headers": undefined,
-        "id": "response-id",
-        "modelId": "response-model-id",
+        "id": "id-1",
+        "modelId": "mock-model-id",
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
           "modelVersion": "v3",
         },
+        "modelProvider": "mock-provider",
+        "modelVersion": "v3",
         "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:05.000Z,
+        "timestamp": 2024-01-01T00:00:00.000Z,
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
-            "finishReason": undefined,
+            "finishReason": "error",
             "providerMetadata": undefined,
             "request": {},
             "response": {
               "headers": undefined,
-              "id": "response-id",
-              "messages": [
-                {
-                  "content": [
-                    {
-                      "text": "Hello, world!",
-                      "type": "text",
-                    },
-                  ],
-                  "role": "assistant",
-                },
-              ],
-              "modelId": "response-model-id",
-              "timestamp": 1970-01-01T00:00:05.000Z,
+              "id": "id-1",
+              "messages": [],
+              "modelId": "mock-model-id",
+              "modelProvider": "mock-provider",
+              "modelVersion": "v3",
+              "timestamp": 2024-01-01T00:00:00.000Z,
             },
             "tripwire": undefined,
             "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
+              "inputTokens": undefined,
+              "outputTokens": undefined,
+              "totalTokens": undefined,
             },
             "warnings": [],
           },
         ],
-        "text": "Hello, world!",
+        "text": "",
         "toolCalls": [],
         "usage": {
-          "inputTokens": 3,
-          "outputTokens": 10,
-          "totalTokens": 13,
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0,
         },
       },
       "processorRetryCount": 0,
       "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
-        "reason": "stop",
-        "warnings": undefined,
+        "reason": "error",
+        "warnings": [],
       },
     },
     "runId": "test-run-id",
@@ -10170,6 +10025,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -10183,6 +10039,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                   "value": "Sparkle Day",
                 },
                 "providerExecuted": undefined,
+                "providerOptions": undefined,
                 "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
                 "toolName": "test-tool",
                 "type": "tool-call",
@@ -10203,6 +10060,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                   "value": "Sparkle Day",
                 },
                 "providerExecuted": undefined,
+                "providerOptions": undefined,
                 "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
                 "toolName": "test-tool",
                 "type": "tool-call",
@@ -10219,6 +10077,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -10242,7 +10101,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -10258,6 +10117,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                         "value": "Sparkle Day",
                       },
                       "providerExecuted": undefined,
+                      "providerOptions": undefined,
                       "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
                       "toolName": "test-tool",
                       "type": "tool-call",
@@ -10325,6 +10185,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -10338,6 +10199,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                   "value": "Sparkle Day",
                 },
                 "providerExecuted": undefined,
+                "providerOptions": undefined,
                 "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
                 "toolName": "test-tool",
                 "type": "tool-call",
@@ -10358,6 +10220,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                   "value": "Sparkle Day",
                 },
                 "providerExecuted": undefined,
+                "providerOptions": undefined,
                 "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
                 "toolName": "test-tool",
                 "type": "tool-call",
@@ -10374,6 +10237,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -10397,7 +10261,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -10413,6 +10277,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                         "value": "Sparkle Day",
                       },
                       "providerExecuted": undefined,
+                      "providerOptions": undefined,
                       "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
                       "toolName": "test-tool",
                       "type": "tool-call",
@@ -10498,20 +10363,38 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   {
     "from": "AGENT",
     "payload": {
-      "args": {
-        "value": "value",
+      "error": {
+        "actual": [
+          {
+            "content": [
+              {
+                "providerOptions": undefined,
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+        "expected": [
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+        "message": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
+        "operator": "deepStrictEqual",
+        "showDiff": true,
       },
-      "providerExecuted": undefined,
-      "providerMetadata": {
-        "testProvider": {
-          "signature": "sig",
-        },
-      },
-      "toolCallId": "call-1",
-      "toolName": "tool1",
+      "type": "error",
     },
     "runId": "test-run-id",
-    "type": "tool-call",
+    "type": "error",
   },
   {
     "from": "AGENT",
@@ -10522,65 +10405,20 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
             ],
             "role": "user",
           },
-          {
-            "content": [
-              {
-                "input": {
-                  "value": "value",
-                },
-                "providerExecuted": undefined,
-                "providerOptions": {
-                  "testProvider": {
-                    "signature": "sig",
-                  },
-                },
-                "toolCallId": "call-1",
-                "toolName": "tool1",
-                "type": "tool-call",
-              },
-            ],
-            "role": "assistant",
-          },
-          {
-            "content": [],
-            "role": "tool",
-          },
         ],
-        "nonUser": [
-          {
-            "content": [
-              {
-                "input": {
-                  "value": "value",
-                },
-                "providerExecuted": undefined,
-                "providerOptions": {
-                  "testProvider": {
-                    "signature": "sig",
-                  },
-                },
-                "toolCallId": "call-1",
-                "toolName": "tool1",
-                "type": "tool-call",
-              },
-            ],
-            "role": "assistant",
-          },
-          {
-            "content": [],
-            "role": "tool",
-          },
-        ],
+        "nonUser": [],
         "user": [
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -10591,92 +10429,58 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       },
       "metadata": {
         "headers": undefined,
-        "id": "id-0",
+        "id": "id-1",
         "modelId": "mock-model-id",
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
           "modelVersion": "v3",
         },
+        "modelProvider": "mock-provider",
+        "modelVersion": "v3",
         "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": 2024-01-01T00:00:00.000Z,
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
-            "finishReason": undefined,
+            "finishReason": "error",
             "providerMetadata": undefined,
             "request": {},
             "response": {
               "headers": undefined,
-              "id": "id-0",
-              "messages": [
-                {
-                  "content": [
-                    {
-                      "input": {
-                        "value": "value",
-                      },
-                      "providerExecuted": undefined,
-                      "providerOptions": {
-                        "testProvider": {
-                          "signature": "sig",
-                        },
-                      },
-                      "toolCallId": "call-1",
-                      "toolName": "tool1",
-                      "type": "tool-call",
-                    },
-                  ],
-                  "role": "assistant",
-                },
-                {
-                  "content": [],
-                  "role": "tool",
-                },
-              ],
+              "id": "id-1",
+              "messages": [],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "modelProvider": "mock-provider",
+              "modelVersion": "v3",
+              "timestamp": 2024-01-01T00:00:00.000Z,
             },
             "tripwire": undefined,
             "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
+              "inputTokens": undefined,
+              "outputTokens": undefined,
+              "totalTokens": undefined,
             },
             "warnings": [],
           },
         ],
         "text": "",
-        "toolCalls": [
-          {
-            "args": {
-              "value": "value",
-            },
-            "providerExecuted": undefined,
-            "providerMetadata": {
-              "testProvider": {
-                "signature": "sig",
-              },
-            },
-            "toolCallId": "call-1",
-            "toolName": "tool1",
-          },
-        ],
+        "toolCalls": [],
         "usage": {
-          "inputTokens": 3,
-          "outputTokens": 10,
-          "totalTokens": 13,
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0,
         },
       },
       "processorRetryCount": 0,
       "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
-        "reason": "stop",
-        "warnings": undefined,
+        "reason": "error",
+        "warnings": [],
       },
     },
     "runId": "test-run-id",
@@ -10691,65 +10495,20 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
             ],
             "role": "user",
           },
-          {
-            "content": [
-              {
-                "input": {
-                  "value": "value",
-                },
-                "providerExecuted": undefined,
-                "providerOptions": {
-                  "testProvider": {
-                    "signature": "sig",
-                  },
-                },
-                "toolCallId": "call-1",
-                "toolName": "tool1",
-                "type": "tool-call",
-              },
-            ],
-            "role": "assistant",
-          },
-          {
-            "content": [],
-            "role": "tool",
-          },
         ],
-        "nonUser": [
-          {
-            "content": [
-              {
-                "input": {
-                  "value": "value",
-                },
-                "providerExecuted": undefined,
-                "providerOptions": {
-                  "testProvider": {
-                    "signature": "sig",
-                  },
-                },
-                "toolCallId": "call-1",
-                "toolName": "tool1",
-                "type": "tool-call",
-              },
-            ],
-            "role": "assistant",
-          },
-          {
-            "content": [],
-            "role": "tool",
-          },
-        ],
+        "nonUser": [],
         "user": [
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -10760,92 +10519,58 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       },
       "metadata": {
         "headers": undefined,
-        "id": "id-0",
+        "id": "id-1",
         "modelId": "mock-model-id",
         "modelMetadata": {
           "modelId": "mock-model-id",
           "modelProvider": "mock-provider",
           "modelVersion": "v3",
         },
+        "modelProvider": "mock-provider",
+        "modelVersion": "v3",
         "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": 2024-01-01T00:00:00.000Z,
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
-            "finishReason": undefined,
+            "finishReason": "error",
             "providerMetadata": undefined,
             "request": {},
             "response": {
               "headers": undefined,
-              "id": "id-0",
-              "messages": [
-                {
-                  "content": [
-                    {
-                      "input": {
-                        "value": "value",
-                      },
-                      "providerExecuted": undefined,
-                      "providerOptions": {
-                        "testProvider": {
-                          "signature": "sig",
-                        },
-                      },
-                      "toolCallId": "call-1",
-                      "toolName": "tool1",
-                      "type": "tool-call",
-                    },
-                  ],
-                  "role": "assistant",
-                },
-                {
-                  "content": [],
-                  "role": "tool",
-                },
-              ],
+              "id": "id-1",
+              "messages": [],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "modelProvider": "mock-provider",
+              "modelVersion": "v3",
+              "timestamp": 2024-01-01T00:00:00.000Z,
             },
             "tripwire": undefined,
             "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
+              "inputTokens": undefined,
+              "outputTokens": undefined,
+              "totalTokens": undefined,
             },
             "warnings": [],
           },
         ],
         "text": "",
-        "toolCalls": [
-          {
-            "args": {
-              "value": "value",
-            },
-            "providerExecuted": undefined,
-            "providerMetadata": {
-              "testProvider": {
-                "signature": "sig",
-              },
-            },
-            "toolCallId": "call-1",
-            "toolName": "tool1",
-          },
-        ],
+        "toolCalls": [],
         "usage": {
-          "inputTokens": 3,
-          "outputTokens": 10,
-          "totalTokens": 13,
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0,
         },
       },
       "processorRetryCount": 0,
       "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
-        "reason": "stop",
-        "warnings": undefined,
+        "reason": "error",
+        "warnings": [],
       },
     },
     "runId": "test-run-id",
@@ -10895,14 +10620,40 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       "args": {
         "value": "value",
       },
-      "providerExecuted": undefined,
+      "error": {
+        "actual": [
+          {
+            "content": [
+              {
+                "providerOptions": undefined,
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+        "expected": [
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+        "message": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
+        "operator": "deepStrictEqual",
+        "showDiff": true,
+      },
       "providerMetadata": undefined,
-      "result": "value-result",
       "toolCallId": "call-1",
       "toolName": "tool1",
     },
     "runId": "test-run-id",
-    "type": "tool-result",
+    "type": "tool-error",
   },
   {
     "from": "AGENT",
@@ -10913,6 +10664,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -10941,7 +10693,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                 },
                 "output": {
                   "type": "text",
-                  "value": "value-result",
+                  "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                 },
                 "toolCallId": "call-1",
                 "toolName": "tool1",
@@ -10974,7 +10726,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                 },
                 "output": {
                   "type": "text",
-                  "value": "value-result",
+                  "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                 },
                 "toolCallId": "call-1",
                 "toolName": "tool1",
@@ -10988,6 +10740,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -11011,7 +10764,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -11027,6 +10780,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                         "value": "value",
                       },
                       "providerExecuted": undefined,
+                      "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -11050,7 +10804,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             },
             "warnings": [],
           },
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -11081,7 +10835,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                       },
                       "output": {
                         "type": "text",
-                        "value": "value-result",
+                        "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                       },
                       "toolCallId": "call-1",
                       "toolName": "tool1",
@@ -11093,6 +10847,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                 {
                   "content": [
                     {
+                      "providerOptions": undefined,
                       "text": "Done",
                       "type": "text",
                     },
@@ -11134,7 +10889,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": true,
-        "reason": "stop",
+        "reason": "tool-calls",
         "warnings": undefined,
       },
     },
@@ -11188,6 +10943,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -11216,7 +10972,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                 },
                 "output": {
                   "type": "text",
-                  "value": "value-result",
+                  "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                 },
                 "toolCallId": "call-1",
                 "toolName": "tool1",
@@ -11228,6 +10984,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Done",
                 "type": "text",
               },
@@ -11258,7 +11015,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                 },
                 "output": {
                   "type": "text",
-                  "value": "value-result",
+                  "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                 },
                 "toolCallId": "call-1",
                 "toolName": "tool1",
@@ -11270,6 +11027,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Done",
                 "type": "text",
               },
@@ -11281,6 +11039,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -11304,7 +11063,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -11320,6 +11079,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                         "value": "value",
                       },
                       "providerExecuted": undefined,
+                      "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -11343,7 +11103,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             },
             "warnings": [],
           },
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -11374,7 +11134,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                       },
                       "output": {
                         "type": "text",
-                        "value": "value-result",
+                        "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                       },
                       "toolCallId": "call-1",
                       "toolName": "tool1",
@@ -11386,6 +11146,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                 {
                   "content": [
                     {
+                      "providerOptions": undefined,
                       "text": "Done",
                       "type": "text",
                     },
@@ -11433,6 +11194,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -11461,7 +11223,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                 },
                 "output": {
                   "type": "text",
-                  "value": "value-result",
+                  "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                 },
                 "toolCallId": "call-1",
                 "toolName": "tool1",
@@ -11473,6 +11235,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Done",
                 "type": "text",
               },
@@ -11503,7 +11266,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                 },
                 "output": {
                   "type": "text",
-                  "value": "value-result",
+                  "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                 },
                 "toolCallId": "call-1",
                 "toolName": "tool1",
@@ -11515,6 +11278,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "Done",
                 "type": "text",
               },
@@ -11526,6 +11290,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -11549,7 +11314,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -11565,6 +11330,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                         "value": "value",
                       },
                       "providerExecuted": undefined,
+                      "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -11588,7 +11354,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             },
             "warnings": [],
           },
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": undefined,
             "providerMetadata": undefined,
@@ -11619,7 +11385,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                       },
                       "output": {
                         "type": "text",
-                        "value": "value-result",
+                        "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                       },
                       "toolCallId": "call-1",
                       "toolName": "tool1",
@@ -11631,6 +11397,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                 {
                   "content": [
                     {
+                      "providerOptions": undefined,
                       "text": "Done",
                       "type": "text",
                     },
@@ -11696,50 +11463,38 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
   {
     "from": "AGENT",
     "payload": {
-      "id": "text-1",
-      "providerMetadata": undefined,
+      "error": {
+        "actual": [
+          {
+            "content": [
+              {
+                "providerOptions": undefined,
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+        "expected": [
+          {
+            "content": [
+              {
+                "text": "test-input",
+                "type": "text",
+              },
+            ],
+            "role": "user",
+          },
+        ],
+        "message": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
+        "operator": "deepStrictEqual",
+        "showDiff": true,
+      },
+      "type": "error",
     },
     "runId": "test-run-id",
-    "type": "text-start",
-  },
-  {
-    "from": "AGENT",
-    "payload": {
-      "id": "text-1",
-      "providerMetadata": undefined,
-      "text": "Hello",
-    },
-    "runId": "test-run-id",
-    "type": "text-delta",
-  },
-  {
-    "from": "AGENT",
-    "payload": {
-      "id": "text-1",
-      "providerMetadata": undefined,
-      "text": ", ",
-    },
-    "runId": "test-run-id",
-    "type": "text-delta",
-  },
-  {
-    "from": "AGENT",
-    "payload": {
-      "id": "text-1",
-      "providerMetadata": undefined,
-      "text": "world!",
-    },
-    "runId": "test-run-id",
-    "type": "text-delta",
-  },
-  {
-    "from": "AGENT",
-    "payload": {
-      "id": "text-1",
-      "type": "text-end",
-    },
-    "runId": "test-run-id",
-    "type": "text-end",
+    "type": "error",
   },
   {
     "from": "AGENT",
@@ -11750,37 +11505,20 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
             ],
             "role": "user",
           },
-          {
-            "content": [
-              {
-                "text": "Hello, world!",
-                "type": "text",
-              },
-            ],
-            "role": "assistant",
-          },
         ],
-        "nonUser": [
-          {
-            "content": [
-              {
-                "text": "Hello, world!",
-                "type": "text",
-              },
-            ],
-            "role": "assistant",
-          },
-        ],
+        "nonUser": [],
         "user": [
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -11806,25 +11544,15 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
-            "finishReason": undefined,
+            "finishReason": "error",
             "providerMetadata": undefined,
             "request": {},
             "response": {
               "headers": undefined,
               "id": "id-2000",
-              "messages": [
-                {
-                  "content": [
-                    {
-                      "text": "Hello, world!",
-                      "type": "text",
-                    },
-                  ],
-                  "role": "assistant",
-                },
-              ],
+              "messages": [],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
               "modelVersion": "v3",
@@ -11832,27 +11560,27 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
             },
             "tripwire": undefined,
             "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
+              "inputTokens": undefined,
+              "outputTokens": undefined,
+              "totalTokens": undefined,
             },
             "warnings": [],
           },
         ],
-        "text": "Hello, world!",
+        "text": "",
         "toolCalls": [],
         "usage": {
-          "inputTokens": 3,
-          "outputTokens": 10,
-          "totalTokens": 13,
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0,
         },
       },
       "processorRetryCount": 0,
       "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
-        "reason": "stop",
-        "warnings": undefined,
+        "reason": "error",
+        "warnings": [],
       },
     },
     "runId": "test-run-id",
@@ -11867,37 +11595,20 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
             ],
             "role": "user",
           },
-          {
-            "content": [
-              {
-                "text": "Hello, world!",
-                "type": "text",
-              },
-            ],
-            "role": "assistant",
-          },
         ],
-        "nonUser": [
-          {
-            "content": [
-              {
-                "text": "Hello, world!",
-                "type": "text",
-              },
-            ],
-            "role": "assistant",
-          },
-        ],
+        "nonUser": [],
         "user": [
           {
             "content": [
               {
+                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -11923,25 +11634,15 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
-            "finishReason": undefined,
+            "finishReason": "error",
             "providerMetadata": undefined,
             "request": {},
             "response": {
               "headers": undefined,
               "id": "id-2000",
-              "messages": [
-                {
-                  "content": [
-                    {
-                      "text": "Hello, world!",
-                      "type": "text",
-                    },
-                  ],
-                  "role": "assistant",
-                },
-              ],
+              "messages": [],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
               "modelVersion": "v3",
@@ -11949,27 +11650,27 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
             },
             "tripwire": undefined,
             "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
+              "inputTokens": undefined,
+              "outputTokens": undefined,
+              "totalTokens": undefined,
             },
             "warnings": [],
           },
         ],
-        "text": "Hello, world!",
+        "text": "",
         "toolCalls": [],
         "usage": {
-          "inputTokens": 3,
-          "outputTokens": 10,
-          "totalTokens": 13,
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0,
         },
       },
       "processorRetryCount": 0,
       "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
-        "reason": "stop",
-        "warnings": undefined,
+        "reason": "error",
+        "warnings": [],
       },
     },
     "runId": "test-run-id",
@@ -12072,7 +11773,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.response > should resolve wi
           },
         ],
       },
-      "createdAt": 2024-01-01T00:00:00.001Z,
       "id": "msg-0",
       "role": "assistant",
     },
@@ -12085,6 +11785,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.response > should resolve wi
     {
       "content": [
         {
+          "providerOptions": undefined,
           "text": "Hello",
           "type": "text",
         },
@@ -12103,11 +11804,13 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.response > should resolve wi
     {
       "id": "msg-0",
       "metadata": {
-        "createdAt": 2024-01-01T00:00:00.001Z,
         "modelId": "mock-model-id",
       },
       "parts": [
         {
+          "providerMetadata": {
+            "mastra": {},
+          },
           "text": "Hello",
           "type": "text",
         },
@@ -12173,6 +11876,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
         "type": "file",
       },
       {
+        "providerOptions": {
+          "mastra": {
+            "createdAt": 1704067200000,
+          },
+        },
         "text": "Hello!",
         "type": "text",
       },
@@ -12244,27 +11952,42 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
             },
             "parts": [
               {
+                "createdAt": 1704067200000,
                 "data": "Hello World",
                 "mimeType": "text/plain",
                 "type": "file",
               },
               {
+                "createdAt": 1704067200000,
                 "text": "Hello!",
                 "type": "text",
               },
               {
+                "createdAt": 1704067200000,
                 "data": "QkFVRw==",
                 "mimeType": "image/jpeg",
                 "type": "file",
               },
               {
+                "createdAt": 1704067200000,
                 "data": "data:text/plain;base64,Hello World",
                 "mimeType": "text/plain",
+                "providerMetadata": {
+                  "mastra": {
+                    "createdAt": 1704067200000,
+                  },
+                },
                 "type": "file",
               },
               {
+                "createdAt": 1704067200000,
                 "data": "data:image/jpeg;base64,QkFVRw==",
                 "mimeType": "image/jpeg",
+                "providerMetadata": {
+                  "mastra": {
+                    "createdAt": 1704067200000,
+                  },
+                },
                 "type": "file",
               },
             ],
@@ -12283,9 +12006,19 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
               "data": "data:text/plain;base64,Hello World",
               "filename": undefined,
               "mediaType": "text/plain",
+              "providerOptions": {
+                "mastra": {
+                  "createdAt": 1704067200000,
+                },
+              },
               "type": "file",
             },
             {
+              "providerOptions": {
+                "mastra": {
+                  "createdAt": 1704067200000,
+                },
+              },
               "text": "Hello!",
               "type": "text",
             },
@@ -12293,6 +12026,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
               "data": "data:image/jpeg;base64,QkFVRw==",
               "filename": undefined,
               "mediaType": "image/jpeg",
+              "providerOptions": {
+                "mastra": {
+                  "createdAt": 1704067200000,
+                },
+              },
               "type": "file",
             },
           ],
@@ -12318,25 +12056,50 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
           "parts": [
             {
               "mediaType": "text/plain",
+              "providerMetadata": {
+                "mastra": {
+                  "createdAt": 1704067200000,
+                },
+              },
               "type": "file",
               "url": "data:text/plain;base64,Hello World",
             },
             {
+              "providerMetadata": {
+                "mastra": {
+                  "createdAt": 1704067200000,
+                },
+              },
               "text": "Hello!",
               "type": "text",
             },
             {
               "mediaType": "image/jpeg",
+              "providerMetadata": {
+                "mastra": {
+                  "createdAt": 1704067200000,
+                },
+              },
               "type": "file",
               "url": "data:image/jpeg;base64,QkFVRw==",
             },
             {
               "mediaType": "text/plain",
+              "providerMetadata": {
+                "mastra": {
+                  "createdAt": 1704067200000,
+                },
+              },
               "type": "file",
               "url": "data:text/plain;base64,Hello World",
             },
             {
               "mediaType": "image/jpeg",
+              "providerMetadata": {
+                "mastra": {
+                  "createdAt": 1704067200000,
+                },
+              },
               "type": "file",
               "url": "data:image/jpeg;base64,QkFVRw==",
             },

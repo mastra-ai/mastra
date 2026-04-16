@@ -72,6 +72,8 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   metadata?: Record<string, unknown>;
   /** Global request context passed to agent.generate() for all items */
   requestContext?: Record<string, unknown>;
+  /** Agent version ID to record against the experiment */
+  agentVersion?: string;
 }
 
 /**

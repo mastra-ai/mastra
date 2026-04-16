@@ -1,29 +1,43 @@
 import {
-  MainContentLayout,
+  Breadcrumb,
+  Button,
+  Crumb,
+  Header,
+  Icon,
   MainContentContent,
+  MainContentLayout,
+  PermissionDenied,
+  SessionExpired,
+  is401UnauthorizedError,
+  is403ForbiddenError,
+} from '@mastra/playground-ui';
+import { Database, Play } from 'lucide-react';
+import { useState } from 'react';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router';
+import {
   DatasetPageContent,
   ExperimentTriggerDialog,
   AddItemDialog,
   EditDatasetDialog,
   DeleteDatasetDialog,
-  useDataset,
-  Button,
-  Header,
-  Breadcrumb,
-  Crumb,
-  Icon,
   DatasetCombobox,
-  PermissionDenied,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
-import type { DatasetVersion } from '@mastra/playground-ui';
-import { Database, Play } from 'lucide-react';
-import { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router';
+} from '@/domains/datasets';
+import type { DatasetVersion } from '@/domains/datasets/hooks/use-dataset-versions';
+import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+
+type DatasetTab = 'items' | 'experiments' | 'review';
+const VALID_TABS = new Set<string>(['items', 'experiments', 'review']);
 
 function DatasetPage() {
   const { datasetId } = useParams<{ datasetId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const initialTab: DatasetTab = tabParam && VALID_TABS.has(tabParam) ? (tabParam as DatasetTab) : 'items';
+
+  const handleTabChange = (tab: DatasetTab) => {
+    setSearchParams(tab === 'items' ? {} : { tab }, { replace: true });
+  };
 
   // Dialog states
   const [experimentDialogOpen, setExperimentDialogOpen] = useState(false);
@@ -43,6 +57,16 @@ function DatasetPage() {
         <MainContentContent>
           <div className="text-neutral3 p-4">Dataset not found</div>
         </MainContentContent>
+      </MainContentLayout>
+    );
+  }
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
       </MainContentLayout>
     );
   }
@@ -95,6 +119,8 @@ function DatasetPage() {
           onDeleteClick={() => setDeleteDialogOpen(true)}
           activeDatasetVersion={activeVersion}
           onVersionSelect={handleVersionSelect}
+          initialTab={initialTab}
+          onTabChange={handleTabChange}
           experimentTriggerSlot={
             <Button variant="primary" onClick={() => setExperimentDialogOpen(true)}>
               <Play />
