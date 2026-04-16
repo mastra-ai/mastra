@@ -282,7 +282,7 @@ importers:
     dependencies:
       firebase-admin:
         specifier: ^13.7.0
-        version: 13.7.0
+        version: 13.7.0(encoding@0.1.13)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -1701,10 +1701,10 @@ importers:
         version: link:../mastra
       braintrust:
         specifier: ^2.2.2
-        version: 2.2.2(@aws-sdk/credential-provider-web-identity@3.972.20)(chokidar@3.6.0)(zod@4.3.6)
+        version: 2.2.2(@aws-sdk/credential-provider-web-identity@3.972.20)(chokidar@3.6.0)(zod@3.25.76)
       zod:
         specifier: ^3.25.34 || ^4.0.0
-        version: 4.3.6
+        version: 3.25.76
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2301,11 +2301,11 @@ importers:
         version: 1.1.3
       zod:
         specifier: ^3.25.0 || ^4.0.0
-        version: 4.3.6
+        version: 3.25.76
     devDependencies:
       '@ai-sdk/provider-utils':
         specifier: ^3.0.22
-        version: 3.0.23(zod@4.3.6)
+        version: 3.0.23(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -2326,7 +2326,7 @@ importers:
         version: 4.0.18(vitest@4.0.18)
       ai:
         specifier: ^4.3.19
-        version: 4.3.19(react@19.2.5)(zod@4.3.6)
+        version: 4.3.19(react@19.2.5)(zod@3.25.76)
       eslint:
         specifier: ^9.39.4
         version: 9.39.4(jiti@2.6.1)
@@ -2463,17 +2463,17 @@ importers:
     dependencies:
       zod:
         specifier: ^3.25.0 || ^4.0.0
-        version: 4.3.6
+        version: 3.25.76
     devDependencies:
       '@ai-sdk/provider':
         specifier: 1.1.3
         version: 1.1.3
       '@ai-sdk/provider-utils':
         specifier: 2.2.8
-        version: 2.2.8(zod@4.3.6)
+        version: 2.2.8(zod@3.25.76)
       '@ai-sdk/ui-utils':
         specifier: 1.2.11
-        version: 1.2.11(zod@4.3.6)
+        version: 1.2.11(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../_config
@@ -2497,7 +2497,7 @@ importers:
         version: 4.0.18(vitest@4.1.0)
       ai:
         specifier: ^4.3.19
-        version: 4.3.19(react@19.2.5)(zod@4.3.6)
+        version: 4.3.19(react@19.2.5)(zod@3.25.76)
       eslint:
         specifier: ^9.39.4
         version: 9.39.4(jiti@2.6.1)
@@ -2584,17 +2584,17 @@ importers:
     dependencies:
       zod:
         specifier: ^3.25.76 || ^4.0.0
-        version: 4.3.6
+        version: 3.25.76
     devDependencies:
       '@ai-sdk/gateway':
         specifier: ^3.0.66
-        version: 3.0.66(zod@4.3.6)
+        version: 3.0.66(zod@3.25.76)
       '@ai-sdk/provider':
         specifier: ^3.0.8
         version: 3.0.8
       '@ai-sdk/provider-utils':
         specifier: ^4.0.19
-        version: 4.0.23(zod@4.3.6)
+        version: 4.0.23(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../_config
@@ -2618,7 +2618,7 @@ importers:
         version: 4.0.18(vitest@4.1.0)
       ai:
         specifier: ^6.0.116
-        version: 6.0.116(zod@4.3.6)
+        version: 6.0.116(zod@3.25.76)
       eslint:
         specifier: ^9.39.4
         version: 9.39.4(jiti@2.6.1)
@@ -4957,17 +4957,17 @@ importers:
     dependencies:
       vitest:
         specifier: '*'
-        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0(bufferutil@4.1.0))(lightningcss@1.32.0)(msw@2.12.13(@types/node@22.19.15)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.3)
+        version: 4.1.0(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/ui@4.0.18)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.12.13(@types/node@22.19.15)(typescript@5.9.3))(vite@7.3.2(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.3))
     devDependencies:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18)
+        version: 4.0.18(vitest@4.1.0)
       '@vitest/ui':
         specifier: 'catalog:'
-        version: 4.0.18(vitest@4.0.18)
+        version: 4.0.18(vitest@4.1.0)
 
   stores/astra:
     dependencies:
@@ -6508,9 +6508,6 @@ importers:
 
   workflows/inngest:
     dependencies:
-      '@inngest/realtime':
-        specifier: ^0.4.6
-        version: 0.4.6(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.12)(koa@3.1.2)(react@19.2.5)(typescript@5.9.3)(zod@4.3.6)
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
@@ -6518,8 +6515,8 @@ importers:
         specifier: ^1.30.0
         version: 1.30.1(@opentelemetry/api@1.9.0)
       inngest:
-        specifier: ^3.52.6
-        version: 3.52.7(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.12)(koa@3.1.2)(typescript@5.9.3)(zod@4.3.6)
+        specifier: ^4.2.2
+        version: 4.2.4(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.12)(koa@3.1.2)(react@19.2.5)(typescript@5.9.3)(zod@4.3.6)
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.24
@@ -19526,6 +19523,46 @@ packages:
       typescript:
         optional: true
 
+  inngest@4.2.4:
+    resolution: {integrity: sha512-MBFcRhhQ+dcGHLYCbIcMYxiAZCxzfAx0+3b/euYQKc7MK3rOnNHaNHuF2e0WsT13oWJiGzjuC3T4Nocggmh5WQ==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@sveltejs/kit': '>=1.27.3'
+      '@vercel/node': '>=2.15.9'
+      aws-lambda: '>=1.0.7'
+      express: '>=4.19.2'
+      fastify: '>=4.21.0'
+      h3: '>=1.8.1'
+      hono: '>=4.2.7'
+      koa: '>=2.14.2'
+      next: '>=12.0.0'
+      react: '>=18.0.0'
+      typescript: ^5.9.3
+      zod: ^3.25.0 || ^4.0.0
+    peerDependenciesMeta:
+      '@sveltejs/kit':
+        optional: true
+      '@vercel/node':
+        optional: true
+      aws-lambda:
+        optional: true
+      express:
+        optional: true
+      fastify:
+        optional: true
+      h3:
+        optional: true
+      hono:
+        optional: true
+      koa:
+        optional: true
+      next:
+        optional: true
+      react:
+        optional: true
+      typescript:
+        optional: true
+
   internal-slot@1.1.0:
     resolution: {integrity: sha512-4gd7VpWNQNB4UKKCFFVcp1AVv+FMOgs9NKzjHKusc8jTMhd5eL1NqQqOpE0KzMds804/yHlglp3uxgluOqAPLw==}
     engines: {node: '>= 0.4'}
@@ -25749,6 +25786,13 @@ snapshots:
       '@vercel/oidc': 3.1.0
       zod: 4.3.6
 
+  '@ai-sdk/gateway@3.0.66(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.8
+      '@ai-sdk/provider-utils': 4.0.19(zod@3.25.76)
+      '@vercel/oidc': 3.1.0
+      zod: 3.25.76
+
   '@ai-sdk/gateway@3.0.66(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.8
@@ -25917,6 +25961,13 @@ snapshots:
     optionalDependencies:
       zod: 4.3.6
 
+  '@ai-sdk/provider-utils@2.2.8(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 1.1.3
+      nanoid: 3.3.11
+      secure-json-parse: 2.7.0
+      zod: 3.25.76
+
   '@ai-sdk/provider-utils@2.2.8(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
@@ -25966,12 +26017,26 @@ snapshots:
       eventsource-parser: 3.0.6
       zod: 4.3.6
 
+  '@ai-sdk/provider-utils@4.0.19(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.8
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.0.6
+      zod: 3.25.76
+
   '@ai-sdk/provider-utils@4.0.19(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.8
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.0.6
       zod: 4.3.6
+
+  '@ai-sdk/provider-utils@4.0.23(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.8
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.0.6
+      zod: 3.25.76
 
   '@ai-sdk/provider-utils@4.0.23(zod@4.3.6)':
     dependencies:
@@ -26000,6 +26065,16 @@ snapshots:
     dependencies:
       json-schema: 0.4.0
 
+  '@ai-sdk/react@1.2.12(react@19.2.5)(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
+      '@ai-sdk/ui-utils': 1.2.11(zod@3.25.76)
+      react: 19.2.5
+      swr: 2.3.6(react@19.2.5)
+      throttleit: 2.1.0
+    optionalDependencies:
+      zod: 3.25.76
+
   '@ai-sdk/react@1.2.12(react@19.2.5)(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider-utils': 2.2.8(zod@4.3.6)
@@ -26026,6 +26101,13 @@ snapshots:
       '@ai-sdk/provider': 2.0.1
       '@ai-sdk/provider-utils': 3.0.23(zod@4.3.6)
       zod: 4.3.6
+
+  '@ai-sdk/ui-utils@1.2.11(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 1.1.3
+      '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
+      zod: 3.25.76
+      zod-to-json-schema: 3.25.1(zod@3.25.76)
 
   '@ai-sdk/ui-utils@1.2.11(zod@4.3.6)':
     dependencies:
@@ -30581,7 +30663,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@google-cloud/firestore@7.11.6':
+  '@google-cloud/firestore@7.11.6(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       fast-deep-equal: 3.1.3
@@ -30952,28 +31034,6 @@ snapshots:
     dependencies:
       '@types/node': 22.19.15
       typescript: 5.9.3
-
-  '@inngest/realtime@0.4.6(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.12)(koa@3.1.2)(react@19.2.5)(typescript@5.9.3)(zod@4.3.6)':
-    dependencies:
-      '@standard-schema/spec': 1.1.0
-      debug: 4.4.3
-      inngest: 3.52.7(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.12)(koa@3.1.2)(typescript@5.9.3)(zod@4.3.6)
-      react: 19.2.5
-      zod: 4.3.6
-    transitivePeerDependencies:
-      - '@opentelemetry/core'
-      - '@sveltejs/kit'
-      - '@vercel/node'
-      - aws-lambda
-      - encoding
-      - express
-      - fastify
-      - h3
-      - hono
-      - koa
-      - next
-      - supports-color
-      - typescript
 
   '@inngest/realtime@0.4.6(@opentelemetry/core@2.6.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.12)(koa@3.1.2)(react@19.2.5)(typescript@5.9.3)(zod@4.3.6)':
     dependencies:
@@ -37602,6 +37662,18 @@ snapshots:
       clean-stack: 2.2.0
       indent-string: 4.0.0
 
+  ai@4.3.19(react@19.2.5)(zod@3.25.76):
+    dependencies:
+      '@ai-sdk/provider': 1.1.3
+      '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
+      '@ai-sdk/react': 1.2.12(react@19.2.5)(zod@3.25.76)
+      '@ai-sdk/ui-utils': 1.2.11(zod@3.25.76)
+      '@opentelemetry/api': 1.9.0
+      jsondiffpatch: 0.7.3
+      zod: 3.25.76
+    optionalDependencies:
+      react: 19.2.5
+
   ai@4.3.19(react@19.2.5)(zod@4.3.6):
     dependencies:
       '@ai-sdk/provider': 1.1.3
@@ -37637,6 +37709,14 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.17(zod@4.3.6)
       '@opentelemetry/api': 1.9.0
       zod: 4.3.6
+
+  ai@6.0.116(zod@3.25.76):
+    dependencies:
+      '@ai-sdk/gateway': 3.0.66(zod@3.25.76)
+      '@ai-sdk/provider': 3.0.8
+      '@ai-sdk/provider-utils': 4.0.19(zod@3.25.76)
+      '@opentelemetry/api': 1.9.0
+      zod: 3.25.76
 
   ai@6.0.116(zod@4.3.6):
     dependencies:
@@ -38240,7 +38320,7 @@ snapshots:
     dependencies:
       fill-range: 7.1.1
 
-  braintrust@2.2.2(@aws-sdk/credential-provider-web-identity@3.972.20)(chokidar@3.6.0)(zod@4.3.6):
+  braintrust@2.2.2(@aws-sdk/credential-provider-web-identity@3.972.20)(chokidar@3.6.0)(zod@3.25.76):
     dependencies:
       '@ai-sdk/provider': 1.1.3
       '@next/env': 14.2.33
@@ -38267,8 +38347,8 @@ snapshots:
       source-map: 0.7.6
       termi-link: 1.1.0
       uuid: 9.0.1
-      zod: 4.3.6
-      zod-to-json-schema: 3.25.1(zod@4.3.6)
+      zod: 3.25.76
+      zod-to-json-schema: 3.25.1(zod@3.25.76)
     transitivePeerDependencies:
       - '@aws-sdk/credential-provider-web-identity'
       - chokidar
@@ -40579,7 +40659,7 @@ snapshots:
       pkg-types: 1.3.1
       yaml: 2.8.3
 
-  firebase-admin@13.7.0:
+  firebase-admin@13.7.0(encoding@0.1.13):
     dependencies:
       '@fastify/busboy': 3.2.0
       '@firebase/database-compat': 2.1.0
@@ -40592,7 +40672,7 @@ snapshots:
       node-forge: 1.4.0
       uuid: 11.1.0
     optionalDependencies:
-      '@google-cloud/firestore': 7.11.6
+      '@google-cloud/firestore': 7.11.6(encoding@0.1.13)
       '@google-cloud/storage': 7.19.0(encoding@0.1.13)
     transitivePeerDependencies:
       - encoding
@@ -41657,45 +41737,6 @@ snapshots:
       - encoding
       - supports-color
 
-  inngest@3.52.7(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.12)(koa@3.1.2)(typescript@5.9.3)(zod@4.3.6):
-    dependencies:
-      '@bufbuild/protobuf': 2.10.0
-      '@inngest/ai': 0.1.7
-      '@jpwilliams/waitgroup': 2.1.1
-      '@opentelemetry/api': 1.9.0
-      '@opentelemetry/auto-instrumentations-node': 0.71.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.0))
-      '@opentelemetry/context-async-hooks': 2.6.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/exporter-trace-otlp-http': 0.205.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/instrumentation': 0.213.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resources': 2.6.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/sdk-trace-base': 2.6.0(@opentelemetry/api@1.9.0)
-      '@standard-schema/spec': 1.1.0
-      '@traceloop/instrumentation-anthropic': 0.20.0
-      '@types/debug': 4.1.12
-      '@types/ms': 2.1.0
-      canonicalize: 1.0.8
-      chalk: 4.1.2
-      cross-fetch: 4.1.0(encoding@0.1.13)
-      debug: 4.4.3
-      hash.js: 1.1.7
-      json-stringify-safe: 5.0.1
-      ms: 2.1.3
-      serialize-error-cjs: 0.1.4
-      strip-ansi: 5.2.0
-      temporal-polyfill: 0.2.5
-      ulid: 2.4.0
-      zod: 4.3.6
-    optionalDependencies:
-      express: 5.2.1
-      fastify: 5.8.5
-      hono: 4.12.12
-      koa: 3.1.2
-      typescript: 5.9.3
-    transitivePeerDependencies:
-      - '@opentelemetry/core'
-      - encoding
-      - supports-color
-
   inngest@3.52.7(@opentelemetry/core@2.6.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.12)(koa@3.1.2)(typescript@5.9.3)(zod@4.3.6):
     dependencies:
       '@bufbuild/protobuf': 2.10.0
@@ -41729,6 +41770,44 @@ snapshots:
       fastify: 5.8.5
       hono: 4.12.12
       koa: 3.1.2
+      typescript: 5.9.3
+    transitivePeerDependencies:
+      - '@opentelemetry/core'
+      - encoding
+      - supports-color
+
+  inngest@4.2.4(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.12)(koa@3.1.2)(react@19.2.5)(typescript@5.9.3)(zod@4.3.6):
+    dependencies:
+      '@bufbuild/protobuf': 2.10.0
+      '@inngest/ai': 0.1.7
+      '@jpwilliams/waitgroup': 2.1.1
+      '@opentelemetry/api': 1.9.0
+      '@opentelemetry/auto-instrumentations-node': 0.71.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.0))
+      '@opentelemetry/context-async-hooks': 2.6.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/exporter-trace-otlp-http': 0.205.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/instrumentation': 0.213.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/resources': 2.6.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/sdk-trace-base': 2.6.0(@opentelemetry/api@1.9.0)
+      '@standard-schema/spec': 1.1.0
+      '@traceloop/instrumentation-anthropic': 0.20.0
+      '@types/debug': 4.1.12
+      '@types/ms': 2.1.0
+      canonicalize: 1.0.8
+      cross-fetch: 4.1.0(encoding@0.1.13)
+      debug: 4.4.3
+      hash.js: 1.1.7
+      json-stringify-safe: 5.0.1
+      ms: 2.1.3
+      serialize-error-cjs: 0.1.4
+      temporal-polyfill: 0.2.5
+      ulid: 2.4.0
+      zod: 4.3.6
+    optionalDependencies:
+      express: 5.2.1
+      fastify: 5.8.5
+      hono: 4.12.12
+      koa: 3.1.2
+      react: 19.2.5
       typescript: 5.9.3
     transitivePeerDependencies:
       - '@opentelemetry/core'
