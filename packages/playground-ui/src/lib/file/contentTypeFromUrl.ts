@@ -28,7 +28,7 @@ export const getFileContentType = async (url: string) => {
     } catch {
       // url is not a valid absolute URL (e.g. a relative path) — extract
       // extension from the raw string so we still return a useful MIME type.
-      const extension = url.split('.').pop()?.split('?')[0];
+      const extension = url.split('.').pop()?.split(/[?#]/)[0];
       if (!extension) return undefined;
       return EXTENSION_TO_MIME[extension.toLowerCase()];
     }
