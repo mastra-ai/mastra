@@ -115,7 +115,7 @@ const agent = new Agent({
   id: 'rag-agent',
   name: "Research Assistant",
   model: "anthropic/claude-sonnet-4-6",
-  instructions: `You are a research assistant. Use tavily-search to find relevant pages,then use tavily-extract to get full content from the best results.`,
+  instructions: `You are a research assistant. Use tavily-search to find relevant pages, then use tavily-extract to get full content from the best results.`,
   tools: {
     search: createTavilySearchTool(),
     extract: createTavilyExtractTool(),

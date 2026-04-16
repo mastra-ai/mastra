@@ -89,7 +89,7 @@ export function createTavilySearchTool(config?: TavilyClientOptions) {
           url: typeof img === 'string' ? img : img.url,
           description: typeof img === 'string' ? undefined : img.description,
         })),
-        results: response.results.map((r: any) => ({
+        results: (response.results ?? []).map((r: any) => ({
           title: r.title,
           url: r.url,
           content: r.content,

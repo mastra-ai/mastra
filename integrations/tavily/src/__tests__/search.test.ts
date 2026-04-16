@@ -132,4 +132,17 @@ describe('createTavilySearchTool', () => {
 
     await expect(tool.execute!({ query: 'test' }, {} as any)).rejects.toThrow('API rate limit exceeded');
   });
+
+  it('should handle empty results', async () => {
+    mockSearch.mockResolvedValue({
+      query: 'test',
+      results: undefined,
+      responseTime: 1.0,
+    });
+
+    const tool = createTavilySearchTool({ apiKey: 'test-key' });
+    const result = (await tool.execute!({ query: 'test' }, {} as any)) as any;
+
+    expect(result.results).toEqual([]);
+  });
 });
