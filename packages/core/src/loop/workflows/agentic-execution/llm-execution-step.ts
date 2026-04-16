@@ -723,6 +723,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let request: any;
       let rawResponse: any;
       let activeFallbackModelIndex = inputData.fallbackModelIndex || 0;
+      let executedStepModel: string | undefined;
       const maxErrorProcessorRetries = maxProcessorRetries ?? (errorProcessors?.length ? 10 : undefined);
       const { outputStream, callBail, runState, stepTools, stepWorkspace, processAPIErrorRetry } =
         await executeStreamWithFallbackModels<{
@@ -739,6 +740,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         )(async (modelConfig, isLastModel) => {
           activeFallbackModelIndex = models.findIndex(candidate => candidate.id === modelConfig.id);
           const model = modelConfig.model;
+          executedStepModel = model.provider && model.modelId ? `${model.provider}/${model.modelId}` : undefined;
           const modelHeaders = modelConfig.headers;
           // Reset system messages to original before each step execution
           // This ensures that system message modifications in prepareStep/processInputStep/processors
@@ -1290,14 +1292,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           };
         });
 
-      if (currentIteration > 1) {
-        const activeModel = models[activeFallbackModelIndex]?.model;
-        const provider = activeModel?.provider;
-        const modelId = activeModel?.modelId;
-
-        if (provider && modelId) {
-          messageList.enrichLastStepStart(`${provider}/${modelId}`);
-        }
+      if (currentIteration > 1 && executedStepModel) {
+        messageList.enrichLastStepStart(executedStepModel);
       }
 
       // Store modified tools and workspace in _internal so toolCallStep can access them

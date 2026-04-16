@@ -3141,7 +3141,7 @@ ${formattedMessages}
       const ttlExpired =
         ttlExpiredMs !== undefined && activateAfterIdle !== undefined && ttlExpiredMs >= activateAfterIdle;
       const actorModel = getCurrentModel(opts.currentModel);
-      const lastModel = getLastModelFromMessages(opts.messages);
+      const lastModel = getLastModelFromMessages(thresholdMessages);
       const providerChanged =
         this.observationConfig.activateOnProviderChange === true &&
         actorModel !== undefined &&
