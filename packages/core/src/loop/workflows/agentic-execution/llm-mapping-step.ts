@@ -109,7 +109,11 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         result?: unknown;
         providerMetadata?: Record<string, unknown>;
       }) {
-        const tool = rest.tools?.[toolCall.toolName] as { toModelOutput?: (output: unknown) => unknown } | undefined;
+        const tool = ((
+          _internal?.stepTools as Record<string, { toModelOutput?: (output: unknown) => unknown }> | undefined
+        )?.[toolCall.toolName] ?? rest.tools?.[toolCall.toolName]) as
+          | { toModelOutput?: (output: unknown) => unknown }
+          | undefined;
         let modelOutput: unknown;
         if (tool?.toModelOutput && toolCall.result != null) {
           modelOutput = await tool.toModelOutput(toolCall.result);
