@@ -306,10 +306,12 @@ export class MessageMerger {
         latestMessage.content.parts.at(-1)?.type === 'tool-invocation';
 
       const previousStepStart = [...latestMessage.content.parts].reverse().find(p => p.type === 'step-start');
-      const stepStartPart = stampPart({
-        type: 'step-start' as const,
-        model: previousStepStart?.model,
-      });
+      const stepStartPart = previousStepStart?.model
+        ? stampPart({
+            type: 'step-start' as const,
+            model: previousStepStart.model,
+          })
+        : ({ type: 'step-start' as const } as MastraMessageContentV2['parts'][number]);
 
       if (typeof insertAt === 'number') {
         if (needsStepStart) {
