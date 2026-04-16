@@ -1,5 +1,5 @@
 /**
- * @mastra/azure-blob - Azure Blob Storage Filesystem Provider
+ * @mastra/azure/blob - Azure Blob Storage Filesystem Provider
  *
  * A filesystem implementation backed by Azure Blob Storage.
  */
