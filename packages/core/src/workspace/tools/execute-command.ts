@@ -62,18 +62,39 @@ function extractTailPipe(command: string): { command: string; tail?: number } {
  * Maps CLI command prefixes to their CDP URL flag.
  * All CLIs accept either port number or full WebSocket URL.
  * We use full URL for consistency.
+ *
+ * warmupCommand: Some CLIs (like agent-browser) need a "connect" command
+ * to be run first to establish their daemon's CDP connection before other
+ * commands will work properly.
  */
-const CLI_CDP_PATTERNS: Record<string, { pattern: RegExp; flag: string }> = {
-  'agent-browser': { pattern: /^agent-browser\b/, flag: '--cdp' },
-  'browser-use': { pattern: /^(?:browser-use|browseruse|bu)\b/, flag: '--cdp-url' },
-  browse: { pattern: /^browse\b/, flag: '--ws' },
-};
+const CLI_CDP_PATTERNS: Record<string, { pattern: RegExp; flag: string; warmupCommand?: (cdpUrl: string) => string }> =
+  {
+    'agent-browser': {
+      pattern: /^agent-browser\b/,
+      flag: '--cdp',
+      // agent-browser daemon needs explicit connect command to establish CDP connection
+      warmupCommand: (cdpUrl: string) => `agent-browser connect "${cdpUrl}"`,
+    },
+    'browser-use': { pattern: /^(?:browser-use|browseruse|bu)\b/, flag: '--cdp-url' },
+    browse: { pattern: /^browse\b/, flag: '--ws' },
+  };
 
 /**
- * Check if a command is a browser CLI command.
+ * Track which CLI providers have been warmed up per thread.
+ * Key format: `${cliName}:${threadId}`
  */
-function isBrowserCliCommand(command: string): boolean {
-  return Object.values(CLI_CDP_PATTERNS).some(config => config.pattern.test(command));
+const warmedUpClis = new Set<string>();
+
+/**
+ * Get the CLI name from a command if it matches a browser CLI pattern.
+ */
+function getCliName(command: string): string | null {
+  for (const [name, config] of Object.entries(CLI_CDP_PATTERNS)) {
+    if (config.pattern.test(command)) {
+      return name;
+    }
+  }
+  return null;
 }
 
 /**
@@ -118,18 +139,57 @@ async function executeCommand(input: Record<string, any>, context: any) {
 
   // Lazy browser launch and CDP URL injection for browser CLI commands
   const browser = workspace.browser;
-  if (browser && isBrowserCliCommand(command)) {
+  const cliName = getCliName(command);
+  if (browser && cliName) {
     // Get threadId from context for thread-scoped browsers
-    const threadId = context?.threadId;
+    // threadId lives at context.agent.threadId (set during tool execution)
+    const threadId = context?.agent?.threadId ?? context?.threadId ?? 'default';
+
+    // eslint-disable-next-line no-console
+    console.log(
+      `[execute-command] Browser CLI detected. cli=${cliName}, threadId=${threadId}, isBrowserRunning=${browser.isBrowserRunning(threadId)}`,
+    );
 
     // Launch browser if not already running (for this thread if thread-scoped)
     if (!browser.isBrowserRunning(threadId)) {
+      // eslint-disable-next-line no-console
+      console.log(`[execute-command] Launching browser for threadId=${threadId}`);
       await browser.launch(threadId);
     }
 
-    // Inject CDP URL into command
+    // Get CDP URL for injection
     const cdpUrl = browser.getCdpUrl(threadId);
+    // eslint-disable-next-line no-console
+    console.log(`[execute-command] CDP URL for threadId=${threadId}: ${cdpUrl}`);
+
+    // Run warmup command if this CLI requires it and hasn't been warmed up yet
+    const warmupKey = `${cliName}:${threadId}`;
+    const cliConfig = CLI_CDP_PATTERNS[cliName];
+    if (cdpUrl && cliConfig?.warmupCommand && !warmedUpClis.has(warmupKey)) {
+      const warmupCmd = cliConfig.warmupCommand(cdpUrl);
+      // eslint-disable-next-line no-console
+      console.log(`[execute-command] Running warmup command for ${cliName}: ${warmupCmd}`);
+      try {
+        // Run warmup command with a timeout - we don't care much about the result,
+        // just that it establishes the connection
+        if (sandbox.executeCommand) {
+          await sandbox.executeCommand(warmupCmd, [], { timeout: 10000 });
+        }
+        warmedUpClis.add(warmupKey);
+        // eslint-disable-next-line no-console
+        console.log(`[execute-command] Warmup complete for ${cliName}`);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.log(`[execute-command] Warmup command failed (may still work): ${err}`);
+        // Still mark as warmed up to avoid retrying every command
+        warmedUpClis.add(warmupKey);
+      }
+    }
+
+    const originalCommand = command;
     command = injectCdpUrl(command, cdpUrl);
+    // eslint-disable-next-line no-console
+    console.log(`[execute-command] Command: "${originalCommand}" -> "${command}"`);
   }
 
   await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);

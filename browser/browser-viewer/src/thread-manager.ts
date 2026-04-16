@@ -174,6 +174,9 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
     // Store in our session map
     this.threadSessions.set(threadId, session);
 
+    // Store in base class sessions map (for hasSession() checks)
+    this.sessions.set(threadId, session);
+
     // Store browser in thread managers map (used by base class)
     this.threadManagers.set(threadId, browser);
 
@@ -286,6 +289,9 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       cdpUrl,
     };
 
+    // Store in base class sessions map (for hasSession() checks)
+    this.sessions.set(DEFAULT_THREAD_ID, this.sharedSession);
+
     // Set shared manager (used by base class)
     this.setSharedManager(browser);
 
@@ -304,6 +310,7 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
     if (this.scope === 'shared') {
       this.sharedSession = null;
       this.clearSharedManager();
+      this.sessions.delete(DEFAULT_THREAD_ID);
     } else {
       this.threadSessions.delete(threadId);
       this.threadManagers.delete(threadId);
