@@ -49,6 +49,7 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   messageList: MessageList;
   outputStream: MastraModelOutput<OUTPUT>;
   runState: AgenticRunState;
+  model?: { provider?: string };
   options?: LoopConfig<OUTPUT>;
   controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
   responseFromModel: {
@@ -61,9 +62,22 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   transportResolver?: () => StreamTransport | undefined;
 };
 
-function buildResponseModelMetadata(runState: AgenticRunState): { metadata: Record<string, unknown> } | undefined {
+function buildResponseModelMetadata(
+  runState: AgenticRunState,
+  model?: { provider?: string },
+): { metadata: Record<string, unknown> } | undefined {
+  const metadata: Record<string, unknown> = {};
   const modelId = runState.state.responseMetadata?.modelId;
-  return modelId ? { metadata: { modelId } } : undefined;
+
+  if (modelId) {
+    metadata.modelId = modelId;
+  }
+
+  if (model?.provider) {
+    metadata.provider = model.provider;
+  }
+
+  return Object.keys(metadata).length > 0 ? { metadata } : undefined;
 }
 
 function flushReasoningBuffer({
@@ -71,11 +85,13 @@ function flushReasoningBuffer({
   messageId,
   messageList,
   runState,
+  model,
 }: {
   buffer: { deltas: string[]; providerMetadata: Record<string, any> | undefined };
   messageId: string;
   messageList: MessageList;
   runState: AgenticRunState;
+  model?: { provider?: string };
 }) {
   const message: MastraDBMessage = {
     id: messageId,
@@ -90,7 +106,7 @@ function flushReasoningBuffer({
           providerMetadata: buffer.providerMetadata,
         },
       ],
-      ...buildResponseModelMetadata(runState),
+      ...buildResponseModelMetadata(runState, model),
     },
     createdAt: new Date(),
   };
@@ -104,6 +120,7 @@ async function processOutputStream<OUTPUT = undefined>({
   messageList,
   outputStream,
   runState,
+  model,
   options,
   controller,
   responseFromModel,
@@ -174,7 +191,7 @@ async function processOutputStream<OUTPUT = undefined>({
                 ...(providerMetadata ? { providerMetadata } : {}),
               },
             ],
-            ...buildResponseModelMetadata(runState),
+            ...buildResponseModelMetadata(runState, model),
           },
           createdAt: new Date(),
         };
@@ -212,6 +229,7 @@ async function processOutputStream<OUTPUT = undefined>({
           messageId,
           messageList,
           runState,
+          model,
         });
       }
 
@@ -345,7 +363,7 @@ async function processOutputStream<OUTPUT = undefined>({
                   providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
                 },
               ],
-              ...buildResponseModelMetadata(runState),
+              ...buildResponseModelMetadata(runState, model),
             },
             createdAt: new Date(),
           };
@@ -403,6 +421,7 @@ async function processOutputStream<OUTPUT = undefined>({
           messageId,
           messageList,
           runState,
+          model,
         });
 
         reasoningBuffers.delete(chunk.payload.id);
@@ -436,7 +455,7 @@ async function processOutputStream<OUTPUT = undefined>({
                   ...(chunk.payload.providerMetadata ? { providerMetadata: chunk.payload.providerMetadata } : {}),
                 },
               ],
-              ...buildResponseModelMetadata(runState),
+              ...buildResponseModelMetadata(runState, model),
             },
             createdAt: new Date(),
           };
@@ -464,7 +483,7 @@ async function processOutputStream<OUTPUT = undefined>({
                   },
                 },
               ],
-              ...buildResponseModelMetadata(runState),
+              ...buildResponseModelMetadata(runState, model),
             },
             createdAt: new Date(),
           };
@@ -559,7 +578,7 @@ async function processOutputStream<OUTPUT = undefined>({
           content: {
             format: 2,
             parts: [toolCallPart],
-            ...buildResponseModelMetadata(runState),
+            ...buildResponseModelMetadata(runState, model),
           },
           createdAt: new Date(),
         };
@@ -704,6 +723,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let request: any;
       let rawResponse: any;
       let activeFallbackModelIndex = inputData.fallbackModelIndex || 0;
+      let executedStepModel: string | undefined;
       const maxErrorProcessorRetries = maxProcessorRetries ?? (errorProcessors?.length ? 10 : undefined);
       const { outputStream, callBail, runState, stepTools, stepWorkspace, processAPIErrorRetry } =
         await executeStreamWithFallbackModels<{
@@ -720,6 +740,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         )(async (modelConfig, isLastModel) => {
           activeFallbackModelIndex = models.findIndex(candidate => candidate.id === modelConfig.id);
           const model = modelConfig.model;
+          executedStepModel = model.provider && model.modelId ? `${model.provider}/${model.modelId}` : undefined;
           const modelHeaders = modelConfig.headers;
           // Reset system messages to original before each step execution
           // This ensures that system message modifications in prepareStep/processInputStep/processors
@@ -1126,6 +1147,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               messageId: currentStep.messageId,
               messageList,
               runState,
+              model: currentStep.model,
               options,
               controller,
               responseFromModel: {
@@ -1269,6 +1291,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             stepWorkspace: currentStep.workspace,
           };
         });
+
+      if (currentIteration > 1 && executedStepModel) {
+        messageList.enrichLastStepStart(executedStepModel);
+      }
 
       // Store modified tools and workspace in _internal so toolCallStep can access them
       // without going through workflow serialization (which would lose execute functions)

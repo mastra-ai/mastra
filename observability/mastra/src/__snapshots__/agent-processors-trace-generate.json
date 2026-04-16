@@ -606,7 +606,8 @@
                       }
                     ],
                     "metadata": {
-                      "modelId": "mock-model-id"
+                      "modelId": "mock-model-id",
+                      "provider": "mock-provider"
                     },
                     "content": "Mock V2 generate response"
                   },
