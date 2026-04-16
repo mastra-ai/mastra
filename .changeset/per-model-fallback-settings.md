@@ -25,4 +25,7 @@ const agent = new Agent({
 });
 ```
 
-**Precedence** (lowest → highest): agent `defaultOptions` → call-time `stream()` / `generate()` options → per-fallback entry. `modelSettings` and `headers` shallow-merge by key; `providerOptions` deep-merges per provider key.
+**Precedence**:
+
+- `modelSettings` and `providerOptions`: per-fallback entry > call-time `stream()` / `generate()` options > agent `defaultOptions`. `modelSettings` shallow-merges by key; `providerOptions` deep-merges recursively, preserving sibling and nested keys.
+- `headers`: call-time `modelSettings.headers` > per-fallback `headers` > model-router-extracted headers. This preserves the existing Mastra contract from #11275, where runtime headers (typically tracing, auth, tenancy) intentionally override model-level headers.

@@ -88,8 +88,10 @@ export type ProviderOptions = (SharedV2ProviderOptions | SharedV3ProviderOptions
 };
 
 /**
- * Shallow-merges provider-options per provider key. `override` wins at the leaf
- * within the same provider; providers only in `base` are preserved.
+ * Recursively deep-merges provider-options. When both sides have plain objects
+ * at the same key, their keys are merged. Arrays and class instances (Date,
+ * Map, etc.) are replaced wholesale. Within colliding leaf keys, `override`
+ * wins.
  */
 export function mergeProviderOptions<T extends ProviderOptions | SharedV2ProviderOptions | SharedV3ProviderOptions>(
   base: T | undefined,
@@ -97,17 +99,24 @@ export function mergeProviderOptions<T extends ProviderOptions | SharedV2Provide
 ): T | undefined {
   if (!base) return override;
   if (!override) return base;
+  return deepMerge(base, override) as T;
+}
 
-  const out: Record<string, Record<string, unknown>> = {};
-  for (const [provider, opts] of Object.entries(base)) {
-    if (opts && typeof opts === 'object') {
-      out[provider] = { ...(opts as Record<string, unknown>) };
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === null || proto === Object.prototype;
+}
+
+function deepMerge(base: unknown, override: unknown): unknown {
+  if (override === undefined) return base;
+  if (base === undefined) return override;
+  if (isPlainObject(base) && isPlainObject(override)) {
+    const out: Record<string, unknown> = { ...base };
+    for (const key of Object.keys(override)) {
+      out[key] = deepMerge(base[key], override[key]);
     }
+    return out;
   }
-  for (const [provider, opts] of Object.entries(override)) {
-    if (opts && typeof opts === 'object') {
-      out[provider] = { ...(out[provider] ?? {}), ...(opts as Record<string, unknown>) };
-    }
-  }
-  return out as T;
+  return override;
 }

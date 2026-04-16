@@ -200,6 +200,32 @@ describe('Per-fallback-entry settings', () => {
       expect(po?.openai).toBeUndefined();
     });
 
+    it('should deep-merge nested provider config (e.g. google.thinkingConfig) without losing sibling keys', async () => {
+      const primary = createRecordingStreamModel('nested-merge', 'ok');
+
+      const agent = new Agent({
+        id: 'nested-provider-options-merge',
+        name: 'Nested ProviderOptions Merge Test',
+        instructions: 'You are a test agent',
+        model: [
+          {
+            model: primary,
+            maxRetries: 0,
+            providerOptions: { google: { thinkingConfig: { thinkingBudget: 8000 } } } as any,
+          },
+        ],
+      });
+
+      await (
+        await agent.stream('Hello', {
+          providerOptions: { google: { thinkingConfig: { includeThoughts: true } } } as any,
+        })
+      ).text;
+
+      const po = primary.doStreamCalls[0]?.providerOptions as Record<string, Record<string, any>>;
+      expect(po?.google?.thinkingConfig).toEqual({ includeThoughts: true, thinkingBudget: 8000 });
+    });
+
     it('should resolve a function-form providerOptions using requestContext', async () => {
       const primary = createRecordingStreamModel('dynamic-provider', 'ok');
       const requestContext = new RequestContext();

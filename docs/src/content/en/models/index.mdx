@@ -328,7 +328,12 @@ const agent = new Agent({
 });
 ```
 
-Per-entry values shallow-merge on top of agent `defaultOptions` and call-time options, with the entry winning. `providerOptions` is deep-merged per provider key. Each field also accepts a function of `requestContext`, matching how dynamic models are resolved.
+**Precedence:**
+
+- `modelSettings` and `providerOptions`: per-fallback entry overrides call-time options, which override agent `defaultOptions`. `modelSettings` shallow-merges by key. `providerOptions` deep-merges recursively, so nested provider config (e.g. `google.thinkingConfig`) preserves sibling keys across layers.
+- `headers`: call-time `modelSettings.headers` overrides per-fallback `headers`, which overrides headers extracted from model-router models. Runtime headers (tracing, auth, tenancy) intentionally take precedence over model-level headers.
+
+Each field also accepts a function of `requestContext`, matching how dynamic models are resolved.
 
 ## Use local models with Mastra
 
