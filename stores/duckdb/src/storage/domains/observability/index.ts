@@ -21,10 +21,26 @@ import type {
   BatchCreateScoresArgs,
   ListScoresArgs,
   ListScoresResponse,
+  GetScoreAggregateArgs,
+  GetScoreAggregateResponse,
+  GetScoreBreakdownArgs,
+  GetScoreBreakdownResponse,
+  GetScoreTimeSeriesArgs,
+  GetScoreTimeSeriesResponse,
+  GetScorePercentilesArgs,
+  GetScorePercentilesResponse,
   CreateFeedbackArgs,
   BatchCreateFeedbackArgs,
   ListFeedbackArgs,
   ListFeedbackResponse,
+  GetFeedbackAggregateArgs,
+  GetFeedbackAggregateResponse,
+  GetFeedbackBreakdownArgs,
+  GetFeedbackBreakdownResponse,
+  GetFeedbackTimeSeriesArgs,
+  GetFeedbackTimeSeriesResponse,
+  GetFeedbackPercentilesArgs,
+  GetFeedbackPercentilesResponse,
   GetMetricAggregateArgs,
   GetMetricAggregateResponse,
   GetMetricBreakdownArgs,
@@ -52,7 +68,7 @@ import type {
   ObservabilityStorageStrategy,
 } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
-import { ALL_DDL } from './ddl';
+import { ALL_DDL, ALL_MIGRATIONS } from './ddl';
 import * as discoveryOps from './discovery';
 import * as feedbackOps from './feedback';
 import * as logOps from './logs';
@@ -82,6 +98,10 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   async init(): Promise<void> {
     for (const ddl of ALL_DDL) {
       await this.db.execute(ddl);
+    }
+
+    for (const migration of ALL_MIGRATIONS) {
+      await this.db.execute(migration);
     }
   }
 
@@ -190,6 +210,18 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   async listScores(args: ListScoresArgs): Promise<ListScoresResponse> {
     return scoreOps.listScores(this.db, args);
   }
+  async getScoreAggregate(args: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
+    return scoreOps.getScoreAggregate(this.db, args);
+  }
+  async getScoreBreakdown(args: GetScoreBreakdownArgs): Promise<GetScoreBreakdownResponse> {
+    return scoreOps.getScoreBreakdown(this.db, args);
+  }
+  async getScoreTimeSeries(args: GetScoreTimeSeriesArgs): Promise<GetScoreTimeSeriesResponse> {
+    return scoreOps.getScoreTimeSeries(this.db, args);
+  }
+  async getScorePercentiles(args: GetScorePercentilesArgs): Promise<GetScorePercentilesResponse> {
+    return scoreOps.getScorePercentiles(this.db, args);
+  }
 
   // Feedback
   async createFeedback(args: CreateFeedbackArgs): Promise<void> {
@@ -200,5 +232,17 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   }
   async listFeedback(args: ListFeedbackArgs): Promise<ListFeedbackResponse> {
     return feedbackOps.listFeedback(this.db, args);
+  }
+  async getFeedbackAggregate(args: GetFeedbackAggregateArgs): Promise<GetFeedbackAggregateResponse> {
+    return feedbackOps.getFeedbackAggregate(this.db, args);
+  }
+  async getFeedbackBreakdown(args: GetFeedbackBreakdownArgs): Promise<GetFeedbackBreakdownResponse> {
+    return feedbackOps.getFeedbackBreakdown(this.db, args);
+  }
+  async getFeedbackTimeSeries(args: GetFeedbackTimeSeriesArgs): Promise<GetFeedbackTimeSeriesResponse> {
+    return feedbackOps.getFeedbackTimeSeries(this.db, args);
+  }
+  async getFeedbackPercentiles(args: GetFeedbackPercentilesArgs): Promise<GetFeedbackPercentilesResponse> {
+    return feedbackOps.getFeedbackPercentiles(this.db, args);
   }
 }

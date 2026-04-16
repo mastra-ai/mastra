@@ -18,9 +18,13 @@ type MockSkillSource = SkillSource & {
 // Mock Skill Source
 // =============================================================================
 
-function createMockFilesystem(files: Record<string, string | Buffer> = {}): MockSkillSource {
+function createMockFilesystem(
+  files: Record<string, string | Buffer> = {},
+  options?: { realpaths?: Record<string, string> },
+): MockSkillSource {
   const fileSystem = new Map<string, string | Buffer>(Object.entries(files));
   const directories = new Set<string>();
+  const realpaths = options?.realpaths ?? {};
 
   // Initialize directories from file paths
   for (const path of Object.keys(files)) {
@@ -132,6 +136,7 @@ function createMockFilesystem(files: Record<string, string | Buffer> = {}): Mock
       }
       throw new Error(`Path not found: ${path}`);
     }),
+    realpath: vi.fn(async (path: string) => realpaths[path] ?? path),
   };
 }
 
@@ -473,6 +478,51 @@ describe('WorkspaceSkillsImpl', () => {
 
       const results = await skills.search('test', { topK: 2 });
       expect(results.length).toBeLessThanOrEqual(2);
+    });
+
+    it('should de-duplicate canonical aliases in search results', async () => {
+      const searchEngine = createMockSearchEngine();
+      const canonicalSkillMd = `---
+name: test-skill
+description: API design skill
+---
+
+# API Design
+
+Use this skill to design REST APIs.
+
+## Tools
+
+This skill helps with endpoint design and API patterns.`;
+      const filesystem = createMockFilesystem(
+        {
+          'skills/test-skill/SKILL.md': canonicalSkillMd,
+          'skills/test-skill/references/doc.md': 'API reference for canonical skill.',
+          'linked-skills/test-skill/SKILL.md': canonicalSkillMd,
+          'linked-skills/test-skill/references/doc.md': 'API reference for canonical skill.',
+        },
+        {
+          realpaths: {
+            'skills/test-skill': '/real/skills/test-skill',
+            'linked-skills/test-skill': '/real/skills/test-skill',
+          },
+        },
+      );
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills', 'linked-skills'],
+        searchEngine,
+      });
+
+      await skills.list();
+
+      const results = await skills.search('API', { topK: 2 });
+      expect(results).toHaveLength(2);
+      expect(results).toEqual([
+        expect.objectContaining({ skillPath: 'linked-skills/test-skill', source: 'SKILL.md' }),
+        expect.objectContaining({ skillPath: 'linked-skills/test-skill', source: 'references/doc.md' }),
+      ]);
     });
   });
 
@@ -1137,6 +1187,7 @@ Instructions for the new skill.`;
           }
           throw new Error(`Path not found: ${path}`);
         }),
+        realpath: vi.fn(async (path: string) => path),
         // NOTE: No writeFile, mkdir, rmdir - this is a read-only source
       };
     }
@@ -1459,7 +1510,35 @@ Instructions for the new skill.`;
       expect(result[0]?.name).toBe('test-skill');
     });
 
-    it('should error when same-named skills share the same source type (e.g., two local skills)', async () => {
+    it('should de-duplicate same-named local skills that resolve to the same canonical path', async () => {
+      const filesystem = createMockFilesystem(
+        {
+          'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+          'linked-skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        },
+        {
+          realpaths: {
+            'skills/test-skill': '/real/skills/test-skill',
+            'linked-skills/test-skill': '/real/skills/test-skill',
+          },
+        },
+      );
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills', 'linked-skills'],
+      });
+
+      const listed = await skills.list();
+      expect(listed).toHaveLength(1);
+      expect(listed[0]?.path).toBe('linked-skills/test-skill');
+
+      const winner = await skills.get('test-skill');
+      expect(winner?.path).toBe('linked-skills/test-skill');
+      expect(winner?.instructions).toContain('This is the test skill instructions.');
+    });
+
+    it('should de-duplicate canonical aliases in list() while preserving distinct local skills', async () => {
       const shadowSkillMd = `---
 name: test-skill
 description: Shadow copy of the test skill
@@ -1468,28 +1547,35 @@ license: MIT
 
 Shadow instructions.`;
 
-      const filesystem = createMockFilesystem({
-        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
-        'custom-skills/test-skill/SKILL.md': shadowSkillMd,
-      });
+      const filesystem = createMockFilesystem(
+        {
+          'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+          'linked-skills/test-skill/SKILL.md': VALID_SKILL_MD,
+          'custom-skills/test-skill/SKILL.md': shadowSkillMd,
+        },
+        {
+          realpaths: {
+            'skills/test-skill': '/real/skills/test-skill',
+            'linked-skills/test-skill': '/real/skills/test-skill',
+            'custom-skills/test-skill': '/real/custom-skills/test-skill',
+          },
+        },
+      );
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skills: ['skills', 'custom-skills'],
+        skills: ['skills', 'linked-skills', 'custom-skills'],
       });
 
-      // list() returns all candidates (both visible for disambiguation UI)
       const result = await skills.list();
       expect(result).toHaveLength(2);
       const paths = result.map(s => s.path).sort();
-      expect(paths).toEqual(['custom-skills/test-skill', 'skills/test-skill']);
+      expect(paths).toEqual(['custom-skills/test-skill', 'linked-skills/test-skill']);
 
-      // get() by name throws because both are local (source-type tie can't resolve)
       await expect(skills.get('test-skill')).rejects.toThrow(
         'Cannot resolve skill "test-skill": multiple local skills found',
       );
 
-      // get() by exact path (escape hatch) still works for each specific skill
       const specific = await skills.get('skills/test-skill');
       expect(specific?.instructions).toContain('This is the test skill instructions.');
 
@@ -1516,7 +1602,7 @@ External instructions.`;
         skills: ['node_modules/@company/skills', 'skills'],
       });
 
-      // list() returns all candidates (both visible for disambiguation)
+      // list() returns canonical skills only; distinct source types still both appear
       const result = await skills.list();
       expect(result).toHaveLength(2);
       const paths = result.map(s => s.path).sort();
@@ -1531,6 +1617,40 @@ External instructions.`;
       const external = await skills.get('node_modules/@company/skills/test-skill');
       expect(external?.source.type).toBe('external');
       expect(external?.instructions).toContain('External instructions.');
+    });
+
+    it('should keep the higher-priority source when canonical aliases collapse into one listed skill', async () => {
+      const externalSkillMd = `---
+name: test-skill
+description: External copy of the test skill
+license: MIT
+---
+
+External instructions.`;
+
+      const filesystem = createMockFilesystem(
+        {
+          'node_modules/@company/skills/test-skill/SKILL.md': externalSkillMd,
+          'linked-skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        },
+        {
+          realpaths: {
+            'node_modules/@company/skills/test-skill': '/real/skills/test-skill',
+            'linked-skills/test-skill': '/real/skills/test-skill',
+          },
+        },
+      );
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['node_modules/@company/skills', 'linked-skills'],
+      });
+
+      await expect(skills.list()).resolves.toMatchObject([{ path: 'linked-skills/test-skill' }]);
+      await expect(skills.get('test-skill')).resolves.toMatchObject({
+        path: 'linked-skills/test-skill',
+        source: { type: 'local' },
+      });
     });
 
     it('should emit a warning when tie-breaking resolves same-named skills across source types', async () => {
@@ -1561,6 +1681,43 @@ External instructions.`;
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Multiple skills named "test-skill"'));
 
       warnSpy.mockRestore();
+    });
+
+    it('should resolve skill by path with /SKILL.md suffix (issue #14918)', async () => {
+      // The SkillsProcessor tells the LLM to use the "location" field
+      // (which is `${skill.path}/SKILL.md`) to disambiguate same-named skills.
+      // #resolveByPath must accept paths that include the trailing /SKILL.md.
+      const shadowSkillMd = `---
+name: test-skill
+description: Shadow copy of the test skill
+license: MIT
+---
+
+Shadow instructions.`;
+
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        'custom-skills/test-skill/SKILL.md': shadowSkillMd,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills', 'custom-skills'],
+      });
+
+      // get() by exact path works without /SKILL.md (baseline)
+      const specific = await skills.get('skills/test-skill');
+      expect(specific?.instructions).toContain('This is the test skill instructions.');
+
+      // get() by path WITH /SKILL.md suffix — this is what the LLM sends
+      // because SkillsProcessor.formatLocation() returns `${skill.path}/SKILL.md`
+      const specificWithSuffix = await skills.get('skills/test-skill/SKILL.md');
+      expect(specificWithSuffix).not.toBeNull();
+      expect(specificWithSuffix?.instructions).toContain('This is the test skill instructions.');
+
+      const shadowWithSuffix = await skills.get('custom-skills/test-skill/SKILL.md');
+      expect(shadowWithSuffix).not.toBeNull();
+      expect(shadowWithSuffix?.instructions).toContain('Shadow instructions.');
     });
   });
 

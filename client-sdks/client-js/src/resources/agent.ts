@@ -51,6 +51,13 @@ import { processMastraNetworkStream, processMastraStream } from '../utils/proces
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
 
+type ToolCallRespondFn<OUTPUT> = (
+  messages: MessageListInput,
+  options: StreamParamsBaseWithoutMessages<OUTPUT> & {
+    structuredOutput?: StructuredOutputOptions<OUTPUT>;
+  },
+) => Promise<FullOutput<OUTPUT>>;
+
 async function executeToolCallAndRespond<OUTPUT>({
   response,
   params,
@@ -66,7 +73,7 @@ async function executeToolCallAndRespond<OUTPUT>({
   resourceId?: string;
   threadId?: string;
   requestContext?: RequestContext<any>;
-  respondFn: Agent['generate'];
+  respondFn: ToolCallRespondFn<OUTPUT>;
 }) {
   if (response.finishReason === 'tool-calls') {
     const toolCalls = (
@@ -119,7 +126,15 @@ async function executeToolCallAndRespond<OUTPUT>({
           ? newMessages
           : [...(Array.isArray(params.messages) ? params.messages : []), ...newMessages];
 
-        return respondFn(updatedMessages as MessageListInput, params);
+        const respondOptions: StreamParamsBaseWithoutMessages<OUTPUT> & {
+          structuredOutput?: StructuredOutputOptions<OUTPUT>;
+        } = {
+          ...params,
+        };
+
+        delete (respondOptions as { messages?: MessageListInput }).messages;
+
+        return respondFn(updatedMessages as MessageListInput, respondOptions);
       }
     }
   }
@@ -541,7 +556,7 @@ export class Agent extends BaseResource {
         resourceId,
         threadId,
         requestContext: requestContext as RequestContext<any>,
-        respondFn: this.generate.bind(this),
+        respondFn: this.generate.bind(this) as ToolCallRespondFn<OUTPUT>,
       }) as unknown as Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
     }
 
@@ -1540,7 +1555,10 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  async approveNetworkToolCall(params: { runId: string }): Promise<
+  async approveNetworkToolCall(params: {
+    runId: string;
+    requestContext?: RequestContext | Record<string, any>;
+  }): Promise<
     Response & {
       processDataStream: ({
         onChunk,
@@ -1549,9 +1567,10 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
+    const { requestContext, ...rest } = params;
     const response: Response = await this.request(`/agents/${this.agentId}/approve-network-tool-call`, {
       method: 'POST',
-      body: params,
+      body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
       stream: true,
     });
 
@@ -1585,7 +1604,10 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  async declineNetworkToolCall(params: { runId: string }): Promise<
+  async declineNetworkToolCall(params: {
+    runId: string;
+    requestContext?: RequestContext | Record<string, any>;
+  }): Promise<
     Response & {
       processDataStream: ({
         onChunk,
@@ -1594,9 +1616,10 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
+    const { requestContext, ...rest } = params;
     const response: Response = await this.request(`/agents/${this.agentId}/decline-network-tool-call`, {
       method: 'POST',
-      body: params,
+      body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
       stream: true,
     });
 
@@ -1744,7 +1767,11 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  async approveToolCall(params: { runId: string; toolCallId: string }): Promise<
+  async approveToolCall(params: {
+    runId: string;
+    toolCallId: string;
+    requestContext?: RequestContext | Record<string, any>;
+  }): Promise<
     Response & {
       processDataStream: ({
         onChunk,
@@ -1753,6 +1780,9 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
+    const { requestContext, ...rest } = params;
+    const processedParams = { ...rest, requestContext: parseClientRequestContext(requestContext) };
+
     // Create a manually controlled readable stream
     let readableController: ReadableStreamDefaultController<Uint8Array>;
     const readable = new ReadableStream<Uint8Array>({
@@ -1762,7 +1792,7 @@ export class Agent extends BaseResource {
     });
 
     // Start processing the response in the background
-    const response = await this.processStreamResponse(params, readableController!, 'approve-tool-call');
+    const response = await this.processStreamResponse(processedParams, readableController!, 'approve-tool-call');
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -1792,7 +1822,11 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  async declineToolCall(params: { runId: string; toolCallId: string }): Promise<
+  async declineToolCall(params: {
+    runId: string;
+    toolCallId: string;
+    requestContext?: RequestContext | Record<string, any>;
+  }): Promise<
     Response & {
       processDataStream: ({
         onChunk,
@@ -1801,6 +1835,9 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
+    const { requestContext, ...rest } = params;
+    const processedParams = { ...rest, requestContext: parseClientRequestContext(requestContext) };
+
     // Create a manually controlled readable stream
     let readableController: ReadableStreamDefaultController<Uint8Array>;
     const readable = new ReadableStream<Uint8Array>({
@@ -1810,7 +1847,7 @@ export class Agent extends BaseResource {
     });
 
     // Start processing the response in the background
-    const response = await this.processStreamResponse(params, readableController!, 'decline-tool-call');
+    const response = await this.processStreamResponse(processedParams, readableController!, 'decline-tool-call');
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -1844,10 +1881,15 @@ export class Agent extends BaseResource {
    * Approves a pending tool call and returns the complete response (non-streaming).
    * Used when `requireToolApproval` is enabled with generate() to allow the agent to proceed.
    */
-  async approveToolCallGenerate(params: { runId: string; toolCallId: string }): Promise<any> {
+  async approveToolCallGenerate(params: {
+    runId: string;
+    toolCallId: string;
+    requestContext?: RequestContext | Record<string, any>;
+  }): Promise<any> {
+    const { requestContext, ...rest } = params;
     return this.request(`/agents/${this.agentId}/approve-tool-call-generate`, {
       method: 'POST',
-      body: params,
+      body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
     });
   }
 
@@ -1855,10 +1897,15 @@ export class Agent extends BaseResource {
    * Declines a pending tool call and returns the complete response (non-streaming).
    * Used when `requireToolApproval` is enabled with generate() to prevent tool execution.
    */
-  async declineToolCallGenerate(params: { runId: string; toolCallId: string }): Promise<any> {
+  async declineToolCallGenerate(params: {
+    runId: string;
+    toolCallId: string;
+    requestContext?: RequestContext | Record<string, any>;
+  }): Promise<any> {
+    const { requestContext, ...rest } = params;
     return this.request(`/agents/${this.agentId}/decline-tool-call-generate`, {
       method: 'POST',
-      body: params,
+      body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
     });
   }
 

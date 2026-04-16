@@ -52,6 +52,14 @@ function getOmObservabilityContext(
   };
 }
 
+/** Key used to store gateway detection result in per-processor state. */
+const GATEWAY_STATE_KEY = '__isGatewayModel';
+
+/** Check if the model is routed through a Mastra gateway (duck-type check to avoid cross-package instanceof issues). */
+function isMastraGatewayModel(model: ProcessInputStepArgs['model']): boolean {
+  return typeof model === 'object' && model !== null && 'gatewayId' in model && (model as any).gatewayId === 'mastra';
+}
+
 export class ObservationalMemoryProcessor implements Processor<'observational-memory'> {
   readonly id = 'observational-memory' as const;
   readonly name = 'Observational Memory';
@@ -93,6 +101,17 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     const context = this.engine.getThreadContext(requestContext, messageList);
     if (!context) {
       omDebug(`[OM:processInputStep:NO-CONTEXT] getThreadContext returned null — returning early`);
+      return messageList;
+    }
+
+    // When the agent is using a Mastra gateway model, the gateway handles OM
+    // (observation, reflection, context injection) server-side. Running it
+    // locally would double-process messages and cause history duplication.
+    // We detect this from the model directly (not requestContext) so that
+    // the flag doesn't leak to child agents in delegation scenarios.
+    if (isMastraGatewayModel(model)) {
+      state[GATEWAY_STATE_KEY] = true;
+      omDebug(`[OM:processInputStep:GATEWAY] gateway handles OM — skipping local processing`);
       return messageList;
     }
 
@@ -240,6 +259,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
             postContextTokenCount: finalTotalPending,
             messageList,
             details: {},
+            observerExchange: ctx.observerExchange,
           });
         }
       }
@@ -254,6 +274,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
 
     const context = this.engine.getThreadContext(requestContext, messageList);
     if (!context) return messageList;
+
+    // Gateway handles OM — skip local output processing (see processInputStep).
+    if (state[GATEWAY_STATE_KEY]) return messageList;
 
     const observabilityContext = getOmObservabilityContext(args);
     state.__omObservabilityContext = observabilityContext;

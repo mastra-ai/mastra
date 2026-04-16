@@ -123,9 +123,48 @@ export class MessageMerger {
               t => t.toolCallId === existingCallPart.toolInvocation.toolCallId,
             );
             if (toolInvocationIndex === -1) {
-              latestMessage.content.toolInvocations.push(existingCallPart.toolInvocation);
+              latestMessage.content.toolInvocations.push(
+                existingCallPart.toolInvocation as NonNullable<MastraDBMessage['content']['toolInvocations']>[number],
+              );
             } else {
-              latestMessage.content.toolInvocations[toolInvocationIndex] = existingCallPart.toolInvocation;
+              latestMessage.content.toolInvocations[toolInvocationIndex] =
+                existingCallPart.toolInvocation as NonNullable<MastraDBMessage['content']['toolInvocations']>[number];
+            }
+          } else if (
+            part.toolInvocation.state === 'approval-requested' ||
+            part.toolInvocation.state === 'approval-responded' ||
+            part.toolInvocation.state === 'output-denied' ||
+            part.toolInvocation.state === 'output-error'
+          ) {
+            existingCallPart.toolInvocation = {
+              ...existingCallPart.toolInvocation,
+              state: part.toolInvocation.state,
+              approval: part.toolInvocation.approval,
+              errorText: part.toolInvocation.errorText,
+              rawInput: part.toolInvocation.rawInput,
+              args: {
+                ...existingCallPart.toolInvocation.args,
+                ...part.toolInvocation.args,
+              },
+            };
+
+            if (part.providerMetadata) {
+              existingCallPart.providerMetadata = {
+                ...existingCallPart.providerMetadata,
+                ...part.providerMetadata,
+              };
+            }
+
+            if ('providerExecuted' in part && part.providerExecuted !== undefined) {
+              existingCallPart.providerExecuted = part.providerExecuted;
+            }
+
+            if ('title' in part && part.title !== undefined) {
+              existingCallPart.title = part.title;
+            }
+
+            if ('preliminary' in part && part.preliminary !== undefined) {
+              existingCallPart.preliminary = part.preliminary;
             }
           }
           // Map the index of the tool call in incomingMessage to the index of the tool call in latestMessage

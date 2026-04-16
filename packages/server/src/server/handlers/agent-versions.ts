@@ -81,9 +81,17 @@ export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
-      // Verify agent exists
-      const agent = await agentsStore.getById(agentId);
-      if (!agent) {
+      // Verify agent exists in code or storage
+      const storedAgent = await agentsStore.getById(agentId);
+      let codeAgentExists = false;
+      try {
+        mastra.getAgentById(agentId);
+        codeAgentExists = true;
+      } catch {
+        // Agent not registered in code
+      }
+
+      if (!storedAgent && !codeAgentExists) {
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
 

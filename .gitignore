@@ -19,6 +19,7 @@ test-outputs/
 **/tsconfig.tsbuildinfo
 
 .turbo
+.next
 
 openapi-ts-error*
 

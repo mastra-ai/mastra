@@ -32,7 +32,7 @@ export const createProject = async (projectNameArg: string | undefined, args: Cr
         await create({
           components: ['agents', 'tools', 'workflows'],
           llmProvider: 'openai',
-          addExample: true,
+          addExample: args.example === false ? false : true,
           timeout,
           projectName: projectNameArg,
           mcpServer: args.mcp,

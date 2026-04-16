@@ -731,6 +731,8 @@ export function extractWorkflowTrajectory(
  * meaningful trajectory steps).
  */
 const SKIPPED_SPAN_TYPES = new Set([
+  SpanType.SCORER_RUN,
+  SpanType.SCORER_STEP,
   SpanType.GENERIC,
   SpanType.MODEL_STEP,
   SpanType.MODEL_CHUNK,

@@ -10,6 +10,7 @@
 
 import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import type { TUI } from '@mariozechner/pi-tui';
+import { safeStringify } from '@mastra/core/utils';
 import { BOX_INDENT, getTermWidth, theme } from '../theme.js';
 import type { IToolExecutionComponent } from './tool-execution-interface.js';
 
@@ -76,7 +77,7 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
       if (toolCall.name === name && !toolCall.done) {
         toolCall.done = true;
         toolCall.isError = isError;
-        toolCall.result = typeof result === 'string' ? result : JSON.stringify(result ?? '');
+        toolCall.result = typeof result === 'string' ? result : safeStringify(result ?? '');
         break;
       }
     }

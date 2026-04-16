@@ -1,4 +1,4 @@
-import type { ListScoresResponse } from '@mastra/core/evals';
+import type { ListScoresResponse, Trajectory } from '@mastra/core/evals';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
 import type {
@@ -14,11 +14,27 @@ import type {
   ListScoresResponse as ListScoresResponseNew,
   CreateScoreBody,
   CreateScoreResponse,
+  GetScoreAggregateArgs,
+  GetScoreAggregateResponse,
+  GetScoreBreakdownArgs,
+  GetScoreBreakdownResponse,
+  GetScoreTimeSeriesArgs,
+  GetScoreTimeSeriesResponse,
+  GetScorePercentilesArgs,
+  GetScorePercentilesResponse,
   // Feedback
   ListFeedbackArgs,
   ListFeedbackResponse,
   CreateFeedbackBody,
   CreateFeedbackResponse,
+  GetFeedbackAggregateArgs,
+  GetFeedbackAggregateResponse,
+  GetFeedbackBreakdownArgs,
+  GetFeedbackBreakdownResponse,
+  GetFeedbackTimeSeriesArgs,
+  GetFeedbackTimeSeriesResponse,
+  GetFeedbackPercentilesArgs,
+  GetFeedbackPercentilesResponse,
   // Metrics OLAP
   GetMetricAggregateArgs,
   GetMetricAggregateResponse,
@@ -55,6 +71,7 @@ import {
   A2A,
   MCPTool,
   AgentBuilder,
+  Conversations,
   Observability,
   StoredAgent,
   StoredPromptBlock,
@@ -64,6 +81,7 @@ import {
   ToolProvider,
   ProcessorProvider,
   Workspace,
+  Responses,
 } from './resources';
 import type {
   ListScoresBySpanParams,
@@ -150,14 +168,22 @@ import type {
   DatasetVersionResponse,
   ListToolProvidersResponse,
   GetProcessorProvidersResponse,
+  ListBackgroundTasksParams,
+  ListBackgroundTasksResponse,
+  BackgroundTaskResponse,
+  StreamBackgroundTasksParams,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
 export class MastraClient extends BaseResource {
   private observability: Observability;
+  public readonly conversations: Conversations;
+  public readonly responses: Responses;
   constructor(options: ClientOptions) {
     super(options);
     this.observability = new Observability(options);
+    this.conversations = new Conversations(options);
+    this.responses = new Responses(options);
   }
 
   /**
@@ -286,15 +312,23 @@ export class MastraClient extends BaseResource {
    */
   public listThreadMessages(
     threadId: string,
-    opts: { agentId?: string; networkId?: string; requestContext?: RequestContext | Record<string, any> } = {},
+    opts: {
+      agentId?: string;
+      networkId?: string;
+      requestContext?: RequestContext | Record<string, any>;
+      includeSystemReminders?: boolean;
+    } = {},
   ): Promise<ListMemoryThreadMessagesResponse> {
     let url = '';
+    const includeSystemRemindersQuery =
+      opts.includeSystemReminders === undefined ? '' : `includeSystemReminders=${opts.includeSystemReminders}`;
+
     if (opts.networkId) {
-      url = `/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}${requestContextQueryString(opts.requestContext, '&')}`;
+      url = `/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}${includeSystemRemindersQuery ? `&${includeSystemRemindersQuery}` : ''}${requestContextQueryString(opts.requestContext, includeSystemRemindersQuery ? '&' : '&')}`;
     } else if (opts.agentId) {
-      url = `/memory/threads/${threadId}/messages?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`;
+      url = `/memory/threads/${threadId}/messages?agentId=${opts.agentId}${includeSystemRemindersQuery ? `&${includeSystemRemindersQuery}` : ''}${requestContextQueryString(opts.requestContext, '&')}`;
     } else {
-      url = `/memory/threads/${threadId}/messages${requestContextQueryString(opts.requestContext, '?')}`;
+      url = `/memory/threads/${threadId}/messages${includeSystemRemindersQuery ? `?${includeSystemRemindersQuery}` : ''}${requestContextQueryString(opts.requestContext, includeSystemRemindersQuery ? '&' : '?')}`;
     }
     return this.request(url);
   }
@@ -358,6 +392,14 @@ export class MastraClient extends BaseResource {
     const queryParams = new URLSearchParams({ agentId: params.agentId });
     if (params.resourceId) queryParams.set('resourceId', params.resourceId);
     if (params.threadId) queryParams.set('threadId', params.threadId);
+    if (params.from) {
+      queryParams.set('from', params.from instanceof Date ? params.from.toISOString() : params.from);
+    }
+    if (params.to) {
+      queryParams.set('to', params.to instanceof Date ? params.to.toISOString() : params.to);
+    }
+    if (params.offset != null) queryParams.set('offset', String(params.offset));
+    if (params.limit != null) queryParams.set('limit', String(params.limit));
     const queryString = queryParams.toString();
     return this.request(
       `/memory/observational-memory?${queryString}${requestContextQueryString(params.requestContext, '&')}`,
@@ -862,6 +904,11 @@ export class MastraClient extends BaseResource {
     return this.observability.getTrace(traceId);
   }
 
+  /** Extracts a structured trajectory from a trace's spans. */
+  getTraceTrajectory(traceId: string): Promise<Trajectory> {
+    return this.observability.getTraceTrajectory(traceId);
+  }
+
   /**
    * Retrieves paginated list of traces with optional filtering.
    * This is the legacy API preserved for backward compatibility.
@@ -920,6 +967,26 @@ export class MastraClient extends BaseResource {
     return this.observability.createScore(params);
   }
 
+  /** Returns an aggregated score value with optional period-over-period comparison. */
+  getScoreAggregate(params: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
+    return this.observability.getScoreAggregate(params);
+  }
+
+  /** Returns score values grouped by specified dimensions. */
+  getScoreBreakdown(params: GetScoreBreakdownArgs): Promise<GetScoreBreakdownResponse> {
+    return this.observability.getScoreBreakdown(params);
+  }
+
+  /** Returns score values bucketed by time interval with optional grouping. */
+  getScoreTimeSeries(params: GetScoreTimeSeriesArgs): Promise<GetScoreTimeSeriesResponse> {
+    return this.observability.getScoreTimeSeries(params);
+  }
+
+  /** Returns percentile values for scores bucketed by time interval. */
+  getScorePercentiles(params: GetScorePercentilesArgs): Promise<GetScorePercentilesResponse> {
+    return this.observability.getScorePercentiles(params);
+  }
+
   // --------------------------------------------------------------------------
   // Feedback
   // --------------------------------------------------------------------------
@@ -932,6 +999,26 @@ export class MastraClient extends BaseResource {
   /** Creates a single feedback record in the observability store. */
   createFeedback(params: CreateFeedbackBody): Promise<CreateFeedbackResponse> {
     return this.observability.createFeedback(params);
+  }
+
+  /** Returns an aggregated feedback value with optional period-over-period comparison. */
+  getFeedbackAggregate(params: GetFeedbackAggregateArgs): Promise<GetFeedbackAggregateResponse> {
+    return this.observability.getFeedbackAggregate(params);
+  }
+
+  /** Returns feedback values grouped by specified dimensions. */
+  getFeedbackBreakdown(params: GetFeedbackBreakdownArgs): Promise<GetFeedbackBreakdownResponse> {
+    return this.observability.getFeedbackBreakdown(params);
+  }
+
+  /** Returns feedback values bucketed by time interval with optional grouping. */
+  getFeedbackTimeSeries(params: GetFeedbackTimeSeriesArgs): Promise<GetFeedbackTimeSeriesResponse> {
+    return this.observability.getFeedbackTimeSeries(params);
+  }
+
+  /** Returns percentile values for feedback bucketed by time interval. */
+  getFeedbackPercentiles(params: GetFeedbackPercentilesArgs): Promise<GetFeedbackPercentilesResponse> {
+    return this.observability.getFeedbackPercentiles(params);
   }
 
   // --------------------------------------------------------------------------
@@ -1743,5 +1830,93 @@ export class MastraClient extends BaseResource {
       method: 'POST',
       body,
     });
+  }
+
+  // ============================================================================
+  // Background Tasks
+  // ============================================================================
+
+  /**
+   * Lists background tasks with optional filtering and pagination.
+   */
+  public listBackgroundTasks(params: ListBackgroundTasksParams = {}): Promise<ListBackgroundTasksResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.agentId) searchParams.set('agentId', params.agentId);
+    if (params.status) searchParams.set('status', params.status);
+    if (params.runId) searchParams.set('runId', params.runId);
+    if (params.threadId) searchParams.set('threadId', params.threadId);
+    if (params.resourceId) searchParams.set('resourceId', params.resourceId);
+    if (params.fromDate) searchParams.set('fromDate', params.fromDate.toISOString());
+    if (params.toDate) searchParams.set('toDate', params.toDate.toISOString());
+    if (params.dateFilterBy) searchParams.set('dateFilterBy', params.dateFilterBy);
+    if (params.orderBy) searchParams.set('orderBy', params.orderBy);
+    if (params.orderDirection) searchParams.set('orderDirection', params.orderDirection);
+    if (params.page !== undefined) searchParams.set('page', String(params.page));
+    if (params.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+    const qs = searchParams.toString();
+    return this.request(`/background-tasks${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets a single background task by ID.
+   */
+  public getBackgroundTask(backgroundTaskId: string): Promise<BackgroundTaskResponse> {
+    return this.request(`/background-tasks/${encodeURIComponent(backgroundTaskId)}`);
+  }
+
+  /**
+   * Opens an SSE stream of background task events (completed/failed).
+   * Returns a Response that can be consumed as a ReadableStream.
+   */
+  public async streamBackgroundTasks(params: StreamBackgroundTasksParams = {}) {
+    const searchParams = new URLSearchParams();
+    if (params.agentId) searchParams.set('agentId', params.agentId);
+    if (params.runId) searchParams.set('runId', params.runId);
+    if (params.threadId) searchParams.set('threadId', params.threadId);
+    if (params.resourceId) searchParams.set('resourceId', params.resourceId);
+    const qs = searchParams.toString();
+    const response: Response = await this.request(`/background-tasks/stream${qs ? `?${qs}` : ''}`, { stream: true });
+
+    if (!response.ok) {
+      throw new Error(`Failed to stream background tasks: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    //using undefined instead of empty string to avoid parsing errors
+    let failedChunk: string | undefined = undefined;
+
+    return response.body.pipeThrough(
+      new TransformStream({
+        async transform(chunk, controller) {
+          try {
+            // Decode binary data to text
+            const decoded = new TextDecoder().decode(chunk);
+
+            // Split by record separator
+            const chunks = decoded.split('\n\n');
+
+            // Process each chunk
+            for (const chunk of chunks) {
+              if (chunk) {
+                const cleanChunk = chunk.substring('data: '.length);
+                const newChunk: string = failedChunk ? failedChunk + cleanChunk : cleanChunk;
+                try {
+                  const parsedChunk = JSON.parse(newChunk);
+                  controller.enqueue(parsedChunk);
+                  failedChunk = undefined;
+                } catch {
+                  failedChunk = newChunk;
+                }
+              }
+            }
+          } catch {
+            // Silently ignore processing errors
+          }
+        },
+      }),
+    );
   }
 }

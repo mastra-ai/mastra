@@ -6,6 +6,24 @@ import type { ModelItem } from '../components/model-selector.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import type { SlashCommandContext } from './types.js';
 
+const BUILT_IN_SUBAGENT_TYPES: Array<{ id: string; label: string; description: string }> = [
+  {
+    id: 'explore',
+    label: 'Explore',
+    description: 'Read-only codebase exploration',
+  },
+  {
+    id: 'plan',
+    label: 'Plan',
+    description: 'Read-only analysis and planning',
+  },
+  {
+    id: 'execute',
+    label: 'Execute',
+    description: 'Task execution with write access',
+  },
+];
+
 async function showSubagentModelListForScope(
   ctx: SlashCommandContext,
   scope: 'global' | 'thread',
@@ -19,7 +37,7 @@ async function showSubagentModelListForScope(
     return;
   }
 
-  const currentSubagentModel = await ctx.state.harness.getSubagentModelId({ agentType });
+  const currentSubagentModel = ctx.state.harness.getSubagentModelId({ agentType });
   const scopeLabel = scope === 'global' ? `${agentTypeLabel} · Global` : `${agentTypeLabel} · Thread`;
 
   return new Promise(resolve => {
@@ -115,24 +133,27 @@ async function showSubagentScopeThenList(
   });
 }
 
+function getConfiguredSubagentTypes(
+  ctx: SlashCommandContext,
+): Array<{ id: string; label: string; description: string }> {
+  const harnessWithConfig = ctx.state.harness as unknown as {
+    config?: {
+      subagents?: Array<{ id: string; name: string; description: string }>;
+    };
+  };
+  const configuredSubagents = harnessWithConfig.config?.subagents;
+
+  return configuredSubagents && configuredSubagents.length > 0
+    ? configuredSubagents.map(subagent => ({
+        id: subagent.id,
+        label: subagent.name,
+        description: subagent.description,
+      }))
+    : BUILT_IN_SUBAGENT_TYPES;
+}
+
 export async function handleSubagentsCommand(ctx: SlashCommandContext): Promise<void> {
-  const agentTypes = [
-    {
-      id: 'explore',
-      label: 'Explore',
-      description: 'Read-only codebase exploration',
-    },
-    {
-      id: 'plan',
-      label: 'Plan',
-      description: 'Read-only analysis and planning',
-    },
-    {
-      id: 'execute',
-      label: 'Execute',
-      description: 'Task execution with write access',
-    },
-  ];
+  const agentTypes = getConfiguredSubagentTypes(ctx);
 
   return new Promise<void>(resolve => {
     const questionComponent = new AskQuestionInlineComponent(

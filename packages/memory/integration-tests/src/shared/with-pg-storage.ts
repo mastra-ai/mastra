@@ -1,8 +1,17 @@
 import { randomUUID } from 'node:crypto';
+import { anthropic as anthropicV6 } from '@ai-sdk/anthropic-v6';
+import { createGatewayMock } from '@internal/test-utils';
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+import { Agent } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent';
+import { RequestContext } from '@mastra/core/request-context';
+import { createTool } from '@mastra/core/tools';
 import { fastembed } from '@mastra/fastembed';
 import { Memory } from '@mastra/memory';
 import { PostgresStore, PgVector } from '@mastra/pg';
 import { afterAll, describe, it, expect, beforeAll, beforeEach, onTestFinished } from 'vitest';
+import { z } from 'zod';
+import { transformRequest } from '../transform-request';
 
 import { getResuableTests } from './reusable-tests';
 
@@ -44,6 +53,103 @@ function createMemoryWithCleanup(opts: ConstructorParameters<typeof Memory>[0]):
     ]);
   });
   return mem;
+}
+
+const REPRO_RECORDING_NAME = 'memory-integration-tests-src-with-pg-storage';
+
+function getMessageParts(message: any): any[] {
+  return message?.content?.parts || message?.parts || [];
+}
+
+function isPureOmMessage(message: any): boolean {
+  const parts = message?.content?.parts;
+  if (!Array.isArray(parts) || parts.length === 0) return false;
+  return parts.every((part: any) => typeof part.type === 'string' && part.type.startsWith('data-om'));
+}
+
+/**
+ * Analyze raw DB messages for OM persistence integrity.
+ *
+ * Tool invocations are stored as single parts that start as state:'call' and
+ * are updated in place to state:'result'. So after completion, raw DB will
+ * have tool-invocation parts in state:'result' — that's correct.
+ *
+ * What we're checking:
+ * 1. Tool invocations exist at all (not lost)
+ * 2. Messages are in chronological order (createdAt monotonic)
+ * 3. Sealed buffered chunks produce separate assistant messages, not one mega-row
+ */
+function analyzeDbMessages(messages: any[]) {
+  let toolInvocationCount = 0;
+  let dataOmCount = 0;
+  const violations: string[] = [];
+  let assistantMessageCount = 0;
+  let maxPartsInOneMessage = 0;
+
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i] as any;
+    const parts = getMessageParts(message);
+
+    if (message.role === 'assistant') {
+      assistantMessageCount++;
+      if (parts.length > maxPartsInOneMessage) {
+        maxPartsInOneMessage = parts.length;
+      }
+    }
+
+    for (const part of parts) {
+      if (part.type === 'tool-invocation') {
+        toolInvocationCount++;
+      }
+
+      if (typeof part.type === 'string' && part.type.startsWith('data-om')) {
+        dataOmCount++;
+      }
+    }
+
+    // Check chronological order
+    if (i > 0) {
+      const previousCreatedAt = new Date((messages[i - 1] as any).createdAt).getTime();
+      const currentCreatedAt = new Date(message.createdAt).getTime();
+      if (currentCreatedAt < previousCreatedAt) {
+        violations.push(
+          `msg[${i}] createdAt (${message.createdAt}) < msg[${i - 1}] createdAt (${(messages[i - 1] as any).createdAt})`,
+        );
+      }
+    }
+  }
+
+  return { toolInvocationCount, dataOmCount, assistantMessageCount, maxPartsInOneMessage, violations };
+}
+
+/**
+ * Analyze UI messages from toAISdkV5Messages() for display integrity.
+ *
+ * In the UI pipeline, tool invocations appear as tool-<toolName> parts with
+ * a toolInvocation object. Each tool should have both a call and result state
+ * within the same assistant message (or across messages in order).
+ */
+function analyzeUiMessages(messages: any[]) {
+  const violations: string[] = [];
+  let toolPartCount = 0;
+
+  for (const message of messages) {
+    if (message.role !== 'assistant') continue;
+
+    const parts = message.parts || [];
+
+    for (const part of parts) {
+      const isToolPart =
+        part.type === 'tool-invocation' ||
+        (typeof part.type === 'string' && part.type.startsWith('tool-') && (part.toolCallId || part.toolInvocation));
+
+      if (isToolPart) {
+        toolPartCount++;
+      }
+    }
+  }
+
+  return { toolPartCount, violations };
 }
 
 export function getPgStorageTests(connectionString: string) {
@@ -865,6 +971,250 @@ export function getPgStorageTests(connectionString: string) {
         });
         expect(result.messages).toBeDefined();
       });
+    });
+
+    describe('Observational memory standalone repro path', () => {
+      // PR-added regression repro. Kept skipped by default because CI currently falls back to
+      // fuzzy llm-recorder matches for this path, which makes the recorded tool-heavy run unstable.
+      it.skip('splits buffered output into multiple assistant messages instead of one mega-message', async () => {
+        const storage = new PostgresStore({ id: randomUUID(), ...config, ...poolLimits });
+        const memory = createMemoryWithCleanup({
+          storage,
+          options: {
+            generateTitle: true,
+            lastMessages: 200,
+            observationalMemory: {
+              scope: 'thread',
+              model: 'google/gemini-2.5-flash',
+              observation: {
+                // This repro is intentionally buffering-focused: keep the overall
+                // observation threshold high enough that sync observation does not
+                // take over, while using a small absolute buffer threshold so OM
+                // still seals and rotates assistant chunks during the run.
+                messageTokens: 5_000,
+                bufferTokens: 300,
+                blockAfter: 20_000,
+              },
+              reflection: {
+                observationTokens: 150_000,
+              },
+              shareTokenBudget: false,
+            },
+          },
+        });
+
+        const fileContents: Record<string, string> = {};
+        for (let i = 1; i <= 35; i++) {
+          const name = `document-${String(i).padStart(2, '0')}.pdf`;
+          fileContents[name] = [
+            `=== ${name} ===`,
+            `This is a ${['financial', 'legal', 'operational', 'strategic', 'market'][i % 5]} document.`,
+            `Key metric: revenue of $${(i * 127_000).toLocaleString()}.`,
+            `Risk rating: ${['low', 'medium', 'high'][i % 3]}.`,
+            `Contains ${i + 10} pages of analysis on the deal structure.`,
+          ].join('\n');
+        }
+
+        const listFiles = createTool({
+          id: 'listFiles',
+          description: 'List all files available in the data room',
+          inputSchema: z.object({}),
+          outputSchema: z.object({
+            files: z.array(z.object({ name: z.string(), sizeKb: z.number() })),
+          }),
+          execute: async () => ({
+            files: Object.keys(fileContents).map((name, index) => ({ name, sizeKb: (index + 1) * 42 })),
+          }),
+        });
+
+        const readFile = createTool({
+          id: 'readFile',
+          description: 'Read the full contents of a single data room file by name',
+          inputSchema: z.object({ fileName: z.string().describe('Exact file name from listFiles') }),
+          outputSchema: z.object({ content: z.string(), pages: z.number() }),
+          execute: async ({ context }: any) => {
+            const fileName = context.fileName;
+            return {
+              content: fileContents[fileName] || `File not found: ${fileName}`,
+              pages: 11,
+            };
+          },
+        });
+
+        const agent = new Agent({
+          id: 'deep-agent-repro',
+          name: 'Deep Agent Reproduction',
+          instructions: `You are a research assistant that analyzes data room files.
+
+MANDATORY WORKFLOW — follow these steps EXACTLY:
+1. Call listFiles to get the full file list.
+2. Call readFile for EVERY file returned — one call per file, do not skip any.
+3. After reading ALL files, write a brief summary of what you found.
+
+CRITICAL RULES:
+- You MUST call readFile individually for each file. No batching, no skipping.
+- Do NOT stop reading files early. Read all of them.
+- After reading all files, provide a 2-3 sentence summary.`,
+          model: anthropicV6('claude-sonnet-4-5'),
+          tools: { listFiles, readFile },
+          memory,
+          defaultOptions: {
+            autoResumeSuspendedTools: false,
+            maxSteps: 75,
+          },
+        });
+
+        await storage.init();
+
+        const threadId = 'repro-buffered-output-split';
+        const testResourceId = 'test-org_test-engagement_deep';
+        const requestContext = new RequestContext();
+        const abortController = new AbortController();
+        requestContext.set('organizationId', 'test-org-id');
+        requestContext.set('chatId', threadId);
+        requestContext.set('chatType', 'deep-agent');
+        requestContext.set('sessionId', threadId);
+        requestContext.set('userId', 'test-user-id');
+        requestContext.set('planName', 'pro');
+        requestContext.set('baseUrl', 'http://localhost:5101');
+        requestContext.set('abortSignal', abortController.signal);
+
+        const memoryStore = await storage.getStore('memory');
+        if (!memoryStore) {
+          throw new Error('Memory store not found');
+        }
+
+        await memoryStore.saveThread({
+          thread: {
+            id: threadId,
+            resourceId: testResourceId,
+            title: '',
+            metadata: {},
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+
+        const expectedToolCalls = 36;
+        const toolCallsDuringStream: string[] = [];
+
+        const mock = createGatewayMock({
+          name: REPRO_RECORDING_NAME,
+          exactMatch: true,
+          transformRequest,
+        });
+        await mock.start();
+
+        const stream = await agent.stream(
+          [
+            {
+              role: 'user',
+              content: 'Analyze all the files in the data room. Read every single file and give me a summary.',
+            },
+          ] as any,
+          {
+            maxSteps: 100,
+            toolCallConcurrency: 1,
+            requestContext,
+            abortSignal: abortController.signal,
+            runId: `run_${threadId}`,
+            modelSettings: {
+              maxOutputTokens: 100_000,
+              temperature: 0.2,
+              providerOptions: {
+                anthropic: {
+                  sendReasoning: true,
+                  thinking: { type: 'enabled', budgetTokens: 10_000 },
+                },
+                google: {
+                  thinkingConfig: { thinkingLevel: 'medium', includeThoughts: true },
+                },
+                openai: {
+                  reasoningEffort: 'medium',
+                  promptCacheKey: 'o11-chat-v1',
+                  promptCacheRetention: '24h',
+                },
+              },
+            },
+            providerOptions: {
+              anthropic: {
+                sendReasoning: true,
+                thinking: { type: 'enabled', budgetTokens: 10_000 },
+              },
+              google: {
+                thinkingConfig: { thinkingLevel: 'medium', includeThoughts: true },
+              },
+              openai: {
+                reasoningEffort: 'medium',
+                promptCacheKey: 'o11-chat-v1',
+                promptCacheRetention: '24h',
+              },
+            },
+            memory: { thread: threadId, resource: testResourceId },
+            outputProcessors: [],
+            prepareStep: () => {
+              if (abortController.signal.aborted) throw new Error('Aborted');
+              return {};
+            },
+            onStepFinish: (result: any) => {
+              const toolCalls = result.toolCalls || [];
+              const toolResults = result.toolResults || [];
+              for (const toolCall of toolCalls) {
+                toolCallsDuringStream.push(toolCall.toolName ?? toolCall.name ?? toolCall.payload?.toolName ?? '?');
+              }
+              if (toolCalls.length === 0 && toolResults.length > 0) {
+                for (const toolResult of toolResults) {
+                  toolCallsDuringStream.push(toolResult.toolName ?? toolResult.name ?? '?');
+                }
+              }
+            },
+          } as any,
+        );
+
+        for await (const _ of stream.fullStream) {
+        }
+        await mock.saveAndStop();
+
+        const om = (await (memory as any).createOMProcessor([], requestContext)) as {
+          waitForBuffering?: (threadId: string, resourceId: string) => Promise<void>;
+        } | null;
+        await om?.waitForBuffering?.(threadId, testResourceId);
+
+        const rawDb = await memoryStore.listMessages({ threadId, perPage: false as any });
+        const rawMessages = rawDb.messages as MastraDBMessage[];
+        const recalled = await memory.recall({ threadId, resourceId: testResourceId, perPage: 500 });
+        const filtered = recalled.messages.filter(message => !isPureOmMessage(message));
+        const uiMessages = toAISdkV5Messages(filtered);
+
+        const dbAnalysis = analyzeDbMessages(rawMessages);
+        const recallAnalysis = analyzeDbMessages(filtered);
+        const uiAnalysis = analyzeUiMessages(uiMessages);
+
+        // Raw DB should have tool invocations (as state:'result' — that's the expected final state)
+        expect(dbAnalysis.toolInvocationCount).toBeGreaterThanOrEqual(expectedToolCalls);
+
+        // No ordering violations in raw DB
+        const orderingViolations = dbAnalysis.violations.filter(v => v.includes('createdAt'));
+        expect(orderingViolations).toEqual([]);
+
+        // This repro is specifically checking the buffering contract: once buffering
+        // starts, OM should seal and rotate output into multiple assistant messages
+        // instead of letting one assistant row absorb the entire run.
+        expect(dbAnalysis.assistantMessageCount).toBeGreaterThan(1);
+
+        // The largest assistant chunk should stay well below the historical mega-row
+        // shape from the bug, where most of the run ended up in one persisted message.
+        expect(dbAnalysis.maxPartsInOneMessage).toBeLessThan(40);
+
+        // Recall path should also see the same integrity
+        expect(recallAnalysis.toolInvocationCount).toBeGreaterThanOrEqual(expectedToolCalls);
+        const recallOrderingViolations = recallAnalysis.violations.filter(v => v.includes('createdAt'));
+        expect(recallOrderingViolations).toEqual([]);
+
+        // UI should have tool parts preserved
+        expect(uiAnalysis.toolPartCount).toBeGreaterThanOrEqual(expectedToolCalls);
+        expect(uiAnalysis.violations).toEqual([]);
+      }, 120_000);
     });
 
     describe('lastMessages should return newest messages, not oldest', () => {

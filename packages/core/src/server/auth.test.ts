@@ -258,6 +258,22 @@ describe('Composite auth', () => {
           ['/api/resource', ['POST', 'PUT']],
         ]);
       });
+
+      it('should use the matching provider mapUserToResourceId callback', async () => {
+        const user1 = { id: 'user-1' };
+        const user2 = { id: 'user-2', tenantId: 'tenant-2' };
+
+        const provider1 = new MockAuthProvider(true, true, false, user1);
+        provider1.mapUserToResourceId = user => `primary:${(user as typeof user1).id}`;
+
+        const provider2 = new MockAuthProvider(true, true, false, user2);
+        provider2.mapUserToResourceId = user => `secondary:${(user as typeof user2).tenantId}`;
+
+        const compositeAuth = new CompositeAuth([provider2, provider1]);
+        const authenticatedUser = await compositeAuth.authenticateToken('test-token', mockRequest);
+
+        expect(compositeAuth.mapUserToResourceId?.(authenticatedUser)).toBe('secondary:tenant-2');
+      });
     });
 
     describe('integration scenarios', () => {

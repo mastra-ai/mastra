@@ -13,11 +13,18 @@ import {
 } from '../processors/observational-memory/recall';
 import { truncateStringByTokens } from '../processors/observational-memory/tool-result-helpers';
 
+function getMessageParts(msg: MastraDBMessage): any[] {
+  if (typeof msg.content === 'string') return [];
+  if (Array.isArray(msg.content)) return msg.content;
+  const parts = msg.content?.parts;
+  return Array.isArray(parts) ? parts : [];
+}
+
 /** Returns true if a message has at least one non-data part with visible content. */
 function hasVisibleParts(msg: MastraDBMessage): boolean {
   if (typeof msg.content === 'string') return (msg.content as string).length > 0;
-  const parts = msg.content?.parts;
-  if (!parts || !Array.isArray(parts)) return false;
+  const parts = getMessageParts(msg);
+  if (parts.length === 0) return Boolean(msg.content?.content);
   return parts.some((p: { type?: string }) => !p.type?.startsWith('data-'));
 }
 
@@ -56,7 +63,13 @@ type RecallMemory = {
         endExclusive?: boolean;
       };
     };
-  }) => Promise<{ messages: MastraDBMessage[] }>;
+  }) => Promise<{
+    messages: MastraDBMessage[];
+    total: number;
+    page: number;
+    perPage: number | false;
+    hasMore: boolean;
+  }>;
   listThreads: (args: {
     perPage?: number | false;
     page?: number;
@@ -107,7 +120,7 @@ function parseRangeFormat(cursor: string): { startId: string; endId: string } | 
 async function resolveCursorMessage(
   memory: RecallMemory,
   cursor: string,
-  access?: { resourceId?: string; threadScope?: string },
+  access?: { resourceId?: string; threadScope?: string; enforceThreadScope?: boolean },
 ): Promise<MastraDBMessage | { hint: string; startId: string; endId: string }> {
   const normalized = cursor.trim();
 
@@ -125,7 +138,11 @@ async function resolveCursorMessage(
 
   const memoryStore = await memory.getMemoryStore();
   const result = await memoryStore.listMessagesById({ messageIds: [normalized] });
-  const message = result.messages.find(message => message.id === normalized);
+  let message = result.messages.find(message => message.id === normalized) ?? null;
+
+  if (!message) {
+    message = await resolveCursorMessageByRecall(memory, normalized, access);
+  }
 
   if (!message) {
     throw new Error(`Could not resolve cursor message: ${cursor}`);
@@ -136,12 +153,55 @@ async function resolveCursorMessage(
     throw new Error(`Could not resolve cursor message: ${cursor}`);
   }
 
-  // In thread scope, verify the cursor belongs to the current thread
-  if (access?.threadScope && message.threadId !== access.threadScope) {
+  // In strict thread scope, verify the cursor belongs to the current thread
+  if (access?.enforceThreadScope && access.threadScope && message.threadId !== access.threadScope) {
     throw new Error(`Could not resolve cursor message: ${cursor}`);
   }
 
   return message;
+}
+
+async function resolveCursorMessageByRecall(
+  memory: RecallMemory,
+  cursor: string,
+  access?: { resourceId?: string; threadScope?: string; enforceThreadScope?: boolean },
+): Promise<MastraDBMessage | null> {
+  if (access?.enforceThreadScope && access.threadScope) {
+    const result = await memory.recall({
+      threadId: access.threadScope,
+      resourceId: access.resourceId,
+      page: 0,
+      perPage: false,
+    });
+
+    return result.messages.find(message => message.id === cursor) ?? null;
+  }
+
+  if (!access?.resourceId) {
+    return null;
+  }
+
+  const threads = await memory.listThreads({
+    page: 0,
+    perPage: 100,
+    orderBy: { field: 'updatedAt', direction: 'DESC' },
+    filter: { resourceId: access.resourceId },
+  });
+
+  for (const thread of threads.threads) {
+    const result = await memory.recall({
+      threadId: thread.id,
+      resourceId: access.resourceId,
+      page: 0,
+      perPage: false,
+    });
+    const message = result.messages.find(message => message.id === cursor);
+    if (message) {
+      return message;
+    }
+  }
+
+  return null;
 }
 
 // ── Thread listing ──────────────────────────────────────────────────
@@ -368,6 +428,35 @@ export async function searchMessagesForResource({
 // ── Per-part formatting ─────────────────────────────────────────────
 
 const DEFAULT_MAX_RESULT_TOKENS = 2000;
+
+async function getNextVisibleMessage({
+  memory,
+  threadId,
+  resourceId,
+  after,
+}: {
+  memory: RecallMemory;
+  threadId: string;
+  resourceId?: string;
+  after: Date;
+}): Promise<MastraDBMessage | null> {
+  const result = await memory.recall({
+    threadId,
+    resourceId,
+    page: 0,
+    perPage: 50,
+    orderBy: { field: 'createdAt', direction: 'ASC' },
+    filter: {
+      dateRange: {
+        start: after,
+        startExclusive: true,
+      },
+    },
+  });
+
+  return result.messages.find(hasVisibleParts) ?? null;
+}
+
 const MAX_EXPAND_USER_TEXT_TOKENS = 200;
 const MAX_EXPAND_OTHER_TOKENS = 50;
 
@@ -480,7 +569,11 @@ export async function recallPart({
     throw new Error('Thread ID is required for recall');
   }
 
-  const resolved = await resolveCursorMessage(memory, cursor, { resourceId, threadScope });
+  const resolved = await resolveCursorMessage(memory, cursor, {
+    resourceId,
+    threadScope,
+    enforceThreadScope: false,
+  });
 
   if ('hint' in resolved) {
     throw new Error(resolved.hint);
@@ -494,12 +587,43 @@ export async function recallPart({
     );
   }
 
-  const target = allParts.find(p => p.partIndex === partIndex);
+  const target = [...allParts].reverse().find(p => p.partIndex === partIndex);
 
   if (!target) {
-    throw new Error(
-      `Part index ${partIndex} not found in message ${cursor}. Available indices: ${allParts.map(p => p.partIndex).join(', ')}`,
-    );
+    const availableIndices = allParts.map(p => p.partIndex).join(', ');
+    const highestVisiblePartIndex = Math.max(...allParts.map(p => p.partIndex));
+
+    if (partIndex > highestVisiblePartIndex) {
+      const nextMessage = await getNextVisibleMessage({
+        memory,
+        threadId,
+        resourceId,
+        after: resolved.createdAt,
+      });
+
+      if (nextMessage) {
+        const nextParts = formatMessageParts(nextMessage, 'high');
+        const firstNextPart = nextParts[0];
+
+        if (firstNextPart) {
+          const fallbackNote = `Part index ${partIndex} not found in message ${cursor}; showing partIndex ${firstNextPart.partIndex} from next message ${firstNextPart.messageId}.\n\n`;
+          const fallbackText = `${fallbackNote}${firstNextPart.text}`;
+          const truncatedText = truncateStringByTokens(fallbackText, maxTokens);
+          const wasTruncated = truncatedText !== fallbackText;
+
+          return {
+            text: truncatedText,
+            messageId: firstNextPart.messageId,
+            partIndex: firstNextPart.partIndex,
+            role: firstNextPart.role,
+            type: firstNextPart.type,
+            truncated: wasTruncated,
+          };
+        }
+      }
+    }
+
+    throw new Error(`Part index ${partIndex} not found in message ${cursor}. Available indices: ${availableIndices}`);
   }
 
   const truncatedText = truncateStringByTokens(target.text, maxTokens);
@@ -538,6 +662,8 @@ export async function recallMessages({
   page = 1,
   limit = 20,
   detail = 'low',
+  partType,
+  toolName,
   threadScope,
   maxTokens = DEFAULT_MAX_RESULT_TOKENS,
 }: {
@@ -548,6 +674,8 @@ export async function recallMessages({
   page?: number;
   limit?: number;
   detail?: RecallDetail;
+  partType?: 'text' | 'tool-call' | 'tool-result' | 'reasoning' | 'image' | 'file';
+  toolName?: string;
   threadScope?: string;
   maxTokens?: number;
 }): Promise<RecallResult> {
@@ -569,7 +697,11 @@ export async function recallMessages({
   const normalizedPage = Math.max(Math.min(rawPage, MAX_PAGE), -MAX_PAGE);
   const normalizedLimit = Math.min(limit, MAX_LIMIT);
 
-  const resolved = await resolveCursorMessage(memory, cursor, { resourceId, threadScope });
+  const resolved = await resolveCursorMessage(memory, cursor, {
+    resourceId,
+    threadScope,
+    enforceThreadScope: false,
+  });
 
   if ('hint' in resolved) {
     return {
@@ -587,10 +719,11 @@ export async function recallMessages({
   }
 
   const anchor = resolved;
+  const crossThreadId = anchor.threadId && anchor.threadId !== threadId ? anchor.threadId : undefined;
 
-  if (anchor.threadId && anchor.threadId !== threadId) {
+  if (crossThreadId && threadScope) {
     return {
-      messages: `Cursor does not belong to the active thread. Expected thread "${threadId}" but cursor "${cursor}" belongs to "${anchor.threadId}".`,
+      messages: `Cursor does not belong to the active thread. Expected thread "${threadId}" but cursor "${cursor}" belongs to "${anchor.threadId}". Pass threadId="${anchor.threadId}" to browse that thread, or omit threadId and use this cursor directly in resource scope.`,
       count: 0,
       cursor,
       page: normalizedPage,
@@ -603,7 +736,10 @@ export async function recallMessages({
     };
   }
 
-  const resolvedThreadId = threadId;
+  const resolvedThreadId = crossThreadId ?? threadId;
+  if (!resolvedThreadId) {
+    throw new Error('Thread ID is required for recall');
+  }
 
   const isForward = normalizedPage > 0;
   const pageIndex = Math.max(Math.abs(normalizedPage), 1) - 1;
@@ -657,11 +793,19 @@ export async function recallMessages({
   const hasPrevPage = isForward ? pageIndex > 0 : hasMore;
 
   // Format parts from returned messages
-  const allParts: FormattedPart[] = [];
+  let allParts: FormattedPart[] = [];
   const timestamps = new Map<string, Date>();
   for (const msg of messages) {
     timestamps.set(msg.id, msg.createdAt);
     allParts.push(...formatMessageParts(msg, detail));
+  }
+
+  if (toolName) {
+    allParts = allParts.filter(p => (p.type === 'tool-call' || p.type === 'tool-result') && p.toolName === toolName);
+  }
+
+  if (partType) {
+    allParts = allParts.filter(p => p.type === partType);
   }
 
   // High detail: clamp to 1 message and 1 part to avoid token blowup
@@ -706,9 +850,15 @@ export async function recallMessages({
   }
 
   const rendered = renderFormattedParts(allParts, timestamps, { detail, maxTokens });
+  const emptyMessage =
+    allParts.length === 0
+      ? partType || toolName
+        ? '(no message parts matched the current filters)'
+        : '(no visible message parts found for this page)'
+      : '(no messages found)';
 
   return {
-    messages: rendered.text,
+    messages: rendered.text || emptyMessage,
     count: messages.length,
     cursor,
     page: normalizedPage,
@@ -730,6 +880,9 @@ export async function recallThreadFromStart({
   page = 1,
   limit = 20,
   detail = 'low',
+  partType,
+  toolName,
+  anchor = 'start',
   maxTokens = DEFAULT_MAX_RESULT_TOKENS,
 }: {
   memory: RecallMemory;
@@ -738,6 +891,9 @@ export async function recallThreadFromStart({
   page?: number;
   limit?: number;
   detail?: RecallDetail;
+  partType?: 'text' | 'tool-call' | 'tool-result' | 'reasoning' | 'image' | 'file';
+  toolName?: string;
+  anchor?: 'start' | 'end';
   maxTokens?: number;
 }): Promise<RecallResult> {
   if (!memory) {
@@ -760,8 +916,6 @@ export async function recallThreadFromStart({
   const normalizedPage = Math.max(Math.min(page, MAX_PAGE), 1);
   const normalizedLimit = Math.min(Math.max(limit, 1), MAX_LIMIT);
   const pageIndex = normalizedPage - 1;
-
-  // Fetch one extra to detect hasNextPage
   const fetchCount = pageIndex * normalizedLimit + normalizedLimit + 1;
 
   const result = await memory.recall({
@@ -769,33 +923,53 @@ export async function recallThreadFromStart({
     resourceId,
     page: 0,
     perPage: fetchCount,
-    orderBy: { field: 'createdAt', direction: 'ASC' },
+    orderBy: { field: 'createdAt', direction: anchor === 'end' ? 'DESC' : 'ASC' },
   });
 
-  const visibleMessages = result.messages.filter(hasVisibleParts);
-  const total = visibleMessages.length;
+  const visibleMessages =
+    anchor === 'end'
+      ? result.messages.slice(0, fetchCount).filter(hasVisibleParts).reverse()
+      : result.messages.slice(0, fetchCount).filter(hasVisibleParts);
   const skip = pageIndex * normalizedLimit;
-  const hasMore = total > skip + normalizedLimit;
   const messages = visibleMessages.slice(skip, skip + normalizedLimit);
+  const hasExtraMessage = visibleMessages.length > skip + messages.length;
+  const hasNextPage = messages.length > 0 ? (anchor === 'end' ? pageIndex > 0 : hasExtraMessage) : false;
+  const hasPrevPage = messages.length > 0 ? (anchor === 'end' ? hasExtraMessage : pageIndex > 0) : pageIndex > 0;
 
-  const allParts: FormattedPart[] = [];
+  let allParts: FormattedPart[] = [];
   const timestamps = new Map<string, Date>();
   for (const msg of messages) {
     timestamps.set(msg.id, msg.createdAt);
     allParts.push(...formatMessageParts(msg, detail));
   }
 
+  if (toolName) {
+    allParts = allParts.filter(p => (p.type === 'tool-call' || p.type === 'tool-result') && p.toolName === toolName);
+  }
+
+  if (partType) {
+    allParts = allParts.filter(p => p.type === partType);
+  }
+
   const rendered = renderFormattedParts(allParts, timestamps, { detail, maxTokens });
+  const emptyMessage =
+    messages.length === 0
+      ? pageIndex > 0
+        ? `(no messages found on page ${normalizedPage} for this thread)`
+        : '(no messages in this thread)'
+      : partType || toolName
+        ? '(no message parts matched the current filters)'
+        : '(no messages found)';
 
   return {
-    messages: rendered.text || '(no messages in this thread)',
+    messages: rendered.text || emptyMessage,
     count: messages.length,
     cursor: messages[0]?.id || '',
     page: normalizedPage,
     limit: normalizedLimit,
     detail,
-    hasNextPage: hasMore,
-    hasPrevPage: pageIndex > 0,
+    hasNextPage,
+    hasPrevPage,
     truncated: rendered.truncated,
     tokenOffset: rendered.tokenOffset,
   };
@@ -828,7 +1002,9 @@ export const recallTool = (
               .string()
               .min(1)
               .optional()
-              .describe('Browse a different thread. Use mode="threads" first to discover thread IDs.'),
+              .describe(
+                'Browse a different thread, or use "current" for the active thread. Use mode="threads" first to discover thread IDs.',
+              ),
             before: z
               .string()
               .optional()
@@ -862,6 +1038,12 @@ export const recallTool = (
         .describe(
           'A message ID to use as the pagination cursor. For mode="messages", provide either cursor or threadId. If only cursor is provided, it must belong to the current thread. Extract it from the start or end of an observation group range.',
         ),
+      anchor: z
+        .enum(['start', 'end'])
+        .optional()
+        .describe(
+          'For mode="messages" without a cursor, page from the start (oldest-first) or end (newest-first) of the thread. Defaults to "start".',
+        ),
       page: z
         .number()
         .int()
@@ -884,6 +1066,17 @@ export const recallTool = (
         .describe(
           'Detail level for messages. "low" (default) returns truncated text and tool names. "high" returns full content with tool args/results.',
         ),
+      partType: z
+        .enum(['text', 'tool-call', 'tool-result', 'reasoning', 'image', 'file'])
+        .optional()
+        .describe('Filter results to only include parts of this type. Only applies to mode="messages".'),
+      toolName: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+          'Filter results to only include tool-call and tool-result parts matching this tool name. Only applies to mode="messages".',
+        ),
       partIndex: z
         .number()
         .int()
@@ -899,9 +1092,12 @@ export const recallTool = (
         query,
         cursor,
         threadId: explicitThreadId,
+        anchor,
         page,
         limit,
         detail,
+        partType,
+        toolName,
         partIndex,
         before,
         after,
@@ -910,9 +1106,12 @@ export const recallTool = (
         query?: string;
         cursor?: string;
         threadId?: string;
+        anchor?: 'start' | 'end';
         page?: number;
         limit?: number;
         detail?: RecallDetail;
+        partType?: 'text' | 'tool-call' | 'tool-result' | 'reasoning' | 'image' | 'file';
+        toolName?: string;
         partIndex?: number;
         before?: string;
         after?: string;
@@ -922,9 +1121,14 @@ export const recallTool = (
       const memory = (context as any)?.memory as RecallMemory | undefined;
       const currentThreadId = context?.agent?.threadId;
       const resourceId = context?.agent?.resourceId;
+      const resolvedExplicitThreadId = explicitThreadId === 'current' ? currentThreadId : explicitThreadId;
 
       if (!memory) {
         throw new Error('Memory instance is required for recall');
+      }
+
+      if (explicitThreadId === 'current' && !currentThreadId) {
+        throw new Error('Could not resolve current thread.');
       }
 
       // Search mode
@@ -943,20 +1147,25 @@ export const recallTool = (
           topK: limit ?? 10,
           before,
           after,
-          threadScope: !isResourceScope ? currentThreadId || undefined : undefined,
+          threadScope: !isResourceScope ? currentThreadId || undefined : resolvedExplicitThreadId || undefined,
         });
       }
 
       // Thread listing mode
       if (mode === 'threads') {
+        const requestedCurrentThread = explicitThreadId === 'current';
+
         // Thread scope: return current thread info only
-        if (!isResourceScope) {
+        if (!isResourceScope || requestedCurrentThread) {
           if (!currentThreadId || !memory.getThreadById) {
             return { error: 'Could not resolve current thread.' };
           }
           const thread = await memory.getThreadById({ threadId: currentThreadId });
           if (!thread) {
             return { error: 'Could not resolve current thread.' };
+          }
+          if (isResourceScope && resourceId && thread.resourceId !== resourceId) {
+            throw new Error('Thread does not belong to the active resource');
           }
           return {
             threads: `- **${thread.title || '(untitled)'}** ← current\n  id: ${thread.id}\n  updated: ${formatTimestamp(thread.updatedAt)} | created: ${formatTimestamp(thread.createdAt)}`,
@@ -979,7 +1188,7 @@ export const recallTool = (
         });
       }
 
-      const hasExplicitThreadId = typeof explicitThreadId === 'string' && explicitThreadId.length > 0;
+      const hasExplicitThreadId = typeof resolvedExplicitThreadId === 'string' && resolvedExplicitThreadId.length > 0;
       const hasCursor = typeof cursor === 'string' && cursor.length > 0;
 
       if (!hasExplicitThreadId && !hasCursor) {
@@ -1000,7 +1209,7 @@ export const recallTool = (
           throw new Error('Memory instance cannot verify thread access for recall');
         }
 
-        const thread = await memory.getThreadById({ threadId: explicitThreadId! });
+        const thread = await memory.getThreadById({ threadId: resolvedExplicitThreadId! });
         if (!thread || thread.resourceId !== resourceId) {
           throw new Error('Thread does not belong to the active resource');
         }
@@ -1013,7 +1222,27 @@ export const recallTool = (
       }
 
       if (hasCursor && !hasExplicitThreadId && !currentThreadId) {
-        throw new Error('Current thread is required when browsing by cursor');
+        if (!isResourceScope) {
+          throw new Error('Current thread is required when browsing by cursor');
+        }
+
+        const resolved = await resolveCursorMessage(memory, cursor!, { resourceId });
+        if ('hint' in resolved) {
+          return {
+            messages: resolved.hint,
+            count: 0,
+            cursor: cursor!,
+            page: page ?? 1,
+            limit: Math.min(limit ?? 20, 20),
+            detail: detail ?? 'low',
+            hasNextPage: false,
+            hasPrevPage: false,
+            truncated: false,
+            tokenOffset: 0,
+          };
+        }
+
+        targetThreadId = resolved.threadId;
       }
 
       if (!targetThreadId) {
@@ -1029,6 +1258,9 @@ export const recallTool = (
           page: page ?? 1,
           limit: limit ?? 20,
           detail: detail ?? 'low',
+          partType,
+          toolName,
+          anchor: anchor ?? 'start',
         });
       }
 
@@ -1052,6 +1284,8 @@ export const recallTool = (
         page,
         limit,
         detail: detail ?? 'low',
+        partType,
+        toolName,
         threadScope,
       });
     },

@@ -320,6 +320,34 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return delegate.listScores(...args);
   }
 
+  async getScoreAggregate(
+    ...args: Parameters<ObservabilityStoreImpl['getScoreAggregate']>
+  ): ReturnType<ObservabilityStoreImpl['getScoreAggregate']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getScoreAggregate(...args);
+  }
+
+  async getScoreBreakdown(
+    ...args: Parameters<ObservabilityStoreImpl['getScoreBreakdown']>
+  ): ReturnType<ObservabilityStoreImpl['getScoreBreakdown']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getScoreBreakdown(...args);
+  }
+
+  async getScoreTimeSeries(
+    ...args: Parameters<ObservabilityStoreImpl['getScoreTimeSeries']>
+  ): ReturnType<ObservabilityStoreImpl['getScoreTimeSeries']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getScoreTimeSeries(...args);
+  }
+
+  async getScorePercentiles(
+    ...args: Parameters<ObservabilityStoreImpl['getScorePercentiles']>
+  ): ReturnType<ObservabilityStoreImpl['getScorePercentiles']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getScorePercentiles(...args);
+  }
+
   async createFeedback(
     ...args: Parameters<ObservabilityStoreImpl['createFeedback']>
   ): ReturnType<ObservabilityStoreImpl['createFeedback']> {
@@ -339,6 +367,34 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   ): ReturnType<ObservabilityStoreImpl['listFeedback']> {
     const delegate = await this.requireDelegate();
     return delegate.listFeedback(...args);
+  }
+
+  async getFeedbackAggregate(
+    ...args: Parameters<ObservabilityStoreImpl['getFeedbackAggregate']>
+  ): ReturnType<ObservabilityStoreImpl['getFeedbackAggregate']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getFeedbackAggregate(...args);
+  }
+
+  async getFeedbackBreakdown(
+    ...args: Parameters<ObservabilityStoreImpl['getFeedbackBreakdown']>
+  ): ReturnType<ObservabilityStoreImpl['getFeedbackBreakdown']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getFeedbackBreakdown(...args);
+  }
+
+  async getFeedbackTimeSeries(
+    ...args: Parameters<ObservabilityStoreImpl['getFeedbackTimeSeries']>
+  ): ReturnType<ObservabilityStoreImpl['getFeedbackTimeSeries']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getFeedbackTimeSeries(...args);
+  }
+
+  async getFeedbackPercentiles(
+    ...args: Parameters<ObservabilityStoreImpl['getFeedbackPercentiles']>
+  ): ReturnType<ObservabilityStoreImpl['getFeedbackPercentiles']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getFeedbackPercentiles(...args);
   }
 }
 

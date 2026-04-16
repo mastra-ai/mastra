@@ -8,6 +8,7 @@ import type {
   DatasetRecord,
   DatasetItem,
   DatasetItemRow,
+  DatasetItemSource,
   DatasetVersion,
   TargetType,
   UpdateExperimentResultInput,
@@ -125,6 +126,7 @@ export class Dataset {
     tags?: string[] | null;
     targetType?: TargetType | null;
     targetIds?: string[] | null;
+    scorerIds?: string[] | null;
   }): Promise<DatasetRecord> {
     const store = await this.#getDatasetsStore();
 
@@ -155,16 +157,20 @@ export class Dataset {
   async addItem(input: {
     input: unknown;
     groundTruth?: unknown;
+    expectedTrajectory?: unknown;
     requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
+    source?: DatasetItemSource;
   }): Promise<DatasetItem> {
     const store = await this.#getDatasetsStore();
     return store.addItem({
       datasetId: this.id,
       input: input.input,
       groundTruth: input.groundTruth,
+      expectedTrajectory: input.expectedTrajectory,
       requestContext: input.requestContext,
       metadata: input.metadata,
+      source: input.source,
     });
   }
 
@@ -175,8 +181,10 @@ export class Dataset {
     items: Array<{
       input: unknown;
       groundTruth?: unknown;
+      expectedTrajectory?: unknown;
       requestContext?: Record<string, unknown>;
       metadata?: Record<string, unknown>;
+      source?: DatasetItemSource;
     }>;
   }): Promise<DatasetItem[]> {
     const store = await this.#getDatasetsStore();
@@ -224,6 +232,7 @@ export class Dataset {
     itemId: string;
     input?: unknown;
     groundTruth?: unknown;
+    expectedTrajectory?: unknown;
     requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
   }): Promise<DatasetItem> {
@@ -233,6 +242,7 @@ export class Dataset {
       datasetId: this.id,
       input: input.input,
       groundTruth: input.groundTruth,
+      expectedTrajectory: input.expectedTrajectory,
       requestContext: input.requestContext,
       metadata: input.metadata,
     });
@@ -342,11 +352,12 @@ export class Dataset {
 
     const experimentId = run.id;
 
-    // Fire-and-forget — update experiment to failed on unexpected errors
+    // Fire-and-forget — runExperiment merges dataset-attached scorers automatically
     void runExperiment(this.#mastra, {
       datasetId: this.id,
       experimentId,
       ...config,
+      version: targetVersion,
     } as ExperimentConfig).catch(async err => {
       await experimentsStore
         .updateExperiment({

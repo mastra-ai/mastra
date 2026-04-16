@@ -729,6 +729,19 @@ export interface ObservationalMemoryOptions {
   scope?: 'resource' | 'thread';
 
   /**
+   * Time before buffered observations or buffered reflections are force-activated after inactivity.
+   * Accepts milliseconds as a number or a duration string like `"5m"` or `"1hr"`.
+   * When the gap between the current time and the last assistant message part's `createdAt`
+   * exceeds this value, buffered observational memory activates regardless of whether the
+   * token threshold has been reached. Useful to align with prompt cache TTLs.
+   *
+   * @example 300_000
+   * @example "5m"
+   * @example "1hr"
+   */
+  activateAfterIdle?: number | string;
+
+  /**
    * Share the token budget between messages and observations.
    * When true, the total budget = observation.messageTokens + reflection.observationTokens.
    * - Messages can use more space when observations are small
@@ -1161,6 +1174,9 @@ export type SerializedObservationalMemoryConfig = {
 
   /** Memory scope: 'resource' or 'thread' */
   scope?: 'resource' | 'thread';
+
+  /** Inactivity TTL before forcing buffered observation/reflection activation */
+  activateAfterIdle?: number | string;
 
   /** Share the token budget between messages and observations */
   shareTokenBudget?: boolean;

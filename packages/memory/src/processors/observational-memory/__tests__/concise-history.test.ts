@@ -73,7 +73,10 @@ describe('formatConciseHistory', () => {
           content: {
             format: 2,
             parts: [
-              { type: 'tool-invocation', toolInvocation: { toolName: 'web_search', state: 'call' } },
+              {
+                type: 'tool-invocation',
+                toolInvocation: { toolName: 'web_search', state: 'call', args: { query: 'status' } },
+              },
               {
                 type: 'tool-invocation',
                 toolInvocation: { toolName: 'web_search', state: 'result', result: { items: ['a', 'b'] } },

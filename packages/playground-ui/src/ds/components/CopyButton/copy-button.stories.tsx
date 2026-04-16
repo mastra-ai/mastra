@@ -66,7 +66,7 @@ export const InContext: Story = {
 
 export const CodeBlock: Story = {
   render: () => (
-    <div className="relative p-4 bg-surface4 rounded-md w-[300px]">
+    <div className="relative p-4 bg-surface4 rounded-md w-dropdown-max-height">
       <CopyButton content="const agent = new Agent()" className="absolute top-2 right-2" />
       <pre className="text-sm font-mono text-neutral5">const agent = new Agent()</pre>
     </div>

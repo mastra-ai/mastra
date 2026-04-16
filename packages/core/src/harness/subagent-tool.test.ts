@@ -84,7 +84,7 @@ describe('createSubagentTool requestContext forwarding', () => {
     vi.restoreAllMocks();
   });
 
-  it('forwards the parent requestContext to subagent.stream()', async () => {
+  it('forwards a copy of requestContext with threadId/resourceId stripped', async () => {
     mockStream.mockResolvedValue(createMockStreamResponse('result text'));
 
     const tool = createSubagentTool({
@@ -93,10 +93,12 @@ describe('createSubagentTool requestContext forwarding', () => {
       fallbackModelId: 'test-model',
     });
 
-    // Build a requestContext with harness data, simulating what the parent agent provides
+    // Build a requestContext with harness data including threadId/resourceId
     const requestContext = new RequestContext();
     const harnessCtx: Partial<HarnessRequestContext> = {
       emitEvent: vi.fn(),
+      threadId: 'parent-thread-123',
+      resourceId: 'parent-resource-456',
     };
     requestContext.set('harness', harnessCtx);
 
@@ -107,12 +109,19 @@ describe('createSubagentTool requestContext forwarding', () => {
 
     expect(mockStream).toHaveBeenCalledTimes(1);
     const streamCall = mockStream.mock.calls[0]!;
-    // The exact same RequestContext instance should be forwarded
-    expect(streamCall[1].requestContext).toBe(requestContext);
+    const subagentCtx = streamCall[1].requestContext;
+    // Should be a new instance (not the parent's context)
+    expect(subagentCtx).not.toBe(requestContext);
+    // Harness context should have threadId/resourceId cleared
+    const subagentHarness = subagentCtx.get('harness') as Partial<HarnessRequestContext>;
+    expect(subagentHarness.threadId).toBeNull();
+    expect(subagentHarness.resourceId).toBe('');
+    // Other harness fields should be preserved
+    expect(subagentHarness.emitEvent).toBe(harnessCtx.emitEvent);
     expect(result.isError).toBe(false);
   });
 
-  it('forwards requestContext even when harness context is not set', async () => {
+  it('forwards requestContext copy when harness context is not set', async () => {
     mockStream.mockResolvedValue(createMockStreamResponse('result text'));
 
     const tool = createSubagentTool({
@@ -132,9 +141,11 @@ describe('createSubagentTool requestContext forwarding', () => {
 
     expect(mockStream).toHaveBeenCalledTimes(1);
     const streamCall = mockStream.mock.calls[0]!;
-    expect(streamCall[1].requestContext).toBe(requestContext);
+    const subagentCtx = streamCall[1].requestContext;
+    // Should be a new instance but with same data
+    expect(subagentCtx).not.toBe(requestContext);
     // Verify the custom data is accessible through the forwarded context
-    expect(streamCall[1].requestContext.get('custom-key')).toBe('custom-value');
+    expect(subagentCtx.get('custom-key')).toBe('custom-value');
     expect(result.isError).toBe(false);
   });
 
@@ -167,8 +178,9 @@ describe('createSubagentTool requestContext forwarding', () => {
       stopWhen: undefined,
       abortSignal: abortController.signal,
       requireToolApproval: false,
-      requestContext,
     });
+    // Subagent gets a copy of the request context (not the original)
+    expect(streamOpts.requestContext).toBeInstanceOf(RequestContext);
   });
 
   it('does not default maxSteps when stopWhen is configured', async () => {

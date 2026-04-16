@@ -338,6 +338,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/mixlayer',
+          label: 'Mixlayer',
+        },
+        {
+          type: 'doc',
           id: 'providers/moark',
           label: 'Moark',
         },
@@ -488,6 +493,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/the-grid-ai',
+          label: 'The Grid AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/togetherai',
           label: 'Together AI',
         },
@@ -515,6 +525,21 @@ const sidebars = {
           type: 'doc',
           id: 'providers/xiaomi',
           label: 'Xiaomi',
+        },
+        {
+          type: 'doc',
+          id: 'providers/xiaomi-token-plan-cn',
+          label: 'Xiaomi Token Plan (China)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/xiaomi-token-plan-ams',
+          label: 'Xiaomi Token Plan (Europe)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/xiaomi-token-plan-sgp',
+          label: 'Xiaomi Token Plan (Singapore)',
         },
         {
           type: 'doc',

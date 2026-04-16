@@ -69,6 +69,7 @@ export class AISDKV6LanguageModel implements MastraLanguageModelV3 {
     const result = await this.#model.doGenerate(remapToolsToV3(options));
 
     return {
+      ...result,
       request: result.request!,
       response: result.response as unknown as StreamResult['response'],
       stream: createStreamFromGenerateResult(result),

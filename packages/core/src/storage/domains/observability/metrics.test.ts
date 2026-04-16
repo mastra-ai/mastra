@@ -306,6 +306,16 @@ describe('Metric Schemas', () => {
       });
       expect(args.percentiles).toHaveLength(3);
     });
+
+    it('getMetricPercentilesArgsSchema rejects empty percentile arrays', () => {
+      expect(() =>
+        getMetricPercentilesArgsSchema.parse({
+          name: 'test',
+          percentiles: [],
+          interval: '1h',
+        }),
+      ).toThrow();
+    });
   });
 
   describe('Discovery schemas', () => {

@@ -2,7 +2,7 @@ import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/sp
 import traverse from 'json-schema-traverse';
 // Use zod/v3 types for v3 compatibility (v4's v3-compat layer)
 import type { ZodType, ZodTypeDef } from 'zod/v3';
-import zodToJsonSchemaOriginal from 'zod-to-json-schema';
+import zodToJsonSchemaOriginal, { ignoreOverride } from 'zod-to-json-schema';
 import type {
   StandardSchemaWithJSON,
   StandardSchemaWithJSONProps,
@@ -45,6 +45,14 @@ function convertToJsonSchema<T extends ZodType<any, ZodTypeDef, any>>(
   const jsonSchema = zodToJsonSchemaOriginal(zodSchema, {
     $refStrategy: 'none',
     target,
+    override: (def: any) => {
+      // Mark z.date() with x-date for downstream string→Date conversion.
+      // Zod v3 has no z.coerce.date(), so all dates are strict.
+      if (def.typeName === 'ZodDate') {
+        return { type: 'string', format: 'date-time', 'x-date': true };
+      }
+      return ignoreOverride;
+    },
   });
 
   traverse(jsonSchema, {

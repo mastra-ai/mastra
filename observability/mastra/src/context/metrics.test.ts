@@ -135,9 +135,9 @@ describe('MetricsContextImpl', () => {
 
     const metrics = new MetricsContextImpl({
       cardinalityFilter,
+      traceId: 'trace-1',
+      spanId: 'span-1',
       correlationContext: {
-        traceId: 'trace-1',
-        spanId: 'span-1',
         entityType: EntityType.AGENT,
         entityName: 'test-agent',
         environment: 'test',
@@ -148,12 +148,12 @@ describe('MetricsContextImpl', () => {
     metrics.emit('calls', 1, { agent: 'test-agent' });
 
     expect(emittedEvents[0]!.metric.correlationContext).toEqual({
-      traceId: 'trace-1',
-      spanId: 'span-1',
       entityType: EntityType.AGENT,
       entityName: 'test-agent',
       environment: 'test',
     });
+    expect(emittedEvents[0]!.metric.traceId).toBe('trace-1');
+    expect(emittedEvents[0]!.metric.spanId).toBe('span-1');
   });
 
   it('should include metadata when provided', () => {
@@ -219,5 +219,59 @@ describe('MetricsContextImpl', () => {
 
     expect(onMetricEvent).toHaveBeenCalledTimes(1);
     expect(onMetricEvent.mock.calls[0]![0].metric.name).toBe('test_metric');
+  });
+
+  it('should fall back to deprecated traceId and spanId on correlationContext', () => {
+    setupBus();
+    const cardinalityFilter = new CardinalityFilter();
+
+    const metrics = new MetricsContextImpl({
+      cardinalityFilter,
+      observabilityBus: bus,
+      correlationContext: {
+        traceId: 'legacy-trace',
+        spanId: 'legacy-span',
+        entityType: EntityType.AGENT,
+      },
+    });
+
+    metrics.emit('calls', 1);
+
+    const metric = emittedEvents[0]!.metric;
+    expect(metric.traceId).toBe('legacy-trace');
+    expect(metric.spanId).toBe('legacy-span');
+    expect(metric.correlationContext).toEqual({
+      traceId: 'legacy-trace',
+      spanId: 'legacy-span',
+      entityType: EntityType.AGENT,
+    });
+  });
+
+  it('should prefer top-level traceId and spanId over deprecated correlationContext values', () => {
+    setupBus();
+    const cardinalityFilter = new CardinalityFilter();
+
+    const metrics = new MetricsContextImpl({
+      cardinalityFilter,
+      observabilityBus: bus,
+      traceId: 'top-level-trace',
+      spanId: 'top-level-span',
+      correlationContext: {
+        traceId: 'legacy-trace',
+        spanId: 'legacy-span',
+        entityType: EntityType.AGENT,
+      },
+    });
+
+    metrics.emit('calls', 1);
+
+    const metric = emittedEvents[0]!.metric;
+    expect(metric.traceId).toBe('top-level-trace');
+    expect(metric.spanId).toBe('top-level-span');
+    expect(metric.correlationContext).toEqual({
+      traceId: 'legacy-trace',
+      spanId: 'legacy-span',
+      entityType: EntityType.AGENT,
+    });
   });
 });

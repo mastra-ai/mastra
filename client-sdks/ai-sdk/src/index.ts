@@ -1,5 +1,10 @@
 export { chatRoute, handleChatStream } from './chat-route';
-export type { chatRouteOptions, ChatStreamHandlerParams, ChatStreamHandlerOptions } from './chat-route';
+export type {
+  chatRouteOptions,
+  ChatStreamHandlerParams,
+  ChatStreamHandlerOptions,
+  AgentVersionOptions,
+} from './chat-route';
 export { workflowRoute, handleWorkflowStream } from './workflow-route';
 export type { WorkflowRouteOptions, WorkflowStreamHandlerParams, WorkflowStreamHandlerOptions } from './workflow-route';
 export type { WorkflowDataPart } from './transformers';

@@ -17,10 +17,7 @@ const API = `${BASE}/api`;
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function api<T = unknown>(
-  path: string,
-  opts: { method?: string; body?: unknown } = {},
-): Promise<T> {
+async function api<T = unknown>(path: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     method: opts.method ?? (opts.body ? 'POST' : 'GET'),
     headers: { 'Content-Type': 'application/json' },
@@ -63,13 +60,31 @@ const datasetDefs: DatasetDef[] = [
     targetType: 'agent',
     targetIds: ['chefAgent'],
     items: [
-      { input: { question: 'How do I reset my password?' }, groundTruth: { answer: 'Go to settings > security > reset password' } },
+      {
+        input: { question: 'How do I reset my password?' },
+        groundTruth: { answer: 'Go to settings > security > reset password' },
+      },
       { input: { question: 'What are your business hours?' }, groundTruth: { answer: 'Monday–Friday, 9am–5pm EST' } },
-      { input: { question: 'Can I get a refund?' }, groundTruth: { answer: 'Refunds available within 30 days of purchase' } },
-      { input: { question: 'How do I upgrade my plan?' }, groundTruth: { answer: 'Go to billing > plans > choose your new plan' } },
-      { input: { question: 'Where is my order?' }, groundTruth: { answer: 'Check your email for tracking information' } },
-      { input: { question: 'Do you offer student discounts?' }, groundTruth: { answer: 'Yes, 20% off with a valid .edu email' } },
-      { input: { question: 'How do I cancel my subscription?' }, groundTruth: { answer: 'Go to settings > billing > cancel subscription' } },
+      {
+        input: { question: 'Can I get a refund?' },
+        groundTruth: { answer: 'Refunds available within 30 days of purchase' },
+      },
+      {
+        input: { question: 'How do I upgrade my plan?' },
+        groundTruth: { answer: 'Go to billing > plans > choose your new plan' },
+      },
+      {
+        input: { question: 'Where is my order?' },
+        groundTruth: { answer: 'Check your email for tracking information' },
+      },
+      {
+        input: { question: 'Do you offer student discounts?' },
+        groundTruth: { answer: 'Yes, 20% off with a valid .edu email' },
+      },
+      {
+        input: { question: 'How do I cancel my subscription?' },
+        groundTruth: { answer: 'Go to settings > billing > cancel subscription' },
+      },
       { input: { question: 'Can I change my email?' }, groundTruth: { answer: 'Yes, update in profile settings' } },
     ],
   },
@@ -119,8 +134,14 @@ const datasetDefs: DatasetDef[] = [
     targetIds: ['chefAgent', 'evalAgent'],
     items: [
       { input: { text: 'Hello, how are you?', target: 'es' }, groundTruth: { translation: 'Hola, ¿cómo estás?' } },
-      { input: { text: 'The weather is nice today', target: 'es' }, groundTruth: { translation: 'El clima está agradable hoy' } },
-      { input: { text: 'I would like to order a coffee', target: 'es' }, groundTruth: { translation: 'Me gustaría pedir un café' } },
+      {
+        input: { text: 'The weather is nice today', target: 'es' },
+        groundTruth: { translation: 'El clima está agradable hoy' },
+      },
+      {
+        input: { text: 'I would like to order a coffee', target: 'es' },
+        groundTruth: { translation: 'Me gustaría pedir un café' },
+      },
     ],
   },
   {
@@ -129,8 +150,14 @@ const datasetDefs: DatasetDef[] = [
     targetType: 'agent',
     targetIds: ['dynamicAgent'],
     items: [
-      { input: { code: 'function add(a, b) { return a + b; }', lang: 'javascript' }, groundTruth: { quality: 'good', issues: [] } },
-      { input: { code: 'def sort(lst): return lst.sort()', lang: 'python' }, groundTruth: { quality: 'poor', issues: ['mutates input'] } },
+      {
+        input: { code: 'function add(a, b) { return a + b; }', lang: 'javascript' },
+        groundTruth: { quality: 'good', issues: [] },
+      },
+      {
+        input: { code: 'def sort(lst): return lst.sort()', lang: 'python' },
+        groundTruth: { quality: 'poor', issues: ['mutates input'] },
+      },
     ],
   },
   {
@@ -139,8 +166,14 @@ const datasetDefs: DatasetDef[] = [
     targetType: 'agent',
     targetIds: ['evalAgent'],
     items: [
-      { input: { text: 'The quick brown fox jumps over the lazy dog. '.repeat(10) }, groundTruth: { summary: 'A fox jumps over a dog' } },
-      { input: { text: 'AI researchers have made significant breakthroughs in NLP...' }, groundTruth: { summary: 'AI researchers advance NLP capabilities' } },
+      {
+        input: { text: 'The quick brown fox jumps over the lazy dog. '.repeat(10) },
+        groundTruth: { summary: 'A fox jumps over a dog' },
+      },
+      {
+        input: { text: 'AI researchers have made significant breakthroughs in NLP...' },
+        groundTruth: { summary: 'AI researchers advance NLP capabilities' },
+      },
     ],
   },
   {
@@ -164,7 +197,11 @@ const storedScorerDefs = [
   { name: 'Accuracy Scorer', description: 'Measures factual accuracy of responses', type: 'llm-judge' as const },
   { name: 'Coherence Scorer', description: 'Evaluates logical flow and coherence', type: 'llm-judge' as const },
   { name: 'Helpfulness Scorer', description: 'Rates how helpful the response is', type: 'llm-judge' as const },
-  { name: 'Conciseness Scorer', description: 'Checks if response is appropriately concise', type: 'llm-judge' as const },
+  {
+    name: 'Conciseness Scorer',
+    description: 'Checks if response is appropriately concise',
+    type: 'llm-judge' as const,
+  },
   { name: 'Safety Scorer', description: 'Detects harmful or toxic content', type: 'toxicity' as const },
 ];
 
@@ -307,7 +344,7 @@ async function seed() {
   console.log('\n   Open /evaluation in the playground to see the data.');
 }
 
-seed().catch((err) => {
+seed().catch(err => {
   console.error('❌ Seed failed:', err);
   process.exit(1);
 });

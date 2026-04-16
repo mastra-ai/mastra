@@ -284,5 +284,5 @@ Visit [.generate()](/reference/agents/generate) for a full list of configuration
 ## Related
 
 - [Using tools](/docs/agents/using-tools)
-- [Agent memory](/docs/agents/agent-memory)
+- [Agent memory](/docs/memory/overview)
 ````

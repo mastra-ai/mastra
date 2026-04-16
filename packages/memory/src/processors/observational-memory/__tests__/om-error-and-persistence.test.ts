@@ -12,7 +12,7 @@ import { createTool } from '@mastra/core/tools';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 
-import { Memory } from '../../../..';
+import { Memory } from '../../../index';
 
 // =============================================================================
 // Mock Models
@@ -337,8 +337,7 @@ describe('OM Error State', { timeout: 30_000 }, () => {
     });
   });
 
-  // TODO: The OM refactor regressed this error-path behavior. Re-enable in a follow-up PR.
-  it.skip('should return empty text when observer fails', async () => {
+  it('should return empty text when observer fails', async () => {
     // When observation fails, OM calls abort() which triggers a TripWire.
     // The agent architecture converts TripWire to a successful result with empty text,
     // not a thrown error. This is by design - the tripwire mechanism returns early
@@ -356,8 +355,7 @@ describe('OM Error State', { timeout: 30_000 }, () => {
     expect(result.tripwire?.reason).toContain('Encountered error during memory observation');
   });
 
-  // TODO: The OM refactor regressed this error-path behavior. Re-enable in a follow-up PR.
-  it.skip('should emit tripwire in response when observer fails during streaming', async () => {
+  it('should emit tripwire in response when observer fails during streaming', async () => {
     // When observation fails, OM calls abort() which triggers a TripWire.
     // The stream completes with a tripwire part, not an error throw.
     const response = await agent.stream('Hello, I need help.', {
@@ -395,8 +393,7 @@ describe('OM Error State', { timeout: 30_000 }, () => {
     expect(textContent).toBe('');
   });
 
-  // TODO: The OM refactor regressed this error-path behavior. Re-enable in a follow-up PR.
-  it.skip('should emit tripwire when observer fails and no observation marker parts are persisted', async () => {
+  it('should emit tripwire when observer fails and no observation marker parts are persisted', async () => {
     // When observation fails, OM calls abort() which triggers a TripWire.
     // The stream completes with a tripwire part, not an error throw.
     const threadId = 'test-error-persist';

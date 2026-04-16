@@ -71,7 +71,11 @@ export const EntryCell = ({ name, description, icon, meta, ...props }: EntryCell
             {name}
           </Txt>
           {description && (
-            <Txt as="span" variant="ui-xs" className="text-neutral3 w-full max-w-[300px] truncate !leading-tight pt-1">
+            <Txt
+              as="span"
+              variant="ui-xs"
+              className="text-neutral3 w-full max-w-dropdown-max-height truncate !leading-tight pt-1"
+            >
               {description}
             </Txt>
           )}

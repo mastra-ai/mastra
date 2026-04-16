@@ -152,7 +152,13 @@ export function createWorkflowStreamToAISDKTransformer<UI_CHUNK>(
         },
         convertMastraChunkToAISDK,
       );
-      if (transformed) controller.enqueue(transformed as UI_CHUNK);
+      if (Array.isArray(transformed)) {
+        for (const c of transformed) {
+          if (c) controller.enqueue(c as UI_CHUNK);
+        }
+      } else if (transformed) {
+        controller.enqueue(transformed as UI_CHUNK);
+      }
     },
   });
 }
@@ -276,44 +282,75 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
         finishEventSent = true;
       }
 
+      if (chunk.type === 'object-result') {
+        controller.enqueue({
+          type: 'data-structured-output',
+          data: {
+            object: chunk.object,
+          },
+        });
+      }
+
       const part = convertMastraChunkToAISDK({ chunk, mode: 'stream' });
 
-      const transformedChunk = convertFullStreamChunkToUIMessageStream<any>({
-        part: part as any,
-        sendReasoning,
-        sendSources,
-        messageMetadataValue: part ? messageMetadata?.({ part: part as TextStreamPart<ToolSet> }) : undefined,
-        sendStart,
-        sendFinish,
-        responseMessageId: lastMessageId,
-        onError(error) {
-          return onError ? onError(error) : safeParseErrorObject(error);
-        },
-      });
+      const enqueueTransformedPart = (p: any) => {
+        const transformedChunk = convertFullStreamChunkToUIMessageStream<any>({
+          part: p as any,
+          sendReasoning,
+          sendSources,
+          messageMetadataValue: p ? messageMetadata?.({ part: p as TextStreamPart<ToolSet> }) : undefined,
+          sendStart,
+          sendFinish,
+          responseMessageId: lastMessageId,
+          onError(error) {
+            return onError ? onError(error) : safeParseErrorObject(error);
+          },
+        });
 
-      if (transformedChunk) {
-        if (transformedChunk.type === 'tool-agent') {
-          const payload = transformedChunk.payload;
-          const agentTransformed = transformAgent<OUTPUT>(payload, bufferedSteps);
-          if (agentTransformed) controller.enqueue(agentTransformed);
-        } else if (transformedChunk.type === 'tool-workflow') {
-          const payload = transformedChunk.payload;
-          const workflowChunk = transformWorkflow(
-            payload,
-            bufferedSteps,
-            true,
-            undefined,
-            undefined,
-            convertMastraChunkToAISDK,
-          );
-          if (workflowChunk) controller.enqueue(workflowChunk);
-        } else if (transformedChunk.type === 'tool-network') {
-          const payload = transformedChunk.payload;
-          const networkChunk = transformNetwork(payload, bufferedSteps, true);
-          if (networkChunk) controller.enqueue(networkChunk);
-        } else {
-          controller.enqueue(transformedChunk as any);
+        if (transformedChunk) {
+          if (transformedChunk.type === 'tool-agent') {
+            const payload = transformedChunk.payload;
+            const agentTransformed = transformAgent<OUTPUT>(payload, bufferedSteps);
+            if (agentTransformed) controller.enqueue(agentTransformed);
+          } else if (transformedChunk.type === 'tool-workflow') {
+            const payload = transformedChunk.payload;
+            const workflowChunk = transformWorkflow(
+              payload,
+              bufferedSteps,
+              true,
+              undefined,
+              undefined,
+              convertMastraChunkToAISDK,
+            );
+            if (Array.isArray(workflowChunk)) {
+              for (const c of workflowChunk) {
+                if (c) controller.enqueue(c);
+              }
+            } else if (workflowChunk) {
+              controller.enqueue(workflowChunk);
+            }
+          } else if (transformedChunk.type === 'tool-network') {
+            const payload = transformedChunk.payload;
+            const networkChunk = transformNetwork(payload, bufferedSteps, true);
+            if (Array.isArray(networkChunk)) {
+              for (const c of networkChunk) {
+                if (c) controller.enqueue(c);
+              }
+            } else if (networkChunk) {
+              controller.enqueue(networkChunk);
+            }
+          } else {
+            controller.enqueue(transformedChunk as any);
+          }
         }
+      };
+
+      if (Array.isArray(part)) {
+        for (const p of part) {
+          enqueueTransformedPart(p);
+        }
+      } else {
+        enqueueTransformedPart(part);
       }
     },
     flush(controller) {
@@ -450,6 +487,10 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
         warnings: payload.payload?.stepResult?.warnings,
         steps: bufferedSteps.get(payload.runId!)!.steps,
         status: 'finished',
+        response: {
+          ...bufferedSteps.get(payload.runId!).response,
+          ...(payload.payload.response || {}),
+        },
       });
       hasChanged = true;
       break;
@@ -515,10 +556,24 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
       break;
     case 'step-finish': {
       const stepRun = ensureAgentRunState(bufferedSteps, payload.runId!);
+      // Exclude `steps` and internal offset trackers from the stepResult to
+      // avoid recursive nesting where each stepResult embeds copies of all
+      // prior stepResults (issue #14932).
+      const { steps: _steps, _textOffset, _reasoningOffset, ...stepRunWithoutSteps } = stepRun;
+
+      // Derive per-step text and reasoning using tracked offsets so each
+      // stepResult only contains its own content, not the cumulative run state.
+      const textOffset: number = _textOffset || 0;
+      const reasoningOffset: number = _reasoningOffset || 0;
+      const stepText = stepRun.text.slice(textOffset);
+      const stepReasoning: string[] = stepRun.reasoning.slice(reasoningOffset);
+
       const stepResult = {
-        ...stepRun,
+        ...stepRunWithoutSteps,
+        text: stepText,
+        reasoning: stepReasoning,
         stepType: stepRun.steps.length === 0 ? 'initial' : 'tool-result',
-        reasoningText: stepRun.reasoning.join(''),
+        reasoningText: stepReasoning.join(''),
         staticToolCalls: stepRun.toolCalls.filter(
           (part: any) => part.type === 'tool-call' && part.payload?.dynamic === false,
         ),
@@ -539,15 +594,31 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
           id: payload.payload.id || '',
           timestamp: (payload.payload.metadata?.timestamp as Date) || new Date(),
           modelId: (payload.payload.metadata?.modelId as string) || (payload.payload.metadata?.model as string) || '',
-          messages: stepRun.response.messages || [],
+          ...((payload.payload as any).response || {}),
+          messages:
+            ((payload.payload as any).response?.messages as typeof stepRun.response.messages) ??
+            stepRun.response.messages ??
+            [],
         },
       };
 
+      // Reset per-step structural fields so the next step starts fresh instead
+      // of carrying forward all prior toolCalls/toolResults (issue #14932).
+      // Text and reasoning stay cumulative at the run level (consumers read
+      // `data.text`); offsets track where the next step's content begins.
+      // `object` is last-write-wins, so it is NOT reset — clearing it would
+      // lose structured output from the completed step.
       bufferedSteps.set(payload.runId!, {
         ...stepRun,
+        sources: [],
+        files: [],
+        toolCalls: [],
+        toolResults: [],
         usage: payload.payload.output.usage,
         warnings: payload.payload.stepResult.warnings || [],
         steps: [...stepRun.steps, stepResult],
+        _textOffset: stepRun.text.length,
+        _reasoningOffset: stepRun.reasoning.length,
       });
       hasChanged = true;
       break;
@@ -557,10 +628,12 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
   }
 
   if (hasChanged) {
+    // Strip internal offset trackers so they don't leak over the wire.
+    const { _textOffset: _to, _reasoningOffset: _ro, ...data } = bufferedSteps.get(payload.runId!)!;
     return {
       type: 'data-tool-agent',
       id: payload.runId!,
-      data: bufferedSteps.get(payload.runId!),
+      data,
     } satisfies AgentDataPart;
   }
   return null;
@@ -678,6 +751,22 @@ export function transformWorkflow<OUTPUT>(
       if (includeTextStreamParts && output && isMastraTextStreamChunk(output)) {
         // @ts-expect-error - generic type mismatch in conversion
         const part = convertMastraChunkToAISDK<OUTPUT>({ chunk: output, mode: 'stream' });
+
+        // convertMastraChunkToAISDK can return an array (e.g. for tool-call-approval v6 chunks)
+        if (Array.isArray(part)) {
+          return part
+            .map(p =>
+              convertFullStreamChunkToUIMessageStream({
+                part: p as any,
+                sendReasoning: streamOptions?.sendReasoning,
+                sendSources: streamOptions?.sendSources,
+                onError(error) {
+                  return safeParseErrorObject(error);
+                },
+              }),
+            )
+            .filter(Boolean);
+        }
 
         const transformedChunk = convertFullStreamChunkToUIMessageStream({
           part: part as any,
