@@ -5,6 +5,9 @@
  * separate Chrome instances per thread.
  */
 
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { ThreadManager, DEFAULT_THREAD_ID } from '@mastra/core/browser';
 import type { ThreadSession, ThreadManagerConfig } from '@mastra/core/browser';
 import { chromium } from 'playwright-core';
@@ -118,26 +121,28 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
   protected async createSession(threadId: string): Promise<BrowserViewerSession> {
     const savedState = this.getSavedBrowserState(threadId);
 
-    // Launch Chrome via Playwright's launchServer to get the WebSocket endpoint
-    const port = this.browserConfig.cdpPort ?? 0;
+    // Use a specific CDP port so we can discover it, or let Chrome choose
+    const cdpPort = this.browserConfig.cdpPort ?? 0;
 
-    this.logger?.debug?.(`Launching Chrome for thread ${threadId} with remote-debugging-port=${port}`);
+    this.logger?.debug?.(`Launching Chrome for thread ${threadId} with remote-debugging-port=${cdpPort}`);
 
     const launchOptions: Parameters<typeof chromium.launchServer>[0] = {
       headless: this.browserConfig.headless ?? false,
-      args: [`--remote-debugging-port=${port}`, '--no-first-run', '--no-default-browser-check'],
+      args: [`--remote-debugging-port=${cdpPort}`, '--no-first-run', '--no-default-browser-check'],
     };
 
     if (this.browserConfig.executablePath) {
       launchOptions.executablePath = this.browserConfig.executablePath;
     }
 
-    // Launch server to get WebSocket endpoint
+    // Launch server - this starts Chrome
     const browserServer = await chromium.launchServer(launchOptions);
-    const cdpUrl = browserServer.wsEndpoint();
 
-    // Connect to the browser
-    const browser = await chromium.connect(cdpUrl);
+    // Discover the actual CDP WebSocket URL from Chrome's DevToolsActivePort file
+    const cdpUrl = this.discoverCdpUrl(browserServer);
+
+    // Connect to the browser via Playwright for screencast/session management
+    const browser = await chromium.connect(browserServer.wsEndpoint());
 
     // Create context and initial page
     const context = await browser.newContext({
@@ -181,6 +186,51 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
   }
 
   /**
+   * Discover the actual CDP WebSocket URL from Chrome's DevToolsActivePort file.
+   *
+   * Playwright's BrowserServer exposes _userDataDirForTest which points to Chrome's
+   * user data directory. Chrome writes a DevToolsActivePort file there containing:
+   *   Line 1: The debugging port number
+   *   Line 2: The browser WebSocket path (e.g., /devtools/browser/<guid>)
+   *
+   * This gives us the real CDP URL that external tools like agent-browser can connect to.
+   */
+  private discoverCdpUrl(browserServer: BrowserServer): string {
+    // Access Playwright's internal user data directory
+    const userDataDir = (browserServer as BrowserServer & { _userDataDirForTest?: string })._userDataDirForTest;
+
+    if (!userDataDir) {
+      this.logger?.warn?.('Could not access browser user data directory, falling back to Playwright wsEndpoint');
+      return browserServer.wsEndpoint();
+    }
+
+    const portFilePath = join(userDataDir, 'DevToolsActivePort');
+
+    if (!existsSync(portFilePath)) {
+      this.logger?.warn?.('DevToolsActivePort file not found, falling back to Playwright wsEndpoint');
+      return browserServer.wsEndpoint();
+    }
+
+    try {
+      const content = readFileSync(portFilePath, 'utf-8').trim().split('\n');
+      const port = content[0];
+      const browserPath = content[1];
+
+      if (!port || !browserPath) {
+        this.logger?.warn?.('Invalid DevToolsActivePort content, falling back to Playwright wsEndpoint');
+        return browserServer.wsEndpoint();
+      }
+
+      const cdpUrl = `ws://127.0.0.1:${port}${browserPath}`;
+      this.logger?.debug?.(`Discovered CDP URL from DevToolsActivePort: ${cdpUrl}`);
+      return cdpUrl;
+    } catch (error) {
+      this.logger?.warn?.('Failed to read DevToolsActivePort file:', error);
+      return browserServer.wsEndpoint();
+    }
+  }
+
+  /**
    * Create a shared session (for 'shared' scope).
    */
   async createSharedSession(): Promise<void> {
@@ -201,12 +251,14 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       launchOptions.executablePath = this.browserConfig.executablePath;
     }
 
-    // Launch server to get WebSocket endpoint
+    // Launch server - this starts Chrome
     const browserServer = await chromium.launchServer(launchOptions);
-    const cdpUrl = browserServer.wsEndpoint();
 
-    // Connect to the browser
-    const browser = await chromium.connect(cdpUrl);
+    // Discover the actual CDP WebSocket URL from Chrome's DevToolsActivePort file
+    const cdpUrl = this.discoverCdpUrl(browserServer);
+
+    // Connect to the browser via Playwright for screencast/session management
+    const browser = await chromium.connect(browserServer.wsEndpoint());
 
     // Create context and initial page
     const context = await browser.newContext({

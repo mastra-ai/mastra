@@ -59,12 +59,14 @@ function extractTailPipe(command: string): { command: string; tail?: number } {
 
 /**
  * CLI provider patterns for CDP URL injection.
- * Maps CLI command prefixes to their CDP URL flag format.
+ * Maps CLI command prefixes to their CDP URL flag.
+ * All CLIs accept either port number or full WebSocket URL.
+ * We use full URL for consistency.
  */
 const CLI_CDP_PATTERNS: Record<string, { pattern: RegExp; flag: string }> = {
   'agent-browser': { pattern: /^agent-browser\b/, flag: '--cdp' },
   'browser-use': { pattern: /^(?:browser-use|bu)\b/, flag: '--cdp-url' },
-  browse: { pattern: /^browse\b/, flag: '--cdp-url' },
+  browse: { pattern: /^browse\b/, flag: '--ws' },
 };
 
 /**
