@@ -1292,7 +1292,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           };
         });
 
-      if (currentIteration > 1 && executedStepModel) {
+      if (executedStepModel) {
         messageList.enrichLastStepStart(executedStepModel);
       }
 
