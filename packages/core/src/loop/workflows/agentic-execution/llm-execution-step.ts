@@ -1475,6 +1475,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             finishReason: immediateFinishReason,
             toolCalls: toolCallInfos.length > 0 ? toolCallInfos : undefined,
             text: immediateText,
+            usage: outputStream._getImmediateUsage(),
             ...createObservabilityContext(outputStepTracingContext),
             requestContext,
             retryCount: currentRetryCount,
