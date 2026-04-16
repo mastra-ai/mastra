@@ -224,6 +224,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
       return this.agent.stream(prompt, {
         model: this.structuringModel,
         instructions: this.structuringInstructions,
+        requestContext,
         structuredOutput: {
           schema: this.schema,
           jsonPromptInjection: this.jsonPromptInjection,

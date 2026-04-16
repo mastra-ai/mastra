@@ -261,6 +261,7 @@ describe('StructuredOutputProcessor', () => {
         expect.objectContaining({
           model: mockModel,
           instructions: expect.any(String),
+          requestContext,
           structuredOutput: {
             schema: testSchema,
             jsonPromptInjection: undefined,
@@ -336,6 +337,7 @@ describe('StructuredOutputProcessor', () => {
         expect.objectContaining({
           model: mockModel,
           instructions: expect.any(String),
+          requestContext,
           structuredOutput: {
             schema: testSchema,
             jsonPromptInjection: undefined,
