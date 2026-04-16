@@ -8,14 +8,16 @@
 import { ThreadManager, DEFAULT_THREAD_ID } from '@mastra/core/browser';
 import type { ThreadSession, ThreadManagerConfig } from '@mastra/core/browser';
 import { chromium } from 'playwright-core';
-import type { Browser, BrowserContext, CDPSession, Page } from 'playwright-core';
+import type { Browser, BrowserContext, BrowserServer, CDPSession, Page } from 'playwright-core';
 import type { BrowserViewerConfig } from './types';
 
 /**
  * Extended session info for BrowserViewer.
  */
 interface BrowserViewerSession extends ThreadSession {
-  /** Playwright browser instance */
+  /** Playwright browser server (owns the Chrome process) */
+  browserServer: BrowserServer;
+  /** Playwright browser instance (connected to server) */
   browser: Browser;
   /** Browser context */
   context: BrowserContext;
@@ -116,12 +118,12 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
   protected async createSession(threadId: string): Promise<BrowserViewerSession> {
     const savedState = this.getSavedBrowserState(threadId);
 
-    // Launch Chrome via Playwright
+    // Launch Chrome via Playwright's launchServer to get the WebSocket endpoint
     const port = this.browserConfig.cdpPort ?? 0;
 
     this.logger?.debug?.(`Launching Chrome for thread ${threadId} with remote-debugging-port=${port}`);
 
-    const launchOptions: Parameters<typeof chromium.launch>[0] = {
+    const launchOptions: Parameters<typeof chromium.launchServer>[0] = {
       headless: this.browserConfig.headless ?? false,
       args: [`--remote-debugging-port=${port}`, '--no-first-run', '--no-default-browser-check'],
     };
@@ -130,10 +132,12 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       launchOptions.executablePath = this.browserConfig.executablePath;
     }
 
-    const browser = await chromium.launch(launchOptions);
+    // Launch server to get WebSocket endpoint
+    const browserServer = await chromium.launchServer(launchOptions);
+    const cdpUrl = browserServer.wsEndpoint();
 
-    // Extract CDP URL
-    const cdpUrl = this.extractCdpUrl(browser);
+    // Connect to the browser
+    const browser = await chromium.connect(cdpUrl);
 
     // Create context and initial page
     const context = await browser.newContext({
@@ -155,6 +159,7 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       threadId,
       createdAt: Date.now(),
       browserState: savedState,
+      browserServer,
       browser,
       context,
       cdpSession,
@@ -187,7 +192,7 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
 
     this.logger?.debug?.(`Launching shared Chrome with remote-debugging-port=${port}`);
 
-    const launchOptions: Parameters<typeof chromium.launch>[0] = {
+    const launchOptions: Parameters<typeof chromium.launchServer>[0] = {
       headless: this.browserConfig.headless ?? false,
       args: [`--remote-debugging-port=${port}`, '--no-first-run', '--no-default-browser-check'],
     };
@@ -196,10 +201,12 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       launchOptions.executablePath = this.browserConfig.executablePath;
     }
 
-    const browser = await chromium.launch(launchOptions);
+    // Launch server to get WebSocket endpoint
+    const browserServer = await chromium.launchServer(launchOptions);
+    const cdpUrl = browserServer.wsEndpoint();
 
-    // Extract CDP URL
-    const cdpUrl = this.extractCdpUrl(browser);
+    // Connect to the browser
+    const browser = await chromium.connect(cdpUrl);
 
     // Create context and initial page
     const context = await browser.newContext({
@@ -220,6 +227,7 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
     this.sharedSession = {
       threadId: DEFAULT_THREAD_ID,
       createdAt: Date.now(),
+      browserServer,
       browser,
       context,
       cdpSession,
@@ -233,17 +241,6 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
 
     // Notify callback
     this.onBrowserCreated?.(browser, DEFAULT_THREAD_ID, cdpUrl);
-  }
-
-  /**
-   * Extract CDP URL from Playwright browser.
-   */
-  private extractCdpUrl(browser: Browser): string {
-    const wsEndpoint = (browser as Browser & { wsEndpoint?: () => string }).wsEndpoint?.();
-    if (wsEndpoint) {
-      return wsEndpoint;
-    }
-    throw new Error('Could not extract CDP URL from browser');
   }
 
   /**
@@ -282,9 +279,16 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       }
     }
 
-    // Close browser
+    // Close browser connection
     try {
       await session.browser.close();
+    } catch {
+      // Ignore
+    }
+
+    // Close browser server (kills the Chrome process)
+    try {
+      await session.browserServer.close();
     } catch {
       // Ignore
     }
@@ -313,9 +317,16 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       }
     }
 
-    // Close browser
+    // Close browser connection
     try {
       await this.sharedSession.browser.close();
+    } catch {
+      // Ignore
+    }
+
+    // Close browser server (kills the Chrome process)
+    try {
+      await this.sharedSession.browserServer.close();
     } catch {
       // Ignore
     }
@@ -377,9 +388,16 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       }
     }
 
-    // Close browser
+    // Close browser connection
     try {
       await viewerSession.browser.close();
+    } catch {
+      // Ignore
+    }
+
+    // Close browser server (kills the Chrome process)
+    try {
+      await viewerSession.browserServer.close();
     } catch {
       // Ignore
     }
