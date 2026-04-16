@@ -7,7 +7,7 @@ export type {
 } from './chat-route';
 export { workflowRoute, handleWorkflowStream } from './workflow-route';
 export type { WorkflowRouteOptions, WorkflowStreamHandlerParams, WorkflowStreamHandlerOptions } from './workflow-route';
-export type { WorkflowDataPart } from './transformers';
+export type { WorkflowDataPart, WorkflowStepDataPart } from './transformers';
 export { networkRoute, handleNetworkStream } from './network-route';
 export type { NetworkRouteOptions, NetworkStreamHandlerParams, NetworkStreamHandlerOptions } from './network-route';
 export type { NetworkDataPart } from './transformers';
