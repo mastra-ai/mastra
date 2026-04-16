@@ -253,6 +253,34 @@ function mapMastraToLangfuseAttributes(attributes: Record<string, any>, environm
     delete attributes['mastra.tags'];
   }
 
+  // Trace name: mastra.metadata.traceName → langfuse.trace.name
+  if (attributes['mastra.metadata.traceName']) {
+    attributes['langfuse.trace.name'] = attributes['mastra.metadata.traceName'];
+    delete attributes['mastra.metadata.traceName'];
+  }
+
+  // Trace version: mastra.metadata.version → langfuse.trace.version
+  if (attributes['mastra.metadata.version']) {
+    attributes['langfuse.trace.version'] = attributes['mastra.metadata.version'];
+    delete attributes['mastra.metadata.version'];
+  }
+
+  // Observation metadata: map semantic attributes to langfuse.observation.metadata.*
+  // so they become top-level filterable keys on each observation in Langfuse.
+  // @see https://langfuse.com/integrations/native/opentelemetry#how-metadata-mapping-works
+  if (attributes['gen_ai.agent.id']) {
+    attributes['langfuse.observation.metadata.agentId'] = attributes['gen_ai.agent.id'];
+  }
+  if (attributes['gen_ai.agent.name']) {
+    attributes['langfuse.observation.metadata.agentName'] = attributes['gen_ai.agent.name'];
+  }
+  if (attributes['mastra.span.type']) {
+    attributes['langfuse.observation.metadata.spanType'] = attributes['mastra.span.type'];
+  }
+  if (attributes['gen_ai.operation.name']) {
+    attributes['langfuse.observation.metadata.operationName'] = attributes['gen_ai.operation.name'];
+  }
+
   // Input/Output: mastra.*.input/output → langfuse.observation.input/output
   // For gen_ai spans, Langfuse reads gen_ai.input.messages natively.
   // For non-gen_ai spans, we map the first mastra.*.input/output we find.

@@ -12,7 +12,7 @@ import type { ObservabilityContext, Span } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
-
+import type { LanguageModelUsage } from '../stream/types';
 import type { ProcessorStepOutput } from './step-schema';
 import { isMaybeClaude46, TrailingAssistantGuard } from './trailing-assistant-guard';
 import { isProcessorWorkflow } from './index';
@@ -1116,6 +1116,7 @@ export class ProcessorRunner {
       finishReason?: string;
       toolCalls?: ToolCallInfo[];
       text?: string;
+      usage?: LanguageModelUsage;
       requestContext?: RequestContext;
       retryCount?: number;
       writer?: ProcessorStreamWriter;
@@ -1128,6 +1129,7 @@ export class ProcessorRunner {
       finishReason,
       toolCalls,
       text,
+      usage,
       requestContext,
       retryCount = 0,
       writer,
@@ -1153,6 +1155,7 @@ export class ProcessorRunner {
             finishReason,
             toolCalls,
             text,
+            usage,
             systemMessages: currentSystemMessages,
             steps,
             retryCount,
@@ -1202,6 +1205,11 @@ export class ProcessorRunner {
       const processorState = this.getProcessorState(processor.id);
 
       try {
+        const defaultUsage: LanguageModelUsage = {
+          inputTokens: undefined,
+          outputTokens: undefined,
+          totalTokens: undefined,
+        };
         const result = await processMethod({
           messages: processableMessages,
           messageList,
@@ -1209,6 +1217,7 @@ export class ProcessorRunner {
           finishReason,
           toolCalls,
           text,
+          usage: usage ?? defaultUsage,
           systemMessages: currentSystemMessages,
           steps,
           state: processorState.customState,

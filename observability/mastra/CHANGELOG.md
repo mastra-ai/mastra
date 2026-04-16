@@ -1,5 +1,16 @@
 # @mastra/observability
 
+## 1.9.2-alpha.0
+
+### Patch Changes
+
+- Fixed span serialization replacing tool parameter JSON schemas with lossy summaries like `"unknown (required)"`. JSON schemas in span data are now preserved as-is, keeping full type information for debugging in observability tools like Datadog. Also fixed MODEL_STEP span input showing only a keys summary instead of actual messages for AI SDK v5 providers. ([#15404](https://github.com/mastra-ai/mastra/pull/15404))
+
+- Fixed CloudExporter to default to observability.mastra.ai for Mastra platform exports. ([#15418](https://github.com/mastra-ai/mastra/pull/15418))
+
+- Updated dependencies [[`3d83d06`](https://github.com/mastra-ai/mastra/commit/3d83d06f776f00fb5f4163dddd32a030c5c20844), [`7e0e63e`](https://github.com/mastra-ai/mastra/commit/7e0e63e2e485e84442351f4c7a79a424c83539dc), [`9467ea8`](https://github.com/mastra-ai/mastra/commit/9467ea87695749a53dfc041576410ebf9ee7bb67), [`7338d94`](https://github.com/mastra-ai/mastra/commit/7338d949380cf68b095342e8e42610dc51d557c1)]:
+  - @mastra/core@1.26.0-alpha.2
+
 ## 1.9.1
 
 ### Patch Changes

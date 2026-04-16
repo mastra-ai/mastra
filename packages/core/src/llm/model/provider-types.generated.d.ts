@@ -1053,6 +1053,8 @@ export type ProviderModelsMap = {
     'mimo-v2-pro',
     'minimax-m2.5',
     'minimax-m2.7',
+    'qwen3.5-plus',
+    'qwen3.6-plus',
   ];
   readonly 'io-net': readonly [
     'Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar',
@@ -1088,6 +1090,7 @@ export type ProviderModelsMap = {
     'deepseek-v3-1',
     'deepseek-v3-2-exp',
     'glm-5',
+    'glm-5.1',
     'kimi-k2-thinking',
     'kimi-k2.5',
     'kimi/kimi-k2.5',
@@ -1270,6 +1273,7 @@ export type ProviderModelsMap = {
     'anthropic/claude-opus-4.1',
     'anthropic/claude-opus-4.5',
     'anthropic/claude-opus-4.6',
+    'anthropic/claude-opus-4.7',
     'anthropic/claude-sonnet-4',
     'anthropic/claude-sonnet-4.5',
     'anthropic/claude-sonnet-4.6',
@@ -2040,6 +2044,7 @@ export type ProviderModelsMap = {
     'claude-opus-4-1',
     'claude-opus-4-5',
     'claude-opus-4-6',
+    'claude-opus-4-7',
     'claude-sonnet-4',
     'claude-sonnet-4-5',
     'claude-sonnet-4-6',
@@ -2066,6 +2071,8 @@ export type ProviderModelsMap = {
     'minimax-m2.5',
     'minimax-m2.5-free',
     'nemotron-3-super-free',
+    'qwen3.5-plus',
+    'qwen3.6-plus',
   ];
   readonly stepfun: readonly ['step-1-32k', 'step-2-16k', 'step-3.5-flash', 'step-3.5-flash-2603'];
   readonly nebius: readonly [
@@ -2829,6 +2836,7 @@ export type ProviderModelsMap = {
     'glm-4.7',
     'glm-4.7-flash',
     'glm-5',
+    'glm-5.1',
     'gpt-4.1',
     'gpt-oss-120b',
     'intellect-3',
@@ -2836,6 +2844,7 @@ export type ProviderModelsMap = {
     'kimi-k2-thinking',
     'kimi-k2.5',
     'llama-3.1-405b-instruct',
+    'minimax-M2.7',
     'minimax-m2',
     'minimax-m2.1',
     'minimax-m2.5',
@@ -2959,6 +2968,7 @@ export type ProviderModelsMap = {
     'anthropic/claude-opus-4.1',
     'anthropic/claude-opus-4.5',
     'anthropic/claude-opus-4.6',
+    'anthropic/claude-opus-4.7',
     'anthropic/claude-sonnet-4',
     'anthropic/claude-sonnet-4.5',
     'anthropic/claude-sonnet-4.6',
@@ -3006,6 +3016,7 @@ export type ProviderModelsMap = {
     'google/text-embedding-005',
     'google/text-multilingual-embedding-002',
     'inception/mercury-2',
+    'inception/mercury-coder-small',
     'inception/mercury-edit-2',
     'kwaipilot/kat-coder-pro-v1',
     'kwaipilot/kat-coder-pro-v2',
@@ -3151,6 +3162,7 @@ export type ProviderModelsMap = {
     'zai/glm-4.7-flashx',
     'zai/glm-5',
     'zai/glm-5-turbo',
+    'zai/glm-5.1',
     'zai/glm-5v-turbo',
   ];
   readonly minimax: readonly [
@@ -3595,6 +3607,7 @@ export type ProviderModelsMap = {
     'claude-opus-4-5',
     'claude-opus-4-5-20251101',
     'claude-opus-4-6',
+    'claude-opus-4-7',
     'claude-sonnet-4-0',
     'claude-sonnet-4-20250514',
     'claude-sonnet-4-5',
@@ -3610,6 +3623,7 @@ export type ProviderModelsMap = {
     'ZhipuAI/GLM-4.5',
     'ZhipuAI/GLM-4.6',
   ];
+  readonly 'hpc-ai': readonly ['minimax/minimax-m2.5', 'moonshotai/kimi-k2.5', 'zai-org/glm-5.1'];
   readonly xiaomi: readonly ['mimo-v2-flash', 'mimo-v2-omni', 'mimo-v2-pro'];
   readonly clarifai: readonly [
     'arcee_ai/AFM/models/trinity-mini',
@@ -3657,6 +3671,7 @@ export type ProviderModelsMap = {
     'anthropic/claude-opus-4-5',
     'anthropic/claude-opus-4-5-20251101',
     'anthropic/claude-opus-4-6',
+    'anthropic/claude-opus-4-7',
     'anthropic/claude-sonnet-4-0',
     'anthropic/claude-sonnet-4-20250514',
     'anthropic/claude-sonnet-4-5',

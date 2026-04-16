@@ -1171,7 +1171,17 @@
       "apiKeyEnvVar": "OPENCODE_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "OpenCode Go",
-      "models": ["glm-5", "glm-5.1", "kimi-k2.5", "mimo-v2-omni", "mimo-v2-pro", "minimax-m2.5", "minimax-m2.7"],
+      "models": [
+        "glm-5",
+        "glm-5.1",
+        "kimi-k2.5",
+        "mimo-v2-omni",
+        "mimo-v2-pro",
+        "minimax-m2.5",
+        "minimax-m2.7",
+        "qwen3.5-plus",
+        "qwen3.6-plus"
+      ],
       "docUrl": "https://opencode.ai/docs/zen",
       "gateway": "models.dev"
     },
@@ -1222,6 +1232,7 @@
         "deepseek-v3-1",
         "deepseek-v3-2-exp",
         "glm-5",
+        "glm-5.1",
         "kimi-k2-thinking",
         "kimi-k2.5",
         "kimi/kimi-k2.5",
@@ -1453,6 +1464,7 @@
         "anthropic/claude-opus-4.1",
         "anthropic/claude-opus-4.5",
         "anthropic/claude-opus-4.6",
+        "anthropic/claude-opus-4.7",
         "anthropic/claude-sonnet-4",
         "anthropic/claude-sonnet-4.5",
         "anthropic/claude-sonnet-4.6",
@@ -2343,6 +2355,7 @@
         "claude-opus-4-1",
         "claude-opus-4-5",
         "claude-opus-4-6",
+        "claude-opus-4-7",
         "claude-sonnet-4",
         "claude-sonnet-4-5",
         "claude-sonnet-4-6",
@@ -2368,7 +2381,9 @@
         "kimi-k2.5",
         "minimax-m2.5",
         "minimax-m2.5-free",
-        "nemotron-3-super-free"
+        "nemotron-3-super-free",
+        "qwen3.5-plus",
+        "qwen3.6-plus"
       ],
       "docUrl": "https://opencode.ai/docs/zen",
       "gateway": "models.dev"
@@ -3386,6 +3401,7 @@
         "glm-4.7",
         "glm-4.7-flash",
         "glm-5",
+        "glm-5.1",
         "gpt-4.1",
         "gpt-oss-120b",
         "intellect-3",
@@ -3393,6 +3409,7 @@
         "kimi-k2-thinking",
         "kimi-k2.5",
         "llama-3.1-405b-instruct",
+        "minimax-M2.7",
         "minimax-m2",
         "minimax-m2.1",
         "minimax-m2.5",
@@ -3530,6 +3547,7 @@
         "anthropic/claude-opus-4.1",
         "anthropic/claude-opus-4.5",
         "anthropic/claude-opus-4.6",
+        "anthropic/claude-opus-4.7",
         "anthropic/claude-sonnet-4",
         "anthropic/claude-sonnet-4.5",
         "anthropic/claude-sonnet-4.6",
@@ -3577,6 +3595,7 @@
         "google/text-embedding-005",
         "google/text-multilingual-embedding-002",
         "inception/mercury-2",
+        "inception/mercury-coder-small",
         "inception/mercury-edit-2",
         "kwaipilot/kat-coder-pro-v1",
         "kwaipilot/kat-coder-pro-v2",
@@ -3722,6 +3741,7 @@
         "zai/glm-4.7-flashx",
         "zai/glm-5",
         "zai/glm-5-turbo",
+        "zai/glm-5.1",
         "zai/glm-5v-turbo"
       ],
       "docUrl": "https://github.com/vercel/ai/tree/5eb85cc45a259553501f535b8ac79a77d0e79223/packages/gateway",
@@ -4286,6 +4306,7 @@
         "claude-opus-4-5",
         "claude-opus-4-5-20251101",
         "claude-opus-4-6",
+        "claude-opus-4-7",
         "claude-sonnet-4-0",
         "claude-sonnet-4-20250514",
         "claude-sonnet-4-5",
@@ -4311,6 +4332,15 @@
         "ZhipuAI/GLM-4.6"
       ],
       "docUrl": "https://modelscope.cn/docs/model-service/API-Inference/intro",
+      "gateway": "models.dev"
+    },
+    "hpc-ai": {
+      "url": "https://api.hpc-ai.com/inference/v1",
+      "apiKeyEnvVar": "HPC_AI_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "HPC-AI",
+      "models": ["minimax/minimax-m2.5", "moonshotai/kimi-k2.5", "zai-org/glm-5.1"],
+      "docUrl": "https://www.hpc-ai.com/doc/docs/quickstart/",
       "gateway": "models.dev"
     },
     "xiaomi": {
@@ -4414,6 +4444,7 @@
         "anthropic/claude-opus-4-5",
         "anthropic/claude-opus-4-5-20251101",
         "anthropic/claude-opus-4-6",
+        "anthropic/claude-opus-4-7",
         "anthropic/claude-sonnet-4-0",
         "anthropic/claude-sonnet-4-20250514",
         "anthropic/claude-sonnet-4-5",
@@ -5510,7 +5541,17 @@
     ],
     "kimi-for-coding": ["k2p5", "kimi-k2-thinking"],
     "moark": ["GLM-4.7", "MiniMax-M2.1"],
-    "opencode-go": ["glm-5", "glm-5.1", "kimi-k2.5", "mimo-v2-omni", "mimo-v2-pro", "minimax-m2.5", "minimax-m2.7"],
+    "opencode-go": [
+      "glm-5",
+      "glm-5.1",
+      "kimi-k2.5",
+      "mimo-v2-omni",
+      "mimo-v2-pro",
+      "minimax-m2.5",
+      "minimax-m2.7",
+      "qwen3.5-plus",
+      "qwen3.6-plus"
+    ],
     "io-net": [
       "Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar",
       "Qwen/Qwen2.5-VL-32B-Instruct",
@@ -5545,6 +5586,7 @@
       "deepseek-v3-1",
       "deepseek-v3-2-exp",
       "glm-5",
+      "glm-5.1",
       "kimi-k2-thinking",
       "kimi-k2.5",
       "kimi/kimi-k2.5",
@@ -5727,6 +5769,7 @@
       "anthropic/claude-opus-4.1",
       "anthropic/claude-opus-4.5",
       "anthropic/claude-opus-4.6",
+      "anthropic/claude-opus-4.7",
       "anthropic/claude-sonnet-4",
       "anthropic/claude-sonnet-4.5",
       "anthropic/claude-sonnet-4.6",
@@ -6497,6 +6540,7 @@
       "claude-opus-4-1",
       "claude-opus-4-5",
       "claude-opus-4-6",
+      "claude-opus-4-7",
       "claude-sonnet-4",
       "claude-sonnet-4-5",
       "claude-sonnet-4-6",
@@ -6522,7 +6566,9 @@
       "kimi-k2.5",
       "minimax-m2.5",
       "minimax-m2.5-free",
-      "nemotron-3-super-free"
+      "nemotron-3-super-free",
+      "qwen3.5-plus",
+      "qwen3.6-plus"
     ],
     "stepfun": ["step-1-32k", "step-2-16k", "step-3.5-flash", "step-3.5-flash-2603"],
     "nebius": [
@@ -7286,6 +7332,7 @@
       "glm-4.7",
       "glm-4.7-flash",
       "glm-5",
+      "glm-5.1",
       "gpt-4.1",
       "gpt-oss-120b",
       "intellect-3",
@@ -7293,6 +7340,7 @@
       "kimi-k2-thinking",
       "kimi-k2.5",
       "llama-3.1-405b-instruct",
+      "minimax-M2.7",
       "minimax-m2",
       "minimax-m2.1",
       "minimax-m2.5",
@@ -7416,6 +7464,7 @@
       "anthropic/claude-opus-4.1",
       "anthropic/claude-opus-4.5",
       "anthropic/claude-opus-4.6",
+      "anthropic/claude-opus-4.7",
       "anthropic/claude-sonnet-4",
       "anthropic/claude-sonnet-4.5",
       "anthropic/claude-sonnet-4.6",
@@ -7463,6 +7512,7 @@
       "google/text-embedding-005",
       "google/text-multilingual-embedding-002",
       "inception/mercury-2",
+      "inception/mercury-coder-small",
       "inception/mercury-edit-2",
       "kwaipilot/kat-coder-pro-v1",
       "kwaipilot/kat-coder-pro-v2",
@@ -7608,6 +7658,7 @@
       "zai/glm-4.7-flashx",
       "zai/glm-5",
       "zai/glm-5-turbo",
+      "zai/glm-5.1",
       "zai/glm-5v-turbo"
     ],
     "minimax": [
@@ -8046,6 +8097,7 @@
       "claude-opus-4-5",
       "claude-opus-4-5-20251101",
       "claude-opus-4-6",
+      "claude-opus-4-7",
       "claude-sonnet-4-0",
       "claude-sonnet-4-20250514",
       "claude-sonnet-4-5",
@@ -8061,6 +8113,7 @@
       "ZhipuAI/GLM-4.5",
       "ZhipuAI/GLM-4.6"
     ],
+    "hpc-ai": ["minimax/minimax-m2.5", "moonshotai/kimi-k2.5", "zai-org/glm-5.1"],
     "xiaomi": ["mimo-v2-flash", "mimo-v2-omni", "mimo-v2-pro"],
     "clarifai": [
       "arcee_ai/AFM/models/trinity-mini",
@@ -8108,6 +8161,7 @@
       "anthropic/claude-opus-4-5",
       "anthropic/claude-opus-4-5-20251101",
       "anthropic/claude-opus-4-6",
+      "anthropic/claude-opus-4-7",
       "anthropic/claude-sonnet-4-0",
       "anthropic/claude-sonnet-4-20250514",
       "anthropic/claude-sonnet-4-5",

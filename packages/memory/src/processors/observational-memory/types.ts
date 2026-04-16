@@ -284,6 +284,11 @@ export interface ObservationMarkerConfig {
   activateAfterIdle?: number;
 }
 
+export interface ObservationModelContext {
+  provider?: string;
+  modelId?: string;
+}
+
 /**
  * Start marker inserted when observation begins.
  * Everything BEFORE this marker will be observed.
@@ -623,14 +628,20 @@ export interface DataOmActivationPart {
     /** The actual observations from activated chunks (for UI display) */
     observations?: string;
 
-    /** Whether activation was triggered by threshold crossing or activateAfterIdle expiry */
-    triggeredBy?: 'threshold' | 'ttl';
+    /** Whether activation was triggered by threshold crossing, activateAfterIdle expiry, or a model/provider change */
+    triggeredBy?: 'threshold' | 'ttl' | 'provider_change';
 
     /** Unix-ms timestamp of the last assistant message part used for TTL checks */
     lastActivityAt?: number;
 
     /** How long activateAfterIdle had been exceeded when activation fired */
     ttlExpiredMs?: number;
+
+    /** Previous assistant model identifier that triggered activation, e.g. openai/gpt-4o */
+    previousModel?: string;
+
+    /** Current actor model identifier that triggered activation, e.g. anthropic/claude-3-7-sonnet */
+    currentModel?: string;
   };
 }
 
@@ -844,6 +855,12 @@ export interface ObservationalMemoryConfig {
    * token threshold has been reached.
    */
   activateAfterIdle?: number | string;
+
+  /**
+   * Force-activate buffered observations and reflections when the actor provider/model changes.
+   * This helps flush prompt-cache-specific memory before switching to a different model.
+   */
+  activateOnProviderChange?: boolean;
 }
 
 /**
@@ -867,6 +884,8 @@ export interface ResolvedObservationConfig {
   bufferActivation?: number;
   /** Time in milliseconds before buffered observations are force-activated based on the last assistant message part timestamp */
   activateAfterIdle?: number;
+  /** Force-activate buffered observations when the actor model/provider changes */
+  activateOnProviderChange?: boolean;
   /** Token threshold above which synchronous observation is forced */
   blockAfter?: number;
   /** Optional token budget for observer context optimization (0 = full truncation, false = disabled) */
@@ -890,6 +909,8 @@ export interface ResolvedReflectionConfig {
   bufferActivation?: number;
   /** Time in milliseconds before buffered reflections are force-activated based on the last assistant message part timestamp */
   activateAfterIdle?: number;
+  /** Force-activate buffered reflections when the actor model/provider changes */
+  activateOnProviderChange?: boolean;
   /** Token threshold above which synchronous reflection is forced */
   blockAfter?: number;
   /** Custom instructions to append to the Reflector's system prompt */

@@ -5172,6 +5172,7 @@ exports[`Loop Tests > AISDK v5 > result.response > should resolve with response 
         "format": 2,
         "metadata": {
           "modelId": "mock-model-id",
+          "provider": "mock-provider",
         },
         "parts": [
           {
@@ -5212,6 +5213,7 @@ exports[`Loop Tests > AISDK v5 > result.response > should resolve with response 
       "id": "msg-0",
       "metadata": {
         "modelId": "mock-model-id",
+        "provider": "mock-provider",
       },
       "parts": [
         {
@@ -5356,6 +5358,7 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
             "format": 2,
             "metadata": {
               "modelId": "mock-model-id",
+              "provider": "mock-provider",
             },
             "parts": [
               {
@@ -5459,6 +5462,7 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
           "metadata": {
             "createdAt": 2024-01-01T00:00:00.001Z,
             "modelId": "mock-model-id",
+            "provider": "mock-provider",
           },
           "parts": [
             {
@@ -11765,6 +11769,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.response > should resolve wi
         "format": 2,
         "metadata": {
           "modelId": "mock-model-id",
+          "provider": "mock-provider",
         },
         "parts": [
           {
@@ -11805,6 +11810,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.response > should resolve wi
       "id": "msg-0",
       "metadata": {
         "modelId": "mock-model-id",
+        "provider": "mock-provider",
       },
       "parts": [
         {
@@ -11949,6 +11955,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
             "format": 2,
             "metadata": {
               "modelId": "mock-model-id",
+              "provider": "mock-provider",
             },
             "parts": [
               {
@@ -12052,6 +12059,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
           "metadata": {
             "createdAt": 2024-01-01T00:00:00.001Z,
             "modelId": "mock-model-id",
+            "provider": "mock-provider",
           },
           "parts": [
             {

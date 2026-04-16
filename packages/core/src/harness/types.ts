@@ -760,10 +760,12 @@ export type HarnessEvent =
       observationTokens: number;
       messagesActivated: number;
       generationCount: number;
-      triggeredBy?: 'threshold' | 'ttl';
+      triggeredBy?: 'threshold' | 'ttl' | 'provider_change';
       lastActivityAt?: number;
       ttlExpiredMs?: number;
       activateAfterIdle?: number;
+      previousModel?: string;
+      currentModel?: string;
     }
   | { type: 'om_thread_title_updated'; cycleId: string; threadId: string; oldTitle?: string; newTitle: string }
   | { type: 'sandbox_access_request'; questionId: string; path: string; reason: string }
