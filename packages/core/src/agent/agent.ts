@@ -4653,11 +4653,17 @@ export class Agent<
           routerHeaders = (model as any).config?.headers;
         }
 
-        const [resolvedModelSettings, resolvedProviderOptions, resolvedUserHeaders] = await Promise.all([
-          this.resolveFallbackDynamic(modelConfig.modelSettings, requestContext),
-          this.resolveFallbackDynamic(modelConfig.providerOptions, requestContext),
-          this.resolveFallbackDynamic(modelConfig.headers, requestContext),
-        ]);
+        // Disabled entries are filtered out in getLLM(); skip resolving their dynamic
+        // fields so a throwing or side-effecting resolver on an unused entry can't
+        // break the whole fallback array.
+        const isEnabled = modelConfig.enabled ?? true;
+        const [resolvedModelSettings, resolvedProviderOptions, resolvedUserHeaders] = isEnabled
+          ? await Promise.all([
+              this.resolveFallbackDynamic(modelConfig.modelSettings, requestContext),
+              this.resolveFallbackDynamic(modelConfig.providerOptions, requestContext),
+              this.resolveFallbackDynamic(modelConfig.headers, requestContext),
+            ])
+          : [undefined, undefined, undefined];
 
         const mergedHeaders =
           routerHeaders || resolvedUserHeaders
@@ -4668,7 +4674,7 @@ export class Agent<
           id: modelId,
           model: model,
           maxRetries: modelConfig.maxRetries ?? 0,
-          enabled: modelConfig.enabled ?? true,
+          enabled: isEnabled,
           headers: mergedHeaders,
           modelSettings: resolvedModelSettings,
           providerOptions: resolvedProviderOptions,
