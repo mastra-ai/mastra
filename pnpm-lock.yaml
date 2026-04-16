@@ -1700,8 +1700,8 @@ importers:
         specifier: workspace:*
         version: link:../mastra
       braintrust:
-        specifier: ^2.2.2
-        version: 2.2.2(@aws-sdk/credential-provider-web-identity@3.972.20)(chokidar@3.6.0)(zod@4.3.6)
+        specifier: ^3.0.0
+        version: 3.8.0(@aws-sdk/credential-provider-web-identity@3.972.20)(zod@4.3.6)
       zod:
         specifier: ^3.25.34 || ^4.0.0
         version: 4.3.6
@@ -7398,6 +7398,9 @@ packages:
   '@anush008/tokenizers@0.0.0':
     resolution: {integrity: sha512-IQD9wkVReKAhsEAbDjh/0KrBGTEXelqZLpOBRDaIRvlzZ9sjmUP+gKbpvzyJnei2JHQiE8JAgj7YcNloINbGBw==}
     engines: {node: '>= 10'}
+
+  '@apm-js-collab/code-transformer@0.9.0':
+    resolution: {integrity: sha512-cfHtufVUBKJz6se/tQBJqizgoot5AOxhVy5B9Cuo493p6b7hXKBEIi6tcZEbr4XwN1VnV9JZOu52MMTCOCSBMw==}
 
   '@appium/logger@1.7.1':
     resolution: {integrity: sha512-9C2o9X/lBEDBUnKfAi3mRo9oG7Z03nmISLwsGkWxIWjMAvBdJD0RRSJMekWVKzfXN3byrI1WlCXTITzN4LAoLw==}
@@ -15302,9 +15305,6 @@ packages:
   '@types/node@22.19.15':
     resolution: {integrity: sha512-F0R/h2+dsy5wJAUe3tAU6oqa2qbWY5TpNfL/RGmo1y38hiyO1w3x2jPtt76wmuaJI4DQnOBu21cNXQ2STIUUWg==}
 
-  '@types/nunjucks@3.2.6':
-    resolution: {integrity: sha512-pHiGtf83na1nCzliuAdq8GowYiXvH5l931xZ0YEHaLMNFgynpEqx+IPStlu7UaDkehfvl01e4x/9Tpwhy7Ue3w==}
-
   '@types/oracledb@6.5.2':
     resolution: {integrity: sha512-kK1eBS/Adeyis+3OlBDMeQQuasIDLUYXsi2T15ccNJ0iyUpQ4xDF7svFu3+bGVrI0CMBUclPciz+lsQR3JX3TQ==}
 
@@ -16068,9 +16068,6 @@ packages:
     resolution: {integrity: sha512-E+iruNOY8VV9s4JEbe1aNEm6MiszPRr/UfcHMz0TQh1BXSxHK+ASV1R6W4HpjBhSeS+54PIsAMCBmwD06LLsqQ==}
     hasBin: true
 
-  a-sync-waterfall@1.0.1:
-    resolution: {integrity: sha512-RYTOHHdWipFUliRFMCS4X2Yn2X8M87V/OpSqWzKKOGhzqyUxzyVmhHDH9sAvG+ZuQf/TAOFsLCpMw09I1ufUnA==}
-
   abbrev@2.0.0:
     resolution: {integrity: sha512-6/mh1E2u2YgEsCHdY0Yx5oW+61gZU+1vXaoiHHrpKeuRNNgFvS+/jrwHiQhB5apAf5oB7UB7E19ol2R2LKH8hQ==}
     engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0}
@@ -16387,9 +16384,6 @@ packages:
   arrify@2.0.1:
     resolution: {integrity: sha512-3duEwti880xqi4eAMN8AyR4a0ByT90zoYdLlevfrvU43vb0YZwZVfxOgxWrLXXXpyugL0hNZc9G6BiB5B3nUug==}
     engines: {node: '>=8'}
-
-  asap@2.0.6:
-    resolution: {integrity: sha512-BSHWgDSAiKs50o2Re8ppvp3seVHXSRM44cdSsT9FfNEUUZLOGWVCsiWaRPWM1Znn+mqZ1OfVZ3z3DWEzSp7hRA==}
 
   asn1@0.2.6:
     resolution: {integrity: sha512-ix/FxPn0MDjeyJ7i/yoHGFt/EX6LyNbxSEhPPXODPL+KB0VPk86UYfL0lMdy+KCnv+fmvIzySwaK5COwqVbWTQ==}
@@ -16746,8 +16740,8 @@ packages:
     resolution: {integrity: sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA==}
     engines: {node: '>=8'}
 
-  braintrust@2.2.2:
-    resolution: {integrity: sha512-g8TPnfZb7X8ziJG3w2iYRBMiIbSTV6YW79rjhDyDAeVCwa4hq52ns4JzQeQTPRWusm7vE3gXAEgIxuBc9q18uQ==}
+  braintrust@3.8.0:
+    resolution: {integrity: sha512-yBRbQsSC1Gq5hwTpS03THnJYE1OLt6bZzT1cgbeN1ma7HE4tF+PBA2HcEWa88tcYIdZ6JC2RJozobJvLBCBLpA==}
     hasBin: true
     peerDependencies:
       zod: ^3.25.34 || ^4.0
@@ -17713,6 +17707,9 @@ packages:
 
   dayjs@1.11.18:
     resolution: {integrity: sha512-zFBQ7WFRvVRhKcWoUh+ZA1g2HVgUbsZm9sbddh8EC5iv93sui8DVVz1Npvz+r6meo9VKfa8NyLWBsQK1VvIKPA==}
+
+  dc-browser@1.0.4:
+    resolution: {integrity: sha512-7oEtnzNlcE+hr4OvO3GR6Gndgw8BhW+wKOEwMqSleyY7N29jbAxzyW5BaJl7qBCw+6OIxfMWtY0T+6dxq8RWLw==}
 
   dc-polyfill@0.1.10:
     resolution: {integrity: sha512-9iSbB8XZ7aIrhUtWI5ulEOJ+IyUN+axquodHK+bZO4r7HfY/xwmo6I4fYYf+aiDom+WMcN/wnzCz+pKvHDDCug==}
@@ -21420,16 +21417,6 @@ packages:
     peerDependencies:
       webpack: ^4.0.0 || ^5.0.0
 
-  nunjucks@3.2.4:
-    resolution: {integrity: sha512-26XRV6BhkgK0VOxfbU5cQI+ICFUtMLixv1noZn1tGU38kQH5A5nmmbk/O45xdyBhD1esk47nKrY0mvQpZIhRjQ==}
-    engines: {node: '>= 6.9.0'}
-    hasBin: true
-    peerDependencies:
-      chokidar: ^3.3.0
-    peerDependenciesMeta:
-      chokidar:
-        optional: true
-
   nwsapi@2.2.23:
     resolution: {integrity: sha512-7wfH4sLbt4M0gCDzGE6vzQBo0bfTKjU7Sfpqy/7gs1qBfYz2vEJH6vXcBKpO3+6Yu1telwd0t9HpyOoLEQQbIQ==}
 
@@ -24751,6 +24738,10 @@ packages:
     resolution: {integrity: sha512-4/u/j4FrCKdi17jaxuJA0jClGxB1AvU2hw/IuayPc4ay1XGaJs/rbb4v5WKwAjNifjmXK9PIFyuPiaK8azyR9w==}
     engines: {node: '>=14.0.0'}
 
+  unplugin@2.3.11:
+    resolution: {integrity: sha512-5uKD0nqiYVzlmCRs01Fhs2BdkEgBS3SAVP6ndrBsuK42iC2+JHyxM05Rm9G8+5mkmRtzMZGY8Ct5+mliZxU/Ww==}
+    engines: {node: '>=18.12.0'}
+
   unrs-resolver@1.11.1:
     resolution: {integrity: sha512-bSjt9pjaEBnNiGgc9rUiHGKv5l4/TGzDmYw3RhnkJGtLhbnnA/5qJj7x3dNDCRx/PJxu774LlH8lCOlB4hEfKg==}
 
@@ -26176,6 +26167,8 @@ snapshots:
       '@anush008/tokenizers-darwin-universal': 0.0.0
       '@anush008/tokenizers-linux-x64-gnu': 0.0.0
       '@anush008/tokenizers-win32-x64-msvc': 0.0.0
+
+  '@apm-js-collab/code-transformer@0.9.0': {}
 
   '@appium/logger@1.7.1':
     dependencies:
@@ -36508,8 +36501,6 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
-  '@types/nunjucks@3.2.6': {}
-
   '@types/oracledb@6.5.2':
     dependencies:
       '@types/node': 22.19.15
@@ -37521,8 +37512,6 @@ snapshots:
       jsonparse: 1.3.1
       through: 2.3.8
 
-  a-sync-waterfall@1.0.1: {}
-
   abbrev@2.0.0: {}
 
   abort-controller@3.0.0:
@@ -37889,8 +37878,6 @@ snapshots:
 
   arrify@2.0.1: {}
 
-  asap@2.0.6: {}
-
   asn1@0.2.6:
     dependencies:
       safer-buffer: 2.1.2
@@ -38240,11 +38227,11 @@ snapshots:
     dependencies:
       fill-range: 7.1.1
 
-  braintrust@2.2.2(@aws-sdk/credential-provider-web-identity@3.972.20)(chokidar@3.6.0)(zod@4.3.6):
+  braintrust@3.8.0(@aws-sdk/credential-provider-web-identity@3.972.20)(zod@4.3.6):
     dependencies:
       '@ai-sdk/provider': 1.1.3
+      '@apm-js-collab/code-transformer': 0.9.0
       '@next/env': 14.2.33
-      '@types/nunjucks': 3.2.6
       '@vercel/functions': 1.6.0(@aws-sdk/credential-provider-web-identity@3.972.20)
       ajv: 8.18.0
       argparse: 2.0.1
@@ -38253,6 +38240,7 @@ snapshots:
       cli-progress: 3.12.0
       cli-table3: 0.6.5
       cors: 2.8.6
+      dc-browser: 1.0.4
       dotenv: 16.6.1
       esbuild: 0.27.7
       eventsource-parser: 1.1.2
@@ -38260,18 +38248,18 @@ snapshots:
       graceful-fs: 4.2.11
       http-errors: 2.0.1
       minimatch: 9.0.5
+      module-details-from-path: 1.0.4
       mustache: 4.2.0
-      nunjucks: 3.2.4(chokidar@3.6.0)
       pluralize: 8.0.0
       simple-git: 3.28.0
       source-map: 0.7.6
       termi-link: 1.1.0
+      unplugin: 2.3.11
       uuid: 9.0.1
       zod: 4.3.6
       zod-to-json-schema: 3.25.1(zod@4.3.6)
     transitivePeerDependencies:
       - '@aws-sdk/credential-provider-web-identity'
-      - chokidar
       - supports-color
 
   browserify-zlib@0.1.4:
@@ -39288,6 +39276,8 @@ snapshots:
   dayjs@1.11.13: {}
 
   dayjs@1.11.18: {}
+
+  dc-browser@1.0.4: {}
 
   dc-polyfill@0.1.10: {}
 
@@ -44023,14 +44013,6 @@ snapshots:
       schema-utils: 3.3.0
       webpack: 5.104.1(@swc/core@1.15.7(@swc/helpers@0.5.17))
 
-  nunjucks@3.2.4(chokidar@3.6.0):
-    dependencies:
-      a-sync-waterfall: 1.0.1
-      asap: 2.0.6
-      commander: 5.1.0
-    optionalDependencies:
-      chokidar: 3.6.0
-
   nwsapi@2.2.23: {}
 
   nypm@0.6.5:
@@ -48205,6 +48187,13 @@ snapshots:
   unplugin@1.16.1:
     dependencies:
       acorn: 8.15.0
+      webpack-virtual-modules: 0.6.2
+
+  unplugin@2.3.11:
+    dependencies:
+      '@jridgewell/remapping': 2.3.5
+      acorn: 8.15.0
+      picomatch: 4.0.4
       webpack-virtual-modules: 0.6.2
 
   unrs-resolver@1.11.1:
