@@ -86,3 +86,28 @@ export type ProviderOptions = (SharedV2ProviderOptions | SharedV3ProviderOptions
   openai?: OpenAIProviderOptions & Record<string, any>;
   xai?: XaiProviderOptions & Record<string, any>;
 };
+
+/**
+ * Shallow-merges provider-options per provider key. `override` wins at the leaf
+ * within the same provider; providers only in `base` are preserved.
+ */
+export function mergeProviderOptions<T extends ProviderOptions | SharedV2ProviderOptions | SharedV3ProviderOptions>(
+  base: T | undefined,
+  override: T | undefined,
+): T | undefined {
+  if (!base) return override;
+  if (!override) return base;
+
+  const out: Record<string, Record<string, unknown>> = {};
+  for (const [provider, opts] of Object.entries(base)) {
+    if (opts && typeof opts === 'object') {
+      out[provider] = { ...(opts as Record<string, unknown>) };
+    }
+  }
+  for (const [provider, opts] of Object.entries(override)) {
+    if (opts && typeof opts === 'object') {
+      out[provider] = { ...(out[provider] ?? {}), ...(opts as Record<string, unknown>) };
+    }
+  }
+  return out as T;
+}

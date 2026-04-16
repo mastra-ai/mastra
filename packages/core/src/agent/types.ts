@@ -1,4 +1,5 @@
 import type { GenerateTextOnStepFinishCallback } from '@internal/ai-sdk-v4';
+import type { CallSettings } from '@internal/ai-sdk-v5';
 import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
@@ -134,11 +135,16 @@ export interface AgentCreateOptions {
   tracingPolicy?: TracingPolicy;
 }
 
+export type ModelFallbackSettings = Omit<CallSettings, 'abortSignal' | 'maxRetries' | 'headers'>;
+
 export type ModelWithRetries = {
   id?: string;
   model: DynamicArgument<MastraModelConfig>;
   maxRetries?: number; // defaults to agent-level maxRetries
   enabled?: boolean; // defaults to true
+  modelSettings?: DynamicArgument<ModelFallbackSettings>;
+  providerOptions?: DynamicArgument<ProviderOptions>;
+  headers?: DynamicArgument<Record<string, string>>;
 };
 
 export interface AgentConfig<
@@ -186,6 +192,24 @@ export interface AgentConfig<
    * model: [
    *   { model: 'openai/gpt-4', maxRetries: 2 },
    *   { model: 'anthropic/claude-3-opus', maxRetries: 1 }
+   * ]
+   * ```
+   *
+   * @example Static fallback array with per-entry settings
+   * ```typescript
+   * model: [
+   *   {
+   *     model: 'google/gemini-2.5-flash',
+   *     maxRetries: 2,
+   *     modelSettings: { temperature: 0.3 },
+   *     providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } },
+   *   },
+   *   {
+   *     model: 'openai/gpt-5-mini',
+   *     maxRetries: 2,
+   *     modelSettings: { temperature: 0.7 },
+   *     providerOptions: { openai: { reasoningEffort: 'low' } },
+   *   },
    * ]
    * ```
    *

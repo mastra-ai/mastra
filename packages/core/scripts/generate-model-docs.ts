@@ -916,6 +916,36 @@ Mastra tries your primary model first. If it encounters a 500 error, rate limit,
 
 Your users never experience the disruption - the response comes back with the same format, just from a different model. The error context is preserved as the system moves through your fallback chain, ensuring clean error propagation while maintaining streaming compatibility.
 
+### Per-model settings
+
+Each fallback entry can carry its own \`modelSettings\`, \`providerOptions\`, and \`headers\` — useful when models in the chain need different temperatures or provider-specific knobs to produce comparable output.
+
+\`\`\`typescript title="src/mastra/agents/tuned-resilient-agent.ts"
+import { Agent } from '@mastra/core/agent';
+
+const agent = new Agent({
+  id: 'tuned-resilient',
+  name: 'Tuned Resilient Agent',
+  instructions: 'You are a helpful assistant.',
+  model: [
+    {
+      model: 'google/gemini-2.5-flash',
+      maxRetries: 2,
+      modelSettings: { temperature: 0.3 },
+      providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } },
+    },
+    {
+      model: 'openai/gpt-5-mini',
+      maxRetries: 2,
+      modelSettings: { temperature: 0.7 },
+      providerOptions: { openai: { reasoningEffort: 'low' } },
+    },
+  ],
+});
+\`\`\`
+
+Per-entry values shallow-merge on top of agent \`defaultOptions\` and call-time options, with the entry winning. \`providerOptions\` is deep-merged per provider key. Each field also accepts a function of \`requestContext\`, matching how dynamic models are resolved.
+
 ## Use local models with Mastra
 
 Mastra also supports local models like \`gpt-oss\`, \`Qwen3\`, \`DeepSeek\` and many more that you run on your own hardware. The application running your local model needs to provide an OpenAI-compatible API server for Mastra to connect to. We recommend using [LMStudio](https://lmstudio.ai/) (see [Running the LMStudio server](https://lmstudio.ai/docs/developer/core/server)).

@@ -30,6 +30,7 @@ import type {
   StreamTextResult,
 } from '../llm/model/base.types';
 import { MastraLLMVNext } from '../llm/model/model.loop';
+import type { ProviderOptions } from '../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
@@ -106,6 +107,7 @@ import type {
   AgentMethodType,
   StructuredOutputOptions,
   PublicStructuredOutputOptions,
+  ModelFallbackSettings,
   ModelWithRetries,
   ZodSchema,
 } from './types';
@@ -120,6 +122,9 @@ type ModelFallbacks = {
   model: DynamicArgument<MastraModelConfig>;
   maxRetries: number;
   enabled: boolean;
+  modelSettings?: DynamicArgument<ModelFallbackSettings>;
+  providerOptions?: DynamicArgument<ProviderOptions>;
+  headers?: DynamicArgument<Record<string, string>>;
 }[];
 
 type ResolvedModelSelection = MastraModelConfig | ModelFallbacks;
@@ -260,6 +265,9 @@ export class Agent<
         model: mdl.model,
         maxRetries: mdl.maxRetries ?? config?.maxRetries ?? 0,
         enabled: mdl.enabled ?? true,
+        modelSettings: mdl.modelSettings,
+        providerOptions: mdl.providerOptions,
+        headers: mdl.headers,
       })) as ModelFallbacks;
       this.#originalModel = [...this.model];
     } else {
@@ -1713,6 +1721,9 @@ export class Agent<
       model: m.model as DynamicArgument<MastraModelConfig>,
       maxRetries: m.maxRetries ?? this.maxRetries,
       enabled: m.enabled ?? true,
+      modelSettings: m.modelSettings as DynamicArgument<ModelFallbackSettings> | undefined,
+      providerOptions: m.providerOptions as DynamicArgument<ProviderOptions> | undefined,
+      headers: m.headers as DynamicArgument<Record<string, string>> | undefined,
     })) as ModelFallbacks;
   }
 
@@ -4636,22 +4647,50 @@ export class Agent<
         }
 
         // Extract headers from ModelRouterLanguageModel if available
-        let headers: Record<string, string> | undefined;
+        let routerHeaders: Record<string, string> | undefined;
         if (model instanceof ModelRouterLanguageModel) {
-          headers = (model as any).config?.headers;
+          routerHeaders = (model as any).config?.headers;
         }
+
+        const [resolvedModelSettings, resolvedProviderOptions, resolvedUserHeaders] = await Promise.all([
+          this.resolveFallbackDynamic(modelConfig.modelSettings, requestContext),
+          this.resolveFallbackDynamic(modelConfig.providerOptions, requestContext),
+          this.resolveFallbackDynamic(modelConfig.headers, requestContext),
+        ]);
+
+        const mergedHeaders =
+          routerHeaders || resolvedUserHeaders
+            ? { ...(routerHeaders ?? {}), ...(resolvedUserHeaders ?? {}) }
+            : undefined;
 
         return {
           id: modelId,
           model: model,
           maxRetries: modelConfig.maxRetries ?? 0,
           enabled: modelConfig.enabled ?? true,
-          headers,
+          headers: mergedHeaders,
+          modelSettings: resolvedModelSettings,
+          providerOptions: resolvedProviderOptions,
         };
       }),
     );
 
     return models;
+  }
+
+  /** @internal */
+  private async resolveFallbackDynamic<T>(
+    value: DynamicArgument<T> | undefined,
+    requestContext: RequestContext,
+  ): Promise<T | undefined> {
+    if (value === undefined) return undefined;
+    if (typeof value === 'function') {
+      return await (value as (args: { requestContext: RequestContext; mastra?: Mastra }) => Promise<T> | T)({
+        requestContext,
+        mastra: this.#mastra,
+      });
+    }
+    return value;
   }
 
   /**
