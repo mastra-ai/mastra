@@ -131,6 +131,8 @@ export function getCurrentModel(model?: { provider?: string; modelId?: string })
   return formatModelContext(model?.provider, model?.modelId);
 }
 
+export { didProviderChange } from './model-context';
+
 function parseActivationTTL(value: number | string | undefined, fieldPath: string): number | undefined {
   if (value === undefined) {
     return undefined;
@@ -185,6 +187,7 @@ import {
   stripThreadTags,
 } from './message-utils';
 import { ModelByInputTokens } from './model-by-input-tokens';
+import { didProviderChange as hasProviderChanged } from './model-context';
 import { renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
 import { ObservationStrategy } from './observation-strategies/index';
 import { ObservationTurn } from './observation-turn/index';
@@ -3143,10 +3146,7 @@ ${formattedMessages}
       const actorModel = getCurrentModel(opts.currentModel);
       const lastModel = getLastModelFromMessages(thresholdMessages);
       const providerChanged =
-        this.observationConfig.activateOnProviderChange === true &&
-        actorModel !== undefined &&
-        lastModel !== undefined &&
-        actorModel !== lastModel;
+        this.observationConfig.activateOnProviderChange === true && hasProviderChanged(actorModel, lastModel);
 
       if (providerChanged) {
         activationTriggeredBy = 'provider_change';
