@@ -20,7 +20,7 @@ import {
   renderObservationGroupsForReflection,
 } from '../observation-groups';
 import { getObservationsAsOf } from '../observation-utils';
-import { ObservationalMemory } from '../observational-memory';
+import { didProviderChange, ObservationalMemory } from '../observational-memory';
 import {
   buildObserverPrompt,
   buildMultiThreadObserverPrompt,
@@ -2289,6 +2289,40 @@ Line 2`;
 // =============================================================================
 // Unit Tests: Reflector Agent Helpers
 // =============================================================================
+
+describe('didProviderChange', () => {
+  it('returns false when either side is undefined', () => {
+    expect(didProviderChange(undefined, 'openai/gpt-4o')).toBe(false);
+    expect(didProviderChange('openai/gpt-4o', undefined)).toBe(false);
+    expect(didProviderChange(undefined, undefined)).toBe(false);
+  });
+
+  it('returns false when both sides are identical fully-formatted strings', () => {
+    expect(didProviderChange('openai/gpt-4o', 'openai/gpt-4o')).toBe(false);
+  });
+
+  it('returns true when both sides are fully-formatted but differ', () => {
+    expect(didProviderChange('openai/gpt-4o', 'anthropic/claude-opus-4-7')).toBe(true);
+    expect(didProviderChange('openai.responses/gpt-5.4', 'openai/gpt-5.4')).toBe(true);
+  });
+
+  it('returns false when persisted history has bare modelId that matches actor modelId', () => {
+    // Legacy persisted metadata: { provider: null, modelId: 'gpt-5.4' } -> 'gpt-5.4'
+    // Current actor formatted: 'openai.responses/gpt-5.4'
+    // Should NOT trigger a provider change.
+    expect(didProviderChange('openai.responses/gpt-5.4', 'gpt-5.4')).toBe(false);
+    expect(didProviderChange('gpt-5.4', 'openai.responses/gpt-5.4')).toBe(false);
+  });
+
+  it('returns true when bare modelId differs from actor modelId', () => {
+    expect(didProviderChange('openai/gpt-4o', 'gpt-5.4')).toBe(true);
+    expect(didProviderChange('gpt-5.4', 'openai/gpt-4o')).toBe(true);
+  });
+
+  it('returns false when both sides are identical bare modelIds', () => {
+    expect(didProviderChange('gpt-5.4', 'gpt-5.4')).toBe(false);
+  });
+});
 
 describe('Reflector Agent Helpers', () => {
   describe('buildReflectorSystemPrompt', () => {

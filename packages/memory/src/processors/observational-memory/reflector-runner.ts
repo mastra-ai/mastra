@@ -52,6 +52,27 @@ function getCurrentModel(model?: ObservationModelContext): string | undefined {
   return formatModelContext(model?.provider, model?.modelId);
 }
 
+/**
+ * Compare a model string derived from past messages against the current actor
+ * model. Persisted messages from older code paths may carry a bare `modelId`
+ * (no `provider/` prefix) while the current actor always formats as
+ * `provider/modelId`. If either side is bare, fall back to comparing just the
+ * `modelId` part so a missing provider in history doesn't trigger a spurious
+ * provider change.
+ */
+function didProviderChange(actorModel?: string, lastModel?: string): boolean {
+  if (actorModel === undefined || lastModel === undefined) return false;
+  if (actorModel === lastModel) return false;
+
+  const actorHasSlash = actorModel.includes('/');
+  const lastHasSlash = lastModel.includes('/');
+  if (actorHasSlash && lastHasSlash) return true;
+
+  const actorModelId = actorHasSlash ? actorModel.slice(actorModel.indexOf('/') + 1) : actorModel;
+  const lastModelId = lastHasSlash ? lastModel.slice(lastModel.indexOf('/') + 1) : lastModel;
+  return actorModelId !== lastModelId;
+}
+
 function getLastModelFromMessageList(messageList?: MessageList): string | undefined {
   const messages = messageList?.get.all.db();
   if (!messages) return undefined;
@@ -792,10 +813,7 @@ export class ReflectorRunner {
     const actorModel = getCurrentModel(currentModel);
     const lastModel = getLastModelFromMessageList(messageList);
     const providerChanged =
-      this.reflectionConfig.activateOnProviderChange === true &&
-      actorModel !== undefined &&
-      lastModel !== undefined &&
-      actorModel !== lastModel;
+      this.reflectionConfig.activateOnProviderChange === true && didProviderChange(actorModel, lastModel);
 
     if (observationTokens < reflectThreshold && !ttlExpired && !providerChanged) {
       return;
