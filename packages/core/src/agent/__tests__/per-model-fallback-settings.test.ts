@@ -320,4 +320,52 @@ describe('Per-fallback-entry settings', () => {
       expect(sent['x-tenant']).toBe('acme');
     });
   });
+
+  describe('disabled entries', () => {
+    it('should not invoke function-form modelSettings/providerOptions/headers on disabled entries, and not resolve their model factory', async () => {
+      const primary = createRecordingStreamModel('active-primary', 'ok');
+      let modelFactoryCalled = false;
+      let modelSettingsCalled = false;
+      let providerOptionsCalled = false;
+      let headersCalled = false;
+
+      const agent = new Agent({
+        id: 'disabled-entry-skip',
+        name: 'Disabled Entry Skip Test',
+        instructions: 'You are a test agent',
+        model: [
+          { model: primary, maxRetries: 0 },
+          {
+            enabled: false,
+            maxRetries: 0,
+            model: () => {
+              modelFactoryCalled = true;
+              throw new Error('disabled model factory must not run');
+            },
+            modelSettings: () => {
+              modelSettingsCalled = true;
+              throw new Error('disabled modelSettings must not run');
+            },
+            providerOptions: () => {
+              providerOptionsCalled = true;
+              throw new Error('disabled providerOptions must not run');
+            },
+            headers: () => {
+              headersCalled = true;
+              throw new Error('disabled headers must not run');
+            },
+          },
+        ],
+      });
+
+      const text = await (await agent.stream('Hello')).text;
+
+      expect(text).toBe('ok');
+      expect(modelFactoryCalled).toBe(false);
+      expect(modelSettingsCalled).toBe(false);
+      expect(providerOptionsCalled).toBe(false);
+      expect(headersCalled).toBe(false);
+      expect(primary.doStreamCalls).toHaveLength(1);
+    });
+  });
 });
