@@ -35,9 +35,7 @@
         },
         "input": "  Hello! How are you?  ",
         "output": {
-          "text": {
-            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-          },
+          "text": "Mock V2 generate response",
           "files": []
         }
       },
@@ -92,6 +90,23 @@
                   "content": "You are a helpful assistant"
                 }
               ],
+              "state": {},
+              "processorStates": {
+                "__type": "Map",
+                "__map_entries": [
+                  [
+                    "string",
+                    "validator",
+                    {
+                      "inputAccumulatedText": "",
+                      "outputAccumulatedText": "",
+                      "outputChunkCount": 0,
+                      "customState": {},
+                      "streamParts": []
+                    }
+                  ]
+                ]
+              },
               "retryCount": 0,
               "messages": [
                 {
@@ -134,9 +149,7 @@
                 },
                 "input": "Validate:   Hello! How are you?  ",
                 "output": {
-                  "text": {
-                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                  },
+                  "text": "Mock V2 generate response",
                   "files": []
                 }
               },
@@ -199,9 +212,7 @@
                       "files": [],
                       "reasoning": [],
                       "sources": [],
-                      "text": {
-                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                      },
+                      "text": "Mock V2 generate response",
                       "warnings": []
                     }
                   },
@@ -245,9 +256,7 @@
                         },
                         "input": {},
                         "output": {
-                          "text": {
-                            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                          },
+                          "text": "Mock V2 generate response",
                           "toolCalls": []
                         }
                       },
@@ -272,9 +281,7 @@
                               "runId": "<runId-2>"
                             },
                             "output": {
-                              "text": {
-                                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                              }
+                              "text": "Mock V2 generate response"
                             }
                           }
                         }
@@ -344,9 +351,7 @@
               "files": [],
               "reasoning": [],
               "sources": [],
-              "text": {
-                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-              },
+              "text": "Mock V2 generate response",
               "warnings": []
             }
           },
@@ -390,9 +395,7 @@
                 },
                 "input": {},
                 "output": {
-                  "text": {
-                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                  },
+                  "text": "Mock V2 generate response",
                   "toolCalls": []
                 }
               },
@@ -417,9 +420,7 @@
                       "runId": "<runId-1>"
                     },
                     "output": {
-                      "text": {
-                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                      }
+                      "text": "Mock V2 generate response"
                     }
                   }
                 }
@@ -468,9 +469,7 @@
                     "content": [
                       {
                         "type": "text",
-                        "text": {
-                          "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                        },
+                        "text": "Mock V2 generate response",
                         "createdAt": "<date>"
                       }
                     ]
@@ -483,10 +482,108 @@
                   }
                 ]
               },
+              "state": {},
+              "processorStates": {
+                "__type": "Map",
+                "__map_entries": [
+                  [
+                    "string",
+                    "validator",
+                    {
+                      "inputAccumulatedText": "",
+                      "outputAccumulatedText": "",
+                      "outputChunkCount": 0,
+                      "customState": {},
+                      "streamParts": []
+                    }
+                  ],
+                  [
+                    "string",
+                    "test-agent-output-processor",
+                    {
+                      "inputAccumulatedText": "Mock V2 generate response",
+                      "outputAccumulatedText": "Mock V2 generate response",
+                      "outputChunkCount": 5,
+                      "customState": {},
+                      "streamParts": [
+                        {
+                          "type": "response-metadata",
+                          "runId": "<runId-1>",
+                          "from": "AGENT",
+                          "payload": {
+                            "type": "response-metadata",
+                            "id": "<id-2>",
+                            "modelId": "mock-model-id"
+                          }
+                        },
+                        {
+                          "type": "text-start",
+                          "runId": "<runId-1>",
+                          "from": "AGENT",
+                          "payload": {
+                            "id": "msg_<msg-1>"
+                          }
+                        },
+                        {
+                          "type": "text-delta",
+                          "runId": "<runId-1>",
+                          "from": "AGENT",
+                          "payload": {
+                            "id": "msg_<msg-1>",
+                            "text": "Mock V2 generate response"
+                          }
+                        },
+                        {
+                          "type": "text-end",
+                          "runId": "<runId-1>",
+                          "from": "AGENT",
+                          "payload": {
+                            "type": "text-end",
+                            "id": "msg_<msg-1>"
+                          }
+                        },
+                        {
+                          "type": "finish",
+                          "runId": "<runId-1>",
+                          "from": "AGENT",
+                          "payload": {
+                            "stepResult": {
+                              "reason": "stop"
+                            },
+                            "output": {
+                              "usage": {
+                                "inputTokens": 15,
+                                "outputTokens": 25,
+                                "totalTokens": 40
+                              }
+                            },
+                            "metadata": {},
+                            "messages": {
+                              "all": [],
+                              "user": [],
+                              "nonUser": []
+                            },
+                            "type": "finish"
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  [
+                    "string",
+                    "summarizer",
+                    {
+                      "inputAccumulatedText": "",
+                      "outputAccumulatedText": "",
+                      "outputChunkCount": 0,
+                      "customState": {},
+                      "streamParts": []
+                    }
+                  ]
+                ]
+              },
               "result": {
-                "text": {
-                  "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                },
+                "text": "Mock V2 generate response",
                 "usage": {
                   "inputTokens": 15,
                   "outputTokens": 25,
@@ -497,25 +594,21 @@
               "retryCount": 0,
               "messages": [
                 {
-                  "id": "<id-2>",
+                  "id": "<id-3>",
                   "role": "assistant",
                   "content": {
                     "format": 2,
                     "parts": [
                       {
                         "type": "text",
-                        "text": {
-                          "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                        },
+                        "text": "Mock V2 generate response",
                         "createdAt": "<date>"
                       }
                     ],
                     "metadata": {
                       "modelId": "mock-model-id"
                     },
-                    "content": {
-                      "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                    }
+                    "content": "Mock V2 generate response"
                   },
                   "createdAt": "<date>"
                 }
@@ -541,13 +634,9 @@
                 "metadata": {
                   "runId": "<runId-3>"
                 },
-                "input": {
-                  "__or__": ["Summarize: Mock V2 generate response", "Summarize: Mock V2 stream response"]
-                },
+                "input": "Summarize: Mock V2 generate response",
                 "output": {
-                  "text": {
-                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                  },
+                  "text": "Mock V2 generate response",
                   "files": []
                 }
               },
@@ -600,9 +689,7 @@
                           "content": [
                             {
                               "type": "text",
-                              "text": {
-                                "__or__": ["Summarize: Mock V2 generate response", "Summarize: Mock V2 stream response"]
-                              }
+                              "text": "Summarize: Mock V2 generate response"
                             }
                           ]
                         }
@@ -612,9 +699,7 @@
                       "files": [],
                       "reasoning": [],
                       "sources": [],
-                      "text": {
-                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                      },
+                      "text": "Mock V2 generate response",
                       "warnings": []
                     }
                   },
@@ -658,9 +743,7 @@
                         },
                         "input": {},
                         "output": {
-                          "text": {
-                            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                          },
+                          "text": "Mock V2 generate response",
                           "toolCalls": []
                         }
                       },
@@ -685,9 +768,7 @@
                               "runId": "<runId-3>"
                             },
                             "output": {
-                              "text": {
-                                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                              }
+                              "text": "Mock V2 generate response"
                             }
                           }
                         }

@@ -9,6 +9,8 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # CloudExporter
 
+**Added in:** `@mastra/observability@1.8.0`
+
 Sends tracing spans, logs, metrics, scores, and feedback to the Mastra platform for online visualization and monitoring.
 
 ## Constructor
@@ -76,9 +78,9 @@ Extends `BaseExporterConfig`, which includes:
 
 The exporter reads these environment variables if not provided in config:
 
-- `MASTRA_CLOUD_ACCESS_TOKEN` - Authentication token. Project-scoped tokens work with the default `/ai/{signal}/publish` routes. Organization API keys require `projectId` or `MASTRA_PROJECT_ID`.
+- `MASTRA_CLOUD_ACCESS_TOKEN` - Authentication token for `CloudExporter` requests
 - `MASTRA_PROJECT_ID` - Project ID to use when deriving project-scoped collector routes such as `/projects/:projectId/ai/spans/publish`
-- `MASTRA_CLOUD_TRACES_ENDPOINT` - Traces endpoint override. Pass either a base origin or a full traces publish URL. Defaults to `https://api.mastra.ai`
+- `MASTRA_CLOUD_TRACES_ENDPOINT` - Traces endpoint override. Pass either a base origin or a full traces publish URL. Defaults to `https://observability.mastra.ai` in `@mastra/observability@1.9.2` and later
 
 ## Properties
 

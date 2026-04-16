@@ -16,6 +16,8 @@ type State = {
   };
   hasToolCallStreaming: boolean;
   hasErrored: boolean;
+  apiError: unknown | undefined;
+  deferredErrorChunk: any | undefined;
   reasoningBuffers: Map<string, ReasoningBuffer>;
   textDeltas: string[];
   isReasoning: boolean;
@@ -45,6 +47,8 @@ export class AgenticRunState {
       providerOptions: undefined,
       hasToolCallStreaming: false,
       hasErrored: false,
+      apiError: undefined,
+      deferredErrorChunk: undefined,
       reasoningBuffers: new Map(),
       textDeltas: [],
       stepResult: undefined,
