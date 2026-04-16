@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 1.2.9-alpha.0
+
+### Patch Changes
+
+- Fixed MCP tools with recursive JSON Schema refs so they stay serializable when loaded. ([#15400](https://github.com/mastra-ai/mastra/pull/15400))
+
 ## 1.2.8
 
 ### Patch Changes
