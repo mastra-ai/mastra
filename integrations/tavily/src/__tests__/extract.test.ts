@@ -53,6 +53,7 @@ describe('createTavilyExtractTool', () => {
       {
         urls: ['https://example.com', 'https://unreachable.com'],
         extractDepth: 'advanced',
+        query: 'pricing information',
         includeImages: true,
         format: 'markdown',
       },
@@ -61,6 +62,7 @@ describe('createTavilyExtractTool', () => {
 
     expect(mockExtract).toHaveBeenCalledWith(['https://example.com', 'https://unreachable.com'], {
       extractDepth: 'advanced',
+      query: 'pricing information',
       includeImages: true,
       format: 'markdown',
     });
