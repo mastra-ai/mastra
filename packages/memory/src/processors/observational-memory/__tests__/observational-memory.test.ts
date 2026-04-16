@@ -5110,6 +5110,83 @@ describe('Locking Behavior', () => {
     expect(updatedRecord!.isReflecting).toBe(false);
   });
 
+  it('should force reflection when activateAfterIdle has expired even below threshold', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const now = new Date('2026-04-14T12:00:00.000Z');
+      vi.setSystemTime(now);
+
+      const storage = createInMemoryStorage();
+      let reflectorCalled = false;
+      const mockReflectorModel = createStreamCapableMockModel({
+        doGenerate: async () => {
+          reflectorCalled = true;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+            content: [{ type: 'text' as const, text: '<observations>\n- Reflected summary\n</observations>' }],
+            warnings: [],
+          };
+        },
+      });
+
+      const om = new ObservationalMemory({
+        storage,
+        activateAfterIdle: '5m',
+        observation: {
+          messageTokens: 100,
+          bufferTokens: false,
+          model: createStreamCapableMockModel({
+            doGenerate: async () => ({
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop' as const,
+              usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+              content: [{ type: 'text' as const, text: '<observations>\n- Observation\n</observations>' }],
+              warnings: [],
+            }),
+          }) as any,
+        },
+        reflection: {
+          observationTokens: 1000,
+          model: mockReflectorModel as any,
+        },
+        scope: 'thread',
+      });
+
+      await storage.initializeObservationalMemory({
+        threadId: 'thread-ttl',
+        resourceId: 'resource-ttl',
+        scope: 'thread',
+        config: {
+          activateAfterIdle: '5m',
+          observation: { messageTokens: 100, model: 'test-model' },
+          reflection: { observationTokens: 1000, model: 'test-model' },
+        },
+      });
+
+      const record = await storage.getObservationalMemory('thread-ttl', 'resource-ttl');
+      await storage.updateActiveObservations({
+        id: record!.id,
+        observations: '- Observation 1\n- Observation 2',
+        tokenCount: 100,
+        lastObservedAt: new Date(now.getTime() - 301_000),
+      });
+
+      await om.reflector.maybeReflect({
+        record: (await storage.getObservationalMemory('thread-ttl', 'resource-ttl'))!,
+        observationTokens: 100,
+        lastActivityAt: now.getTime() - 301_000,
+        threadId: 'thread-ttl',
+      });
+
+      expect(reflectorCalled).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('should skip observation when isObserving flag is true in processOutputResult', async () => {
     const storage = createInMemoryStorage();
 
@@ -7659,6 +7736,7 @@ describe('Full Async Buffering Flow', () => {
     bufferActivation: number;
     reflectionObservationTokens: number;
     reflectionAsyncActivation?: number;
+    activateAfterIdle?: number | string;
     blockAfter?: number;
     /** Number of messages to pre-save (each ~200 tokens via repeated filler text) */
     messageCount?: number;
@@ -7669,6 +7747,10 @@ describe('Full Async Buffering Flow', () => {
     const { RequestContext } = await import('@mastra/core/di');
 
     // Clear static maps to avoid cross-test pollution
+    const pendingBufferingOps = [...BufferingCoordinator.asyncBufferingOps.values()];
+    if (pendingBufferingOps.length > 0) {
+      await Promise.allSettled(pendingBufferingOps);
+    }
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
@@ -7728,6 +7810,7 @@ describe('Full Async Buffering Flow', () => {
       storage,
       scope: 'thread',
       model: mockModel as any,
+      activateAfterIdle: opts.activateAfterIdle,
       observation: {
         messageTokens: opts.messageTokens,
         bufferTokens: opts.bufferTokens,
@@ -7924,6 +8007,76 @@ describe('Full Async Buffering Flow', () => {
     expect(record!.activeObservations).toBeTruthy();
     expect(record!.activeObservations!.length).toBeGreaterThan(0);
     expect(record!.activeObservations).toContain('Observed');
+  });
+
+  it('should activate buffered observations during prepare when activateAfterIdle expires', async () => {
+    const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
+      messageTokens: 30000,
+      bufferTokens: 500,
+      bufferActivation: 0.7,
+      reflectionObservationTokens: 50000,
+      activateAfterIdle: 1,
+      messageCount: 10,
+    });
+
+    await step(0);
+    await waitForAsyncOps();
+
+    const preRecord = await storage.getObservationalMemory(threadId, resourceId);
+    const preChunks =
+      typeof preRecord?.bufferedObservationChunks === 'string'
+        ? JSON.parse(preRecord.bufferedObservationChunks)
+        : preRecord?.bufferedObservationChunks;
+    expect(Array.isArray(preChunks) ? preChunks.length : 0).toBeGreaterThan(0);
+    expect(observerCalls.length).toBeGreaterThan(0);
+
+    const now = new Date('2026-04-14T12:00:00.000Z').getTime();
+    const staleAssistantPartTime = now - 10;
+    const userMessage = {
+      id: 'ttl-user-msg',
+      role: 'user' as const,
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: 'hi' }],
+      },
+      type: 'text',
+      createdAt: new Date(now),
+      threadId,
+      resourceId,
+    };
+    const assistantMessage = {
+      id: 'ttl-assistant-msg',
+      role: 'assistant' as const,
+      content: {
+        format: 2 as const,
+        parts: [
+          {
+            type: 'text' as const,
+            text: 'Previously cached response',
+            createdAt: staleAssistantPartTime,
+          },
+        ],
+      },
+      type: 'text',
+      createdAt: new Date(staleAssistantPartTime),
+      threadId,
+      resourceId,
+    };
+
+    await storage.saveMessages({ messages: [assistantMessage, userMessage] });
+
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    expect(record).toBeDefined();
+    expect(record!.activeObservations).toContain('Observed');
+
+    const activatedChunks =
+      typeof record?.bufferedObservationChunks === 'string'
+        ? JSON.parse(record.bufferedObservationChunks)
+        : record?.bufferedObservationChunks;
+    expect(Array.isArray(activatedChunks) ? activatedChunks : []).toHaveLength(0);
   });
 
   it('should trigger reflection after observation tokens exceed reflection threshold', async () => {
@@ -8577,6 +8730,10 @@ describe('Full Async Buffering Flow', () => {
     const { RequestContext } = await import('@mastra/core/di');
 
     // Clear static maps to avoid cross-test pollution
+    const pendingBufferingOps = [...BufferingCoordinator.asyncBufferingOps.values()];
+    if (pendingBufferingOps.length > 0) {
+      await Promise.allSettled(pendingBufferingOps);
+    }
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
@@ -8758,6 +8915,10 @@ describe('Full Async Buffering Flow', () => {
     const { RequestContext } = await import('@mastra/core/di');
 
     // Clear static maps to avoid cross-test pollution
+    const pendingBufferingOps = [...BufferingCoordinator.asyncBufferingOps.values()];
+    if (pendingBufferingOps.length > 0) {
+      await Promise.allSettled(pendingBufferingOps);
+    }
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
@@ -10479,15 +10640,25 @@ describe('threadId validation in thread scope', () => {
 // =============================================================================
 
 describe('Observer Context Optimization', () => {
-  function createOM(observationOverrides: Record<string, unknown> = {}) {
+  function createOM({
+    activateAfterIdle,
+    observation,
+    ...observationOverrides
+  }: {
+    activateAfterIdle?: number | string;
+    observation?: Record<string, unknown>;
+    [key: string]: unknown;
+  } = {}) {
     return new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' } as any),
+      activateAfterIdle,
       observation: {
         messageTokens: 50000,
         bufferTokens: false,
         ...observationOverrides,
+        ...observation,
       },
       reflection: { observationTokens: 40000 },
     });
@@ -10528,6 +10699,18 @@ describe('Observer Context Optimization', () => {
       expect(() => createOM({ previousObserverTokens: 0 })).not.toThrow();
       expect(() => createOM({ previousObserverTokens: 1 })).not.toThrow();
       expect(() => createOM({ previousObserverTokens: 5000 })).not.toThrow();
+    });
+
+    it('should accept duration strings for activateAfterIdle', () => {
+      expect(() => createOM({ activateAfterIdle: '5m' })).not.toThrow();
+      expect(() => createOM({ activateAfterIdle: '1hr' })).not.toThrow();
+      expect(() => createOM({ activateAfterIdle: '30s' })).not.toThrow();
+    });
+
+    it('should throw if activateAfterIdle is an invalid duration string', () => {
+      expect(() => createOM({ activateAfterIdle: 'later' as any })).toThrow(
+        'activateAfterIdle must be a non-negative number of milliseconds or a duration string like "5m" or "1hr".',
+      );
     });
   });
 

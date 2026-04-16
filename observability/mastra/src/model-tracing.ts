@@ -181,6 +181,10 @@ function summarizeRequestBody(body: unknown): StepInputPreview {
     return normalizeMessages((body as { messages: unknown[] }).messages);
   }
 
+  if (Array.isArray((body as { input?: unknown }).input)) {
+    return normalizeMessages((body as { input: unknown[] }).input);
+  }
+
   if (Array.isArray((body as { contents?: unknown }).contents)) {
     return (body as { contents: Array<{ role?: unknown; parts?: unknown[] }> }).contents.map(item => ({
       role: typeof item?.role === 'string' ? item.role : 'user',

@@ -4,6 +4,26 @@ import { createStreamFromGenerateResult } from '../generate-to-stream';
 
 type StreamResult = Awaited<ReturnType<LanguageModelV2['doStream']>>;
 
+function stripStrictFromFunctionTools(options: LanguageModelV2CallOptions): LanguageModelV2CallOptions {
+  if (!options.tools?.length) {
+    return options;
+  }
+
+  const sanitizedTools = options.tools.map((tool: Record<string, unknown>) => {
+    if (tool.type !== 'function' || !('strict' in tool)) {
+      return tool;
+    }
+
+    const { strict: _strict, ...rest } = tool;
+    return rest;
+  });
+
+  return {
+    ...options,
+    tools: sanitizedTools as typeof options.tools,
+  };
+}
+
 /**
  * Wrapper class for AI SDK V5 (LanguageModelV2) that converts doGenerate to return
  * a stream format for consistency with Mastra's streaming architecture.
@@ -44,7 +64,7 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
   }
 
   async doGenerate(options: LanguageModelV2CallOptions) {
-    const result = await this.#model.doGenerate(options);
+    const result = await this.#model.doGenerate(stripStrictFromFunctionTools(options));
 
     return {
       ...result,
@@ -55,6 +75,6 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
   }
 
   async doStream(options: LanguageModelV2CallOptions) {
-    return await this.#model.doStream(options);
+    return await this.#model.doStream(stripStrictFromFunctionTools(options));
   }
 }

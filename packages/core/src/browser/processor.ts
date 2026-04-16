@@ -45,9 +45,6 @@ export interface BrowserContext {
 
   /** Current page title (updated per-request) */
   pageTitle?: string;
-
-  /** Whether browser is currently running */
-  isRunning?: boolean;
 }
 
 /**
@@ -90,10 +87,6 @@ export class BrowserContextProcessor {
 
     if (ctx.pageTitle) {
       parts.push(`Page title: ${ctx.pageTitle}`);
-    }
-
-    if (ctx.isRunning === false) {
-      parts.push('Browser is not currently running.');
     }
 
     if (parts.length === 0) return;
