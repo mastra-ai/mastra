@@ -64,7 +64,7 @@ export function createTavilySearchTool(config?: TavilyClientOptions) {
   return createTool({
     id: 'tavily-search',
     description:
-      'Search the web using Tavily. Returns relevant results with content snippets, optional AI-generated answers, and images. Supports filtering by domain, topic, time range, and search depth.',
+      'Search the web using Tavily. Returns relevant results with content snippets, optional AI-generated answers, and images. Supports filtering by domain, time range, and search depth.',
     inputSchema,
     outputSchema,
     execute: async input => {
