@@ -67,17 +67,30 @@ function extractTailPipe(command: string): { command: string; tail?: number } {
  * to be run first to establish their daemon's CDP connection before other
  * commands will work properly.
  */
-const CLI_CDP_PATTERNS: Record<string, { pattern: RegExp; flag: string; warmupCommand?: (cdpUrl: string) => string }> =
+const CLI_CDP_PATTERNS: Record<
+  string,
   {
-    'agent-browser': {
-      pattern: /^agent-browser\b/,
-      flag: '--cdp',
-      // agent-browser daemon needs explicit connect command to establish CDP connection
-      warmupCommand: (cdpUrl: string) => `agent-browser connect "${cdpUrl}"`,
-    },
-    'browser-use': { pattern: /^(?:browser-use|browseruse|bu)\b/, flag: '--cdp-url' },
-    browse: { pattern: /^browse\b/, flag: '--ws' },
-  };
+    pattern: RegExp;
+    flag: string;
+    sessionFlag?: string; // Flag to pass threadId as session name for isolation
+    warmupCommand?: (cdpUrl: string, threadId: string) => string;
+  }
+> = {
+  'agent-browser': {
+    pattern: /^agent-browser\b/,
+    flag: '--cdp',
+    sessionFlag: '--session',
+    // agent-browser daemon needs explicit connect command to establish CDP connection
+    // Must include session flag to isolate threads
+    warmupCommand: (cdpUrl: string, threadId: string) => `agent-browser --session "${threadId}" connect "${cdpUrl}"`,
+  },
+  'browser-use': {
+    pattern: /^(?:browser-use|browseruse|bu)\b/,
+    flag: '--cdp-url',
+    sessionFlag: '--session',
+  },
+  browse: { pattern: /^browse\b/, flag: '--ws' },
+};
 
 /**
  * Track which CLI providers have been warmed up per thread.
@@ -98,10 +111,10 @@ function getCliName(command: string): string | null {
 }
 
 /**
- * Inject CDP URL into browser CLI commands if not already present.
+ * Inject CDP URL and session flag into browser CLI commands if not already present.
  * Returns the modified command or the original if no injection needed.
  */
-function injectCdpUrl(command: string, cdpUrl: string | null): string {
+function injectCdpUrl(command: string, cdpUrl: string | null, threadId?: string): string {
   if (!cdpUrl) return command;
 
   for (const [, config] of Object.entries(CLI_CDP_PATTERNS)) {
@@ -112,8 +125,18 @@ function injectCdpUrl(command: string, cdpUrl: string | null): string {
         return command; // Already has CDP URL, don't override
       }
 
-      // Inject CDP URL after the CLI command name
-      return command.replace(config.pattern, `$& ${config.flag} "${cdpUrl}"`);
+      // Build injection: CDP URL + session flag (for thread isolation)
+      let injection = `${config.flag} "${cdpUrl}"`;
+      if (config.sessionFlag && threadId) {
+        // Check if session flag already present
+        const sessionPattern = new RegExp(`${config.sessionFlag}\\s+\\S+`);
+        if (!sessionPattern.test(command)) {
+          injection += ` ${config.sessionFlag} "${threadId}"`;
+        }
+      }
+
+      // Inject flags after the CLI command name
+      return command.replace(config.pattern, `$& ${injection}`);
     }
   }
 
@@ -166,7 +189,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
     const warmupKey = `${cliName}:${threadId}`;
     const cliConfig = CLI_CDP_PATTERNS[cliName];
     if (cdpUrl && cliConfig?.warmupCommand && !warmedUpClis.has(warmupKey)) {
-      const warmupCmd = cliConfig.warmupCommand(cdpUrl);
+      const warmupCmd = cliConfig.warmupCommand(cdpUrl, threadId);
       // eslint-disable-next-line no-console
       console.log(`[execute-command] Running warmup command for ${cliName}: ${warmupCmd}`);
       try {
@@ -187,7 +210,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
     }
 
     const originalCommand = command;
-    command = injectCdpUrl(command, cdpUrl);
+    command = injectCdpUrl(command, cdpUrl, threadId);
     // eslint-disable-next-line no-console
     console.log(`[execute-command] Command: "${originalCommand}" -> "${command}"`);
   }

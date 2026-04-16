@@ -18,7 +18,6 @@ import type {
   ScreencastOptions,
   ScreencastStream,
   CdpSessionProvider,
-  CdpSessionLike,
   MouseEventParams,
   KeyboardEventParams,
 } from '@mastra/core/browser';
@@ -88,6 +87,10 @@ export class BrowserViewer extends MastraBrowser {
       logger: this.logger,
       onSessionCreated: session => {
         // Notify listeners so screencast can start for this thread
+        // eslint-disable-next-line no-console
+        console.log(
+          `[BrowserViewer] onSessionCreated for thread ${session.threadId}, hasSession=${this.threadManager?.hasSession(session.threadId)}`,
+        );
         this.notifyBrowserReady(session.threadId);
       },
       onBrowserCreated: (_browser, threadId, _cdpUrl) => {
@@ -203,6 +206,9 @@ export class BrowserViewer extends MastraBrowser {
       // For thread scope, launch for this specific thread
       if (!this.threadManager.isBrowserRunning(effectiveThreadId)) {
         await this.threadManager.getManagerForThread(effectiveThreadId);
+        // Set status to ready so isBrowserRunning() returns true
+        // (base class launch() does this, but we bypass it for thread scope)
+        this.status = 'ready';
       }
     }
   }
@@ -248,29 +254,41 @@ export class BrowserViewer extends MastraBrowser {
   // ---------------------------------------------------------------------------
 
   override async startScreencast(options?: ScreencastOptions): Promise<ScreencastStream> {
-    const threadId = this.getCurrentThread();
-    const cdpSession = this.threadManager.getCdpSessionForThread(threadId);
+    const threadId = options?.threadId ?? this.getCurrentThread();
 
-    if (!cdpSession) {
-      throw new Error('CDP session not available for screencast');
-    }
-
-    // Create a CDP session wrapper that implements CdpSessionLike
-    const cdpSessionLike: CdpSessionLike = {
-      send: async (method: string, params?: Record<string, unknown>) => {
-        return cdpSession.send(method as any, params);
-      },
-      on: (event: string, handler: (params: unknown) => void) => {
-        cdpSession.on(event as any, handler);
-      },
-      off: (event: string, handler: (params: unknown) => void) => {
-        cdpSession.off(event as any, handler);
-      },
-    };
-
-    // Create CDP session provider
+    // Create CDP session provider that creates FRESH sessions on each call
+    // This is critical for tab switching - when reconnecting, we need a CDP session
+    // attached to the CURRENT page, not the original page from launch
     const provider: CdpSessionProvider = {
-      getCdpSession: async () => cdpSessionLike,
+      getCdpSession: async () => {
+        const context = this.threadManager.getContextForThread(threadId);
+        if (!context) {
+          throw new Error('No browser context available for screencast');
+        }
+
+        // Get the most recently active page (last in the list, or first if only one)
+        const pages = context.pages();
+        if (pages.length === 0) {
+          throw new Error('No pages available for screencast');
+        }
+        const currentPage = pages[pages.length - 1] ?? pages[0];
+
+        // Create a fresh CDP session for this page
+        const cdpSession = await context.newCDPSession(currentPage!);
+
+        // Return wrapper that implements CdpSessionLike
+        return {
+          send: async (method: string, params?: Record<string, unknown>) => {
+            return cdpSession.send(method as any, params);
+          },
+          on: (event: string, handler: (params: unknown) => void) => {
+            cdpSession.on(event as any, handler);
+          },
+          off: (event: string, handler: (params: unknown) => void) => {
+            cdpSession.off(event as any, handler);
+          },
+        };
+      },
       isBrowserRunning: () => this.isBrowserRunning(threadId),
     };
 
@@ -282,6 +300,53 @@ export class BrowserViewer extends MastraBrowser {
       maxHeight: options?.maxHeight ?? 720,
       everyNthFrame: options?.everyNthFrame ?? 1,
     });
+
+    // Set up tab change detection - reconnect screencast when tabs change
+    const context = this.threadManager.getContextForThread(threadId);
+    if (context) {
+      // New tab opened
+      const onNewPage = () => {
+        setTimeout(() => {
+          if (stream.isActive()) {
+            stream.reconnect().catch(() => {});
+          }
+        }, 100);
+      };
+      context.on('page', onNewPage);
+
+      // Set up page close listener for each page
+      const setupPageListeners = (page: Page) => {
+        page.once('close', () => {
+          setTimeout(() => {
+            if (stream.isActive() && context.pages().length > 0) {
+              stream.reconnect().catch(() => {});
+            }
+          }, 100);
+        });
+
+        // Navigation listener for URL updates
+        page.on('framenavigated', (frame: { url: () => string; parentFrame: () => unknown }) => {
+          if (!frame.parentFrame()) {
+            stream.emitUrl(frame.url());
+          }
+        });
+      };
+
+      // Set up for existing pages
+      for (const page of context.pages()) {
+        setupPageListeners(page);
+      }
+
+      // Set up for new pages
+      context.on('page', (newPage: Page) => {
+        setupPageListeners(newPage);
+      });
+
+      // Clean up on stream stop
+      stream.once('stop', () => {
+        context.off('page', onNewPage);
+      });
+    }
 
     await stream.start();
     return stream;

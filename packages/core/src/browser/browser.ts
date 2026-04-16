@@ -1385,15 +1385,16 @@ export abstract class MastraBrowser extends MastraBase {
    * - Returns null if the thread doesn't have an existing browser session
    */
   async startScreencastIfBrowserActive(options?: ScreencastOptions): Promise<ScreencastStream | null> {
-    if (!this.isBrowserRunning()) {
-      return null;
-    }
-
     // Merge config screencast defaults with call-site overrides
     const mergedOptions = this.config.screencast || options ? { ...this.config.screencast, ...options } : undefined;
 
     const threadId = mergedOptions?.threadId;
     const scope = this.threadManager?.getScope() ?? this.config.scope ?? 'shared';
+
+    // Check if browser is running (pass threadId for thread-scoped checks)
+    if (!this.isBrowserRunning(threadId)) {
+      return null;
+    }
 
     // Shared scope - just start the screencast
     if (scope === 'shared') {
@@ -1402,6 +1403,10 @@ export abstract class MastraBrowser extends MastraBase {
 
     // For 'thread' scope, only start if the thread has an existing session
     if (threadId && !this.hasThreadSession(threadId)) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[MastraBrowser] startScreencastIfBrowserActive: hasThreadSession(${threadId})=false, scope=${scope}`,
+      );
       return null;
     }
 
