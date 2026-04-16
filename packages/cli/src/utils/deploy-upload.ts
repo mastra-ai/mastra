@@ -1,4 +1,4 @@
-import { createApiClient } from '../commands/auth/client.js';
+import { createApiClient, extractApiErrorDetail } from '../commands/auth/client.js';
 import { getToken } from '../commands/auth/credentials.js';
 import { isRetryablePollingError } from './polling.js';
 
@@ -65,8 +65,14 @@ export async function confirmUploadWithRetry(opts: {
     const isRetryable = isRetryableStatus || isRetryableNetwork;
 
     if (!isRetryable || attempt === maxRetries) {
-      const detail = status ? `${status}` : completeError instanceof Error ? completeError.message : 'unknown error';
-      lastError = new Error(`Upload confirmation failed: ${detail}`);
+      const apiMessage = extractApiErrorDetail(completeError);
+      if (apiMessage) {
+        lastError = new Error(apiMessage);
+      } else {
+        const detail =
+          status !== undefined ? `${status}` : completeError instanceof Error ? completeError.message : 'unknown error';
+        lastError = new Error(`Upload confirmation failed: ${detail}`);
+      }
       break;
     }
 
