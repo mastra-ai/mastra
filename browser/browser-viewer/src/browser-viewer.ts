@@ -87,10 +87,6 @@ export class BrowserViewer extends MastraBrowser {
       logger: this.logger,
       onSessionCreated: session => {
         // Notify listeners so screencast can start for this thread
-        // eslint-disable-next-line no-console
-        console.log(
-          `[BrowserViewer] onSessionCreated for thread ${session.threadId}, hasSession=${this.threadManager?.hasSession(session.threadId)}`,
-        );
         this.notifyBrowserReady(session.threadId);
       },
       onBrowserCreated: (_browser, threadId, _cdpUrl) => {

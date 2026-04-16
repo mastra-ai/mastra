@@ -168,30 +168,19 @@ async function executeCommand(input: Record<string, any>, context: any) {
     // threadId lives at context.agent.threadId (set during tool execution)
     const threadId = context?.agent?.threadId ?? context?.threadId ?? 'default';
 
-    // eslint-disable-next-line no-console
-    console.log(
-      `[execute-command] Browser CLI detected. cli=${cliName}, threadId=${threadId}, isBrowserRunning=${browser.isBrowserRunning(threadId)}`,
-    );
-
     // Launch browser if not already running (for this thread if thread-scoped)
     if (!browser.isBrowserRunning(threadId)) {
-      // eslint-disable-next-line no-console
-      console.log(`[execute-command] Launching browser for threadId=${threadId}`);
       await browser.launch(threadId);
     }
 
     // Get CDP URL for injection
     const cdpUrl = browser.getCdpUrl(threadId);
-    // eslint-disable-next-line no-console
-    console.log(`[execute-command] CDP URL for threadId=${threadId}: ${cdpUrl}`);
 
     // Run warmup command if this CLI requires it and hasn't been warmed up yet
     const warmupKey = `${cliName}:${threadId}`;
     const cliConfig = CLI_CDP_PATTERNS[cliName];
     if (cdpUrl && cliConfig?.warmupCommand && !warmedUpClis.has(warmupKey)) {
       const warmupCmd = cliConfig.warmupCommand(cdpUrl, threadId);
-      // eslint-disable-next-line no-console
-      console.log(`[execute-command] Running warmup command for ${cliName}: ${warmupCmd}`);
       try {
         // Run warmup command with a timeout - we don't care much about the result,
         // just that it establishes the connection
@@ -199,20 +188,13 @@ async function executeCommand(input: Record<string, any>, context: any) {
           await sandbox.executeCommand(warmupCmd, [], { timeout: 10000 });
         }
         warmedUpClis.add(warmupKey);
-        // eslint-disable-next-line no-console
-        console.log(`[execute-command] Warmup complete for ${cliName}`);
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.log(`[execute-command] Warmup command failed (may still work): ${err}`);
+      } catch {
         // Still mark as warmed up to avoid retrying every command
         warmedUpClis.add(warmupKey);
       }
     }
 
-    const originalCommand = command;
     command = injectCdpUrl(command, cdpUrl, threadId);
-    // eslint-disable-next-line no-console
-    console.log(`[execute-command] Command: "${originalCommand}" -> "${command}"`);
   }
 
   await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
