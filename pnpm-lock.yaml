@@ -1896,8 +1896,8 @@ importers:
         specifier: workspace:*
         version: link:../mastra
       langsmith:
-        specifier: ^0.5.10
-        version: 0.5.18(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.213.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.6.0(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.19.0(bufferutil@4.1.0))
+        specifier: ^0.5.19
+        version: 0.5.19(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.213.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.6.0(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.19.0(bufferutil@4.1.0))
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.99
@@ -20173,8 +20173,8 @@ packages:
       openai:
         optional: true
 
-  langsmith@0.5.18:
-    resolution: {integrity: sha512-3zuZUWffTHQ+73EAwnodADtf534VNEZUpXr9jC12qyG8/IQuJET7PRsCpTb9wX2lmBspakwLUpqpj3tNm/0bVA==}
+  langsmith@0.5.19:
+    resolution: {integrity: sha512-5tFoETuFMvGkbPGsINNlIE4Ab86CsPhdPOQZCGwNt/NX0h5NDKQLKOWS/G2XcRUBOQl4mCNbrayUvUTWaIRsCg==}
     peerDependencies:
       '@opentelemetry/api': '*'
       '@opentelemetry/exporter-trace-otlp-proto': '*'
@@ -42334,7 +42334,7 @@ snapshots:
       '@opentelemetry/sdk-trace-base': 2.6.0(@opentelemetry/api@1.9.0)
       openai: 4.104.0(encoding@0.1.13)(ws@8.19.0(bufferutil@4.1.0))(zod@4.3.6)
 
-  langsmith@0.5.18(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.213.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.6.0(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.19.0(bufferutil@4.1.0)):
+  langsmith@0.5.19(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.213.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.6.0(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.19.0(bufferutil@4.1.0)):
     dependencies:
       p-queue: 6.6.2
       uuid: 10.0.0
