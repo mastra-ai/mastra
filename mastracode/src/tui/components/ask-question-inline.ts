@@ -308,7 +308,9 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
         hintText = '↑↓ to navigate · Enter to select · Esc to skip';
         this.buildSelectMode(options.options);
       } else {
-        hintText = 'Enter to submit · Shift+Enter for new line · Esc to skip';
+        hintText = this.tui
+          ? 'Enter to submit · Shift+Enter for new line · Esc to skip'
+          : 'Enter to submit · Esc to skip';
         this.buildInputMode();
       }
 
@@ -377,7 +379,9 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
       hintText = '↑↓ to navigate · Enter to select · Esc to skip';
       this.buildSelectMode(options.options);
     } else {
-      hintText = 'Enter to submit · Shift+Enter for new line · Esc to skip';
+      hintText = this.tui
+        ? 'Enter to submit · Shift+Enter for new line · Esc to skip'
+        : 'Enter to submit · Esc to skip';
       this.buildInputMode();
     }
 
@@ -420,7 +424,11 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
 
     // Clear items so the answered state renders as free-text, not select
     this.borderedBox.items = [];
-    this.borderedBox.setInteractive(undefined, this.input, 'Enter to submit · Shift+Enter for new line · Esc to skip');
+    this.borderedBox.setInteractive(
+      undefined,
+      this.input,
+      this.tui ? 'Enter to submit · Shift+Enter for new line · Esc to skip' : 'Enter to submit · Esc to skip',
+    );
   }
 
   private buildInputMode(): void {

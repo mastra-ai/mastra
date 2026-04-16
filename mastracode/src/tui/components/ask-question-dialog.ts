@@ -128,7 +128,7 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
     this.addChild(spacer);
     this.modeChildren.push(spacer);
     const hintText = this.tui
-      ? '  Enter to submit · Shift+Enter for new line · Esc to skip'
+      ? '  Enter to submit · Shift+Enter for new line · \\+Enter for new line · Esc to skip'
       : '  Enter to submit · Esc to skip';
     const hint = new Text(theme.fg('dim', hintText), 0, 0);
     this.addChild(hint);
