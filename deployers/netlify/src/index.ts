@@ -27,6 +27,30 @@ function nodeBuiltinPrefix() {
   };
 }
 
+/** Modules that Netlify's Edge bundler cannot resolve: native Node addons (`bufferutil`, `utf-8-validate`) and `typescript`. */
+const EDGE_INCOMPATIBLE_MODULES = ['bufferutil', 'utf-8-validate', 'typescript'];
+
+/**
+ * Rollup plugin that replaces edge-incompatible modules with an empty stub so
+ * they do not appear as external imports in the bundle.
+ */
+function stubEdgeIncompatibleModules() {
+  const stubs = new Set(EDGE_INCOMPATIBLE_MODULES);
+  const STUB_ID = '\0mastra-netlify-edge-stub';
+  return {
+    name: 'stub-edge-incompatible-modules',
+    resolveId(source: string) {
+      return stubs.has(source) ? STUB_ID : null;
+    },
+    load(id: string) {
+      if (id === STUB_ID) {
+        return 'export default undefined;';
+      }
+      return null;
+    },
+  };
+}
+
 export interface NetlifyDeployerOptions {
   /**
    * Deploy target for Netlify.
@@ -91,8 +115,13 @@ export class NetlifyDeployer extends Deployer {
     });
 
     if (this.target === 'edge' && Array.isArray(inputOptions.plugins)) {
-      // Add node: prefix plugin at the start so it runs before subpathExternalsResolver
-      inputOptions.plugins.unshift(nodeBuiltinPrefix());
+      // Run before subpathExternalsResolver so the resolveId hooks win.
+      inputOptions.plugins.unshift(nodeBuiltinPrefix(), stubEdgeIncompatibleModules());
+
+      // Drop edge-incompatible modules from Rollup's external list so the stub plugin can redirect them.
+      if (Array.isArray(inputOptions.external)) {
+        inputOptions.external = inputOptions.external.filter(id => !EDGE_INCOMPATIBLE_MODULES.includes(id as string));
+      }
     }
 
     return inputOptions;

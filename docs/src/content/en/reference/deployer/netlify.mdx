@@ -7,7 +7,7 @@ packages:
 
 # NetlifyDeployer
 
-The `NetlifyDeployer` class handles packaging, configuration, and deployment by adapting Mastra's output to create an optimized version of your server. It extends the base [`Deployer`](/reference/deployer/) class with Netlify specific functionality. It enables you to run Mastra within Netlify serverless functions or edge functions.
+The `NetlifyDeployer` class handles packaging, configuration, and deployment by adapting Mastra's output to create an optimized version of your server. It extends the base [`Deployer`](/reference/deployer/) class with Netlify-specific functionality. It enables you to run Mastra within Netlify serverless functions or edge functions.
 
 ## Installation
 
@@ -41,14 +41,14 @@ export const mastra = new Mastra({
 ### Edge functions example
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { NetlifyDeployer } from "@mastra/deployer-netlify";
+import { Mastra } from '@mastra/core'
+import { NetlifyDeployer } from '@mastra/deployer-netlify'
 
 export const mastra = new Mastra({
   deployer: new NetlifyDeployer({
-    target: "edge",
+    target: 'edge',
   }),
-});
+})
 ```
 
 ## Output

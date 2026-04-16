@@ -46,14 +46,14 @@ export const mastra = new Mastra({
 To deploy as edge functions instead, pass `{ target: 'edge' }`:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { NetlifyDeployer } from "@mastra/deployer-netlify";
+import { Mastra } from '@mastra/core'
+import { NetlifyDeployer } from '@mastra/deployer-netlify'
 
 export const mastra = new Mastra({
   deployer: new NetlifyDeployer({
-    target: "edge",
+    target: 'edge',
   }),
-});
+})
 ```
 
 Edge functions run on Deno at the edge closest to your users. They have no hard execution timeout (only a CPU time limit), making them a better fit for longer-running AI workflows. See the [constructor options](/reference/deployer/netlify#constructor-options) for details.
