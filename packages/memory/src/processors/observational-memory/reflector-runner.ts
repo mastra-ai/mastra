@@ -601,6 +601,26 @@ export class ReflectorRunner {
       : freshRecord.bufferedReflection!;
     const combinedTokenCount = this.tokenCounter.countObservations(combinedObservations);
 
+    // Early-trigger overshoot guard:
+    // TTL and provider-change triggers can fire immediately after a buffered reflection
+    // is written — before observations have grown enough to produce a healthy
+    // reflection/raw mix on activation. If we activated now, the result would collapse
+    // to ~just the buffered reflection with an empty (or near-empty) raw tail,
+    // destroying the high-quality recent observations. Require the unreflected tail
+    // to be at least as large as the buffered reflection (≥ 50/50 post-activation
+    // mix) before consuming the buffer on an early trigger. Otherwise keep the buffer
+    // in place for the eventual threshold activation.
+    if (activationMetadata?.triggeredBy === 'ttl' || activationMetadata?.triggeredBy === 'provider_change') {
+      const unreflectedTailTokens = unreflectedContent ? this.tokenCounter.countObservations(unreflectedContent) : 0;
+      const bufferedReflectionTokens = freshRecord.bufferedReflectionTokens ?? 0;
+      if (unreflectedTailTokens < bufferedReflectionTokens) {
+        omDebug(
+          `[OM:reflect] tryActivateBufferedReflection: suppressing early ${activationMetadata.triggeredBy} activation — unreflectedTailTokens=${unreflectedTailTokens} < bufferedReflectionTokens=${bufferedReflectionTokens}; keeping buffer for threshold activation`,
+        );
+        return false;
+      }
+    }
+
     omDebug(
       `[OM:reflect] tryActivateBufferedReflection: activating, beforeTokens=${beforeTokens}, combinedTokenCount=${combinedTokenCount}, reflectedLineCount=${reflectedLineCount}, unreflectedLines=${unreflectedLines.length}`,
     );
@@ -769,6 +789,20 @@ export class ReflectorRunner {
         activationMetadata,
       );
       if (activationSuccess) {
+        return;
+      }
+      // Early-trigger overshoot guard:
+      // When tryActivateBufferedReflection returns false on an early trigger
+      // (TTL or provider-change) while a buffered reflection already exists, it
+      // suppressed activation to avoid collapsing active observations to mostly
+      // reflection. Don't fall through to sync reflection (which would compress
+      // the entire active observations — the lossy outcome we're preventing) or
+      // start another background buffering op on top of the existing one. Just
+      // return and let the next turn re-evaluate.
+      if ((ttlExpired || providerChanged) && record.bufferedReflection) {
+        omDebug(
+          `[OM:reflect] skipping sync fallback / re-buffer after suppressed early ${providerChanged ? 'provider_change' : 'ttl'} activation`,
+        );
         return;
       }
       if (this.reflectionConfig.blockAfter && observationTokens >= this.reflectionConfig.blockAfter) {
