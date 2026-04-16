@@ -1,3 +1,4 @@
+import { createTool } from '@mastra/core/tools';
 import { createTavilySearchTool, createTavilyExtractTool } from '@mastra/tavily';
 
 import { truncateStringForTokenEstimate } from '../utils/token-estimator.js';
@@ -16,19 +17,20 @@ export function hasTavilyKey(): boolean {
   return !!process.env.TAVILY_API_KEY;
 }
 
+/**
+ * Wraps the @mastra/tavily search tool with mastracode-specific behavior:
+ * relevance filtering, markdown string formatting, and token truncation.
+ * The underlying Tavily tool handles client init, input validation, and the API call.
+ */
 export function createWebSearchTool() {
-  const tool = createTavilySearchTool();
-  const originalExecute = tool.execute!;
+  const tavilySearchTool = createTavilySearchTool();
 
-  // We override execute to return a truncated string instead of structured data.
-  // This is intentional: mastracode needs token-budgeted string output for the model,
-  // not the full structured response. Clearing outputSchema so validation doesn't
-  // reject the string return, and the cast follows from that type change.
-  tool.outputSchema = undefined;
-
-  tool.execute = (async (input: any, context: any) => {
-    try {
-      const output: any = await originalExecute.call(tool, input, context);
+  return createTool({
+    id: 'web-search',
+    description: tavilySearchTool.description!,
+    inputSchema: tavilySearchTool.inputSchema!,
+    execute: async (input, context) => {
+      const output: any = await tavilySearchTool.execute!(input as any, context as any);
 
       const parts: string[] = [];
 
@@ -48,24 +50,23 @@ export function createWebSearchTool() {
 
       const text = parts.join('\n\n');
       return truncateStringForTokenEstimate(text, MAX_WEB_SEARCH_TOKENS);
-    } catch {
-      return 'No results';
-    }
-  }) as unknown as typeof tool.execute;
-
-  return tool;
+    },
+  });
 }
 
+/**
+ * Wraps the @mastra/tavily extract tool with mastracode-specific behavior:
+ * markdown string formatting and token truncation.
+ */
 export function createWebExtractTool() {
-  const tool = createTavilyExtractTool();
-  const originalExecute = tool.execute!;
+  const tavilyExtractTool = createTavilyExtractTool();
 
-  // Same pattern as search: override execute to return truncated string output.
-  tool.outputSchema = undefined;
-
-  tool.execute = (async (input: any, context: any) => {
-    try {
-      const output: any = await originalExecute.call(tool, input, context);
+  return createTool({
+    id: 'web-extract',
+    description: tavilyExtractTool.description!,
+    inputSchema: tavilyExtractTool.inputSchema!,
+    execute: async (input, context) => {
+      const output: any = await tavilyExtractTool.execute!(input as any, context as any);
 
       const parts: string[] = [];
 
@@ -79,10 +80,6 @@ export function createWebExtractTool() {
 
       const text = parts.join('\n\n');
       return truncateStringForTokenEstimate(text, MAX_WEB_EXTRACT_TOKENS);
-    } catch (error) {
-      return `Extraction failed: ${String(error)}`;
-    }
-  }) as unknown as typeof tool.execute;
-
-  return tool;
+    },
+  });
 }
