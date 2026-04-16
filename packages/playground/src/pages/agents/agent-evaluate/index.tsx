@@ -1,28 +1,43 @@
 import {
-  AgentPlaygroundEvaluate,
-  AgentEditFormProvider,
-  useAgent,
-  useStoredAgent,
-  useAgentCmsForm,
-  Spinner,
   PermissionDenied,
+  SessionExpired,
+  Spinner,
+  is401UnauthorizedError,
   is403ForbiddenError,
-  mapAgentResponseToDataSource,
-  useLinkComponent,
 } from '@mastra/playground-ui';
-import type { AgentDataSource } from '@mastra/playground-ui';
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router';
+import { AgentPlaygroundEvaluate } from '@/domains/agents/components/agent-playground/agent-playground-evaluate';
+import { AgentEditFormProvider } from '@/domains/agents/context/agent-edit-form-context';
+import { useAgent } from '@/domains/agents/hooks/use-agent';
+import { useAgentCmsForm } from '@/domains/agents/hooks/use-agent-cms-form';
+import { useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
+import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
+import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
+import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
+import { useLinkComponent } from '@/lib/framework';
 
 function AgentEvaluate() {
   const { agentId } = useParams();
   const { navigate } = useLinkComponent();
 
   const { data: codeAgent, isLoading: isLoadingCodeAgent, error } = useAgent(agentId!);
-  const { data: storedAgent, isLoading: isLoadingStoredAgent } = useStoredAgent(agentId!, { status: 'draft' });
+
+  // Fetch versions first — this endpoint returns an empty array for code-only agents
+  const { data: versionsData } = useAgentVersions({
+    agentId: agentId ?? '',
+    params: { sortDirection: 'DESC' },
+  });
+
+  // Only fetch stored agent details when versions exist (avoids 404 for code-only agents)
+  const hasVersions = (versionsData?.versions?.length ?? 0) > 0;
+  const { data: storedAgent, isLoading: isLoadingStoredAgent } = useStoredAgent(agentId!, {
+    status: 'draft',
+    enabled: hasVersions,
+  });
 
   const isCodeAgentOverride = codeAgent?.source === 'code';
-  const isLoading = isLoadingCodeAgent || isLoadingStoredAgent;
+  const isLoading = isLoadingCodeAgent || (hasVersions && isLoadingStoredAgent);
 
   const dataSource = useMemo<AgentDataSource>(() => {
     if (storedAgent) return storedAgent;
@@ -54,6 +69,14 @@ function AgentEvaluate() {
       return null;
     },
   );
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <SessionExpired />
+      </div>
+    );
+  }
 
   if (error && is403ForbiddenError(error)) {
     return (

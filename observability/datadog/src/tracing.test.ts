@@ -214,8 +214,8 @@ describe('DatadogExporter', () => {
   describe('span type mapping', () => {
     it.each([
       [SpanType.AGENT_RUN, 'agent'],
-      [SpanType.MODEL_GENERATION, 'llm'],
-      [SpanType.MODEL_STEP, 'task'],
+      [SpanType.MODEL_GENERATION, 'workflow'],
+      [SpanType.MODEL_STEP, 'llm'],
       [SpanType.MODEL_CHUNK, 'task'],
       [SpanType.TOOL_CALL, 'tool'],
       [SpanType.MCP_TOOL_CALL, 'tool'],
@@ -281,7 +281,44 @@ describe('DatadogExporter', () => {
       );
     });
 
-    it('sets native Datadog error status on ddSpan for error spans', async () => {
+    it('sets native Datadog error tags on ddSpan for error spans', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const span = createMockSpan({
+        errorInfo: {
+          message: 'Something went wrong',
+          name: 'ValidationError',
+          stack: 'ValidationError: Something went wrong\n    at test.ts:1:1',
+        },
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      // Verify all native Datadog error tags are set for Error Tracking UI
+      expect(capturedSpans[0].setTag).toHaveBeenCalledWith('error', true);
+      expect(capturedSpans[0].setTag).toHaveBeenCalledWith('error.message', 'Something went wrong');
+      expect(capturedSpans[0].setTag).toHaveBeenCalledWith('error.type', 'ValidationError');
+      expect(capturedSpans[0].setTag).toHaveBeenCalledWith(
+        'error.stack',
+        'ValidationError: Something went wrong\n    at test.ts:1:1',
+      );
+    });
+
+    it('uses category as error.type fallback when name is not present', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const span = createMockSpan({
+        errorInfo: {
+          message: 'Something went wrong',
+          category: 'runtime',
+        },
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      expect(capturedSpans[0].setTag).toHaveBeenCalledWith('error.type', 'runtime');
+      expect(capturedSpans[0].setTag).not.toHaveBeenCalledWith('error.stack', expect.anything());
+    });
+
+    it('uses "Error" as error.type fallback when neither name nor category is present', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
         errorInfo: {
@@ -291,8 +328,8 @@ describe('DatadogExporter', () => {
 
       await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
 
-      // Verify setTag was called with error: true
-      expect(capturedSpans[0].setTag).toHaveBeenCalledWith('error', true);
+      expect(capturedSpans[0].setTag).toHaveBeenCalledWith('error.type', 'Error');
+      expect(capturedSpans[0].setTag).not.toHaveBeenCalledWith('error.stack', expect.anything());
     });
 
     it('does not set native error status for non-error spans', async () => {
@@ -1050,7 +1087,7 @@ describe('DatadogExporter', () => {
     it('includes modelName and modelProvider for llm spans', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
-        type: SpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_STEP,
         attributes: {
           model: 'gpt-4',
           provider: 'openai',
@@ -1066,6 +1103,33 @@ describe('DatadogExporter', () => {
           modelProvider: 'openai',
         }),
         expect.any(Function),
+      );
+    });
+
+    it('inherits modelName/modelProvider from parent MODEL_GENERATION onto MODEL_STEP children', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const generation = createMockSpan({
+        id: 'gen',
+        traceId: 'trace-inherit',
+        isRootSpan: true,
+        type: SpanType.MODEL_GENERATION,
+        attributes: { model: 'gpt-4o', provider: 'openai' },
+      });
+      const step = createMockSpan({
+        id: 'step',
+        traceId: 'trace-inherit',
+        isRootSpan: false,
+        parentSpanId: 'gen',
+        type: SpanType.MODEL_STEP,
+        attributes: {},
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, step));
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, generation));
+
+      const stepCall = mockTrace.mock.calls.find(c => c[0].kind === 'llm');
+      expect(stepCall?.[0]).toEqual(
+        expect.objectContaining({ kind: 'llm', modelName: 'gpt-4o', modelProvider: 'openai' }),
       );
     });
 
@@ -1224,7 +1288,7 @@ describe('DatadogExporter', () => {
     it('excludes known LLM fields from attribute forwarding', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
-        type: SpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_STEP,
         metadata: { userKey: 'userValue' },
         attributes: {
           model: 'gpt-4', // Should be excluded (used for modelName)

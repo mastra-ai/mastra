@@ -3,6 +3,7 @@ import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import type { ToolsInput } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
+import { RequestContext } from '../request-context';
 import { createTool } from '../tools/tool';
 import { createWorkspaceTools } from '../workspace/tools/tools';
 
@@ -416,11 +417,21 @@ Use this tool when:
         workspace,
       });
 
-      // Compute the full set of workspace tool names (after renames) so
-      // prepareStep can selectively hide workspace tools not listed in
-      // allowedWorkspaceTools while leaving all other tools untouched.
-      const allWorkspaceToolNames = workspace ? new Set(Object.keys(createWorkspaceTools(workspace))) : undefined;
+      // Only resolve workspace tool names when an allowlist is configured,
+      // avoiding unnecessary createWorkspaceTools overhead for subagents
+      // that don't restrict workspace tools.
       const allowedWs = definition.allowedWorkspaceTools ? new Set(definition.allowedWorkspaceTools) : undefined;
+      const allWorkspaceToolNames =
+        workspace && allowedWs
+          ? new Set(
+              Object.keys(
+                await createWorkspaceTools(workspace, {
+                  requestContext: context?.requestContext ?? {},
+                  workspace,
+                }),
+              ),
+            )
+          : undefined;
 
       const startTime = Date.now();
 
@@ -435,15 +446,24 @@ Use this tool when:
       let partialText = '';
       const toolCallLog: Array<{ name: string; toolCallId: string; isError?: boolean }> = [];
 
+      // Build a request context for the subagent that inherits sandbox paths
+      // and harness state but strips threadId/resourceId so the subagent
+      // doesn't trigger OM enrichment on the parent's memory thread.
+      let subagentRequestContext: RequestContext | undefined;
+      if (context?.requestContext) {
+        subagentRequestContext = new RequestContext(context.requestContext.entries());
+        if (harnessCtx) {
+          subagentRequestContext.set('harness', { ...harnessCtx, threadId: null, resourceId: '' });
+        }
+      }
+
       try {
         const response = await subagent.stream(task, {
           maxSteps: definition.maxSteps ?? (definition.stopWhen ? undefined : 50),
           stopWhen: definition.stopWhen,
           abortSignal,
           requireToolApproval: false,
-          // Forward the parent's request context so the subagent inherits
-          // sandbox allowed paths and other harness state.
-          requestContext: context?.requestContext,
+          requestContext: subagentRequestContext,
           // When allowedWorkspaceTools is set, hide workspace tools not in
           // the list. Non-workspace tools always pass through.
           prepareStep:

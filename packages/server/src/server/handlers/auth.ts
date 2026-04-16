@@ -26,6 +26,7 @@ import {
   currentUserResponseSchema,
   credentialsSignInBodySchema,
   credentialsSignUpBodySchema,
+  refreshResponseSchema,
 } from '../schemas/auth';
 import { createPublicRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
@@ -430,6 +431,64 @@ export const POST_LOGOUT_ROUTE = createPublicRoute({
 });
 
 // ============================================================================
+// POST /auth/refresh
+// ============================================================================
+
+export const POST_REFRESH_ROUTE = createPublicRoute({
+  method: 'POST',
+  path: '/auth/refresh',
+  responseType: 'datastream-response',
+  responseSchema: refreshResponseSchema,
+  summary: 'Refresh session',
+  description: 'Refreshes the current session, extending its expiry. Sets a new session cookie on success.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    const { mastra, request } = ctx as any;
+
+    try {
+      const auth = getAuthProvider(mastra);
+
+      if (
+        !auth ||
+        !implementsInterface<ISessionProvider>(auth, 'refreshSession') ||
+        !implementsInterface<ISessionProvider>(auth, 'getSessionIdFromRequest')
+      ) {
+        throw new HTTPException(404, { message: 'Session refresh not configured' });
+      }
+
+      // Get session ID from request
+      const sessionId = auth.getSessionIdFromRequest(request);
+      if (!sessionId) {
+        throw new HTTPException(401, { message: 'No session' });
+      }
+
+      // Refresh the session
+      const newSession = await auth.refreshSession(sessionId);
+      if (!newSession) {
+        throw new HTTPException(401, { message: 'Session expired' });
+      }
+
+      // Build response with new session headers
+      const headers = new Headers({ 'Content-Type': 'application/json' });
+      if (implementsInterface<ISessionProvider>(auth, 'getSessionHeaders')) {
+        const sessionHeaders = auth.getSessionHeaders(newSession);
+        for (const [key, value] of Object.entries(sessionHeaders)) {
+          headers.append(key, value);
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers,
+      });
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      return handleError(error, 'Error refreshing session');
+    }
+  },
+});
+
+// ============================================================================
 // POST /auth/credentials/sign-in
 // ============================================================================
 
@@ -554,6 +613,7 @@ export const AUTH_ROUTES = [
   GET_SSO_LOGIN_ROUTE,
   GET_SSO_CALLBACK_ROUTE,
   POST_LOGOUT_ROUTE,
+  POST_REFRESH_ROUTE,
   POST_CREDENTIALS_SIGN_IN_ROUTE,
   POST_CREDENTIALS_SIGN_UP_ROUTE,
 ] as const;

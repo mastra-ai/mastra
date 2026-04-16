@@ -1,0 +1,222 @@
+---
+title: "Migrate from Mastra Cloud | Migration Guide"
+description: Learn how to migrate from Mastra Cloud to the Mastra platform
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Migrate from Mastra Cloud to Mastra platform
+
+The Mastra platform replaces Mastra Cloud with separate Studio and Server products, CLI-driven deploys, and a new observability system. This guide walks you through each step.
+
+## What changed
+
+| Area | Mastra Cloud | Mastra platform |
+| - | - | - |
+| **Products** | Single project | Separate Studio and Server |
+| **Deploys** | Auto-deploy on push | CLI-driven (`mastra studio deploy`, `mastra server deploy`) |
+| **Project creation** | GitHub import | CLI creates projects on first deploy |
+| **Storage** | Managed LibSQL (Cloud Store) or bring your own | Bring your own hosted database |
+| **Observability** | Logger-based | `Observability` class with exporters |
+| **Env vars** | Set during project setup | Seeded from `.env` on first deploy, managed in dashboard after |
+| **URLs** | Single URL | Separate Studio and Server URLs |
+
+## Before you start
+
+<Steps>
+  <StepItem>
+    Install or update the CLI:
+
+    ```bash npm2yarn
+    npm install -g mastra@latest
+    ```
+  </StepItem>
+
+  <StepItem>
+    Authenticate:
+
+    ```bash
+    mastra auth login
+    ```
+  </StepItem>
+
+  <StepItem>
+    Verify your project builds locally:
+
+    ```bash
+    mastra build
+    ```
+  </StepItem>
+</Steps>
+
+## Replace Mastra Cloud Store with a hosted database
+
+Mastra Cloud provided a managed LibSQL database. The Mastra platform does not host a database for you, so you need to point your storage at an externally hosted instance.
+
+If you were already using a hosted database ("bring your own"), no changes are needed. Make sure the connection string is set as an environment variable in the dashboard rather than hardcoded.
+
+If you were using `file:./mastra.db` with Cloud Store, please [contact support](mailto:support@mastra.ai) for a migration path to export and import your data.
+
+## Update observability configuration
+
+Mastra Cloud used logger-based tracing. The Mastra platform uses the `Observability` class with explicit exporters.
+
+Install the observability package:
+
+```bash npm2yarn
+npm install @mastra/observability
+```
+
+**Before (Mastra Cloud):**
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { PinoLogger } from '@mastra/loggers'
+
+export const mastra = new Mastra({
+  logger: new PinoLogger({ name: 'my-app', level: 'info' }),
+  // traces appear in Cloud dashboard automatically
+})
+```
+
+**After (Mastra platform):**
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from '@mastra/observability'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'my-app',
+        exporters: [new DefaultExporter(), new CloudExporter()],
+        spanOutputProcessors: [new SensitiveDataFilter()],
+      },
+    },
+  }),
+})
+```
+
+- `DefaultExporter` persists traces to your storage backend for [Studio](/docs/studio/observability).
+- `CloudExporter` Sends observability data to hosted Mastra Studio when `MASTRA_CLOUD_ACCESS_TOKEN` is set.
+- `SensitiveDataFilter` redacts passwords, tokens, and keys from span data before export.
+
+See the [observability overview](/docs/observability/overview) for the full configuration, including composite storage with DuckDB for metrics.
+
+## Deploy Studio
+
+Deploy your hosted Studio instance:
+
+```bash
+mastra studio deploy
+```
+
+The CLI builds your project, uploads the artifact, and deploys it. On first deploy, a `.mastra-project.json` file is created to link your local project to the platform. Commit this file to your repository.
+
+See [Studio deployment](/docs/studio/deployment#mastra-platform) for details.
+
+## Deploy Server (optional)
+
+If you need a production API endpoint, deploy a Server:
+
+```bash
+mastra server deploy
+```
+
+This creates a separate deployment with a stable API URL, environment variable management, and custom domain support. See the [Server deployment guide](/guides/deployment/mastra-platform) for the full walkthrough.
+
+:::note
+Environment variables from `.env`, `.env.local`, and `.env.production` are included automatically on first deploy. After that, manage env vars through the [web dashboard](https://projects.mastra.ai).
+Review and sanitize these files before first deploy to avoid uploading development-only or personal secrets.
+:::
+
+## Set up CI (optional)
+
+Mastra Cloud auto-deployed on push. The Mastra platform uses CLI-driven deploys, which you can run from any CI provider.
+
+### Prerequisites
+
+1. Create an API token:
+
+   ```bash
+   mastra auth tokens create ci-deploy
+   ```
+
+1. Store the token as a GitHub Actions secret (e.g. `MASTRA_API_TOKEN`).
+
+1. Commit `.mastra-project.json` to your repo (generated on your first manual deploy).
+
+When `MASTRA_API_TOKEN` is set, the CLI runs in headless mode and skips all interactive prompts.
+
+### Deploy Server on push to main
+
+Server deploy accepts org and project from `.mastra-project.json`, so no extra env vars are needed beyond the token:
+
+```yaml title=".github/workflows/deploy-server.yml"
+name: Deploy to Mastra Server
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pnpm install
+      - run: pnpm mastra server deploy --yes --config .mastra-project.json
+        env:
+          MASTRA_API_TOKEN: ${{ secrets.MASTRA_API_TOKEN }}
+```
+
+### Deploy Studio on push to main
+
+Studio deploy requires `MASTRA_ORG_ID` and `MASTRA_PROJECT_ID` as env vars in headless mode, even when `--config` is provided:
+
+```yaml title=".github/workflows/deploy-studio.yml"
+name: Deploy to Mastra Studio
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pnpm install
+      - run: pnpm mastra studio deploy --yes --config .mastra-project.json
+        env:
+          MASTRA_API_TOKEN: ${{ secrets.MASTRA_API_TOKEN }}
+          MASTRA_ORG_ID: ${{ secrets.MASTRA_ORG_ID }}
+          MASTRA_PROJECT_ID: ${{ secrets.MASTRA_PROJECT_ID }}
+```
+
+## Decommission old Cloud project
+
+Update any clients pointing to your old Mastra Cloud URL to the new Server or Studio URL. Verify traces appear in the new platform by checking the [Studio observability dashboard](/docs/studio/observability). Delete your old Mastra Cloud project once everything is confirmed working.
+
+## Related
+
+- [Observability overview](/docs/observability/overview)
+- [Studio deployment](/docs/studio/deployment#mastra-platform)
+- [Server deployment](/guides/deployment/mastra-platform)
+- [CLI reference](/reference/cli/mastra)
+- [Mastra platform overview](/docs/mastra-platform/overview)

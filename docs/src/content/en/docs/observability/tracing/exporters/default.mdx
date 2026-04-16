@@ -68,7 +68,7 @@ export const mastra = new Mastra({
         serviceName: 'mastra',
         exporters: [
           new DefaultExporter(), // Persists traces to storage for Studio
-          new CloudExporter(), // Sends traces to Mastra Cloud (requires MASTRA_CLOUD_ACCESS_TOKEN)
+          new CloudExporter(), // Sends observability data to hosted Mastra Studio (requires MASTRA_CLOUD_ACCESS_TOKEN)
         ],
         spanOutputProcessors: [new SensitiveDataFilter()],
       },
@@ -212,5 +212,5 @@ new DefaultExporter({
 
 - [Tracing Overview](/docs/observability/tracing/overview)
 - [CloudExporter](/docs/observability/tracing/exporters/cloud)
-- [Composite Storage](/reference/storage/composite) - Combine multiple storage providers
+- [Composite Storage](/reference/storage/composite): Combine multiple storage providers
 - [Storage Configuration](/docs/memory/storage)

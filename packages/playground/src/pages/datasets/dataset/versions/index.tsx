@@ -1,25 +1,26 @@
 import {
-  Header,
-  MainContentLayout,
-  MainContentContent,
-  Icon,
   Breadcrumb,
-  Crumb,
-  MainHeader,
-  TextAndIcon,
   Button,
-  useDataset,
-  useDatasetItems,
-  Columns,
   Column,
-  DatasetCompareVersionToolbar,
-  DatasetCompareVersionsList,
+  Columns,
+  Crumb,
+  Header,
+  Icon,
+  MainContentContent,
+  MainContentLayout,
+  MainHeader,
   PermissionDenied,
+  SessionExpired,
+  TextAndIcon,
+  is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { ArrowLeft, Database, ScaleIcon, HistoryIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router';
+import { DatasetCompareVersionToolbar, DatasetCompareVersionsList } from '@/domains/datasets';
+import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
+import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 
 function DatasetCompareVersionsPage() {
   const { datasetId } = useParams<{ datasetId: string }>();
@@ -54,6 +55,16 @@ function DatasetCompareVersionsPage() {
   const itemsAMap = useMemo(() => new Map(itemsA.map(i => [i.id, i])), [itemsA]);
   const itemsBMap = useMemo(() => new Map(itemsB.map(i => [i.id, i])), [itemsB]);
 
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
   if (error && is403ForbiddenError(error)) {
     return (
       <MainContentLayout>
@@ -69,7 +80,7 @@ function DatasetCompareVersionsPage() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to="/evaluation?tab=datasets">
+            <Crumb as={Link} to="/datasets">
               <Icon>
                 <Database />
               </Icon>
@@ -96,7 +107,7 @@ function DatasetCompareVersionsPage() {
   };
 
   const handleVersionChange = (newA: string, newB: string) => {
-    void navigate(`/evaluation/datasets/${datasetId}/versions?ids=${newA},${newB}`, {
+    void navigate(`/datasets/${datasetId}/versions?ids=${newA},${newB}`, {
       replace: true,
     });
   };
@@ -105,13 +116,13 @@ function DatasetCompareVersionsPage() {
     <MainContentLayout>
       <Header>
         <Breadcrumb>
-          <Crumb as={Link} to="/evaluation?tab=datasets">
+          <Crumb as={Link} to="/datasets">
             <Icon>
               <Database />
             </Icon>
             Datasets
           </Crumb>
-          <Crumb as={Link} to={`/evaluation/datasets/${datasetId}`}>
+          <Crumb as={Link} to={`/datasets/${datasetId}`}>
             {dataset?.name || datasetId?.slice(0, 8)}
           </Crumb>
           <Crumb isCurrent as="span">
@@ -138,7 +149,7 @@ function DatasetCompareVersionsPage() {
               </MainHeader.Description>
             </MainHeader.Column>
             <MainHeader.Column>
-              <Button as={Link} to={`/evaluation/datasets/${datasetId}`}>
+              <Button as={Link} to={`/datasets/${datasetId}`}>
                 <ArrowLeft />
                 Back to Dataset
               </Button>

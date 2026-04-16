@@ -121,6 +121,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/channels',
+          label: 'Channels',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/networks',
           label: 'Networks',
           customProps: {
@@ -227,6 +235,30 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Editor',
+      customProps: {
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'editor/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'editor/tools',
+          label: 'Tools',
+        },
+        {
+          type: 'doc',
+          id: 'editor/prompts',
+          label: 'Prompts',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Streaming',
       items: [
         {
@@ -271,9 +303,6 @@ const sidebars = {
     {
       type: 'category',
       label: 'Workspaces',
-      customProps: {
-        tags: ['new'],
-      },
       items: [
         {
           type: 'doc',
@@ -304,6 +333,30 @@ const sidebars = {
           type: 'doc',
           id: 'workspace/search',
           label: 'Search and Indexing',
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Browser',
+      customProps: {
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'browser/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'browser/agent-browser',
+          label: 'AgentBrowser',
+        },
+        {
+          type: 'doc',
+          id: 'browser/stagehand',
+          label: 'Stagehand',
         },
       ],
     },
@@ -507,6 +560,11 @@ const sidebars = {
                 },
                 {
                   type: 'doc',
+                  id: 'observability/tracing/exporters/arthur',
+                  label: 'Arthur',
+                },
+                {
+                  type: 'doc',
                   id: 'observability/tracing/exporters/braintrust',
                   label: 'Braintrust',
                 },
@@ -617,30 +675,20 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Mastra Cloud',
+      label: 'Mastra Platform',
       customProps: {
-        tags: ['beta'],
+        tags: ['new'],
       },
       items: [
         {
           type: 'doc',
-          id: 'mastra-cloud/overview',
+          id: 'mastra-platform/overview',
           label: 'Overview',
         },
         {
           type: 'doc',
-          id: 'mastra-cloud/setup',
-          label: 'Setup',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/deployment',
-          label: 'Deployment',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/observability',
-          label: 'Observability',
+          id: 'mastra-platform/configuration',
+          label: 'Configuration',
         },
       ],
     },

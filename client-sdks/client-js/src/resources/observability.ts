@@ -1,4 +1,4 @@
-import type { ListScoresResponse } from '@mastra/core/evals';
+import type { ListScoresResponse, Trajectory } from '@mastra/core/evals';
 import type { SpanType } from '@mastra/core/observability';
 import type {
   TraceRecord,
@@ -130,6 +130,16 @@ export class Observability extends BaseResource {
    */
   getTrace(traceId: string): Promise<TraceRecord> {
     return this.request(`/observability/traces/${traceId}`);
+  }
+
+  /**
+   * Extracts a structured trajectory from a trace's spans.
+   *
+   * @param traceId - ID of the trace to extract trajectory from
+   * @returns Promise containing the trajectory with ordered steps
+   */
+  getTraceTrajectory(traceId: string): Promise<Trajectory> {
+    return this.request(`/observability/traces/${traceId}/trajectory`);
   }
 
   /**

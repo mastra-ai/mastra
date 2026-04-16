@@ -35,6 +35,7 @@ import {
   sanitizeObservationLines,
   detectDegenerateRepetition,
 } from '../observer-agent';
+import { ObserverRunner } from '../observer-runner';
 import { ObservationalMemoryProcessor } from '../processor';
 import type { MemoryContextProvider } from '../processor';
 
@@ -683,6 +684,517 @@ describe('Storage Operations', () => {
       const history = await storage.getObservationalMemoryHistory(threadId, resourceId, 2);
       expect(history.length).toBe(2);
     });
+
+    it('should filter by from date', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await new Promise(r => setTimeout(r, 50));
+      const midpoint = new Date();
+      await new Promise(r => setTimeout(r, 50));
+
+      const gen2 = await storage.createReflectionGeneration({
+        currentRecord: initial,
+        reflection: '- Reflection after midpoint',
+        tokenCount: 50,
+      });
+
+      const history = await storage.getObservationalMemoryHistory(threadId, resourceId, undefined, { from: midpoint });
+      expect(history.length).toBe(1);
+      expect(history[0]!.id).toBe(gen2.id);
+    });
+
+    it('should filter by to date', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await new Promise(r => setTimeout(r, 50));
+      const midpoint = new Date();
+      await new Promise(r => setTimeout(r, 50));
+
+      await storage.createReflectionGeneration({
+        currentRecord: initial,
+        reflection: '- Reflection after midpoint',
+        tokenCount: 50,
+      });
+
+      const history = await storage.getObservationalMemoryHistory(threadId, resourceId, undefined, { to: midpoint });
+      expect(history.length).toBe(1);
+      expect(history[0]!.id).toBe(initial.id);
+    });
+
+    it('should support offset', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      let current = initial;
+      for (let i = 0; i < 3; i++) {
+        current = await storage.createReflectionGeneration({
+          currentRecord: current,
+          reflection: `- Reflection ${i + 1}`,
+          tokenCount: 50,
+        });
+      }
+
+      // 4 records total (gen 0-3), offset 2 skips 2 newest
+      const history = await storage.getObservationalMemoryHistory(threadId, resourceId, undefined, { offset: 2 });
+      expect(history.length).toBe(2);
+      expect(history[0]!.generationCount).toBe(1);
+      expect(history[1]!.generationCount).toBe(0);
+    });
+
+    it('should support offset with limit', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      let current = initial;
+      for (let i = 0; i < 3; i++) {
+        current = await storage.createReflectionGeneration({
+          currentRecord: current,
+          reflection: `- Reflection ${i + 1}`,
+          tokenCount: 50,
+        });
+      }
+
+      // offset 1, limit 2: skip newest, take next 2
+      const history = await storage.getObservationalMemoryHistory(threadId, resourceId, 2, { offset: 1 });
+      expect(history.length).toBe(2);
+      expect(history[0]!.generationCount).toBe(2);
+      expect(history[1]!.generationCount).toBe(1);
+    });
+
+    it('should return all records when empty options object is passed', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.createReflectionGeneration({
+        currentRecord: initial,
+        reflection: '- Reflection 1',
+        tokenCount: 50,
+      });
+
+      const withEmptyOptions = await storage.getObservationalMemoryHistory(threadId, resourceId, undefined, {});
+      const withoutOptions = await storage.getObservationalMemoryHistory(threadId, resourceId);
+
+      expect(withEmptyOptions.length).toBe(2);
+      expect(withEmptyOptions.length).toBe(withoutOptions.length);
+      expect(withEmptyOptions.map(r => r.id)).toEqual(withoutOptions.map(r => r.id));
+    });
+
+    it('should return empty array when from is in the future', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.createReflectionGeneration({
+        currentRecord: initial,
+        reflection: '- Reflection 1',
+        tokenCount: 50,
+      });
+
+      const futureDate = new Date(Date.now() + 86_400_000);
+      const history = await storage.getObservationalMemoryHistory(threadId, resourceId, undefined, {
+        from: futureDate,
+      });
+
+      expect(history).toEqual([]);
+    });
+
+    it('should return empty array when to is far in the past', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.createReflectionGeneration({
+        currentRecord: initial,
+        reflection: '- Reflection 1',
+        tokenCount: 50,
+      });
+
+      const pastDate = new Date('2000-01-01T00:00:00Z');
+      const history = await storage.getObservationalMemoryHistory(threadId, resourceId, undefined, {
+        to: pastDate,
+      });
+
+      expect(history).toEqual([]);
+    });
+
+    it('should return empty array when offset exceeds total records', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.createReflectionGeneration({
+        currentRecord: initial,
+        reflection: '- Reflection 1',
+        tokenCount: 50,
+      });
+
+      const history = await storage.getObservationalMemoryHistory(threadId, resourceId, undefined, { offset: 10 });
+
+      expect(history).toEqual([]);
+    });
+
+    it('should treat offset 0 the same as no offset', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      let current = initial;
+      for (let i = 0; i < 2; i++) {
+        current = await storage.createReflectionGeneration({
+          currentRecord: current,
+          reflection: `- Reflection ${i + 1}`,
+          tokenCount: 50,
+        });
+      }
+
+      const withOffset0 = await storage.getObservationalMemoryHistory(threadId, resourceId, undefined, { offset: 0 });
+      const withoutOffset = await storage.getObservationalMemoryHistory(threadId, resourceId);
+
+      expect(withOffset0.length).toBe(3);
+      expect(withOffset0.map(r => r.id)).toEqual(withoutOffset.map(r => r.id));
+    });
+
+    it('should preserve reverse chronological order when filtering by from', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await new Promise(r => setTimeout(r, 50));
+      const midpoint = new Date();
+      await new Promise(r => setTimeout(r, 50));
+
+      let current = initial;
+      for (let i = 0; i < 3; i++) {
+        current = await storage.createReflectionGeneration({
+          currentRecord: current,
+          reflection: `- Reflection ${i + 1}`,
+          tokenCount: 50,
+        });
+      }
+
+      const history = await storage.getObservationalMemoryHistory(threadId, resourceId, undefined, { from: midpoint });
+
+      expect(history.length).toBe(3);
+      expect(history[0]!.generationCount).toBeGreaterThan(history[1]!.generationCount);
+      expect(history[1]!.generationCount).toBeGreaterThan(history[2]!.generationCount);
+    });
+
+    it('should preserve reverse chronological order when using offset', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      let current = initial;
+      for (let i = 0; i < 4; i++) {
+        current = await storage.createReflectionGeneration({
+          currentRecord: current,
+          reflection: `- Reflection ${i + 1}`,
+          tokenCount: 50,
+        });
+      }
+
+      const history = await storage.getObservationalMemoryHistory(threadId, resourceId, undefined, { offset: 1 });
+
+      expect(history.length).toBe(4);
+      for (let i = 0; i < history.length - 1; i++) {
+        expect(history[i]!.generationCount).toBeGreaterThan(history[i + 1]!.generationCount);
+      }
+    });
+
+    it('should combine from + to + limit correctly', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await new Promise(r => setTimeout(r, 50));
+      const rangeStart = new Date();
+      await new Promise(r => setTimeout(r, 50));
+
+      let current = initial;
+      for (let i = 0; i < 3; i++) {
+        current = await storage.createReflectionGeneration({
+          currentRecord: current,
+          reflection: `- Reflection ${i + 1}`,
+          tokenCount: 50,
+        });
+      }
+
+      await new Promise(r => setTimeout(r, 50));
+      const rangeEnd = new Date();
+      await new Promise(r => setTimeout(r, 50));
+
+      await storage.createReflectionGeneration({
+        currentRecord: current,
+        reflection: '- After range',
+        tokenCount: 50,
+      });
+
+      // 3 records in range, but limit to 2
+      const history = await storage.getObservationalMemoryHistory(threadId, resourceId, 2, {
+        from: rangeStart,
+        to: rangeEnd,
+      });
+
+      expect(history.length).toBe(2);
+      expect(history[0]!.generationCount).toBe(3);
+      expect(history[1]!.generationCount).toBe(2);
+    });
+
+    it('should combine from + to + offset correctly', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await new Promise(r => setTimeout(r, 50));
+      const rangeStart = new Date();
+      await new Promise(r => setTimeout(r, 50));
+
+      let current = initial;
+      for (let i = 0; i < 3; i++) {
+        current = await storage.createReflectionGeneration({
+          currentRecord: current,
+          reflection: `- Reflection ${i + 1}`,
+          tokenCount: 50,
+        });
+      }
+
+      await new Promise(r => setTimeout(r, 50));
+      const rangeEnd = new Date();
+      await new Promise(r => setTimeout(r, 50));
+
+      await storage.createReflectionGeneration({
+        currentRecord: current,
+        reflection: '- After range',
+        tokenCount: 50,
+      });
+
+      // 3 records in range, skip the newest 1
+      const history = await storage.getObservationalMemoryHistory(threadId, resourceId, undefined, {
+        from: rangeStart,
+        to: rangeEnd,
+        offset: 1,
+      });
+
+      expect(history.length).toBe(2);
+      expect(history[0]!.generationCount).toBe(2);
+      expect(history[1]!.generationCount).toBe(1);
+    });
+
+    it('should combine from + to + offset + limit for full pagination', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await new Promise(r => setTimeout(r, 50));
+      const rangeStart = new Date();
+      await new Promise(r => setTimeout(r, 50));
+
+      let current = initial;
+      for (let i = 0; i < 4; i++) {
+        current = await storage.createReflectionGeneration({
+          currentRecord: current,
+          reflection: `- Reflection ${i + 1}`,
+          tokenCount: 50,
+        });
+      }
+
+      await new Promise(r => setTimeout(r, 50));
+      const rangeEnd = new Date();
+      await new Promise(r => setTimeout(r, 50));
+
+      await storage.createReflectionGeneration({
+        currentRecord: current,
+        reflection: '- After range',
+        tokenCount: 50,
+      });
+
+      // 4 records in range (gen 4,3,2,1 desc), offset 1, limit 2 => gen 3, gen 2
+      const history = await storage.getObservationalMemoryHistory(threadId, resourceId, 2, {
+        from: rangeStart,
+        to: rangeEnd,
+        offset: 1,
+      });
+
+      expect(history.length).toBe(2);
+      expect(history[0]!.generationCount).toBe(3);
+      expect(history[1]!.generationCount).toBe(2);
+    });
+
+    it('should paginate correctly using offset + limit across multiple pages', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Create 6 records total (gen 0..5)
+      let current = initial;
+      for (let i = 0; i < 5; i++) {
+        current = await storage.createReflectionGeneration({
+          currentRecord: current,
+          reflection: `- Reflection ${i + 1}`,
+          tokenCount: 50,
+        });
+      }
+
+      const pageSize = 2;
+
+      // Page 1: offset 0, limit 2 => gen 5, 4
+      const page1 = await storage.getObservationalMemoryHistory(threadId, resourceId, pageSize, { offset: 0 });
+      expect(page1.length).toBe(2);
+      expect(page1[0]!.generationCount).toBe(5);
+      expect(page1[1]!.generationCount).toBe(4);
+
+      // Page 2: offset 2, limit 2 => gen 3, 2
+      const page2 = await storage.getObservationalMemoryHistory(threadId, resourceId, pageSize, { offset: 2 });
+      expect(page2.length).toBe(2);
+      expect(page2[0]!.generationCount).toBe(3);
+      expect(page2[1]!.generationCount).toBe(2);
+
+      // Page 3: offset 4, limit 2 => gen 1, 0
+      const page3 = await storage.getObservationalMemoryHistory(threadId, resourceId, pageSize, { offset: 4 });
+      expect(page3.length).toBe(2);
+      expect(page3[0]!.generationCount).toBe(1);
+      expect(page3[1]!.generationCount).toBe(0);
+
+      // Page 4: offset 6, limit 2 => empty
+      const page4 = await storage.getObservationalMemoryHistory(threadId, resourceId, pageSize, { offset: 6 });
+      expect(page4).toEqual([]);
+
+      // All pages combined should cover all 6 records with no duplicates
+      const allIds = [...page1, ...page2, ...page3].map(r => r.id);
+      expect(new Set(allIds).size).toBe(6);
+    });
+
+    it('should return correct results when limit exceeds available records after offset', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      let current = initial;
+      for (let i = 0; i < 2; i++) {
+        current = await storage.createReflectionGeneration({
+          currentRecord: current,
+          reflection: `- Reflection ${i + 1}`,
+          tokenCount: 50,
+        });
+      }
+
+      // offset 2 leaves only 1 record, but limit is 10
+      const history = await storage.getObservationalMemoryHistory(threadId, resourceId, 10, { offset: 2 });
+      expect(history.length).toBe(1);
+      expect(history[0]!.generationCount).toBe(0);
+    });
+
+    it('should return correct results when limit exceeds available records after date filtering', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await new Promise(r => setTimeout(r, 50));
+      const midpoint = new Date();
+      await new Promise(r => setTimeout(r, 50));
+
+      await storage.createReflectionGeneration({
+        currentRecord: initial,
+        reflection: '- After midpoint',
+        tokenCount: 50,
+      });
+
+      // Limit 100 but only 1 record matches
+      const history = await storage.getObservationalMemoryHistory(threadId, resourceId, 100, { from: midpoint });
+      expect(history.length).toBe(1);
+    });
+
+    it('should handle offset on a single record', async () => {
+      await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // offset 0 on single record returns it
+      const withOffset0 = await storage.getObservationalMemoryHistory(threadId, resourceId, undefined, { offset: 0 });
+      expect(withOffset0.length).toBe(1);
+
+      // offset 1 on single record returns nothing
+      const withOffset1 = await storage.getObservationalMemoryHistory(threadId, resourceId, undefined, { offset: 1 });
+      expect(withOffset1).toEqual([]);
+    });
+
+    it('should return empty array when from equals to and no record matches', async () => {
+      await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      const exactDate = new Date('2099-06-15T12:00:00.000Z');
+      const history = await storage.getObservationalMemoryHistory(threadId, resourceId, undefined, {
+        from: exactDate,
+        to: exactDate,
+      });
+
+      expect(history).toEqual([]);
+    });
   });
 
   describe('clearObservationalMemory', () => {
@@ -715,19 +1227,37 @@ describe('Observer Agent Helpers', () => {
       const messages = [createTestMessage('Hello', 'user'), createTestMessage('Hi there!', 'assistant')];
 
       const formatted = formatMessagesForObserver(messages);
-      expect(formatted).toContain('**User');
+      expect(formatted).toMatch(/^[A-Z][a-z]{2} \d{1,2} \d{4}:/);
+      expect(formatted).toContain('User');
       expect(formatted).toContain('Hello');
-      expect(formatted).toContain('**Assistant');
+      expect(formatted).toContain('Assistant');
       expect(formatted).toContain('Hi there!');
     });
 
-    it('should include timestamps if present', () => {
-      const msg = createTestMessage('Test', 'user');
-      msg.createdAt = new Date('2024-12-04T10:30:00Z');
+    it('should include date headers on part day changes and only repeat times when they change', () => {
+      const first = createTestMessage('ignored', 'assistant');
+      first.createdAt = new Date('2024-12-04T10:30:00Z');
+      first.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'first', createdAt: Date.parse('2024-12-04T10:30:00Z') } as any,
+          { type: 'reasoning', reasoning: 'thinking', createdAt: Date.parse('2024-12-04T10:30:00Z') } as any,
+          { type: 'text', text: 'second', createdAt: Date.parse('2024-12-04T10:31:00Z') } as any,
+          { type: 'text', text: 'next day', createdAt: Date.parse('2024-12-05T12:01:00Z') } as any,
+        ],
+      } as any;
 
-      const formatted = formatMessagesForObserver([msg]);
-      expect(formatted).toContain('2024');
-      expect(formatted).toContain('Dec');
+      const second = createTestMessage('later', 'user');
+      second.createdAt = new Date('2024-12-05T12:01:00Z');
+
+      const formatted = formatMessagesForObserver([first, second]);
+      expect((formatted.match(/Dec 4 2024:/g) ?? []).length).toBe(1);
+      expect((formatted.match(/Dec 5 2024:/g) ?? []).length).toBe(1);
+      expect(formatted).toMatch(/Assistant \([^)]*\): first/);
+      expect(formatted).toContain('Reasoning: thinking');
+      expect(formatted).toMatch(/Assistant \([^)]*\): second/);
+      expect(formatted).toMatch(/Assistant \([^)]*\): next day/);
+      expect(formatted).toContain('\nUser: later');
     });
 
     it('should include attachment placeholders for image and file parts', () => {
@@ -760,8 +1290,8 @@ describe('Observer Agent Helpers', () => {
       const textMsg = createTestMessage('Hello', 'user');
 
       const formatted = formatMessagesForObserver([dataMsg, textMsg]);
-      expect(formatted).not.toContain('**Assistant');
-      expect(formatted).toContain('**User');
+      expect(formatted).not.toMatch(/Assistant(?: \([^)]*\))?:/);
+      expect(formatted).toMatch(/User( \([^)]*\))?:/);
       expect(formatted).toContain('Hello');
     });
 
@@ -804,8 +1334,8 @@ describe('Observer Agent Helpers', () => {
       const textMsg = createTestMessage('Real content', 'user');
 
       const formatted = formatMessagesForObserver([reasoningMsg, textMsg]);
-      expect(formatted).not.toContain('**Assistant');
-      expect(formatted).toContain('**User');
+      expect(formatted).not.toContain('Assistant:');
+      expect(formatted).toMatch(/User( \([^)]*\))?:/);
       expect(formatted).toContain('Real content');
     });
 
@@ -831,7 +1361,7 @@ describe('Observer Agent Helpers', () => {
       } as any;
 
       const formatted = formatMessagesForObserver([msg], { maxToolResultTokens: 200 });
-      expect(formatted).toContain('[Tool Result: web_search_20250305]');
+      expect(formatted).toContain('Tool Result web_search_20250305');
       expect(formatted).toContain('[stripped encryptedContent: 6000 characters]');
       expect(formatted).toContain('[truncated ~');
       expect(formatted).not.toContain('x'.repeat(200));
@@ -874,6 +1404,92 @@ describe('Observer Agent Helpers', () => {
       expect(content[2]).toMatchObject({ type: 'image', image: 'https://example.com/reference-board.png' });
       expect(content[3]).toMatchObject({ type: 'image', image: 'https://example.com/annotated-photo.jpg' });
       expect(content).not.toContainEqual(expect.objectContaining({ image: 'https://example.com/floorplan.pdf' }));
+    });
+
+    it('should reuse part-level date grouping without message separators', () => {
+      const assistant = createTestMessage('ignored', 'assistant');
+      assistant.createdAt = new Date('2024-12-04T10:30:00Z');
+      assistant.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'first', createdAt: Date.parse('2024-12-04T10:30:00Z') } as any,
+          { type: 'text', text: 'next day', createdAt: Date.parse('2024-12-05T12:01:00Z') } as any,
+        ],
+      } as any;
+
+      const user = createTestMessage('later', 'user');
+      user.createdAt = new Date('2024-12-05T12:01:00Z');
+
+      const historyMessage = buildObserverHistoryMessage([assistant, user]) as any;
+      const joinedText = historyMessage.content
+        .filter((part: any) => part.type === 'text')
+        .map((part: any) => part.text)
+        .join('\n');
+
+      expect((joinedText.match(/Dec 4 2024:/g) ?? []).length).toBe(1);
+      expect((joinedText.match(/Dec 5 2024:/g) ?? []).length).toBe(1);
+      expect(joinedText).not.toContain('---');
+      expect(joinedText).toContain('\nUser: later');
+    });
+
+    it('should render mixed content parts into the exact observer history text the model sees', () => {
+      const assistant = createTestMessage('ignored', 'assistant');
+      assistant.createdAt = new Date(2024, 11, 4, 10, 30);
+      assistant.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'I found two candidate vendors.', createdAt: new Date(2024, 11, 4, 10, 30) },
+          {
+            type: 'reasoning',
+            reasoning: 'Comparing price and delivery windows.',
+            createdAt: new Date(2024, 11, 4, 10, 30),
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'call',
+              toolCallId: 'tool-1',
+              toolName: 'web_search',
+              args: { query: 'best local print vendors' },
+            },
+            createdAt: new Date(2024, 11, 4, 10, 31),
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'web_search',
+              args: { query: 'best local print vendors' },
+              result: { topVendor: 'Acme Print', etaDays: 3 },
+            },
+            createdAt: new Date(2024, 11, 4, 10, 31),
+          },
+          {
+            type: 'file',
+            data: 'https://example.com/quote.pdf',
+            mimeType: 'application/pdf',
+            filename: 'quote.pdf',
+            createdAt: new Date(2024, 11, 5, 9, 0),
+          },
+        ],
+      } as any;
+
+      const historyMessage = buildObserverHistoryMessage([assistant]) as any;
+      const textParts = historyMessage.content.filter((part: any) => part.type === 'text');
+
+      expect(textParts[0].text).toContain('## New Message History to Observe');
+      expect(textParts[1].text).toBe(
+        `Dec 4 2024:\nAssistant (10:30 AM): I found two candidate vendors.\nReasoning: Comparing price and delivery windows.\nTool Call web_search (10:31 AM): {\n  "query": "best local print vendors"\n}\nTool Result web_search: {\n  "topVendor": "Acme Print",\n  "etaDays": 3\n}\nDec 5 2024:\nFile (9:00 AM): [File #1: quote.pdf]`,
+      );
+      expect(historyMessage.content).toContainEqual(
+        expect.objectContaining({
+          type: 'file',
+          data: 'https://example.com/quote.pdf',
+          mimeType: 'application/pdf',
+          filename: 'quote.pdf',
+        }),
+      );
     });
 
     it('should preserve thread grouping while attaching multimodal content for multi-thread observer input', () => {
@@ -1096,6 +1712,50 @@ describe('Observer Agent Helpers', () => {
           mimeType: 'application/pdf',
           filename: 'floorplan.pdf',
         }),
+      );
+    });
+
+    it('should inject thread title instructions into the observer request when enabled', async () => {
+      let capturedPrompt: any;
+
+      const observer = new ObserverRunner({
+        observationConfig: {
+          model: 'test-model',
+          messageTokens: 1000,
+          bufferTokens: false,
+          previousObserverTokens: 1000,
+          threadTitle: true,
+        } as any,
+        observedMessageIds: new Set(),
+        resolveModel: () => ({ model: 'test-model' as any }),
+        tokenCounter: {
+          countMessages: () => 1,
+        } as any,
+      });
+
+      vi.spyOn(observer as any, 'createAgent').mockReturnValue({
+        stream: async (prompt: any) => {
+          capturedPrompt = prompt;
+          return {
+            getFullOutput: async () => ({
+              text: '<observations>\n- saw image\n</observations>',
+              usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+            }),
+          };
+        },
+      });
+
+      await observer.call(undefined, [createTestMessage('Need a better title', 'user')], undefined, {
+        priorThreadTitle: 'Old thread title',
+      });
+
+      expect(Array.isArray(capturedPrompt)).toBe(true);
+      expect(capturedPrompt).toHaveLength(2);
+      expect(capturedPrompt[0]).toMatchObject({ role: 'user' });
+      expect(capturedPrompt[0].content).toContain('Also output a <thread-title>');
+      expect(capturedPrompt[0].content).toContain('- prior thread-title: Old thread title');
+      expect(capturedPrompt[0].content).toContain(
+        'Use the prior current-task, suggested-response, and thread-title as continuity hints',
       );
     });
   });
@@ -3410,8 +4070,7 @@ describe('Scenario: Information should be preserved through observation cycle', 
     const formatted = formatMessagesForObserver([msg]);
 
     // Should include the date for temporal context
-    expect(formatted).toContain('Dec');
-    expect(formatted).toContain('2024');
+    expect(formatted).toContain('Dec 4 2024:');
   });
 
   it('observer system prompt should require Current Task section', () => {
@@ -4449,6 +5108,83 @@ describe('Locking Behavior', () => {
     // Verify the flag was cleared in storage
     const updatedRecord = await storage.getObservationalMemory('thread-1', 'resource-1');
     expect(updatedRecord!.isReflecting).toBe(false);
+  });
+
+  it('should force reflection when activateAfterIdle has expired even below threshold', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const now = new Date('2026-04-14T12:00:00.000Z');
+      vi.setSystemTime(now);
+
+      const storage = createInMemoryStorage();
+      let reflectorCalled = false;
+      const mockReflectorModel = createStreamCapableMockModel({
+        doGenerate: async () => {
+          reflectorCalled = true;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+            content: [{ type: 'text' as const, text: '<observations>\n- Reflected summary\n</observations>' }],
+            warnings: [],
+          };
+        },
+      });
+
+      const om = new ObservationalMemory({
+        storage,
+        activateAfterIdle: '5m',
+        observation: {
+          messageTokens: 100,
+          bufferTokens: false,
+          model: createStreamCapableMockModel({
+            doGenerate: async () => ({
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop' as const,
+              usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+              content: [{ type: 'text' as const, text: '<observations>\n- Observation\n</observations>' }],
+              warnings: [],
+            }),
+          }) as any,
+        },
+        reflection: {
+          observationTokens: 1000,
+          model: mockReflectorModel as any,
+        },
+        scope: 'thread',
+      });
+
+      await storage.initializeObservationalMemory({
+        threadId: 'thread-ttl',
+        resourceId: 'resource-ttl',
+        scope: 'thread',
+        config: {
+          activateAfterIdle: '5m',
+          observation: { messageTokens: 100, model: 'test-model' },
+          reflection: { observationTokens: 1000, model: 'test-model' },
+        },
+      });
+
+      const record = await storage.getObservationalMemory('thread-ttl', 'resource-ttl');
+      await storage.updateActiveObservations({
+        id: record!.id,
+        observations: '- Observation 1\n- Observation 2',
+        tokenCount: 100,
+        lastObservedAt: new Date(now.getTime() - 301_000),
+      });
+
+      await om.reflector.maybeReflect({
+        record: (await storage.getObservationalMemory('thread-ttl', 'resource-ttl'))!,
+        observationTokens: 100,
+        lastActivityAt: now.getTime() - 301_000,
+        threadId: 'thread-ttl',
+      });
+
+      expect(reflectorCalled).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('should skip observation when isObserving flag is true in processOutputResult', async () => {
@@ -7000,6 +7736,7 @@ describe('Full Async Buffering Flow', () => {
     bufferActivation: number;
     reflectionObservationTokens: number;
     reflectionAsyncActivation?: number;
+    activateAfterIdle?: number | string;
     blockAfter?: number;
     /** Number of messages to pre-save (each ~200 tokens via repeated filler text) */
     messageCount?: number;
@@ -7010,6 +7747,10 @@ describe('Full Async Buffering Flow', () => {
     const { RequestContext } = await import('@mastra/core/di');
 
     // Clear static maps to avoid cross-test pollution
+    const pendingBufferingOps = [...BufferingCoordinator.asyncBufferingOps.values()];
+    if (pendingBufferingOps.length > 0) {
+      await Promise.allSettled(pendingBufferingOps);
+    }
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
@@ -7069,6 +7810,7 @@ describe('Full Async Buffering Flow', () => {
       storage,
       scope: 'thread',
       model: mockModel as any,
+      activateAfterIdle: opts.activateAfterIdle,
       observation: {
         messageTokens: opts.messageTokens,
         bufferTokens: opts.bufferTokens,
@@ -7265,6 +8007,76 @@ describe('Full Async Buffering Flow', () => {
     expect(record!.activeObservations).toBeTruthy();
     expect(record!.activeObservations!.length).toBeGreaterThan(0);
     expect(record!.activeObservations).toContain('Observed');
+  });
+
+  it('should activate buffered observations during prepare when activateAfterIdle expires', async () => {
+    const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
+      messageTokens: 30000,
+      bufferTokens: 500,
+      bufferActivation: 0.7,
+      reflectionObservationTokens: 50000,
+      activateAfterIdle: 1,
+      messageCount: 10,
+    });
+
+    await step(0);
+    await waitForAsyncOps();
+
+    const preRecord = await storage.getObservationalMemory(threadId, resourceId);
+    const preChunks =
+      typeof preRecord?.bufferedObservationChunks === 'string'
+        ? JSON.parse(preRecord.bufferedObservationChunks)
+        : preRecord?.bufferedObservationChunks;
+    expect(Array.isArray(preChunks) ? preChunks.length : 0).toBeGreaterThan(0);
+    expect(observerCalls.length).toBeGreaterThan(0);
+
+    const now = new Date('2026-04-14T12:00:00.000Z').getTime();
+    const staleAssistantPartTime = now - 10;
+    const userMessage = {
+      id: 'ttl-user-msg',
+      role: 'user' as const,
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: 'hi' }],
+      },
+      type: 'text',
+      createdAt: new Date(now),
+      threadId,
+      resourceId,
+    };
+    const assistantMessage = {
+      id: 'ttl-assistant-msg',
+      role: 'assistant' as const,
+      content: {
+        format: 2 as const,
+        parts: [
+          {
+            type: 'text' as const,
+            text: 'Previously cached response',
+            createdAt: staleAssistantPartTime,
+          },
+        ],
+      },
+      type: 'text',
+      createdAt: new Date(staleAssistantPartTime),
+      threadId,
+      resourceId,
+    };
+
+    await storage.saveMessages({ messages: [assistantMessage, userMessage] });
+
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    expect(record).toBeDefined();
+    expect(record!.activeObservations).toContain('Observed');
+
+    const activatedChunks =
+      typeof record?.bufferedObservationChunks === 'string'
+        ? JSON.parse(record.bufferedObservationChunks)
+        : record?.bufferedObservationChunks;
+    expect(Array.isArray(activatedChunks) ? activatedChunks : []).toHaveLength(0);
   });
 
   it('should trigger reflection after observation tokens exceed reflection threshold', async () => {
@@ -7918,6 +8730,10 @@ describe('Full Async Buffering Flow', () => {
     const { RequestContext } = await import('@mastra/core/di');
 
     // Clear static maps to avoid cross-test pollution
+    const pendingBufferingOps = [...BufferingCoordinator.asyncBufferingOps.values()];
+    if (pendingBufferingOps.length > 0) {
+      await Promise.allSettled(pendingBufferingOps);
+    }
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
@@ -8099,6 +8915,10 @@ describe('Full Async Buffering Flow', () => {
     const { RequestContext } = await import('@mastra/core/di');
 
     // Clear static maps to avoid cross-test pollution
+    const pendingBufferingOps = [...BufferingCoordinator.asyncBufferingOps.values()];
+    if (pendingBufferingOps.length > 0) {
+      await Promise.allSettled(pendingBufferingOps);
+    }
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
@@ -9820,15 +10640,25 @@ describe('threadId validation in thread scope', () => {
 // =============================================================================
 
 describe('Observer Context Optimization', () => {
-  function createOM(observationOverrides: Record<string, unknown> = {}) {
+  function createOM({
+    activateAfterIdle,
+    observation,
+    ...observationOverrides
+  }: {
+    activateAfterIdle?: number | string;
+    observation?: Record<string, unknown>;
+    [key: string]: unknown;
+  } = {}) {
     return new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' } as any),
+      activateAfterIdle,
       observation: {
         messageTokens: 50000,
         bufferTokens: false,
         ...observationOverrides,
+        ...observation,
       },
       reflection: { observationTokens: 40000 },
     });
@@ -9869,6 +10699,18 @@ describe('Observer Context Optimization', () => {
       expect(() => createOM({ previousObserverTokens: 0 })).not.toThrow();
       expect(() => createOM({ previousObserverTokens: 1 })).not.toThrow();
       expect(() => createOM({ previousObserverTokens: 5000 })).not.toThrow();
+    });
+
+    it('should accept duration strings for activateAfterIdle', () => {
+      expect(() => createOM({ activateAfterIdle: '5m' })).not.toThrow();
+      expect(() => createOM({ activateAfterIdle: '1hr' })).not.toThrow();
+      expect(() => createOM({ activateAfterIdle: '30s' })).not.toThrow();
+    });
+
+    it('should throw if activateAfterIdle is an invalid duration string', () => {
+      expect(() => createOM({ activateAfterIdle: 'later' as any })).toThrow(
+        'activateAfterIdle must be a non-negative number of milliseconds or a duration string like "5m" or "1hr".',
+      );
     });
   });
 
@@ -13198,5 +14040,834 @@ describe('Observer output threadTitle propagation', () => {
     });
     expect(threadUpdatePart?.data.cycleId).toEqual(expect.any(String));
     expect(threadUpdatePart?.data.timestamp).toEqual(expect.any(String));
+  });
+
+  it('should persist threadTitle from activated buffered chunks to thread record', async () => {
+    const storage = createInMemoryStorage();
+    const threadId = 'buf-title-thread';
+    const resourceId = 'buf-title-resource';
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'New Thread',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
+      observation: {
+        messageTokens: 50000,
+        bufferTokens: 10000,
+        bufferActivation: 1,
+        threadTitle: true,
+      },
+      reflection: { observationTokens: 100000 },
+    });
+
+    const record = await storage.initializeObservationalMemory({
+      threadId,
+      resourceId,
+      scope: 'thread',
+      config: {},
+    });
+
+    // Simulate a buffered chunk that includes a threadTitle
+    await storage.updateBufferedObservations({
+      id: record.id,
+      chunk: {
+        observations: '- User building a React dashboard',
+        tokenCount: 100,
+        messageIds: ['msg-1', 'msg-2'],
+        messageTokens: 45000,
+        lastObservedAt: new Date('2025-01-01T10:00:00Z'),
+        cycleId: 'cycle-title-1',
+        threadTitle: 'React Dashboard Project',
+        currentTask: 'Building the dashboard',
+        suggestedContinuation: 'Let me help with that.',
+      },
+    });
+
+    const result = await om.activate({ threadId, resourceId });
+    expect(result.activated).toBe(true);
+
+    // Verify threadTitle was persisted to the thread record
+    const thread = await storage.getThreadById({ threadId });
+    expect(thread?.title).toBe('React Dashboard Project');
+
+    // Verify OM metadata includes the threadTitle
+    const omMetadata = ((thread?.metadata as any)?.mastra?.om ?? {}) as any;
+    expect(omMetadata.threadTitle).toBe('React Dashboard Project');
+    expect(omMetadata.currentTask).toBe('Building the dashboard');
+    expect(omMetadata.suggestedResponse).toBe('Let me help with that.');
+  });
+});
+
+// =============================================================================
+// Message Ordering Regressions
+// =============================================================================
+
+describe('Message ordering regressions', () => {
+  /**
+   * Sets up a common scenario for ordering / persistence tests.
+   *
+   * Creates storage, seeds a thread + history messages + OM record,
+   * builds an ObservationalMemory + processor, and exposes helpers
+   * for adding messages and running steps.
+   */
+  async function setupOrderingScenario(opts: {
+    messageTokens: number;
+    bufferTokens?: number | false;
+    observerDelay?: number;
+  }) {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const pendingOps = [...BufferingCoordinator.asyncBufferingOps.values()];
+    if (pendingOps.length > 0) {
+      await Promise.allSettled(pendingOps);
+    }
+
+    BufferingCoordinator.asyncBufferingOps.clear();
+    BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.lastBufferedAtTime.clear();
+    BufferingCoordinator.reflectionBufferCycleIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = `ordering-${Math.random().toString(36).slice(2)}`;
+    const resourceId = 'ordering-resource';
+
+    const delay = opts.observerDelay ?? 0;
+    const mockModel = createStreamCapableMockModel({
+      doGenerate: async () => {
+        if (delay > 0) await new Promise(r => setTimeout(r, delay));
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>\nDate: Jan 1, 2025\n* 🟡 Observed user request\n</observations>\n<current-task>Handle user request</current-task>\n<suggested-response>Sure!</suggested-response>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    // Resolve bufferTokens config
+    const bufferTokensConfig =
+      opts.bufferTokens === undefined || opts.bufferTokens === false ? false : opts.bufferTokens;
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: {
+        messageTokens: opts.messageTokens,
+        ...(bufferTokensConfig !== false ? { bufferTokens: bufferTokensConfig } : { bufferTokens: false }),
+      },
+      reflection: { observationTokens: 200_000 },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Ordering Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    // Seed some existing messages so OM thresholds can be met
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(80);
+    const seedMessages = Array.from({ length: 2 }, (_, i) => ({
+      id: `seed-${i}`,
+      threadId,
+      resourceId,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: `Seed message ${i}: ${filler}` }],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 8, 30 + i)),
+    }));
+    await storage.saveMessages({ messages: seedMessages });
+
+    const state: Record<string, unknown> = {};
+    const capturedParts: any[] = [];
+    const mockWriter = { custom: async (part: any) => capturedParts.push(part) };
+    const abort = (() => {
+      throw new Error('aborted');
+    }) as any;
+
+    let messageList = new MessageList({ threadId, resourceId });
+    let processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+    let messageCounter = 0;
+
+    const makeCtx = () => {
+      const ctx = new RequestContext();
+      ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+      ctx.set('currentDate', new Date('2025-01-01T10:00:00Z').toISOString());
+      return ctx;
+    };
+
+    function addUserMessage(text = 'User question') {
+      const id = `user-${++messageCounter}`;
+      messageList.add(
+        {
+          id,
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text }] },
+          createdAt: new Date(Date.UTC(2025, 0, 1, 10, messageCounter)),
+          threadId,
+          resourceId,
+        } as any,
+        'input',
+      );
+      return id;
+    }
+
+    function addAssistantMessage(text = 'Assistant response') {
+      const id = `assistant-${++messageCounter}`;
+      messageList.add(
+        {
+          id,
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text }] },
+          createdAt: new Date(Date.UTC(2025, 0, 1, 10, messageCounter)),
+          threadId,
+          resourceId,
+        } as any,
+        'response',
+      );
+      return id;
+    }
+
+    function addToolCallMessage(toolName = 'search', toolCallId = `tc-${++messageCounter}`) {
+      const id = `tool-call-${messageCounter}`;
+      messageList.add(
+        {
+          id,
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolCallId,
+                  toolName,
+                  state: 'result',
+                  args: { query: 'test' },
+                  result: { success: true },
+                },
+              },
+            ],
+          },
+          createdAt: new Date(Date.UTC(2025, 0, 1, 10, messageCounter)),
+          threadId,
+          resourceId,
+        } as any,
+        'response',
+      );
+      return id;
+    }
+
+    async function runStep(stepNumber: number) {
+      await processor.processInputStep({
+        messageList,
+        messages: [],
+        requestContext: makeCtx(),
+        stepNumber,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: mockModel as any,
+        retryCount: 0,
+        writer: mockWriter as any,
+        abort,
+      });
+    }
+
+    async function finalize() {
+      await processor.processOutputResult({
+        messageList,
+        messages: messageList.get.response.db(),
+        requestContext: makeCtx(),
+        state,
+        abort,
+        result: {} as any,
+        retryCount: 0,
+      });
+      // Wait for async buffering to settle
+      const ops = BufferingCoordinator.asyncBufferingOps as Map<string, Promise<void>>;
+      if (ops.size > 0) {
+        await Promise.allSettled([...ops.values()]);
+        await new Promise(r => setTimeout(r, 50));
+      }
+    }
+
+    async function getStoredMessages() {
+      const result = await storage.listMessages({
+        threadId,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        perPage: false,
+      });
+      return result.messages;
+    }
+
+    async function getOMRecord() {
+      return om.getRecord(threadId, resourceId);
+    }
+
+    async function getOMMetadata() {
+      const thread = await storage.getThreadById({ threadId });
+      return ((thread?.metadata as any)?.mastra?.om ?? {}) as any;
+    }
+
+    function resetForNewTurn() {
+      Object.keys(state).forEach(k => delete state[k]);
+      capturedParts.length = 0;
+      messageList = new MessageList({ threadId, resourceId });
+      processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+    }
+
+    return {
+      storage,
+      om,
+      threadId,
+      resourceId,
+      state,
+      capturedParts,
+      messageList,
+      processor,
+      addUserMessage,
+      addAssistantMessage,
+      addToolCallMessage,
+      runStep,
+      finalize,
+      getStoredMessages,
+      getOMRecord,
+      getOMMetadata,
+      resetForNewTurn,
+      MessageList,
+      RequestContext,
+      get currentMessageList() {
+        return messageList;
+      },
+    };
+  }
+
+  // ─── Test 1: observation should not produce side effects during processOutputResult ───
+
+  it('1 — observation should not produce side effects during processOutputResult', async () => {
+    const s = await setupOrderingScenario({ messageTokens: 1 });
+
+    s.addUserMessage('Tell me about React');
+    await s.runStep(0);
+    s.addAssistantMessage('React is a UI library.');
+    await s.finalize();
+
+    const record = await s.getOMRecord();
+    // observation must NOT have fired during finalize
+    expect(record?.activeObservations ?? '').toBe('');
+    expect(record?.lastObservedAt).toBeUndefined();
+
+    const omMetadata = await s.getOMMetadata();
+    expect(omMetadata?.currentTask).toBeUndefined();
+    expect(omMetadata?.suggestedResponse).toBeUndefined();
+  });
+
+  // ─── Test 2: deferred observation should happen at beginning of next turn ───
+
+  it('2 — deferred observation should happen at the beginning of the next turn', async () => {
+    const s = await setupOrderingScenario({ messageTokens: 1 });
+
+    // Turn 1: single step
+    s.addUserMessage('Hello');
+    await s.runStep(0);
+    s.addAssistantMessage('Hi there');
+    await s.finalize();
+
+    // After turn 1: no observation yet
+    let record = await s.getOMRecord();
+    expect(record?.activeObservations ?? '').toBe('');
+    expect(record?.lastObservedAt).toBeUndefined();
+
+    // Turn 2: multi-step (step 0 + step 1 triggers observation)
+    s.resetForNewTurn();
+    s.addUserMessage('Follow-up');
+    await s.runStep(0);
+    s.addToolCallMessage('search');
+    await s.runStep(1);
+    s.addAssistantMessage('Here are results');
+    await s.finalize();
+
+    // After turn 2 step 1: observation should have fired
+    record = await s.getOMRecord();
+    expect(record?.activeObservations).toBeTruthy();
+    expect(record?.lastObservedAt).toBeDefined();
+  });
+
+  // ─── Test 2b: next turn step 0 activates buffered chunks and loads correct context ───
+
+  it('2b — next turn step 0 activates buffered chunks and loads correct context', async () => {
+    // Use messageTokens: 3000, bufferTokens: 500. Seed provides ~2100 tokens
+    // (below observation threshold but above buffer threshold). Turn 1 user
+    // message adds ~1100 tokens. By turn 2, total > 3000 triggers activation.
+    const s = await setupOrderingScenario({ messageTokens: 3000, bufferTokens: 500 });
+    const longFiller = 'word '.repeat(800);
+
+    // Turn 1: triggers buffering (fire-and-forget)
+    s.addUserMessage(`Tell me about TypeScript. ${longFiller}`);
+    await s.runStep(0);
+    s.addAssistantMessage('TypeScript is great.');
+    await s.finalize();
+
+    // After turn 1: buffered chunks should exist, no observation yet
+    const status1 = await s.om.getStatus({
+      threadId: s.threadId,
+      resourceId: s.resourceId,
+      messages: s.currentMessageList.get.all.db(),
+    });
+    expect(status1.bufferedChunkCount).toBeGreaterThanOrEqual(1);
+    let record = await s.getOMRecord();
+    expect(record?.activeObservations ?? '').toBe('');
+
+    // Turn 2 step 0: should activate buffered chunks
+    s.resetForNewTurn();
+    s.addUserMessage(`What about generics? ${longFiller}`);
+    await s.runStep(0);
+
+    // After activation: activeObservations populated, bufferCount drops
+    record = await s.getOMRecord();
+    expect(record?.activeObservations).toBeTruthy();
+
+    const status2 = await s.om.getStatus({
+      threadId: s.threadId,
+      resourceId: s.resourceId,
+    });
+    expect(status2.bufferedChunkCount).toBe(0);
+
+    // Turn 2's user message should be present in the live messageList
+    const allMsgs = s.currentMessageList.get.all.db();
+    const turn2User = allMsgs.find(m => {
+      const content = m.content as any;
+      return m.role === 'user' && content?.parts?.some((p: any) => p.text?.includes('What about generics?'));
+    });
+    expect(turn2User).toBeDefined();
+
+    // Turn 1's user message must survive in storage even if removed from live list by activation
+    const storedAfterActivation = await s.getStoredMessages();
+    expect(
+      storedAfterActivation.some(m => {
+        const content = m.content as any;
+        return m.role === 'user' && content?.parts?.some((p: any) => p.text?.includes('Tell me about TypeScript'));
+      }),
+    ).toBe(true);
+
+    // Messages should be in chronological order
+    for (let i = 1; i < allMsgs.length; i++) {
+      expect(new Date(allMsgs[i]!.createdAt).getTime()).toBeGreaterThanOrEqual(
+        new Date(allMsgs[i - 1]!.createdAt).getTime(),
+      );
+    }
+  });
+
+  // ─── Test 3: observer failure should not lose messages ───
+
+  it('3 — observer failure during sync observation should not lose previously persisted messages', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const pendingOps = [...BufferingCoordinator.asyncBufferingOps.values()];
+    if (pendingOps.length > 0) {
+      await Promise.allSettled(pendingOps);
+    }
+
+    BufferingCoordinator.asyncBufferingOps.clear();
+    BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.lastBufferedAtTime.clear();
+    BufferingCoordinator.reflectionBufferCycleIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = 'fail-test-thread';
+    const resourceId = 'fail-test-resource';
+
+    const failingModel = createStreamCapableMockModel({
+      doGenerate: async () => {
+        throw new Error('Observer model failure');
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: failingModel as any,
+      observation: { messageTokens: 1, bufferTokens: false },
+      reflection: { observationTokens: 200_000 },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Fail Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    // Seed messages so OM token threshold is exceeded at step > 0
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(80);
+    const seedMessages = Array.from({ length: 2 }, (_, i) => ({
+      id: `seed-${i}`,
+      threadId,
+      resourceId,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: `Seed message ${i}: ${filler}` }],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 8, 30 + i)),
+    }));
+    await storage.saveMessages({ messages: seedMessages });
+
+    const state: Record<string, unknown> = {};
+    const mockWriter = { custom: async () => {} };
+    const abort = (() => {
+      throw new Error('aborted');
+    }) as any;
+    const makeCtx = () => {
+      const ctx = new RequestContext();
+      ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+      ctx.set('currentDate', new Date('2025-01-01T10:00:00Z').toISOString());
+      return ctx;
+    };
+
+    // ── Turn 1: step 0 (no observation) → finalize → messages persist ──
+    let ml = new MessageList({ threadId, resourceId });
+    let processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+
+    ml.add(
+      {
+        id: 'fail-user-1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Hello world' }] },
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'input',
+    );
+    await processor.processInputStep({
+      messageList: ml,
+      messages: [],
+      requestContext: makeCtx(),
+      stepNumber: 0,
+      state,
+      steps: [],
+      systemMessages: [],
+      model: failingModel as any,
+      retryCount: 0,
+      writer: mockWriter as any,
+      abort,
+    });
+
+    ml.add(
+      {
+        id: 'fail-assistant-1',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Hi there' }] },
+        createdAt: new Date('2025-01-01T10:01:00Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'response',
+    );
+    await processor.processOutputResult({
+      messageList: ml,
+      messages: ml.get.response.db(),
+      requestContext: makeCtx(),
+      state,
+      abort,
+      result: {} as any,
+      retryCount: 0,
+    });
+
+    // Verify Turn 1 messages persisted
+    let result = await storage.listMessages({
+      threadId,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      perPage: false,
+    });
+    expect(result.messages.some(m => m.id === 'fail-user-1')).toBe(true);
+    expect(result.messages.some(m => m.id === 'fail-assistant-1')).toBe(true);
+
+    // ── Turn 2: step 0 → step 1 (observation fires, model fails → abort) ──
+    Object.keys(state).forEach(k => delete state[k]);
+    ml = new MessageList({ threadId, resourceId });
+    processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+
+    ml.add(
+      {
+        id: 'fail-user-2',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Follow-up question' }] },
+        createdAt: new Date('2025-01-01T10:02:00Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'input',
+    );
+    await processor.processInputStep({
+      messageList: ml,
+      messages: [],
+      requestContext: makeCtx(),
+      stepNumber: 0,
+      state,
+      steps: [],
+      systemMessages: [],
+      model: failingModel as any,
+      retryCount: 0,
+      writer: mockWriter as any,
+      abort,
+    });
+
+    // Step 1: threshold exceeded → sync observation fires → model throws → abort
+    await expect(
+      processor.processInputStep({
+        messageList: ml,
+        messages: [],
+        requestContext: makeCtx(),
+        stepNumber: 1,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: failingModel as any,
+        retryCount: 0,
+        writer: mockWriter as any,
+        abort,
+      }),
+    ).rejects.toThrow();
+
+    // Despite observation failure, all previously persisted messages must survive
+    result = await storage.listMessages({
+      threadId,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      perPage: false,
+    });
+    expect(result.messages.some(m => m.id === 'fail-user-1')).toBe(true);
+    expect(result.messages.some(m => m.id === 'fail-assistant-1')).toBe(true);
+    // Turn 2's user message was saved at step 1 *before* observation ran
+    expect(result.messages.some(m => m.id === 'fail-user-2')).toBe(true);
+  });
+
+  // ─── Test 4: all messages present in storage after processOutputResult ───
+
+  it('4 — all messages present in storage immediately after processOutputResult', async () => {
+    const s = await setupOrderingScenario({ messageTokens: 1 });
+
+    s.addUserMessage('Question about testing');
+    await s.runStep(0);
+    s.addAssistantMessage('Here is the answer about testing.');
+    await s.finalize();
+
+    const stored = await s.getStoredMessages();
+    const runtimeMessages = s.currentMessageList.get.all.db();
+
+    // Every non-system message from runtime must exist in storage by exact ID
+    for (const msg of runtimeMessages) {
+      if (msg.role === 'system') continue;
+      const inStorage = stored.find(sm => sm.id === msg.id);
+      expect(inStorage).toBeDefined();
+    }
+  });
+
+  // ─── Test 5: multi-step turn persists tool calls in correct order ───
+
+  it('5 — multi-step turn with tool calls persists all messages in correct order', async () => {
+    const s = await setupOrderingScenario({ messageTokens: 3000 });
+
+    // Step 0: user + tool call
+    s.addUserMessage('Search for React hooks');
+    await s.runStep(0);
+    s.addToolCallMessage('search');
+
+    // Step 1: observation fires, then final text
+    await s.runStep(1);
+    s.addAssistantMessage('Here are the React hooks results.');
+
+    // Step 2: optional extra step to trigger more processing
+    await s.runStep(2);
+    s.addAssistantMessage('Anything else?');
+
+    await s.finalize();
+
+    const stored = await s.getStoredMessages();
+
+    // User message must exist
+    expect(stored.some(m => m.role === 'user')).toBe(true);
+
+    // At least one assistant message should exist
+    expect(stored.some(m => m.role === 'assistant')).toBe(true);
+
+    // Tool invocations appear within assistant messages (MessageMerger merges consecutive
+    // assistant messages). Check that any tool-invocation parts come before the final text.
+    const allParts: Array<{ type: string; msgIdx: number; partIdx: number }> = [];
+    for (let mi = 0; mi < stored.length; mi++) {
+      const msg = stored[mi]!;
+      if (msg.role !== 'assistant') continue;
+      const content = msg.content as any;
+      if (content?.parts) {
+        for (let pi = 0; pi < content.parts.length; pi++) {
+          allParts.push({ type: content.parts[pi].type, msgIdx: mi, partIdx: pi });
+        }
+      }
+    }
+
+    const lastToolIdx = allParts.map(p => p.type).lastIndexOf('tool-invocation');
+    const lastTextIdx = allParts.map(p => p.type).lastIndexOf('text');
+    expect(lastToolIdx).not.toBe(-1);
+    expect(lastTextIdx).not.toBe(-1);
+    expect(lastToolIdx).toBeLessThan(lastTextIdx);
+
+    // All message IDs should be unique
+    const ids = stored.map(m => m.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  // ─── Test 6: DB reload order matches runtime order after buffering ───
+
+  it('6 — DB reload order matches runtime order after buffering seals messages', async () => {
+    const s = await setupOrderingScenario({ messageTokens: 3000, bufferTokens: 500 });
+
+    s.addUserMessage('First question');
+    await s.runStep(0);
+    s.addAssistantMessage('First answer');
+    await s.finalize();
+
+    const stored = await s.getStoredMessages();
+
+    // Messages in storage should be in chronological order
+    for (let i = 1; i < stored.length; i++) {
+      expect(new Date(stored[i]!.createdAt).getTime()).toBeGreaterThanOrEqual(
+        new Date(stored[i - 1]!.createdAt).getTime(),
+      );
+    }
+
+    // User and assistant should both be present
+    expect(stored.some(m => m.role === 'user')).toBe(true);
+    expect(stored.some(m => m.role === 'assistant')).toBe(true);
+  });
+
+  // ─── Test 7: no duplicate messages after buffer races ───
+
+  it('7 — no duplicate messages after buffer races with per-step save', async () => {
+    const s = await setupOrderingScenario({
+      messageTokens: 3000,
+      bufferTokens: 500,
+      observerDelay: 10,
+    });
+
+    // Multi-step turn: user → tool call → assistant → assistant
+    s.addUserMessage('Search and summarize');
+    await s.runStep(0);
+    s.addToolCallMessage('search');
+    await s.runStep(1);
+    s.addAssistantMessage('Summary of results');
+    await s.finalize();
+
+    const stored = await s.getStoredMessages();
+
+    // No duplicate IDs
+    const ids = stored.map(m => m.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  // ─── Test 8: second turn loads correct messages after first turn ───
+
+  it('8 — second turn loads correct messages from storage after first turn', async () => {
+    const s = await setupOrderingScenario({ messageTokens: 3000, bufferTokens: 500 });
+
+    // Turn 1: multi-step
+    s.addUserMessage('First turn question');
+    await s.runStep(0);
+    s.addToolCallMessage('search');
+    await s.runStep(1);
+    s.addAssistantMessage('First turn answer.');
+    await s.finalize();
+
+    // Turn 2: fresh messageList and processor (mirrors production)
+    s.resetForNewTurn();
+    s.addUserMessage('Second turn question');
+    await s.runStep(0);
+
+    // After step 0 of turn 2, the messageList should have loaded history
+    const allMsgs = s.currentMessageList.get.all.db();
+    const userMsgs = allMsgs.filter(m => m.role === 'user');
+
+    // If observation fired in turn 1 step 1, then getContext may filter older messages.
+    // Either way, the turn 2 user message MUST be present.
+    expect(userMsgs.length).toBeGreaterThanOrEqual(1);
+    const turn2User = userMsgs.find(m => {
+      const content = m.content as any;
+      return content?.parts?.some((p: any) => p.text?.includes('Second turn question'));
+    });
+    expect(turn2User).toBeDefined();
+
+    // Messages must be in chronological order
+    for (let i = 1; i < allMsgs.length; i++) {
+      expect(new Date(allMsgs[i]!.createdAt).getTime()).toBeGreaterThanOrEqual(
+        new Date(allMsgs[i - 1]!.createdAt).getTime(),
+      );
+    }
+
+    // No duplicate IDs
+    const ids = allMsgs.map(m => m.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  // ─── Test 9: sealed ordering with real OM primitives ───
+
+  it('9 — sealed messages maintain correct chronological order after buffering', async () => {
+    const s = await setupOrderingScenario({ messageTokens: 3000, bufferTokens: 500 });
+
+    // Turn 1: trigger buffering (which seals messages)
+    s.addUserMessage('Tell me about sealed messages');
+    await s.runStep(0);
+    s.addAssistantMessage('Sealed messages are persisted early.');
+    await s.finalize();
+
+    // Turn 2: load from storage and verify ordering
+    s.resetForNewTurn();
+    s.addUserMessage('Continue the discussion');
+    await s.runStep(0);
+
+    const stored = await s.getStoredMessages();
+
+    // Messages must be in chronological order
+    for (let i = 1; i < stored.length; i++) {
+      expect(new Date(stored[i]!.createdAt).getTime()).toBeGreaterThanOrEqual(
+        new Date(stored[i - 1]!.createdAt).getTime(),
+      );
+    }
+
+    // No duplicate IDs
+    const ids = stored.map(m => m.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });

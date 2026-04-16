@@ -135,6 +135,10 @@ export class ObservabilityStorage extends StorageDomain {
 
   /**
    * Updates a single Span with partial data. Primarily used for realtime trace creation.
+   *
+   * @deprecated This method only works with stores that support span updates,
+   * It will be removed in the future. Instead try to add all data to a span before
+   * ending it.
    */
   async updateSpan(_args: UpdateSpanArgs): Promise<void> {
     throw new MastraError({

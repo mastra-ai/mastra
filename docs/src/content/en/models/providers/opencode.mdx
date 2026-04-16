@@ -190,6 +190,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3.2
   },
   {
+    "model": "opencode/glm-5.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 1.4,
+    "outputCost": 4.4
+  },
+  {
     "model": "opencode/gpt-5",
     "imageInput": true,
     "audioInput": false,
@@ -382,30 +394,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3
   },
   {
-    "model": "opencode/mimo-v2-omni-free",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 64000,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "opencode/mimo-v2-pro-free",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 64000,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "opencode/minimax-m2.5",
     "imageInput": false,
     "audioInput": false,
@@ -436,22 +424,34 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
+    "contextWindow": 204800,
     "maxOutput": 128000,
     "inputCost": null,
     "outputCost": null
   },
   {
-    "model": "opencode/qwen3.6-plus-free",
-    "imageInput": false,
+    "model": "opencode/qwen3.5-plus",
+    "imageInput": true,
     "audioInput": false,
-    "videoInput": false,
+    "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 64000,
-    "inputCost": null,
-    "outputCost": null
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.2,
+    "outputCost": 1.2
+  },
+  {
+    "model": "opencode/qwen3.6-plus",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.5,
+    "outputCost": 3
   }
 ]}
 />
@@ -484,7 +484,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "opencode/qwen3.6-plus-free"
+      ? "opencode/qwen3.6-plus"
       : "opencode/big-pickle";
   }
 });

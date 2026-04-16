@@ -6,7 +6,7 @@ test.afterEach(async () => {
 });
 
 test('shows scorers in the evaluation dashboard', async ({ page }) => {
-  await page.goto('/evaluation?tab=scorers');
+  await page.goto('/scorers');
 
   await expect(page).toHaveTitle(/Mastra Studio/);
   await expect(page.getByRole('textbox', { name: 'Filter by scorer name' })).toBeVisible();
@@ -14,9 +14,9 @@ test('shows scorers in the evaluation dashboard', async ({ page }) => {
 });
 
 test('clicking on the scorer row redirects to detail page', async ({ page }) => {
-  await page.goto('/evaluation?tab=scorers');
+  await page.goto('/scorers');
 
   await page.getByRole('link', { name: /Response Quality Scorer/i }).click();
 
-  await expect(page).toHaveURL(/\/evaluation\/scorers\/response-quality$/);
+  await expect(page).toHaveURL(/\/scorers\/response-quality$/);
 });

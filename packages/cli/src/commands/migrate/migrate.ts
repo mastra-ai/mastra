@@ -129,13 +129,13 @@ export async function migrate({
         } else {
           logger.info(pc.green('✓ Migration completed successfully!'));
           if (result.duplicatesRemoved > 0) {
-            logger.info(`  Removed ${result.duplicatesRemoved} duplicate entries.`);
+            logger.info('Removed duplicate entries', { count: result.duplicatesRemoved });
           }
         }
-        logger.info(`  ${result.message}`);
+        logger.info(result.message);
       } else {
         logger.error(pc.red('✗ Migration failed.'));
-        logger.error(`  ${result.message}`);
+        logger.error(result.message);
         process.exit(1);
       }
     } else {
@@ -159,7 +159,7 @@ export async function migrate({
       logger.error(pc.red('Error: Could not find Mastra entry file.'));
       logger.info('');
       logger.info('Make sure you have a mastra directory with an index.ts or index.js file.');
-      logger.info(`Expected location: ${mastraDir}`);
+      logger.info('Expected location', { path: mastraDir });
       logger.info('');
       logger.info('You can specify a custom directory:');
       logger.info(pc.cyan('  npx mastra migrate --dir path/to/mastra'));

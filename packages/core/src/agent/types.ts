@@ -3,6 +3,9 @@ import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypev4 } from 'zod/v4';
+import type { AgentBackgroundConfig } from '../background-tasks';
+import type { MastraBrowser } from '../browser';
+import type { AgentChannels, ChannelConfig } from '../channels/agent-channels';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type {
   CoreMessage,
@@ -27,7 +30,11 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../memory/types';
 import type { Span, SpanType, TracingOptions, TracingPolicy, ObservabilityContext } from '../observability';
-import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
+import type {
+  ErrorProcessorOrWorkflow,
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+} from '../processors/index';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
@@ -49,6 +56,9 @@ export type {
 } from './message-list/index';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type { LLMStepResult } from '../stream/types';
+export type { MastraBrowser } from '../browser/browser';
+// Screencast types now on MastraBrowser directly
+export type { ScreencastOptions, ScreencastStream } from '../browser/browser';
 
 export type ZodSchema = ZodSchemaV3 | ZodTypev4;
 
@@ -292,9 +302,40 @@ export interface AgentConfig<
    */
   skillsFormat?: SkillFormat;
   /**
+   * Browser for web automation capabilities.
+   * When configured, browser tools are automatically injected into the agent.
+   * Accessible via agent.browser for server-side features like screencast.
+   */
+  browser?: MastraBrowser;
+  /**
    * Voice settings for speech input and output.
    */
   voice?: MastraVoice;
+  /**
+   * Messaging channels the agent communicates over (e.g. Slack, Discord).
+   *
+   * @example
+   * ```ts
+   * channels: {
+   *   adapters: {
+   *     discord: createDiscordAdapter(),
+   *     slack: { adapter: createSlackAdapter(), cards: false },
+   *   },
+   *   handlers: {
+   *     // Wrap default DM handler with logging
+   *     onDirectMessage: async (thread, msg, defaultHandler) => {
+   *       console.log('Received DM:', msg.text);
+   *       await defaultHandler(thread, msg);
+   *     },
+   *     // Disable mention handling
+   *     onMention: false,
+   *   },
+   * }
+   * ```
+   *
+   * For full control, pass an `AgentChannels` instance directly.
+   */
+  channels?: ChannelConfig | AgentChannels;
   /**
    * Workspace for file storage and code execution.
    * When configured, workspace tools are automatically injected into the agent.
@@ -320,6 +361,12 @@ export interface AgentConfig<
    */
   maxProcessorRetries?: number;
   /**
+   * Error processors that handle LLM API rejections.
+   * These implement `processAPIError` and can inspect the error, modify messages, and signal a retry.
+   * Error processors can also be placed in `inputProcessors` or `outputProcessors`.
+   */
+  errorProcessors?: DynamicArgument<ErrorProcessorOrWorkflow[], TRequestContext>;
+  /**
    * Options to pass to the agent upon creation.
    */
   options?: AgentCreateOptions;
@@ -334,6 +381,11 @@ export interface AgentConfig<
    * If validation fails, an error is thrown.
    */
   requestContextSchema?: PublicSchema<TRequestContext>;
+  /**
+   * Background task configuration for this agent.
+   * Controls which tools can run in the background and their behavior.
+   */
+  backgroundTasks?: AgentBackgroundConfig;
 }
 
 export type AgentMemoryOption = {
@@ -393,6 +445,8 @@ export type AgentGenerateOptions<
    * If not set, no retries are performed.
    */
   maxProcessorRetries?: number;
+  /** Error processors to use for this generation call (overrides agent's default) */
+  errorProcessors?: ErrorProcessorOrWorkflow[];
   /** tracing options for starting new traces */
   tracingOptions?: TracingOptions;
   /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */

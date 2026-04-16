@@ -41,7 +41,8 @@ describe('MessageList.stepStart', () => {
 
     expect(result).toBe(true);
     const parts = messageList.get.all.db()[0]?.content?.parts ?? [];
-    expect(parts[parts.length - 1]).toEqual({ type: 'step-start' });
+    expect(parts[parts.length - 1]).toMatchObject({ type: 'step-start' });
+    expect(parts[parts.length - 1]).toEqual(expect.objectContaining({ createdAt: expect.any(Number) }));
   });
 
   it('should return false when the last message is a user message', () => {
@@ -113,6 +114,7 @@ describe('MessageList.stepStart', () => {
     expect(unsaved.length).toBeGreaterThan(0);
     const drained = unsaved.find(m => m.id === msg.id);
     expect(drained).toBeDefined();
-    expect(drained?.content.parts.at(-1)).toEqual({ type: 'step-start' });
+    expect(drained?.content.parts.at(-1)).toMatchObject({ type: 'step-start' });
+    expect(drained?.content.parts.at(-1)).toEqual(expect.objectContaining({ createdAt: expect.any(Number) }));
   });
 });

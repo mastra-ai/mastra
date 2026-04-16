@@ -1,5 +1,35 @@
 # @mastra/schema-compat
 
+## 1.2.9-alpha.0
+
+### Patch Changes
+
+- Fixed MCP tools with recursive JSON Schema refs so they stay serializable when loaded. ([#15400](https://github.com/mastra-ai/mastra/pull/15400))
+
+## 1.2.8
+
+### Patch Changes
+
+- --- ([#14624](https://github.com/mastra-ai/mastra/pull/14624))
+  `@mastra/schema-compat`: patch
+
+  ***
+
+  Improved provider schema compatibility for structured outputs and tool calls.
+  Fixed validation for optional, nullable, and defaulted fields, and for ISO date strings returned for date fields.
+
+## 1.2.8-alpha.0
+
+### Patch Changes
+
+- --- ([#14624](https://github.com/mastra-ai/mastra/pull/14624))
+  `@mastra/schema-compat`: patch
+
+  ***
+
+  Improved provider schema compatibility for structured outputs and tool calls.
+  Fixed validation for optional, nullable, and defaulted fields, and for ISO date strings returned for date fields.
+
 ## 1.2.7
 
 ### Patch Changes

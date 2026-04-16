@@ -57,17 +57,16 @@ describe('Score Schemas', () => {
       expect(record.reason).toBeUndefined();
     });
 
-    it('rejects missing traceId', () => {
-      expect(() =>
-        scoreRecordSchema.parse({
-          id: 'score-3',
-          timestamp: now,
-          scorerId: 'test',
-          score: 0.5,
-          createdAt: now,
-          updatedAt: null,
-        }),
-      ).toThrow();
+    it('accepts an unanchored score record without traceId', () => {
+      const record = scoreRecordSchema.parse({
+        id: 'score-3',
+        timestamp: now,
+        scorerId: 'test',
+        score: 0.5,
+        createdAt: now,
+        updatedAt: null,
+      });
+      expect(record.traceId).toBeUndefined();
     });
   });
 

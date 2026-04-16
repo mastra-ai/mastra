@@ -6,6 +6,7 @@ import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import type { Processor, ProcessOutputResultArgs } from '../../processors/index';
+import { RequestContext, MASTRA_THREAD_ID_KEY, MASTRA_RESOURCE_ID_KEY } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
@@ -3230,6 +3231,128 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
         expect(allSavedContent).not.toContain('I live in Paris');
       }
     }
+  });
+
+  it('should isolate sub-agent memory when threadId and resourceId are set via requestContext reserved keys', async () => {
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        content: [{ type: 'text', text: 'Sub-agent response' }],
+        warnings: [],
+      }),
+    });
+
+    const memoryStore = new InMemoryStore();
+    const subAgentMemory = new MockMemory({ storage: memoryStore });
+
+    const subAgent = new Agent({
+      id: 'sub-agent-reserved-keys-test',
+      name: 'Sub Agent Reserved Keys Test',
+      description: 'A sub-agent for testing reserved key isolation',
+      instructions: 'Answer questions.',
+      model: subAgentMockModel,
+      memory: subAgentMemory,
+    });
+
+    let supervisorCallCount = 0;
+    const resourceId = randomUUID();
+    const threadId = randomUUID();
+
+    const supervisorAgent = new Agent({
+      id: 'supervisor-reserved-keys',
+      name: 'Supervisor Reserved Keys',
+      instructions: 'Delegate to sub-agent.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          supervisorCallCount++;
+          if (supervisorCallCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: '',
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'agent-subAgent',
+                  input: JSON.stringify({ prompt: 'What is my name?', threadId, resourceId }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text', text: 'Sub-agent says: Sub-agent response' }],
+            warnings: [],
+          };
+        },
+      }),
+      agents: { subAgent },
+      memory: new MockMemory(),
+    });
+
+    // Set reserved keys on requestContext (simulates middleware + body merge)
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+
+    await supervisorAgent.generate([{ role: 'user', content: 'What is my name?' }], {
+      maxSteps: 3,
+      requestContext,
+      memory: {
+        resource: resourceId,
+        thread: threadId,
+      },
+    });
+
+    // Sub-agent should have its own isolated thread, not the parent's
+    const subAgentResourceId = `${resourceId}-subAgent`;
+    const memoryStorage = await subAgentMemory.storage.getStore('memory');
+    expect(memoryStorage).toBeDefined();
+
+    if (memoryStorage) {
+      const allThreadsResult = await memoryStorage.listThreads({ filter: { resourceId: subAgentResourceId } });
+      const allThreads = allThreadsResult.threads;
+
+      // Sub-agent should have its own thread
+      expect(allThreads.length).toBeGreaterThan(0);
+
+      const subAgentThread = allThreads[0];
+      expect(subAgentThread).toBeDefined();
+
+      if (subAgentThread) {
+        // Sub-agent thread ID should NOT be the parent's thread ID
+        expect(subAgentThread.id).not.toBe(threadId);
+
+        const subAgentMessages = await memoryStorage.listMessages({
+          threadId: subAgentThread.id,
+          perPage: 100,
+        });
+
+        expect(subAgentMessages.messages.length).toBeGreaterThanOrEqual(2);
+
+        // First message should be the delegation prompt
+        expect(subAgentMessages.messages[0].role).toBe('user');
+        const userContent =
+          typeof subAgentMessages.messages[0].content === 'string'
+            ? subAgentMessages.messages[0].content
+            : JSON.stringify(subAgentMessages.messages[0].content);
+        expect(userContent).toContain('What is my name');
+
+        // Second message should be the sub-agent's response
+        expect(subAgentMessages.messages[1].role).toBe('assistant');
+      }
+    }
+
+    // Verify reserved keys are restored for the parent after sub-agent execution
+    expect(requestContext.get(MASTRA_THREAD_ID_KEY)).toBe(threadId);
+    expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe(resourceId);
   });
 
   describe('Sub-agent instructions merge', () => {

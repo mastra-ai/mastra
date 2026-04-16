@@ -320,13 +320,27 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       reply.status(fetchResponse.status);
       if (fetchResponse.body) {
         const reader = fetchResponse.body.getReader();
+
+        const onResError = (err: unknown) => {
+          this.mastra.getLogger()?.error('Error writing datastream response', {
+            error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+          });
+          void reader.cancel('response write error');
+        };
+        reply.raw.once('error', onResError);
+
         try {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
             reply.raw.write(value);
           }
+        } catch (error) {
+          this.mastra.getLogger()?.error('Error in datastream processing', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
         } finally {
+          reply.raw.off('error', onResError);
           reply.raw.end();
         }
       } else {

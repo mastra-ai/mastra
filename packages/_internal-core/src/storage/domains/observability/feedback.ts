@@ -59,7 +59,7 @@ const feedbackRecordObjectSchema = z.object({
   timestamp: z.date().describe('When the feedback was recorded'),
 
   // Target
-  traceId: traceIdField,
+  traceId: traceIdField.nullish().describe('Trace that anchors the feedback target when available'),
   spanId: spanIdField.nullish().describe('Span ID this feedback applies to'),
 
   // Feedback data

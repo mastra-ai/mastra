@@ -112,11 +112,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
   async list(): Promise<SkillMetadata[]> {
     await this.#ensureInitialized();
-    // Return all candidates (including same-named skills from different sources)
-    // so the disambiguation UI and LLM can see every skill and use the path to pick one.
+
     const results: SkillMetadata[] = [];
     for (const candidates of this.#skills.values()) {
-      for (const skill of candidates) {
+      const canonicalCandidates = await this.#dedupeCanonicalCandidates(candidates);
+      for (const skill of canonicalCandidates) {
         results.push({
           name: skill.name,
           path: skill.path,
@@ -133,7 +133,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   async get(name: string): Promise<Skill | null> {
     await this.#ensureInitialized();
     // Try name-based lookup first, then fall back to path-based (escape hatch)
-    const skill = this.#resolveByName(name) ?? this.#resolveByPath(name);
+    const skill = (await this.#resolveByName(name)) ?? this.#resolveByPath(name);
     if (!skill) return null;
 
     // Return without internal indexableContent field
@@ -143,7 +143,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
   async has(name: string): Promise<boolean> {
     await this.#ensureInitialized();
-    return (this.#resolveByName(name) ?? this.#resolveByPath(name)) !== null;
+    return ((await this.#resolveByName(name)) ?? this.#resolveByPath(name)) !== null;
   }
 
   // ===========================================================================
@@ -154,7 +154,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    * Resolve a skill by name with tie-breaking when multiple candidates exist.
    * Priority: local > managed > external, then alphabetical path.
    */
-  #resolveByName(name: string): InternalSkill | null {
+  async #resolveByName(name: string): Promise<InternalSkill | null> {
     const candidates = this.#skills.get(name);
     if (!candidates || candidates.length === 0) return null;
     return this.#tieBreak(candidates);
@@ -163,29 +163,68 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   /**
    * Resolve a skill by exact path (escape hatch for disambiguation).
    * Searches across all candidate arrays.
+   * Accepts paths with or without a trailing `/SKILL.md` suffix, since
+   * SkillsProcessor.formatLocation() exposes `${path}/SKILL.md` to the LLM.
    */
   #resolveByPath(skillPath: string): InternalSkill | null {
+    const normalized = skillPath.replace(/\/SKILL\.md$/, '');
     for (const candidates of this.#skills.values()) {
-      const match = candidates.find(s => s.path === skillPath);
+      const match = candidates.find(s => s.path === normalized);
       if (match) return match;
     }
     return null;
   }
 
+  async #getCanonicalSkillPath(skillPath: string): Promise<string> {
+    if (!this.#source.realpath) return skillPath;
+
+    try {
+      return await this.#source.realpath(skillPath);
+    } catch {
+      return skillPath;
+    }
+  }
+
+  async #dedupeCanonicalCandidates(candidates: InternalSkill[]): Promise<InternalSkill[]> {
+    const canonicalGroups = new Map<string, InternalSkill[]>();
+    for (const candidate of candidates) {
+      const canonicalPath = await this.#getCanonicalSkillPath(candidate.path);
+      const group = canonicalGroups.get(canonicalPath) ?? [];
+      group.push(candidate);
+      canonicalGroups.set(canonicalPath, group);
+    }
+
+    const SOURCE_PRIORITY: Record<string, number> = { local: 0, managed: 1, external: 2 };
+    return [...canonicalGroups.values()].map(
+      group =>
+        [...group].sort((a, b) => {
+          const aPri = SOURCE_PRIORITY[a.source.type] ?? 99;
+          const bPri = SOURCE_PRIORITY[b.source.type] ?? 99;
+          if (aPri !== bPri) return aPri - bPri;
+          return a.path.localeCompare(b.path);
+        })[0]!,
+    );
+  }
+
   /**
    * Pick the winning skill from an array of same-named candidates.
    * When there's only one candidate, returns it directly (no warning).
-   * When there are multiple, applies source-type priority and warns.
+   * When there are multiple, de-duplicates alias paths that point to the same
+   * canonical skill, then applies source-type priority and warns.
    *
    * Priority: local (0) > managed (1) > external (2).
-   * Throws if source-type priority can't resolve the tie (e.g., two local skills with same name).
+   * Throws if source-type priority can't resolve the tie (e.g., two distinct local skills with same name).
    */
-  #tieBreak(candidates: InternalSkill[]): InternalSkill | null {
+  async #tieBreak(candidates: InternalSkill[]): Promise<InternalSkill | null> {
     if (candidates.length === 0) return null;
     if (candidates.length === 1) return candidates[0]!;
 
+    const deduped = await this.#dedupeCanonicalCandidates(candidates);
+
+    if (deduped.length === 1) return deduped[0]!;
+
     const SOURCE_PRIORITY: Record<string, number> = { local: 0, managed: 1, external: 2 };
-    const sorted = [...candidates].sort((a, b) => {
+    const sorted = [...deduped].sort((a, b) => {
       const aPri = SOURCE_PRIORITY[a.source.type] ?? 99;
       const bPri = SOURCE_PRIORITY[b.source.type] ?? 99;
       if (aPri !== bPri) return aPri - bPri;
@@ -296,7 +335,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     await this.#ensureInitialized();
 
     // Resolve by name (tie-break winner), then fall back to path-based lookup
-    const skill = this.#resolveByName(skillName) ?? this.#resolveByPath(skillName);
+    const skill = (await this.#resolveByName(skillName)) ?? this.#resolveByPath(skillName);
     if (!skill) return;
 
     // Remove from search index
@@ -350,8 +389,14 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
     const { topK = 5, minScore, skillNames, includeReferences = true, mode } = options;
 
-    // Get more results than needed to filter by skillNames/includeReferences
-    const expandedTopK = skillNames ? topK * 3 : topK;
+    // Ask the search engine for enough rows to survive post-search filtering and
+    // canonical alias de-duplication before applying the final topK.
+    const totalIndexedDocuments = [...this.#skills.values()].reduce(
+      (count, candidates) =>
+        count + candidates.reduce((skillCount, skill) => skillCount + 1 + skill.references.length, 0),
+      0,
+    );
+    const expandedTopK = Math.max(skillNames ? topK * 3 : topK, totalIndexedDocuments);
 
     // Delegate to SearchEngine
     const searchResults = await this.#searchEngine.search(query, {
@@ -361,6 +406,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     });
 
     const results: SkillSearchResult[] = [];
+    const seenCanonicalSources = new Set<string>();
 
     for (const result of searchResults) {
       const skillPath = result.metadata?.skillPath as string;
@@ -368,9 +414,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
       if (!skillPath || !source) continue;
 
-      // Map path back to skill name for filtering and results
-      const skill = this.#resolveByPath(skillPath);
-      if (!skill) continue;
+      // Map path back to the canonical skill winner for filtering and results.
+      const matchedSkill = this.#resolveByPath(skillPath);
+      if (!matchedSkill) continue;
+
+      const skill = (await this.#resolveByName(matchedSkill.name)) ?? matchedSkill;
 
       // Filter by skill names if specified
       if (skillNames && !skillNames.includes(skill.name)) {
@@ -381,6 +429,12 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       if (!includeReferences && source !== 'SKILL.md') {
         continue;
       }
+
+      const canonicalSourceKey = `${skill.path}:${source}`;
+      if (seenCanonicalSources.has(canonicalSourceKey)) {
+        continue;
+      }
+      seenCanonicalSources.add(canonicalSourceKey);
 
       results.push({
         skillName: skill.name,
@@ -405,7 +459,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   async getReference(skillName: string, referencePath: string): Promise<string | null> {
     await this.#ensureInitialized();
 
-    const skill = this.#resolveByName(skillName) ?? this.#resolveByPath(skillName);
+    const skill = (await this.#resolveByName(skillName)) ?? this.#resolveByPath(skillName);
     if (!skill) return null;
 
     const safeRefPath = this.#assertRelativePath(referencePath, 'reference');
@@ -426,7 +480,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   async getScript(skillName: string, scriptPath: string): Promise<string | null> {
     await this.#ensureInitialized();
 
-    const skill = this.#resolveByName(skillName) ?? this.#resolveByPath(skillName);
+    const skill = (await this.#resolveByName(skillName)) ?? this.#resolveByPath(skillName);
     if (!skill) return null;
 
     const safeScriptPath = this.#assertRelativePath(scriptPath, 'script');
@@ -447,7 +501,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   async getAsset(skillName: string, assetPath: string): Promise<Buffer | null> {
     await this.#ensureInitialized();
 
-    const skill = this.#resolveByName(skillName) ?? this.#resolveByPath(skillName);
+    const skill = (await this.#resolveByName(skillName)) ?? this.#resolveByPath(skillName);
     if (!skill) return null;
 
     const safeAssetPath = this.#assertRelativePath(assetPath, 'asset');
@@ -471,19 +525,19 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
   async listReferences(skillName: string): Promise<string[]> {
     await this.#ensureInitialized();
-    const skill = this.#resolveByName(skillName) ?? this.#resolveByPath(skillName);
+    const skill = (await this.#resolveByName(skillName)) ?? this.#resolveByPath(skillName);
     return skill?.references ?? [];
   }
 
   async listScripts(skillName: string): Promise<string[]> {
     await this.#ensureInitialized();
-    const skill = this.#resolveByName(skillName) ?? this.#resolveByPath(skillName);
+    const skill = (await this.#resolveByName(skillName)) ?? this.#resolveByPath(skillName);
     return skill?.scripts ?? [];
   }
 
   async listAssets(skillName: string): Promise<string[]> {
     await this.#ensureInitialized();
-    const skill = this.#resolveByName(skillName) ?? this.#resolveByPath(skillName);
+    const skill = (await this.#resolveByName(skillName)) ?? this.#resolveByPath(skillName);
     return skill?.assets ?? [];
   }
 
@@ -1034,7 +1088,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
     for (const candidates of this.#skills.values()) {
       // Use tie-break winner for each name
-      const skill = this.#tieBreak(candidates);
+      const skill = await this.#tieBreak(candidates);
       if (!skill) continue;
 
       // Filter by skill names if specified

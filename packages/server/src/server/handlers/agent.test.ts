@@ -111,6 +111,7 @@ describe('Agent Handlers', () => {
           workflows: {},
           skills: [],
           workspaceTools: [],
+          browserTools: [],
           workspaceId: undefined,
           inputProcessors: [],
           outputProcessors: [],
@@ -137,6 +138,7 @@ describe('Agent Handlers', () => {
           requestContextSchema: undefined,
           skills: [],
           workspaceTools: [],
+          browserTools: [],
           inputProcessors: [],
           outputProcessors: [],
           provider: 'openai.responses',
@@ -481,6 +483,8 @@ describe('Agent Handlers', () => {
         },
         skills: [],
         workspaceTools: [],
+        browserTools: [],
+        workspaceId: undefined,
         inputProcessors: [],
         outputProcessors: [],
         provider: 'openai.chat',
@@ -490,6 +494,7 @@ describe('Agent Handlers', () => {
         defaultGenerateOptionsLegacy: {},
         defaultStreamOptionsLegacy: {},
         modelList: undefined,
+        requestContextSchema: undefined,
         source: 'code',
       });
     });
@@ -565,6 +570,33 @@ describe('Agent Handlers', () => {
           message: 'Agent with id non-existing not found',
         }),
       );
+    });
+
+    it('should return serialized agent with browser tools when browser is configured', async () => {
+      const mockBrowser = {
+        getTools: () => ({
+          navigate: { name: 'navigate' },
+          click: { name: 'click' },
+          screenshot: { name: 'screenshot' },
+        }),
+      };
+
+      const agentWithBrowser = makeMockAgent({
+        name: 'browser-agent',
+        browser: mockBrowser as any,
+      });
+
+      const mastraWithBrowser = makeMastraMock({
+        agents: { 'browser-agent': agentWithBrowser },
+      });
+
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithBrowser }),
+        agentId: 'browser-agent',
+        requestContext,
+      });
+
+      expect(result?.browserTools).toEqual(['navigate', 'click', 'screenshot']);
     });
   });
 

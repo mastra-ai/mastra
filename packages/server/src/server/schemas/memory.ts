@@ -226,6 +226,11 @@ export const listMessagesQuerySchema = createPagePaginationSchema(40).extend({
   orderBy: messageOrderBySchema,
   include: includeSchema,
   filter: filterSchema,
+  includeSystemReminders: z.preprocess(val => {
+    if (val === 'true') return true;
+    if (val === 'false') return false;
+    return val;
+  }, z.boolean().optional()),
 });
 
 /**
@@ -351,6 +356,7 @@ export const deleteMessagesNetworkQuerySchema = agentIdQuerySchema.extend({
  */
 export const memoryStatusResponseSchema = z.object({
   result: z.boolean(),
+  memoryType: z.enum(['local', 'gateway']).optional(),
   observationalMemory: z
     .object({
       enabled: z.boolean(),
@@ -392,6 +398,7 @@ const observationalMemoryConfigSchema = z.object({
  * MemoryConfig is complex with many optional fields - using passthrough
  */
 export const memoryConfigResponseSchema = z.object({
+  memoryType: z.enum(['local', 'gateway']).optional(),
   config: z
     .object({
       lastMessages: z.union([z.number(), z.literal(false)]).optional(),
@@ -562,6 +569,10 @@ export const getObservationalMemoryQuerySchema = z.object({
   agentId: z.string(),
   resourceId: z.string().optional(),
   threadId: z.string().optional(),
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+  limit: z.coerce.number().int().min(1).optional(),
 });
 
 /**

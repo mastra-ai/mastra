@@ -18,7 +18,11 @@ import {
   saveSettings,
 } from '../onboarding/index.js';
 import type { OnboardingResult, ProviderAccess, ProviderAccessLevel } from '../onboarding/index.js';
-import { resolveThreadActiveModelPackId, THREAD_ACTIVE_MODEL_PACK_ID_KEY } from '../onboarding/settings.js';
+import {
+  resolveThreadActiveModelPackId,
+  THREAD_ACTIVE_MODEL_PACK_ID_KEY,
+  MEMORY_GATEWAY_PROVIDER,
+} from '../onboarding/settings.js';
 import {
   detectPackageManager,
   fetchLatestVersion,
@@ -176,7 +180,8 @@ export class MastraTUI {
     // so the editor stays responsive for queued follow-ups.
     while (true) {
       const userInput = await this.getUserInput();
-      if (!userInput.trim()) continue;
+      // allow space as transparent continue (for recovering from api errors manually)
+      if (!userInput.trim() && userInput !== ' ') continue;
 
       try {
         // Handle slash commands
@@ -484,6 +489,13 @@ export class MastraTUI {
       google: hasEnv('google') ? ('apikey' as const) : false,
       deepseek: hasEnv('deepseek') ? ('apikey' as const) : false,
     };
+    // Gateway covers all providers
+    const mgKey =
+      this.state.authStorage?.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
+    if (mgKey) {
+      if (!access.anthropic) access.anthropic = 'apikey';
+      if (!access.openai) access.openai = 'apikey';
+    }
     // Include all other providers that have API keys configured
     const seen = new Set(Object.keys(access));
     for (const m of models) {

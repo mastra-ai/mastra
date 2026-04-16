@@ -61,7 +61,7 @@ export class CompositeVersionedSkillSource implements SkillSource {
    * Route a path to the correct source.
    * Returns the source and the remaining path within that source.
    */
-  #routePath(path: string): { source: SkillSource; subPath: string } | null {
+  #routePath(path: string): { source: SkillSource; subPath: string; mountDir: string } | null {
     const normalized = this.#normalizePath(path);
 
     // Root: handled by this source directly
@@ -73,18 +73,18 @@ export class CompositeVersionedSkillSource implements SkillSource {
 
     // Check if this skill should use the fallback source
     if (this.#fallbackSkills.has(skillDir) && this.#fallback) {
-      return { source: this.#fallback, subPath: normalized };
+      return { source: this.#fallback, subPath: normalized, mountDir: '' };
     }
 
     // Check if this skill has a versioned source
     const versionedSource = this.#sources.get(skillDir);
     if (versionedSource) {
-      return { source: versionedSource, subPath };
+      return { source: versionedSource, subPath, mountDir: skillDir };
     }
 
     // Try the fallback for unknown paths
     if (this.#fallback) {
-      return { source: this.#fallback, subPath: normalized };
+      return { source: this.#fallback, subPath: normalized, mountDir: '' };
     }
 
     return null;
@@ -163,5 +163,18 @@ export class CompositeVersionedSkillSource implements SkillSource {
     }
 
     return route.source.readdir(route.subPath);
+  }
+
+  async realpath(path: string): Promise<string> {
+    const normalized = this.#normalizePath(path);
+    if (normalized === '') return '';
+
+    const route = this.#routePath(path);
+    if (!route) {
+      throw new Error(`Path not found in composite skill source: ${path}`);
+    }
+
+    const realSubPath = route.source.realpath ? await route.source.realpath(route.subPath) : route.subPath;
+    return [route.mountDir, realSubPath].filter(Boolean).join('/');
   }
 }

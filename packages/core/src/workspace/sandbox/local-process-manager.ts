@@ -5,6 +5,8 @@
  * Tracks processes in-memory since there's no server to query.
  */
 
+import * as path from 'node:path';
+
 import type { ResultPromise, Options as ExecaOptions } from 'execa';
 
 import { getExeca } from './execa';
@@ -163,7 +165,7 @@ async function killProcessTree(pid: number, subprocess: ResultPromise, signal: N
  */
 export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
-    const cwd = options.cwd ?? this.sandbox.workingDirectory;
+    const cwd = options.cwd ? path.resolve(this.sandbox.workingDirectory, options.cwd) : this.sandbox.workingDirectory;
     const env = this.sandbox.buildEnv(options.env);
     const wrapped = this.sandbox.wrapCommandForIsolation(command);
 

@@ -333,6 +333,225 @@ describe('RecordedTrace', () => {
     );
   });
 
+  it('adds top-level annotations directly from provided correlation context', async () => {
+    const storage = new MockStore();
+    const onScoreEvent = vi.fn().mockResolvedValue(undefined);
+    const onFeedbackEvent = vi.fn().mockResolvedValue(undefined);
+
+    const mirrorExporter: ObservabilityExporter = {
+      name: 'mirror-exporter',
+      exportTracingEvent: vi.fn().mockResolvedValue(undefined),
+      onScoreEvent,
+      onFeedbackEvent,
+      flush: vi.fn().mockResolvedValue(undefined),
+      shutdown: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      observability: new Observability({
+        configs: {
+          default: {
+            serviceName: 'test-service',
+            exporters: [new DefaultExporter(), mirrorExporter],
+          },
+        },
+      }),
+    });
+
+    const observabilityStore = await storage.getStore('observability');
+    expect(observabilityStore).toBeTruthy();
+
+    const correlationContext = {
+      traceId: 'trace-live',
+      spanId: 'span-live',
+      entityType: EntityType.TOOL,
+      entityId: 'tool-1',
+      entityName: 'tool-call',
+      parentEntityType: EntityType.AGENT,
+      parentEntityId: 'agent-1',
+      parentEntityName: 'agent-run',
+      rootEntityType: EntityType.WORKFLOW_RUN,
+      rootEntityId: 'workflow-1',
+      rootEntityName: 'workflow-root',
+      source: 'cloud',
+      serviceName: 'test-service',
+      experimentId: 'exp-live',
+      tags: ['prod', 'review'],
+    } as const;
+
+    await mastra.observability.addScore({
+      traceId: 'trace-live',
+      spanId: 'span-live',
+      correlationContext,
+      score: {
+        scorerId: 'content-similarity-scorer',
+        scoreSource: 'code',
+        score: 0.88,
+        reason: 'Fast scorer emitted directly from live span context',
+        metadata: { reviewer: 'qa' },
+      },
+    });
+
+    await mastra.observability.addFeedback({
+      traceId: 'trace-live',
+      spanId: 'span-live',
+      correlationContext,
+      feedback: {
+        feedbackSource: 'user',
+        feedbackType: 'thumbs',
+        value: 1,
+        feedbackUserId: 'user-123',
+        comment: 'Helpful',
+        metadata: { channel: 'chat' },
+      },
+    });
+
+    await mastra.observability.getDefaultInstance()?.flush();
+
+    const scores = await observabilityStore!.listScores({
+      filters: { traceId: 'trace-live' },
+      pagination: { page: 0, perPage: 10 },
+      orderBy: { field: 'timestamp', direction: 'ASC' },
+    });
+    const feedback = await observabilityStore!.listFeedback({
+      filters: { traceId: 'trace-live' },
+      pagination: { page: 0, perPage: 10 },
+      orderBy: { field: 'timestamp', direction: 'ASC' },
+    });
+
+    expect(scores.scores[0]).toMatchObject({
+      traceId: 'trace-live',
+      spanId: 'span-live',
+      scorerId: 'content-similarity-scorer',
+      scoreSource: 'code',
+      entityName: 'tool-call',
+      parentEntityName: 'agent-run',
+      rootEntityName: 'workflow-root',
+      executionSource: 'cloud',
+      experimentId: 'exp-live',
+      metadata: { reviewer: 'qa' },
+    });
+
+    expect(feedback.feedback[0]).toMatchObject({
+      traceId: 'trace-live',
+      spanId: 'span-live',
+      feedbackSource: 'user',
+      feedbackType: 'thumbs',
+      value: 1,
+      feedbackUserId: 'user-123',
+      entityName: 'tool-call',
+      parentEntityName: 'agent-run',
+      rootEntityName: 'workflow-root',
+      executionSource: 'cloud',
+      experimentId: 'exp-live',
+      metadata: { channel: 'chat' },
+    });
+
+    expect(onScoreEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        score: expect.objectContaining({
+          traceId: 'trace-live',
+          spanId: 'span-live',
+          correlationContext: expect.objectContaining({
+            entityName: 'tool-call',
+            parentEntityName: 'agent-run',
+            rootEntityName: 'workflow-root',
+          }),
+        }),
+      }),
+    );
+
+    expect(onFeedbackEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        feedback: expect.objectContaining({
+          traceId: 'trace-live',
+          spanId: 'span-live',
+          correlationContext: expect.objectContaining({
+            entityName: 'tool-call',
+            parentEntityName: 'agent-run',
+            rootEntityName: 'workflow-root',
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('allows top-level annotations without traceId when correlation context is provided', async () => {
+    const storage = new MockStore();
+
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      observability: new Observability({
+        configs: {
+          default: {
+            serviceName: 'test-service',
+            exporters: [new DefaultExporter()],
+          },
+        },
+      }),
+    });
+
+    const observabilityStore = await storage.getStore('observability');
+    expect(observabilityStore).toBeTruthy();
+
+    const correlationContext = {
+      entityType: EntityType.TOOL,
+      entityName: 'tool-call',
+      rootEntityType: EntityType.WORKFLOW_RUN,
+      rootEntityName: 'workflow-root',
+      source: 'cloud',
+      serviceName: 'test-service',
+    } as const;
+
+    await mastra.observability.addScore({
+      correlationContext,
+      score: {
+        scorerId: 'unanchored-scorer',
+        score: 0.5,
+      },
+    });
+
+    await mastra.observability.addFeedback({
+      correlationContext,
+      feedback: {
+        feedbackSource: 'user',
+        feedbackType: 'thumbs',
+        value: 1,
+      },
+    });
+
+    await mastra.observability.getDefaultInstance()?.flush();
+
+    const scores = await observabilityStore!.listScores({
+      pagination: { page: 0, perPage: 10 },
+      orderBy: { field: 'timestamp', direction: 'ASC' },
+    });
+    const feedback = await observabilityStore!.listFeedback({
+      pagination: { page: 0, perPage: 10 },
+      orderBy: { field: 'timestamp', direction: 'ASC' },
+    });
+
+    expect(scores.scores[0]).toMatchObject({
+      traceId: null,
+      scorerId: 'unanchored-scorer',
+      entityName: 'tool-call',
+      rootEntityName: 'workflow-root',
+      executionSource: 'cloud',
+    });
+
+    expect(feedback.feedback[0]).toMatchObject({
+      traceId: null,
+      feedbackSource: 'user',
+      feedbackType: 'thumbs',
+      entityName: 'tool-call',
+      rootEntityName: 'workflow-root',
+      executionSource: 'cloud',
+    });
+  });
+
   it('debug-logs and skips annotation when the recorded emit path is no longer wired', async () => {
     const emitRecordedEvent = vi.fn().mockResolvedValue(undefined);
     const debugRecordedAnnotationUnavailable = vi.fn();

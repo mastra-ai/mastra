@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-studio",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Mastra Studio Auth integration — proxies authentication through Mastra shared API",
   "type": "module",
   "main": "dist/index.js",

@@ -94,10 +94,24 @@ export function updateStatusLine(state: TUIState): void {
         ? state.harness.getObserverModelId()
         : state.harness.getReflectorModelId()
       : state.harness.getFullModelId()) ?? '';
+  const compactModelId = (modelId: string): string => {
+    const parts = modelId.split('/');
+    if (parts.length >= 3) {
+      return `${parts[0]}/${parts.at(-1)!}`;
+    }
+    if (parts.length === 2) {
+      return parts[1] ?? modelId;
+    }
+    return modelId;
+  };
+
   // e.g. "anthropic/claude-sonnet-4-20250514" → "claude-sonnet-4-20250514"
-  const shortModelId = fullModelId.includes('/') ? fullModelId.slice(fullModelId.indexOf('/') + 1) : fullModelId;
-  // e.g. "claude-opus-4-6" → "opus 4.6", "claude-sonnet-4-20250514" → "sonnet-4-20250514"
-  const tinyModelId = shortModelId.replace(/^claude-/, '').replace(/^(\w+)-(\d+)-(\d{1,2})$/, '$1 $2.$3');
+  // e.g. "mastra/anthropic/claude-opus-4.6" → "mastra/claude-opus-4.6"
+  const shortModelId = compactModelId(fullModelId);
+  // e.g. "claude-opus-4-6" → "opus 4.6", "mastra/anthropic/claude-opus-4.6" → "mastra/claude-opus-4.6"
+  const tinyModelId = shortModelId.includes('/')
+    ? shortModelId
+    : shortModelId.replace(/^claude-/, '').replace(/^(\w+)-(\d+)-(\d{1,2})$/, '$1 $2.$3');
 
   const homedir = process.env.HOME || process.env.USERPROFILE || '';
   // Use thread title if available and not generic, otherwise use project root path

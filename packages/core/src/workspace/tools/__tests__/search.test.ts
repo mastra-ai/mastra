@@ -24,7 +24,7 @@ describe('workspace_search', () => {
       filesystem: new LocalFilesystem({ basePath: tempDir }),
       bm25: true,
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     await workspace.index('/doc.txt', 'The quick brown fox');
 
@@ -40,7 +40,7 @@ describe('workspace_search', () => {
       filesystem: new LocalFilesystem({ basePath: tempDir }),
       bm25: true,
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     await workspace.index('/doc.txt', 'The quick brown fox');
 

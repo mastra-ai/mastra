@@ -51,6 +51,13 @@ import { processMastraNetworkStream, processMastraStream } from '../utils/proces
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
 
+type ToolCallRespondFn<OUTPUT> = (
+  messages: MessageListInput,
+  options: StreamParamsBaseWithoutMessages<OUTPUT> & {
+    structuredOutput?: StructuredOutputOptions<OUTPUT>;
+  },
+) => Promise<FullOutput<OUTPUT>>;
+
 async function executeToolCallAndRespond<OUTPUT>({
   response,
   params,
@@ -66,7 +73,7 @@ async function executeToolCallAndRespond<OUTPUT>({
   resourceId?: string;
   threadId?: string;
   requestContext?: RequestContext<any>;
-  respondFn: Agent['generate'];
+  respondFn: ToolCallRespondFn<OUTPUT>;
 }) {
   if (response.finishReason === 'tool-calls') {
     const toolCalls = (
@@ -119,7 +126,15 @@ async function executeToolCallAndRespond<OUTPUT>({
           ? newMessages
           : [...(Array.isArray(params.messages) ? params.messages : []), ...newMessages];
 
-        return respondFn(updatedMessages as MessageListInput, params);
+        const respondOptions: StreamParamsBaseWithoutMessages<OUTPUT> & {
+          structuredOutput?: StructuredOutputOptions<OUTPUT>;
+        } = {
+          ...params,
+        };
+
+        delete (respondOptions as { messages?: MessageListInput }).messages;
+
+        return respondFn(updatedMessages as MessageListInput, respondOptions);
       }
     }
   }
@@ -541,7 +556,7 @@ export class Agent extends BaseResource {
         resourceId,
         threadId,
         requestContext: requestContext as RequestContext<any>,
-        respondFn: this.generate.bind(this),
+        respondFn: this.generate.bind(this) as ToolCallRespondFn<OUTPUT>,
       }) as unknown as Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
     }
 

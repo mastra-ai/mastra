@@ -1,5 +1,6 @@
 import type { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
+import type { MastraBrowser } from '../browser/browser';
 import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
@@ -92,6 +93,10 @@ export class Harness<TState = {}> {
     | ((ctx: { requestContext: RequestContext }) => Promise<Workspace | undefined> | Workspace | undefined)
     | undefined = undefined;
   private workspaceInitialized = false;
+  private browser: MastraBrowser | undefined = undefined;
+  private browserFn:
+    | ((ctx: { requestContext: RequestContext }) => Promise<MastraBrowser | undefined> | MastraBrowser | undefined)
+    | undefined = undefined;
   private heartbeatTimers = new Map<string, { timer: NodeJS.Timeout; shutdown?: () => void | Promise<void> }>();
   private tokenUsage: { promptTokens: number; completionTokens: number; totalTokens: number } = {
     promptTokens: 0,
@@ -130,6 +135,13 @@ export class Harness<TState = {}> {
       this.workspace = config.workspace;
     } else if (typeof config.workspace === 'function') {
       this.workspaceFn = config.workspace;
+    }
+
+    // Store browser: pre-built instance or dynamic factory
+    if (config.browser && typeof config.browser !== 'function') {
+      this.browser = config.browser;
+    } else if (typeof config.browser === 'function') {
+      this.browserFn = config.browser;
     }
 
     // Seed model from mode default if not set
@@ -184,8 +196,9 @@ export class Harness<TState = {}> {
       }
     }
 
-    // Propagate harness-level Mastra, memory, and workspace to mode agents (after workspace init)
+    // Propagate harness-level Mastra, memory, workspace, and browser to mode agents (after workspace init)
     const workspaceForAgents = this.workspaceFn ?? this.workspace;
+    const browserForAgents = this.browserFn ?? this.browser;
     for (const mode of this.config.modes) {
       const agent = typeof mode.agent === 'function' ? null : mode.agent;
       if (!agent) continue;
@@ -197,6 +210,9 @@ export class Harness<TState = {}> {
       }
       if (workspaceForAgents && !agent.hasOwnWorkspace()) {
         agent.__setWorkspace(workspaceForAgents);
+      }
+      if (browserForAgents && !agent.hasOwnBrowser()) {
+        agent.setBrowser(browserForAgents as MastraBrowser);
       }
 
       if (this.#internalMastra && !alreadyHasMastra) {
@@ -1348,7 +1364,13 @@ export class Harness<TState = {}> {
         };
       }
 
-      const response = await agent.stream(messageInput as any, streamOptions as any);
+      const response = await agent.stream(
+        typeof messageInput === 'string' && messageInput === ''
+          ? // allow sending an empty message to manually re-trigger agent from its last output
+            []
+          : (messageInput as any),
+        streamOptions as any,
+      );
       const streamResult = await this.processStream(response, requestContext);
 
       if (this.currentOperationId === operationId) {
@@ -1369,6 +1391,20 @@ export class Harness<TState = {}> {
         });
         this.followUpQueue.push({
           content: `[System] Your previous tool call used "${badTool}" which is not a valid tool. Please retry with the correct tool name.`,
+          requestContext: requestContextInput,
+        });
+        this.emit({ type: 'agent_end', reason: 'error' });
+      } else if (
+        error instanceof Error &&
+        /does not support assistant message prefill|must end with a user message/i.test(error.message)
+      ) {
+        this.emit({
+          type: 'error',
+          error: new Error('Model does not support assistant message prefill. Retrying with a user message.'),
+          retryable: true,
+        });
+        this.followUpQueue.push({
+          content: '<system-reminder>There was an API error, please continue.</system-reminder>',
           requestContext: requestContextInput,
         });
         this.emit({ type: 'agent_end', reason: 'error' });
@@ -2046,6 +2082,10 @@ export class Harness<TState = {}> {
               observationTokens: payload.observationTokens ?? 0,
               messagesActivated: payload.messagesActivated ?? 0,
               generationCount: payload.generationCount ?? 0,
+              triggeredBy: payload.triggeredBy,
+              lastActivityAt: payload.lastActivityAt,
+              ttlExpiredMs: payload.ttlExpiredMs,
+              activateAfterIdle: payload.config?.activateAfterIdle,
             });
           }
           break;
@@ -2312,10 +2352,11 @@ export class Harness<TState = {}> {
     }
 
     const requestContext = await this.buildRequestContext(requestContextInput);
+    const isYolo = (this.state as Record<string, unknown>).yolo === true;
     const response = await agent.approveToolCall({
       runId: this.currentRunId,
       toolCallId,
-      requireToolApproval: true,
+      requireToolApproval: !isYolo,
       memory: this.currentThreadId ? { thread: this.currentThreadId, resource: this.resourceId } : undefined,
       abortSignal: this.abortController.signal,
       requestContext,
@@ -2342,10 +2383,11 @@ export class Harness<TState = {}> {
     }
 
     const requestContext = await this.buildRequestContext(requestContextInput);
+    const isYolo = (this.state as Record<string, unknown>).yolo === true;
     const response = await agent.declineToolCall({
       runId: this.currentRunId,
       toolCallId,
-      requireToolApproval: true,
+      requireToolApproval: !isYolo,
       memory: this.currentThreadId ? { thread: this.currentThreadId, resource: this.resourceId } : undefined,
       abortSignal: this.abortController.signal,
       requestContext,
@@ -2373,10 +2415,11 @@ export class Harness<TState = {}> {
     }
 
     const requestContext = await this.buildRequestContext(requestContextInput);
+    const isYolo = (this.state as Record<string, unknown>).yolo === true;
     const response = await agent.resumeStream(resumeData, {
       runId: this.pendingSuspensionRunId,
       toolCallId: this.pendingSuspensionToolCallId ?? undefined,
-      requireToolApproval: true,
+      requireToolApproval: !isYolo,
       memory: this.currentThreadId ? { thread: this.currentThreadId, resource: this.resourceId } : undefined,
       abortSignal: this.abortController.signal,
       requestContext,

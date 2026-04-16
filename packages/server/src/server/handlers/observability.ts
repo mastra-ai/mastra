@@ -1,5 +1,5 @@
 import type { Mastra } from '@mastra/core';
-import { listScoresResponseSchema } from '@mastra/core/evals';
+import { extractTrajectoryFromTrace, listScoresResponseSchema } from '@mastra/core/evals';
 import { scoreTraces } from '@mastra/core/evals/scoreTraces';
 import type { ScoresStorage } from '@mastra/core/storage';
 import {
@@ -149,6 +149,39 @@ export const GET_TRACE_ROUTE = createRoute({
       return trace;
     } catch (error) {
       return handleError(error, 'Error getting trace');
+    }
+  },
+});
+
+/** Route: GET /observability/traces/:traceId/trajectory - extract trajectory from a trace. */
+export const GET_TRACE_TRAJECTORY_ROUTE = createRoute({
+  method: 'GET',
+  path: '/observability/traces/:traceId/trajectory',
+  responseType: 'json',
+  pathParamSchema: getTraceArgsSchema,
+  responseSchema: z.object({
+    steps: z.array(z.unknown()),
+    totalDurationMs: z.number().optional(),
+    rawOutput: z.unknown().optional(),
+    rawWorkflowResult: z.unknown().optional(),
+  }),
+  summary: 'Extract trajectory from trace',
+  description: 'Extracts a structured trajectory (ordered steps) from a trace by analyzing its spans',
+  tags: ['Observability'],
+  requiresAuth: true,
+  handler: async ({ mastra, traceId }) => {
+    try {
+      const observabilityStore = await getObservabilityStore(mastra);
+      const trace = await observabilityStore.getTrace({ traceId });
+
+      if (!trace) {
+        throw new HTTPException(404, { message: `Trace with ID '${traceId}' not found` });
+      }
+
+      const trajectory = extractTrajectoryFromTrace(trace.spans);
+      return trajectory;
+    } catch (error) {
+      return handleError(error, 'Error extracting trajectory from trace');
     }
   },
 });

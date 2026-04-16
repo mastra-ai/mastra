@@ -70,12 +70,15 @@ type CorrelationRecordFields = Pick<
   | 'entityType'
   | 'entityId'
   | 'entityName'
+  | 'entityVersionId'
   | 'parentEntityType'
   | 'parentEntityId'
   | 'parentEntityName'
+  | 'parentEntityVersionId'
   | 'rootEntityType'
   | 'rootEntityId'
   | 'rootEntityName'
+  | 'rootEntityVersionId'
   | 'userId'
   | 'organizationId'
   | 'resourceId'
@@ -95,12 +98,15 @@ function buildCorrelationRecordFields(context: CorrelationContext | undefined): 
     entityType: context?.entityType ?? null,
     entityId: context?.entityId ?? null,
     entityName: context?.entityName ?? null,
+    entityVersionId: context?.entityVersionId ?? null,
     parentEntityType: context?.parentEntityType ?? null,
     parentEntityId: context?.parentEntityId ?? null,
     parentEntityName: context?.parentEntityName ?? null,
+    parentEntityVersionId: context?.parentEntityVersionId ?? null,
     rootEntityType: context?.rootEntityType ?? null,
     rootEntityId: context?.rootEntityId ?? null,
     rootEntityName: context?.rootEntityName ?? null,
+    rootEntityVersionId: context?.rootEntityVersionId ?? null,
     userId: context?.userId ?? null,
     organizationId: context?.organizationId ?? null,
     resourceId: context?.resourceId ?? null,
@@ -169,6 +175,7 @@ export function buildCreateSpanRecord(span: AnyExportedSpan): CreateSpanRecord {
     entityType: span.entityType ?? null,
     entityId: span.entityId ?? null,
     entityName: span.entityName ?? null,
+    entityVersionId: getStringOrNull(metadata.entityVersionId),
 
     // Identity & Tenancy - extracted from metadata if present
     userId: getStringOrNull(metadata.userId),
@@ -186,6 +193,9 @@ export function buildCreateSpanRecord(span: AnyExportedSpan): CreateSpanRecord {
     source: getStringOrNull(metadata.source),
     serviceName: getStringOrNull(metadata.serviceName),
     scope: getObjectOrNull(metadata.scope),
+
+    // Experimentation
+    experimentId: getStringOrNull(metadata.experimentId),
 
     // Span data
     spanType: span.type,
@@ -297,10 +307,11 @@ export function buildScoreRecord(event: ScoreEvent): CreateScoreRecord {
     score: s.score,
     reason: s.reason ?? null,
     ...correlationFields,
+    entityType: correlationFields.entityType ?? s.targetEntityType ?? null,
     experimentId: correlationFields.experimentId ?? s.experimentId ?? null,
     scope: null,
     scoreTraceId: s.scoreTraceId ?? null,
-    metadata: s.metadata ?? null,
+    metadata: s.scorerName ? { ...(s.metadata ?? {}), scorerName: s.scorerName } : (s.metadata ?? null),
   };
 }
 

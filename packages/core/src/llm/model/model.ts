@@ -135,7 +135,7 @@ export class MastraLLMV1 extends MastraBase {
     const model = this.#model;
     const observabilityContext = resolveObservabilityContext(rest);
 
-    this.logger.debug(`[LLM] - Generating text`, {
+    this.logger.debug('Generating text', {
       runId,
       messages,
       maxSteps,
@@ -147,7 +147,7 @@ export class MastraLLMV1 extends MastraBase {
     let schema: z.ZodType<inferOutput<Z>> | Schema<inferOutput<Z>> | undefined = undefined;
 
     if (experimental_output) {
-      this.logger.debug('[LLM] - Using experimental output', {
+      this.logger.debug('Using experimental output', {
         runId,
       });
 
@@ -246,7 +246,7 @@ export class MastraLLMV1 extends MastraBase {
           throw mastraError;
         }
 
-        this.logger.debug('[LLM] - Text Step Change:', {
+        this.logger.debug('Text step change', {
           text: props?.text,
           toolCalls: props?.toolCalls,
           toolResults: props?.toolResults,
@@ -313,7 +313,7 @@ export class MastraLLMV1 extends MastraBase {
         },
         e,
       );
-      this.logger.error('[LLM] - Generate text failed', {
+      this.logger.error('Generate text failed', {
         error: mastraError,
         runId,
         threadId,
@@ -338,7 +338,7 @@ export class MastraLLMV1 extends MastraBase {
     const model = this.#model;
     const observabilityContext = resolveObservabilityContext(rest);
 
-    this.logger.debug(`[LLM] - Generating a text object`, { runId });
+    this.logger.debug('Generating text object', { runId });
 
     const llmSpan = observabilityContext.tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
@@ -430,7 +430,7 @@ export class MastraLLMV1 extends MastraBase {
           },
           e,
         );
-        this.logger.error('[LLM] - Generate object failed', {
+        this.logger.error('Generate object failed', {
           error: mastraError,
           runId,
           threadId,
@@ -461,7 +461,7 @@ export class MastraLLMV1 extends MastraBase {
         },
         e,
       );
-      this.logger.error('[LLM] - Generate object schema conversion failed', {
+      this.logger.error('Generate object schema conversion failed', {
         error: mastraError,
         runId,
         threadId,
@@ -492,20 +492,8 @@ export class MastraLLMV1 extends MastraBase {
     const model = this.#model;
     const observabilityContext = resolveObservabilityContext(rest);
 
-    this.logger.debug(`[LLM] - Streaming text`, {
-      runId,
-      threadId,
-      resourceId,
-      messages,
-      maxSteps,
-      tools: Object.keys(tools || {}),
-    });
-
     let schema: z.ZodType<Z> | Schema<Z> | undefined;
     if (experimental_output) {
-      this.logger.debug('[LLM] - Using experimental output', {
-        runId,
-      });
       if (typeof (experimental_output as any).parse === 'function') {
         schema = experimental_output as z.ZodType<Z>;
         if (isZodArray(schema)) {
@@ -542,6 +530,21 @@ export class MastraLLMV1 extends MastraBase {
       tracingPolicy: this.#options?.tracingPolicy,
       requestContext,
     });
+
+    if (llmSpan) {
+      executeWithContextSync({
+        span: llmSpan,
+        fn: () =>
+          this.logger.debug('Streaming text', {
+            runId,
+            threadId,
+            resourceId,
+            messages,
+            maxSteps,
+            tools: Object.keys(tools || {}),
+          }),
+      });
+    }
 
     // make json schema a ai sdk schema
     if (tools && Object.keys(tools).length > 0) {
@@ -594,7 +597,7 @@ export class MastraLLMV1 extends MastraBase {
           throw mastraError;
         }
 
-        this.logger.debug('[LLM] - Stream Step Change:', {
+        this.logger.debug('Stream step change', {
           text: props?.text,
           toolCalls: props?.toolCalls,
           toolResults: props?.toolResults,
@@ -655,7 +658,7 @@ export class MastraLLMV1 extends MastraBase {
           throw mastraError;
         }
 
-        this.logger.debug('[LLM] - Stream Finished:', {
+        this.logger.debug('Stream finished', {
           text: props?.text,
           toolCalls: props?.toolCalls,
           toolResults: props?.toolResults,
@@ -682,7 +685,7 @@ export class MastraLLMV1 extends MastraBase {
           },
           error,
         );
-        this.logger.error('[LLM] - Stream text error', {
+        this.logger.error('Stream text error', {
           error: mastraError,
           runId,
           threadId,
@@ -719,7 +722,7 @@ export class MastraLLMV1 extends MastraBase {
         },
         e,
       );
-      this.logger.error('[LLM] - Stream text failed', {
+      this.logger.error('Stream text failed', {
         error: mastraError,
         runId,
         threadId,
@@ -745,7 +748,7 @@ export class MastraLLMV1 extends MastraBase {
     const model = this.#model;
     const observabilityContext = resolveObservabilityContext(rest);
 
-    this.logger.debug(`[LLM] - Streaming structured output`, {
+    this.logger.debug('Streaming structured output', {
       runId,
       messages,
     });
@@ -841,7 +844,7 @@ export class MastraLLMV1 extends MastraBase {
             throw mastraError;
           }
 
-          this.logger.debug('[LLM] - Object Stream Finished:', {
+          this.logger.debug('Object stream finished', {
             usage: props?.usage,
             runId,
             threadId,
@@ -864,7 +867,7 @@ export class MastraLLMV1 extends MastraBase {
             },
             error,
           );
-          this.logger.error('[LLM] - Stream object error', {
+          this.logger.error('Stream object error', {
             error: mastraError,
             runId,
             threadId,
@@ -897,7 +900,7 @@ export class MastraLLMV1 extends MastraBase {
           },
           e,
         );
-        this.logger.error('[LLM] - Stream object failed', {
+        this.logger.error('Stream object failed', {
           error: mastraError,
           runId,
           threadId,
@@ -929,7 +932,7 @@ export class MastraLLMV1 extends MastraBase {
         },
         e,
       );
-      this.logger.error('[LLM] - Stream object schema conversion failed', {
+      this.logger.error('Stream object schema conversion failed', {
         error: mastraError,
         runId,
         threadId,

@@ -1,5 +1,123 @@
 # @mastra/mcp
 
+## 1.5.1-alpha.1
+
+### Patch Changes
+
+- Fixed MCP tools with recursive JSON Schema refs so they stay serializable when loaded. ([#15400](https://github.com/mastra-ai/mastra/pull/15400))
+
+- Updated dependencies [[`3d83d06`](https://github.com/mastra-ai/mastra/commit/3d83d06f776f00fb5f4163dddd32a030c5c20844), [`7e0e63e`](https://github.com/mastra-ai/mastra/commit/7e0e63e2e485e84442351f4c7a79a424c83539dc), [`9467ea8`](https://github.com/mastra-ai/mastra/commit/9467ea87695749a53dfc041576410ebf9ee7bb67), [`7338d94`](https://github.com/mastra-ai/mastra/commit/7338d949380cf68b095342e8e42610dc51d557c1)]:
+  - @mastra/core@1.26.0-alpha.2
+
+## 1.5.1-alpha.0
+
+### Patch Changes
+
+- Fixed MCP tool strict mode propagation. MCP servers now expose Mastra tool strictness in MCP metadata, and the MCP client restores that flag when rebuilding tools so strict OpenAI tool calling works for MCP-backed tools too. ([#15397](https://github.com/mastra-ai/mastra/pull/15397))
+
+- Updated dependencies [[`7020c06`](https://github.com/mastra-ai/mastra/commit/7020c0690b199d9da337f0e805f16948e557922e)]:
+  - @mastra/core@1.25.1-alpha.1
+
+## 1.5.0
+
+### Minor Changes
+
+- Added `requireToolApproval` option to MCP server configuration for requiring human approval before tool execution. Supports both boolean (all tools) and function (dynamic per-tool logic). ([#15315](https://github.com/mastra-ai/mastra/pull/15315))
+
+### Patch Changes
+
+- Preserve forwarded MCP client elicitation capabilities so client-supported URL and form elicitations work correctly. ([#15233](https://github.com/mastra-ai/mastra/pull/15233))
+
+- Updated dependencies [[`87df955`](https://github.com/mastra-ai/mastra/commit/87df955c028660c075873fd5d74af28233ce32eb), [`8fad147`](https://github.com/mastra-ai/mastra/commit/8fad14759804179c8e080ce4d9dec6ef1a808b31), [`582644c`](https://github.com/mastra-ai/mastra/commit/582644c4a87f83b4f245a84d72b9e8590585012e), [`cbdf3e1`](https://github.com/mastra-ai/mastra/commit/cbdf3e12b3d0c30a6e5347be658e2009648c130a), [`8fe46d3`](https://github.com/mastra-ai/mastra/commit/8fe46d354027f3f0f0846e64219772348de106dd), [`18c67db`](https://github.com/mastra-ai/mastra/commit/18c67dbb9c9ebc26f26f65f7d3ff836e5691ef46), [`4ba3bb1`](https://github.com/mastra-ai/mastra/commit/4ba3bb1e465ad2ddaba3bbf2bc47e0faec32985e), [`5d84914`](https://github.com/mastra-ai/mastra/commit/5d84914e0e520c642a40329b210b413fcd139898), [`8dcc77e`](https://github.com/mastra-ai/mastra/commit/8dcc77e78a5340f5848f74b9e9f1b3da3513c1f5), [`aa67fc5`](https://github.com/mastra-ai/mastra/commit/aa67fc59ee8a5eeff1f23eb05970b8d7a536c8ff), [`fd2f314`](https://github.com/mastra-ai/mastra/commit/fd2f31473d3449b6b97e837ef8641264377f41a7), [`fa8140b`](https://github.com/mastra-ai/mastra/commit/fa8140bcd4251d2e3ac85fdc5547dfc4f372b5be), [`190f452`](https://github.com/mastra-ai/mastra/commit/190f45258b0640e2adfc8219fa3258cdc5b8f071), [`e80fead`](https://github.com/mastra-ai/mastra/commit/e80fead1412cc0d1b2f7d6a1ce5017d9e0098ff7), [`0287b64`](https://github.com/mastra-ai/mastra/commit/0287b644a5c3272755cf3112e71338106664103b), [`7e7bf60`](https://github.com/mastra-ai/mastra/commit/7e7bf606886bf374a6f9d4ca9b09dd83d0533372), [`184907d`](https://github.com/mastra-ai/mastra/commit/184907d775d8609c03c26e78ccaf37315f3aa287), [`075e91a`](https://github.com/mastra-ai/mastra/commit/075e91a4549baf46ad7a42a6a8ac8dfa78cc09e6), [`0c4cd13`](https://github.com/mastra-ai/mastra/commit/0c4cd131931c04ac5405373c932a242dbe88edd6), [`b16a753`](https://github.com/mastra-ai/mastra/commit/b16a753d5748440248d7df82e29bb987a9c8386c)]:
+  - @mastra/core@1.25.0
+
+## 1.5.0-alpha.1
+
+### Patch Changes
+
+- Preserve forwarded MCP client elicitation capabilities so client-supported URL and form elicitations work correctly. ([#15233](https://github.com/mastra-ai/mastra/pull/15233))
+
+## 1.5.0-alpha.0
+
+### Minor Changes
+
+- Added `requireToolApproval` option to MCP server configuration for requiring human approval before tool execution. Supports both boolean (all tools) and function (dynamic per-tool logic). ([#15315](https://github.com/mastra-ai/mastra/pull/15315))
+
+### Patch Changes
+
+- Updated dependencies [[`cbdf3e1`](https://github.com/mastra-ai/mastra/commit/cbdf3e12b3d0c30a6e5347be658e2009648c130a), [`8fe46d3`](https://github.com/mastra-ai/mastra/commit/8fe46d354027f3f0f0846e64219772348de106dd), [`18c67db`](https://github.com/mastra-ai/mastra/commit/18c67dbb9c9ebc26f26f65f7d3ff836e5691ef46), [`8dcc77e`](https://github.com/mastra-ai/mastra/commit/8dcc77e78a5340f5848f74b9e9f1b3da3513c1f5), [`aa67fc5`](https://github.com/mastra-ai/mastra/commit/aa67fc59ee8a5eeff1f23eb05970b8d7a536c8ff), [`fa8140b`](https://github.com/mastra-ai/mastra/commit/fa8140bcd4251d2e3ac85fdc5547dfc4f372b5be), [`190f452`](https://github.com/mastra-ai/mastra/commit/190f45258b0640e2adfc8219fa3258cdc5b8f071), [`7e7bf60`](https://github.com/mastra-ai/mastra/commit/7e7bf606886bf374a6f9d4ca9b09dd83d0533372), [`184907d`](https://github.com/mastra-ai/mastra/commit/184907d775d8609c03c26e78ccaf37315f3aa287), [`0c4cd13`](https://github.com/mastra-ai/mastra/commit/0c4cd131931c04ac5405373c932a242dbe88edd6), [`b16a753`](https://github.com/mastra-ai/mastra/commit/b16a753d5748440248d7df82e29bb987a9c8386c)]:
+  - @mastra/core@1.25.0-alpha.3
+
+## 1.4.2
+
+### Patch Changes
+
+- Improved MCP tool discovery to retry once after reconnectable connection errors like `Connection closed` during `tools/list`. ([#15141](https://github.com/mastra-ai/mastra/pull/15141))
+
+  `MCPClient.listToolsets()`, `listToolsetsWithErrors()`, and `listTools()` now attempt a reconnect before treating transient discovery failures as missing tools.
+
+- Fixed MCP server to return HTTP 404 (instead of 400) when a client sends a stale or unknown session ID. Per the MCP spec, this tells clients to re-initialize with a new session, which fixes broken tool calls after server redeploys. ([#15160](https://github.com/mastra-ai/mastra/pull/15160))
+
+- Updated dependencies [[`8db7663`](https://github.com/mastra-ai/mastra/commit/8db7663c9a9c735828094c359d2e327fd4f8fba3), [`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38), [`715710d`](https://github.com/mastra-ai/mastra/commit/715710d12fa47cf88e09d41f13843eddc29327b0), [`378c6c4`](https://github.com/mastra-ai/mastra/commit/378c6c4755726e8d8cf83a14809b350b90d46c62), [`9f91fd5`](https://github.com/mastra-ai/mastra/commit/9f91fd538ab2a44f8cc740bcad8e51205f74fbea), [`ba6fa9c`](https://github.com/mastra-ai/mastra/commit/ba6fa9cc0f3e1912c49fd70d4c3bb8c44903ddaa)]:
+  - @mastra/core@1.24.0
+
+## 1.4.2-alpha.1
+
+### Patch Changes
+
+- Fixed MCP server to return HTTP 404 (instead of 400) when a client sends a stale or unknown session ID. Per the MCP spec, this tells clients to re-initialize with a new session, which fixes broken tool calls after server redeploys. ([#15160](https://github.com/mastra-ai/mastra/pull/15160))
+
+## 1.4.2-alpha.0
+
+### Patch Changes
+
+- Improved MCP tool discovery to retry once after reconnectable connection errors like `Connection closed` during `tools/list`. ([#15141](https://github.com/mastra-ai/mastra/pull/15141))
+
+  `MCPClient.listToolsets()`, `listToolsetsWithErrors()`, and `listTools()` now attempt a reconnect before treating transient discovery failures as missing tools.
+
+- Updated dependencies [[`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38)]:
+  - @mastra/core@1.23.1-alpha.0
+
+## 1.4.1
+
+### Patch Changes
+
+- Standardized all logger calls across the codebase to use static string messages with structured data objects. Dynamic values are now passed as key-value pairs in the second argument instead of being interpolated into template literal strings. This improves log filterability and searchability in observability storage. ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+
+  Removed ~150 redundant or noisy log calls including duplicate error logging after trackException and verbose in-memory storage CRUD traces.
+
+- Updated dependencies [[`cbeec24`](https://github.com/mastra-ai/mastra/commit/cbeec24b3c97a1a296e7e461e66cc7f7d215dc50), [`cee146b`](https://github.com/mastra-ai/mastra/commit/cee146b5d858212e1df2b2730fc36d3ceda0e08d), [`aa0aeff`](https://github.com/mastra-ai/mastra/commit/aa0aeffa11efbef5e219fbd97bf43d263cfe3afe), [`2bcec65`](https://github.com/mastra-ai/mastra/commit/2bcec652d62b07eab15e9eb9822f70184526eede), [`ad9bded`](https://github.com/mastra-ai/mastra/commit/ad9bdedf86a824801f49928a8d40f6e31ff5450f), [`cbeec24`](https://github.com/mastra-ai/mastra/commit/cbeec24b3c97a1a296e7e461e66cc7f7d215dc50), [`208c0bb`](https://github.com/mastra-ai/mastra/commit/208c0bbacbf5a1da6318f2a0e0c544390e542ddc), [`f566ee7`](https://github.com/mastra-ai/mastra/commit/f566ee7d53a3da33a01103e2a5ac2070ddefe6b0)]:
+  - @mastra/core@1.20.0
+
+## 1.4.1-alpha.0
+
+### Patch Changes
+
+- Standardized all logger calls across the codebase to use static string messages with structured data objects. Dynamic values are now passed as key-value pairs in the second argument instead of being interpolated into template literal strings. This improves log filterability and searchability in observability storage. ([#14899](https://github.com/mastra-ai/mastra/pull/14899))
+
+  Removed ~150 redundant or noisy log calls including duplicate error logging after trackException and verbose in-memory storage CRUD traces.
+
+- Updated dependencies [[`cbeec24`](https://github.com/mastra-ai/mastra/commit/cbeec24b3c97a1a296e7e461e66cc7f7d215dc50), [`cee146b`](https://github.com/mastra-ai/mastra/commit/cee146b5d858212e1df2b2730fc36d3ceda0e08d), [`aa0aeff`](https://github.com/mastra-ai/mastra/commit/aa0aeffa11efbef5e219fbd97bf43d263cfe3afe), [`2bcec65`](https://github.com/mastra-ai/mastra/commit/2bcec652d62b07eab15e9eb9822f70184526eede), [`ad9bded`](https://github.com/mastra-ai/mastra/commit/ad9bdedf86a824801f49928a8d40f6e31ff5450f), [`cbeec24`](https://github.com/mastra-ai/mastra/commit/cbeec24b3c97a1a296e7e461e66cc7f7d215dc50), [`208c0bb`](https://github.com/mastra-ai/mastra/commit/208c0bbacbf5a1da6318f2a0e0c544390e542ddc), [`f566ee7`](https://github.com/mastra-ai/mastra/commit/f566ee7d53a3da33a01103e2a5ac2070ddefe6b0)]:
+  - @mastra/core@1.20.0-alpha.0
+
+## 1.4.0
+
+### Minor Changes
+
+- Added support for passing custom \_meta metadata when calling tools on external MCP servers. The execute context now accepts an optional \_meta field with arbitrary key-value pairs that are forwarded in the callTool request, enabling use cases like distributed tracing, compliance tagging, and multi-tenant routing. Custom \_meta is merged with the progress token when progress tracking is enabled. ([#14809](https://github.com/mastra-ai/mastra/pull/14809))
+
+  ```typescript
+  const tools = await mcpClient.tools();
+  await tools['my_tool'].execute({ query: 'active users' }, { _meta: { traceId: 'span-456', tenantId: 'org-123' } });
+  ```
+
+  When `enableProgressTracking` is enabled, the `progressToken` is automatically merged into `_meta` alongside your custom fields.
+
+### Patch Changes
+
+- Updated dependencies [[`180aaaf`](https://github.com/mastra-ai/mastra/commit/180aaaf4d0903d33a49bc72de2d40ca69a5bc599), [`9140989`](https://github.com/mastra-ai/mastra/commit/91409890e83f4f1d9c1b39223f1af91a6a53b549), [`d7c98cf`](https://github.com/mastra-ai/mastra/commit/d7c98cfc9d75baba9ecbf1a8835b5183d0a0aec8), [`acf5fbc`](https://github.com/mastra-ai/mastra/commit/acf5fbcb890dc7ca7167bec386ce5874dfadb997), [`24ca2ae`](https://github.com/mastra-ai/mastra/commit/24ca2ae57538ec189fabb9daee6175ad27035853), [`0762516`](https://github.com/mastra-ai/mastra/commit/07625167e029a8268ea7aaf0402416e6d8832874), [`9c57f2f`](https://github.com/mastra-ai/mastra/commit/9c57f2f7241e9f94769aa99fc86c531e8207d0f9), [`5bfc691`](https://github.com/mastra-ai/mastra/commit/5bfc69104c07ba7a9b55c2f8536422c0878b9c57), [`2de3d36`](https://github.com/mastra-ai/mastra/commit/2de3d36932b7f73ad26bc403f7da26cfe89e903e), [`d3736cb`](https://github.com/mastra-ai/mastra/commit/d3736cb9ce074d2b8e8b00218a01f790fe81a1b4), [`c627366`](https://github.com/mastra-ai/mastra/commit/c6273666f9ef4c8c617c68b7d07fe878a322f85c)]:
+  - @mastra/core@1.19.0
+
 ## 1.4.0-alpha.0
 
 ### Minor Changes

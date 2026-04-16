@@ -63,17 +63,28 @@ describe('create mastra', () => {
 
         await new Promise<void>((resolve, reject) => {
           console.log('waiting for server to start');
+
+          const timeout = setTimeout(() => {
+            reject(new Error('Dev server did not start in time'));
+          }, 30000); // 30s safety
+
           proc!.stderr?.on('data', data => {
             const output = data?.toString() ?? '';
             console.error(output);
-            const errorPatterns = ['Error', 'ERR', 'failed', 'ENOENT', 'MODULE_NOT_FOUND'];
-            if (errorPatterns.some(pattern => output.toLowerCase().includes(pattern.toLowerCase()))) {
-              reject(new Error('failed to start dev: ' + data?.toString()));
+
+            const errorPatterns = ['error', 'err', 'failed', 'enoent', 'module_not_found'];
+            if (errorPatterns.some(pattern => output.toLowerCase().includes(pattern))) {
+              clearTimeout(timeout);
+              reject(new Error('failed to start dev: ' + output));
             }
           });
+
           proc!.stdout?.on('data', data => {
-            console.log(data?.toString());
-            if (data?.toString()?.includes(`http://localhost:${port}`)) {
+            const output = data?.toString() ?? '';
+            console.log(output);
+
+            if (output.includes(`http://localhost:${port}`)) {
+              clearTimeout(timeout);
               resolve();
             }
           });
@@ -84,7 +95,7 @@ describe('create mastra', () => {
 
     afterAll(async () => {
       if (proc) {
-        proc.kill();
+        proc.kill('SIGTERM');
       }
     });
 
@@ -111,6 +122,7 @@ describe('create mastra', () => {
           {
             "weather-agent": {
               "agents": {},
+              "browserTools": [],
               "defaultGenerateOptionsLegacy": {},
               "defaultOptions": {},
               "defaultStreamOptionsLegacy": {},

@@ -356,3 +356,20 @@ html.light {
   background-color: #121212 !important;
   border: none !important;
 }
+
+/* Click ripple animation for browser view */
+@keyframes click-ripple {
+  0% {
+    transform: scale(0);
+    opacity: 0.5;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+.animate-click-ripple {
+  animation: click-ripple 300ms ease-out forwards;
+}
