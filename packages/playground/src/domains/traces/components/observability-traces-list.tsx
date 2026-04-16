@@ -293,7 +293,10 @@ export function ObservabilityTracesList({
 
   return (
     <div
-      className={cn('grid h-full min-h-0 gap-4 items-start ', hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]')}
+      className={cn(
+        'grid max-h-full min-h-0 gap-4 items-start ',
+        hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]',
+      )}
     >
       <TracesDataList columns={COLUMNS} className="min-w-0">
         <TracesDataList.Top>
@@ -357,7 +360,7 @@ export function ObservabilityTracesList({
       {featuredTraceId && (
         <div
           className={cn(
-            'grid gap-4 h-full overflow-auto',
+            'grid gap-4 max-h-full overflow-auto',
             featuredScore
               ? traceCollapsed
                 ? 'grid-rows-[auto_3fr_3fr]'
@@ -381,6 +384,7 @@ export function ObservabilityTracesList({
             onNext={handleNextTrace}
             collapsed={traceCollapsed}
             onCollapsedChange={setTraceCollapsed}
+            placement="traces-list"
           />
           {featuredSpanRecord && (
             <SpanDataPanel
