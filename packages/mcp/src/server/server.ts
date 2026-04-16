@@ -50,6 +50,7 @@ import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
 import { SSETransport } from 'hono-mcp-server-sse-transport';
 
+import { withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { ServerPromptActions } from './promptActions';
 import { ServerResourceActions } from './resourceActions';
 import type { MCPServerPrompts, MCPServerResources, ElicitationActions, MastraPrompt } from './types';
@@ -428,9 +429,9 @@ export class MCPServer extends MCPServerBase {
           if (tool.mcp?.annotations) {
             toolSpec.annotations = tool.mcp.annotations;
           }
-          // Include _meta if present
-          if (tool.mcp?._meta) {
-            toolSpec._meta = tool.mcp._meta;
+          const toolMeta = withMastraToolStrictMeta(tool.mcp?._meta, tool.strict);
+          if (toolMeta) {
+            toolSpec._meta = toolMeta;
           }
           return toolSpec;
         }),
@@ -1879,7 +1880,14 @@ export class MCPServer extends MCPServerBase {
    * ```
    */
   public getToolListInfo(): {
-    tools: Array<{ name: string; description?: string; inputSchema: any; outputSchema?: any; toolType?: MCPToolType }>;
+    tools: Array<{
+      name: string;
+      description?: string;
+      inputSchema: any;
+      outputSchema?: any;
+      toolType?: MCPToolType;
+      _meta?: Record<string, unknown>;
+    }>;
   } {
     this.logger.debug('Getting tool list', { server: this.name });
     return {
@@ -1890,6 +1898,7 @@ export class MCPServer extends MCPServerBase {
         inputSchema: this.convertSchema(tool.parameters),
         outputSchema: this.convertSchema(tool.parameters),
         toolType: tool.mcp?.toolType,
+        _meta: withMastraToolStrictMeta(tool.mcp?._meta, tool.strict),
       })),
     };
   }
@@ -1912,9 +1921,16 @@ export class MCPServer extends MCPServerBase {
    * }
    * ```
    */
-  public getToolInfo(
-    toolId: string,
-  ): { name: string; description?: string; inputSchema: any; outputSchema?: any; toolType?: MCPToolType } | undefined {
+  public getToolInfo(toolId: string):
+    | {
+        name: string;
+        description?: string;
+        inputSchema: any;
+        outputSchema?: any;
+        toolType?: MCPToolType;
+        _meta?: Record<string, unknown>;
+      }
+    | undefined {
     const tool = this.convertedTools[toolId];
     if (!tool) {
       this.logger.debug('Tool not found', { tool: toolId, server: this.name });
@@ -1927,6 +1943,7 @@ export class MCPServer extends MCPServerBase {
       inputSchema: this.convertSchema(tool.parameters),
       outputSchema: this.convertSchema(tool.outputSchema),
       toolType: tool.mcp?.toolType,
+      _meta: withMastraToolStrictMeta(tool.mcp?._meta, tool.strict),
     };
   }
 

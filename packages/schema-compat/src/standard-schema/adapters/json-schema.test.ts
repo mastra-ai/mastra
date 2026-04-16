@@ -198,6 +198,53 @@ describe('json-schema standard-schema adapter', () => {
       expect('issues' in invalidResult).toBe(true);
     });
 
+    it('should preserve recursive $ref schemas when converting output JSON Schema', () => {
+      const jsonSchema = {
+        type: 'object',
+        properties: {
+          root: { $ref: '#/$defs/node' },
+        },
+        required: ['root'],
+        $defs: {
+          node: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              children: {
+                type: 'array',
+                items: { $ref: '#/$defs/node' },
+              },
+            },
+            required: ['name'],
+          },
+        },
+      } as JSONSchema7 & {
+        properties: {
+          root: { $ref: string };
+        };
+        $defs: {
+          node: {
+            properties: {
+              children: {
+                items: { $ref: string };
+              };
+            };
+          };
+        };
+      };
+
+      const standardSchema = toStandardSchema(jsonSchema);
+      const outputSchema = standardSchema['~standard'].jsonSchema.output({
+        target: 'draft-07',
+      }) as unknown as typeof jsonSchema & {
+        $schema?: string;
+      };
+
+      expect(outputSchema.$schema).toBe('http://json-schema.org/draft-07/schema#');
+      expect(outputSchema.properties.root).toEqual({ $ref: '#/$defs/node' });
+      expect(outputSchema.$defs.node.properties.children.items).toEqual({ $ref: '#/$defs/node' });
+    });
+
     it('should expose getSchema method', () => {
       const jsonSchema: JSONSchema7 = {
         type: 'string',
