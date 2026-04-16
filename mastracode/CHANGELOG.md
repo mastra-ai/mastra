@@ -1,5 +1,34 @@
 # mastracode
 
+## 0.15.0-alpha.2
+
+### Minor Changes
+
+- Added `--model`, `--mode`, `--thinking-level`, and `--settings` CLI flags to headless mode for controlling model selection, execution mode, and thinking level without interactive TUI. Uses the same `settings.json` as the interactive TUI — pass `--settings <path>` for CI or other environments, or omit to use the default global settings. Added `settingsPath` option to `createMastraCode()` for programmatic use. ([#14909](https://github.com/mastra-ai/mastra/pull/14909))
+
+### Patch Changes
+
+- Improved observational memory activation output in MastraCode. ([#15365](https://github.com/mastra-ai/mastra/pull/15365))
+
+  **What changed**
+  - Added a separate Observation TTL line when buffered context activates after inactivity
+  - Removed repeated TTL text from each activation line so grouped activations are easier to scan
+
+  This makes long idle-thread activations much easier to read in the terminal.
+
+- Updated dependencies [[`3d83d06`](https://github.com/mastra-ai/mastra/commit/3d83d06f776f00fb5f4163dddd32a030c5c20844), [`7e0e63e`](https://github.com/mastra-ai/mastra/commit/7e0e63e2e485e84442351f4c7a79a424c83539dc), [`9467ea8`](https://github.com/mastra-ai/mastra/commit/9467ea87695749a53dfc041576410ebf9ee7bb67), [`7338d94`](https://github.com/mastra-ai/mastra/commit/7338d949380cf68b095342e8e42610dc51d557c1), [`c65aec3`](https://github.com/mastra-ai/mastra/commit/c65aec356cc037ee7c4b30ccea946807d4c4f443)]:
+  - @mastra/core@1.26.0-alpha.2
+  - @mastra/memory@1.16.0-alpha.0
+  - @mastra/mcp@1.5.1-alpha.1
+
+## 0.15.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`7020c06`](https://github.com/mastra-ai/mastra/commit/7020c0690b199d9da337f0e805f16948e557922e), [`7020c06`](https://github.com/mastra-ai/mastra/commit/7020c0690b199d9da337f0e805f16948e557922e)]:
+  - @mastra/mcp@1.5.1-alpha.0
+  - @mastra/core@1.25.1-alpha.1
+
 ## 0.15.0-alpha.0
 
 ### Minor Changes

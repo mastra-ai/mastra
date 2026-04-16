@@ -1,13 +1,16 @@
 import type { SpanRecord } from '@mastra/core/storage';
-import { Button, ButtonWithTooltip, DataKeysAndValues, DataPanel, Icon, ButtonsGroup } from '@mastra/playground-ui';
-import { format } from 'date-fns';
-import { CircleGaugeIcon, ChevronsDownUpIcon, ChevronsUpDownIcon, SaveIcon } from 'lucide-react';
+import { Button, ButtonWithTooltip, DataPanel, Icon, ButtonsGroup } from '@mastra/playground-ui';
+import { CircleGaugeIcon, ChevronsDownUpIcon, ChevronsUpDownIcon, Link2Icon, SaveIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
 import { useTraceSpans } from '../hooks/use-trace-spans';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
+import { TraceKeysAndValues } from './trace-keys-and-values';
 import { TraceTimeline } from './trace-timeline';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
+import { Link } from '@/lib/link';
+
+export type TraceDataPanelPlacement = 'traces-list' | 'trace-page';
 
 export interface TraceDataPanelProps {
   traceId: string;
@@ -19,6 +22,8 @@ export interface TraceDataPanelProps {
   onNext?: () => void;
   collapsed?: boolean;
   onCollapsedChange?: (collapsed: boolean) => void;
+  placement: TraceDataPanelPlacement;
+  timelineChartWidth?: 'wide' | 'default';
 }
 
 export function TraceDataPanel({
@@ -31,7 +36,10 @@ export function TraceDataPanel({
   onNext,
   collapsed: controlledCollapsed,
   onCollapsedChange,
+  placement,
+  timelineChartWidth = 'default',
 }: TraceDataPanelProps) {
+  const isOnTracePage = placement === 'trace-page';
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const collapsed = controlledCollapsed ?? internalCollapsed;
   const setCollapsed = onCollapsedChange ?? setInternalCollapsed;
@@ -42,17 +50,24 @@ export function TraceDataPanel({
 
   // Sync selected span when initialSpanId or trace data changes
   useEffect(() => {
-    if (initialSpanId && traceData?.spans) {
-      const span = traceData.spans.find(s => s.spanId === initialSpanId);
-      if (span) {
-        setSelectedSpanId(initialSpanId);
-        onSpanSelect?.(span);
-        return;
-      }
+    // No span requested: clear immediately.
+    if (!initialSpanId) {
+      setSelectedSpanId(undefined);
+      onSpanSelect?.(undefined);
+      return;
     }
-    // Clear stale selection when initialSpanId is null/missing or span not found
-    setSelectedSpanId(undefined);
-    onSpanSelect?.(undefined);
+    // Span requested: wait for trace data before deciding so an in-flight
+    // fetch doesn't wipe a URL-provided selection.
+    if (!traceData?.spans) return;
+
+    const span = traceData.spans.find(s => s.spanId === initialSpanId);
+    if (span) {
+      setSelectedSpanId(initialSpanId);
+      onSpanSelect?.(span);
+    } else {
+      setSelectedSpanId(undefined);
+      onSpanSelect?.(undefined);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSpanId, traceData?.spans]);
 
@@ -83,33 +98,48 @@ export function TraceDataPanel({
     onSpanSelect?.(span);
   };
 
-  const KV = DataKeysAndValues;
-
   return (
     <>
       <DataPanel collapsed={collapsed}>
         <DataPanel.Header>
-          <DataPanel.Heading>
-            Trace <b># {traceId}</b>
-          </DataPanel.Heading>
-          <ButtonsGroup className="ml-auto shrink-0">
-            {onCollapsedChange && (
-              <ButtonWithTooltip
-                size="md"
-                tooltipContent={collapsed ? 'Expand panel' : 'Collapse panel'}
-                onClick={() => setCollapsed(!collapsed)}
-              >
-                {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
-              </ButtonWithTooltip>
-            )}
-            <DataPanel.NextPrevNav
-              onPrevious={onPrevious}
-              onNext={onNext}
-              previousLabel="Previous trace"
-              nextLabel="Next trace"
-            />
-            <DataPanel.CloseButton onClick={onClose} />
-          </ButtonsGroup>
+          {isOnTracePage ? (
+            <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
+          ) : (
+            <>
+              <DataPanel.Heading>
+                Trace <b># {traceId}</b>
+              </DataPanel.Heading>
+              <ButtonsGroup className="ml-auto shrink-0">
+                {onCollapsedChange && (
+                  <ButtonWithTooltip
+                    size="md"
+                    tooltipContent={collapsed ? 'Expand panel' : 'Collapse panel'}
+                    onClick={() => setCollapsed(!collapsed)}
+                  >
+                    {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
+                  </ButtonWithTooltip>
+                )}
+                <DataPanel.NextPrevNav
+                  onPrevious={onPrevious}
+                  onNext={onNext}
+                  previousLabel="Previous trace"
+                  nextLabel="Next trace"
+                />
+                {!isOnTracePage && (
+                  <ButtonWithTooltip
+                    as={Link}
+                    href={`/traces/${traceId}`}
+                    size="md"
+                    tooltipContent="Open trace details page"
+                    aria-label="Open trace details page"
+                  >
+                    <Link2Icon />
+                  </ButtonWithTooltip>
+                )}
+                <DataPanel.CloseButton onClick={onClose} />
+              </ButtonsGroup>
+            </>
+          )}
         </DataPanel.Header>
 
         {!collapsed &&
@@ -119,59 +149,26 @@ export function TraceDataPanel({
             <DataPanel.NoData>No spans found for this trace.</DataPanel.NoData>
           ) : (
             <DataPanel.Content ref={contentRef}>
-              {rootSpan && (
-                <KV className="mb-6" numOfCol={2}>
-                  {rootSpan.entityId && (
-                    <>
-                      <KV.Key>Entity Id</KV.Key>
-                      <KV.Value>{rootSpan.entityName || rootSpan.entityId}</KV.Value>
-                    </>
-                  )}
-                  {rootSpan.entityType && (
-                    <>
-                      <KV.Key>Entity Type</KV.Key>
-                      <KV.Value>{rootSpan.entityType}</KV.Value>
-                    </>
-                  )}
-                  <KV.Key>Status</KV.Key>
-                  <KV.Value>{(rootSpan.attributes?.status as string) || '-'}</KV.Value>
-                  {rootSpan.startedAt && rootSpan.endedAt && (
-                    <>
-                      <KV.Key>Duration</KV.Key>
-                      <KV.Value>{`${(new Date(rootSpan.endedAt).getTime() - new Date(rootSpan.startedAt).getTime()).toLocaleString()}ms`}</KV.Value>
-                    </>
-                  )}
-                  {rootSpan.startedAt && (
-                    <>
-                      <KV.Key>Started at</KV.Key>
-                      <KV.Value>{format(new Date(rootSpan.startedAt), 'MMM dd, h:mm:ss.SSS aaa')}</KV.Value>
-                    </>
-                  )}
-                  {rootSpan.endedAt && (
-                    <>
-                      <KV.Key>Ended at</KV.Key>
-                      <KV.Value>{format(new Date(rootSpan.endedAt), 'MMM dd, h:mm:ss.SSS aaa')}</KV.Value>
-                    </>
-                  )}
-                </KV>
-              )}
+              {!isOnTracePage && rootSpan && <TraceKeysAndValues rootSpan={rootSpan} numOfCol={2} className="mb-6" />}
 
-              <div className="mb-6 flex justify-between items-center gap-4">
-                {onEvaluateTrace && (
-                  <Button size="sm" onClick={onEvaluateTrace}>
+              {!isOnTracePage && (
+                <div className="mb-6 flex justify-between items-center gap-4">
+                  {onEvaluateTrace && (
+                    <Button size="sm" onClick={onEvaluateTrace}>
+                      <Icon>
+                        <CircleGaugeIcon />
+                      </Icon>
+                      Evaluate Trace
+                    </Button>
+                  )}
+                  <Button size="sm" onClick={() => setDatasetDialogOpen(true)}>
                     <Icon>
-                      <CircleGaugeIcon />
+                      <SaveIcon />
                     </Icon>
-                    Evaluate Trace
+                    Save as Dataset Item
                   </Button>
-                )}
-                <Button size="sm" onClick={() => setDatasetDialogOpen(true)}>
-                  <Icon>
-                    <SaveIcon />
-                  </Icon>
-                  Save as Dataset Item
-                </Button>
-              </div>
+                </div>
+              )}
 
               <TraceTimeline
                 hierarchicalSpans={hierarchicalSpans}
@@ -179,6 +176,7 @@ export function TraceDataPanel({
                 selectedSpanId={selectedSpanId}
                 expandedSpanIds={expandedSpanIds}
                 setExpandedSpanIds={setExpandedSpanIds}
+                chartWidth={timelineChartWidth}
               />
             </DataPanel.Content>
           ))}

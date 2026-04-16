@@ -295,6 +295,60 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     // The full CallToolResult envelope is returned — no extraction, no Zod stripping
     expect(result).toEqual(callToolResult);
   });
+
+  it('should preserve recursive $ref input schemas when creating tools', async () => {
+    const sdkClient = (client as any).client as Client;
+    const recursiveInputSchema = {
+      type: 'object' as const,
+      properties: {
+        root: { $ref: '#/$defs/node' },
+      },
+      required: ['root'],
+      $defs: {
+        node: {
+          type: 'object' as const,
+          properties: {
+            name: { type: 'string' as const },
+            children: {
+              type: 'array' as const,
+              items: { $ref: '#/$defs/node' },
+            },
+          },
+          required: ['name'],
+        },
+      },
+    };
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'recursive_tool',
+          description: 'Returns a recursive schema',
+          inputSchema: recursiveInputSchema,
+        },
+      ],
+    });
+
+    const tools = await client.tools();
+    const recursiveTool = tools['recursive_tool'];
+    expect(recursiveTool).toBeDefined();
+
+    const storedSchema = recursiveTool.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-07' }) as {
+      properties?: { root?: { $ref?: string } };
+      $defs?: {
+        node?: {
+          properties?: {
+            children?: {
+              items?: { $ref?: string };
+            };
+          };
+        };
+      };
+    };
+
+    expect(storedSchema.properties?.root?.$ref).toBe('#/$defs/node');
+    expect(storedSchema.$defs?.node?.properties?.children?.items?.$ref).toBe('#/$defs/node');
+  });
 });
 
 describe('MastraMCPClient - no outputSchema', () => {
@@ -2182,6 +2236,34 @@ describe('MastraMCPClient - mcpMetadata on tools', () => {
     const greetTool = tools.greet;
     expect(greetTool.mcpMetadata).toBeDefined();
     expect(greetTool.mcpMetadata!.serverVersion).toBe('1.0.0');
+  });
+
+  it('should preserve strict mode from MCP tool metadata', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'strict_tool',
+          description: 'A strict MCP tool',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { query: { type: 'string' } },
+            required: ['query'],
+            additionalProperties: false,
+          },
+          _meta: {
+            mastra: {
+              strict: true,
+            },
+          },
+        },
+      ],
+    });
+
+    const tools = await client.tools();
+    expect(tools.strict_tool).toBeDefined();
+    expect(tools.strict_tool.strict).toBe(true);
   });
 });
 

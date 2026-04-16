@@ -197,7 +197,10 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
                 name,
                 description: sdkTool.description,
                 inputSchema: fixTypelessProperties(parameters as Record<string, unknown>),
-                ...(targetVersion === 'v3' && strict != null ? { strict } : {}),
+                // Preserve strict through v2 preparation because the model router may
+                // still forward these tools to an AI SDK v6 / V3 model later. Actual
+                // V2 model calls strip this field at the AISDKV5LanguageModel boundary.
+                ...(strict != null ? { strict } : {}),
                 providerOptions: sdkTool.providerOptions,
               };
             case 'provider-defined': {

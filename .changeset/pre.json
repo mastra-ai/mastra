@@ -127,15 +127,27 @@
     "@mastra/vercel": "0.1.0"
   },
   "changesets": [
+    "automated-provider-registry-20260415-183610",
+    "bold-badgers-reply",
     "bright-foxes-jump",
     "calm-tigers-dream",
     "fancy-buckets-retire",
+    "fix-observability-preserve-json-schema",
+    "fix-processor-states-passthrough",
+    "good-shoes-notice",
     "green-birds-knock",
     "hungry-kings-fail",
     "jolly-ants-attend",
+    "mighty-mails-divide",
+    "mighty-yaks-take",
+    "perky-snakes-see",
     "quiet-lions-fold",
+    "quiet-pots-sparkle",
+    "red-words-ask",
+    "remove-browser-not-running-reminder",
     "seven-suns-dress",
     "shy-owls-drift",
+    "sour-paws-cough",
     "tired-comics-cover",
     "two-badgers-sin"
   ]
