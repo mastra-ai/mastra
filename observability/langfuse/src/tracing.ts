@@ -10,7 +10,7 @@
 import { LangfuseClient } from '@langfuse/client';
 import { LangfuseSpanProcessor } from '@langfuse/otel';
 import type { TracingEvent, AnyExportedSpan, InitExporterOptions } from '@mastra/core/observability';
-import { TracingEventType } from '@mastra/core/observability';
+import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import { SpanConverter } from '@mastra/otel-exporter';
@@ -28,6 +28,12 @@ export interface LangfuseExporterConfig extends BaseExporterConfig {
   baseUrl?: string;
   /** Enable realtime mode - flushes after each event for immediate visibility */
   realtime?: boolean;
+  /** Maximum number of spans per OTEL export batch */
+  flushAt?: number;
+  /** Maximum time in seconds before pending spans are exported */
+  flushInterval?: number;
+  /** Export MODEL_CHUNK spans. Defaults to true for backward compatibility. */
+  includeModelChunks?: boolean;
   /** Langfuse environment tag for traces */
   environment?: string;
   /** Langfuse release tag for traces */
@@ -40,6 +46,7 @@ export class LangfuseExporter extends BaseExporter {
   #client: LangfuseClient | undefined;
   #spanConverter: SpanConverter | undefined;
   #realtime: boolean;
+  #includeModelChunks: boolean;
   #environment: string | undefined;
   #release: string | undefined;
 
@@ -50,6 +57,7 @@ export class LangfuseExporter extends BaseExporter {
     const secretKey = config.secretKey ?? process.env.LANGFUSE_SECRET_KEY;
     const baseUrl = (config.baseUrl ?? process.env.LANGFUSE_BASE_URL ?? LANGFUSE_DEFAULT_BASE_URL).replace(/\/+$/, '');
     this.#realtime = config.realtime ?? false;
+    this.#includeModelChunks = config.includeModelChunks ?? true;
 
     if (!publicKey || !secretKey) {
       const publicKeySource = config.publicKey
@@ -76,6 +84,8 @@ export class LangfuseExporter extends BaseExporter {
       environment: config.environment,
       release: config.release,
       exportMode: this.#realtime ? 'immediate' : 'batched',
+      flushAt: config.flushAt,
+      flushInterval: config.flushInterval,
       // Export all spans — the default filter only passes spans with gen_ai.* attributes
       // or known LLM instrumentation scopes, but Mastra spans use mastra.* attributes.
       shouldExportSpan: () => true,
@@ -102,6 +112,7 @@ export class LangfuseExporter extends BaseExporter {
   protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
     if (event.type !== TracingEventType.SPAN_ENDED) return;
     if (!this.#processor) return;
+    if (!this.#includeModelChunks && event.exportedSpan.type === SpanType.MODEL_CHUNK) return;
 
     await this.exportSpan(event.exportedSpan);
   }

@@ -185,6 +185,22 @@ describe('LangfuseExporter', () => {
       );
     });
 
+    it('passes batch controls to LangfuseSpanProcessor', () => {
+      exporter = new LangfuseExporter({
+        publicKey: 'pk-test',
+        secretKey: 'sk-test',
+        flushAt: 200,
+        flushInterval: 15,
+      });
+
+      expect(processorConstructorArgs[0]).toEqual(
+        expect.objectContaining({
+          flushAt: 200,
+          flushInterval: 15,
+        }),
+      );
+    });
+
     it('creates LangfuseClient with correct config', () => {
       exporter = new LangfuseExporter({
         publicKey: 'pk-test',
@@ -223,6 +239,39 @@ describe('LangfuseExporter', () => {
         type: TracingEventType.SPAN_STARTED,
         exportedSpan: makeSpan(),
       } as any);
+      expect(processedSpans.length).toBe(0);
+    });
+
+    it('exports MODEL_CHUNK spans by default', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          id: 'chunk-1',
+          type: SpanType.MODEL_CHUNK,
+          name: 'chunk: text',
+        }),
+      );
+
+      expect(processedSpans.length).toBe(1);
+      expect(processedSpans[0].attributes['mastra.span.type']).toBe(SpanType.MODEL_CHUNK);
+    });
+
+    it('does not export MODEL_CHUNK spans when includeModelChunks is disabled', async () => {
+      exporter = new LangfuseExporter({
+        publicKey: 'pk-test',
+        secretKey: 'sk-test',
+        includeModelChunks: false,
+      });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          id: 'chunk-1',
+          type: SpanType.MODEL_CHUNK,
+          name: 'chunk: text',
+        }),
+      );
+
       expect(processedSpans.length).toBe(0);
     });
 
