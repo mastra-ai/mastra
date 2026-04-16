@@ -1,8 +1,11 @@
 import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { z } from 'zod';
+import { RequestContext } from '../../request-context';
 import { prepareToolsAndToolChoice } from '../../stream/aisdk/v5/compat/prepare-tools';
 import type { ModelSpecVersion } from '../../stream/aisdk/v5/compat/prepare-tools';
 import { createTool } from '../../tools/tool';
+import { makeCoreTool } from '../../utils';
 import { MastraModelGateway } from './gateways/base';
 import type { ProviderConfig, GatewayLanguageModel } from './gateways/base';
 import { ModelRouterLanguageModel } from './router';
@@ -269,6 +272,56 @@ describe('ModelRouterLanguageModel with V3 gateway and provider tools (#13667)',
     expect(passedOptions.tools[0]).toMatchObject({
       type: 'function',
       name: 'strictTool',
+      strict: true,
+    });
+  });
+
+  it('should preserve strict through the full createTool → makeCoreTool → prepareTools → router pipeline', async () => {
+    const router = new ModelRouterLanguageModel({ id: 'v3-gateway/openai/gpt-4o' as `${string}/${string}` }, [gateway]);
+
+    // Step 1: createTool with strict (what the user writes)
+    const strictTool = createTool({
+      id: 'add',
+      description: 'Add two numbers together.',
+      strict: true,
+      inputSchema: z.object({
+        x: z.number().describe('The first number to add'),
+        y: z.number().describe('The second number to add'),
+      }),
+      execute: async ({ x, y }) => ({ result: `${x + y}` }),
+    });
+
+    // Step 2: makeCoreTool (what the agent does internally)
+    const coreTool = makeCoreTool(strictTool as any, {
+      name: 'addTool',
+      logger: console as any,
+      description: 'Add two numbers together.',
+      requestContext: new RequestContext(),
+      tracingContext: {},
+    });
+
+    // Step 3: prepareToolsAndToolChoice with targetVersion 'v2' (what execute.ts does — router is always v2)
+    const preparedTools = prepareToolsAndToolChoice({
+      tools: { addTool: coreTool as any },
+      toolChoice: undefined,
+      activeTools: undefined,
+      targetVersion: 'v2',
+    });
+
+    // Step 4: Route through the model router to the V3 model
+    await router.doStream({
+      inputFormat: 'messages',
+      ...preparedTools,
+      prompt: [{ role: 'user', content: [{ type: 'text', text: 'Add 1 and 2' }] }],
+    } as any);
+
+    const doStreamCall = (mockV3Model.doStream as ReturnType<typeof vi.fn>).mock.calls[0];
+    const passedOptions = doStreamCall[0];
+
+    expect(passedOptions.tools).toHaveLength(1);
+    expect(passedOptions.tools[0]).toMatchObject({
+      type: 'function',
+      name: 'addTool',
       strict: true,
     });
   });
