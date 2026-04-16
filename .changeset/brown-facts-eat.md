@@ -2,4 +2,4 @@
 '@mastra/langfuse': patch
 ---
 
-Bump @langfuse/client and @langfuse/otel from ^5.0.2 to ^5.1.0 to pick up the latest Langfuse server API spec.
+Improved `@mastra/langfuse` compatibility with the latest Langfuse server API by updating `@langfuse/client` and `@langfuse/otel` to ^5.1.0.
