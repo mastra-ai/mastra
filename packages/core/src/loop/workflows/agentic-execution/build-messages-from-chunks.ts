@@ -28,7 +28,7 @@ export type CollectedChunk = { type: string; payload: any };
  * 1. Produce exactly one text part per text-start/text-end span (no duplicates)
  * 2. Produce exactly one reasoning part per reasoning-start/reasoning-end span
  * 3. Preserve correct stream ordering (text before tool-call if that's how they arrived)
- * 4. Use providerMetadata from the *-start chunk (not from a random interrupting chunk)
+ * 4. Use providerMetadata with "last seen wins" semantics per AI SDK convention
  * 5. Skip empty text spans (empty-string deltas only) — no more empty text parts in DB
  * 6. Merge tool-call + tool-result into a single part with state: 'result' when applicable
  */
