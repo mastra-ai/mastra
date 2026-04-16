@@ -248,6 +248,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/hpc-ai',
+          label: 'HPC-AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/huggingface',
           label: 'Hugging Face',
         },
