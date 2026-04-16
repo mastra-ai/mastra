@@ -14,6 +14,21 @@ function formatTokens(tokens: number): string {
   const k = tokens / 1000;
   return k % 1 === 0 ? `${k}k` : `${k.toFixed(1)}k`;
 }
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+
+  const totalSeconds = Math.floor(ms / 1000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (totalMinutes < 60) return seconds === 0 ? `${totalMinutes}m` : `${totalMinutes}m${seconds}s`;
+
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes === 0 ? `${hours}h` : `${hours}h${minutes}m`;
+}
 export type OMMarkerData =
   | {
       type: 'om_observation_start';
@@ -55,6 +70,11 @@ export type OMMarkerData =
       operationType: 'observation' | 'reflection';
       tokensActivated: number;
       observationTokens: number;
+    }
+  | {
+      type: 'om_activation_ttl';
+      activateAfterIdle: number;
+      ttlExpiredMs: number;
     }
   | {
       type: 'om_thread_title_updated';
@@ -133,6 +153,12 @@ function formatMarker(data: OMMarkerData): string {
       const msgTokens = formatTokens(data.tokensActivated);
       const obsTokens = formatTokens(data.observationTokens);
       return theme.fg('success', `  ✓ Activated ${kind}: -${msgTokens} msg tokens, +${obsTokens} obs tokens`);
+    }
+    case 'om_activation_ttl': {
+      return theme.fg(
+        'muted',
+        `  Idle timeout (${formatDuration(data.activateAfterIdle)}) exceeded by ${formatDuration(data.ttlExpiredMs)}, activating observations`,
+      );
     }
     case 'om_thread_title_updated': {
       return theme.fg('muted', `  thread title updated: ${data.newTitle}`);

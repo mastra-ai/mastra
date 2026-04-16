@@ -106,6 +106,10 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       '/memory/observational-memory/buffer-status',
       // skill publish requires blob storage not available in InMemoryStore
       '/stored/skills/:storedSkillId/publish',
+      // Long-poll watch SSE: stays open until the client disconnects, so the
+      // test harness's real-HTTP-server cleanup (server.close awaiting drain)
+      // hangs. The route's behavior is exercised in unit tests.
+      '/background-tasks/stream',
     ];
     // Routes under these prefixes are excluded (e.g. /datasets needs a datasets storage domain)
     const excludedPrefixes = ['/datasets'];
@@ -203,6 +207,25 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
               it('should return 404 when workflow not found', async () => {
                 const request = buildRouteRequest(route, {
                   pathParams: { workflowId: 'non-existent-workflow' },
+                });
+
+                const httpRequest: HttpRequest = {
+                  method: request.method,
+                  path: request.path,
+                  query: request.query,
+                  body: request.body,
+                };
+
+                const response = await executeHttpRequest(app, httpRequest);
+
+                expect(response.status).toBe(404);
+              });
+            }
+
+            if (route.path.includes(':backgroundTaskId')) {
+              it('should return 404 when background task not found', async () => {
+                const request = buildRouteRequest(route, {
+                  pathParams: { backgroundTaskId: 'non-existent-background-task' },
                 });
 
                 const httpRequest: HttpRequest = {

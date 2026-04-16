@@ -299,6 +299,18 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       if (args.datasetId) {
         filter.datasetId = args.datasetId;
       }
+      if (args.targetType) {
+        filter.targetType = args.targetType;
+      }
+      if (args.targetId) {
+        filter.targetId = args.targetId;
+      }
+      if (args.agentVersion) {
+        filter.agentVersion = args.agentVersion;
+      }
+      if (args.status) {
+        filter.status = args.status;
+      }
 
       const total = await collection.countDocuments(filter);
 
@@ -503,6 +515,12 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       const { page, perPage: perPageInput } = args.pagination;
 
       const filter: Record<string, unknown> = { experimentId: args.experimentId };
+      if (args.traceId) {
+        filter.traceId = args.traceId;
+      }
+      if (args.status) {
+        filter.status = args.status;
+      }
 
       const total = await collection.countDocuments(filter);
 

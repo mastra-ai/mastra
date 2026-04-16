@@ -7,6 +7,7 @@ import type { StructuredOutputOptions } from '../../../agent';
 import type { MastraDBMessage, MastraMessagePart, MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
+import { generateBackgroundTaskSystemPrompt } from '../../../background-tasks';
 import { getErrorFromUnknown } from '../../../error/utils.js';
 import { ModelRouterLanguageModel } from '../../../llm/model/router';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
@@ -1017,6 +1018,16 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             }
           }
 
+          if (_internal?.backgroundTaskManager && currentStep.tools) {
+            const bgPrompt = generateBackgroundTaskSystemPrompt(currentStep.tools, _internal?.agentBackgroundConfig);
+            inputMessages = inputMessages.map((message, index) => {
+              if (message.role === 'system' && index === 0) {
+                message.content = message.content + `\n\n${bgPrompt}`;
+              }
+              return message;
+            });
+          }
+
           if (isSupportedLanguageModel(currentStep.model)) {
             modelResult = executeWithContextSync({
               span: modelSpanTracker?.getTracingContext()?.currentSpan,
@@ -1464,6 +1475,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             finishReason: immediateFinishReason,
             toolCalls: toolCallInfos.length > 0 ? toolCallInfos : undefined,
             text: immediateText,
+            usage: outputStream._getImmediateUsage(),
             ...createObservabilityContext(outputStepTracingContext),
             requestContext,
             retryCount: currentRetryCount,

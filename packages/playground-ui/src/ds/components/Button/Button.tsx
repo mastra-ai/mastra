@@ -16,7 +16,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   prefetch?: boolean | null;
   children: React.ReactNode;
   size?: FormElementSize;
-  variant?: 'default' | 'primary' | 'cta' | 'ghost' | 'inputLike' | 'light' | 'outline';
+  variant?: 'default' | 'primary' | 'cta' | 'ghost' | 'inputLike' | 'light' | 'outline' | 'link';
   target?: string;
   type?: 'button' | 'submit' | 'reset';
   onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
@@ -39,6 +39,7 @@ const variantClasses = {
   inputLike: sharedFormElementStyle,
   light: '',
   outline: '',
+  link: 'inline-flex justify-start rounded-none h-auto px-0 bg-transparent text-neutral3 hover:text-neutral4 gap-1 [&>svg]:mx-0 w-auto [&>svg]:opacity-70',
 };
 
 const sharedStyles = cn(
@@ -66,7 +67,7 @@ export function buttonVariants(options?: {
   const variant = resolveVariant(options?.variant || 'default');
   const size = options?.size || 'default';
 
-  return cn(sharedStyles, variantClasses[variant], sizeClasses[size], options?.iconOnly && '[&>svg]:opacity-75');
+  return cn(sharedStyles, sizeClasses[size], variantClasses[variant], options?.iconOnly && '[&>svg]:opacity-75');
 }
 
 function flattenChildren(children: React.ReactNode): React.ReactNode[] {
