@@ -1625,10 +1625,16 @@ export class Agent<
       return resolveMaybePromise(resolvedModel, modelInfo => {
         let llm: MastraLLM | Promise<MastraLLM>;
         if (isSupportedLanguageModel(modelInfo)) {
-          llm = this.prepareModels(requestContext, modelSelection).then(models => {
-            const enabledModels = models.filter(model => model.enabled);
+          // Filter disabled entries before prepareModels so their model factories and
+          // dynamic resolvers are never invoked on the streaming path. A disabled
+          // entry's throwing/side-effecting factory must not break the request.
+          const enabledSelection = Array.isArray(modelSelection)
+            ? (modelSelection.filter(m => m.enabled) as typeof modelSelection)
+            : modelSelection;
+
+          llm = this.prepareModels(requestContext, enabledSelection).then(models => {
             return new MastraLLMVNext({
-              models: enabledModels,
+              models,
               mastra: this.#mastra,
               options: { tracingPolicy: this.#options?.tracingPolicy },
             });
