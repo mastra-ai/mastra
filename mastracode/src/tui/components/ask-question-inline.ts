@@ -435,6 +435,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     if (this.tui) {
       // Use MultilineInput for multiline support when TUI is available
       const multilineInput = new MultilineInput(this.tui, getEditorTheme());
+      multilineInput.allowEmptySubmit = this.allowEmptyInput;
       multilineInput.onSubmit = (value: string) => {
         const trimmed = value.trim();
         if (trimmed || this.allowEmptyInput) {

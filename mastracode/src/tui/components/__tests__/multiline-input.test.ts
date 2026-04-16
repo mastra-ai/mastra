@@ -67,6 +67,18 @@ describe('MultilineInput', () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
+  it('calls onSubmit with empty string when allowEmptySubmit is true and Enter is pressed', () => {
+    mocks.matchesKey.mockImplementation((_data: string, key: string) => key === 'enter');
+    mocks.editorGetText.mockReturnValue('   ');
+    const onSubmit = vi.fn();
+    input.allowEmptySubmit = true;
+    input.onSubmit = onSubmit;
+
+    input.handleInput('\r');
+
+    expect(onSubmit).toHaveBeenCalledWith('');
+  });
+
   it('does not call onSubmit when Enter is pressed with no text', () => {
     mocks.matchesKey.mockImplementation((_data: string, key: string) => key === 'enter');
     mocks.editorGetText.mockReturnValue('');

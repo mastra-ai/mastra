@@ -19,6 +19,7 @@ export class MultilineInput {
   private _focused = false;
   public onSubmit?: (value: string) => void;
   public onEscape?: () => void;
+  public allowEmptySubmit = false;
 
   get focused(): boolean {
     return this._focused;
@@ -57,7 +58,7 @@ export class MultilineInput {
 
       // Submit on plain Enter
       const text = this.editor.getText().trim();
-      if (text) {
+      if (text || this.allowEmptySubmit) {
         this.onSubmit?.(text);
       }
       return;
