@@ -5629,6 +5629,102 @@ describe('Locking Behavior', () => {
         vi.useRealTimers();
       }
     });
+
+    it('should still activate on a later threshold trigger after an early TTL activation was suppressed', async () => {
+      vi.useFakeTimers();
+      try {
+        const now = new Date('2026-04-14T12:00:00.000Z');
+        vi.setSystemTime(now);
+
+        // Small reflectThreshold (500) so we can drive observationTokens past it
+        // deterministically. bufferActivation=0.5 → regular target=250,
+        // minCombinedTokens≈187 (75% of 250).
+        const { storage, om, getReflectorCalled } = await setupBufferedReflectionEnv({
+          activateAfterIdle: '5m',
+          reflectionObservationTokens: 500,
+        });
+
+        const threadId = 'thread-overshoot';
+        const resourceId = 'resource-overshoot';
+        const record = (await storage.getObservationalMemory(threadId, resourceId))!;
+
+        // Step 1: Seed state that must be suppressed by the early-trigger guard
+        // (tail tokens smaller than buffered reflection tokens).
+        const reflectedLines = ['- 🔴 Line 1', '- 🟡 Line 2', '- 🟢 Line 3'];
+        const activeObservations = reflectedLines.join('\n');
+        await storage.updateActiveObservations({
+          id: record.id,
+          observations: activeObservations,
+          tokenCount: om.getTokenCounter().countObservations(activeObservations),
+          lastObservedAt: new Date(now.getTime() - 301_000),
+        });
+        const reflection = '- 🔴 Condensed reflection';
+        await storage.updateBufferedReflection({
+          id: record.id,
+          reflection,
+          tokenCount: 4000, // synthetic large count — tail (empty) < buffered reflection
+          inputTokenCount: 15000,
+          reflectedObservationLineCount: reflectedLines.length,
+        });
+
+        const { writer: writer1, customCalls: calls1 } = makeCapturingWriter();
+        const suppressedRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
+        await om.reflector.maybeReflect({
+          record: suppressedRecord,
+          observationTokens: suppressedRecord.observationTokenCount ?? 0,
+          lastActivityAt: now.getTime() - 301_000,
+          threadId,
+          writer: writer1,
+        });
+
+        const afterSuppress = (await storage.getObservationalMemory(threadId, resourceId))!;
+        expect(afterSuppress.bufferedReflection).toBe(reflection);
+        expect(afterSuppress.activeObservations).toBe(activeObservations);
+        expect(calls1.filter(p => p?.type === 'data-om-activation')).toHaveLength(0);
+
+        // Step 2: Observations grow past the threshold. Threshold-triggered
+        // activation bypasses the early-trigger guard and must activate the
+        // still-buffered reflection — proving the suppression did not strand
+        // the buffer.
+        const tailLines = Array.from(
+          { length: 120 },
+          (_, i) => `- 🟢 Later observation capturing substantive tail content line number ${i + 1}`,
+        );
+        const grownObservations = [...reflectedLines, ...tailLines].join('\n');
+        const grownTokens = om.getTokenCounter().countObservations(grownObservations);
+        // Threshold=500. With enough tail content this clears it.
+        expect(grownTokens).toBeGreaterThanOrEqual(500);
+        await storage.updateActiveObservations({
+          id: record.id,
+          observations: grownObservations,
+          tokenCount: grownTokens,
+          lastObservedAt: new Date(now.getTime()),
+        });
+
+        const { writer: writer2, customCalls: calls2 } = makeCapturingWriter();
+        const grownRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
+        await om.reflector.maybeReflect({
+          record: grownRecord,
+          observationTokens: grownRecord.observationTokenCount ?? 0,
+          lastActivityAt: now.getTime(),
+          threadId,
+          writer: writer2,
+        });
+
+        const afterThreshold = (await storage.getObservationalMemory(threadId, resourceId))!;
+        expect(afterThreshold.bufferedReflection).toBeFalsy();
+        expect(afterThreshold.activeObservations).toContain('Condensed reflection');
+        expect(afterThreshold.activeObservations).toContain(
+          'Later observation capturing substantive tail content line number 1',
+        );
+        expect(getReflectorCalled()).toBe(false);
+        const thresholdMarkers = calls2.filter(p => p?.type === 'data-om-activation');
+        expect(thresholdMarkers).toHaveLength(1);
+        expect(thresholdMarkers[0]?.data?.triggeredBy).toBe('threshold');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   it('should skip observation when isObserving flag is true in processOutputResult', async () => {

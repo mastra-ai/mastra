@@ -96,6 +96,27 @@ async function withAbortCheck<T>(fn: () => Promise<T>, abortSignal?: AbortSignal
 }
 
 /**
+ * Minimum size of combined (buffered reflection + unreflected tail) expressed
+ * as a ratio of the regular threshold-activation target
+ * (reflectThreshold × (1 − bufferActivation)). Early TTL / provider-change
+ * triggers are suppressed if the post-activation size would fall below this
+ * floor — keeps early activations close to the system's tuned post-activation
+ * size while still letting them fire sooner than a threshold activation.
+ */
+const EARLY_ACTIVATION_SIZE_FLOOR_RATIO = 0.75;
+
+/**
+ * Result of an attempt to activate a buffered reflection. The caller uses
+ * this to decide whether to fall through to sync reflection or background
+ * buffering, without re-deriving state that `tryActivateBufferedReflection`
+ * already evaluated.
+ */
+type TryActivateResult =
+  | { status: 'activated' }
+  | { status: 'no-buffer' }
+  | { status: 'suppressed'; reason: 'composition' | 'size' };
+
+/**
  * Runs the Reflector agent for compressing observations.
  * Handles synchronous reflection, async buffered reflection, and activation.
  */
@@ -545,7 +566,9 @@ export class ReflectorRunner {
 
   /**
    * Try to activate buffered reflection when threshold is reached.
-   * Returns true if activation succeeded.
+   * Returns a discriminated result so the caller can distinguish between
+   * "activated", "no buffer present", and "suppressed by overshoot guard"
+   * without re-deriving that state.
    */
   private async tryActivateBufferedReflection(
     record: ObservationalMemoryRecord,
@@ -559,7 +582,7 @@ export class ReflectorRunner {
       previousModel?: string;
       currentModel?: string;
     },
-  ): Promise<boolean> {
+  ): Promise<TryActivateResult> {
     const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
 
     const asyncOp = BufferingCoordinator.asyncBufferingOps.get(bufferKey);
@@ -585,8 +608,8 @@ export class ReflectorRunner {
     );
 
     if (!freshRecord?.bufferedReflection) {
-      omDebug(`[OM:reflect] tryActivateBufferedReflection: no buffered reflection after re-fetch, returning false`);
-      return false;
+      omDebug(`[OM:reflect] tryActivateBufferedReflection: no buffered reflection after re-fetch`);
+      return { status: 'no-buffer' };
     }
 
     const beforeTokens = freshRecord.observationTokenCount ?? 0;
@@ -627,18 +650,22 @@ export class ReflectorRunner {
         omDebug(
           `[OM:reflect] tryActivateBufferedReflection: suppressing early ${activationMetadata.triggeredBy} activation — unreflectedTailTokens=${unreflectedTailTokens} < bufferedReflectionTokens=${bufferedReflectionTokens}; keeping buffer for threshold activation`,
         );
-        return false;
+        return { status: 'suppressed', reason: 'composition' };
       }
 
+      // bufferActivation is guaranteed defined here: reaching this function
+      // requires isAsyncReflectionEnabled(), which in turn requires a
+      // defined, positive bufferActivation. Dropping the ?? fallback keeps
+      // that invariant visible in the types.
+      const bufferActivation = this.reflectionConfig.bufferActivation!;
       const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(freshRecord));
-      const bufferActivation = this.reflectionConfig.bufferActivation ?? 0.5;
       const regularActivationTarget = reflectThreshold * (1 - bufferActivation);
-      const minCombinedTokens = regularActivationTarget * 0.75;
+      const minCombinedTokens = Math.round(regularActivationTarget * EARLY_ACTIVATION_SIZE_FLOOR_RATIO);
       if (combinedTokenCount < minCombinedTokens) {
         omDebug(
-          `[OM:reflect] tryActivateBufferedReflection: suppressing early ${activationMetadata.triggeredBy} activation — combinedTokenCount=${combinedTokenCount} < minCombinedTokens=${minCombinedTokens} (75% of regular activation target ${regularActivationTarget}, threshold=${reflectThreshold}, bufferActivation=${bufferActivation}); keeping buffer for threshold activation`,
+          `[OM:reflect] tryActivateBufferedReflection: suppressing early ${activationMetadata.triggeredBy} activation — combinedTokenCount=${combinedTokenCount} < minCombinedTokens=${minCombinedTokens} (${EARLY_ACTIVATION_SIZE_FLOOR_RATIO * 100}% of regular activation target ${Math.round(regularActivationTarget)}, threshold=${reflectThreshold}, bufferActivation=${bufferActivation}); keeping buffer for threshold activation`,
         );
-        return false;
+        return { status: 'suppressed', reason: 'size' };
       }
     }
 
@@ -689,7 +716,7 @@ export class ReflectorRunner {
 
     BufferingCoordinator.reflectionBufferCycleIds.delete(bufferKey);
 
-    return true;
+    return { status: 'activated' };
   }
 
   /**
@@ -802,27 +829,25 @@ export class ReflectorRunner {
     // ASYNC ACTIVATION: Try to activate buffered reflection first
     // ════════════════════════════════════════════════════════════════════════
     if (this.buffering.isAsyncReflectionEnabled()) {
-      const activationSuccess = await this.tryActivateBufferedReflection(
+      const activationResult = await this.tryActivateBufferedReflection(
         record,
         lockKey,
         writer,
         messageList,
         activationMetadata,
       );
-      if (activationSuccess) {
+      if (activationResult.status === 'activated') {
         return;
       }
-      // Early-trigger overshoot guard:
-      // When tryActivateBufferedReflection returns false on an early trigger
-      // (TTL or provider-change) while a buffered reflection already exists, it
-      // suppressed activation to avoid collapsing active observations to mostly
-      // reflection. Don't fall through to sync reflection (which would compress
-      // the entire active observations — the lossy outcome we're preventing) or
-      // start another background buffering op on top of the existing one. Just
-      // return and let the next turn re-evaluate.
-      if ((ttlExpired || providerChanged) && record.bufferedReflection) {
+      // Early-trigger overshoot guard: tryActivateBufferedReflection already
+      // decided the early trigger should not activate the existing buffer.
+      // Don't fall through to sync reflection (which would compress the
+      // entire active observations — the lossy outcome we're preventing) or
+      // start another background buffering op on top of the existing one.
+      // Return and let the next turn re-evaluate.
+      if (activationResult.status === 'suppressed') {
         omDebug(
-          `[OM:reflect] skipping sync fallback / re-buffer after suppressed early ${providerChanged ? 'provider_change' : 'ttl'} activation`,
+          `[OM:reflect] skipping sync fallback / re-buffer after suppressed early ${activationMetadata.triggeredBy} activation (reason=${activationResult.reason})`,
         );
         return;
       }
