@@ -299,6 +299,12 @@ export class S3Filesystem extends MastraFilesystem {
   /**
    * Get mount configuration for E2B sandbox.
    * Returns S3-compatible config that works with s3fs-fuse.
+   *
+   * Only static `accessKeyId`/`secretAccessKey`/`sessionToken` are included in the
+   * returned config. If credentials are provided only via the `credentials` option
+   * (provider function), the returned config will have no credentials because FUSE
+   * mounts cannot call a provider function. Use static credentials for sandbox
+   * mount compatibility.
    */
   getMountConfig(): S3MountConfig {
     const config: S3MountConfig = {
