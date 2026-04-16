@@ -4325,6 +4325,15 @@
       "docUrl": "https://modelscope.cn/docs/model-service/API-Inference/intro",
       "gateway": "models.dev"
     },
+    "hpc-ai": {
+      "url": "https://api.hpc-ai.com/inference/v1",
+      "apiKeyEnvVar": "HPC_AI_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "HPC-AI",
+      "models": ["minimax/minimax-m2.5", "moonshotai/kimi-k2.5", "zai-org/glm-5.1"],
+      "docUrl": "https://www.hpc-ai.com/doc/docs/quickstart/",
+      "gateway": "models.dev"
+    },
     "xiaomi": {
       "url": "https://api.xiaomimimo.com/v1",
       "apiKeyEnvVar": "XIAOMI_API_KEY",
@@ -8085,6 +8094,7 @@
       "ZhipuAI/GLM-4.5",
       "ZhipuAI/GLM-4.6"
     ],
+    "hpc-ai": ["minimax/minimax-m2.5", "moonshotai/kimi-k2.5", "zai-org/glm-5.1"],
     "xiaomi": ["mimo-v2-flash", "mimo-v2-omni", "mimo-v2-pro"],
     "clarifai": [
       "arcee_ai/AFM/models/trinity-mini",

@@ -1,5 +1,23 @@
 # @mastra/client-js
 
+## 1.13.5-alpha.3
+
+### Patch Changes
+
+- Fixed @mastra/client-js to re-export RequestContext so client SDK users can import it from @mastra/client-js. ([#15413](https://github.com/mastra-ai/mastra/pull/15413))
+
+- Updated dependencies [[`fdd54cf`](https://github.com/mastra-ai/mastra/commit/fdd54cf612a9af876e9fdd85e534454f6e7dd518), [`7db42a9`](https://github.com/mastra-ai/mastra/commit/7db42a9cccd3b29c44fb0731f792c51575e8421c), [`30456b6`](https://github.com/mastra-ai/mastra/commit/30456b6b08c8fd17e109dd093b73d93b65e83bc5), [`9d11a8c`](https://github.com/mastra-ai/mastra/commit/9d11a8c1c8924eb975a245a5884d40ca1b7e0491), [`d246696`](https://github.com/mastra-ai/mastra/commit/d246696139a3144a5b21b042d41c532688e957e1), [`354f9ce`](https://github.com/mastra-ai/mastra/commit/354f9ce1ca6af2074b6a196a23f8ec30012dccca), [`e9837b5`](https://github.com/mastra-ai/mastra/commit/e9837b53699e18711b09e0ca010a4106376f2653)]:
+  - @mastra/core@1.26.0-alpha.3
+  - @mastra/schema-compat@1.2.9-alpha.1
+
+## 1.13.5-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`3d83d06`](https://github.com/mastra-ai/mastra/commit/3d83d06f776f00fb5f4163dddd32a030c5c20844), [`7e0e63e`](https://github.com/mastra-ai/mastra/commit/7e0e63e2e485e84442351f4c7a79a424c83539dc), [`9467ea8`](https://github.com/mastra-ai/mastra/commit/9467ea87695749a53dfc041576410ebf9ee7bb67), [`7338d94`](https://github.com/mastra-ai/mastra/commit/7338d949380cf68b095342e8e42610dc51d557c1), [`c65aec3`](https://github.com/mastra-ai/mastra/commit/c65aec356cc037ee7c4b30ccea946807d4c4f443)]:
+  - @mastra/core@1.26.0-alpha.2
+  - @mastra/schema-compat@1.2.9-alpha.0
+
 ## 1.13.5-alpha.1
 
 ### Patch Changes
