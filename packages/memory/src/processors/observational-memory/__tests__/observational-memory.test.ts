@@ -5664,6 +5664,64 @@ describe('Locking Behavior', () => {
       }
     });
 
+    it('should prefer a real threshold activation over TTL metadata when observations already crossed the threshold', async () => {
+      vi.useFakeTimers();
+      try {
+        const now = new Date('2026-04-14T12:00:00.000Z');
+        vi.setSystemTime(now);
+
+        const { storage, om, getReflectorCalled } = await setupBufferedReflectionEnv({
+          activateAfterIdle: '5m',
+          reflectionObservationTokens: 500,
+        });
+
+        const threadId = 'thread-overshoot';
+        const resourceId = 'resource-overshoot';
+        const record = (await storage.getObservationalMemory(threadId, resourceId))!;
+
+        const reflectedLines = Array.from(
+          { length: 140 },
+          (_, i) => `- 🟢 Reflected observation content line number ${i + 1} with enough text to exceed the threshold`,
+        );
+        const activeObservations = reflectedLines.join('\n');
+        const observationTokens = om.getTokenCounter().countObservations(activeObservations);
+        expect(observationTokens).toBeGreaterThanOrEqual(500);
+        await storage.updateActiveObservations({
+          id: record.id,
+          observations: activeObservations,
+          tokenCount: observationTokens,
+          lastObservedAt: new Date(now.getTime() - 301_000),
+        });
+        await storage.updateBufferedReflection({
+          id: record.id,
+          reflection: '- 🔴 Condensed reflection',
+          tokenCount: 4000,
+          inputTokenCount: 15000,
+          reflectedObservationLineCount: reflectedLines.length,
+        });
+
+        const { writer, customCalls } = makeCapturingWriter();
+        const freshRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
+        await om.reflector.maybeReflect({
+          record: freshRecord,
+          observationTokens: freshRecord.observationTokenCount ?? 0,
+          lastActivityAt: now.getTime() - 301_000,
+          threadId,
+          writer,
+        });
+
+        const afterRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
+        expect(afterRecord.bufferedReflection).toBeFalsy();
+        expect(afterRecord.activeObservations).toContain('Condensed reflection');
+        expect(getReflectorCalled()).toBe(false);
+        const activationMarkers = customCalls.filter(part => part?.type === 'data-om-activation');
+        expect(activationMarkers).toHaveLength(1);
+        expect(activationMarkers[0]?.data?.triggeredBy).toBe('threshold');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('should still activate on a later threshold trigger after an early TTL activation was suppressed', async () => {
       vi.useFakeTimers();
       try {

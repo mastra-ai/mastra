@@ -799,16 +799,18 @@ export class ReflectorRunner {
       return;
     }
 
+    const activationTriggeredBy =
+      observationTokens >= reflectThreshold
+        ? ('threshold' as const)
+        : providerChanged
+          ? ('provider_change' as const)
+          : ('ttl' as const);
     const activationMetadata = {
-      triggeredBy: providerChanged
-        ? ('provider_change' as const)
-        : ttlExpired
-          ? ('ttl' as const)
-          : ('threshold' as const),
-      lastActivityAt: ttlExpired ? lastActivityAt : undefined,
-      ttlExpiredMs: ttlExpired ? ttlExpiredMs : undefined,
-      previousModel: providerChanged ? lastModel : undefined,
-      currentModel: providerChanged ? actorModel : undefined,
+      triggeredBy: activationTriggeredBy,
+      lastActivityAt: activationTriggeredBy === 'ttl' ? lastActivityAt : undefined,
+      ttlExpiredMs: activationTriggeredBy === 'ttl' ? ttlExpiredMs : undefined,
+      previousModel: activationTriggeredBy === 'provider_change' ? lastModel : undefined,
+      currentModel: activationTriggeredBy === 'provider_change' ? actorModel : undefined,
     };
 
     // ═══════════════════════════════════════════════════════════
