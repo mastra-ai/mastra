@@ -1,5 +1,40 @@
 # @mastra/core
 
+## 1.26.0-alpha.3
+
+### Patch Changes
+
+- Fixed browser context reminders breaking prompt cache. Browser reminders are now added as new user messages instead of modifying existing message history. ([#15417](https://github.com/mastra-ai/mastra/pull/15417))
+
+- Fixed channel webhook handling in Node.js when no execution context is available. ([#15441](https://github.com/mastra-ai/mastra/pull/15441))
+
+- Recalled V4 messages now preserve `data-*` message parts (e.g. `data-tool-call-suspended`) after a page refresh, so suspended HITL workflows can resume correctly. ([#14211](https://github.com/mastra-ai/mastra/pull/14211))
+
+- Fixed processOutputStep not receiving token usage data. Output processors now receive usage (inputTokens, outputTokens, totalTokens) for the current LLM step, enabling per-step cost tracking and token budget enforcement. ([#15068](https://github.com/mastra-ai/mastra/pull/15068))
+
+- Fixed `requireApproval` on tools to accept a function in addition to a boolean. Previously, passing a function for `requireApproval` on a tool created with `createTool` was silently ignored and approval was never required. ([#15346](https://github.com/mastra-ai/mastra/pull/15346))
+
+  ```ts
+  import { createTool } from '@mastra/core/tools';
+  import { z } from 'zod';
+
+  createTool({
+    id: 'delete-file',
+    description: 'Delete a file',
+    inputSchema: z.object({ path: z.string() }),
+    // Now works: only require approval for paths outside /tmp
+    requireApproval: input => !input.path.startsWith('/tmp/'),
+    execute: async ({ context }) => {
+      // ...
+    },
+  });
+  ```
+
+- Fixed agent stream errors when providers end a stream without an error payload. ([#15435](https://github.com/mastra-ai/mastra/pull/15435))
+
+- Updated dependencies [[`7db42a9`](https://github.com/mastra-ai/mastra/commit/7db42a9cccd3b29c44fb0731f792c51575e8421c)]:
+  - @mastra/schema-compat@1.2.9-alpha.1
+
 ## 1.26.0-alpha.2
 
 ### Minor Changes
