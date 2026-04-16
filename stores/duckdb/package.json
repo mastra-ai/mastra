@@ -28,7 +28,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@duckdb/node-api": "1.4.2-r.1"
+    "@duckdb/node-api": "^1.5.2-r.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

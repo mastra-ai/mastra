@@ -1053,6 +1053,8 @@ export type ProviderModelsMap = {
     'mimo-v2-pro',
     'minimax-m2.5',
     'minimax-m2.7',
+    'qwen3.5-plus',
+    'qwen3.6-plus',
   ];
   readonly 'io-net': readonly [
     'Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar',
@@ -2066,6 +2068,8 @@ export type ProviderModelsMap = {
     'minimax-m2.5',
     'minimax-m2.5-free',
     'nemotron-3-super-free',
+    'qwen3.5-plus',
+    'qwen3.6-plus',
   ];
   readonly stepfun: readonly ['step-1-32k', 'step-2-16k', 'step-3.5-flash', 'step-3.5-flash-2603'];
   readonly nebius: readonly [
@@ -3610,6 +3614,7 @@ export type ProviderModelsMap = {
     'ZhipuAI/GLM-4.5',
     'ZhipuAI/GLM-4.6',
   ];
+  readonly 'hpc-ai': readonly ['minimax/minimax-m2.5', 'moonshotai/kimi-k2.5', 'zai-org/glm-5.1'];
   readonly xiaomi: readonly ['mimo-v2-flash', 'mimo-v2-omni', 'mimo-v2-pro'];
   readonly clarifai: readonly [
     'arcee_ai/AFM/models/trinity-mini',
