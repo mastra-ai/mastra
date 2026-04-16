@@ -2082,6 +2082,10 @@ export class Harness<TState = {}> {
               observationTokens: payload.observationTokens ?? 0,
               messagesActivated: payload.messagesActivated ?? 0,
               generationCount: payload.generationCount ?? 0,
+              triggeredBy: payload.triggeredBy,
+              lastActivityAt: payload.lastActivityAt,
+              ttlExpiredMs: payload.ttlExpiredMs,
+              activateAfterIdle: payload.config?.activateAfterIdle,
             });
           }
           break;
