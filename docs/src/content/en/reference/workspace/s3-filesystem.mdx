@@ -46,6 +46,33 @@ const agent = new Agent({
 })
 ```
 
+### AWS credential provider chain
+
+When no credentials are provided, `S3Filesystem` uses the AWS SDK default credential provider chain. This discovers credentials automatically from environment variables, `~/.aws` config files, ECS container credentials, EC2 instance profiles, and other standard sources.
+
+```typescript
+import { S3Filesystem } from '@mastra/s3'
+
+// SDK discovers credentials from the environment automatically
+const filesystem = new S3Filesystem({
+  bucket: 'my-bucket',
+  region: 'us-east-1',
+})
+```
+
+Pass a credential provider function for auto-refreshing credentials. This is useful for deployments on ECS, Lambda, or when using SSO/AssumeRole where temporary credentials expire and need to be refreshed.
+
+```typescript
+import { S3Filesystem } from '@mastra/s3'
+import { fromNodeProviderChain } from '@aws-sdk/credential-providers'
+
+const filesystem = new S3Filesystem({
+  bucket: 'my-bucket',
+  region: 'us-east-1',
+  credentials: fromNodeProviderChain(),
+})
+```
+
 ### Cloudflare R2
 
 ```typescript
@@ -89,22 +116,31 @@ const filesystem = new S3Filesystem({
     description: "AWS region (use 'auto' for R2)",
   },
   {
+    name: 'credentials',
+    type: 'AwsCredentialIdentity | AwsCredentialIdentityProvider',
+    description:
+      'AWS credentials or credential provider function. Accepts static credentials or a provider that auto-refreshes (e.g. `fromNodeProviderChain()` from `@aws-sdk/credential-providers`). Takes precedence over `accessKeyId`/`secretAccessKey`/`sessionToken`. When all credential options are omitted, the SDK default credential provider chain is used.',
+    isOptional: true,
+  },
+  {
     name: 'accessKeyId',
     type: 'string',
-    description: 'AWS access key ID. Optional for public buckets (read-only access).',
+    description:
+      'AWS access key ID. When omitted along with `secretAccessKey` and `credentials`, the SDK default credential provider chain is used.',
     isOptional: true,
   },
   {
     name: 'secretAccessKey',
     type: 'string',
-    description: 'AWS secret access key. Optional for public buckets (read-only access).',
+    description:
+      'AWS secret access key. When omitted along with `accessKeyId` and `credentials`, the SDK default credential provider chain is used.',
     isOptional: true,
   },
   {
     name: 'sessionToken',
     type: 'string',
     description:
-      'AWS session token for temporary credentials. Required when using SSO, AssumeRole, container credentials, or any other temporary credential provider.',
+      'AWS session token for temporary credentials. Used with `accessKeyId`/`secretAccessKey` when credentials come from SSO, AssumeRole, or container credentials.',
     isOptional: true,
   },
   {

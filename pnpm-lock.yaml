@@ -6927,6 +6927,9 @@ importers:
       '@aws-sdk/client-s3':
         specifier: ^3.1009.0
         version: 3.1011.0
+      '@aws-sdk/types':
+        specifier: ^3.0.0
+        version: 3.973.6
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
