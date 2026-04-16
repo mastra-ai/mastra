@@ -149,16 +149,12 @@ export class AskQuestionDialogComponent extends Box implements Focusable {
     if (this.selectList) {
       this.selectList.handleInput(data);
     } else if (this.input) {
-      if (this.input instanceof MultilineInput) {
-        this.input.handleInput(data);
-      } else {
-        const kb = getEditorKeybindings();
-        if (kb.matches(data, 'selectCancel')) {
-          this.onCancel();
-          return;
-        }
-        this.input.handleInput(data);
+      const kb = getEditorKeybindings();
+      if (kb.matches(data, 'selectCancel')) {
+        this.onCancel();
+        return;
       }
+      this.input.handleInput(data);
     }
   }
 }

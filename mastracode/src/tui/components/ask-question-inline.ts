@@ -422,6 +422,9 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     this.selectList = undefined;
     this.buildInputMode();
 
+    // Reapply focus to the new input
+    if (this.input) this.input.focused = this._focused;
+
     // Clear items so the answered state renders as free-text, not select
     this.borderedBox.items = [];
     this.borderedBox.setInteractive(
@@ -485,17 +488,12 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     if (this.selectList) {
       this.selectList.handleInput(data);
     } else if (this.input) {
-      if (this.input instanceof MultilineInput) {
-        // MultilineInput handles its own keybindings internally
-        this.input.handleInput(data);
-      } else {
-        const kb = getEditorKeybindings();
-        if (kb.matches(data, 'selectCancel')) {
-          this.handleCancel();
-          return;
-        }
-        this.input.handleInput(data);
+      const kb = getEditorKeybindings();
+      if (kb.matches(data, 'selectCancel')) {
+        this.handleCancel();
+        return;
       }
+      this.input.handleInput(data);
     }
   }
 }
