@@ -2,8 +2,8 @@
 '@mastra/core': patch
 ---
 
-Stamp `step-start.model` on the first iteration of a loop run
+Fixed assistant model attribution so provider and model information is preserved more reliably in stored assistant messages.
 
-The `enrichLastStepStart` call was gated behind `currentIteration > 1`, so the initial assistant message persisted without the resolved `provider/modelId` on its `step-start` part. Downstream consumers that read `step-start.model` (for example, observational memory's provider-change detector) fell back to the bare `modelId` from `content.metadata`, which could produce spurious mismatches against a fully-qualified `provider/modelId` on later turns.
+Loop runs now keep the resolved model on the first `step-start`, already-attributed `step-start` parts are left alone, and post-tool assistant continuations preserve their incoming metadata when they merge into an existing assistant message.
 
-Removing the gate stamps the first-iteration `step-start` in the same shape as subsequent iterations.
+This keeps downstream features working with the correct model identity instead of falling back to incomplete metadata or losing it during merge.
