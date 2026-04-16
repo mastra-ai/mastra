@@ -379,7 +379,7 @@ const memory = new Memory({
 
 With a 5-minute prompt cache TTL, this activates buffered context after 5 minutes of inactivity so the next uncached prompt uses observations and reflections instead of a larger raw message window. If you prefer, `300_000` works the same way.
 
-If your agent can switch between providers or models mid-thread, `activateOnProviderChange: true` forces buffered context to activate before the new provider runs. That avoids sending a large raw window to a provider that cannot reuse the previous prompt cache.
+Changing model or providers mid-thread will invalidate the prompt cache. If your agent can switch between providers or models mid-thread, `activateOnProviderChange: true` forces buffered context to activate before the new provider runs. That avoids sending a large raw window to a provider that cannot reuse the previous prompt cache.
 
 ### Disabling
 
