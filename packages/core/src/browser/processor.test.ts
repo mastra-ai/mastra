@@ -128,11 +128,11 @@ describe('BrowserContextProcessor', () => {
       expect(textPart.text).toContain('Hello');
     });
 
-    it('should indicate browser not running', () => {
+    it('should prepend system-reminder when only page title is available', () => {
       const requestContext = new RequestContext();
       const browserCtx: BrowserContext = {
         provider: 'agent-browser',
-        isRunning: false,
+        pageTitle: 'Example Page',
       };
       requestContext.set('browser', browserCtx);
 
@@ -149,16 +149,16 @@ describe('BrowserContextProcessor', () => {
       const result = processor.processInputStep(createInputStepArgs({ messages, requestContext }));
 
       expect(result).toBeDefined();
-      const resultMessages = (result as any).messages;
-      const textPart = resultMessages[0].content.parts[0];
-      expect(textPart.text).toContain('Browser is not currently running');
+      const textPart = (result as any).messages[0].content.parts[0];
+      expect(textPart.text).toContain('<system-reminder>');
+      expect(textPart.text).toContain('Example Page');
     });
 
     it('should return undefined when no per-request data available', () => {
       const requestContext = new RequestContext();
       const browserCtx: BrowserContext = {
         provider: 'agent-browser',
-        // No currentUrl, pageTitle, or isRunning=false
+        // No currentUrl or pageTitle
       };
       requestContext.set('browser', browserCtx);
 

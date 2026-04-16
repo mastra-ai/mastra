@@ -47,8 +47,6 @@ const SIGNAL_PUBLISH_SEGMENTS: Record<CloudSignal, string> = {
   feedback: 'feedback',
 };
 
-const DEFAULT_CLOUD_ENDPOINT = 'https://api.mastra.ai';
-
 function trimTrailingSlashes(value: string): string {
   let end = value.length;
   while (end > 0 && value.charCodeAt(end - 1) === 47) {
@@ -247,7 +245,7 @@ export class CloudExporter extends BaseExporter {
     if (tracesEndpointOverride) {
       tracesEndpoint = resolveExplicitSignalEndpoint('traces', tracesEndpointOverride, projectId);
     } else {
-      baseEndpoint = resolveBaseEndpoint(config.endpoint ?? DEFAULT_CLOUD_ENDPOINT);
+      baseEndpoint = resolveBaseEndpoint(config.endpoint ?? 'https://observability.mastra.ai');
       tracesEndpoint = buildSignalEndpoint(baseEndpoint, 'traces', projectId);
     }
 

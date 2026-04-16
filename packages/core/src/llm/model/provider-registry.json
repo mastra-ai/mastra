@@ -1171,7 +1171,17 @@
       "apiKeyEnvVar": "OPENCODE_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "OpenCode Go",
-      "models": ["glm-5", "glm-5.1", "kimi-k2.5", "mimo-v2-omni", "mimo-v2-pro", "minimax-m2.5", "minimax-m2.7"],
+      "models": [
+        "glm-5",
+        "glm-5.1",
+        "kimi-k2.5",
+        "mimo-v2-omni",
+        "mimo-v2-pro",
+        "minimax-m2.5",
+        "minimax-m2.7",
+        "qwen3.5-plus",
+        "qwen3.6-plus"
+      ],
       "docUrl": "https://opencode.ai/docs/zen",
       "gateway": "models.dev"
     },
@@ -2368,7 +2378,9 @@
         "kimi-k2.5",
         "minimax-m2.5",
         "minimax-m2.5-free",
-        "nemotron-3-super-free"
+        "nemotron-3-super-free",
+        "qwen3.5-plus",
+        "qwen3.6-plus"
       ],
       "docUrl": "https://opencode.ai/docs/zen",
       "gateway": "models.dev"
@@ -4313,6 +4325,15 @@
       "docUrl": "https://modelscope.cn/docs/model-service/API-Inference/intro",
       "gateway": "models.dev"
     },
+    "hpc-ai": {
+      "url": "https://api.hpc-ai.com/inference/v1",
+      "apiKeyEnvVar": "HPC_AI_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "HPC-AI",
+      "models": ["minimax/minimax-m2.5", "moonshotai/kimi-k2.5", "zai-org/glm-5.1"],
+      "docUrl": "https://www.hpc-ai.com/doc/docs/quickstart/",
+      "gateway": "models.dev"
+    },
     "xiaomi": {
       "url": "https://api.xiaomimimo.com/v1",
       "apiKeyEnvVar": "XIAOMI_API_KEY",
@@ -5510,7 +5531,17 @@
     ],
     "kimi-for-coding": ["k2p5", "kimi-k2-thinking"],
     "moark": ["GLM-4.7", "MiniMax-M2.1"],
-    "opencode-go": ["glm-5", "glm-5.1", "kimi-k2.5", "mimo-v2-omni", "mimo-v2-pro", "minimax-m2.5", "minimax-m2.7"],
+    "opencode-go": [
+      "glm-5",
+      "glm-5.1",
+      "kimi-k2.5",
+      "mimo-v2-omni",
+      "mimo-v2-pro",
+      "minimax-m2.5",
+      "minimax-m2.7",
+      "qwen3.5-plus",
+      "qwen3.6-plus"
+    ],
     "io-net": [
       "Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar",
       "Qwen/Qwen2.5-VL-32B-Instruct",
@@ -6522,7 +6553,9 @@
       "kimi-k2.5",
       "minimax-m2.5",
       "minimax-m2.5-free",
-      "nemotron-3-super-free"
+      "nemotron-3-super-free",
+      "qwen3.5-plus",
+      "qwen3.6-plus"
     ],
     "stepfun": ["step-1-32k", "step-2-16k", "step-3.5-flash", "step-3.5-flash-2603"],
     "nebius": [
@@ -8061,6 +8094,7 @@
       "ZhipuAI/GLM-4.5",
       "ZhipuAI/GLM-4.6"
     ],
+    "hpc-ai": ["minimax/minimax-m2.5", "moonshotai/kimi-k2.5", "zai-org/glm-5.1"],
     "xiaomi": ["mimo-v2-flash", "mimo-v2-omni", "mimo-v2-pro"],
     "clarifai": [
       "arcee_ai/AFM/models/trinity-mini",

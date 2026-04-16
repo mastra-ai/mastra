@@ -187,7 +187,7 @@ importers:
         version: 9.39.4(jiti@2.6.1)
       hono:
         specifier: ^4.12.8
-        version: 4.12.12
+        version: 4.12.14
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(@microsoft/api-extractor@7.57.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.9)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
@@ -267,7 +267,7 @@ importers:
         version: 9.39.4(jiti@2.6.1)
       hono:
         specifier: ^4.12.8
-        version: 4.12.12
+        version: 4.12.14
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(@microsoft/api-extractor@7.57.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.9)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
@@ -350,7 +350,7 @@ importers:
         version: 9.39.4(jiti@2.6.1)
       hono:
         specifier: ^4.12.8
-        version: 4.12.12
+        version: 4.12.14
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(@microsoft/api-extractor@7.57.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.9)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
@@ -469,7 +469,7 @@ importers:
         version: 9.39.4(jiti@2.6.1)
       hono:
         specifier: ^4.12.8
-        version: 4.12.12
+        version: 4.12.14
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(@microsoft/api-extractor@7.57.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.9)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
@@ -1234,7 +1234,7 @@ importers:
     dependencies:
       '@hono/node-server':
         specifier: ^1.19.11
-        version: 1.19.14(hono@4.12.12)
+        version: 1.19.14(hono@4.12.14)
       '@mastra/client-js':
         specifier: workspace:*
         version: link:../../../client-sdks/client-js
@@ -1258,7 +1258,7 @@ importers:
         version: 7.1.0
       hono:
         specifier: ^4.12.8
-        version: 4.12.12
+        version: 4.12.14
       vitest:
         specifier: 'catalog:'
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0(bufferutil@4.1.0))(lightningcss@1.32.0)(msw@2.12.13(@types/node@22.19.15)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.3)
@@ -1897,7 +1897,7 @@ importers:
         version: link:../mastra
       langsmith:
         specifier: ^0.5.10
-        version: 0.5.18(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.213.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.6.0(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.19.0(bufferutil@4.1.0))
+        version: 0.5.19(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.213.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.6.0(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.19.0(bufferutil@4.1.0))
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.99
@@ -3012,10 +3012,10 @@ importers:
         version: 4.0.3
       hono:
         specifier: ^4.12.8
-        version: 4.12.12
+        version: 4.12.14
       hono-openapi:
         specifier: ^1.3.0
-        version: 1.3.0(@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.12))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.2.0)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.2.0)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.2.0(typescript@5.9.3))(zod@4.3.6))(@types/json-schema@7.0.15)(hono@4.12.12)(openapi-types@12.1.3)
+        version: 1.3.0(@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.14))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.2.0)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.2.0)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.2.0(typescript@5.9.3))(zod@4.3.6))(@types/json-schema@7.0.15)(hono@4.12.14)(openapi-types@12.1.3)
       ignore:
         specifier: ^7.0.5
         version: 7.0.5
@@ -3287,7 +3287,7 @@ importers:
         version: 7.29.0
       '@hono/node-ws':
         specifier: ^1.3.0
-        version: 1.3.0(@hono/node-server@1.19.14(hono@4.12.12))(bufferutil@4.1.0)(hono@4.12.12)
+        version: 1.3.0(@hono/node-server@1.19.14(hono@4.12.14))(bufferutil@4.1.0)(hono@4.12.14)
       '@mastra/server':
         specifier: workspace:*
         version: link:../server
@@ -3332,7 +3332,7 @@ importers:
         version: 11.3.4
       hono:
         specifier: ^4.12.8
-        version: 4.12.12
+        version: 4.12.14
       local-pkg:
         specifier: ^1.1.2
         version: 1.1.2
@@ -3363,13 +3363,13 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.19.11
-        version: 1.19.14(hono@4.12.12)
+        version: 1.19.14(hono@4.12.14)
       '@hono/standard-validator':
         specifier: ^0.2.2
-        version: 0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.12)
+        version: 0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.14)
       '@hono/swagger-ui':
         specifier: ^0.5.3
-        version: 0.5.3(hono@4.12.12)
+        version: 0.5.3(hono@4.12.14)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -3411,7 +3411,7 @@ importers:
         version: 2.1.0(patch_hash=42949ba7834aab28b47574e6989b8f3203c3ef91ee1ca866baf4dc8b151d34ae)
       hono-openapi:
         specifier: ^1.3.0
-        version: 1.3.0(@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.12))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.2.0)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.2.0)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.2.0(typescript@5.9.3))(zod@4.3.6))(@types/json-schema@7.0.15)(hono@4.12.12)(openapi-types@12.1.3)
+        version: 1.3.0(@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.14))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.2.0)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.2.0)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.2.0(typescript@5.9.3))(zod@4.3.6))(@types/json-schema@7.0.15)(hono@4.12.14)(openapi-types@12.1.3)
       stacktrace-parser:
         specifier: ^0.1.11
         version: 0.1.11
@@ -3451,7 +3451,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.19.11
-        version: 1.19.14(hono@4.12.12)
+        version: 1.19.14(hono@4.12.14)
       '@internal/ai-sdk-v4':
         specifier: workspace:*
         version: link:../_vendored/ai_v4
@@ -3475,7 +3475,7 @@ importers:
         version: link:../mcp
       hono:
         specifier: ^4.12.8
-        version: 4.12.12
+        version: 4.12.14
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(@microsoft/api-extractor@7.57.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.9)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
@@ -3644,9 +3644,6 @@ importers:
 
   packages/mcp:
     dependencies:
-      '@apidevtools/json-schema-ref-parser':
-        specifier: ^14.2.1
-        version: 14.2.1(@types/json-schema@7.0.15)
       '@modelcontextprotocol/sdk':
         specifier: ^1.27.1
         version: 1.27.1(@cfworker/json-schema@4.1.1)(zod@4.3.6)
@@ -3662,7 +3659,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.19.11
-        version: 1.19.14(hono@4.12.12)
+        version: 1.19.14(hono@4.12.14)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -3701,10 +3698,10 @@ importers:
         version: 9.39.4(jiti@2.6.1)
       hono:
         specifier: ^4.12.8
-        version: 4.12.12
+        version: 4.12.14
       hono-mcp-server-sse-transport:
         specifier: 0.0.7
-        version: 0.0.7(@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@4.3.6))(hono@4.12.12)
+        version: 0.0.7(@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@4.3.6))(hono@4.12.14)
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(@microsoft/api-extractor@7.57.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.9)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
@@ -3747,7 +3744,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.19.11
-        version: 1.19.14(hono@4.12.12)
+        version: 1.19.14(hono@4.12.14)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -3777,7 +3774,7 @@ importers:
         version: 9.39.4(jiti@2.6.1)
       hono:
         specifier: ^4.12.8
-        version: 4.12.12
+        version: 4.12.14
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(@microsoft/api-extractor@7.57.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.9)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
@@ -3805,7 +3802,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.19.11
-        version: 1.19.14(hono@4.12.12)
+        version: 1.19.14(hono@4.12.14)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -3838,7 +3835,7 @@ importers:
         version: 9.39.4(jiti@2.6.1)
       hono:
         specifier: ^4.12.8
-        version: 4.12.12
+        version: 4.12.14
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(@microsoft/api-extractor@7.57.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.9)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
@@ -4533,7 +4530,7 @@ importers:
     dependencies:
       hono:
         specifier: ^4.12.8
-        version: 4.12.12
+        version: 4.12.14
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.24
@@ -4600,13 +4597,13 @@ importers:
         version: 5.3.0
       '@inngest/realtime':
         specifier: ^0.4.6
-        version: 0.4.6(@opentelemetry/core@2.6.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.3)(hono@4.12.12)(koa@3.1.2)(react@19.2.5)(typescript@5.9.3)(zod@4.3.6)
+        version: 0.4.6(@opentelemetry/core@2.6.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.14)(koa@3.1.2)(react@19.2.5)(typescript@5.9.3)(zod@4.3.6)
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
       inngest:
         specifier: ^3.52.6
-        version: 3.52.7(@opentelemetry/core@2.6.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.3)(hono@4.12.12)(koa@3.1.2)(typescript@5.9.3)(zod@4.3.6)
+        version: 3.52.7(@opentelemetry/core@2.6.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.14)(koa@3.1.2)(typescript@5.9.3)(zod@4.3.6)
       zod:
         specifier: 'catalog:'
         version: 4.3.6
@@ -4798,8 +4795,8 @@ importers:
         specifier: ^9.39.4
         version: 9.39.4(jiti@2.6.1)
       fastify:
-        specifier: ^5.8.2
-        version: 5.8.3
+        specifier: ^5.8.5
+        version: 5.8.5
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(@microsoft/api-extractor@7.57.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.9)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
@@ -4817,7 +4814,7 @@ importers:
     dependencies:
       '@hono/node-ws':
         specifier: ^1.3.0
-        version: 1.3.0(@hono/node-server@1.19.14(hono@4.12.12))(bufferutil@4.1.0)(hono@4.12.12)
+        version: 1.3.0(@hono/node-server@1.19.14(hono@4.12.14))(bufferutil@4.1.0)(hono@4.12.14)
       '@mastra/server':
         specifier: workspace:*
         version: link:../../packages/server
@@ -4833,10 +4830,10 @@ importers:
         version: 2.0.102(zod@4.3.6)
       '@hono/node-server':
         specifier: ^1.19.11
-        version: 1.19.14(hono@4.12.12)
+        version: 1.19.14(hono@4.12.14)
       '@hono/swagger-ui':
         specifier: ^0.5.3
-        version: 0.5.3(hono@4.12.12)
+        version: 0.5.3(hono@4.12.14)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -4872,7 +4869,7 @@ importers:
         version: 9.39.4(jiti@2.6.1)
       hono:
         specifier: ^4.12.8
-        version: 4.12.12
+        version: 4.12.14
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(@microsoft/api-extractor@7.57.7(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.9)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.3)
@@ -5273,8 +5270,8 @@ importers:
   stores/duckdb:
     dependencies:
       '@duckdb/node-api':
-        specifier: 1.4.2-r.1
-        version: 1.4.2-r.1
+        specifier: ^1.5.2-r.1
+        version: 1.5.2-r.1
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -6513,7 +6510,7 @@ importers:
     dependencies:
       '@inngest/realtime':
         specifier: ^0.4.6
-        version: 0.4.6(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.3)(hono@4.12.12)(koa@3.1.2)(react@19.2.5)(typescript@5.9.3)(zod@4.3.6)
+        version: 0.4.6(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.14)(koa@3.1.2)(react@19.2.5)(typescript@5.9.3)(zod@4.3.6)
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
@@ -6522,14 +6519,14 @@ importers:
         version: 1.30.1(@opentelemetry/api@1.9.0)
       inngest:
         specifier: ^3.52.6
-        version: 3.52.7(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.3)(hono@4.12.12)(koa@3.1.2)(typescript@5.9.3)(zod@4.3.6)
+        version: 3.52.7(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.14)(koa@3.1.2)(typescript@5.9.3)(zod@4.3.6)
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.24
         version: 1.3.24(zod@4.3.6)
       '@hono/node-server':
         specifier: ^1.19.11
-        version: 1.19.14(hono@4.12.12)
+        version: 1.19.14(hono@4.12.14)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -6585,14 +6582,14 @@ importers:
         specifier: ^5.2.1
         version: 5.2.1
       fastify:
-        specifier: ^5.8.2
-        version: 5.8.3
+        specifier: ^5.8.5
+        version: 5.8.5
       get-port:
         specifier: 7.1.0
         version: 7.1.0
       hono:
         specifier: ^4.12.8
-        version: 4.12.12
+        version: 4.12.14
       inngest-cli:
         specifier: ^1.17.5
         version: 1.17.5(encoding@0.1.13)
@@ -7401,12 +7398,6 @@ packages:
   '@anush008/tokenizers@0.0.0':
     resolution: {integrity: sha512-IQD9wkVReKAhsEAbDjh/0KrBGTEXelqZLpOBRDaIRvlzZ9sjmUP+gKbpvzyJnei2JHQiE8JAgj7YcNloINbGBw==}
     engines: {node: '>= 10'}
-
-  '@apidevtools/json-schema-ref-parser@14.2.1':
-    resolution: {integrity: sha512-HmdFw9CDYqM6B25pqGBpNeLCKvGPlIx1EbLrVL0zPvj50CJQUHyBNBw45Muk0kEIkogo1VZvOKHajdMuAzSxRg==}
-    engines: {node: '>= 20'}
-    peerDependencies:
-      '@types/json-schema': ^7.0.15
 
   '@appium/logger@1.7.1':
     resolution: {integrity: sha512-9C2o9X/lBEDBUnKfAi3mRo9oG7Z03nmISLwsGkWxIWjMAvBdJD0RRSJMekWVKzfXN3byrI1WlCXTITzN4LAoLw==}
@@ -9596,36 +9587,41 @@ packages:
     resolution: {integrity: sha512-lBSBiRruFurFKXr5Hbsl2thmGweAPmddhF3jb99U4EMDA5L+e5Y1rAkOS07Nvrup7HUMBDrCV45meaxZnt28nQ==}
     engines: {node: '>=20.0'}
 
-  '@duckdb/node-api@1.4.2-r.1':
-    resolution: {integrity: sha512-8Ef4R/Lq+rXTpcqZIJZe6ALfgMGxy88HmiPvRpWrRw1fUTy85x1U0NnGrqCklZsmWyZUdPwVYj90MQOF2MY/TA==}
+  '@duckdb/node-api@1.5.2-r.1':
+    resolution: {integrity: sha512-OzBBnS0JGXMoS5mzKNY/Ylr7SshcRQiLFIoxQ4AlePwJ2fNeDL/fbHu/knjxUrXwW1fJBTUgwWftmxDdnZZb3A==}
 
-  '@duckdb/node-bindings-darwin-arm64@1.4.2-r.1':
-    resolution: {integrity: sha512-C4yBI3zBX7iZ9iq8zJDvPatXA+2xM22sg1kX3fx76nG+qTqKtU/dGFVYL7Fx6cBYxBO1ZZ8Y+vjgYb6/bich8A==}
+  '@duckdb/node-bindings-darwin-arm64@1.5.2-r.1':
+    resolution: {integrity: sha512-v35FyKOb8EJCvaiPF7k0gvKiJTXR7PPQDNoWR0Gu+YSX5O9b+DIguzt1348Of3HebHy6ATSMzlUekaVA9YXu+g==}
     cpu: [arm64]
     os: [darwin]
 
-  '@duckdb/node-bindings-darwin-x64@1.4.2-r.1':
-    resolution: {integrity: sha512-dgTSBuEfWyhymYovsGoRESjqcJuZWwJqla9l89SSsBDrGYcUp+EHsXUF73oUCspzTesT2lOvHrDufO8pKgtudw==}
+  '@duckdb/node-bindings-darwin-x64@1.5.2-r.1':
+    resolution: {integrity: sha512-SU9dIJ1BluKkkGxi4UsP4keqkkstB2YDySF9KcYu3EZKIVM3FTv2zc7XO38dXnHOq6+F3WqhWWZvD+XU945p7A==}
     cpu: [x64]
     os: [darwin]
 
-  '@duckdb/node-bindings-linux-arm64@1.4.2-r.1':
-    resolution: {integrity: sha512-r2Ml1LvU2vkVMx4YU04T79FjGkYg8YMVtbOz7j740SZGIi5Cch5P1/oy48jJBWRqoaXuqimpYWeTZiGVeCQiZA==}
+  '@duckdb/node-bindings-linux-arm64@1.5.2-r.1':
+    resolution: {integrity: sha512-3Tra9xM3aM3denaER4KhJ6//6PpmPbik9ECBQ+sh9PyKaEgHw/0kAcKnLm5EzWUnXF0qYmZlewvkCrse8KmOYw==}
     cpu: [arm64]
     os: [linux]
 
-  '@duckdb/node-bindings-linux-x64@1.4.2-r.1':
-    resolution: {integrity: sha512-ed5KiNIu1rqSva5rgo4PRVYSmBolAMVqGFWsYWLoRZ94ka2F/dHwJNkarCTmBFCEDGVZWzWzjRyWTQgYTvQxTg==}
+  '@duckdb/node-bindings-linux-x64@1.5.2-r.1':
+    resolution: {integrity: sha512-pcQvZRHiIfJ9cq8parkSQczQHEml/IeGfnDCMAbEgD6+jaV9Y9Y5Ph1kP9aR+bm6him1S5ZIEr3kZbihjKnWbA==}
     cpu: [x64]
     os: [linux]
 
-  '@duckdb/node-bindings-win32-x64@1.4.2-r.1':
-    resolution: {integrity: sha512-kIIT8tuoW3mzr9EPcdSoKfv9CgOhTqRryHDI10Z0nuhc9UhqOWPUM/LnSUebfo1mdD9Drm7YrKCKYxNTr5dqBQ==}
+  '@duckdb/node-bindings-win32-arm64@1.5.2-r.1':
+    resolution: {integrity: sha512-Ji8tym+N3LkrhVt0Up3bsacD/kpg4/JXFJQqxswiYvBaNCQOk+D+aiVS0GN5pcqvmnG7V7TpsDRzkLEFaWp1vw==}
+    cpu: [arm64]
+    os: [win32]
+
+  '@duckdb/node-bindings-win32-x64@1.5.2-r.1':
+    resolution: {integrity: sha512-5XqcqC+4R8ghBEEbnc2a0sqfz1zyPBRb9YcmIWfiuDoCYSYFbKhmHcEyNftZDHcwCoLOHXnUin45jraex4STqQ==}
     cpu: [x64]
     os: [win32]
 
-  '@duckdb/node-bindings@1.4.2-r.1':
-    resolution: {integrity: sha512-z0pJCdEnIj0Famkip6w7JZ/A17nm5VcYc6H7isOHXfEnPhBQ9PBusUTFgIzl6+3J8HOFQOv0szJq46zldbsHfQ==}
+  '@duckdb/node-bindings@1.5.2-r.1':
+    resolution: {integrity: sha512-bUg3bLVj70YVku6fKyQJS8ASORl7kM7YFVFznsEB9pWbtazPj+ME2x2FUk0WiTzjJdutjzSSGXF066mB4bGGZA==}
 
   '@elastic/elasticsearch@8.19.1':
     resolution: {integrity: sha512-+1j9NnQVOX+lbWB8LhCM7IkUmjU05Y4+BmSLfusq0msCsQb1Va+OUKFCoOXjCJqQrcgdRdQCjYYyolQ/npQALQ==}
@@ -18559,8 +18555,8 @@ packages:
   fastify-plugin@5.1.0:
     resolution: {integrity: sha512-FAIDA8eovSt5qcDgcBvDuX/v0Cjz0ohGhENZ/wpc3y+oZCY2afZ9Baqql3g/lC+OHRnciQol4ww7tuthOb9idw==}
 
-  fastify@5.8.3:
-    resolution: {integrity: sha512-XJXpRQ41+rsJ/GLeP9vyDC+fBXilcTlEXokMSexkdEkla4uf7ZQNaI5xl3el+kW5TZQulqYxLr659ey/KX7XmQ==}
+  fastify@5.8.5:
+    resolution: {integrity: sha512-Yqptv59pQzPgQUSIm87hMqHJmdkb1+GPxdE6vW6FRyVE9G86mt7rOghitiU4JHRaTyDUk9pfeKmDeu70lAwM4Q==}
 
   fastq@1.20.1:
     resolution: {integrity: sha512-GGToxJ/w1x32s/D2EKND7kTil4n8OVk/9mycTc4VDza13lOvpUZTGX3mFSCtV9ksdGBVzvsyAVLM6mHFThxXxw==}
@@ -19215,8 +19211,8 @@ packages:
       hono:
         optional: true
 
-  hono@4.12.12:
-    resolution: {integrity: sha512-p1JfQMKaceuCbpJKAPKVqyqviZdS0eUxH9v82oWo1kb9xjQ5wA6iP3FNVAPDFlz5/p7d45lO+BpSk1tuSZMF4Q==}
+  hono@4.12.14:
+    resolution: {integrity: sha512-am5zfg3yu6sqn5yjKBNqhnTX7Cv+m00ox+7jbaKkrLMRJ4rAdldd1xPd/JzbBWspqaQv6RSTrgFN95EsfhC+7w==}
     engines: {node: '>=16.9.0'}
 
   hosted-git-info@7.0.2:
@@ -20182,8 +20178,8 @@ packages:
       openai:
         optional: true
 
-  langsmith@0.5.18:
-    resolution: {integrity: sha512-3zuZUWffTHQ+73EAwnodADtf534VNEZUpXr9jC12qyG8/IQuJET7PRsCpTb9wX2lmBspakwLUpqpj3tNm/0bVA==}
+  langsmith@0.5.19:
+    resolution: {integrity: sha512-5tFoETuFMvGkbPGsINNlIE4Ab86CsPhdPOQZCGwNt/NX0h5NDKQLKOWS/G2XcRUBOQl4mCNbrayUvUTWaIRsCg==}
     peerDependencies:
       '@opentelemetry/api': '*'
       '@opentelemetry/exporter-trace-otlp-proto': '*'
@@ -26226,11 +26222,6 @@ snapshots:
       '@anush008/tokenizers-linux-x64-gnu': 0.0.0
       '@anush008/tokenizers-win32-x64-msvc': 0.0.0
 
-  '@apidevtools/json-schema-ref-parser@14.2.1(@types/json-schema@7.0.15)':
-    dependencies:
-      '@types/json-schema': 7.0.15
-      js-yaml: 3.14.2
-
   '@appium/logger@1.7.1':
     dependencies:
       console-control-strings: 1.1.0
@@ -30025,32 +30016,36 @@ snapshots:
       - uglify-js
       - webpack-cli
 
-  '@duckdb/node-api@1.4.2-r.1':
+  '@duckdb/node-api@1.5.2-r.1':
     dependencies:
-      '@duckdb/node-bindings': 1.4.2-r.1
+      '@duckdb/node-bindings': 1.5.2-r.1
 
-  '@duckdb/node-bindings-darwin-arm64@1.4.2-r.1':
+  '@duckdb/node-bindings-darwin-arm64@1.5.2-r.1':
     optional: true
 
-  '@duckdb/node-bindings-darwin-x64@1.4.2-r.1':
+  '@duckdb/node-bindings-darwin-x64@1.5.2-r.1':
     optional: true
 
-  '@duckdb/node-bindings-linux-arm64@1.4.2-r.1':
+  '@duckdb/node-bindings-linux-arm64@1.5.2-r.1':
     optional: true
 
-  '@duckdb/node-bindings-linux-x64@1.4.2-r.1':
+  '@duckdb/node-bindings-linux-x64@1.5.2-r.1':
     optional: true
 
-  '@duckdb/node-bindings-win32-x64@1.4.2-r.1':
+  '@duckdb/node-bindings-win32-arm64@1.5.2-r.1':
     optional: true
 
-  '@duckdb/node-bindings@1.4.2-r.1':
+  '@duckdb/node-bindings-win32-x64@1.5.2-r.1':
+    optional: true
+
+  '@duckdb/node-bindings@1.5.2-r.1':
     optionalDependencies:
-      '@duckdb/node-bindings-darwin-arm64': 1.4.2-r.1
-      '@duckdb/node-bindings-darwin-x64': 1.4.2-r.1
-      '@duckdb/node-bindings-linux-arm64': 1.4.2-r.1
-      '@duckdb/node-bindings-linux-x64': 1.4.2-r.1
-      '@duckdb/node-bindings-win32-x64': 1.4.2-r.1
+      '@duckdb/node-bindings-darwin-arm64': 1.5.2-r.1
+      '@duckdb/node-bindings-darwin-x64': 1.5.2-r.1
+      '@duckdb/node-bindings-linux-arm64': 1.5.2-r.1
+      '@duckdb/node-bindings-linux-x64': 1.5.2-r.1
+      '@duckdb/node-bindings-win32-arm64': 1.5.2-r.1
+      '@duckdb/node-bindings-win32-x64': 1.5.2-r.1
 
   '@elastic/elasticsearch@8.19.1':
     dependencies:
@@ -30844,27 +30839,27 @@ snapshots:
     dependencies:
       typescript: 5.9.3
 
-  '@hono/node-server@1.19.14(hono@4.12.12)':
+  '@hono/node-server@1.19.14(hono@4.12.14)':
     dependencies:
-      hono: 4.12.12
+      hono: 4.12.14
 
-  '@hono/node-ws@1.3.0(@hono/node-server@1.19.14(hono@4.12.12))(bufferutil@4.1.0)(hono@4.12.12)':
+  '@hono/node-ws@1.3.0(@hono/node-server@1.19.14(hono@4.12.14))(bufferutil@4.1.0)(hono@4.12.14)':
     dependencies:
-      '@hono/node-server': 1.19.14(hono@4.12.12)
-      hono: 4.12.12
+      '@hono/node-server': 1.19.14(hono@4.12.14)
+      hono: 4.12.14
       ws: 8.19.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.12)':
+  '@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.14)':
     dependencies:
       '@standard-schema/spec': 1.1.0
-      hono: 4.12.12
+      hono: 4.12.14
 
-  '@hono/swagger-ui@0.5.3(hono@4.12.12)':
+  '@hono/swagger-ui@0.5.3(hono@4.12.14)':
     dependencies:
-      hono: 4.12.12
+      hono: 4.12.14
 
   '@hookform/resolvers@3.10.0(react-hook-form@7.71.2(react@19.2.5))':
     dependencies:
@@ -31003,11 +30998,11 @@ snapshots:
       '@types/node': 22.19.15
       typescript: 5.9.3
 
-  '@inngest/realtime@0.4.6(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.3)(hono@4.12.12)(koa@3.1.2)(react@19.2.5)(typescript@5.9.3)(zod@4.3.6)':
+  '@inngest/realtime@0.4.6(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.14)(koa@3.1.2)(react@19.2.5)(typescript@5.9.3)(zod@4.3.6)':
     dependencies:
       '@standard-schema/spec': 1.1.0
       debug: 4.4.3
-      inngest: 3.52.7(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.3)(hono@4.12.12)(koa@3.1.2)(typescript@5.9.3)(zod@4.3.6)
+      inngest: 3.52.7(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.14)(koa@3.1.2)(typescript@5.9.3)(zod@4.3.6)
       react: 19.2.5
       zod: 4.3.6
     transitivePeerDependencies:
@@ -31025,11 +31020,11 @@ snapshots:
       - supports-color
       - typescript
 
-  '@inngest/realtime@0.4.6(@opentelemetry/core@2.6.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.3)(hono@4.12.12)(koa@3.1.2)(react@19.2.5)(typescript@5.9.3)(zod@4.3.6)':
+  '@inngest/realtime@0.4.6(@opentelemetry/core@2.6.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.14)(koa@3.1.2)(react@19.2.5)(typescript@5.9.3)(zod@4.3.6)':
     dependencies:
       '@standard-schema/spec': 1.1.0
       debug: 4.4.3
-      inngest: 3.52.7(@opentelemetry/core@2.6.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.3)(hono@4.12.12)(koa@3.1.2)(typescript@5.9.3)(zod@4.3.6)
+      inngest: 3.52.7(@opentelemetry/core@2.6.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.14)(koa@3.1.2)(typescript@5.9.3)(zod@4.3.6)
       react: 19.2.5
       zod: 4.3.6
     transitivePeerDependencies:
@@ -31721,7 +31716,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@3.25.76)':
     dependencies:
-      '@hono/node-server': 1.19.14(hono@4.12.12)
+      '@hono/node-server': 1.19.14(hono@4.12.14)
       ajv: 8.18.0
       ajv-formats: 3.0.1(ajv@8.18.0)
       content-type: 1.0.5
@@ -31731,7 +31726,7 @@ snapshots:
       eventsource-parser: 3.0.6
       express: 5.2.1
       express-rate-limit: 8.3.1(express@5.2.1)
-      hono: 4.12.12
+      hono: 4.12.14
       jose: 6.2.1
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.0
@@ -31745,7 +31740,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@4.3.6)':
     dependencies:
-      '@hono/node-server': 1.19.14(hono@4.12.12)
+      '@hono/node-server': 1.19.14(hono@4.12.14)
       ajv: 8.18.0
       ajv-formats: 3.0.1(ajv@8.18.0)
       content-type: 1.0.5
@@ -31755,7 +31750,7 @@ snapshots:
       eventsource-parser: 3.0.6
       express: 5.2.1
       express-rate-limit: 8.3.1(express@5.2.1)
-      hono: 4.12.12
+      hono: 4.12.14
       jose: 6.2.1
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.0
@@ -40478,7 +40473,7 @@ snapshots:
 
   fastify-plugin@5.1.0: {}
 
-  fastify@5.8.3:
+  fastify@5.8.5:
     dependencies:
       '@fastify/ajv-compiler': 4.0.5
       '@fastify/error': 4.2.0
@@ -41414,22 +41409,22 @@ snapshots:
     dependencies:
       parse-passwd: 1.0.0
 
-  hono-mcp-server-sse-transport@0.0.7(@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@4.3.6))(hono@4.12.12):
+  hono-mcp-server-sse-transport@0.0.7(@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@4.3.6))(hono@4.12.14):
     dependencies:
       '@modelcontextprotocol/sdk': 1.27.1(@cfworker/json-schema@4.1.1)(zod@4.3.6)
-      hono: 4.12.12
+      hono: 4.12.14
 
-  hono-openapi@1.3.0(@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.12))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.2.0)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.2.0)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.2.0(typescript@5.9.3))(zod@4.3.6))(@types/json-schema@7.0.15)(hono@4.12.12)(openapi-types@12.1.3):
+  hono-openapi@1.3.0(@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.14))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.2.0)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.2.0)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.2.0(typescript@5.9.3))(zod@4.3.6))(@types/json-schema@7.0.15)(hono@4.12.14)(openapi-types@12.1.3):
     dependencies:
       '@standard-community/standard-json': 0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.2.0)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6)
       '@standard-community/standard-openapi': 0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(arktype@2.2.0)(quansync@0.2.11)(valibot@1.2.0(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.2.0(typescript@5.9.3))(zod@4.3.6)
       '@types/json-schema': 7.0.15
       openapi-types: 12.1.3
     optionalDependencies:
-      '@hono/standard-validator': 0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.12)
-      hono: 4.12.12
+      '@hono/standard-validator': 0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.14)
+      hono: 4.12.14
 
-  hono@4.12.12: {}
+  hono@4.12.14: {}
 
   hosted-git-info@7.0.2:
     dependencies:
@@ -41727,7 +41722,7 @@ snapshots:
       - encoding
       - supports-color
 
-  inngest@3.52.7(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.3)(hono@4.12.12)(koa@3.1.2)(typescript@5.9.3)(zod@4.3.6):
+  inngest@3.52.7(@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.14)(koa@3.1.2)(typescript@5.9.3)(zod@4.3.6):
     dependencies:
       '@bufbuild/protobuf': 2.10.0
       '@inngest/ai': 0.1.7
@@ -41757,8 +41752,8 @@ snapshots:
       zod: 4.3.6
     optionalDependencies:
       express: 5.2.1
-      fastify: 5.8.3
-      hono: 4.12.12
+      fastify: 5.8.5
+      hono: 4.12.14
       koa: 3.1.2
       typescript: 5.9.3
     transitivePeerDependencies:
@@ -41766,7 +41761,7 @@ snapshots:
       - encoding
       - supports-color
 
-  inngest@3.52.7(@opentelemetry/core@2.6.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.3)(hono@4.12.12)(koa@3.1.2)(typescript@5.9.3)(zod@4.3.6):
+  inngest@3.52.7(@opentelemetry/core@2.6.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)(express@5.2.1)(fastify@5.8.5)(hono@4.12.14)(koa@3.1.2)(typescript@5.9.3)(zod@4.3.6):
     dependencies:
       '@bufbuild/protobuf': 2.10.0
       '@inngest/ai': 0.1.7
@@ -41796,8 +41791,8 @@ snapshots:
       zod: 4.3.6
     optionalDependencies:
       express: 5.2.1
-      fastify: 5.8.3
-      hono: 4.12.12
+      fastify: 5.8.5
+      hono: 4.12.14
       koa: 3.1.2
       typescript: 5.9.3
     transitivePeerDependencies:
@@ -42438,7 +42433,7 @@ snapshots:
       '@opentelemetry/sdk-trace-base': 2.6.0(@opentelemetry/api@1.9.0)
       openai: 4.104.0(encoding@0.1.13)(ws@8.19.0(bufferutil@4.1.0))(zod@4.3.6)
 
-  langsmith@0.5.18(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.213.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.6.0(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.19.0(bufferutil@4.1.0)):
+  langsmith@0.5.19(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.213.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.6.0(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.19.0(bufferutil@4.1.0)):
     dependencies:
       p-queue: 6.6.2
       uuid: 10.0.0

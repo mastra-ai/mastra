@@ -281,6 +281,7 @@ export interface ObservationMarkerConfig {
   messageTokens: number;
   observationTokens: number;
   scope: 'thread' | 'resource';
+  activateAfterIdle?: number;
 }
 
 /**
@@ -621,6 +622,15 @@ export interface DataOmActivationPart {
 
     /** The actual observations from activated chunks (for UI display) */
     observations?: string;
+
+    /** Whether activation was triggered by threshold crossing or activateAfterIdle expiry */
+    triggeredBy?: 'threshold' | 'ttl';
+
+    /** Unix-ms timestamp of the last assistant message part used for TTL checks */
+    lastActivityAt?: number;
+
+    /** How long activateAfterIdle had been exceeded when activation fired */
+    ttlExpiredMs?: number;
   };
 }
 
@@ -825,6 +835,15 @@ export interface ObservationalMemoryConfig {
    * @default false
    */
   shareTokenBudget?: boolean;
+
+  /**
+   * Time before buffered observations or buffered reflections are force-activated after inactivity.
+   * Accepts milliseconds as a number or a duration string like `"5m"` or `"1hr"`.
+   * When the gap between the current time and the last assistant message part's `createdAt`
+   * exceeds this value, buffered observational memory activates regardless of whether the
+   * token threshold has been reached.
+   */
+  activateAfterIdle?: number | string;
 }
 
 /**
@@ -846,6 +865,8 @@ export interface ResolvedObservationConfig {
   bufferTokens?: number;
   /** Ratio of buffered observations to activate (0-1 float) */
   bufferActivation?: number;
+  /** Time in milliseconds before buffered observations are force-activated based on the last assistant message part timestamp */
+  activateAfterIdle?: number;
   /** Token threshold above which synchronous observation is forced */
   blockAfter?: number;
   /** Optional token budget for observer context optimization (0 = full truncation, false = disabled) */
@@ -867,6 +888,8 @@ export interface ResolvedReflectionConfig {
   providerOptions: ProviderOptions;
   /** Ratio (0-1) controlling when async reflection buffering starts */
   bufferActivation?: number;
+  /** Time in milliseconds before buffered reflections are force-activated based on the last assistant message part timestamp */
+  activateAfterIdle?: number;
   /** Token threshold above which synchronous reflection is forced */
   blockAfter?: number;
   /** Custom instructions to append to the Reflector's system prompt */
