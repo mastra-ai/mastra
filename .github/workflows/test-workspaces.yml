@@ -71,7 +71,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [s3, gcs, azure]
+        package: [s3, gcs, azure-blob]
     steps:
       - uses: actions/checkout@v5
 
