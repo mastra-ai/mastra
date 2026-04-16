@@ -5,10 +5,10 @@
  * separate Chrome instances per thread.
  */
 
-import { chromium } from 'playwright-core';
-import type { Browser, BrowserContext, CDPSession, Page } from 'playwright-core';
 import { ThreadManager, DEFAULT_THREAD_ID } from '@mastra/core/browser';
 import type { ThreadSession, ThreadManagerConfig } from '@mastra/core/browser';
+import { chromium } from 'playwright-core';
+import type { Browser, BrowserContext, CDPSession, Page } from 'playwright-core';
 import type { BrowserViewerConfig } from './types';
 
 /**

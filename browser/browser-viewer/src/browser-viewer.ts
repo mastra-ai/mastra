@@ -11,8 +11,6 @@
  * - Thread-scoped browser isolation
  */
 
-import { chromium } from 'playwright-core';
-import type { Page } from 'playwright-core';
 import {
   MastraBrowser,
   ScreencastStreamImpl,
@@ -28,8 +26,10 @@ import type {
   KeyboardEventParams,
 } from '@mastra/core/browser';
 import type { Tool } from '@mastra/core/tools';
-import type { BrowserViewerConfig, CLIProvider } from './types';
+import type { Page } from 'playwright-core';
+import { chromium } from 'playwright-core';
 import { BrowserViewerThreadManager } from './thread-manager';
+import type { BrowserViewerConfig, CLIProvider } from './types';
 
 /**
  * BrowserViewer - CLI provider with Playwright-managed Chrome
