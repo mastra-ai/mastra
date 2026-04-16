@@ -290,6 +290,50 @@ describe('SkillsProcessor', () => {
       expect(codeReviewIdx).toBeLessThan(testingIdx);
     });
 
+    it('should de-duplicate symlinked skill aliases in available skills output', async () => {
+      const canonicalSkill = {
+        ...mockSkill1,
+        path: '/Users/tylerbarnes/.agents/skills/mastra',
+        name: 'mastra',
+        description: 'Mastra development guide',
+      };
+      const duplicateSkillMetadata = [
+        {
+          name: 'mastra',
+          description: 'Mastra development guide',
+          path: '/Users/tylerbarnes/.claude/skills/mastra',
+        },
+        {
+          name: 'mastra',
+          description: 'Mastra development guide',
+          path: '/Users/tylerbarnes/.agents/skills/mastra',
+        },
+      ];
+
+      const duplicateSkills = {
+        ...createMockWorkspaceSkills(),
+        list: vi.fn().mockResolvedValue(duplicateSkillMetadata),
+        get: vi.fn().mockResolvedValue(canonicalSkill),
+      };
+      const workspace = createMockWorkspace(duplicateSkills);
+      const proc = new SkillsProcessor({ workspace });
+
+      await proc.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      } as any);
+
+      const systemCalls = mockMessageList.addSystem.mock.calls;
+      const availableSkillsMessage = systemCalls.find((call: any) =>
+        call[0]?.content?.includes('<available_skills>'),
+      )?.[0]?.content;
+
+      expect(availableSkillsMessage).toBeDefined();
+      expect(availableSkillsMessage.match(/<name>mastra<\/name>/g)).toHaveLength(1);
+      expect(availableSkillsMessage).toContain('/Users/tylerbarnes/.agents/skills/mastra/SKILL.md');
+      expect(availableSkillsMessage).not.toContain('/Users/tylerbarnes/.claude/skills/mastra/SKILL.md');
+    });
+
     it('should inject on every step (system messages are reset between steps)', async () => {
       // Step 0 — should inject
       await processor.processInputStep({

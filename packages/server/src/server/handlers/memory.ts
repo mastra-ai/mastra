@@ -871,6 +871,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
     orderBy,
     include,
     filter,
+    includeSystemReminders,
     requestContext,
   }: any) => {
     try {
@@ -928,6 +929,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
           orderBy,
           include,
           filter,
+          includeSystemReminders,
         });
         return result;
       }

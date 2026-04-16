@@ -2,7 +2,7 @@ import { getThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
 import { filterObservedMessages } from '../message-utils';
-import { getLatestStepParts } from '../observational-memory';
+import { getLastActivityFromMessages, getLatestStepParts } from '../observational-memory';
 import { resolveRetentionFloor } from '../thresholds';
 
 import type { ObservationTurn } from './turn';
@@ -93,6 +93,7 @@ export class ObservationStep {
         writer: this.turn.writer,
         requestContext: this.turn.requestContext,
         observabilityContext: this.turn.observabilityContext,
+        lastActivityAt: getLastActivityFromMessages(messageList.get.all.db()),
       });
       await this.turn.refreshRecord();
       if (this.turn.record.generationCount > preReflectGeneration) {
@@ -334,6 +335,7 @@ export class ObservationStep {
           messageList,
           requestContext: this.turn.requestContext,
           observabilityContext: this.turn.observabilityContext,
+          lastActivityAt: getLastActivityFromMessages(messageList.get.all.db()),
         });
 
         return {

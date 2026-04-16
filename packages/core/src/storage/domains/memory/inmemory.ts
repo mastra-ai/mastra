@@ -25,6 +25,7 @@ import type {
   SwapBufferedToActiveResult,
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
+  UpdateObservationalMemoryConfigInput,
 } from '../../types';
 import { filterByDateRange, jsonValueEquals, safelyParseJSON } from '../../utils';
 import type { InMemoryDB } from '../inmemory-db';
@@ -1220,6 +1221,16 @@ export class InMemoryMemory extends MemoryStorage {
     }
 
     record.pendingMessageTokens = tokenCount;
+    record.updatedAt = new Date();
+  }
+
+  async updateObservationalMemoryConfig(input: UpdateObservationalMemoryConfigInput): Promise<void> {
+    const record = this.findObservationalMemoryRecordById(input.id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${input.id}`);
+    }
+
+    record.config = this.deepMergeConfig(record.config as Record<string, unknown>, input.config);
     record.updatedAt = new Date();
   }
 

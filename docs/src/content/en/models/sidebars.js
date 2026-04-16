@@ -248,6 +248,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/hpc-ai',
+          label: 'HPC-AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/huggingface',
           label: 'Hugging Face',
         },
@@ -335,6 +340,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/minimax-cn-coding-plan',
           label: 'MiniMax Coding Plan (minimaxi.com)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/mixlayer',
+          label: 'Mixlayer',
         },
         {
           type: 'doc',

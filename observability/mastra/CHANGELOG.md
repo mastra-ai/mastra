@@ -1,5 +1,282 @@
 # @mastra/observability
 
+## 1.9.2-alpha.0
+
+### Patch Changes
+
+- Fixed span serialization replacing tool parameter JSON schemas with lossy summaries like `"unknown (required)"`. JSON schemas in span data are now preserved as-is, keeping full type information for debugging in observability tools like Datadog. Also fixed MODEL_STEP span input showing only a keys summary instead of actual messages for AI SDK v5 providers. ([#15404](https://github.com/mastra-ai/mastra/pull/15404))
+
+- Fixed CloudExporter to default to observability.mastra.ai for Mastra platform exports. ([#15418](https://github.com/mastra-ai/mastra/pull/15418))
+
+- Updated dependencies [[`3d83d06`](https://github.com/mastra-ai/mastra/commit/3d83d06f776f00fb5f4163dddd32a030c5c20844), [`7e0e63e`](https://github.com/mastra-ai/mastra/commit/7e0e63e2e485e84442351f4c7a79a424c83539dc), [`9467ea8`](https://github.com/mastra-ai/mastra/commit/9467ea87695749a53dfc041576410ebf9ee7bb67), [`7338d94`](https://github.com/mastra-ai/mastra/commit/7338d949380cf68b095342e8e42610dc51d557c1)]:
+  - @mastra/core@1.26.0-alpha.2
+
+## 1.9.1
+
+### Patch Changes
+
+- Fixed double-counting of Anthropic cache tokens in usage metrics ([#15316](https://github.com/mastra-ai/mastra/pull/15316))
+
+- Cost estimates now use the latest model pricing rates for more accurate calculations ([#15362](https://github.com/mastra-ai/mastra/pull/15362))
+
+- Update references to "Mastra Cloud" to "Mastra platform" ([#15297](https://github.com/mastra-ai/mastra/pull/15297))
+
+- Reduced observability overhead for `MODEL_STEP` spans by storing a lightweight message preview of request bodies. ([#15249](https://github.com/mastra-ai/mastra/pull/15249))
+
+  This keeps span previews readable and avoids pulling large payloads into exporter input.
+
+- Fixed cost lookup for models with date suffixes. Providers like OpenAI often return model names with date suffixes (e.g., `gpt-5.4-mini-2026-03-17`) that don't exactly match pricing data entries. The lookup now tries multiple variants including stripping date suffixes and converting dots to dashes. ([#15349](https://github.com/mastra-ai/mastra/pull/15349))
+
+- Added `entityVersionId`, `parentEntityVersionId`, and `rootEntityVersionId` to span correlation context, enabling version information to propagate to scores, metrics, logs, and feedback emitted during traced execution. ([#15317](https://github.com/mastra-ai/mastra/pull/15317))
+
+- Fixed stack traces for errors reported to Sentry. Exceptions now point to the code that threw the error instead of `SentryExporter.handleSpanEnded` inside the exporter, so issues in Sentry are actually debuggable. ([#15343](https://github.com/mastra-ai/mastra/pull/15343))
+
+  This was caused by two issues, both fixed:
+  - `@mastra/sentry` passed the error message as a string to `Sentry.captureException`, which made Sentry synthesize a stack trace from the exporter's call site. It now passes an `Error` instance with the captured stack attached.
+  - `@mastra/observability` stored the wrapping `MastraError`'s stack on the span, hiding the original error's location. When the `MastraError` has a cause, the cause's stack is now preserved.
+
+  Fixes [#15337](https://github.com/mastra-ai/mastra/issues/15337).
+
+- Updated dependencies [[`87df955`](https://github.com/mastra-ai/mastra/commit/87df955c028660c075873fd5d74af28233ce32eb), [`8fad147`](https://github.com/mastra-ai/mastra/commit/8fad14759804179c8e080ce4d9dec6ef1a808b31), [`582644c`](https://github.com/mastra-ai/mastra/commit/582644c4a87f83b4f245a84d72b9e8590585012e), [`cbdf3e1`](https://github.com/mastra-ai/mastra/commit/cbdf3e12b3d0c30a6e5347be658e2009648c130a), [`8fe46d3`](https://github.com/mastra-ai/mastra/commit/8fe46d354027f3f0f0846e64219772348de106dd), [`18c67db`](https://github.com/mastra-ai/mastra/commit/18c67dbb9c9ebc26f26f65f7d3ff836e5691ef46), [`4ba3bb1`](https://github.com/mastra-ai/mastra/commit/4ba3bb1e465ad2ddaba3bbf2bc47e0faec32985e), [`5d84914`](https://github.com/mastra-ai/mastra/commit/5d84914e0e520c642a40329b210b413fcd139898), [`8dcc77e`](https://github.com/mastra-ai/mastra/commit/8dcc77e78a5340f5848f74b9e9f1b3da3513c1f5), [`aa67fc5`](https://github.com/mastra-ai/mastra/commit/aa67fc59ee8a5eeff1f23eb05970b8d7a536c8ff), [`fd2f314`](https://github.com/mastra-ai/mastra/commit/fd2f31473d3449b6b97e837ef8641264377f41a7), [`fa8140b`](https://github.com/mastra-ai/mastra/commit/fa8140bcd4251d2e3ac85fdc5547dfc4f372b5be), [`190f452`](https://github.com/mastra-ai/mastra/commit/190f45258b0640e2adfc8219fa3258cdc5b8f071), [`e80fead`](https://github.com/mastra-ai/mastra/commit/e80fead1412cc0d1b2f7d6a1ce5017d9e0098ff7), [`0287b64`](https://github.com/mastra-ai/mastra/commit/0287b644a5c3272755cf3112e71338106664103b), [`7e7bf60`](https://github.com/mastra-ai/mastra/commit/7e7bf606886bf374a6f9d4ca9b09dd83d0533372), [`184907d`](https://github.com/mastra-ai/mastra/commit/184907d775d8609c03c26e78ccaf37315f3aa287), [`075e91a`](https://github.com/mastra-ai/mastra/commit/075e91a4549baf46ad7a42a6a8ac8dfa78cc09e6), [`0c4cd13`](https://github.com/mastra-ai/mastra/commit/0c4cd131931c04ac5405373c932a242dbe88edd6), [`b16a753`](https://github.com/mastra-ai/mastra/commit/b16a753d5748440248d7df82e29bb987a9c8386c)]:
+  - @mastra/core@1.25.0
+
+## 1.9.1-alpha.2
+
+### Patch Changes
+
+- Cost estimates now use the latest model pricing rates for more accurate calculations ([#15362](https://github.com/mastra-ai/mastra/pull/15362))
+
+- Reduced observability overhead for `MODEL_STEP` spans by storing a lightweight message preview of request bodies. ([#15249](https://github.com/mastra-ai/mastra/pull/15249))
+
+  This keeps span previews readable and avoids pulling large payloads into exporter input.
+
+- Fixed cost lookup for models with date suffixes. Providers like OpenAI often return model names with date suffixes (e.g., `gpt-5.4-mini-2026-03-17`) that don't exactly match pricing data entries. The lookup now tries multiple variants including stripping date suffixes and converting dots to dashes. ([#15349](https://github.com/mastra-ai/mastra/pull/15349))
+
+- Added `entityVersionId`, `parentEntityVersionId`, and `rootEntityVersionId` to span correlation context, enabling version information to propagate to scores, metrics, logs, and feedback emitted during traced execution. ([#15317](https://github.com/mastra-ai/mastra/pull/15317))
+
+- Fixed stack traces for errors reported to Sentry. Exceptions now point to the code that threw the error instead of `SentryExporter.handleSpanEnded` inside the exporter, so issues in Sentry are actually debuggable. ([#15343](https://github.com/mastra-ai/mastra/pull/15343))
+
+  This was caused by two issues, both fixed:
+  - `@mastra/sentry` passed the error message as a string to `Sentry.captureException`, which made Sentry synthesize a stack trace from the exporter's call site. It now passes an `Error` instance with the captured stack attached.
+  - `@mastra/observability` stored the wrapping `MastraError`'s stack on the span, hiding the original error's location. When the `MastraError` has a cause, the cause's stack is now preserved.
+
+  Fixes [#15337](https://github.com/mastra-ai/mastra/issues/15337).
+
+- Updated dependencies [[`cbdf3e1`](https://github.com/mastra-ai/mastra/commit/cbdf3e12b3d0c30a6e5347be658e2009648c130a), [`8fe46d3`](https://github.com/mastra-ai/mastra/commit/8fe46d354027f3f0f0846e64219772348de106dd), [`18c67db`](https://github.com/mastra-ai/mastra/commit/18c67dbb9c9ebc26f26f65f7d3ff836e5691ef46), [`8dcc77e`](https://github.com/mastra-ai/mastra/commit/8dcc77e78a5340f5848f74b9e9f1b3da3513c1f5), [`aa67fc5`](https://github.com/mastra-ai/mastra/commit/aa67fc59ee8a5eeff1f23eb05970b8d7a536c8ff), [`fa8140b`](https://github.com/mastra-ai/mastra/commit/fa8140bcd4251d2e3ac85fdc5547dfc4f372b5be), [`190f452`](https://github.com/mastra-ai/mastra/commit/190f45258b0640e2adfc8219fa3258cdc5b8f071), [`7e7bf60`](https://github.com/mastra-ai/mastra/commit/7e7bf606886bf374a6f9d4ca9b09dd83d0533372), [`184907d`](https://github.com/mastra-ai/mastra/commit/184907d775d8609c03c26e78ccaf37315f3aa287), [`0c4cd13`](https://github.com/mastra-ai/mastra/commit/0c4cd131931c04ac5405373c932a242dbe88edd6), [`b16a753`](https://github.com/mastra-ai/mastra/commit/b16a753d5748440248d7df82e29bb987a9c8386c)]:
+  - @mastra/core@1.25.0-alpha.3
+
+## 1.9.1-alpha.1
+
+### Patch Changes
+
+- Fixed double-counting of Anthropic cache tokens in usage metrics ([#15316](https://github.com/mastra-ai/mastra/pull/15316))
+
+## 1.9.1-alpha.0
+
+### Patch Changes
+
+- Update references to "Mastra Cloud" to "Mastra platform" ([#15297](https://github.com/mastra-ai/mastra/pull/15297))
+
+- Updated dependencies [[`4ba3bb1`](https://github.com/mastra-ai/mastra/commit/4ba3bb1e465ad2ddaba3bbf2bc47e0faec32985e)]:
+  - @mastra/core@1.25.0-alpha.2
+
+## 1.9.0
+
+### Minor Changes
+
+- Added support for project-scoped CloudExporter collector routes for organization API keys. ([#15189](https://github.com/mastra-ai/mastra/pull/15189))
+
+  **What changed**
+  CloudExporter now accepts a `projectId` option and reads `MASTRA_PROJECT_ID` so remote writes can target project-scoped collector URLs when you authenticate with an organization API key.
+
+  ```ts
+  new CloudExporter({
+    accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN,
+    projectId: process.env.MASTRA_PROJECT_ID,
+  });
+  ```
+
+  When `projectId` is set, base endpoints resolve to `/projects/:projectId/ai/{signal}/publish`. Without it, existing JWT-style `/ai/{signal}/publish` routes still work as before.
+
+### Patch Changes
+
+- Updated dependencies [[`ef94400`](https://github.com/mastra-ai/mastra/commit/ef9440049402596b31f2ab976c5e4508f6cb6c91), [`3db852b`](https://github.com/mastra-ai/mastra/commit/3db852bff74e29f60d415a7b0f1583d6ce2bad92)]:
+  - @mastra/core@1.24.1
+
+## 1.9.0-alpha.0
+
+### Minor Changes
+
+- Added support for project-scoped CloudExporter collector routes for organization API keys. ([#15189](https://github.com/mastra-ai/mastra/pull/15189))
+
+  **What changed**
+  CloudExporter now accepts a `projectId` option and reads `MASTRA_PROJECT_ID` so remote writes can target project-scoped collector URLs when you authenticate with an organization API key.
+
+  ```ts
+  new CloudExporter({
+    accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN,
+    projectId: process.env.MASTRA_PROJECT_ID,
+  });
+  ```
+
+  When `projectId` is set, base endpoints resolve to `/projects/:projectId/ai/{signal}/publish`. Without it, existing JWT-style `/ai/{signal}/publish` routes still work as before.
+
+### Patch Changes
+
+- Updated dependencies [[`ef94400`](https://github.com/mastra-ai/mastra/commit/ef9440049402596b31f2ab976c5e4508f6cb6c91)]:
+  - @mastra/core@1.24.1-alpha.0
+
+## 1.8.0
+
+### Minor Changes
+
+- Added CloudExporter support for Mastra Observability logs, metrics, scores, and feedback. ([#15124](https://github.com/mastra-ai/mastra/pull/15124))
+
+  CloudExporter now batches and uploads all Mastra Observability signals to Mastra Cloud, not just tracing spans.
+
+  This includes a breaking change to the CloudExporter endpoint format. We now pass a base endpoint URL and let let the exporter derive the standard publish paths automatically.
+
+  ```ts
+  import { CloudExporter, Observability } from '@mastra/observability';
+
+  const observability = new Observability({
+    configs: {
+      default: {
+        serviceName: 'my-app',
+        exporters: [
+          new CloudExporter({
+            endpoint: 'https://collector.example.com',
+          }),
+        ],
+      },
+    },
+  });
+
+  // Traces, logs, metrics, scores, and feedback now all publish through CloudExporter.
+  ```
+
+  After updating the exporter endpoint config, the exporter will continue to work for traces, and the same exporter will now also publish structured logs, auto-extracted metrics, scores, and feedback records.
+
+- Added `excludeSpanTypes` and `spanFilter` options to `ObservabilityInstanceConfig` for selectively filtering spans before export. Use `excludeSpanTypes` to drop entire categories of spans by type (e.g., `MODEL_CHUNK`, `MODEL_STEP`) or `spanFilter` for fine-grained predicate-based filtering by attributes, metadata, entity, or any combination. Both options help reduce noise and costs in observability platforms that charge per-span. ([#15131](https://github.com/mastra-ai/mastra/pull/15131))
+
+  **`excludeSpanTypes` example:**
+
+  ```ts
+  excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP, SpanType.WORKFLOW_SLEEP];
+  ```
+
+  **`spanFilter` example:**
+
+  ```ts
+  spanFilter: span => {
+    if (span.type === SpanType.MODEL_CHUNK) return false;
+    if (span.type === SpanType.TOOL_CALL && span.attributes?.success) return false;
+    return true;
+  };
+  ```
+
+  Resolves https://github.com/mastra-ai/mastra/issues/12710
+
+### Patch Changes
+
+- ObservabilityBus now honors per-instance `serializationOptions` (maxStringLength, maxDepth, maxArrayLength, maxObjectKeys) when deep-cleaning log/metric/score/feedback payloads, matching the behavior of tracing spans. Previously these signals always used the built-in defaults regardless of user configuration. ([#15138](https://github.com/mastra-ai/mastra/pull/15138))
+
+- Apply `deepClean()` to all observability signals (logs, metrics, scores, feedback) before fanning out to exporters and bridges. Previously only tracing spans were deep-cleaned at construction time, leaving free-form payload fields on other signals (e.g. `log.data`, `log.metadata`, `metric.metadata`, `metric.costContext.costMetadata`, `score.metadata`, `feedback.metadata`) susceptible to circular references, oversized strings, and other non-serializable values. Sanitization now happens centrally in `ObservabilityBus.emit()` so every signal leaving the bus is bounded and JSON-safe. ([#15135](https://github.com/mastra-ai/mastra/pull/15135))
+
+- `deepClean()` now preserves data for `Map`, `Set`, and richer `Error` objects. Previously Maps and Sets were serialized as empty `{}` (entries silently dropped) and Errors only kept `name`/`message`. Maps are now converted to plain objects of entries, Sets to arrays (both respecting `maxObjectKeys`/`maxArrayLength` and cycle detection), and Errors additionally preserve `stack` and recursively cleaned `cause`. ([#15136](https://github.com/mastra-ai/mastra/pull/15136))
+
+- Updated dependencies [[`8db7663`](https://github.com/mastra-ai/mastra/commit/8db7663c9a9c735828094c359d2e327fd4f8fba3), [`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38), [`715710d`](https://github.com/mastra-ai/mastra/commit/715710d12fa47cf88e09d41f13843eddc29327b0), [`378c6c4`](https://github.com/mastra-ai/mastra/commit/378c6c4755726e8d8cf83a14809b350b90d46c62), [`9f91fd5`](https://github.com/mastra-ai/mastra/commit/9f91fd538ab2a44f8cc740bcad8e51205f74fbea), [`ba6fa9c`](https://github.com/mastra-ai/mastra/commit/ba6fa9cc0f3e1912c49fd70d4c3bb8c44903ddaa)]:
+  - @mastra/core@1.24.0
+
+## 1.8.0-alpha.1
+
+### Minor Changes
+
+- Added `excludeSpanTypes` and `spanFilter` options to `ObservabilityInstanceConfig` for selectively filtering spans before export. Use `excludeSpanTypes` to drop entire categories of spans by type (e.g., `MODEL_CHUNK`, `MODEL_STEP`) or `spanFilter` for fine-grained predicate-based filtering by attributes, metadata, entity, or any combination. Both options help reduce noise and costs in observability platforms that charge per-span. ([#15131](https://github.com/mastra-ai/mastra/pull/15131))
+
+  **`excludeSpanTypes` example:**
+
+  ```ts
+  excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP, SpanType.WORKFLOW_SLEEP];
+  ```
+
+  **`spanFilter` example:**
+
+  ```ts
+  spanFilter: span => {
+    if (span.type === SpanType.MODEL_CHUNK) return false;
+    if (span.type === SpanType.TOOL_CALL && span.attributes?.success) return false;
+    return true;
+  };
+  ```
+
+  Resolves https://github.com/mastra-ai/mastra/issues/12710
+
+### Patch Changes
+
+- Updated dependencies [[`8db7663`](https://github.com/mastra-ai/mastra/commit/8db7663c9a9c735828094c359d2e327fd4f8fba3), [`715710d`](https://github.com/mastra-ai/mastra/commit/715710d12fa47cf88e09d41f13843eddc29327b0), [`378c6c4`](https://github.com/mastra-ai/mastra/commit/378c6c4755726e8d8cf83a14809b350b90d46c62), [`9f91fd5`](https://github.com/mastra-ai/mastra/commit/9f91fd538ab2a44f8cc740bcad8e51205f74fbea), [`ba6fa9c`](https://github.com/mastra-ai/mastra/commit/ba6fa9cc0f3e1912c49fd70d4c3bb8c44903ddaa)]:
+  - @mastra/core@1.24.0-alpha.1
+
+## 1.8.0-alpha.0
+
+### Minor Changes
+
+- Added CloudExporter support for Mastra Observability logs, metrics, scores, and feedback. ([#15124](https://github.com/mastra-ai/mastra/pull/15124))
+
+  CloudExporter now batches and uploads all Mastra Observability signals to Mastra Cloud, not just tracing spans.
+
+  This includes a breaking change to the CloudExporter endpoint format. We now pass a base endpoint URL and let let the exporter derive the standard publish paths automatically.
+
+  ```ts
+  import { CloudExporter, Observability } from '@mastra/observability';
+
+  const observability = new Observability({
+    configs: {
+      default: {
+        serviceName: 'my-app',
+        exporters: [
+          new CloudExporter({
+            endpoint: 'https://collector.example.com',
+          }),
+        ],
+      },
+    },
+  });
+
+  // Traces, logs, metrics, scores, and feedback now all publish through CloudExporter.
+  ```
+
+  After updating the exporter endpoint config, the exporter will continue to work for traces, and the same exporter will now also publish structured logs, auto-extracted metrics, scores, and feedback records.
+
+### Patch Changes
+
+- ObservabilityBus now honors per-instance `serializationOptions` (maxStringLength, maxDepth, maxArrayLength, maxObjectKeys) when deep-cleaning log/metric/score/feedback payloads, matching the behavior of tracing spans. Previously these signals always used the built-in defaults regardless of user configuration. ([#15138](https://github.com/mastra-ai/mastra/pull/15138))
+
+- Apply `deepClean()` to all observability signals (logs, metrics, scores, feedback) before fanning out to exporters and bridges. Previously only tracing spans were deep-cleaned at construction time, leaving free-form payload fields on other signals (e.g. `log.data`, `log.metadata`, `metric.metadata`, `metric.costContext.costMetadata`, `score.metadata`, `feedback.metadata`) susceptible to circular references, oversized strings, and other non-serializable values. Sanitization now happens centrally in `ObservabilityBus.emit()` so every signal leaving the bus is bounded and JSON-safe. ([#15135](https://github.com/mastra-ai/mastra/pull/15135))
+
+- `deepClean()` now preserves data for `Map`, `Set`, and richer `Error` objects. Previously Maps and Sets were serialized as empty `{}` (entries silently dropped) and Errors only kept `name`/`message`. Maps are now converted to plain objects of entries, Sets to arrays (both respecting `maxObjectKeys`/`maxArrayLength` and cycle detection), and Errors additionally preserve `stack` and recursively cleaned `cause`. ([#15136](https://github.com/mastra-ai/mastra/pull/15136))
+
+- Updated dependencies [[`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38)]:
+  - @mastra/core@1.23.1-alpha.0
+
+## 1.7.3
+
+### Patch Changes
+
+- Fixed MODEL_STEP span input containing the entire raw HTTP request body instead of just the messages. Observability exporters (Datadog, Langfuse, etc.) now receive clean message arrays as MODEL_STEP span input. ([#15099](https://github.com/mastra-ai/mastra/pull/15099))
+
+- Updated dependencies [[`f32b9e1`](https://github.com/mastra-ai/mastra/commit/f32b9e115a3c754d1c8cfa3f4256fba87b09cfb7), [`7d6f521`](https://github.com/mastra-ai/mastra/commit/7d6f52164d0cca099f0b07cb2bba334360f1c8ab), [`a50d220`](https://github.com/mastra-ai/mastra/commit/a50d220b01ecbc5644d489a3d446c3bd4ab30245), [`665477b`](https://github.com/mastra-ai/mastra/commit/665477bc104fd52cfef8e7610d7664781a70c220), [`4cc2755`](https://github.com/mastra-ai/mastra/commit/4cc2755a7194cb08720ff2ab4dffb4b4a5103dfd), [`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`ed425d7`](https://github.com/mastra-ai/mastra/commit/ed425d78e7c66cbda8209fee910856f98c6c6b82), [`1371703`](https://github.com/mastra-ai/mastra/commit/1371703835080450ef3f9aea58059a95d0da2e5a), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`98f8a8b`](https://github.com/mastra-ai/mastra/commit/98f8a8bdf5761b9982f3ad3acbe7f1cc3efa71f3), [`ba6f7e9`](https://github.com/mastra-ai/mastra/commit/ba6f7e9086d8281393f2acae60fda61de3bff1f9), [`7eb2596`](https://github.com/mastra-ai/mastra/commit/7eb25960d607e07468c9a10c5437abd2deaf1e9a), [`1805ddc`](https://github.com/mastra-ai/mastra/commit/1805ddc9c9b3b14b63749735a13c05a45af43a80), [`fff91cf`](https://github.com/mastra-ai/mastra/commit/fff91cf914de0e731578aacebffdeebef82f0440), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/core@1.23.0
+
+## 1.7.3-alpha.0
+
+### Patch Changes
+
+- Fixed MODEL_STEP span input containing the entire raw HTTP request body instead of just the messages. Observability exporters (Datadog, Langfuse, etc.) now receive clean message arrays as MODEL_STEP span input. ([#15099](https://github.com/mastra-ai/mastra/pull/15099))
+
+- Updated dependencies [[`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/core@1.23.0-alpha.8
+
 ## 1.7.2
 
 ### Patch Changes

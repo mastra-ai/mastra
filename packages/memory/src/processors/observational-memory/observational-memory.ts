@@ -58,6 +58,85 @@ export function buildMessageRange(messages: MastraDBMessage[]): string {
   return `${first.id}:${last.id}`;
 }
 
+/**
+ * Returns the unix-ms timestamp of the last non-data part in the last assistant
+ * message, representing when the last visible LLM response completed. Used as the
+ * last activity time for activateAfterIdle checks.
+ */
+export function getLastActivityFromMessages(messages?: MastraDBMessage[]): number | undefined {
+  if (!messages) return undefined;
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (!message || message.role !== 'assistant') {
+      continue;
+    }
+
+    if (!message.content || typeof message.content === 'string') {
+      return message.createdAt ? new Date(message.createdAt).getTime() : undefined;
+    }
+
+    for (let j = message.content.parts.length - 1; j >= 0; j--) {
+      const part = message.content.parts[j];
+      if (!part || part.type?.startsWith('data-')) {
+        continue;
+      }
+
+      if (part.createdAt !== undefined) {
+        return part.createdAt;
+      }
+    }
+
+    return message.createdAt ? new Date(message.createdAt).getTime() : undefined;
+  }
+
+  return undefined;
+}
+
+function parseActivationTTL(value: number | string | undefined, fieldPath: string): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || value < 0) {
+      throw new Error(`${fieldPath} must be a non-negative number of milliseconds or a duration string like "5m".`);
+    }
+    return value;
+  }
+
+  const trimmed = value.trim();
+  const match = trimmed.match(
+    /^(\d+(?:\.\d+)?)\s*(ms|msec|msecs|millisecond|milliseconds|s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours)$/i,
+  );
+
+  if (!match) {
+    throw new Error(
+      `${fieldPath} must be a non-negative number of milliseconds or a duration string like "5m" or "1hr".`,
+    );
+  }
+
+  const rawAmount = match[1]!;
+  const rawUnit = match[2]!;
+  const amount = Number(rawAmount);
+  const unit = rawUnit.toLowerCase();
+
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new Error(`${fieldPath} must be a non-negative number of milliseconds or a duration string like "5m".`);
+  }
+
+  const multiplier =
+    unit === 'ms' || unit === 'msec' || unit === 'msecs' || unit === 'millisecond' || unit === 'milliseconds'
+      ? 1
+      : unit === 's' || unit === 'sec' || unit === 'secs' || unit === 'second' || unit === 'seconds'
+        ? 1_000
+        : unit === 'm' || unit === 'min' || unit === 'mins' || unit === 'minute' || unit === 'minutes'
+          ? 60_000
+          : 3_600_000;
+
+  return amount * multiplier;
+}
+
 import { addRelativeTimeToObservations } from './date-utils';
 import { omDebug, omError } from './debug';
 import { createBufferingStartMarker, createActivationMarker } from './markers';
@@ -77,6 +156,7 @@ import { ObserverRunner } from './observer-runner';
 import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-registry';
 import type { CompressionLevel } from './reflector-agent';
 import { ReflectorRunner } from './reflector-runner';
+import { isOmReproCaptureEnabled, writeObserverExchangeReproCapture } from './repro-capture';
 import {
   calculateDynamicThreshold,
   calculateProjectedMessageRemoval,
@@ -92,6 +172,7 @@ import type {
   ObservationDebugEvent,
   ObservationalMemoryConfig,
   ObservationalMemoryModel,
+  ObserveHookUsage,
   ObserveHooks,
   ResolvedObservationConfig,
   ResolvedReflectionConfig,
@@ -355,6 +436,7 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config.observation?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferActivation),
+      activateAfterIdle: parseActivationTTL(config.activateAfterIdle, 'activateAfterIdle'),
       blockAfter: asyncBufferingDisabled
         ? undefined
         : resolveBlockAfter(
@@ -386,6 +468,7 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config?.reflection?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferActivation),
+      activateAfterIdle: parseActivationTTL(config.activateAfterIdle, 'activateAfterIdle'),
       blockAfter: asyncBufferingDisabled
         ? undefined
         : resolveBlockAfter(
@@ -798,6 +881,55 @@ export class ObservationalMemory {
   }
 
   /**
+   * Resolve the effective messageTokens for a record.
+   * Only explicit per-record overrides (stored under `_overrides`) win;
+   * the initial config snapshot written by getOrCreateRecord() is ignored
+   * so that later instance-level changes still take effect.
+   *
+   * Overrides that fall below the instance-level buffering floor
+   * (bufferTokens / absolute bufferActivation) are clamped to the
+   * instance threshold to preserve buffering invariants.
+   */
+  private getEffectiveMessageTokens(record: ObservationalMemoryRecord): number | ThresholdRange {
+    const overrides = (record.config as { _overrides?: { observation?: { messageTokens?: number | ThresholdRange } } })
+      ?._overrides;
+    const recordTokens = overrides?.observation?.messageTokens;
+    if (recordTokens) {
+      const maxOverride = getMaxThreshold(recordTokens);
+
+      // Clamp: override must not violate instance-level buffering invariants
+      const bufferTokens = this.observationConfig.bufferTokens;
+      if (bufferTokens && maxOverride <= bufferTokens) {
+        return this.observationConfig.messageTokens;
+      }
+      const bufferActivation = this.observationConfig.bufferActivation;
+      if (bufferActivation && bufferActivation >= 1000 && maxOverride <= bufferActivation) {
+        return this.observationConfig.messageTokens;
+      }
+
+      return recordTokens;
+    }
+    return this.observationConfig.messageTokens;
+  }
+
+  /**
+   * Resolve the effective reflection observationTokens for a record.
+   * Only explicit per-record overrides (stored under `_overrides`) win;
+   * the initial config snapshot is ignored so instance-level changes
+   * still take effect for existing records.
+   */
+  private getEffectiveReflectionTokens(record: ObservationalMemoryRecord): number | ThresholdRange {
+    const overrides = (
+      record.config as { _overrides?: { reflection?: { observationTokens?: number | ThresholdRange } } }
+    )?._overrides;
+    const recordTokens = overrides?.reflection?.observationTokens;
+    if (recordTokens) {
+      return recordTokens;
+    }
+    return this.reflectionConfig.observationTokens;
+  }
+
+  /**
    * Check whether the unobserved message tokens meet the observation threshold.
    */
   private meetsObservationThreshold(opts: {
@@ -808,7 +940,7 @@ export class ObservationalMemory {
     const { record, unobservedTokens, extraTokens = 0 } = opts;
     const pendingTokens = (record.pendingMessageTokens ?? 0) + unobservedTokens + extraTokens;
     const currentObservationTokens = record.observationTokenCount ?? 0;
-    const threshold = calculateDynamicThreshold(this.observationConfig.messageTokens, currentObservationTokens);
+    const threshold = calculateDynamicThreshold(this.getEffectiveMessageTokens(record), currentObservationTokens);
     return pendingTokens >= threshold;
   }
 
@@ -884,6 +1016,7 @@ export class ObservationalMemory {
       messageTokens: getMaxThreshold(this.observationConfig.messageTokens),
       observationTokens: getMaxThreshold(this.reflectionConfig.observationTokens),
       scope: this.scope,
+      activateAfterIdle: this.observationConfig.activateAfterIdle,
     };
   }
 
@@ -2375,7 +2508,7 @@ ${formattedMessages}
       const projectedMessageRemoval = calculateProjectedMessageRemoval(
         bufferedChunks,
         this.observationConfig.bufferActivation ?? 1,
-        getMaxThreshold(this.observationConfig.messageTokens),
+        getMaxThreshold(this.getEffectiveMessageTokens(record)),
         pendingTokens,
       );
 
@@ -2487,8 +2620,8 @@ ${formattedMessages}
     }
     const pendingTokens = Math.max(0, contextWindowTokens + otherThreadTokens);
 
-    // Calculate observation threshold
-    const threshold = calculateDynamicThreshold(this.observationConfig.messageTokens, currentObservationTokens);
+    // Calculate observation threshold (use per-record override if set)
+    const threshold = calculateDynamicThreshold(this.getEffectiveMessageTokens(record), currentObservationTokens);
 
     // Buffering status
     const bufferedChunks = getBufferedChunks(record);
@@ -2512,16 +2645,17 @@ ${formattedMessages}
     // Should observe?
     const shouldObserve = pendingTokens >= threshold;
 
-    // Should reflect?
-    const reflectThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
+    // Should reflect? (use per-record override if set)
+    const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
     const shouldReflect = currentObservationTokens >= reflectThreshold;
 
     // Can activate?
     const canActivate = bufferedChunkCount > 0;
 
     // Effective observation tokens threshold (for shared budget UI display)
-    const isSharedBudget = typeof this.observationConfig.messageTokens !== 'number';
-    const totalBudget = isSharedBudget ? (this.observationConfig.messageTokens as { min: number; max: number }).max : 0;
+    const effectiveMessageTokens = this.getEffectiveMessageTokens(record);
+    const isSharedBudget = typeof effectiveMessageTokens !== 'number';
+    const totalBudget = isSharedBudget ? (effectiveMessageTokens as { min: number; max: number }).max : 0;
     const effectiveObservationTokensThreshold = isSharedBudget
       ? Math.max(totalBudget - threshold, 1000)
       : reflectThreshold;
@@ -2579,7 +2713,7 @@ ${formattedMessages}
     // Activate any remaining buffered chunks
     const preStatus = await this.getStatus({ threadId, resourceId, messages });
     if (preStatus.canActivate) {
-      const actResult = await this.activate({ threadId, resourceId });
+      const actResult = await this.activate({ threadId, resourceId, messages });
       activated = actResult.activated;
     }
 
@@ -2830,6 +2964,24 @@ ${formattedMessages}
         observabilityContext,
       }).run();
 
+      if (isOmReproCaptureEnabled()) {
+        writeObserverExchangeReproCapture({
+          threadId,
+          resourceId: record.resourceId ?? undefined,
+          label: `buffer-${cycleId}`,
+          observerExchange: this.observer.lastExchange,
+          details: {
+            cycleId,
+            startedAt,
+            buffered: true,
+            candidateMessageIds: candidateMessages.map(message => message.id),
+            candidateMessageCount: candidateMessages.length,
+            pendingTokens: currentTokens,
+            newTokens,
+          },
+        });
+      }
+
       // Update the boundary tokens in storage + in-memory cache for interval tracking
       await this.storage.setBufferingObservationFlag(record.id, false, newTokens).catch(() => {});
       flagCleared = true;
@@ -2923,11 +3075,36 @@ ${formattedMessages}
       return { activated: false, record };
     }
 
+    let activationTriggeredBy: 'threshold' | 'ttl' = 'threshold';
+    let activationLastActivityAt: number | undefined;
+    let activateAfterIdleExpiredMs: number | undefined;
+
     // Optional threshold guard — skip activation if pending tokens are below threshold
     if (opts.checkThreshold) {
-      const status = await this.getStatus({ threadId, resourceId, messages: opts.messages });
-      if (status.pendingTokens < status.threshold) {
-        return { activated: false, record };
+      const thresholdMessages =
+        opts.messages ??
+        (await this.loadMessagesFromStorage(
+          threadId,
+          resourceId,
+          record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
+        ));
+
+      const activateAfterIdle = this.observationConfig.activateAfterIdle;
+      const lastActivityAt = getLastActivityFromMessages(thresholdMessages);
+      const ttlExpiredMs =
+        activateAfterIdle !== undefined && lastActivityAt !== undefined ? Date.now() - lastActivityAt : undefined;
+      const ttlExpired =
+        ttlExpiredMs !== undefined && activateAfterIdle !== undefined && ttlExpiredMs >= activateAfterIdle;
+
+      if (ttlExpired) {
+        activationTriggeredBy = 'ttl';
+        activationLastActivityAt = lastActivityAt;
+        activateAfterIdleExpiredMs = ttlExpiredMs;
+      } else {
+        const status = await this.getStatus({ threadId, resourceId, messages: thresholdMessages });
+        if (status.pendingTokens < status.threshold) {
+          return { activated: false, record };
+        }
       }
     }
 
@@ -2961,8 +3138,8 @@ ${formattedMessages}
       return { activated: false, record };
     }
 
-    // Calculate activation parameters
-    const messageTokensThreshold = getMaxThreshold(this.observationConfig.messageTokens);
+    // Calculate activation parameters (use per-record override if set)
+    const messageTokensThreshold = getMaxThreshold(this.getEffectiveMessageTokens(freshRecord));
     const bufferActivation = this.observationConfig.bufferActivation ?? 0.7;
     const activationRatio = resolveActivationRatio(bufferActivation, messageTokensThreshold);
 
@@ -3007,6 +3184,9 @@ ${formattedMessages}
           threadId: postSwapRecord.threadId ?? record.threadId ?? '',
           generationCount: postSwapRecord.generationCount ?? 0,
           observations: chunkData?.observations ?? activationResult.observations,
+          triggeredBy: activationTriggeredBy,
+          lastActivityAt: activationLastActivityAt,
+          ttlExpiredMs: activateAfterIdleExpiredMs,
           config: this.getObservationMarkerConfig(),
         });
         void opts.writer.custom(activationMarker).catch(() => {});
@@ -3081,6 +3261,7 @@ ${formattedMessages}
       : undefined;
 
     let observed = false;
+    let observationUsage: ObserveHookUsage | undefined;
     let generationBefore = -1;
 
     await this.withLock(lockKey, async () => {
@@ -3105,8 +3286,9 @@ ${formattedMessages}
       }
 
       hooks?.onObservationStart?.();
+      let observationError: Error | undefined;
       try {
-        observed = await ObservationStrategy.create(this, {
+        const result = await ObservationStrategy.create(this, {
           record: freshRecord,
           threadId,
           resourceId,
@@ -3116,8 +3298,13 @@ ${formattedMessages}
           writer: opts.writer,
           observabilityContext: opts.observabilityContext,
         }).run();
+        observed = result.observed;
+        observationUsage = result.usage;
+      } catch (error) {
+        observationError = error instanceof Error ? error : new Error(String(error));
+        throw error;
       } finally {
-        hooks?.onObservationEnd?.();
+        hooks?.onObservationEnd?.({ usage: observationUsage, error: observationError });
       }
     });
 
@@ -3147,18 +3334,19 @@ ${formattedMessages}
   ): Promise<{
     reflected: boolean;
     record: ObservationalMemoryRecord;
+    usage?: ObserveHookUsage;
   }> {
     const record = await this.getOrCreateRecord(threadId, resourceId);
 
     if (!record.activeObservations) {
-      return { reflected: false, record };
+      return { reflected: false, record, usage: undefined };
     }
 
     await this.storage.setReflectingFlag(record.id, true);
     registerOp(record.id, 'reflecting');
 
     try {
-      const reflectThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
+      const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
       const reflectResult = await this.reflector.call(
         record.activeObservations,
         prompt,
@@ -3182,11 +3370,11 @@ ${formattedMessages}
       // Note: Thread metadata (currentTask, suggestedResponse) is preserved on each thread
       // and doesn't need to be updated during reflection - it was set during observation
       const updatedRecord = await this.getOrCreateRecord(threadId, resourceId);
-      return { reflected: true, record: updatedRecord };
+      return { reflected: true, record: updatedRecord, usage: reflectResult.usage };
     } catch (error) {
       omError('[OM] reflect() failed', error);
       const latestRecord = await this.getOrCreateRecord(threadId, resourceId);
-      return { reflected: false, record: latestRecord };
+      return { reflected: false, record: latestRecord, usage: undefined };
     } finally {
       await this.storage.setReflectingFlag(record.id, false);
       unregisterOp(record.id, 'reflecting');
@@ -3208,6 +3396,41 @@ ${formattedMessages}
   async getRecord(threadId: string, resourceId?: string): Promise<ObservationalMemoryRecord | null> {
     const ids = this.getStorageIds(threadId, resourceId);
     return this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
+  }
+
+  /**
+   * Update per-record config overrides for observation and/or reflection thresholds.
+   * The provided config is deep-merged into the record's `_overrides` key,
+   * so you only need to specify the fields you want to change.
+   *
+   * Overrides that violate buffering invariants (e.g. messageTokens below
+   * bufferTokens) are silently ignored at read time — the helpers fall back
+   * to the instance-level config.
+   *
+   * @example
+   * ```ts
+   * await om.updateRecordConfig('thread-1', undefined, {
+   *   observation: { messageTokens: 2000 },
+   *   reflection: { observationTokens: 8000 },
+   * });
+   * ```
+   */
+  async updateRecordConfig(
+    threadId: string,
+    resourceId: string | undefined,
+    config: Record<string, unknown>,
+  ): Promise<void> {
+    const ids = this.getStorageIds(threadId, resourceId);
+    const record = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
+    if (!record) {
+      throw new Error(`No observational memory record found for thread ${ids.threadId}`);
+    }
+    // Write under _overrides so getEffectiveMessageTokens / getEffectiveReflectionTokens
+    // pick up the override values, distinct from the initial config snapshot.
+    await this.storage.updateObservationalMemoryConfig({
+      id: record.id,
+      config: { _overrides: config },
+    });
   }
 
   /**

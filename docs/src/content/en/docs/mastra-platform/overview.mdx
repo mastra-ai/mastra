@@ -1,0 +1,76 @@
+---
+title: "Overview | Mastra platform"
+description: The Mastra platform, with Studio and Server, is the easiest way to get your agents online and collect and share observability data.
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Mastra platform
+
+The [Mastra platform](https://projects.mastra.ai) provides two products for deploying and managing AI applications built with the Mastra framework:
+
+- **Studio**: A hosted visual environment for testing agents, running workflows, and inspecting traces
+- **Server**: A production deployment target that runs your Mastra application as an API server
+
+## Quickstart
+
+Before you begin, ensure you have Node.js 22.13.0 or later installed.
+
+<Steps>
+  <StepItem>
+    Follow the [get started guide](/docs) to create your first Mastra project.
+  </StepItem>
+
+  <StepItem>
+    Install the `mastra` CLI globally:
+
+    ```bash npm2yarn
+    npm install -g mastra
+    ```
+  </StepItem>
+
+  <StepItem>
+    Deploy Studio with a single command:
+
+    ```bash
+    mastra studio deploy
+    ```
+
+    On a successful deploy, the CLI will output the URL of your deployed Studio instance.
+  </StepItem>
+
+  <StepItem>
+    Deploy Server with a single command:
+
+    ```bash
+    mastra server deploy
+    ```
+
+    On a successful deploy, the CLI will output the URL of your deployed Server instance.
+  </StepItem>
+</Steps>
+
+You have now successfully deployed both Studio and Server instances of your Mastra application. The CLI created a `.mastra-project.json` file in your project directory.
+
+This file links your local project to a platform project. It's auto-generated on your first deploy and contains the `projectId`, `projectName`, and `organizationId`. Commit this file to your repository so CI/CD knows which project to deploy to.
+
+## Key Concepts
+
+**Projects** are the shared parent entity across all products. A single project can have a Studio deployment and a Server deployment. Projects belong to an **Organization**, which is the multi-tenant container for your team.
+
+Your Mastra application is built from three building blocks:
+
+- [Agents](/docs/agents/overview): AI agents that can use tools, follow instructions, and maintain context
+- [Tools](/docs/agents/using-tools): Callable functions and integrations available to your agents
+- [Workflows](/docs/workflows/overview): Multi-step orchestration pipelines that coordinate agents and tools
+
+## Going to production
+
+Develop your project locally with [`mastra dev`](/reference/cli/mastra#mastra-dev) and open [Studio](/docs/studio/overview) to test your agents, workflows, and tools in a visual environment.
+
+Once you're ready to deploy your application to production, use [`mastra studio deploy`](/reference/cli/mastra#mastra-studio-deploy) and [`mastra server deploy`](/reference/cli/mastra#mastra-server-deploy) to push your application to the cloud.
+
+Follow the [Studio deployment guide](/docs/studio/deployment#mastra-platform) and [Server deployment guide](/guides/deployment/mastra-platform) for step-by-step instructions.
+
+If you host your Mastra application on your own infrastructure, you can still send observability data to Studio using the [CloudExporter](/docs/observability/tracing/exporters/cloud).

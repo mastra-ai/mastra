@@ -7,7 +7,7 @@ import { loop } from '../../loop';
 import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import { SpanType, resolveObservabilityContext } from '../../observability';
-import { executeWithContextSync } from '../../observability/context-storage';
+import { executeWithContextSync } from '../../observability/utils';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { ModelManagerModelConfig } from '../../stream/types';
 import { delay } from '../../utils';
@@ -112,6 +112,7 @@ export class MastraLLMVNext extends MastraBase {
     options,
     inputProcessors,
     outputProcessors,
+    errorProcessors,
     returnScorerData,
     providerOptions,
     messageList,
@@ -202,6 +203,7 @@ export class MastraLLMVNext extends MastraBase {
         structuredOutput,
         inputProcessors,
         outputProcessors,
+        errorProcessors,
         returnScorerData,
         modelSpanTracker,
         requireToolApproval,

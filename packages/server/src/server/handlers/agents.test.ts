@@ -179,7 +179,7 @@ describe('getProvidersHandler', () => {
       name: 'Test Gateway',
       getId: () => 'test-gateway',
       fetchProviders: vi.fn().mockResolvedValue({
-        'test-gateway/custom-llm': {
+        'custom-llm': {
           name: 'Custom LLM',
           models: ['custom-model-1', 'custom-model-2'],
           apiKeyEnvVar: 'CUSTOM_LLM_API_KEY',

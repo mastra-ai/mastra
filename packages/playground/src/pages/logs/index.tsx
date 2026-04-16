@@ -1,16 +1,21 @@
-import type { LogRecord, FeaturedIds, LogsDatePreset } from '@mastra/playground-ui';
 import {
-  MainHeader,
-  LogsList,
-  LogsToolbar,
-  isValidLogsDatePreset,
-  useLogsFilters,
-  EntityListPageLayout,
+  ErrorState,
+  NoDataPageLayout,
+  PageHeader,
+  PageLayout,
+  PermissionDenied,
+  SessionExpired,
+  is401UnauthorizedError,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { LogsIcon } from 'lucide-react';
 import { useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router';
+import type { FeaturedIds, LogsDatePreset } from '@/domains/logs';
+import { LogsList, LogsToolbar, isValidLogsDatePreset, useLogsFilters } from '@/domains/logs';
+import { NoLogsInfo } from '@/domains/logs/components/no-logs-info';
 import { useLogs } from '@/domains/logs/hooks/use-logs';
+import type { LogRecord } from '@/domains/logs/types';
 
 const PERIOD_PARAM = 'period';
 const LOG_PARAM = 'logId';
@@ -101,16 +106,48 @@ export default function Logs() {
     filteredLogs,
   } = useLogsFilters(logs as LogRecord[]);
 
+  if (logsError && is401UnauthorizedError(logsError)) {
+    return (
+      <NoDataPageLayout title="Logs" icon={<LogsIcon />}>
+        <SessionExpired />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (logsError && is403ForbiddenError(logsError)) {
+    return (
+      <NoDataPageLayout title="Logs" icon={<LogsIcon />}>
+        <PermissionDenied resource="logs" />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (logsError) {
+    return (
+      <NoDataPageLayout title="Logs" icon={<LogsIcon />}>
+        <ErrorState title="Failed to load logs" message={logsError?.message ?? 'Unknown error'} />
+      </NoDataPageLayout>
+    );
+  }
+
+  const hasActiveFilters = searchQuery.length > 0 || filterGroups.length > 0 || datePreset !== '24h';
+
+  if (logs.length === 0 && !isLoadingLogs && !hasActiveFilters) {
+    return (
+      <NoDataPageLayout title="Logs" icon={<LogsIcon />}>
+        <NoLogsInfo />
+      </NoDataPageLayout>
+    );
+  }
+
   return (
-    <EntityListPageLayout className="max-w-none">
-      <EntityListPageLayout.Top>
-        <MainHeader withMargins={false}>
-          <MainHeader.Column>
-            <MainHeader.Title>
-              <LogsIcon /> Logs
-            </MainHeader.Title>
-          </MainHeader.Column>
-        </MainHeader>
+    <PageLayout width="wide" height="full">
+      <PageLayout.TopArea>
+        <PageHeader>
+          <PageHeader.Title>
+            <LogsIcon /> Logs
+          </PageHeader.Title>
+        </PageHeader>
 
         <LogsToolbar
           onSearchChange={setSearchQuery}
@@ -128,9 +165,9 @@ export default function Logs() {
             handleTimePeriodChange('24h');
           }}
           isLoading={isLoadingLogs}
-          hasActiveFilters={searchQuery.length > 0 || filterGroups.length > 0 || datePreset !== '24h'}
+          hasActiveFilters={hasActiveFilters}
         />
-      </EntityListPageLayout.Top>
+      </PageLayout.TopArea>
 
       <LogsList
         logs={filteredLogs}
@@ -138,13 +175,11 @@ export default function Logs() {
         isFetchingNextPage={isFetchingNextPage}
         hasNextPage={hasNextPage}
         setEndOfListElement={setEndOfListElement}
-        error={logsError instanceof Error ? logsError : null}
-        hasActiveFilters={searchQuery.length > 0 || filterGroups.length > 0}
         featuredLogId={featuredLogId}
         featuredTraceId={featuredTraceId}
         featuredSpanId={featuredSpanId}
         onFeaturedChange={handleFeaturedChange}
       />
-    </EntityListPageLayout>
+    </PageLayout>
   );
 }

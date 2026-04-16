@@ -42,10 +42,10 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
   };
 
   const config = {
-    observerModelId: ctx.state.harness.getObserverModelId(),
-    reflectorModelId: ctx.state.harness.getReflectorModelId(),
-    observationThreshold: ctx.state.harness.getObservationThreshold(),
-    reflectionThreshold: ctx.state.harness.getReflectionThreshold(),
+    observerModelId: ctx.state.harness.getObserverModelId() ?? '',
+    reflectorModelId: ctx.state.harness.getReflectorModelId() ?? '',
+    observationThreshold: ctx.state.harness.getObservationThreshold() ?? 30_000,
+    reflectionThreshold: ctx.state.harness.getReflectionThreshold() ?? 40_000,
   };
 
   return new Promise<void>(resolve => {

@@ -1,5 +1,82 @@
 # @mastra/pg
 
+## 1.9.2-alpha.0
+
+### Patch Changes
+
+- Add `BackgroundTasksStorage` domain implementation so `@mastra/core` background task execution works with any storage adapter. ([#15307](https://github.com/mastra-ai/mastra/pull/15307))
+
+- Updated dependencies [[`d63ffdb`](https://github.com/mastra-ai/mastra/commit/d63ffdbb2c11e76fe5ea45faab44bc15460f010c)]:
+  - @mastra/core@1.25.1-alpha.0
+
+## 1.9.1
+
+### Patch Changes
+
+- Fixed vector similarity queries to leverage HNSW and IVFFlat indexes. When querying without filters on an HNSW or IVFFlat-indexed table, ORDER BY and LIMIT are now placed inside the CTE so PostgreSQL can use the index for faster approximate nearest neighbor searches instead of scanning all rows. ([#14574](https://github.com/mastra-ai/mastra/pull/14574))
+
+- Fixed `batchInsert` and `batchUpdate` in `@mastra/pg` to run on a single Postgres transaction connection. ([#15312](https://github.com/mastra-ai/mastra/pull/15312))
+
+  This prevents pooled `BEGIN`/`COMMIT`/`ROLLBACK` calls from landing on different connections and leaving idle transactions open during batch writes.
+
+- Fixed "column does not exist" errors when using experiment review features on databases created before the review pipeline was introduced. Startup now automatically migrates older experiment tables to the latest schema. ([#15304](https://github.com/mastra-ai/mastra/pull/15304))
+
+- Fixed vector operations failing when pgvector extension is installed in a custom schema. The search_path is now set before index creation and vector similarity queries, ensuring operator classes (e.g. vector_cosine_ops) and distance operators (e.g. <=>) resolve correctly regardless of where the extension is installed. Previously, only table creation set the search_path, causing CREATE INDEX and query operations to fail with unresolvable operator errors. ([#14526](https://github.com/mastra-ai/mastra/pull/14526))
+
+- Added `entityVersionId`, `parentEntityVersionId`, and `rootEntityVersionId` columns to observability storage tables (spans, metrics, scores, feedback, logs) for filtering and grouping traces by entity version. Added ALTER TABLE migrations for existing databases. Added `targetType`, `targetId`, `agentVersion`, and `status` filters to `listExperiments`, and `traceId` and `status` filters to `listExperimentResults`. ([#15317](https://github.com/mastra-ai/mastra/pull/15317))
+
+- Updated dependencies [[`87df955`](https://github.com/mastra-ai/mastra/commit/87df955c028660c075873fd5d74af28233ce32eb), [`8fad147`](https://github.com/mastra-ai/mastra/commit/8fad14759804179c8e080ce4d9dec6ef1a808b31), [`582644c`](https://github.com/mastra-ai/mastra/commit/582644c4a87f83b4f245a84d72b9e8590585012e), [`cbdf3e1`](https://github.com/mastra-ai/mastra/commit/cbdf3e12b3d0c30a6e5347be658e2009648c130a), [`8fe46d3`](https://github.com/mastra-ai/mastra/commit/8fe46d354027f3f0f0846e64219772348de106dd), [`18c67db`](https://github.com/mastra-ai/mastra/commit/18c67dbb9c9ebc26f26f65f7d3ff836e5691ef46), [`4ba3bb1`](https://github.com/mastra-ai/mastra/commit/4ba3bb1e465ad2ddaba3bbf2bc47e0faec32985e), [`5d84914`](https://github.com/mastra-ai/mastra/commit/5d84914e0e520c642a40329b210b413fcd139898), [`8dcc77e`](https://github.com/mastra-ai/mastra/commit/8dcc77e78a5340f5848f74b9e9f1b3da3513c1f5), [`aa67fc5`](https://github.com/mastra-ai/mastra/commit/aa67fc59ee8a5eeff1f23eb05970b8d7a536c8ff), [`fd2f314`](https://github.com/mastra-ai/mastra/commit/fd2f31473d3449b6b97e837ef8641264377f41a7), [`fa8140b`](https://github.com/mastra-ai/mastra/commit/fa8140bcd4251d2e3ac85fdc5547dfc4f372b5be), [`190f452`](https://github.com/mastra-ai/mastra/commit/190f45258b0640e2adfc8219fa3258cdc5b8f071), [`e80fead`](https://github.com/mastra-ai/mastra/commit/e80fead1412cc0d1b2f7d6a1ce5017d9e0098ff7), [`0287b64`](https://github.com/mastra-ai/mastra/commit/0287b644a5c3272755cf3112e71338106664103b), [`7e7bf60`](https://github.com/mastra-ai/mastra/commit/7e7bf606886bf374a6f9d4ca9b09dd83d0533372), [`184907d`](https://github.com/mastra-ai/mastra/commit/184907d775d8609c03c26e78ccaf37315f3aa287), [`075e91a`](https://github.com/mastra-ai/mastra/commit/075e91a4549baf46ad7a42a6a8ac8dfa78cc09e6), [`0c4cd13`](https://github.com/mastra-ai/mastra/commit/0c4cd131931c04ac5405373c932a242dbe88edd6), [`b16a753`](https://github.com/mastra-ai/mastra/commit/b16a753d5748440248d7df82e29bb987a9c8386c)]:
+  - @mastra/core@1.25.0
+
+## 1.9.1-alpha.1
+
+### Patch Changes
+
+- Fixed vector similarity queries to leverage HNSW and IVFFlat indexes. When querying without filters on an HNSW or IVFFlat-indexed table, ORDER BY and LIMIT are now placed inside the CTE so PostgreSQL can use the index for faster approximate nearest neighbor searches instead of scanning all rows. ([#14574](https://github.com/mastra-ai/mastra/pull/14574))
+
+- Fixed vector operations failing when pgvector extension is installed in a custom schema. The search_path is now set before index creation and vector similarity queries, ensuring operator classes (e.g. vector_cosine_ops) and distance operators (e.g. <=>) resolve correctly regardless of where the extension is installed. Previously, only table creation set the search_path, causing CREATE INDEX and query operations to fail with unresolvable operator errors. ([#14526](https://github.com/mastra-ai/mastra/pull/14526))
+
+- Added `entityVersionId`, `parentEntityVersionId`, and `rootEntityVersionId` columns to observability storage tables (spans, metrics, scores, feedback, logs) for filtering and grouping traces by entity version. Added ALTER TABLE migrations for existing databases. Added `targetType`, `targetId`, `agentVersion`, and `status` filters to `listExperiments`, and `traceId` and `status` filters to `listExperimentResults`. ([#15317](https://github.com/mastra-ai/mastra/pull/15317))
+
+- Updated dependencies [[`cbdf3e1`](https://github.com/mastra-ai/mastra/commit/cbdf3e12b3d0c30a6e5347be658e2009648c130a), [`8fe46d3`](https://github.com/mastra-ai/mastra/commit/8fe46d354027f3f0f0846e64219772348de106dd), [`18c67db`](https://github.com/mastra-ai/mastra/commit/18c67dbb9c9ebc26f26f65f7d3ff836e5691ef46), [`8dcc77e`](https://github.com/mastra-ai/mastra/commit/8dcc77e78a5340f5848f74b9e9f1b3da3513c1f5), [`aa67fc5`](https://github.com/mastra-ai/mastra/commit/aa67fc59ee8a5eeff1f23eb05970b8d7a536c8ff), [`fa8140b`](https://github.com/mastra-ai/mastra/commit/fa8140bcd4251d2e3ac85fdc5547dfc4f372b5be), [`190f452`](https://github.com/mastra-ai/mastra/commit/190f45258b0640e2adfc8219fa3258cdc5b8f071), [`7e7bf60`](https://github.com/mastra-ai/mastra/commit/7e7bf606886bf374a6f9d4ca9b09dd83d0533372), [`184907d`](https://github.com/mastra-ai/mastra/commit/184907d775d8609c03c26e78ccaf37315f3aa287), [`0c4cd13`](https://github.com/mastra-ai/mastra/commit/0c4cd131931c04ac5405373c932a242dbe88edd6), [`b16a753`](https://github.com/mastra-ai/mastra/commit/b16a753d5748440248d7df82e29bb987a9c8386c)]:
+  - @mastra/core@1.25.0-alpha.3
+
+## 1.9.1-alpha.0
+
+### Patch Changes
+
+- Fixed `batchInsert` and `batchUpdate` in `@mastra/pg` to run on a single Postgres transaction connection. ([#15312](https://github.com/mastra-ai/mastra/pull/15312))
+
+  This prevents pooled `BEGIN`/`COMMIT`/`ROLLBACK` calls from landing on different connections and leaving idle transactions open during batch writes.
+
+- Fixed "column does not exist" errors when using experiment review features on databases created before the review pipeline was introduced. Startup now automatically migrates older experiment tables to the latest schema. ([#15304](https://github.com/mastra-ai/mastra/pull/15304))
+
+## 1.9.0
+
+### Minor Changes
+
+- Implemented `updateObservationalMemoryConfig()` in Postgres, LibSQL, and MongoDB storage adapters. This enables per-record config overrides for observational memory thresholds, supporting the new `memory.updateObservationalMemoryConfig()` API in `@mastra/memory`. ([#15115](https://github.com/mastra-ai/mastra/pull/15115))
+
+### Patch Changes
+
+- Fixed observational memory date-range queries to use ISO-string timestamp columns (`createdAtZ`) instead of the raw `createdAt` column, ensuring correct filtering when querying observations by date range. ([#15115](https://github.com/mastra-ai/mastra/pull/15115))
+
+- Updated dependencies [[`f32b9e1`](https://github.com/mastra-ai/mastra/commit/f32b9e115a3c754d1c8cfa3f4256fba87b09cfb7), [`7d6f521`](https://github.com/mastra-ai/mastra/commit/7d6f52164d0cca099f0b07cb2bba334360f1c8ab), [`a50d220`](https://github.com/mastra-ai/mastra/commit/a50d220b01ecbc5644d489a3d446c3bd4ab30245), [`665477b`](https://github.com/mastra-ai/mastra/commit/665477bc104fd52cfef8e7610d7664781a70c220), [`4cc2755`](https://github.com/mastra-ai/mastra/commit/4cc2755a7194cb08720ff2ab4dffb4b4a5103dfd), [`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`ed425d7`](https://github.com/mastra-ai/mastra/commit/ed425d78e7c66cbda8209fee910856f98c6c6b82), [`1371703`](https://github.com/mastra-ai/mastra/commit/1371703835080450ef3f9aea58059a95d0da2e5a), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`98f8a8b`](https://github.com/mastra-ai/mastra/commit/98f8a8bdf5761b9982f3ad3acbe7f1cc3efa71f3), [`ba6f7e9`](https://github.com/mastra-ai/mastra/commit/ba6f7e9086d8281393f2acae60fda61de3bff1f9), [`7eb2596`](https://github.com/mastra-ai/mastra/commit/7eb25960d607e07468c9a10c5437abd2deaf1e9a), [`1805ddc`](https://github.com/mastra-ai/mastra/commit/1805ddc9c9b3b14b63749735a13c05a45af43a80), [`fff91cf`](https://github.com/mastra-ai/mastra/commit/fff91cf914de0e731578aacebffdeebef82f0440), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/core@1.23.0
+
+## 1.9.0-alpha.0
+
+### Minor Changes
+
+- Implemented `updateObservationalMemoryConfig()` in Postgres, LibSQL, and MongoDB storage adapters. This enables per-record config overrides for observational memory thresholds, supporting the new `memory.updateObservationalMemoryConfig()` API in `@mastra/memory`. ([#15115](https://github.com/mastra-ai/mastra/pull/15115))
+
+### Patch Changes
+
+- Fixed observational memory date-range queries to use ISO-string timestamp columns (`createdAtZ`) instead of the raw `createdAt` column, ensuring correct filtering when querying observations by date range. ([#15115](https://github.com/mastra-ai/mastra/pull/15115))
+
+- Updated dependencies [[`a50d220`](https://github.com/mastra-ai/mastra/commit/a50d220b01ecbc5644d489a3d446c3bd4ab30245)]:
+  - @mastra/core@1.23.0-alpha.9
+
 ## 1.8.6
 
 ### Patch Changes

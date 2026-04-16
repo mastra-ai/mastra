@@ -191,9 +191,9 @@ const workspace = new Workspace({
 
 `VersionedSkillSource` accepts three parameters:
 
-- **`versionTree`** (`SkillVersionTree`) — A manifest mapping relative file paths to blob entries (`{ entries: Record<string, { blobHash, size, mimeType?, encoding? }> }`).
-- **`blobStore`** (`BlobStore`) — A content-addressable blob store instance that holds the actual file contents referenced by hash.
-- **`versionCreatedAt`** (`Date`) — The timestamp when this skill version was published. Used as the modification time for all files in the version.
+- **`versionTree`** (`SkillVersionTree`): A manifest mapping relative file paths to blob entries (`{ entries: Record<string, { blobHash, size, mimeType?, encoding? }> }`).
+- **`blobStore`** (`BlobStore`): A content-addressable blob store instance that holds the actual file contents referenced by hash.
+- **`versionCreatedAt`** (`Date`): The timestamp when this skill version was published. Used as the modification time for all files in the version.
 
 When `skillSource` is provided, it's used instead of the workspace filesystem for skill discovery.
 

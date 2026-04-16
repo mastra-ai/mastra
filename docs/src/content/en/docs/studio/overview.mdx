@@ -10,9 +10,7 @@ import { VideoPlayer } from "@site/src/components/video-player";
 
 # Studio
 
-Studio provides an interactive UI for building, testing, and managing your agents, workflows, and tools. Run it locally during development, or [deploy it](/docs/studio/deployment) to production so your team can manage agents, monitor performance, and gain insights through built-in observability.
-
-Add [authentication](/docs/studio/auth) to protect your deployed Studio with login screens, role-based access control, and permission-based UI rendering so you can control what each team member can see and do. You can also [create a project in Mastra Cloud](/docs/mastra-cloud/setup) for a hosted option.
+Studio provides an interactive UI for building, testing, and managing your agents, workflows, and tools. Run it locally during development, add [authentication](/docs/studio/auth), or [deploy it](/docs/studio/deployment) to production so your team can manage agents, monitor performance, and gain insights through built-in observability.
 
 <YouTube id="ojGu6Bi4wYk" />
 
@@ -29,7 +27,7 @@ Once the server is running, you can:
 - Open the Studio UI at [http://localhost:4111](http://localhost:4111/) to interact with your agents, workflows, and tools.
 - Visit [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui) to discover and interact with the underlying REST API.
 
-To run Studio in production, see [Studio deployment](/docs/studio/deployment). To run Studio independently from your Mastra server, use [`mastra studio`](/reference/cli/mastra#mastra-studio).
+While Studio is running, you can edit your [agents](/docs/agents/overview), [workflows](/docs/workflows/overview), and other parts of your Mastra application in real time.
 
 ## Primitives
 
@@ -40,6 +38,8 @@ Chat with your agent directly, dynamically switch [models](/models), and tweak s
 <VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1773668516/agent_f8sq1u.mp4" />
 
 When you interact with your agent, you can follow each step of its reasoning, view tool call outputs, and [observe](#observability) traces and logs to see how responses are generated. You can also attach [scorers](#scorers) to measure and compare response quality over time.
+
+Use [Editor](/docs/editor/overview) to let non-technical team members iterate on agents, version every change, and run experiments without redeploying.
 
 ### Workflows
 

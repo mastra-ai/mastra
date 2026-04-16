@@ -138,6 +138,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'deployment/inngest',
+          label: 'Inngest',
+        },
+        {
+          type: 'doc',
+          id: 'deployment/mastra-platform',
+          label: 'Mastra Platform',
+        },
+        {
+          type: 'doc',
           id: 'deployment/netlify',
           label: 'Netlify',
         },
@@ -145,11 +155,6 @@ const sidebars = {
           type: 'doc',
           id: 'deployment/vercel',
           label: 'Vercel',
-        },
-        {
-          type: 'doc',
-          id: 'deployment/inngest',
-          label: 'Inngest',
         },
       ],
     },
@@ -341,23 +346,28 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'migrations/vnext-to-standard-apis',
-          label: 'VNext → Standard APIs',
-        },
-        {
-          type: 'doc',
-          id: 'migrations/agentnetwork',
-          label: 'AgentNetwork → .network()',
+          id: 'migrations/mastra-cloud',
+          label: 'Mastra Cloud to Mastra Platform',
         },
         {
           type: 'doc',
           id: 'migrations/network-to-supervisor',
-          label: '.network() → Supervisor Agents',
+          label: '.network() to Supervisor Agents',
+        },
+        {
+          type: 'doc',
+          id: 'migrations/vnext-to-standard-apis',
+          label: 'VNext to Standard APIs',
+        },
+        {
+          type: 'doc',
+          id: 'migrations/agentnetwork',
+          label: 'AgentNetwork to .network()',
         },
         {
           type: 'doc',
           id: 'migrations/ai-sdk-v4-to-v5',
-          label: 'AI SDK v4 → v5',
+          label: 'AI SDK v4 to v5',
         },
       ],
     },
