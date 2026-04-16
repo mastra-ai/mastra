@@ -260,6 +260,54 @@ describe('workspace_list_files', () => {
     expect(result).not.toContain('style.css');
   });
 
+  it('should list all files when pattern is an empty array', async () => {
+    await fs.mkdir(path.join(tempDir, 'src'));
+    await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
+    await fs.writeFile(path.join(tempDir, 'src', 'style.css'), '');
+    await fs.writeFile(path.join(tempDir, 'README.md'), '');
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = (await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
+      { path: '', maxDepth: 5, pattern: [] },
+      { workspace },
+    )) as string;
+
+    expect(result).toContain('index.ts');
+    expect(result).toContain('style.css');
+    expect(result).toContain('README.md');
+  });
+
+  it('should list all files when pattern is an empty string', async () => {
+    await fs.writeFile(path.join(tempDir, 'index.ts'), '');
+    await fs.writeFile(path.join(tempDir, 'style.css'), '');
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = (await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
+      { path: '', pattern: '' },
+      { workspace },
+    )) as string;
+
+    expect(result).toContain('index.ts');
+    expect(result).toContain('style.css');
+  });
+
+  it('should list all files when pattern array contains only empty strings', async () => {
+    await fs.writeFile(path.join(tempDir, 'index.ts'), '');
+    await fs.writeFile(path.join(tempDir, 'style.css'), '');
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = (await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
+      { path: '', pattern: ['', '  '] },
+      { workspace },
+    )) as string;
+
+    expect(result).toContain('index.ts');
+    expect(result).toContain('style.css');
+  });
+
   it('should apply token limit to large tree output', async () => {
     // Create enough directories and files to exceed default token limit (~3k tokens)
     // Each entry contributes ~5-10 words to tree output

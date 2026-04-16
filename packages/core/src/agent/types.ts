@@ -3,6 +3,7 @@ import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypev4 } from 'zod/v4';
+import type { AgentBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser';
 import type { AgentChannels, ChannelConfig } from '../channels/agent-channels';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
@@ -380,6 +381,11 @@ export interface AgentConfig<
    * If validation fails, an error is thrown.
    */
   requestContextSchema?: PublicSchema<TRequestContext>;
+  /**
+   * Background task configuration for this agent.
+   * Controls which tools can run in the background and their behavior.
+   */
+  backgroundTasks?: AgentBackgroundConfig;
 }
 
 export type AgentMemoryOption = {

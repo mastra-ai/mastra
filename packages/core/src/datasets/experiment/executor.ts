@@ -97,7 +97,7 @@ export async function executeTarget(
   target: Target,
   targetType: TargetType,
   item: { input: unknown; groundTruth?: unknown },
-  options?: { signal?: AbortSignal; requestContext?: Record<string, unknown> },
+  options?: { signal?: AbortSignal; requestContext?: Record<string, unknown>; experimentId?: string },
 ): Promise<ExecutionResult> {
   try {
     const signal = options?.signal;
@@ -110,7 +110,7 @@ export async function executeTarget(
     let executionPromise: Promise<ExecutionResult>;
     switch (targetType) {
       case 'agent':
-        executionPromise = executeAgent(target as Agent, item, signal, options?.requestContext);
+        executionPromise = executeAgent(target as Agent, item, signal, options?.requestContext, options?.experimentId);
         break;
       case 'workflow':
         executionPromise = executeWorkflow(target as Workflow, item);
@@ -180,6 +180,7 @@ async function executeAgent(
   item: { input: unknown; groundTruth?: unknown },
   signal?: AbortSignal,
   requestContext?: Record<string, unknown>,
+  experimentId?: string,
 ): Promise<ExecutionResult> {
   const model = await agent.getModel();
 
@@ -191,17 +192,22 @@ async function executeAgent(
     ? new RequestContext(Object.entries(requestContext))
     : undefined;
 
+  // Pass experimentId as tracing metadata so it appears on the AGENT_RUN span
+  const tracingOptions = experimentId ? { metadata: { experimentId } } : undefined;
+
   const rawResult = isSupportedLanguageModel(model)
     ? await agent.generate(input, {
         scorers: {},
         returnScorerData: true,
         abortSignal: signal,
         ...(reqCtx ? { requestContext: reqCtx } : {}),
+        ...(tracingOptions ? { tracingOptions } : {}),
       })
     : await agent.generateLegacy(input, {
         scorers: {},
         returnScorerData: true,
         ...(reqCtx ? { requestContext: reqCtx } : {}),
+        ...(tracingOptions ? { tracingOptions } : {}),
       });
 
   // Narrow to the common fields we need — both v1 and v2 results share these

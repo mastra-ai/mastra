@@ -1151,5 +1151,63 @@ describe('ModelSpanTracker', () => {
       expect(stepSpans).toHaveLength(1);
       expect(stepSpans[0]!.input).toEqual(messages);
     });
+
+    it('should extract messages from AI SDK v5 body.input instead of body.messages', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      // AI SDK v5 uses body.input with {type, text} content parts
+      const input = [
+        { role: 'system', content: 'You are helpful.' },
+        { role: 'user', content: [{ type: 'input_text', text: 'What is the weather?' }] },
+      ];
+
+      tracker.startStep();
+
+      const chunks = [
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            request: {
+              body: {
+                model: 'gpt-4o-mini',
+                input,
+                tools: [
+                  {
+                    type: 'function',
+                    name: 'weatherTool',
+                    parameters: { type: 'object', properties: { location: { type: 'string' } } },
+                  },
+                ],
+                tool_choice: 'auto',
+              },
+            },
+          },
+        },
+        { type: 'text-delta', payload: { text: 'Let me check.' } },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      // Should extract messages from body.input, not show keys summary
+      expect(stepSpans[0]!.input).toEqual([
+        { role: 'system', content: 'You are helpful.' },
+        { role: 'user', content: 'What is the weather?' },
+      ]);
+      // Should NOT contain tool definitions or fallback keys summary
+      expect(stepSpans[0]!.input).not.toHaveProperty('tools');
+      expect(Array.isArray(stepSpans[0]!.input)).toBe(true);
+    });
   });
 });

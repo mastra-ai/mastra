@@ -965,6 +965,7 @@ https://mastra.ai/en/docs/memory/overview`,
 
     const result: SerializedObservationalMemoryConfig = {
       scope: om.scope,
+      activateAfterIdle: om.activateAfterIdle,
       shareTokenBudget: om.shareTokenBudget,
       retrieval: om.retrieval,
     };
