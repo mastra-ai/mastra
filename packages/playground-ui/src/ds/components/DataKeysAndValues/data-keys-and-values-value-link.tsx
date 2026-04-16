@@ -16,6 +16,9 @@ function isExternalUrl(href: string) {
 export function DataKeysAndValuesValueLink({ className, children, href, as }: DataKeysAndValuesValueLinkProps) {
   const isExternal = isExternalUrl(href);
   const Component = as || 'a';
+  // Pass `to` only for custom components so React-Router's `Link` (which reads `to`) works
+  // while native anchors don't get an unknown `to` attribute warning.
+  const navigationProps = as ? { href, to: href } : { href };
 
   const linkClassName = cn(
     'truncate flex items-center gap-2 hover:text-neutral4 transition-colors',
@@ -35,7 +38,7 @@ export function DataKeysAndValuesValueLink({ className, children, href, as }: Da
 
   return (
     <dd className={cn(dataKeysAndValuesValueStyles, className)}>
-      <Component href={href} className={linkClassName}>
+      <Component {...navigationProps} className={linkClassName}>
         <span>{children}</span>
         <Link2Icon />
       </Component>
