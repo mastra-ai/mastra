@@ -1,5 +1,39 @@
 # @mastra/memory
 
+## 1.16.0-alpha.2
+
+### Minor Changes
+
+- Added `activateOnProviderChange` so observational memory can activate buffered observations and reflections before switching to a different provider or model. ([#15420](https://github.com/mastra-ai/mastra/pull/15420))
+
+  ```ts
+  const memory = new Memory({
+    options: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        activateOnProviderChange: true,
+      },
+    },
+  });
+  ```
+
+  This helps keep prompt-cache savings when the next step cannot reuse the previous provider's cache.
+
+### Patch Changes
+
+- Fixed early observational memory activations so buffered reflections are only activated when they still leave a healthy active observation set. ([#15462](https://github.com/mastra-ai/mastra/pull/15462))
+
+  Before this change, idle-timeout (`activateAfterIdle`) and model/provider-change (`activateOnProviderChange`) activations could swap in a buffered reflection too early. In bad cases, that replaced a large raw observation tail with a much smaller mostly-compressed result, which hurt reflection quality.
+
+  Early activations now stay buffered unless both of these checks pass:
+  - The unreflected observation tail is at least as large as the buffered reflection, so the activated result is not dominated by compressed content.
+  - The combined post-activation size is at least 75% of what a normal threshold activation would produce, so early activations do not cliff far below the regular target.
+
+  This update also fixes false `provider_change` activations when older persisted messages only contain a bare model id like `gpt-5.4` while newer turns use the fully qualified `provider/modelId` form.
+
+- Updated dependencies [[`0474c2b`](https://github.com/mastra-ai/mastra/commit/0474c2b2e7c7e1ad8691dca031284841391ff1ef), [`f607106`](https://github.com/mastra-ai/mastra/commit/f607106854c6416c4a07d4082604b9f66d047221), [`62919a6`](https://github.com/mastra-ai/mastra/commit/62919a6ee0fbf3779ad21a97b1ec6696515d5104), [`0fd90a2`](https://github.com/mastra-ai/mastra/commit/0fd90a215caf5fca8099c15a67ca03e4427747a3)]:
+  - @mastra/core@1.26.0-alpha.4
+
 ## 1.16.0-alpha.1
 
 ### Patch Changes
