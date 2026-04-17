@@ -741,7 +741,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         )(async (modelConfig, isLastModel) => {
           activeFallbackModelIndex = models.findIndex(candidate => candidate.id === modelConfig.id);
           const model = modelConfig.model;
-          executedStepModel = model.provider && model.modelId ? `${model.provider}/${model.modelId}` : undefined;
           const modelHeaders = modelConfig.headers;
           // Reset system messages to original before each step execution
           // This ensures that system message modifications in prepareStep/processInputStep/processors
@@ -822,6 +821,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 abortSignal: options?.abortSignal,
               });
               Object.assign(currentStep, processInputStepResult);
+              executedStepModel =
+                currentStep.model.provider && currentStep.model.modelId
+                  ? `${currentStep.model.provider}/${currentStep.model.modelId}`
+                  : undefined;
 
               // Update MODEL_GENERATION span if processor actually changed model or modelSettings
               const modelChanged = processInputStepResult.model && processInputStepResult.model !== model;
@@ -1298,7 +1301,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           };
         });
 
-      if (currentIteration > 1 && executedStepModel) {
+      if (executedStepModel) {
         messageList.enrichLastStepStart(executedStepModel);
       }
 

@@ -69,17 +69,18 @@ describe('OMMarkerComponent activation rendering', () => {
     expect(activationText).toContain('✓ Activated observations: -7.3k msg tokens, +0.4k obs tokens');
   });
 
-  it('renders reflection activation without TTL suffix', () => {
+  it('renders reflection activation as obs-pool compression without TTL suffix', () => {
     const activationMarker = new OMMarkerComponent({
       type: 'om_activation',
       operationType: 'reflection',
-      tokensActivated: 2400,
-      observationTokens: 600,
+      tokensActivated: 19340,
+      observationTokens: 17077,
     });
 
     const activationText = stripAnsi(activationMarker.render(120).join('\n'));
 
-    expect(activationText).toContain('✓ Activated reflection: -2.4k msg tokens, +0.6k obs tokens');
+    expect(activationText).toContain('✓ Activated reflection: 19.3k → 17.1k obs tokens (-2.3k)');
+    expect(activationText).not.toContain('msg tokens');
     expect(activationText).not.toContain('TTL');
   });
 });

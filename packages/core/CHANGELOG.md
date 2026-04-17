@@ -1,5 +1,65 @@
 # @mastra/core
 
+## 1.26.0-alpha.5
+
+### Patch Changes
+
+- Fixed provider-defined tools with custom execute callbacks (e.g. openai.tools.applyPatch) being incorrectly skipped during execution. Previously, all provider-defined tools were assumed to be provider-executed, which meant user-supplied execute functions were never called. Now, provider tools with a custom execute are correctly identified as client-executed. ([#14819](https://github.com/mastra-ai/mastra/pull/14819))
+
+## 1.26.0-alpha.4
+
+### Minor Changes
+
+- Added per-entry `modelSettings`, `providerOptions`, and `headers` to agent model fallback arrays. Each entry can now specify its own temperature, topP, provider-specific options, and HTTP headers — either statically or as a function of `requestContext`. Closes #15421. ([#15429](https://github.com/mastra-ai/mastra/pull/15429))
+
+  **Example**
+
+  ```ts
+  const agent = new Agent({
+    model: [
+      {
+        model: 'google/gemini-2.5-flash',
+        maxRetries: 2,
+        modelSettings: { temperature: 0.3 },
+        providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } },
+      },
+      {
+        model: 'openai/gpt-5-mini',
+        maxRetries: 2,
+        modelSettings: { temperature: 0.7 },
+        providerOptions: { openai: { reasoningEffort: 'low' } },
+      },
+    ],
+  });
+  ```
+
+  **Precedence**:
+  - `modelSettings` and `providerOptions`: per-fallback entry > call-time `stream()` / `generate()` options > agent `defaultOptions`. `modelSettings` shallow-merges by key; `providerOptions` deep-merges recursively, preserving sibling and nested keys.
+  - `headers`: call-time `modelSettings.headers` > per-fallback `headers` > model-router-extracted headers. This preserves the existing Mastra contract from #11275, where runtime headers (typically tracing, auth, tenancy) intentionally override model-level headers.
+
+### Patch Changes
+
+- Fixed nested workflows dropping `resourceId` when executed as a step of a parent workflow. Child workflow snapshots now preserve the parent run's resource association, so tenant-scoped persistence works end-to-end. Closes [#15246](https://github.com/mastra-ai/mastra/issues/15246). ([#15447](https://github.com/mastra-ai/mastra/pull/15447))
+
+  ```ts
+  const run = await parent.createRun({
+    runId: 'run-1',
+    resourceId: 'workspace-1',
+  });
+
+  await run.start({ inputData: { ok: true } });
+  // Before: child snapshots persisted with resourceId: undefined
+  // After:  child snapshots persisted with resourceId: 'workspace-1'
+  ```
+
+- Fixed assistant model attribution so provider and model information is preserved more reliably in stored assistant messages. ([#15462](https://github.com/mastra-ai/mastra/pull/15462))
+
+  Loop runs now keep the resolved model on the first `step-start`, already-attributed `step-start` parts are left alone, and post-tool assistant continuations preserve their incoming metadata when they merge into an existing assistant message.
+
+  This keeps downstream features working with the correct model identity instead of falling back to incomplete metadata or losing it during merge.
+
+- Added model metadata to step-start parts so model changes can be detected across steps, including within a single assistant message. ([#15420](https://github.com/mastra-ai/mastra/pull/15420))
+
 ## 1.26.0-alpha.3
 
 ### Patch Changes

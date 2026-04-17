@@ -813,6 +813,13 @@ export class MessageList {
         continue;
       }
 
+      // Only stamp step-starts that haven't already been attributed. A prior
+      // iteration (or a re-used message loaded from memory) may have already
+      // stamped its model, and overwriting it would mis-attribute history.
+      if (part.model) {
+        return false;
+      }
+
       part.model = model;
 
       if (!this.stateManager.isResponseMessage(lastMsg)) {
