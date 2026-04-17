@@ -126,6 +126,31 @@ jobs:
       - name: Run examples validator
         run: node .github/scripts/validate-examples.js
 
+  agents-md-check:
+    name: Validate AGENTS.md files
+    needs: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
+    permissions:
+      pull-requests: read
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+        with:
+          package-manager-cache: false
+          install-dependencies: false
+
+      - name: Install dependencies
+        run: pnpm add -w --no-lockfile globby tokenx
+
+      - name: Run AGENTS.md validator
+        run: node .github/scripts/validate-agents-md.mjs
+
   peerdeps-check:
     name: Validate peer dependencies
     runs-on: ubuntu-latest
