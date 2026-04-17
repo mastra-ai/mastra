@@ -721,10 +721,9 @@ export class ModelSpanTracker {
                 dynamic,
                 providerExecuted,
                 providerMetadata,
-                // Output - the actual result
-                result,
                 // Stripped - redundant (already on TOOL_CALL span input)
                 args: _args,
+                result: _result,
               } = (chunk.payload as Record<string, any>) || {};
 
               // All tool-result specific fields go in metadata
@@ -734,7 +733,7 @@ export class ModelSpanTracker {
               if (providerExecuted !== undefined) metadata.providerExecuted = providerExecuted;
               if (providerMetadata !== undefined) metadata.providerMetadata = providerMetadata;
 
-              this.#createEventSpan(chunk.type, result, { metadata });
+              this.#createEventSpan(chunk.type, undefined, { metadata });
               break;
             }
 

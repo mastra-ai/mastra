@@ -146,31 +146,35 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   protected parentSpanId?: string;
   /** Deep clean options for serialization */
   protected deepCleanOptions: DeepCleanOptions;
+  /** True when config guarantees this span will be dropped before export processing */
+  protected excludedFromExport: boolean;
   /** Cached canonical correlation context for this live span */
   protected correlationContext?: CorrelationContext;
 
   constructor(options: CreateSpanOptions<TType>, observabilityInstance: ObservabilityInstance) {
-    // Get serialization options from observability instance config
-    const serializationOptions = observabilityInstance.getConfig().serializationOptions;
+    const config = observabilityInstance.getConfig();
+    const serializationOptions = config.serializationOptions;
     this.deepCleanOptions = mergeSerializationOptions(serializationOptions);
 
     this.name = options.name;
     this.type = options.type;
-    this.attributes = deepClean(options.attributes, this.deepCleanOptions) || ({} as SpanTypeMap[TType]);
-    // Metadata - inherit from parent if not explicitly provided, merge if both exist
-    this.metadata = deepClean(
-      options.parent?.metadata || options.metadata ? { ...options.parent?.metadata, ...options.metadata } : undefined,
-      this.deepCleanOptions,
-    );
-    if (options.requestContext && options.requestContext.size() > 0) {
-      this.requestContext = deepClean(options.requestContext.all, this.deepCleanOptions);
-    }
     this.parent = options.parent;
     this.startTime = options.startTime ?? new Date();
     this.observabilityInstance = observabilityInstance;
     this.isEvent = options.isEvent ?? false;
     this.isInternal = isSpanInternal(this.type, options.tracingPolicy?.internal);
     this.traceState = options.traceState;
+    this.excludedFromExport = Boolean(
+      config.excludeSpanTypes?.includes(this.type) || (this.isInternal && !config.includeInternalSpans),
+    );
+    this.attributes = this.cleanForSpan(options.attributes) || ({} as SpanTypeMap[TType]);
+    // Metadata - inherit from parent if not explicitly provided, merge if both exist
+    this.metadata = this.cleanForSpan(
+      options.parent?.metadata || options.metadata ? { ...options.parent?.metadata, ...options.metadata } : undefined,
+    );
+    if (options.requestContext && options.requestContext.size() > 0) {
+      this.requestContext = this.cleanForSpan(options.requestContext.all);
+    }
     // Tags are only set for root spans (spans without a parent)
     this.tags = !options.parent && options.tags?.length ? options.tags : undefined;
     // Entity identification - inherit from closest non-internal parent if not explicitly provided
@@ -182,10 +186,18 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     if (this.isEvent) {
       // Event spans don't have endTime or input.
       // Event spans are immediately emitted by the BaseObservability class via the end() event.
-      this.output = deepClean(options.output, this.deepCleanOptions);
+      this.output = this.cleanForSpan(options.output);
     } else {
-      this.input = deepClean(options.input, this.deepCleanOptions);
+      this.input = this.cleanForSpan(options.input);
     }
+  }
+
+  protected cleanForSpan<TValue>(value: TValue): TValue {
+    if (this.excludedFromExport) {
+      return value;
+    }
+
+    return deepClean(value, this.deepCleanOptions) as TValue;
   }
 
   // Methods for span lifecycle

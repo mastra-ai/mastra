@@ -1052,6 +1052,77 @@ describe('Span', () => {
   });
 
   describe('serializationOptions', () => {
+    it('should skip deep cleaning for spans excluded by excludeSpanTypes', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test',
+        exporters: [testExporter],
+        excludeSpanTypes: [SpanType.GENERIC],
+      });
+
+      const initialFn = () => 'initial';
+      const updatedFn = () => 'updated';
+      const endedFn = () => 'ended';
+
+      const span = tracing.startSpan({
+        type: SpanType.GENERIC,
+        name: 'test',
+        input: { fn: initialFn },
+        attributes: { fn: initialFn } as any,
+        metadata: { fn: initialFn },
+      });
+
+      expect(span.input.fn).toBe(initialFn);
+      expect((span.attributes as any).fn).toBe(initialFn);
+      expect(span.metadata?.fn).toBe(initialFn);
+
+      span.update({
+        input: { fn: updatedFn },
+        output: { fn: updatedFn },
+        attributes: { fn: updatedFn } as any,
+        metadata: { fn: updatedFn },
+      });
+
+      expect(span.input.fn).toBe(updatedFn);
+      expect(span.output.fn).toBe(updatedFn);
+      expect((span.attributes as any).fn).toBe(updatedFn);
+      expect(span.metadata?.fn).toBe(updatedFn);
+
+      span.end({
+        output: { fn: endedFn },
+        attributes: { fn: endedFn } as any,
+        metadata: { fn: endedFn },
+      });
+
+      expect(span.output.fn).toBe(endedFn);
+      expect((span.attributes as any).fn).toBe(endedFn);
+      expect(span.metadata?.fn).toBe(endedFn);
+    });
+
+    it('should skip deep cleaning for internal spans excluded from export', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test',
+        exporters: [testExporter],
+        includeInternalSpans: false,
+      });
+
+      const rawFn = () => 'raw';
+      const span = tracing.startSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: 'internal-workflow',
+        tracingPolicy: { internal: InternalSpans.WORKFLOW },
+        input: { fn: rawFn },
+        attributes: { fn: rawFn } as any,
+        metadata: { fn: rawFn },
+      });
+
+      expect(span.isInternal).toBe(true);
+      expect(span.input.fn).toBe(rawFn);
+      expect((span.attributes as any).fn).toBe(rawFn);
+      expect(span.metadata?.fn).toBe(rawFn);
+    });
+
     it('should use custom maxStringLength from config', () => {
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'test',
