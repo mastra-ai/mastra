@@ -23,6 +23,8 @@ import {
   GaugeIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
+import { AgentStudioSidebar } from '@/domains/agent-studio/components/agent-studio-sidebar';
+import { useShouldShowAgentStudio } from '@/domains/agent-studio/hooks/use-should-show-agent-studio';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
@@ -211,6 +213,14 @@ function getIsLinkActive(link: SidebarLink, pathname: string): boolean {
 }
 
 export function AppSidebar() {
+  const { showAgentStudio } = useShouldShowAgentStudio();
+  if (showAgentStudio) {
+    return <AgentStudioSidebar />;
+  }
+  return <AdminSidebar />;
+}
+
+function AdminSidebar() {
   const { Link } = useLinkComponent();
   const { state } = useMainSidebar();
 

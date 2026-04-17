@@ -2,6 +2,7 @@ import { Button, Popover, PopoverContent, PopoverTrigger, Txt } from '@mastra/pl
 import { useLogout } from '../hooks';
 import type { AuthenticatedUser, CurrentUser } from '../types';
 import { UserAvatar } from './user-avatar';
+import { useShouldShowAgentStudio } from '@/domains/agent-studio/hooks/use-should-show-agent-studio';
 
 export type UserMenuProps = {
   user: AuthenticatedUser | CurrentUser;
@@ -29,8 +30,16 @@ import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
  */
 export function UserMenu({ user }: UserMenuProps) {
   const { mutate: logout, isPending } = useLogout();
+  const { isAgentStudioAvailable, isAdmin, isPreviewMode, setPreviewMode } = useShouldShowAgentStudio();
 
   if (!user) return null;
+
+  const showPreviewToggle = isAgentStudioAvailable && isAdmin;
+  const handleTogglePreview = () => {
+    setPreviewMode(!isPreviewMode);
+    // Navigate to the appropriate root so the sidebar swap is obvious.
+    window.location.assign(isPreviewMode ? '/agents' : '/agent-studio/agents');
+  };
 
   const handleLogout = () => {
     logout(undefined, {
@@ -69,7 +78,17 @@ export function UserMenu({ user }: UserMenuProps) {
             </div>
           </div>
         </div>
-        <div className="p-2">
+        <div className="p-2 flex flex-col gap-1">
+          {showPreviewToggle && (
+            <Button
+              variant="ghost"
+              onClick={handleTogglePreview}
+              className="w-full justify-start"
+              data-testid="agent-studio-preview-toggle"
+            >
+              {isPreviewMode ? 'Exit end-user preview' : 'View as end-user'}
+            </Button>
+          )}
           <Button variant="ghost" onClick={handleLogout} disabled={isPending} className="w-full justify-start">
             {isPending ? 'Signing out...' : 'Sign out'}
           </Button>

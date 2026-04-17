@@ -1,0 +1,88 @@
+---
+title: "Agent Builder"
+description: Expose a simplified Studio experience to non-engineer end users so they can build and chat with dynamic, database-driven agents.
+packages:
+  - "@mastra/studio-agent-builder"
+  - "@mastra/core"
+---
+
+import { Callout } from "nextra/components";
+
+# Agent Builder
+
+Agent Builder is a Studio surface for non-engineer end users. Admins wire it onto the `Mastra` instance, and Studio switches to a focused sidebar with three sections:
+
+- **Agents** — the user's five most recently opened agents plus a **View all** grid.
+- **Marketplace** — agents and skills published by other teammates.
+- **Configure** — user-managed skills and a light/dark appearance toggle.
+
+Engineers and admins keep the full admin Studio by default, and can flip a **View as end-user** toggle from the user menu to preview the end-user surface.
+
+<Callout type="info">
+  Agent Builder is an Enterprise Edition feature. In production Mastra will refuse to start if a `MastraAgentBuilder` is attached without a valid `MASTRA_EE_LICENSE`. Development environments work without a license.
+</Callout>
+
+## Install
+
+```bash npm2yarn
+npm install @mastra/studio-agent-builder
+```
+
+## Wire it onto `Mastra`
+
+```ts
+import { Mastra } from '@mastra/core'
+import { MastraAgentBuilder } from '@mastra/studio-agent-builder'
+
+export const mastra = new Mastra({
+  agentBuilder: new MastraAgentBuilder({
+    enabledSections: ['tools', 'memory', 'skills'],
+    marketplace: {
+      enabled: true,
+      showAgents: true,
+      showSkills: true,
+    },
+    configure: {
+      allowSkillCreation: true,
+      allowAppearance: true,
+    },
+    recents: { maxItems: 5 },
+  }),
+})
+```
+
+All options are optional — the defaults enable every section, enable the marketplace with agents and skills visible, allow skill creation and appearance toggling, and show five recent agents.
+
+## Enable in production
+
+Set `MASTRA_EE_LICENSE` to a valid Enterprise License before starting the server. Without it, start-up fails with a `[mastra/auth-ee]` error pointing to [`ee/LICENSE`](https://github.com/mastra-ai/mastra/blob/main/ee/LICENSE).
+
+```bash
+export MASTRA_EE_LICENSE="..."
+```
+
+## Configuration reference
+
+| Option | Type | Default | Description |
+| - | - | - | - |
+| `enabledSections` | `Array<'tools' \| 'agents' \| 'workflows' \| 'scorers' \| 'skills' \| 'memory' \| 'variables'>` | all | Sections exposed in the end-user agent editor. |
+| `marketplace.enabled` | `boolean` | `true` | Master switch for the Marketplace sidebar section. |
+| `marketplace.showAgents` | `boolean` | `true` | Show the Agents marketplace tab. |
+| `marketplace.showSkills` | `boolean` | `true` | Show the Skills marketplace tab. |
+| `configure.allowSkillCreation` | `boolean` | `true` | Allow end users to publish new skills from **Configure**. |
+| `configure.allowAppearance` | `boolean` | `true` | Show the light/dark appearance toggle under **Configure**. |
+| `recents.maxItems` | `number` | `5` | How many recent agents to surface in the sidebar. |
+
+## Permissions
+
+Agent Builder reuses the existing `stored-agents:*` and `stored:*` (stored-skills) permission keys. The default `viewer`, `member`, and `admin` roles already cover the capabilities:
+
+- **Viewer** — can read agents and skills.
+- **Member** — can create and edit their own agents, publish skills, and use **Configure**.
+- **Admin** — full access plus the "View as end-user" preview toggle in the user menu.
+
+See [Studio Auth](/docs/studio/auth) for the full RBAC model.
+
+## Marketplace scope
+
+The Marketplace intentionally excludes the current user's own work. Users' own agents appear in the **Agents** sidebar section, and their own skills appear under **Configure → Skills**.

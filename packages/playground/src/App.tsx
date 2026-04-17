@@ -26,6 +26,7 @@ import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } fr
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/link';
+import { AgentStudioPlaceholder } from './pages/agent-studio/placeholder';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
@@ -315,6 +316,82 @@ const routes = [
 
       { index: true, loader: () => redirect('/agents') },
       { path: '/request-context', element: <RequestContext /> },
+
+      // Agent Studio (EE) — placeholder routes; pages land in follow-up PRs.
+      {
+        path: '/agent-studio',
+        loader: () => redirect('/agent-studio/agents'),
+      },
+      {
+        path: '/agent-studio/agents',
+        element: (
+          <AgentStudioPlaceholder
+            title="Agents"
+            description="Grid + list of your agents with search and Mine / Team scope."
+          />
+        ),
+      },
+      {
+        path: '/agent-studio/agents/create',
+        element: <AgentStudioPlaceholder title="Create agent" />,
+      },
+      {
+        path: '/agent-studio/agents/:agentId/edit',
+        element: <AgentStudioPlaceholder title="Edit agent" />,
+      },
+      {
+        path: '/agent-studio/agents/:agentId/chat',
+        element: <AgentStudioPlaceholder title="Chat" />,
+      },
+      {
+        path: '/agent-studio/agents/:agentId/chat/:threadId',
+        element: <AgentStudioPlaceholder title="Chat" />,
+      },
+      {
+        path: '/agent-studio/marketplace',
+        loader: () => redirect('/agent-studio/marketplace/agents'),
+      },
+      {
+        path: '/agent-studio/marketplace/agents',
+        element: (
+          <AgentStudioPlaceholder title="Marketplace — Agents" description="Discover agents built by your teammates." />
+        ),
+      },
+      {
+        path: '/agent-studio/marketplace/skills',
+        element: (
+          <AgentStudioPlaceholder
+            title="Marketplace — Skills"
+            description="Discover skills published by your teammates."
+          />
+        ),
+      },
+      {
+        path: '/agent-studio/marketplace/skills/:skillId',
+        element: <AgentStudioPlaceholder title="Skill details" />,
+      },
+      {
+        path: '/agent-studio/configure',
+        element: (
+          <AgentStudioPlaceholder title="Configure" description="Manage your skills, appearance, and preferences." />
+        ),
+      },
+      {
+        path: '/agent-studio/configure/skills',
+        element: <AgentStudioPlaceholder title="Configure — Skills" description="List and publish your own skills." />,
+      },
+      {
+        path: '/agent-studio/configure/skills/create',
+        element: <AgentStudioPlaceholder title="Create skill" />,
+      },
+      {
+        path: '/agent-studio/configure/skills/:skillId',
+        element: <AgentStudioPlaceholder title="Edit skill" />,
+      },
+      {
+        path: '/agent-studio/configure/appearance',
+        element: <AgentStudioPlaceholder title="Appearance" description="Choose light or dark mode." />,
+      },
     ],
   },
 ];
