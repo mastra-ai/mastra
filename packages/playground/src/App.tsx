@@ -26,6 +26,10 @@ import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } fr
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/link';
+import AgentStudioAgents from './pages/agent-studio/agents';
+import AgentStudioAgentChat from './pages/agent-studio/agents/chat';
+import AgentStudioAgentCreate from './pages/agent-studio/agents/create';
+import AgentStudioAgentEdit from './pages/agent-studio/agents/edit';
 import { AgentStudioPlaceholder } from './pages/agent-studio/placeholder';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
@@ -324,28 +328,23 @@ const routes = [
       },
       {
         path: '/agent-studio/agents',
-        element: (
-          <AgentStudioPlaceholder
-            title="Agents"
-            description="Grid + list of your agents with search and Mine / Team scope."
-          />
-        ),
+        element: <AgentStudioAgents />,
       },
       {
         path: '/agent-studio/agents/create',
-        element: <AgentStudioPlaceholder title="Create agent" />,
+        element: <AgentStudioAgentCreate />,
       },
       {
         path: '/agent-studio/agents/:agentId/edit',
-        element: <AgentStudioPlaceholder title="Edit agent" />,
+        element: <AgentStudioAgentEdit />,
       },
       {
         path: '/agent-studio/agents/:agentId/chat',
-        element: <AgentStudioPlaceholder title="Chat" />,
+        element: <AgentStudioAgentChat />,
       },
       {
         path: '/agent-studio/agents/:agentId/chat/:threadId',
-        element: <AgentStudioPlaceholder title="Chat" />,
+        element: <AgentStudioAgentChat />,
       },
       {
         path: '/agent-studio/marketplace',
