@@ -9,8 +9,10 @@ import { usePermissions } from '@/domains/auth/hooks/use-permissions';
  *
  * Rules:
  *   - The feature must be enabled on the server (MastraAgentBuilder attached).
- *   - End-users (no `stored-agents:write`) always see it when it's available.
- *   - Admins see it only when they flip the "View as end-user" preview toggle.
+ *   - End-users need `stored-agents:read` to participate in the studio — without
+ *     it, they can't see agents anyway, so we fall back to the admin sidebar.
+ *   - Admins (RBAC off, or full `*` grant) see it only when they flip the
+ *     "View as end-user" preview toggle.
  */
 export const useShouldShowAgentStudio = () => {
   const { isAgentStudioAvailable } = useIsAgentStudioAvailable();
@@ -18,9 +20,12 @@ export const useShouldShowAgentStudio = () => {
   const { isPreviewMode, setPreviewMode } = useAgentStudioPreviewMode();
 
   // When RBAC is off, treat everyone as an admin — they already have full access.
-  const isAdmin = !rbacEnabled || hasPermission('stored-agents:write');
+  const isAdmin = !rbacEnabled || hasPermission('*');
 
-  const showAgentStudio = isAgentStudioAvailable && (!isAdmin || isPreviewMode);
+  // Only users who can read stored agents participate in the agent studio.
+  const canUseStudio = hasPermission('stored-agents:read');
+
+  const showAgentStudio = isAgentStudioAvailable && canUseStudio && (!isAdmin || isPreviewMode);
 
   return {
     showAgentStudio,

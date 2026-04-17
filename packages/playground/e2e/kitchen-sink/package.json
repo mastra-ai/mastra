@@ -18,6 +18,7 @@
     "@mastra/libsql": "latest",
     "@mastra/editor": "latest",
     "@mastra/mcp": "latest",
+    "@mastra/studio-agent-builder": "latest",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -32,7 +33,8 @@
       "@mastra/memory": "link:../../../../packages/memory",
       "@mastra/libsql": "link:../../../../stores/libsql",
       "@mastra/editor": "link:../../../../packages/editor",
-      "@mastra/mcp": "link:../../../../packages/mcp"
+      "@mastra/mcp": "link:../../../../packages/mcp",
+      "@mastra/studio-agent-builder": "link:../../../../packages/studio-agent-builder"
     }
   },
   "packageManager": "pnpm@10.29.3"

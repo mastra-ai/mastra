@@ -12,6 +12,7 @@ overrides:
   '@mastra/libsql': link:../../../../stores/libsql
   '@mastra/editor': link:../../../../packages/editor
   '@mastra/mcp': link:../../../../packages/mcp
+  '@mastra/studio-agent-builder': link:../../../../packages/studio-agent-builder
 
 importers:
   .:
@@ -37,6 +38,9 @@ importers:
       '@mastra/memory':
         specifier: link:../../../memory
         version: link:../../../memory
+      '@mastra/studio-agent-builder':
+        specifier: link:../../../studio-agent-builder
+        version: link:../../../studio-agent-builder
       ai:
         specifier: 5.1.0-beta.13
         version: 5.1.0-beta.13(zod@4.3.6)

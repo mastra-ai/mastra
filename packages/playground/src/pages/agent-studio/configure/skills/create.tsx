@@ -17,7 +17,7 @@ export function AgentStudioConfigureSkillCreate() {
     try {
       const skill = await createStoredSkill.mutateAsync({
         name: values.name.trim(),
-        description: values.description.trim() || undefined,
+        description: values.description.trim(),
         instructions: values.instructions,
         license: values.license.trim() || undefined,
         authorId: user?.id,

@@ -2,6 +2,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { registerApiRoute } from '@mastra/core/server';
 import { MastraEditor } from '@mastra/editor';
 import { PinoLogger } from '@mastra/loggers';
+import { MastraAgentBuilder } from '@mastra/studio-agent-builder';
 
 import { weatherAgent, omAgent, omAdaptiveAgent } from './agents';
 import { simpleMcpServer } from './mcps';
@@ -19,6 +20,7 @@ export const mastra = new Mastra({
   }),
   storage,
   editor: new MastraEditor(),
+  agentBuilder: new MastraAgentBuilder(),
   mcpServers: {
     simpleMcpServer,
   },
