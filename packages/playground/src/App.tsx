@@ -30,6 +30,9 @@ import AgentStudioAgents from './pages/agent-studio/agents';
 import AgentStudioAgentChat from './pages/agent-studio/agents/chat';
 import AgentStudioAgentCreate from './pages/agent-studio/agents/create';
 import AgentStudioAgentEdit from './pages/agent-studio/agents/edit';
+import AgentStudioMarketplaceAgents from './pages/agent-studio/marketplace/agents';
+import AgentStudioMarketplaceSkills from './pages/agent-studio/marketplace/skills';
+import AgentStudioMarketplaceSkillDetail from './pages/agent-studio/marketplace/skills/detail';
 import { AgentStudioPlaceholder } from './pages/agent-studio/placeholder';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
@@ -352,22 +355,15 @@ const routes = [
       },
       {
         path: '/agent-studio/marketplace/agents',
-        element: (
-          <AgentStudioPlaceholder title="Marketplace — Agents" description="Discover agents built by your teammates." />
-        ),
+        element: <AgentStudioMarketplaceAgents />,
       },
       {
         path: '/agent-studio/marketplace/skills',
-        element: (
-          <AgentStudioPlaceholder
-            title="Marketplace — Skills"
-            description="Discover skills published by your teammates."
-          />
-        ),
+        element: <AgentStudioMarketplaceSkills />,
       },
       {
         path: '/agent-studio/marketplace/skills/:skillId',
-        element: <AgentStudioPlaceholder title="Skill details" />,
+        element: <AgentStudioMarketplaceSkillDetail />,
       },
       {
         path: '/agent-studio/configure',
