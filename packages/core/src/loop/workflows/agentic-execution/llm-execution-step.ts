@@ -9,6 +9,7 @@ import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { generateBackgroundTaskSystemPrompt } from '../../../background-tasks';
 import { getErrorFromUnknown } from '../../../error/utils.js';
+import { mergeProviderOptions } from '../../../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../../../llm/model/router';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import type { IMastraLogger } from '../../../logger';
@@ -740,7 +741,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         )(async (modelConfig, isLastModel) => {
           activeFallbackModelIndex = models.findIndex(candidate => candidate.id === modelConfig.id);
           const model = modelConfig.model;
-          executedStepModel = model.provider && model.modelId ? `${model.provider}/${model.modelId}` : undefined;
           const modelHeaders = modelConfig.headers;
           // Reset system messages to original before each step execution
           // This ensures that system message modifications in prepareStep/processInputStep/processors
@@ -821,6 +821,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 abortSignal: options?.abortSignal,
               });
               Object.assign(currentStep, processInputStepResult);
+              executedStepModel =
+                currentStep.model.provider && currentStep.model.modelId
+                  ? `${currentStep.model.provider}/${currentStep.model.modelId}`
+                  : undefined;
 
               // Update MODEL_GENERATION span if processor actually changed model or modelSettings
               const modelChanged = processInputStepResult.model && processInputStepResult.model !== model;
@@ -1056,15 +1060,20 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 execute({
                   runId,
                   model: currentStep.model,
-                  providerOptions: currentStep.providerOptions,
+                  // Per-model providerOptions deep-merge per provider key on top of call-time providerOptions
+                  providerOptions: mergeProviderOptions(currentStep.providerOptions, modelConfig.providerOptions),
                   inputMessages,
                   tools: currentStep.tools,
                   toolChoice: currentStep.toolChoice,
                   activeTools: currentStep.activeTools as string[] | undefined,
                   options,
-                  // Per-model maxRetries takes precedence over global modelSettings.maxRetries
-                  // This ensures p-retry uses the correct retry count for each model in the fallback chain
-                  modelSettings: { ...currentStep.modelSettings, maxRetries: modelConfig.maxRetries },
+                  // Per-model modelSettings shallow-merge on top of call-time modelSettings.
+                  // Per-model maxRetries always wins so p-retry uses the right retry count for this model.
+                  modelSettings: {
+                    ...currentStep.modelSettings,
+                    ...modelConfig.modelSettings,
+                    maxRetries: modelConfig.maxRetries,
+                  },
                   includeRawChunks,
                   structuredOutput: currentStep.structuredOutput,
                   // Merge headers: memory context first, then modelConfig headers, then modelSettings overrides
@@ -1292,7 +1301,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           };
         });
 
-      if (currentIteration > 1 && executedStepModel) {
+      if (executedStepModel) {
         messageList.enrichLastStepStart(executedStepModel);
       }
 

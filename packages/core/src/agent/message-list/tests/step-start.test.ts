@@ -144,6 +144,23 @@ describe('MessageList.stepStart', () => {
     expect(result).toBe(false);
   });
 
+  it('should not overwrite a step-start that already has a model attributed', () => {
+    const messageList = new MessageList();
+    const msg = makeAssistantMessage([
+      { type: 'text', text: 'hello' },
+      { type: 'step-start', createdAt: Date.now(), model: 'openai/gpt-4o' },
+    ]);
+    messageList.add(msg, 'response');
+
+    const result = messageList.enrichLastStepStart('anthropic/claude-opus-4-7');
+
+    expect(result).toBe(false);
+    expect(messageList.get.all.db()[0]?.content.parts.at(-1)).toMatchObject({
+      type: 'step-start',
+      model: 'openai/gpt-4o',
+    });
+  });
+
   it('preserves step-start metadata when merge inserts a synthetic step-start', () => {
     const messageList = new MessageList();
     const stepStartCreatedAt = 1234567890;
