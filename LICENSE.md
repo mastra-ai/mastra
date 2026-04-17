@@ -2,8 +2,9 @@ Portions of this software are licensed as follows:
 
 - All content that resides under any directory named "ee/" within this
   repository, including but not limited to:
+  - `packages/core/src/agent-builder/ee/`
   - `packages/core/src/auth/ee/`
-  - `packages/server/src/server/auth/ee/`
+  - `packages/studio-agent-builder/ee/`
     is licensed under the license defined in `ee/LICENSE`.
 
 - All third-party components incorporated into the Mastra Software are

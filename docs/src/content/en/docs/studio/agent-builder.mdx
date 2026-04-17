@@ -6,8 +6,6 @@ packages:
   - "@mastra/core"
 ---
 
-import { Callout } from "nextra/components";
-
 # Agent Builder
 
 Agent Builder is a Studio surface for non-engineer end users. Admins wire it onto the `Mastra` instance, and Studio switches to a focused sidebar with three sections:
@@ -18,9 +16,11 @@ Agent Builder is a Studio surface for non-engineer end users. Admins wire it ont
 
 Engineers and admins keep the full admin Studio by default, and can flip a **View as end-user** toggle from the user menu to preview the end-user surface.
 
-<Callout type="info">
-  Agent Builder is an Enterprise Edition feature. In production Mastra will refuse to start if a `MastraAgentBuilder` is attached without a valid `MASTRA_EE_LICENSE`. Development environments work without a license.
-</Callout>
+:::info
+
+Agent Builder is an Enterprise Edition feature. In production Mastra will refuse to start if a `MastraAgentBuilder` is attached without a valid `MASTRA_EE_LICENSE`. Development environments work without a license.
+
+:::
 
 ## Install
 

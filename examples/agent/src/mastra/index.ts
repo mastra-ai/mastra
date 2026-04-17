@@ -2,6 +2,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { registerApiRoute } from '@mastra/core/server';
 import { MastraCompositeStore, FilesystemStore, InMemoryDB, InMemoryStore } from '@mastra/core/storage';
 import { MastraEditor } from '@mastra/editor';
+import { MastraAgentBuilder } from '@mastra/studio-agent-builder';
 import { LibSQLStore } from '@mastra/libsql';
 import { DuckDBStore } from '@mastra/duckdb';
 
@@ -133,6 +134,19 @@ export const mastra = new Mastra({
     toolProviders: {
       composio: new ComposioToolProvider({ apiKey: '' }),
     },
+  }),
+  agentBuilder: new MastraAgentBuilder({
+    enabledSections: ['tools', 'memory', 'skills'],
+    marketplace: {
+      enabled: true,
+      showAgents: true,
+      showSkills: true,
+    },
+    configure: {
+      allowSkillCreation: true,
+      allowAppearance: true,
+    },
+    recents: { maxItems: 5 },
   }),
   observability: new Observability({
     configs: {

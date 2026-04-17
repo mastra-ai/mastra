@@ -22,9 +22,20 @@ export interface ChatThreadsProps {
   onDelete: (threadId: string) => void;
   resourceId: string;
   resourceType: 'agent' | 'network';
+  newThreadUrl?: string;
+  threadUrl?: (threadId: string) => string;
 }
 
-export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId, resourceType }: ChatThreadsProps) => {
+export const ChatThreads = ({
+  threads,
+  isLoading,
+  threadId,
+  onDelete,
+  resourceId,
+  resourceType,
+  newThreadUrl,
+  threadUrl,
+}: ChatThreadsProps) => {
   const { Link, paths } = useLinkComponent();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const { canDelete } = usePermissions();
@@ -37,7 +48,8 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
   }
 
   const newThreadLink =
-    resourceType === 'agent' ? paths.agentNewThreadLink(resourceId) : paths.networkNewThreadLink(resourceId);
+    newThreadUrl ??
+    (resourceType === 'agent' ? paths.agentNewThreadLink(resourceId) : paths.networkNewThreadLink(resourceId));
 
   return (
     <div className="overflow-y-auto h-full w-full">
@@ -63,8 +75,9 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
           {threads.map(thread => {
             const isActive = thread.id === threadId;
 
-            const threadLink =
-              resourceType === 'agent'
+            const threadLink = threadUrl
+              ? threadUrl(thread.id)
+              : resourceType === 'agent'
                 ? paths.agentThreadLink(resourceId, thread.id)
                 : paths.networkThreadLink(resourceId, thread.id);
 

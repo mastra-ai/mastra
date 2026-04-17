@@ -13,6 +13,7 @@ overrides:
   '@mastra/core': link:../../packages/core
   '@mastra/duckdb': link:../../stores/duckdb
   '@mastra/editor': link:../../packages/editor
+  '@mastra/studio-agent-builder': link:../../packages/studio-agent-builder
   '@mastra/loggers': link:../../packages/loggers
   '@mastra/voice-openai': link:../../voice/openai
   '@mastra/memory': link:../../packages/memory
@@ -88,6 +89,9 @@ importers:
       '@mastra/observability':
         specifier: link:../../observability/mastra
         version: link:../../observability/mastra
+      '@mastra/studio-agent-builder':
+        specifier: link:../../packages/studio-agent-builder
+        version: link:../../packages/studio-agent-builder
       '@mastra/voice-openai':
         specifier: link:../../voice/openai
         version: link:../../voice/openai
