@@ -20,7 +20,7 @@ pnpm test <codemod-name>
 Files scaffold creates
 src/codemods/v1/<codemod-name>.ts
 src/test/<codemod-name>.test.ts
-src/test/**fixtures**/<codemod-name>.input.ts
-src/test/**fixtures**/<codemod-name>.output.ts
+`src/test/__fixtures__/<codemod-name>.input.ts`
+`src/test/__fixtures__/<codemod-name>.output.ts`
 
 If you need implementation patterns method renames import rewrites property transforms or fixture templates read .claude/skills/codemod-patterns/SKILL.md
