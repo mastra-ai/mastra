@@ -1,5 +1,30 @@
 # mastracode
 
+## 0.15.0-alpha.4
+
+### Patch Changes
+
+- Fixed the observational memory reflection activation label in MastraCode so it describes the actual change to the observation pool. ([#15462](https://github.com/mastra-ai/mastra/pull/15462))
+
+  Reflection activations now render as `before → after obs tokens (-delta)` instead of implying that message tokens were removed. Observation activations still use the existing `-X msg tokens, +Y obs tokens` format.
+
+- Updated the default Anthropic mode pack models. Users signed in with an Anthropic Max subscription now get `claude-opus-4-7` for `build` and `plan`, and API-key users get `claude-sonnet-4-6` for `build` and `plan`. The `fast` model is unchanged. ([#15458](https://github.com/mastra-ai/mastra/pull/15458))
+
+- Improved observational memory activation output to show when a provider or model switch triggered buffered observation activation. ([#15420](https://github.com/mastra-ai/mastra/pull/15420))
+
+- Updated dependencies [[`0474c2b`](https://github.com/mastra-ai/mastra/commit/0474c2b2e7c7e1ad8691dca031284841391ff1ef), [`f607106`](https://github.com/mastra-ai/mastra/commit/f607106854c6416c4a07d4082604b9f66d047221), [`f607106`](https://github.com/mastra-ai/mastra/commit/f607106854c6416c4a07d4082604b9f66d047221), [`62919a6`](https://github.com/mastra-ai/mastra/commit/62919a6ee0fbf3779ad21a97b1ec6696515d5104), [`0fd90a2`](https://github.com/mastra-ai/mastra/commit/0fd90a215caf5fca8099c15a67ca03e4427747a3), [`0fd90a2`](https://github.com/mastra-ai/mastra/commit/0fd90a215caf5fca8099c15a67ca03e4427747a3)]:
+  - @mastra/core@1.26.0-alpha.4
+  - @mastra/memory@1.16.0-alpha.2
+
+## 0.15.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`fdd54cf`](https://github.com/mastra-ai/mastra/commit/fdd54cf612a9af876e9fdd85e534454f6e7dd518), [`30456b6`](https://github.com/mastra-ai/mastra/commit/30456b6b08c8fd17e109dd093b73d93b65e83bc5), [`9d11a8c`](https://github.com/mastra-ai/mastra/commit/9d11a8c1c8924eb975a245a5884d40ca1b7e0491), [`d246696`](https://github.com/mastra-ai/mastra/commit/d246696139a3144a5b21b042d41c532688e957e1), [`354f9ce`](https://github.com/mastra-ai/mastra/commit/354f9ce1ca6af2074b6a196a23f8ec30012dccca), [`e9837b5`](https://github.com/mastra-ai/mastra/commit/e9837b53699e18711b09e0ca010a4106376f2653)]:
+  - @mastra/core@1.26.0-alpha.3
+  - @mastra/mcp@1.5.1-alpha.1
+  - @mastra/memory@1.16.0-alpha.1
+
 ## 0.15.0-alpha.2
 
 ### Minor Changes

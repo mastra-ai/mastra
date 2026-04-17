@@ -207,9 +207,11 @@ export function createActivationMarker(params: {
   threadId: string;
   generationCount: number;
   observations?: string;
-  triggeredBy?: 'threshold' | 'ttl';
+  triggeredBy?: 'threshold' | 'ttl' | 'provider_change';
   lastActivityAt?: number;
   ttlExpiredMs?: number;
+  previousModel?: string;
+  currentModel?: string;
   config: ObservationMarkerConfig;
 }): DataOmActivationPart {
   return {
@@ -230,6 +232,8 @@ export function createActivationMarker(params: {
       triggeredBy: params.triggeredBy,
       lastActivityAt: params.lastActivityAt,
       ttlExpiredMs: params.ttlExpiredMs,
+      previousModel: params.previousModel,
+      currentModel: params.currentModel,
     },
   };
 }

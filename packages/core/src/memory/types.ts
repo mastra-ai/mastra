@@ -740,6 +740,12 @@ export interface ObservationalMemoryOptions {
   activateAfterIdle?: number | string;
 
   /**
+   * Force-activate buffered observations and reflections when the actor provider/model changes.
+   * Useful when switching between models that do not share prompt caches.
+   */
+  activateOnProviderChange?: boolean;
+
+  /**
    * Share the token budget between messages and observations.
    * When true, the total budget = observation.messageTokens + reflection.observationTokens.
    * - Messages can use more space when observations are small
@@ -1175,6 +1181,9 @@ export type SerializedObservationalMemoryConfig = {
 
   /** Inactivity TTL before forcing buffered observation/reflection activation */
   activateAfterIdle?: number | string;
+
+  /** Force-activate buffered observation/reflection activation when the actor model changes */
+  activateOnProviderChange?: boolean;
 
   /** Share the token budget between messages and observations */
   shareTokenBudget?: boolean;

@@ -77,6 +77,11 @@ export type OMMarkerData =
       ttlExpiredMs: number;
     }
   | {
+      type: 'om_activation_provider_change';
+      previousModel: string;
+      currentModel: string;
+    }
+  | {
       type: 'om_thread_title_updated';
       oldTitle?: string;
       newTitle: string;
@@ -149,16 +154,27 @@ function formatMarker(data: OMMarkerData): string {
       return theme.fg('error', `  ✗ Buffering ${label.toLowerCase()} failed: ${data.error}`);
     }
     case 'om_activation': {
-      const kind = data.operationType === 'reflection' ? 'reflection' : 'observations';
+      if (data.operationType === 'reflection') {
+        // For reflection, tokensActivated = obs tokens before, observationTokens = obs tokens after.
+        // Reflection compresses observations in place — no message tokens move.
+        const before = formatTokens(data.tokensActivated);
+        const after = formatTokens(data.observationTokens);
+        const delta = data.tokensActivated - data.observationTokens;
+        const deltaStr = delta > 0 ? ` (-${formatTokens(delta)})` : delta < 0 ? ` (+${formatTokens(-delta)})` : '';
+        return theme.fg('success', `  ✓ Activated reflection: ${before} → ${after} obs tokens${deltaStr}`);
+      }
       const msgTokens = formatTokens(data.tokensActivated);
       const obsTokens = formatTokens(data.observationTokens);
-      return theme.fg('success', `  ✓ Activated ${kind}: -${msgTokens} msg tokens, +${obsTokens} obs tokens`);
+      return theme.fg('success', `  ✓ Activated observations: -${msgTokens} msg tokens, +${obsTokens} obs tokens`);
     }
     case 'om_activation_ttl': {
       return theme.fg(
         'muted',
         `  Idle timeout (${formatDuration(data.activateAfterIdle)}) exceeded by ${formatDuration(data.ttlExpiredMs)}, activating observations`,
       );
+    }
+    case 'om_activation_provider_change': {
+      return theme.fg('muted', `  Model changed ${data.previousModel} → ${data.currentModel}, activating observations`);
     }
     case 'om_thread_title_updated': {
       return theme.fg('muted', `  thread title updated: ${data.newTitle}`);

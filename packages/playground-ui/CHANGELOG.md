@@ -1,5 +1,39 @@
 # @mastra/playground-ui
 
+## 22.1.3-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`0474c2b`](https://github.com/mastra-ai/mastra/commit/0474c2b2e7c7e1ad8691dca031284841391ff1ef), [`f607106`](https://github.com/mastra-ai/mastra/commit/f607106854c6416c4a07d4082604b9f66d047221), [`62919a6`](https://github.com/mastra-ai/mastra/commit/62919a6ee0fbf3779ad21a97b1ec6696515d5104), [`0fd90a2`](https://github.com/mastra-ai/mastra/commit/0fd90a215caf5fca8099c15a67ca03e4427747a3)]:
+  - @mastra/core@1.26.0-alpha.4
+  - @mastra/client-js@1.13.5-alpha.4
+  - @mastra/react@0.2.27-alpha.4
+
+## 22.1.3-alpha.3
+
+### Patch Changes
+
+- Added a dedicated trace details page at `/traces/:traceId`, plus the design-system changes that support it: ([#15392](https://github.com/mastra-ai/mastra/pull/15392))
+  - `Button`: new `link` variant (inline, no padding/background/border).
+  - `DataKeysAndValues`: `numOfCol` now accepts `3`.
+  - `DataPanel.Header`: minimum height so heading-only headers match the height of ones with button actions.
+
+- Fix unhandled `TypeError` in `getFileContentType` when the URL is relative ([#15433](https://github.com/mastra-ai/mastra/pull/15433))
+  or malformed. The `catch` block now falls back to inferring the MIME type
+  from the raw string's file extension and strips query/hash fragments so
+  inputs like `/files/report.pdf`, `https://x.dev/a.pdf?token=1`, and
+  `/files/report.pdf#page=2` all resolve to `application/pdf` instead of
+  rejecting.
+
+  Closes #15432.
+
+- Improved visual consistency across Chip, DropdownMenu, Notification, Popover, and toast components — unified radius and border scale. Deduplicated dropdown menu item classes and added max-height scroll handling for long menus. ([#15440](https://github.com/mastra-ai/mastra/pull/15440))
+
+- Updated dependencies [[`fdd54cf`](https://github.com/mastra-ai/mastra/commit/fdd54cf612a9af876e9fdd85e534454f6e7dd518), [`d647793`](https://github.com/mastra-ai/mastra/commit/d647793010ab4de60bb524769a51cd32d7eba8d3), [`30456b6`](https://github.com/mastra-ai/mastra/commit/30456b6b08c8fd17e109dd093b73d93b65e83bc5), [`9d11a8c`](https://github.com/mastra-ai/mastra/commit/9d11a8c1c8924eb975a245a5884d40ca1b7e0491), [`d246696`](https://github.com/mastra-ai/mastra/commit/d246696139a3144a5b21b042d41c532688e957e1), [`354f9ce`](https://github.com/mastra-ai/mastra/commit/354f9ce1ca6af2074b6a196a23f8ec30012dccca), [`e9837b5`](https://github.com/mastra-ai/mastra/commit/e9837b53699e18711b09e0ca010a4106376f2653)]:
+  - @mastra/core@1.26.0-alpha.3
+  - @mastra/client-js@1.13.5-alpha.3
+  - @mastra/react@0.2.27-alpha.3
+
 ## 22.1.3-alpha.2
 
 ### Patch Changes

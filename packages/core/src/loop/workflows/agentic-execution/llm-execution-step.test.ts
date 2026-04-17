@@ -104,13 +104,11 @@ describe('createLLMExecutionStep gateway provider tools', () => {
   });
 
   it('should infer providerExecuted for gateway tools and not merge streamed results onto toolCalls', async () => {
-    const executeSpy = vi.fn();
     const tools = {
       perplexitySearch: {
         type: 'provider' as const,
         id: 'gateway.perplexity_search',
         args: {},
-        execute: executeSpy,
       },
     };
 
@@ -245,7 +243,6 @@ describe('createLLMExecutionStep gateway provider tools', () => {
 
     expect(toolResult).toEqual(toolCallById['call-1']);
     expect(toolResult.result).toBeUndefined();
-    expect(executeSpy).not.toHaveBeenCalled();
   });
 
   it('merges model config headers with explicit modelSettings headers and lets modelSettings override duplicates', async () => {
@@ -492,6 +489,124 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(doStream.mock.calls[0]?.[0]?.headers).toEqual({
       'x-thread-id': 'thread-123',
       'x-resource-id': 'resource-456',
+    });
+  });
+
+  it('stamps step-start.model from the processor-updated model', async () => {
+    const initialDoStream = vi.fn(async () => ({
+      stream: convertArrayToReadableStream([]),
+      request: {},
+      response: { headers: undefined },
+      warnings: [],
+    }));
+    const overrideDoStream = vi.fn(async () => ({
+      stream: convertArrayToReadableStream([
+        {
+          type: 'response-metadata',
+          id: 'resp-override',
+          modelId: 'override-model-id',
+          timestamp: new Date(0),
+        },
+        {
+          type: 'text-start',
+          id: 'text-1',
+        },
+        {
+          type: 'text-delta',
+          id: 'text-1',
+          delta: 'hello from override model',
+        },
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: testUsage,
+        },
+      ]),
+      request: {},
+      response: {
+        headers: undefined,
+      },
+      warnings: [],
+    }));
+    const overrideModel = {
+      specificationVersion: 'v2' as const,
+      provider: 'override-provider',
+      modelId: 'override-model-id',
+      supportedUrls: {},
+      doGenerate: vi.fn(),
+      doStream: overrideDoStream,
+    };
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'initial-provider',
+            modelId: 'initial-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: initialDoStream,
+          } as any,
+        },
+      ],
+      inputProcessors: [
+        {
+          id: 'override-model',
+          processInputStep: vi.fn(async () => ({
+            model: overrideModel as any,
+          })),
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const firstInput = createIterationInput();
+    firstInput.stepResult.isContinued = false;
+
+    await llmExecutionStep.execute(createExecuteParams(firstInput));
+
+    const secondInput = createIterationInput();
+    secondInput.stepResult.isContinued = false;
+    secondInput.output.steps = [{} as any];
+
+    await llmExecutionStep.execute(createExecuteParams(secondInput));
+
+    expect(initialDoStream).not.toHaveBeenCalled();
+    expect(overrideDoStream).toHaveBeenCalledTimes(2);
+
+    const assistantMessage = messageList.get.all
+      .db()
+      .find(message => message.role === 'assistant' && message.content.parts.some(part => part.type === 'step-start'));
+    const stepStartPart = assistantMessage?.content.parts.find(part => part.type === 'step-start');
+
+    expect(stepStartPart).toMatchObject({
+      type: 'step-start',
+      model: 'override-provider/override-model-id',
     });
   });
 

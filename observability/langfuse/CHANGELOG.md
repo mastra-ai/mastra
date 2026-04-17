@@ -1,5 +1,20 @@
 # @mastra/langfuse
 
+## 1.2.0-alpha.1
+
+### Minor Changes
+
+- Added new attribute mappings to the Langfuse exporter so more Mastra attributes are filterable in Langfuse's UI. ([#15445](https://github.com/mastra-ai/mastra/pull/15445))
+
+  **Observation-level metadata** — `gen_ai.agent.id`, `gen_ai.agent.name`, `mastra.span.type`, and `gen_ai.operation.name` are now mapped to `langfuse.observation.metadata.*`, making them top-level filterable keys on each observation. This lets you scope Langfuse evaluators to specific agents or span types.
+
+  **Trace-level attributes** — `mastra.metadata.traceName` and `mastra.metadata.version` are now mapped to `langfuse.trace.name` and `langfuse.trace.version`, enabling custom trace names and version-based filtering.
+
+### Patch Changes
+
+- Updated dependencies [[`0474c2b`](https://github.com/mastra-ai/mastra/commit/0474c2b2e7c7e1ad8691dca031284841391ff1ef), [`f607106`](https://github.com/mastra-ai/mastra/commit/f607106854c6416c4a07d4082604b9f66d047221), [`62919a6`](https://github.com/mastra-ai/mastra/commit/62919a6ee0fbf3779ad21a97b1ec6696515d5104), [`0fd90a2`](https://github.com/mastra-ai/mastra/commit/0fd90a215caf5fca8099c15a67ca03e4427747a3)]:
+  - @mastra/core@1.26.0-alpha.4
+
 ## 1.1.4-alpha.0
 
 ### Patch Changes
