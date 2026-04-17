@@ -1,9 +1,9 @@
-import React from 'react';
 import * as HoverCard from '@radix-ui/react-hover-card';
-import { cn } from '@/lib/utils';
-import { useLinkComponent } from '@/lib/framework';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { ChevronRightIcon } from 'lucide-react';
+import React from 'react';
+import type { LinkComponent } from '@/ds/types/link-component';
+import { cn } from '@/lib/utils';
 
 export type KeyValueListItemValue = {
   id: string;
@@ -23,14 +23,13 @@ export type KeyValueListItemData = {
 type Value = React.ReactNode | KeyValueListItemValue[];
 export type KeyValueListProps = {
   data: KeyValueListItemData[];
-  LinkComponent: React.ComponentType;
   labelsAreHidden?: boolean;
   className?: string;
   isLoading?: boolean;
+  LinkComponent?: LinkComponent;
 };
 
-export function KeyValueList({ data, LinkComponent, className, labelsAreHidden, isLoading }: KeyValueListProps) {
-  const { Link } = useLinkComponent();
+export function KeyValueList({ data, className, labelsAreHidden, isLoading, LinkComponent: Link }: KeyValueListProps) {
   const LabelWrapper = ({ children }: { children: React.ReactNode }) => {
     return labelsAreHidden ? <VisuallyHidden>{children}</VisuallyHidden> : children;
   };
@@ -81,15 +80,25 @@ export function KeyValueList({ data, LinkComponent, className, labelsAreHidden, 
                 </span>
               ) : isValueItemArray ? (
                 value?.map(item => {
-                  return item.path ? (
-                    <RelationWrapper description={item.description} key={item.id}>
-                      <Link href={item.path}>
-                        {item?.name} <ChevronRightIcon />
-                      </Link>
-                    </RelationWrapper>
-                  ) : (
-                    <span key={item.id}>{item?.name}</span>
-                  );
+                  if (item.path && Link) {
+                    return (
+                      <RelationWrapper description={item.description} key={item.id}>
+                        <Link href={item.path}>
+                          {item?.name} <ChevronRightIcon />
+                        </Link>
+                      </RelationWrapper>
+                    );
+                  }
+                  if (item.path) {
+                    return (
+                      <RelationWrapper description={item.description} key={item.id}>
+                        <a href={item.path}>
+                          {item?.name} <ChevronRightIcon />
+                        </a>
+                      </RelationWrapper>
+                    );
+                  }
+                  return <span key={item.id}>{item?.name}</span>;
                 })
               ) : (
                 <>{value ? value : <span className="text-neutral3 text-ui-sm">n/a</span>}</>

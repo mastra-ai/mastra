@@ -916,6 +916,9 @@ if (process.env.E2B_API_KEY) {
         // Ignore cleanup errors
       }
     },
+    killSandboxExternally: async sb => {
+      await (sb as E2BSandbox).e2b.kill();
+    },
     capabilities: {
       supportsMounting: true,
       supportsReconnection: true,

@@ -17,7 +17,7 @@ A SpanOutputProcessor that redacts sensitive information from span fields.
 new SensitiveDataFilter(options?: SensitiveDataFilterOptions)
 ```
 
-## SensitiveDataFilterOptions
+## `SensitiveDataFilterOptions`
 
 ```typescript
 interface SensitiveDataFilterOptions {
@@ -70,7 +70,7 @@ interface SensitiveDataFilterOptions {
 ]}
 />
 
-## RedactionStyle
+## `RedactionStyle`
 
 ```typescript
 type RedactionStyle = 'full' | 'partial'
@@ -113,7 +113,7 @@ No cleanup needed for this processor.
 readonly name = 'sensitive-data-filter';
 ```
 
-## Default Sensitive Fields
+## Default sensitive fields
 
 When no custom fields are provided:
 
@@ -137,7 +137,7 @@ When no custom fields are provided:
 ]
 ```
 
-## Processing Behavior
+## Processing behavior
 
 ### Field Matching
 
@@ -145,7 +145,7 @@ When no custom fields are provided:
 - **Separator-agnostic**: `api-key`, `api_key`, `apiKey` are treated identically
 - **Exact matching**: After normalization, fields must match exactly
   - `token` matches `token`, `Token`, `TOKEN`
-  - `token` does NOT match `promptTokens` or `tokenCount`
+  - `token` doesn't match `promptTokens` or `tokenCount`
 
 ### Redaction Styles
 
@@ -159,7 +159,7 @@ All matched values replaced with redactionToken.
 - Values ≤ 6 characters are fully redacted
 - Non-string values are converted to strings before partial redaction
 
-### Error Handling
+### Error handling
 
 If filtering a field fails, the field is replaced with:
 

@@ -5,7 +5,9 @@ import type {
   LanguageModelV2Prompt,
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider';
-import { wrapLanguageModel } from '@internal/ai-sdk-v5';
+import { wrapLanguageModel as wrapLanguageModelV5 } from '@internal/ai-sdk-v5';
+import type { LanguageModelV3, LanguageModelMiddleware as LanguageModelV3Middleware } from '@internal/ai-v6';
+import { wrapLanguageModel as wrapLanguageModelV6 } from '@internal/ai-v6';
 import { MessageList, TripWire, aiV5ModelMessageToV2PromptMessage } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
@@ -14,6 +16,7 @@ import { MessageHistory, SemanticRecall, WorkingMemory } from '@mastra/core/proc
 import type {
   InputProcessor,
   OutputProcessor,
+  OutputResult,
   ProcessInputArgs,
   ProcessOutputResultArgs,
   ProcessOutputStreamArgs,
@@ -157,7 +160,12 @@ export interface WithMastraOptions {
  * });
  * ```
  */
-export function withMastra(model: LanguageModelV2, options: WithMastraOptions = {}): LanguageModelV2 {
+export function withMastra(model: LanguageModelV2, options?: WithMastraOptions): LanguageModelV2;
+export function withMastra(model: LanguageModelV3, options?: WithMastraOptions): LanguageModelV3;
+export function withMastra(
+  model: LanguageModelV2 | LanguageModelV3,
+  options: WithMastraOptions = {},
+): LanguageModelV2 | LanguageModelV3 {
   const { memory, inputProcessors = [], outputProcessors = [] } = options;
 
   // Build the list of processors
@@ -220,18 +228,29 @@ export function withMastra(model: LanguageModelV2, options: WithMastraOptions = 
     }
   }
 
-  return wrapLanguageModel({
+  const middleware = createProcessorMiddleware({
+    inputProcessors: allInputProcessors,
+    outputProcessors: allOutputProcessors,
+    memory: memory
+      ? {
+          threadId: memory.threadId,
+          resourceId: memory.resourceId,
+        }
+      : undefined,
+  });
+
+  if (model.specificationVersion === 'v3') {
+    return wrapLanguageModelV6({
+      model,
+      // withMastra supports v3 models at the wrapper level, while the
+      // lower-level processor middleware remains v2-oriented for now.
+      middleware: middleware as unknown as LanguageModelV3Middleware,
+    });
+  }
+
+  return wrapLanguageModelV5({
     model,
-    middleware: createProcessorMiddleware({
-      inputProcessors: allInputProcessors,
-      outputProcessors: allOutputProcessors,
-      memory: memory
-        ? {
-            threadId: memory.threadId,
-            resourceId: memory.resourceId,
-          }
-        : undefined,
-    }),
+    middleware,
   });
 }
 
@@ -451,9 +470,6 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
   return {
     middlewareVersion: 'v2',
 
-    /**
-     * Transform params runs input processors (processInput)
-     */
     async transformParams({ params }) {
       // Create a real MessageList with memory context
       const messageList = new MessageList({
@@ -524,10 +540,6 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
         },
       };
     },
-
-    /**
-     * Wrap generate for non-streaming output processing
-     */
     async wrapGenerate({ doGenerate, params }) {
       // Check for tripwire from transformParams
       const processorState = params.providerOptions?.mastraProcessors as ProcessorMiddlewareState | undefined;
@@ -597,6 +609,13 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
               messages: messageList.get.all.db(),
               messageList,
               state: {},
+              result: {
+                text: '',
+                usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+                finishReason: 'unknown',
+                steps: [],
+              },
+              retryCount: 0,
               requestContext,
               abort: (reason?: string): never => {
                 throw new TripWire(reason || 'Aborted by processor');
@@ -627,10 +646,6 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
         content: [{ type: 'text' as const, text: processedText }],
       };
     },
-
-    /**
-     * Wrap stream for streaming output processing
-     */
     async wrapStream({ doStream, params }) {
       // Check for tripwire from transformParams
       const processorState = params.providerOptions?.mastraProcessors as ProcessorMiddlewareState | undefined;
@@ -762,10 +777,26 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
               if (!processor.processOutputResult) continue;
               try {
                 const procState = processorStates.get(processor.id);
+                const finishChunk = (procState?.streamParts ?? []).find(p => p.type === 'finish') as any;
+                const outputResult: OutputResult = {
+                  text: (procState?.streamParts ?? [])
+                    .filter(p => p.type === 'text-delta')
+                    .map(p => (p as any).payload?.text ?? '')
+                    .join(''),
+                  usage: finishChunk?.payload?.output?.usage ?? {
+                    inputTokens: 0,
+                    outputTokens: 0,
+                    totalTokens: 0,
+                  },
+                  finishReason: finishChunk?.payload?.stepResult?.reason ?? 'unknown',
+                  steps: [],
+                };
                 await processor.processOutputResult({
                   messages: messageList.get.all.db(),
                   messageList,
                   state: procState?.customState ?? {},
+                  result: outputResult,
+                  retryCount: 0,
                   requestContext,
                   abort: (reason?: string): never => {
                     throw new TripWire(reason || 'Aborted by processor');

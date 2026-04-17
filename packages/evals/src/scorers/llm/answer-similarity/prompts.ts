@@ -56,7 +56,7 @@ Matching Guidelines:
 - "semantic": The same concept or fact expressed differently but with equivalent meaning
 - "partial": Some overlap but missing important details or context
 - "missing": No corresponding information found in the output
-- "contradiction": Information that directly conflicts with the ground truth (wrong facts, incorrect names, false claims)
+- For factually incorrect information (wrong facts, incorrect names), mark the match as "missing" and add it to the "contradictions" array
 
 CRITICAL: If the output contains factually incorrect information (wrong names, wrong facts, opposite claims), you MUST identify contradictions and mark relevant matches as "missing" while adding entries to the contradictions array.
 

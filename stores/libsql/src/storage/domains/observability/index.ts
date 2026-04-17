@@ -41,6 +41,12 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
 
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_SPANS, schema: SPAN_SCHEMA });
+    // Add requestContext column for backwards compatibility with existing databases
+    await this.#db.alterTable({
+      tableName: TABLE_SPANS,
+      schema: SPAN_SCHEMA,
+      ifNotExists: ['requestContext'],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -245,7 +251,8 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     // Parse args through schema to apply defaults
     const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
-    const { page, perPage } = pagination;
+    const page = pagination?.page ?? 0;
+    const perPage = pagination?.perPage ?? 10;
 
     const tableName = parseSqlIdentifier(TABLE_SPANS, 'table name');
 
@@ -424,8 +431,8 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
       //   - ASC: NULLs first (natural)
       //   - DESC: NULLs last (natural)
       // So we need CASE WHEN workarounds to invert the natural behavior for endedAt
-      const sortField = orderBy.field;
-      const sortDirection = orderBy.direction;
+      const sortField = orderBy?.field ?? 'startedAt';
+      const sortDirection = orderBy?.direction ?? 'DESC';
       let orderByClause: string;
       if (sortField === 'endedAt') {
         // endedAt DESC: want NULLs first (running spans on top) - need CASE WHEN

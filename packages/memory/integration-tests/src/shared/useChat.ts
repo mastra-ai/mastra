@@ -1,8 +1,11 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { mkdtemp } from 'node:fs/promises';
 import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { useChat } from '@ai-sdk/react';
+import { hasRealApiKey } from '@internal/test-utils';
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import { MastraClient } from '@mastra/client-js';
 import { AIV4Adapter, AIV5Adapter } from '@mastra/core/agent/message-list';
@@ -12,8 +15,12 @@ import { DefaultChatTransport, isToolUIPart, lastAssistantMessageIsCompleteWithT
 import type { UIMessage } from 'ai-v5';
 import { JSDOM } from 'jsdom';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { weatherAgent } from '../v4/mastra/agents/weather';
-import { weatherAgent as weatherAgentV5 } from '../v5/mastra/agents/weather';
+import { createWeatherAgent } from '../v4/mastra/agents/weather';
+import { createWeatherAgent as createWeatherAgentV5 } from '../v5/mastra/agents/weather';
+
+// These tests spawn a child Mastra server process, so MSW can't intercept
+// the LLM requests. They require real API keys.
+const skipUseChatTests = !hasRealApiKey('openai');
 
 // Set up JSDOM environment for React testing
 const dom = new JSDOM('<!doctype html><html><body></body></html>', {
@@ -44,14 +51,18 @@ async function getAvailablePort(): Promise<number> {
 }
 
 export function setupUseChatV4() {
-  describe('should stream via useChat after tool call', () => {
+  describe.skipIf(skipUseChatTests)('should stream via useChat after tool call', () => {
     let mastraServer: ReturnType<typeof spawn>;
     let port: number;
+    let agent: ReturnType<typeof createWeatherAgent>;
+    let dbPath: string;
     const threadId = randomUUID();
     const resourceId = 'test-resource';
 
     beforeAll(async () => {
       port = await getAvailablePort();
+      dbPath = path.join(await mkdtemp(path.join(tmpdir(), `usechat-v4-${Date.now()}-`)), 'mastra.db');
+      agent = createWeatherAgent({ dbPath });
 
       const mastraDir = path.resolve(import.meta.dirname, `..`, `v4`, `mastra`);
       mastraServer = spawn(
@@ -68,6 +79,7 @@ export function setupUseChatV4() {
           env: {
             ...process.env,
             PORT: port.toString(),
+            MEMORY_TEST_DB_PATH: dbPath,
           },
         },
       );
@@ -160,13 +172,13 @@ export function setupUseChatV4() {
       let error: Error | null = null;
       const threadId = randomUUID();
 
-      await weatherAgent.generateLegacy(`hi`, {
+      await agent.generateLegacy(`hi`, {
         threadId,
         resourceId,
       });
-      await weatherAgent.generateLegacy(`LA weather`, { threadId, resourceId });
+      await agent.generateLegacy(`LA weather`, { threadId, resourceId });
 
-      const agentMemory = (await weatherAgent.getMemory())!;
+      const agentMemory = (await agent.getMemory())!;
       // Get initial messages from memory and convert to AI SDK v4 format
       const { messages } = await agentMemory.recall({ threadId });
       const initialMessages = messages.map(m => AIV4Adapter.toUIMessage(m)) as Message[];
@@ -269,14 +281,18 @@ export function setupUseChatV4() {
 }
 
 export function setupUseChatV5Plus({ useChatFunc, version }: { useChatFunc: any; version: 'v5' | 'v6' }) {
-  describe('should stream via useChat after tool call (v5+)', () => {
+  describe.skipIf(skipUseChatTests)('should stream via useChat after tool call (v5+)', () => {
     let mastraServer: ReturnType<typeof spawn>;
     let port: number;
+    let agent: ReturnType<typeof createWeatherAgentV5>;
+    let dbPath: string;
     const threadId = randomUUID();
     const resourceId = 'test-resource';
 
     beforeAll(async () => {
       port = await getAvailablePort();
+      dbPath = path.join(await mkdtemp(path.join(tmpdir(), `usechat-${version}-${Date.now()}-`)), 'mastra.db');
+      agent = createWeatherAgentV5({ dbPath });
 
       const mastraDir = path.resolve(import.meta.dirname, `..`, version, `mastra`);
       mastraServer = spawn(
@@ -293,6 +309,7 @@ export function setupUseChatV5Plus({ useChatFunc, version }: { useChatFunc: any;
           env: {
             ...process.env,
             PORT: port.toString(),
+            MEMORY_TEST_DB_PATH: dbPath,
           },
         },
       );
@@ -388,11 +405,11 @@ export function setupUseChatV5Plus({ useChatFunc, version }: { useChatFunc: any;
       let error: Error | null = null;
       const localThreadId = randomUUID();
 
-      await weatherAgentV5.generate(`hi`, {
+      await agent.generate(`hi`, {
         memory: { thread: localThreadId, resource: resourceId },
       });
 
-      const agentMemory = (await weatherAgentV5.getMemory())!;
+      const agentMemory = (await agent.getMemory())!;
       const dbMessages = (await agentMemory.recall({ threadId: localThreadId })).messages;
       const initialMessages = dbMessages.map(m => AIV5Adapter.toUIMessage(m));
       const state = { clipboard: '' };

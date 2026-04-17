@@ -202,6 +202,16 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
               }
             } else if (iterationResult.continue === false && !hasFinishedSteps) {
               hasFinishedSteps = true;
+            } else if (
+              iterationResult.continue === true &&
+              (hasFinishedSteps || !typedInputData.stepResult?.isContinued)
+            ) {
+              if ((rest.maxSteps && accumulatedSteps.length < rest.maxSteps) || !rest.maxSteps) {
+                hasFinishedSteps = false;
+                if (typedInputData.stepResult) {
+                  typedInputData.stepResult.isContinued = true;
+                }
+              }
             }
           }
         } catch (error) {

@@ -25,9 +25,8 @@ import {
   DELETE_THREAD_NETWORK_ROUTE,
   DELETE_MESSAGES_NETWORK_ROUTE,
 } from '../../handlers/memory';
-import type { ServerRoute } from '.';
 
-export const MEMORY_ROUTES: ServerRoute<any, any, any>[] = [
+export const MEMORY_ROUTES = [
   GET_MEMORY_STATUS_ROUTE,
   GET_MEMORY_CONFIG_ROUTE,
   GET_OBSERVATIONAL_MEMORY_ROUTE,
@@ -53,4 +52,4 @@ export const MEMORY_ROUTES: ServerRoute<any, any, any>[] = [
   UPDATE_THREAD_NETWORK_ROUTE,
   DELETE_THREAD_NETWORK_ROUTE,
   DELETE_MESSAGES_NETWORK_ROUTE,
-];
+] as const;

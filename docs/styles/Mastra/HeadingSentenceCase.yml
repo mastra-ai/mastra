@@ -5,3 +5,17 @@ scope: heading
 match: $sentence
 indicators:
   - ':'
+exceptions:
+  # PascalCase identifiers (2+ uppercase letters, e.g. SandboxProcessManager)
+  - '[A-Z][a-z]+(?:[A-Z][a-z]+)+'
+  # camelCase identifiers (e.g. runEvals, rerankWithScorer)
+  - '[a-z]+[A-Z][a-zA-Z]*'
+  # dot.notation (e.g. voice.speak, Run.timeTravel, .chunk())
+  - '[a-zA-Z]*\.[a-zA-Z]+(?:\(\))?'
+  # Function calls with parens (e.g. rerank(), speak())
+  - '[a-zA-Z]+\(\)'
+  # Hyphenated compounds (e.g. Speech-to-Speech, Built-in, Human-in-the-loop)
+  - '[A-Z][a-z]+-[a-z]+-[A-Za-z]+'
+  - '[A-Z][a-z]+-[a-z]+'
+  # CONSTANT_CASE (e.g. SPAN_STARTED)
+  - '[A-Z][A-Z_]+'

@@ -1,8 +1,9 @@
 import * as React from 'react';
-import { InputField, type InputFieldProps } from '@/ds/components/FormFields/input-field';
+import { TextFieldBlock } from '../FormFieldBlocks/fields/text-field-block';
+import type { TextFieldBlockProps } from '../FormFieldBlocks/fields/text-field-block';
 import { useJSONSchemaFormField } from './json-schema-form-field-context';
 
-export type JSONSchemaFormFieldNameProps = Omit<InputFieldProps, 'value' | 'onChange' | 'name'>;
+export type JSONSchemaFormFieldNameProps = Omit<TextFieldBlockProps, 'value' | 'onChange' | 'name'>;
 
 export function FieldName(props: JSONSchemaFormFieldNameProps) {
   const { field, update } = useJSONSchemaFormField();
@@ -14,5 +15,14 @@ export function FieldName(props: JSONSchemaFormFieldNameProps) {
     [update],
   );
 
-  return <InputField {...props} name={`field-name-${field.id}`} value={field.name} onChange={handleChange} />;
+  return (
+    <TextFieldBlock
+      {...props}
+      size="md"
+      labelIsHidden
+      name={`field-name-${field.id}`}
+      value={field.name}
+      onChange={handleChange}
+    />
+  );
 }

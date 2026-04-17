@@ -1,6 +1,6 @@
-import { type ColumnType } from './types';
 import { EntryListEntries } from './entry-list-entries';
 import { EntryListEntry } from './entry-list-entry';
+import type { ColumnType } from './types';
 
 const widths = ['75%', '50%', '65%', '90%', '60%', '80%'];
 
@@ -24,7 +24,7 @@ export function EntryListEntriesSkeleton({ columns, numberOfRows = 3 }: EntryLis
             return (
               <div
                 key={key}
-                className="bg-surface4 rounded-md animate-pulse text-transparent h-[1rem] select-none"
+                className="bg-surface4 rounded-md animate-pulse text-transparent h-4 select-none"
                 style={{ width: `${getPseudoRandomWidth(rowIdx, colIdx)}` }}
               ></div>
             );

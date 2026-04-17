@@ -1,12 +1,20 @@
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
-import { describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 import { MastraError } from './error';
 import { ConsoleLogger } from './logger';
 import { RequestContext } from './request-context';
-import type { InternalCoreTool } from './tools';
+import { toStandardSchema } from './schema';
 import { createTool, isVercelTool } from './tools';
-import { makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
+import {
+  ensureSerializable,
+  fetchWithRetry,
+  generateEmptyFromSchema,
+  makeCoreTool,
+  maskStreamTags,
+  resolveSerializedZodOutput,
+  safeStringify,
+} from './utils';
 
 describe('maskStreamTags', () => {
   async function* makeStream(chunks: string[]) {
@@ -218,7 +226,7 @@ describe('makeCoreTool', () => {
   });
 
   it('should handle tool execution errors correctly', async () => {
-    const errorSpy = vi.spyOn(ConsoleLogger.prototype, 'error');
+    const trackExceptionSpy = vi.spyOn(ConsoleLogger.prototype, 'trackException');
     const error = new Error('Test error');
     const mastraTool = createTool({
       id: 'test',
@@ -236,9 +244,9 @@ describe('makeCoreTool', () => {
       await expect(coreTool.execute({ name: 'test' }, { toolCallId: 'test-id', messages: [] })).rejects.toThrow(
         MastraError,
       );
-      expect(errorSpy).toHaveBeenCalled();
+      expect(trackExceptionSpy).toHaveBeenCalled();
     }
-    errorSpy.mockRestore();
+    trackExceptionSpy.mockRestore();
   });
 
   it('should handle undefined execute function', () => {
@@ -314,9 +322,11 @@ describe('makeCoreTool', () => {
       mockOptions,
     );
 
+    const schema = toStandardSchema(coreTool.parameters);
+
     // Test the schema behavior instead of structure
-    expect(() => (coreTool as InternalCoreTool).parameters.validate({})).not.toThrow();
-    expect(() => (coreTool as InternalCoreTool).parameters.validate({ extra: 'field' })).not.toThrow();
+    expect(() => schema['~standard'].validate({})).not.toThrow();
+    expect(() => schema['~standard'].validate({ extra: 'field' })).not.toThrow();
   });
 });
 
@@ -338,7 +348,259 @@ it('should log correctly for Vercel tool execution', async () => {
 
   await coreTool.execute?.({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
 
-  expect(debugSpy).toHaveBeenCalledWith('[Agent:testAgent] - Executing tool testTool', expect.any(Object));
+  expect(debugSpy).toHaveBeenCalledWith(
+    'Executing tool',
+    expect.objectContaining({ agent: 'testAgent', tool: 'testTool' }),
+  );
 
   debugSpy.mockRestore();
+});
+
+describe('fetchWithRetry', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('should use exponential backoff delays capped at 10 seconds', async () => {
+    const delays: number[] = [];
+
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, delay?: number) => {
+      if (delay && delay > 100) {
+        delays.push(delay);
+      }
+      // Execute callback immediately so the test completes
+      if (typeof fn === 'function') fn();
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof setTimeout);
+
+    const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'));
+    vi.stubGlobal('fetch', mockFetch);
+
+    // Use 5 retries so computed backoff 1000 * 2^4 = 16000 exceeds the 10000 cap
+    await expect(fetchWithRetry('https://example.com', {}, 5)).rejects.toThrow();
+
+    // Delays: 2000 (2^1), 4000 (2^2), 8000 (2^3), 10000 (2^4=16000 capped to 10000)
+    expect(delays.length).toBe(4); // 5 max retries = 4 retry delays
+    for (const delay of delays) {
+      expect(delay).toBeLessThanOrEqual(10000);
+    }
+    expect(delays[0]).toBe(2000); // 1000 * 2^1
+    expect(delays[1]).toBe(4000); // 1000 * 2^2
+    expect(delays[2]).toBe(8000); // 1000 * 2^3
+    expect(delays[3]).toBe(10000); // 1000 * 2^4 = 16000, capped at 10000
+  });
+});
+
+describe('generateEmptyFromSchema', () => {
+  it('should handle a JSON string schema', () => {
+    const schema = JSON.stringify({
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        age: { type: 'number' },
+      },
+    });
+    expect(generateEmptyFromSchema(schema)).toEqual({ name: '', age: 0 });
+  });
+
+  it('should handle a pre-parsed object schema', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        count: { type: 'integer' },
+        active: { type: 'boolean' },
+        tags: { type: 'array' },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({
+      name: '',
+      count: 0,
+      active: false,
+      tags: [],
+    });
+  });
+
+  it('should recursively initialize nested object properties', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        user: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            preferences: {
+              type: 'object',
+              properties: {
+                theme: { type: 'string' },
+                fontSize: { type: 'number' },
+              },
+            },
+          },
+        },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({
+      user: {
+        name: '',
+        preferences: {
+          theme: '',
+          fontSize: 0,
+        },
+      },
+    });
+  });
+
+  it('should respect default values defined in the schema', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        name: { type: 'string', default: 'unnamed' },
+        score: { type: 'number', default: 100 },
+        active: { type: 'boolean', default: true },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({
+      name: 'unnamed',
+      score: 100,
+      active: true,
+    });
+  });
+
+  it('should return {} for non-object schemas', () => {
+    expect(generateEmptyFromSchema({ type: 'string' })).toEqual({});
+    expect(generateEmptyFromSchema({ type: 'array' })).toEqual({});
+  });
+
+  it('should return {} for invalid input', () => {
+    expect(generateEmptyFromSchema('not valid json')).toEqual({});
+  });
+
+  it('should return null for unknown property types', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        unknown: { type: 'custom_type' },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({ unknown: null });
+  });
+
+  it('should handle deeply nested objects (3+ levels)', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        level1: {
+          type: 'object',
+          properties: {
+            level2: {
+              type: 'object',
+              properties: {
+                level3: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({
+      level1: { level2: { level3: '' } },
+    });
+  });
+
+  it('should treat object without properties as empty object', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        data: { type: 'object' },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({ data: {} });
+  });
+});
+
+describe('safeStringify', () => {
+  it('should stringify simple values', () => {
+    expect(safeStringify({ a: 1, b: 'hello' })).toBe('{"a":1,"b":"hello"}');
+    expect(safeStringify(null)).toBe('null');
+    expect(safeStringify(42)).toBe('42');
+    expect(safeStringify('text')).toBe('"text"');
+  });
+
+  it('should handle circular references without throwing', () => {
+    const obj: any = { name: 'test' };
+    obj.self = obj;
+    const result = safeStringify(obj);
+    expect(result).toBe('{"name":"test","self":"[Circular]"}');
+  });
+
+  it('should handle deeply nested circular references', () => {
+    const a: any = { id: 'a' };
+    const b: any = { id: 'b', parent: a };
+    a.child = b;
+    const result = safeStringify(a);
+    const parsed = JSON.parse(result);
+    expect(parsed.id).toBe('a');
+    expect(parsed.child.id).toBe('b');
+    expect(parsed.child.parent).toBe('[Circular]');
+  });
+
+  it('should support space parameter', () => {
+    expect(safeStringify({ a: 1 }, 2)).toBe('{\n  "a": 1\n}');
+  });
+
+  it('should preserve shared (non-circular) references by duplicating them', () => {
+    const shared = { x: 1 };
+    const obj = { a: shared, b: shared };
+    const result = JSON.parse(safeStringify(obj));
+    expect(result.a).toEqual({ x: 1 });
+    expect(result.b).toEqual({ x: 1 });
+  });
+
+  it('should handle BigInt values without throwing', () => {
+    const obj = { count: BigInt(42), name: 'test' };
+    const result = safeStringify(obj);
+    expect(JSON.parse(result)).toEqual({ count: '42', name: 'test' });
+  });
+});
+
+describe('ensureSerializable', () => {
+  it('should return primitives unchanged', () => {
+    expect(ensureSerializable(null)).toBe(null);
+    expect(ensureSerializable(42)).toBe(42);
+    expect(ensureSerializable('text')).toBe('text');
+    expect(ensureSerializable(true)).toBe(true);
+  });
+
+  it('should return serializable objects unchanged (same reference)', () => {
+    const obj = { a: 1, b: [2, 3], c: { d: 'hello' } };
+    const result = ensureSerializable(obj);
+    expect(result).toBe(obj);
+  });
+
+  it('should strip circular references and return a new object', () => {
+    const obj: any = { name: 'test', value: 42 };
+    obj.self = obj;
+    const result = ensureSerializable(obj) as any;
+    expect(result).not.toBe(obj);
+    expect(result.name).toBe('test');
+    expect(result.value).toBe(42);
+    expect(result.self).toBe('[Circular]');
+    // Result should be JSON-serializable
+    expect(() => JSON.stringify(result)).not.toThrow();
+  });
+
+  it('should handle nested circular references between parent and child objects', () => {
+    const properties: any = { color: 'red', size: 10 };
+    const screen: any = { properties };
+    properties.variantScreenInstance = screen;
+    const obj = { screen, metadata: 'test' };
+
+    const result = ensureSerializable(obj) as any;
+    expect(result.metadata).toBe('test');
+    expect(result.screen.properties.color).toBe('red');
+    expect(result.screen.properties.variantScreenInstance).toBe('[Circular]');
+    expect(() => JSON.stringify(result)).not.toThrow();
+  });
 });

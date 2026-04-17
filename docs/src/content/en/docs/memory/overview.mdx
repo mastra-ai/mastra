@@ -7,48 +7,243 @@ packages:
   - "@mastra/memory"
 ---
 
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
 # Memory
 
 Memory enables your agent to remember user messages, agent replies, and tool results across interactions, giving it the context it needs to stay consistent, maintain conversation flow, and produce better answers over time.
 
-Mastra supports four complementary memory types:
+Mastra agents can be configured to store [message history](/docs/memory/message-history). Additionally, you can enable:
 
-- [**Message history**](/docs/memory/message-history) - keeps recent messages from the current conversation so they can be rendered in the UI and used to maintain short-term continuity within the exchange.
-- [**Working memory**](/docs/memory/working-memory) - stores persistent, structured user data such as names, preferences, and goals.
-- [**Semantic recall**](/docs/memory/semantic-recall) - retrieves relevant messages from older conversations based on semantic meaning rather than exact keywords, mirroring how humans recall information by association. Requires a [vector database](/docs/memory/semantic-recall#storage-configuration) and an [embedding model](/docs/memory/semantic-recall#embedder-configuration).
-- [**Observational memory**](/docs/memory/observational-memory) - uses background Observer and Reflector agents to maintain a dense observation log that replaces raw message history as it grows, keeping the context window small while preserving long-term memory across conversations.
+- [Observational Memory](../memory/observational-memory) (Recommended): Uses background agents to maintain a dense observation log that replaces raw message history as it grows. This keeps the context window small while preserving long-term memory.
+- [Working memory](../memory/working-memory): Stores persistent, structured user data such as names, preferences, and goals.
+- [Semantic recall](../memory/semantic-recall): Retrieves relevant past messages based on semantic meaning rather than exact keywords.
 
 If the combined memory exceeds the model's context limit, [memory processors](/docs/memory/memory-processors) can filter, trim, or prioritize content so the most relevant information is preserved.
 
-## Getting started
+Memory results will be stored in one or more of your configured [storage providers](/docs/memory/storage).
 
-Choose a memory option to get started:
+## When to use memory
 
-- [Message history](/docs/memory/message-history)
-- [Working memory](/docs/memory/working-memory)
-- [Semantic recall](/docs/memory/semantic-recall)
-- [Observational memory](/docs/memory/observational-memory)
+Use memory when your agent needs to maintain multi-turn conversations that reference prior exchanges, recall user preferences or facts from earlier in a session, or build context over time within a conversation thread. Skip memory for single-turn requests where each interaction is independent.
 
-## Storage
+## Quickstart
 
-Before enabling memory, you must first configure a storage adapter. Mastra supports several databases including PostgreSQL, MongoDB, libSQL, and [more](/docs/memory/storage#supported-providers).
+<Steps>
+  <StepItem>
+    Install the `@mastra/memory` package.
 
-Storage can be configured at the [instance level](/docs/memory/storage#instance-level-storage) (shared across all agents) or at the [agent level](/docs/memory/storage#agent-level-storage) (dedicated per agent).
+    ```bash npm2yarn
+    npm install @mastra/memory@latest
+    ```
+  </StepItem>
 
-For semantic recall, you can use a separate vector database like Pinecone alongside your primary storage.
+  <StepItem>
+    Memory **requires** a storage provider to persist message history, including user messages and agent responses.
 
-See the [Storage](/docs/memory/storage) documentation for configuration options, supported providers, and examples.
+    For the purposes of this quickstart, use `@mastra/libsql`.
 
-## Debugging memory
+    ```bash npm2yarn
+    npm install @mastra/libsql@latest
+    ```
 
-When [tracing](/docs/observability/tracing/overview) is enabled, you can inspect exactly which messages the agent uses for context in each request. The trace output shows all memory included in the agent's context window - both recent message history and messages recalled via semantic recall.
+    :::note
 
-![Trace output showing memory context included in an agent request](https://mastra.ai/_next/image?url=%2Ftracingafter.png\&w=1920\&q=75)
+    For more details on available providers and how storage works in Mastra, visit the [storage](/docs/memory/storage) documentation.
 
-This visibility helps you understand why an agent made specific decisions and verify that memory retrieval is working as expected.
+    :::
+  </StepItem>
 
-## Next steps
+  <StepItem>
+    Add the storage provider to your main Mastra instance to enable memory across all configured agents.
 
-- Learn more about [Storage](/docs/memory/storage) providers and configuration options
-- Add [Message history](/docs/memory/message-history), [Working memory](/docs/memory/working-memory), [Semantic recall](/docs/memory/semantic-recall), or [Observational memory](/docs/memory/observational-memory)
-- Visit [Memory configuration reference](/reference/memory/memory-class) for all available options
+    ```typescript {2,5-8} title="src/mastra/index.ts"
+    import { Mastra } from '@mastra/core'
+    import { LibSQLStore } from '@mastra/libsql'
+
+    export const mastra = new Mastra({
+      storage: new LibSQLStore({
+        id: 'mastra-storage',
+        url: ':memory:',
+      }),
+    })
+    ```
+  </StepItem>
+
+  <StepItem>
+    Create a `Memory` instance and pass it to the agent's `memory` option.
+
+    ```typescript {2,7-11} title="src/mastra/agents/memory-agent.ts"
+    import { Agent } from '@mastra/core/agent'
+    import { Memory } from '@mastra/memory'
+
+    export const memoryAgent = new Agent({
+      id: 'memory-agent',
+      name: 'Memory Agent',
+      memory: new Memory({
+        options: {
+          lastMessages: 20,
+        },
+      }),
+    })
+    ```
+
+    :::note
+
+    Visit [Memory Class](/reference/memory/memory-class) for a full list of configuration options.
+
+    :::
+  </StepItem>
+
+  <StepItem>
+    Call your agent, for example in [Studio](/docs/studio/overview). Inside Studio, start a new chat with your agent and take a look at the right sidebar. It'll now display various memory-related information.
+  </StepItem>
+</Steps>
+
+## Message history
+
+Pass a `memory` object with `resource` and `thread` to track message history.
+
+- `resource`: A stable identifier for the user or entity.
+- `thread`: An ID that isolates a specific conversation or session.
+
+```typescript {2-5}
+const response = await memoryAgent.generate('Remember my favorite color is blue.', {
+  memory: {
+    resource: 'user-123',
+    thread: 'conversation-123',
+  },
+})
+```
+
+To recall information stored in memory, call the agent with the same `resource` and `thread` values used in the original conversation.
+
+```typescript {2-5}
+const response = await memoryAgent.generate("What's my favorite color?", {
+  memory: {
+    resource: 'user-123',
+    thread: 'conversation-123',
+  },
+})
+
+// Response: "Your favorite color is blue."
+```
+
+:::warning
+
+Each thread has an owner (`resourceId`) that can't be changed after creation. Avoid reusing the same thread ID for threads with different owners, as this will cause errors when querying.
+
+:::
+
+To list all threads for a resource, or retrieve a specific thread, [use the memory API directly](/docs/memory/message-history#querying).
+
+## Observational Memory
+
+For long-running conversations, raw message history grows until it fills the context window, degrading agent performance. [Observational Memory](../memory/observational-memory) solves this by running background agents that compress old messages into dense observations, keeping the context window small while preserving long-term memory.
+
+```typescript title="src/mastra/agents/memory-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+
+export const memoryAgent = new Agent({
+  id: 'memory-agent',
+  name: 'Memory Agent',
+  memory: new Memory({
+    options: {
+      // highlight-next-line
+      observationalMemory: true,
+    },
+  }),
+})
+```
+
+:::note
+
+See [Observational Memory](../memory/observational-memory) for details on how observations and reflections work, and [the reference](/reference/memory/observational-memory) for all configuration options.
+
+:::
+
+## Memory in multi-agent systems
+
+When a [supervisor agent](/docs/agents/supervisor-agents) delegates to a subagent, Mastra isolates subagent memory automatically. No flag enables this as it happens on every delegation. Understanding how this scoping works lets you decide what stays private and what to share intentionally.
+
+### How delegation scopes memory
+
+Each delegation creates a fresh `threadId` and a deterministic `resourceId` for the subagent:
+
+- **Thread ID**: Unique per delegation. The subagent starts with a clean message history every time it's called.
+- **Resource ID**: Derived as `{parentResourceId}-{agentName}`. Because the resource ID is stable across delegations, resource-scoped memory persists between calls. A subagent remembers facts from previous delegations by the same user.
+- **Memory instance**: If a subagent has no memory configured, it inherits the supervisor's `Memory` instance. If the subagent defines its own, that takes precedence.
+
+The supervisor forwards its conversation context to the subagent so it has enough background to complete the task. Only the delegation prompt and the subagent's response are saved — the full parent conversation isn't stored. You can control which messages reach the subagent with the [`messageFilter`](/docs/agents/supervisor-agents#message-filtering) callback.
+
+:::note
+
+Subagent resource IDs are always suffixed with the agent name (`{parentResourceId}-{agentName}`). Two different subagents under the same supervisor never share a resource ID through delegation.
+
+:::
+
+To go beyond this default isolation, you can share memory between agents by passing matching identifiers when you call them directly.
+
+### Share memory between agents
+
+When you call agents directly (outside the delegation flow), memory sharing is controlled by two identifiers: `resourceId` and `threadId`. Agents that use the same values read and write to the same data. This is useful when agents collaborate on a shared context — for example, a researcher that saves notes and a writer that reads them.
+
+**Resource-scoped sharing** is the most common pattern. [Working memory](../memory/working-memory) and [semantic recall](../memory/semantic-recall) default to `scope: 'resource'`. If two agents share a `resourceId`, they share observations, working memory, and embeddings — even across different threads:
+
+```typescript
+// Both agents share the same resource-scoped memory
+await researcher.generate('Find information about quantum computing.', {
+  memory: { resource: 'project-42', thread: 'research-session' },
+})
+
+await writer.generate('Write a summary from the research notes.', {
+  memory: { resource: 'project-42', thread: 'writing-session' },
+})
+```
+
+Because both calls use `resource: 'project-42'`, the writer can access the researcher's observations, working memory, and semantic embeddings. Each agent still has its own thread, so message histories stay separate.
+
+**Thread-scoped sharing** gives tighter coupling. [Observational Memory](../memory/observational-memory) uses `scope: 'thread'` by default. If two agents use the same `resource` _and_ `thread`, they share the full message history. Each agent sees every message the other has written. This is useful when agents need to build on each other's exact outputs.
+
+## Observability
+
+Enable [Tracing](/docs/observability/tracing/overview) to monitor and debug memory in action. Traces show you exactly which messages and observations the agent included in its context for each request, helping you understand agent behavior and verify that memory retrieval is working as expected.
+
+Open [Studio](/docs/studio/overview) and select the **Observability** tab in the sidebar. Open the trace of a recent agent request, then look for spans of LLMs calls.
+
+## Switch memory per request
+
+Use [`RequestContext`](/docs/server/request-context) to access request-specific values. This lets you conditionally select different memory or storage configurations based on the context of the request.
+
+```typescript title="src/mastra/agents/memory-agent.ts"
+export type UserTier = {
+  'user-tier': 'enterprise' | 'pro'
+}
+
+const premiumMemory = new Memory()
+const standardMemory = new Memory()
+
+export const memoryAgent = new Agent({
+  id: 'memory-agent',
+  name: 'Memory Agent',
+  memory: ({ requestContext }) => {
+    const userTier = requestContext.get('user-tier') as UserTier['user-tier']
+
+    return userTier === 'enterprise' ? premiumMemory : standardMemory
+  },
+})
+```
+
+:::note
+
+Visit [Request Context](/docs/server/request-context) for more information.
+
+:::
+
+## Related
+
+- [`Memory` reference](/reference/memory/memory-class)
+- [Tracing](/docs/observability/tracing/overview)
+- [Request Context](/docs/server/request-context)

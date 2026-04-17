@@ -179,7 +179,7 @@ describe('deps utils', () => {
 
       await installDeps({ path: '/test/project' });
 
-      expect(logger.info).toHaveBeenCalledWith('Installing dependencies with pnpm in /test/project');
+      expect(logger.info).toHaveBeenCalledWith('Installing dependencies', { pm: 'pnpm', path: '/test/project' });
       expect(runWithExeca).toHaveBeenCalledWith({
         cmd: 'pnpm',
         args: ['install', '--legacy-peer-deps=false', '--force'],
@@ -192,7 +192,7 @@ describe('deps utils', () => {
 
       await installDeps({ path: '/test/project', pm: 'yarn' });
 
-      expect(logger.info).toHaveBeenCalledWith('Installing dependencies with yarn in /test/project');
+      expect(logger.info).toHaveBeenCalledWith('Installing dependencies', { pm: 'yarn', path: '/test/project' });
       expect(runWithExeca).toHaveBeenCalledWith({
         cmd: 'yarn',
         args: ['install', '--legacy-peer-deps=false', '--force'],
@@ -222,7 +222,7 @@ describe('deps utils', () => {
 
       await runInstallCommand({ path: '/test/project', installCommand: 'npm ci' });
 
-      expect(logger.info).toHaveBeenCalledWith('Running install command npm ci in workspace with /test/project');
+      expect(logger.info).toHaveBeenCalledWith('Running install command', { command: 'npm ci', path: '/test/project' });
       expect(runWithExeca).toHaveBeenCalledWith({
         cmd: 'sh',
         args: ['-c', 'npm ci'],
@@ -301,7 +301,7 @@ describe('deps utils', () => {
 
       await runBuildCommand({ command: 'tsc && vite build', path: '/test/project' });
 
-      expect(logger.info).toHaveBeenCalledWith('Running build command tsc && vite build');
+      expect(logger.info).toHaveBeenCalledWith('Running build command', { command: 'tsc && vite build' });
       expect(runWithExeca).toHaveBeenCalledWith({
         cmd: 'sh',
         args: ['-c', 'tsc && vite build'],

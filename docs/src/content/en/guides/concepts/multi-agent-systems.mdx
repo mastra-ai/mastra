@@ -1,0 +1,87 @@
+---
+title: "Multi-agent systems | Concepts"
+description: "Learn what multi-agent systems are, why teams use them, and how common patterns map to Mastra."
+packages:
+  - "@mastra/core"
+---
+
+# Multi-agent systems
+
+A multi-agent system distributes a task across multiple agents instead of asking one agent to do everything. In Mastra, this usually means combining agents, workflows, or both so each part of the system has a clear role.
+
+The goal is to assign the right context, tools, and responsibilities to the right component. When that split is clear, a multi-agent system can be easier to reason about than one agent with a long prompt, many tools, and too many responsibilities.
+
+## When to use multi-agent systems
+
+Use a multi-agent system when one agent is no longer a good boundary for the work.
+
+This is often the case when:
+
+- A task spans different kinds of work, such as research, planning, writing, or review.
+- One agent would need too much context or too many tools.
+- Parts of the task should run in parallel.
+- Different stages need different prompts, models, or guardrails.
+- You want clear boundaries between routing, execution, and synthesis.
+
+Start with one agent when possible. Add more agents when the added structure clearly improves quality, speed, or reliability.
+
+Multi-agent patterns are useful when the system needs a clear way to divide context, decisions, and responsibilities across components. In practice, the key design question is which component stays in control as the task moves forward.
+
+## Handoffs
+
+A handoff pattern transfers control from one agent to another. Unlike a supervisor pattern, the first agent doesn't stay in charge for the full task. Instead, the active specialist takes ownership of the next part of the interaction.
+
+Use handoffs when the next specialist should continue the interaction directly instead of reporting back through a central coordinator. The tradeoff is that context management becomes more important, since the system must decide what the next agent inherits and what remains scoped.
+
+In Mastra, implement this pattern by combining [agents](/docs/agents/overview), [workflows](/docs/workflows/overview), and [memory](/docs/memory/overview). A workflow can route the task, but the defining feature of the pattern is that ownership moves to the next agent.
+
+## Workflows
+
+A workflow pattern defines the execution path in code. Instead of asking an agent to decide what happens next, you define the sequence through steps, branches, loops, and parallel blocks.
+
+Use workflows when the task is well understood and the execution path is known in advance. The main advantage is predictability: The system is easier to debug, reason about, and audit because the structure is explicit. The tradeoff is flexibility, since workflows are less adaptive when the task changes as it unfolds.
+
+In Mastra, [workflows](/docs/workflows/overview) can implement several coordination patterns, including handoffs and councils. What makes a workflow distinct isn't which agents it calls, but that the control logic lives in the workflow itself.
+
+## Supervisors
+
+A supervisor pattern keeps one lead agent in control for the full task. The supervisor decides when to delegate, which specialist to call, what context to pass, and how to combine the result.
+
+Use this pattern when the task is open-ended and the full sequence isn't known in advance. For example, a research task may require different lines of inquiry based on what earlier steps uncover. A supervisor can adapt as the task unfolds.
+The tradeoff is that the supervisor becomes the main coordination point. That makes the pattern flexible, but it also means the result depends heavily on good delegation behavior and clear subagent boundaries.
+
+In Mastra, this pattern maps directly to [supervisor agents](/docs/agents/supervisor-agents). A supervisor agent defines subagents on the `agents` property and uses `stream()` or `generate()` to coordinate them. Mastra also provides delegation hooks, message filtering, and memory isolation to help control this pattern.
+
+:::tip
+
+Follow the [supervisor agents tutorial](/guides/guide/research-coordinator) for a step-by-step guide.
+
+:::
+
+## Council
+
+A council pattern asks multiple agents to work on the same problem independently, then compares or synthesizes their outputs into one final answer. Unlike a supervisor, which divides the problem into parts, a council keeps the problem shared and brings multiple viewpoints to the same question.
+
+Use this pattern when the question is ambiguous, evaluative, or high-stakes and answer quality matters more than speed. The tradeoff is cost, since councils intentionally duplicate effort and usually take longer and use more tokens than other patterns.
+
+Mastra doesn't provide a dedicated council primitive. In Mastra, implement this pattern with [agents](/docs/agents/overview) and [workflows](/docs/workflows/overview): Run multiple agents in parallel, collect their outputs, and add a final synthesis or review step. Workflow control flow methods such as `.parallel()` provide the structure for this pattern.
+
+## Choosing a pattern
+
+These patterns differ mainly in how they distribute control:
+
+| Pattern | Who stays in control | Use when | Tradeoff | Mastra implementation |
+| - | - | - | - | - |
+| Handoffs | Current specialist | Ownership should move between specialists | Context transfer becomes more important | Agents with workflows and memory |
+| Workflows | Execution graph | The path is known in advance | Less adaptive when the task changes | [Workflows](/docs/workflows/overview) |
+| Supervisor agents | One lead agent | The task needs dynamic delegation | Results depend on good coordination and clear boundaries | [Supervisor agents](/docs/agents/supervisor-agents) |
+| Council | Final synthesis step | The task needs multiple independent perspectives | Higher cost and latency | Agents with workflow parallelism |
+
+In practice, these patterns are often combined:
+
+- A workflow can contain one or more supervisor-driven steps.
+- A handoff flow can begin with a routing workflow.
+- A council can run inside a workflow and feed into a final approval step.
+- A supervisor can delegate to a workflow for a task with fixed internal structure.
+
+Choose the pattern based on the coordination problem, not the task label.

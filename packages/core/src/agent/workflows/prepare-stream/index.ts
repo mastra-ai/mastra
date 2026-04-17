@@ -1,7 +1,9 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
+import type { BackgroundTaskManager } from '../../../background-tasks';
+import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
-import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
+import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
 import { InternalSpans } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
@@ -24,10 +26,10 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   resourceId?: string;
   runId: string;
   requestContext: RequestContext;
-  agentSpan: Span<SpanType.AGENT_RUN>;
+  agentSpan?: Span<SpanType.AGENT_RUN>;
   methodType: AgentMethodType;
   instructions: SystemMessage;
-  memoryConfig?: MemoryConfig;
+  memoryConfig?: MemoryConfigInternal;
   memory?: MastraMemory;
   returnScorerData?: boolean;
   saveQueueManager?: SaveQueueManager;
@@ -41,6 +43,8 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   agentName?: string;
   toolCallId?: string;
   workspace?: Workspace;
+  backgroundTaskManager?: BackgroundTaskManager;
+  agentBackgroundConfig?: AgentBackgroundConfig;
 }
 
 export function createPrepareStreamWorkflow<OUTPUT = undefined>({
@@ -64,6 +68,8 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   agentName,
   toolCallId,
   workspace,
+  backgroundTaskManager,
+  agentBackgroundConfig,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -75,6 +81,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     agentSpan,
     methodType,
     memory,
+    backgroundTaskEnabled: backgroundTaskManager?.config?.enabled,
   });
 
   const prepareMemoryStep = createPrepareMemoryStep({
@@ -88,6 +95,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     instructions,
     memoryConfig,
     memory,
+    isResume: !!resumeContext,
   });
 
   const streamStep = createStreamStep({
@@ -107,12 +115,15 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     resourceId,
     autoResumeSuspendedTools: options.autoResumeSuspendedTools,
     workspace,
+    backgroundTaskManager,
+    agentBackgroundConfig,
   });
 
   const mapResultsStep = createMapResultsStep({
     capabilities,
     options,
     resourceId,
+    threadId: threadFromArgs?.id,
     runId,
     requestContext,
     memory,
@@ -120,6 +131,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     agentSpan,
     agentId,
     methodType,
+    saveQueueManager,
   });
 
   return createWorkflow({

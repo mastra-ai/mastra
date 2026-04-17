@@ -2,9 +2,8 @@ import React from 'react';
 
 import { Icon } from '../../icons/Icon';
 import { Txt } from '../Txt';
-import { cn } from '@/lib/utils';
-
 import { formatDateCell } from './utils';
+import { cn } from '@/lib/utils';
 
 export interface CellProps extends React.TdHTMLAttributes<HTMLTableCellElement> {
   className?: string;
@@ -72,7 +71,11 @@ export const EntryCell = ({ name, description, icon, meta, ...props }: EntryCell
             {name}
           </Txt>
           {description && (
-            <Txt as="span" variant="ui-xs" className="text-neutral3 w-full max-w-[300px] truncate !leading-tight pt-1">
+            <Txt
+              as="span"
+              variant="ui-xs"
+              className="text-neutral3 w-full max-w-dropdown-max-height truncate !leading-tight pt-1"
+            >
               {description}
             </Txt>
           )}

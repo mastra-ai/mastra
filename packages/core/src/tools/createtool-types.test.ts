@@ -1,5 +1,5 @@
 import { describe, it, expect, expectTypeOf } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import { createStep } from '../workflows';
 import { createTool } from './tool';

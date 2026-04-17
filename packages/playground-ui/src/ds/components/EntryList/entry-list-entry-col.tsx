@@ -1,5 +1,5 @@
-import { cn } from '@/lib/utils';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import { cn } from '@/lib/utils';
 
 export type EntryListEntryTextColProps = {
   children: React.ReactNode;
@@ -10,7 +10,7 @@ export function EntryListEntryTextCol({ children, isLoading }: EntryListEntryTex
   return (
     <div className="text-neutral4 text-ui-md truncate ">
       {isLoading ? (
-        <div className="bg-surface4 rounded-md animate-pulse text-transparent h-[1rem] select-none"></div>
+        <div className="bg-surface4 rounded-md animate-pulse text-transparent h-4 select-none"></div>
       ) : (
         children
       )}

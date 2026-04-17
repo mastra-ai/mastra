@@ -1,15 +1,15 @@
 ---
-title: "Reference: OpenSearch Vector Store | Vectors"
+title: "Reference: OpenSearch vector store | Vectors"
 description: Documentation for the OpenSearchVector class in Mastra, which provides vector search using OpenSearch.
 packages:
   - "@mastra/opensearch"
 ---
 
-# OpenSearch Vector Store
+# OpenSearch vector store
 
 The OpenSearchVector class provides vector search using [OpenSearch](https://opensearch.org/), an open-source search and analytics engine. It uses OpenSearch's k-NN capabilities to perform vector similarity search.
 
-## Constructor Options
+## Constructor options
 
 The constructor accepts all [OpenSearch ClientOptions](https://opensearch.org/docs/latest/clients/javascript/index/) plus a required `id` field.
 
@@ -48,7 +48,7 @@ The constructor accepts all [OpenSearch ClientOptions](https://opensearch.org/do
 
 ## Methods
 
-### createIndex()
+### `createIndex()`
 
 Creates a new index with the specified configuration.
 
@@ -74,13 +74,13 @@ Creates a new index with the specified configuration.
 ]}
 />
 
-### listIndexes()
+### `listIndexes()`
 
 Lists all indexes in the OpenSearch instance.
 
 Returns: `Promise<string[]>`
 
-### describeIndex()
+### `describeIndex()`
 
 Gets information about an index.
 
@@ -94,7 +94,7 @@ Gets information about an index.
 ]}
 />
 
-### deleteIndex()
+### `deleteIndex()`
 
 <PropertiesTable
   content={[
@@ -106,7 +106,7 @@ Gets information about an index.
 ]}
 />
 
-### upsert()
+### `upsert()`
 
 <PropertiesTable
   content={[
@@ -135,7 +135,7 @@ Gets information about an index.
 ]}
 />
 
-### query()
+### `query()`
 
 <PropertiesTable
   content={[
@@ -165,7 +165,7 @@ Gets information about an index.
 ]}
 />
 
-### updateVector()
+### `updateVector()`
 
 Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
 
@@ -196,7 +196,7 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 ]}
 />
 
-### deleteVector()
+### `deleteVector()`
 
 Deletes a single vector by its ID from the index.
 
@@ -215,7 +215,7 @@ Deletes a single vector by its ID from the index.
 ]}
 />
 
-### deleteVectors()
+### `deleteVectors()`
 
 Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
 

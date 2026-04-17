@@ -9,10 +9,10 @@ import { jsonSchema, NoObjectGeneratedError, pipeTextStreamToResponse } from '@i
 import type { FinishReason, LanguageModelResponseMetadata, LanguageModelUsage } from '@internal/ai-sdk-v5';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 import { assert, beforeEach, describe, expect, it, vi } from 'vitest';
-import z from 'zod';
+import { z } from 'zod/v4';
 import type { loop } from '../loop';
 import { createMockServerResponse } from './mock-server-response';
-import { createMessageListWithUserMessage, mockDate, testUsage } from './utils';
+import { createMessageListWithUserMessage, mockDate, stripMastraCreatedAt, testUsage } from './utils';
 
 function createTestModels({
   warnings = [],
@@ -234,6 +234,11 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               {
                 "content": [
                   {
+                    "providerOptions": {
+                      "mastra": {
+                        "createdAt": 1704067200000,
+                      },
+                    },
                     "text": "test-input",
                     "type": "text",
                   },
@@ -504,15 +509,18 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           //   headers: { call: '2' },
           // });
 
-          const expectedResponse = {
-            id: 'id-0',
+          await convertAsyncIterableToArray(result.objectStream);
+          const response = stripMastraCreatedAt(await result.response);
+
+          expect(response.id).toBe('id-0');
+          expect(response.timestamp).toEqual(new Date(0));
+          expect(response).toMatchObject({
             modelId: 'mock-model-id',
             modelMetadata: {
               modelId: 'mock-model-id',
               modelProvider: 'mock-provider',
               modelVersion: 'v2',
             },
-            timestamp: new Date(0),
             headers: { call: '2' },
             messages: [
               {
@@ -529,10 +537,10 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               {
                 id: expect.any(String),
                 metadata: {
+                  modelId: 'mock-model-id',
                   structuredOutput: {
                     content: 'Hello, world!',
                   },
-                  createdAt: expect.any(Date),
                 },
                 parts: [
                   {
@@ -546,11 +554,11 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             dbMessages: [
               {
                 id: expect.any(String),
-                createdAt: expect.any(Date),
                 content: {
                   content: '{"content": "Hello, world!"}',
                   format: 2,
                   metadata: {
+                    modelId: 'mock-model-id',
                     structuredOutput: {
                       content: 'Hello, world!',
                     },
@@ -565,10 +573,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 role: 'assistant',
               },
             ],
-          };
-
-          await convertAsyncIterableToArray(result.objectStream);
-          expect(await result.response).toStrictEqual(expectedResponse);
+          });
         });
       });
 
@@ -835,6 +840,11 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             {
               "content": [
                 {
+                  "providerOptions": {
+                    "mastra": {
+                      "createdAt": 1704067200000,
+                    },
+                  },
                   "text": "{ "content": "Hello, world!" }",
                   "type": "text",
                 },
@@ -867,12 +877,15 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       "content": "{ "content": "Hello, world!" }",
                       "format": 2,
                       "metadata": {
+                        "modelId": "mock-model-id",
+                        "provider": "mock-provider",
                         "structuredOutput": {
                           "content": "Hello, world!",
                         },
                       },
                       "parts": [
                         {
+                          "createdAt": 1704067200000,
                           "text": "{ "content": "Hello, world!" }",
                           "type": "text",
                         },
@@ -889,6 +902,11 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   {
                     "content": [
                       {
+                        "providerOptions": {
+                          "mastra": {
+                            "createdAt": 1704067200000,
+                          },
+                        },
                         "text": "{ "content": "Hello, world!" }",
                         "type": "text",
                       },
@@ -908,12 +926,19 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "1234",
                     "metadata": {
                       "createdAt": 2024-01-01T00:00:00.001Z,
+                      "modelId": "mock-model-id",
+                      "provider": "mock-provider",
                       "structuredOutput": {
                         "content": "Hello, world!",
                       },
                     },
                     "parts": [
                       {
+                        "providerMetadata": {
+                          "mastra": {
+                            "createdAt": 1704067200000,
+                          },
+                        },
                         "text": "{ "content": "Hello, world!" }",
                         "type": "text",
                       },
@@ -929,6 +954,11 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 {
                   "content": [
                     {
+                      "providerOptions": {
+                        "mastra": {
+                          "createdAt": 1704067200000,
+                        },
+                      },
                       "text": "{ "content": "Hello, world!" }",
                       "type": "text",
                     },
@@ -952,12 +982,15 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                           "content": "{ "content": "Hello, world!" }",
                           "format": 2,
                           "metadata": {
+                            "modelId": "mock-model-id",
+                            "provider": "mock-provider",
                             "structuredOutput": {
                               "content": "Hello, world!",
                             },
                           },
                           "parts": [
                             {
+                              "createdAt": 1704067200000,
                               "text": "{ "content": "Hello, world!" }",
                               "type": "text",
                             },
@@ -974,6 +1007,11 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       {
                         "content": [
                           {
+                            "providerOptions": {
+                              "mastra": {
+                                "createdAt": 1704067200000,
+                              },
+                            },
                             "text": "{ "content": "Hello, world!" }",
                             "type": "text",
                           },
@@ -993,12 +1031,19 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         "id": "1234",
                         "metadata": {
                           "createdAt": 2024-01-01T00:00:00.001Z,
+                          "modelId": "mock-model-id",
+                          "provider": "mock-provider",
                           "structuredOutput": {
                             "content": "Hello, world!",
                           },
                         },
                         "parts": [
                           {
+                            "providerMetadata": {
+                              "mastra": {
+                                "createdAt": 1704067200000,
+                              },
+                            },
                             "text": "{ "content": "Hello, world!" }",
                             "type": "text",
                           },
@@ -1094,26 +1139,27 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
           // consume expected error rejection
           await output.object.catch(err => {
-            expect(err).toMatchInlineSnapshot(`[Error: Structured output validation failed
-✖ Required
-  → at content
-]`);
+            expect(err).toMatchInlineSnapshot(
+              `[Error: Structured output validation failed: - content: Invalid input: expected string, received undefined]`,
+            );
           });
 
           expect(result!).toMatchInlineSnapshot(`
             {
               "content": [
                 {
+                  "providerOptions": {
+                    "mastra": {
+                      "createdAt": 1704067200000,
+                    },
+                  },
                   "text": "{ "invalid": "Hello, world!" }",
                   "type": "text",
                 },
               ],
               "dynamicToolCalls": [],
               "dynamicToolResults": [],
-              "error": [Error: Structured output validation failed
-            ✖ Required
-              → at content
-            ],
+              "error": [Error: Structured output validation failed: - content: Invalid input: expected string, received undefined],
               "files": [],
               "finishReason": "error",
               "model": {
@@ -1132,8 +1178,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "content": {
                       "content": "{ "invalid": "Hello, world!" }",
                       "format": 2,
+                      "metadata": {
+                        "modelId": "mock-model-id",
+                        "provider": "mock-provider",
+                      },
                       "parts": [
                         {
+                          "createdAt": 1704067200000,
                           "text": "{ "invalid": "Hello, world!" }",
                           "type": "text",
                         },
@@ -1150,6 +1201,11 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   {
                     "content": [
                       {
+                        "providerOptions": {
+                          "mastra": {
+                            "createdAt": 1704067200000,
+                          },
+                        },
                         "text": "{ "invalid": "Hello, world!" }",
                         "type": "text",
                       },
@@ -1169,9 +1225,16 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "1234",
                     "metadata": {
                       "createdAt": 2024-01-01T00:00:00.001Z,
+                      "modelId": "mock-model-id",
+                      "provider": "mock-provider",
                     },
                     "parts": [
                       {
+                        "providerMetadata": {
+                          "mastra": {
+                            "createdAt": 1704067200000,
+                          },
+                        },
                         "text": "{ "invalid": "Hello, world!" }",
                         "type": "text",
                       },
@@ -1187,6 +1250,11 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 {
                   "content": [
                     {
+                      "providerOptions": {
+                        "mastra": {
+                          "createdAt": 1704067200000,
+                        },
+                      },
                       "text": "{ "invalid": "Hello, world!" }",
                       "type": "text",
                     },
@@ -1205,8 +1273,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         "content": {
                           "content": "{ "invalid": "Hello, world!" }",
                           "format": 2,
+                          "metadata": {
+                            "modelId": "mock-model-id",
+                            "provider": "mock-provider",
+                          },
                           "parts": [
                             {
+                              "createdAt": 1704067200000,
                               "text": "{ "invalid": "Hello, world!" }",
                               "type": "text",
                             },
@@ -1223,6 +1296,11 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       {
                         "content": [
                           {
+                            "providerOptions": {
+                              "mastra": {
+                                "createdAt": 1704067200000,
+                              },
+                            },
                             "text": "{ "invalid": "Hello, world!" }",
                             "type": "text",
                           },
@@ -1242,9 +1320,16 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         "id": "1234",
                         "metadata": {
                           "createdAt": 2024-01-01T00:00:00.001Z,
+                          "modelId": "mock-model-id",
+                          "provider": "mock-provider",
                         },
                         "parts": [
                           {
+                            "providerMetadata": {
+                              "mastra": {
+                                "createdAt": 1704067200000,
+                              },
+                            },
                             "text": "{ "invalid": "Hello, world!" }",
                             "type": "text",
                           },
@@ -1340,26 +1425,27 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
           // consume expected error rejection
           await object.catch(err => {
-            expect(err).toMatchInlineSnapshot(`[Error: Structured output validation failed
-✖ Required
-  → at content
-]`);
+            expect(err).toMatchInlineSnapshot(
+              `[Error: Structured output validation failed: - content: Invalid input: expected string, received undefined]`,
+            );
           });
 
           expect(result!).toMatchInlineSnapshot(`
             {
               "content": [
                 {
+                  "providerOptions": {
+                    "mastra": {
+                      "createdAt": 1704067200000,
+                    },
+                  },
                   "text": "{ "invalid": "Hello, world!" }",
                   "type": "text",
                 },
               ],
               "dynamicToolCalls": [],
               "dynamicToolResults": [],
-              "error": [Error: Structured output validation failed
-            ✖ Required
-              → at content
-            ],
+              "error": [Error: Structured output validation failed: - content: Invalid input: expected string, received undefined],
               "files": [],
               "finishReason": "error",
               "model": {
@@ -1378,8 +1464,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "content": {
                       "content": "{ "invalid": "Hello, world!" }",
                       "format": 2,
+                      "metadata": {
+                        "modelId": "mock-model-id",
+                        "provider": "mock-provider",
+                      },
                       "parts": [
                         {
+                          "createdAt": 1704067200000,
                           "text": "{ "invalid": "Hello, world!" }",
                           "type": "text",
                         },
@@ -1396,6 +1487,11 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   {
                     "content": [
                       {
+                        "providerOptions": {
+                          "mastra": {
+                            "createdAt": 1704067200000,
+                          },
+                        },
                         "text": "{ "invalid": "Hello, world!" }",
                         "type": "text",
                       },
@@ -1415,9 +1511,16 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "1234",
                     "metadata": {
                       "createdAt": 2024-01-01T00:00:00.001Z,
+                      "modelId": "mock-model-id",
+                      "provider": "mock-provider",
                     },
                     "parts": [
                       {
+                        "providerMetadata": {
+                          "mastra": {
+                            "createdAt": 1704067200000,
+                          },
+                        },
                         "text": "{ "invalid": "Hello, world!" }",
                         "type": "text",
                       },
@@ -1433,6 +1536,11 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 {
                   "content": [
                     {
+                      "providerOptions": {
+                        "mastra": {
+                          "createdAt": 1704067200000,
+                        },
+                      },
                       "text": "{ "invalid": "Hello, world!" }",
                       "type": "text",
                     },
@@ -1451,8 +1559,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         "content": {
                           "content": "{ "invalid": "Hello, world!" }",
                           "format": 2,
+                          "metadata": {
+                            "modelId": "mock-model-id",
+                            "provider": "mock-provider",
+                          },
                           "parts": [
                             {
+                              "createdAt": 1704067200000,
                               "text": "{ "invalid": "Hello, world!" }",
                               "type": "text",
                             },
@@ -1469,6 +1582,11 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       {
                         "content": [
                           {
+                            "providerOptions": {
+                              "mastra": {
+                                "createdAt": 1704067200000,
+                              },
+                            },
                             "text": "{ "invalid": "Hello, world!" }",
                             "type": "text",
                           },
@@ -1488,9 +1606,16 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         "id": "1234",
                         "metadata": {
                           "createdAt": 2024-01-01T00:00:00.001Z,
+                          "modelId": "mock-model-id",
+                          "provider": "mock-provider",
                         },
                         "parts": [
                           {
+                            "providerMetadata": {
+                              "mastra": {
+                                "createdAt": 1704067200000,
+                              },
+                            },
                             "text": "{ "invalid": "Hello, world!" }",
                             "type": "text",
                           },
@@ -1850,12 +1975,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             runId,
             models,
             structuredOutput: {
-              schema: jsonSchema({
-                type: 'object',
-                properties: { content: { type: 'string' } },
-                required: ['content'],
-                additionalProperties: false,
-              }),
+              schema: z.object({ content: z.string() }),
             },
             messageList: createMessageListWithUserMessage(),
           });
@@ -1878,6 +1998,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           expect(models?.[0]?.model?.doStreamCalls?.[0]?.responseFormat).toMatchInlineSnapshot(`
             {
               "schema": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
                 "additionalProperties": false,
                 "properties": {
                   "content": {
@@ -1930,10 +2051,8 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: createMessageListWithUserMessage(),
           });
-          const expectedErrorMessage = `Structured output validation failed
-✖ Expected string, received number
-  → at content
-`;
+          // Zod v4 has a different error message format
+          const expectedErrorMessage = `Structured output validation failed: - content: Invalid input: expected string, received number`;
           await expect(result.object).rejects.toThrow(expectedErrorMessage);
 
           try {
@@ -1944,7 +2063,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             expect((error as Error)?.cause).toBeInstanceOf(z.ZodError);
             expect(((error as Error)?.cause as z.ZodError)?.issues).toHaveLength(1);
             expect(((error as Error)?.cause as z.ZodError)?.issues[0]?.message).toContain(
-              'Expected string, received number',
+              'expected string, received number',
             );
             expect(((error as Error)?.cause as z.ZodError)?.issues[0]?.path).toEqual(['content']);
           }
@@ -2401,13 +2520,9 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             messageList: createMessageListWithUserMessage(),
           });
           await result.consumeStream();
-          const expectedErrorMessage = `Structured output validation failed
-✖ Required
-  → at [0].content
-✖ Required
-  → at [1].content
-✖ Required
-  → at [2].content`;
+          const expectedErrorMessage = `Structured output validation failed: - 0.content: Invalid input: expected string, received undefined
+- 1.content: Invalid input: expected string, received undefined
+- 2.content: Invalid input: expected string, received undefined`;
           await expect(result.object).rejects.toThrow(expectedErrorMessage);
         });
       });

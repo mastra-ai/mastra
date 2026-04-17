@@ -29,7 +29,17 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
         }
       }
 
-      return { packages, isDev: process.env.MASTRA_DEV === 'true', cmsEnabled: !!mastra.getEditor() };
+      const storage = mastra.getStorage();
+      const storageType = storage?.name;
+      const observabilityStorageType = storage?.stores?.observability?.constructor.name;
+
+      return {
+        packages,
+        isDev: process.env.MASTRA_DEV === 'true',
+        cmsEnabled: !!mastra.getEditor(),
+        storageType,
+        observabilityStorageType,
+      };
     } catch (error) {
       return handleError(error, 'Error getting system packages');
     }

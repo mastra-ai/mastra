@@ -9,6 +9,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+permissions: {}
+
 jobs:
   changes:
     name: Detect code changes
@@ -38,6 +40,7 @@ jobs:
     name: Build
     needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -52,6 +55,7 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v5
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 2
 
       - name: Setup custom action

@@ -133,7 +133,7 @@ describe('ChromaVector Integration Tests', () => {
 
       await vectorDB.upsert({ indexName: testIndexName2, vectors, metadata });
       // Wait for indexing
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 200));
     });
 
     afterAll(async () => {
@@ -266,7 +266,7 @@ describe('ChromaVector Integration Tests', () => {
       });
 
       // Wait for indexing
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 200));
     });
 
     afterAll(async () => {
@@ -573,7 +573,7 @@ createVectorTestSuite({
   },
   waitForIndexing: async () => {
     // Chroma may need a short wait for indexing
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 200));
   },
   // ChromaDB limitations - configure which filter operators are supported
   supportsArrayMetadata: false, // Only primitive types (string, number, boolean)

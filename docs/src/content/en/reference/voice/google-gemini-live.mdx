@@ -1,16 +1,16 @@
 ---
-title: "Reference: Google Gemini Live Voice | Voice"
+title: "Reference: Google Gemini Live voice | Voice"
 description: "Documentation for the GeminiLiveVoice class, providing real-time multimodal voice interactions using Google's Gemini Live API with support for both Gemini API and Vertex AI."
 packages:
   - "@mastra/node-audio"
   - "@mastra/voice-google-gemini-live"
 ---
 
-# Google Gemini Live Voice
+# Google Gemini Live voice
 
 The GeminiLiveVoice class provides real-time voice interaction capabilities using Google's Gemini Live API. It supports bidirectional audio streaming, tool calling, session management, and both standard Google API and Vertex AI authentication methods.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { GeminiLiveVoice } from '@mastra/voice-google-gemini-live'
@@ -96,7 +96,7 @@ voice.close()
 
 ## Configuration
 
-### Constructor Options
+### Constructor options
 
 <PropertiesTable
   content={[
@@ -210,7 +210,7 @@ voice.close()
 
 ## Methods
 
-### connect()
+### `connect()`
 
 Establishes a connection to the Gemini Live API. Must be called before using speak, listen, or send methods.
 
@@ -230,7 +230,7 @@ Establishes a connection to the Gemini Live API. Must be called before using spe
 ]}
 />
 
-### speak()
+### `speak()`
 
 Converts text to speech and sends it to the model. Can accept either a string or a readable stream as input.
 
@@ -280,7 +280,7 @@ Converts text to speech and sends it to the model. Can accept either a string or
 
 Returns: `Promise<void>` (responses are emitted via `speaker` and `writing` events)
 
-### listen()
+### `listen()`
 
 Processes audio input for speech recognition. Takes a readable stream of audio data and returns the transcribed text.
 
@@ -303,7 +303,7 @@ Processes audio input for speech recognition. Takes a readable stream of audio d
 
 Returns: `Promise<string>` - The transcribed text
 
-### send()
+### `send()`
 
 Streams audio data in real-time to the Gemini service for continuous audio streaming scenarios like live microphone input.
 
@@ -320,7 +320,7 @@ Streams audio data in real-time to the Gemini service for continuous audio strea
 
 Returns: `Promise<void>`
 
-### updateSessionConfig()
+### `updateSessionConfig()`
 
 Updates the session configuration dynamically. This can be used to modify voice settings, speaker selection, and other runtime configurations.
 
@@ -337,7 +337,7 @@ Updates the session configuration dynamically. This can be used to modify voice 
 
 Returns: `Promise<void>`
 
-### addTools()
+### `addTools()`
 
 Adds a set of tools to the voice instance. Tools allow the model to perform additional actions during conversations. When GeminiLiveVoice is added to an Agent, any tools configured for the Agent will automatically be available to the voice interface.
 
@@ -354,7 +354,7 @@ Adds a set of tools to the voice instance. Tools allow the model to perform addi
 
 Returns: `void`
 
-### addInstructions()
+### `addInstructions()`
 
 Adds or updates system instructions for the model.
 
@@ -371,7 +371,7 @@ Adds or updates system instructions for the model.
 
 Returns: `void`
 
-### answer()
+### `answer()`
 
 Triggers a response from the model. This method is primarily used internally when integrated with an Agent.
 
@@ -388,25 +388,25 @@ Triggers a response from the model. This method is primarily used internally whe
 
 Returns: `Promise<void>`
 
-### getSpeakers()
+### `getSpeakers()`
 
 Returns a list of available voice speakers for the Gemini Live API.
 
 Returns: `Promise<Array<{ voiceId: string; description?: string }>>`
 
-### disconnect()
+### `disconnect()`
 
 Disconnects from the Gemini Live session and cleans up resources. This is the async method that properly handles cleanup.
 
 Returns: `Promise<void>`
 
-### close()
+### `close()`
 
 Synchronous wrapper for disconnect(). Calls disconnect() internally without awaiting.
 
 Returns: `void`
 
-### on()
+### `on()`
 
 Registers an event listener for voice events.
 
@@ -429,7 +429,7 @@ Registers an event listener for voice events.
 
 Returns: `void`
 
-### off()
+### `off()`
 
 Removes a previously registered event listener.
 
@@ -512,7 +512,7 @@ The GeminiLiveVoice class emits the following events:
 ]}
 />
 
-## Available Models
+## Available models
 
 The following Gemini Live models are available:
 
@@ -524,7 +524,7 @@ The following Gemini Live models are available:
 - `gemini-live-2.5-flash-preview`
 - `gemini-2.6.flash-preview-tts`
 
-## Available Voices
+## Available voices
 
 The following voice options are available:
 
@@ -533,7 +533,7 @@ The following voice options are available:
 - `Kore`: Neutral, professional
 - `Fenrir`: Warm, approachable
 
-## Authentication Methods
+## Authentication methods
 
 ### Gemini API (Development)
 
@@ -575,7 +575,7 @@ const voice = new GeminiLiveVoice({
 })
 ```
 
-## Advanced Features
+## Advanced features
 
 ### Session Management
 

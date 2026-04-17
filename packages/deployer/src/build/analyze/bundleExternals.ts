@@ -19,6 +19,7 @@ import { esmShim } from '../plugins/esm-shim';
 import { aliasHono } from '../plugins/hono-alias';
 import { moduleResolveMap } from '../plugins/module-resolve-map';
 import { nodeGypDetector } from '../plugins/node-gyp-detector';
+import { protocolExternalResolver } from '../plugins/protocol-external-resolver';
 import { subpathExternalsResolver } from '../plugins/subpath-externals-resolver';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
 import type { DependencyMetadata } from '../types';
@@ -173,6 +174,7 @@ async function getInputPlugins(
       ),
     ),
     tsConfigPaths(),
+    protocolExternalResolver(),
     subpathExternalsResolver(externals),
     transpilePackagesMap.size
       ? esbuild({

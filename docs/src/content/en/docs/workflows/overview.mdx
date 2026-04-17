@@ -1,5 +1,5 @@
 ---
-title: "Workflows overview | Workflows"
+title: "Workflows overview"
 description: "Workflows in Mastra help you orchestrate complex sequences of tasks with features like branching, parallel execution, resource suspension, and more."
 packages:
   - "@mastra/core"
@@ -18,9 +18,9 @@ Workflows let you define complex sequences of tasks using clear, structured step
 
 Use workflows for tasks that are clearly defined upfront and involve multiple steps with a specific execution order. They give you fine-grained control over how data flows and transforms between steps, and which primitives are called at each stage.
 
-:::tip[Watch an introduction]
+:::tip
 
-An introduction to workflows, and how they compare to agents [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw)
+Watch an introduction to workflows, and how they compare to agents on [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw).
 
 :::
 
@@ -61,7 +61,7 @@ const step1 = createStep({
 
 :::info
 
-Visit [Step Class](/reference/workflows/step) for a full list of configuration options.
+Visit [`Step`](/reference/workflows/step) for a full list of configuration options.
 
 :::
 
@@ -101,6 +101,15 @@ Visit [Workflow Class](/reference/workflows/workflow) for a full list of configu
 ### Understanding control flow
 
 Workflows can be composed using a number of different methods. The method you choose determines how each step's schema should be structured. Visit the [Control Flow](/docs/workflows/control-flow) page for more information.
+
+## Studio
+
+Open [Studio](/docs/studio/overview) and select a workflow from the **Workflows** tab.
+
+- **Graph view**: The center panel visualizes the workflow's steps and execution flow.
+- **Input form**: The right sidebar generates a form from the workflow's `inputSchema`. Fill it in and start the run.
+- **Live status**: During execution, the graph updates each step's status in real time. The sidebar shows the workflow's input, output, state, and logs.
+- [**Time travel**](/docs/workflows/time-travel): After a run completes, replay individual steps to inspect or retry them.
 
 ## Workflow state
 
@@ -166,7 +175,7 @@ export const testWorkflow = createWorkflow({
 
 ### Cloning a workflow
 
-Clone a workflow using `cloneWorkflow()` when you want to reuse its logic but track it separately under a new ID. Each clone runs independently and appears as a distinct workflow in logs and observability tools.
+Clone a workflow using `cloneWorkflow()` when you want to reuse its logic but track it separately under a new ID. Each clone runs independently and shows up as a distinct workflow in logs and observability tools.
 
 ```typescript prettier:false {6} title="src/mastra/workflows/test-workflow.ts"
 import { cloneWorkflow } from "@mastra/core/workflows";
@@ -209,7 +218,7 @@ const testWorkflow = mastra.getWorkflow('testWorkflow')
 1. It provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores)
 1. It provides full TypeScript type inference for workflow input and output schemas
 
-**Note:** Use `getWorkflow()` with the workflow's **registration key** (the key used when adding it to Mastra). While `getWorkflowById()` is available for retrieving workflows by their `id` property, it does not provide the same level of type inference.
+**Note:** Use `getWorkflow()` with the workflow's **registration key** (the key used when adding it to Mastra). While `getWorkflowById()` is available for retrieving workflows by their `id` property, it doesn't provide the same level of type inference.
 :::
 
 ## Running workflows
@@ -217,7 +226,7 @@ const testWorkflow = mastra.getWorkflow('testWorkflow')
 Workflows can be run in two modes: start waits for all steps to complete before returning, and stream emits events during execution. Choose the approach that fits your use case: start when you only need the final result, and stream when you want to monitor progress or trigger actions as steps complete.
 
 <Tabs>
-  <TabItem value="start" label="Start">
+  <TabItem value="start" label=".start()">
     Create a workflow run instance using `createRun()`, then call `.start()` with `inputData` matching the workflow's `inputSchema`. The workflow executes all steps and returns the final result.
 
     ```typescript
@@ -235,7 +244,7 @@ Workflows can be run in two modes: start waits for all steps to complete before 
     ```
   </TabItem>
 
-  <TabItem value="stream" label="Stream">
+  <TabItem value="stream" label=".stream()">
     Create a workflow run instance using `.createRun()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. Iterate over `fullStream` to track progress, then await `result` to get the final workflow result.
 
     ```typescript
@@ -397,10 +406,6 @@ Visit [Request Context](/docs/server/request-context) for more information.
 For type-safe request context schema validation, see [Schema Validation](/docs/server/request-context#schema-validation).
 
 :::
-
-## Testing with Studio
-
-Use [Studio](/docs/getting-started/studio) to easily run workflows with different inputs, visualize the execution lifecycle, see the inputs and outputs for each step, and inspect each part of the workflow in more detail.
 
 ## Related
 

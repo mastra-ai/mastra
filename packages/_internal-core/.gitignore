@@ -1,0 +1,11 @@
+*.log
+.DS_Store
+node_modules/
+dist/
+.env
+*.d.ts
+!src/llm/model/provider-types.generated.d.ts
+./memory
+./vector/
+./telemetry/
+./storage/

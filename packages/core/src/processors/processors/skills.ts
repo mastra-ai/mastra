@@ -21,7 +21,6 @@
  * });
  * ```
  */
-
 import type { Skill, SkillFormat, WorkspaceSkills } from '../../workspace/skills';
 import type { Workspace } from '../../workspace/workspace';
 import type { ProcessInputStepArgs, Processor } from '../index';
@@ -126,16 +125,18 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
       return '';
     }
 
-    // Get full skill objects to include source info (parallel fetch)
-    const skillPromises = skillsList.map(meta => this.skills?.get(meta.name));
-    const fullSkills = (await Promise.all(skillPromises)).filter((s): s is Skill => s !== undefined);
+    // Get full skill objects to include source info (parallel fetch).
+    // Use meta.path (not meta.name) so same-named skills each resolve to their specific entry.
+    const skillPromises = skillsList.map(meta => this.skills?.get(meta.path));
+    const fullSkills = (await Promise.all(skillPromises)).filter((s): s is Skill => s !== undefined && s !== null);
+    const dedupedSkills = Array.from(new Map(fullSkills.map(skill => [skill.path, skill])).values());
 
     // Sort by name for deterministic output (avoids busting prompt cache)
-    fullSkills.sort((a, b) => a.name.localeCompare(b.name));
+    dedupedSkills.sort((a, b) => a.name.localeCompare(b.name));
 
     switch (this._format) {
       case 'xml': {
-        const skillsXml = fullSkills
+        const skillsXml = dedupedSkills
           .map(
             skill => `  <skill>
     <name>${this.escapeXml(skill.name)}</name>
@@ -155,7 +156,7 @@ ${skillsXml}
         return `Available Skills:
 
 ${JSON.stringify(
-  fullSkills.map(s => ({
+  dedupedSkills.map(s => ({
     name: s.name,
     description: s.description,
     location: this.formatLocation(s),
@@ -167,7 +168,7 @@ ${JSON.stringify(
       }
 
       case 'markdown': {
-        const skillsMd = fullSkills
+        const skillsMd = dedupedSkills
           .map(
             skill =>
               `- **${skill.name}** [${this.formatSourceType(skill)}] (${this.formatLocation(skill)}): ${skill.description}`,
@@ -229,6 +230,7 @@ ${skillsMd}`;
         content:
           'IMPORTANT: Skills are NOT tools. Do not call skill names directly as tool names. ' +
           'To use a skill, call the `skill` tool with the skill name as the "name" parameter. ' +
+          'If multiple skills share the same name, use the skill path (shown in the location field) instead of the name to disambiguate. ' +
           'When a user asks about a topic covered by an available skill, activate it immediately without asking for permission first.',
       });
     }

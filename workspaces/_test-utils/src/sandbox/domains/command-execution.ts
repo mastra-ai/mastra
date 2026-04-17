@@ -94,12 +94,11 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
     );
 
     describe('environment variables', () => {
-      it(
+      const { capabilities } = getContext();
+
+      it.skipIf(!capabilities.supportsEnvVars)(
         'passes environment variables to command',
         async () => {
-          const { capabilities } = getContext();
-          if (!capabilities.supportsEnvVars) return;
-
           const result = await executeCommand('sh', ['-c', 'echo $TEST_VAR'], {
             env: { TEST_VAR: 'test_value' },
           });
@@ -109,12 +108,9 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
         getContext().testTimeout,
       );
 
-      it(
+      it.skipIf(!capabilities.supportsEnvVars)(
         'handles multiple environment variables',
         async () => {
-          const { capabilities } = getContext();
-          if (!capabilities.supportsEnvVars) return;
-
           const result = await executeCommand('sh', ['-c', 'echo "$VAR1 $VAR2"'], {
             env: { VAR1: 'first', VAR2: 'second' },
           });
@@ -124,12 +120,9 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
         getContext().testTimeout,
       );
 
-      it(
+      it.skipIf(!capabilities.supportsEnvVars)(
         'handles env values with special characters',
         async () => {
-          const { capabilities } = getContext();
-          if (!capabilities.supportsEnvVars) return;
-
           const result = await executeCommand('printenv', ['SPECIAL'], {
             env: { SPECIAL: 'has spaces & "quotes"' },
           });
@@ -142,12 +135,11 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
     });
 
     describe('working directory', () => {
-      it(
+      const { capabilities } = getContext();
+
+      it.skipIf(!capabilities.supportsWorkingDirectory)(
         'executes command in specified working directory',
         async () => {
-          const { capabilities } = getContext();
-          if (!capabilities.supportsWorkingDirectory) return;
-
           const result = await executeCommand('pwd', [], {
             cwd: '/tmp',
           });
@@ -160,12 +152,11 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
     });
 
     describe('timeout', () => {
-      it(
+      const { capabilities } = getContext();
+
+      it.skipIf(!capabilities.supportsTimeout)(
         'times out long-running commands',
         async () => {
-          const { capabilities } = getContext();
-          if (!capabilities.supportsTimeout) return;
-
           const result = await executeCommand('sleep', ['10'], {
             timeout: 100,
           });
@@ -176,13 +167,9 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
         getContext().testTimeout,
       );
 
-      it(
+      it.skipIf(!capabilities.supportsTimeout || !capabilities.supportsStreaming)(
         'times out long-running commands with streaming callbacks',
         async () => {
-          const { capabilities } = getContext();
-          if (!capabilities.supportsTimeout) return;
-          if (!capabilities.supportsStreaming) return;
-
           const chunks: string[] = [];
           const result = await executeCommand(
             'sh',
@@ -201,12 +188,9 @@ export function createCommandExecutionTests(getContext: () => TestContext): void
         getContext().testTimeout,
       );
 
-      it(
+      it.skipIf(!capabilities.supportsTimeout)(
         'fast command completes within timeout',
         async () => {
-          const { capabilities } = getContext();
-          if (!capabilities.supportsTimeout) return;
-
           const result = await executeCommand('echo', ['fast'], { timeout: 10000 });
 
           expect(result.exitCode).toBe(0);
@@ -365,12 +349,11 @@ cat /tmp/heredoc-test.txt`,
     });
 
     describe('streaming', () => {
-      it(
+      const { capabilities } = getContext();
+
+      it.skipIf(!capabilities.supportsStreaming)(
         'streams stdout chunks via callback',
         async () => {
-          const { capabilities } = getContext();
-          if (!capabilities.supportsStreaming) return;
-
           const chunks: string[] = [];
           const result = await executeCommand('sh', ['-c', 'for i in 1 2 3; do echo "chunk $i"; sleep 0.3; done'], {
             onStdout: c => chunks.push(c),
@@ -383,12 +366,9 @@ cat /tmp/heredoc-test.txt`,
         getContext().testTimeout,
       );
 
-      it(
+      it.skipIf(!capabilities.supportsStreaming)(
         'streams stderr chunks via callback',
         async () => {
-          const { capabilities } = getContext();
-          if (!capabilities.supportsStreaming) return;
-
           const stderrChunks: string[] = [];
           const result = await executeCommand('sh', ['-c', 'echo "err1" >&2; sleep 0.2; echo "err2" >&2'], {
             onStderr: c => stderrChunks.push(c),
@@ -403,13 +383,14 @@ cat /tmp/heredoc-test.txt`,
     });
 
     describe('sandbox-level environment variables', () => {
+      const { capabilities, createSandbox } = getContext();
+
       const withEnvSandbox = async (
         env: Record<string, string>,
         run: (exec: NonNullable<MastraSandbox['executeCommand']>) => Promise<void>,
       ) => {
-        const { createSandbox } = getContext();
-        if (!createSandbox) return;
-        const envSandbox = await createSandbox({ env });
+        const { createSandbox: create } = getContext();
+        const envSandbox = await create!({ env });
         try {
           await envSandbox._start();
           const exec = envSandbox.executeCommand?.bind(envSandbox);
@@ -420,12 +401,9 @@ cat /tmp/heredoc-test.txt`,
         }
       };
 
-      it(
+      it.skipIf(!capabilities.supportsEnvVars || !createSandbox)(
         'per-command env overrides sandbox-level env',
         async () => {
-          const { capabilities } = getContext();
-          if (!capabilities.supportsEnvVars) return;
-
           await withEnvSandbox({ MY_VAR: 'initial' }, async exec => {
             // Check initial value from sandbox env
             const result1 = await exec('sh', ['-c', 'echo $MY_VAR']);
@@ -445,12 +423,9 @@ cat /tmp/heredoc-test.txt`,
         getContext().testTimeout * 3,
       );
 
-      it(
+      it.skipIf(!capabilities.supportsEnvVars || !createSandbox)(
         'per-command env merges with sandbox-level env',
         async () => {
-          const { capabilities } = getContext();
-          if (!capabilities.supportsEnvVars) return;
-
           await withEnvSandbox({ VAR_A: '1', VAR_B: '2' }, async exec => {
             // Per-command env adds VAR_C and overrides VAR_B
             const result = await exec('sh', ['-c', 'echo $VAR_A $VAR_B $VAR_C'], {
@@ -464,12 +439,11 @@ cat /tmp/heredoc-test.txt`,
     });
 
     describe('concurrency', () => {
-      it(
+      const { capabilities } = getContext();
+
+      it.skipIf(!capabilities.supportsConcurrency)(
         'executes multiple commands concurrently',
         async () => {
-          const { capabilities } = getContext();
-          if (!capabilities.supportsConcurrency) return;
-
           // Run multiple commands in parallel
           const results = await Promise.all([
             executeCommand('echo', ['first']),
@@ -488,13 +462,9 @@ cat /tmp/heredoc-test.txt`,
         getContext().testTimeout,
       );
 
-      it(
+      it.skipIf(!capabilities.supportsConcurrency || !capabilities.supportsEnvVars)(
         'concurrent commands do not interfere with each other',
         async () => {
-          const { capabilities } = getContext();
-          if (!capabilities.supportsConcurrency) return;
-          if (!capabilities.supportsEnvVars) return;
-
           // Run commands that set different env vars
           const results = await Promise.all([
             executeCommand('sh', ['-c', 'echo $VAR'], { env: { VAR: 'value1' } }),

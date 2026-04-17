@@ -1,10 +1,9 @@
-import { useLinkComponent } from '@/lib/framework';
-import { cn } from '@/lib/utils';
-
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
-import { type SidebarState } from './main-sidebar-context';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { CircleAlertIcon } from 'lucide-react';
+import type { SidebarState } from './main-sidebar-context';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import type { LinkComponent } from '@/ds/types/link-component';
+import { cn } from '@/lib/utils';
 
 export type NavLink = {
   name: string;
@@ -15,6 +14,7 @@ export type NavLink = {
   tooltipMsg?: string;
   isOnMastraPlatform: boolean;
   isExperimental?: boolean;
+  indent?: boolean;
 };
 
 export type MainSidebarNavLinkProps = {
@@ -23,6 +23,7 @@ export type MainSidebarNavLinkProps = {
   state?: SidebarState;
   children?: React.ReactNode;
   className?: string;
+  LinkComponent: LinkComponent;
 };
 export function MainSidebarNavLink({
   link,
@@ -30,8 +31,8 @@ export function MainSidebarNavLink({
   children,
   isActive,
   className,
+  LinkComponent: Link,
 }: MainSidebarNavLinkProps) {
-  const { Link } = useLinkComponent();
   const isCollapsed = state === 'collapsed';
   const isFeatured = link?.variant === 'featured';
   const isExternal = link?.url?.startsWith('http');
@@ -53,14 +54,20 @@ export function MainSidebarNavLink({
           '[&>a]:text-neutral5 [&>a]:bg-surface3': isActive,
           '[&_svg]:text-neutral5': isActive,
           // Active indicator bar
-          'before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-5 before:bg-accent1 before:rounded-r-full before:transition-all before:duration-normal':
+          'before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-5 before:bg-black dark:before:bg-white before:rounded-r-full before:transition-all before:duration-normal':
             isActive && !isCollapsed,
           '[&>a]:justify-start': !isCollapsed,
           '[&_svg]:text-neutral3': isCollapsed,
           // Featured variant
-          '[&>a]:rounded-md [&>a]:my-2 [&>a]:bg-accent1/75 [&>a:hover]:bg-accent1/85 [&>a]:text-black [&>a:hover]:text-black':
+          '[&>a]:rounded-md [&>a]:my-2 [&>a]:bg-accent1Dark [&>a:hover]:bg-accent1Darker [&>a]:text-accent1 [&>a:hover]:text-accent1 [&>a]:border [&>a]:border-accent1/30':
             isFeatured,
-          '[&_svg]:text-black/75 [&>a:hover_svg]:text-black': isFeatured,
+          // Keep strong green CTA in dark mode
+          'dark:[&>a]:bg-accent1 dark:[&>a:hover]:bg-accent1/90 dark:[&>a]:text-black dark:[&>a:hover]:text-black dark:[&>a]:border-transparent':
+            isFeatured,
+          '[&_svg]:text-accent1 [&>a:hover_svg]:text-accent1 dark:[&_svg]:text-black/75 dark:[&>a:hover_svg]:text-black':
+            isFeatured,
+          // Indented sub-link
+          '[&>a]:pl-7 [&>a]:text-ui-sm': link?.indent && !isCollapsed,
         },
         className,
       )}

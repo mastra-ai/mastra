@@ -7,19 +7,21 @@ import type {
   ToolSet,
 } from '@internal/ai-sdk-v5';
 import type { StopCondition as StopConditionV6 } from '@internal/ai-v6';
-import z from 'zod';
+import { z } from 'zod/v4';
 import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/agent.types';
 import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
 import type { StructuredOutputOptions } from '../agent/types';
+import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';
 import type { ModelRouterModelId } from '../llm/model';
 import type { ModelMethodType } from '../llm/model/model.loop.types';
 import type { MastraLanguageModelV2, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { MastraMemory, MemoryConfig } from '../memory';
+import type { MastraMemory, MemoryConfigInternal } from '../memory';
 import type { IModelSpanTracker, ObservabilityContext } from '../observability';
 import type {
+  ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
   ProcessInputStepArgs,
@@ -45,19 +47,27 @@ export type StreamInternal = {
   generateId?: IdGenerator;
   currentDate?: () => Date;
   saveQueueManager?: SaveQueueManager; // SaveQueueManager from agent/save-queue
-  memoryConfig?: MemoryConfig; // MemoryConfig from memory/types
+  memoryConfig?: MemoryConfigInternal; // MemoryConfig from memory/types
   threadId?: string;
   resourceId?: string;
   memory?: MastraMemory; // MastraMemory from memory/memory
   threadExists?: boolean;
   // Tools modified by prepareStep/processInputStep - stored here to avoid workflow serialization
   stepTools?: ToolSet;
+  // Active tools from prepareStep - used by toolCallStep to reject calls to hidden tools
+  stepActiveTools?: string[];
   // Workspace from prepareStep/processInputStep - stored here to avoid workflow serialization
   stepWorkspace?: Workspace;
   // Set to true when a delegation hook calls ctx.bail() to signal the loop should stop
   _delegationBailed?: boolean;
   // Stream transport reference (e.g., WebSocket) for stream lifecycle management
   transportRef?: StreamTransportRef;
+  // Background task manager for dispatching tools to run asynchronously
+  backgroundTaskManager?: BackgroundTaskManager;
+  // Agent-level background task config
+  agentBackgroundConfig?: AgentBackgroundConfig;
+  // Manager-level background task config
+  backgroundTaskManagerConfig?: BackgroundTaskManagerConfig;
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
@@ -113,6 +123,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   providerOptions?: SharedProviderOptions;
   outputProcessors?: OutputProcessorOrWorkflow[];
   inputProcessors?: InputProcessorOrWorkflow[];
+  errorProcessors?: ErrorProcessorOrWorkflow[];
   tools?: TOOLS;
   experimental_generateMessageId?: () => string;
   stopWhen?: StopCondition | Array<StopCondition>;
@@ -131,9 +142,9 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   requestContext?: RequestContext;
   methodType: ModelMethodType;
   /**
-   * Maximum number of times processors can trigger a retry per generation.
-   * When a processor calls abort({ retry: true }), the agent will retry with feedback.
-   * If not set, no retries are performed.
+   * Maximum number of processor-triggered retries allowed for this generation.
+   * Input/output processor retries require this to be explicitly set.
+   * Error processor retries from processAPIError default to 10 when errorProcessors are configured and this is not set.
    */
   maxProcessorRetries?: number;
 

@@ -3,13 +3,14 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraMemory } from '../../../memory/memory';
-import type { MemoryConfig } from '../../../memory/types';
-import { resolveObservabilityContext, createObservabilityContext } from '../../../observability';
+import type { MemoryConfigInternal } from '../../../memory/types';
+import { createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
 import type { Step } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
+import type { SaveQueueManager } from '../../save-queue';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
 import { isSupportedLanguageModel } from '../../utils';
@@ -19,13 +20,15 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
   options: InnerAgentExecutionOptions<OUTPUT>;
   resourceId?: string;
+  threadId?: string;
   runId: string;
   requestContext: RequestContext;
   memory?: MastraMemory;
-  memoryConfig?: MemoryConfig;
-  agentSpan: Span<SpanType.AGENT_RUN>;
+  memoryConfig?: MemoryConfigInternal;
+  agentSpan?: Span<SpanType.AGENT_RUN>;
   agentId: string;
   methodType: AgentMethodType;
+  saveQueueManager?: SaveQueueManager;
   /**
    * Shared processor state map that persists across agent turns.
    */
@@ -36,6 +39,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
   capabilities,
   options,
   resourceId,
+  threadId: threadIdFromArgs,
   runId,
   requestContext,
   memory,
@@ -43,6 +47,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
   agentSpan,
   agentId,
   methodType,
+  saveQueueManager,
 }: MapResultsStepOptions<OUTPUT>): Step<
   string,
   unknown,
@@ -52,7 +57,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
   },
   ModelLoopStreamArgs<any, OUTPUT>
 >['execute'] {
-  return async ({ inputData, bail, ...observabilityContext }) => {
+  return async ({ inputData, bail, ..._observabilityContext }) => {
     const toolsData = inputData['prepare-tools-step'];
     const memoryData = inputData['prepare-memory-step'];
 
@@ -66,7 +71,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       temperature: options.modelSettings?.temperature,
       toolChoice: options.toolChoice,
       thread: memoryData.thread,
-      threadId: memoryData.thread?.id,
+      threadId: memoryData.thread?.id ?? threadIdFromArgs,
       resourceId,
       requestContext,
       messageList: memoryData.messageList,
@@ -89,6 +94,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
             messageList: memoryData.messageList!,
             runId,
           });
+
+          if (saveQueueManager && memoryData.thread?.id) {
+            await saveQueueManager.flushMessages(memoryData.messageList!, memoryData.thread.id, memoryConfig);
+          }
         }
 
         return options.onStepFinish?.({ ...props, runId });
@@ -100,27 +109,57 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
     // Check for tripwire and return early if triggered
     if (result.tripwire) {
-      const agentModel = await capabilities.getModel({ requestContext: result.requestContext! });
+      try {
+        const agentModel = await capabilities.getModel({ requestContext: result.requestContext! });
 
-      if (!isSupportedLanguageModel(agentModel)) {
-        throw new MastraError({
-          id: 'MAP_RESULTS_STEP_UNSUPPORTED_MODEL',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: 'Tripwire handling requires a v2/v3 model',
+        if (!isSupportedLanguageModel(agentModel)) {
+          throw new MastraError({
+            id: 'MAP_RESULTS_STEP_UNSUPPORTED_MODEL',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            text: 'Tripwire handling requires a v2/v3 model',
+          });
+        }
+
+        const modelOutput = await getModelOutputForTripwire<OUTPUT>({
+          tripwire: memoryData.tripwire!,
+          runId,
+          ...createObservabilityContext({ currentSpan: agentSpan }),
+          options: options,
+          model: agentModel,
+          messageList: memoryData.messageList,
         });
+
+        // End agent span with tripwire information after fallback completes
+        agentSpan?.end({
+          output: { tripwire: memoryData.tripwire },
+          attributes: {
+            tripwireAbort: {
+              reason: memoryData.tripwire?.reason,
+              processorId: memoryData.tripwire?.processorId,
+              retry: memoryData.tripwire?.retry,
+              metadata: memoryData.tripwire?.metadata,
+            },
+          },
+        });
+
+        return bail(modelOutput);
+      } catch (error) {
+        // End agent span with error and tripwire context so failures aren't masked
+        agentSpan?.error({
+          error: error as Error,
+          endSpan: true,
+          attributes: {
+            tripwireAbort: {
+              reason: memoryData.tripwire?.reason,
+              processorId: memoryData.tripwire?.processorId,
+              retry: memoryData.tripwire?.retry,
+              metadata: memoryData.tripwire?.metadata,
+            },
+          },
+        });
+        throw error;
       }
-
-      const modelOutput = await getModelOutputForTripwire<OUTPUT>({
-        tripwire: memoryData.tripwire!,
-        runId,
-        ...resolveObservabilityContext(observabilityContext),
-        options: options,
-        model: agentModel,
-        messageList: memoryData.messageList,
-      });
-
-      return bail(modelOutput);
     }
 
     // Resolve output processors - overrides replace user-configured but auto-derived (memory) are kept
@@ -140,6 +179,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
         ...options.structuredOutput,
         logger: capabilities.logger,
       });
+      if (capabilities.mastra) {
+        structuredProcessor.__registerMastra(capabilities.mastra);
+      }
       effectiveOutputProcessors = effectiveOutputProcessors
         ? [...effectiveOutputProcessors, structuredProcessor]
         : [structuredProcessor];
@@ -154,6 +196,16 @@ export function createMapResultsStep<OUTPUT = undefined>({
           })
         : options.inputProcessors || capabilities.inputProcessors
       : options.inputProcessors || [];
+
+    // Resolve error processors
+    const effectiveErrorProcessors = capabilities.errorProcessors
+      ? typeof capabilities.errorProcessors === 'function'
+        ? await capabilities.errorProcessors({
+            requestContext: result.requestContext!,
+            overrides: options.errorProcessors,
+          })
+        : options.errorProcessors || capabilities.errorProcessors
+      : options.errorProcessors || [];
 
     const messageList = memoryData.messageList!;
 
@@ -179,25 +231,48 @@ export function createMapResultsStep<OUTPUT = undefined>({
           if (payload.finishReason === 'error') {
             const provider = payload.model?.provider;
             const modelId = payload.model?.modelId;
-            const isUpstreamError = APICallError.isInstance(payload.error);
+            const error =
+              payload.error instanceof Error
+                ? payload.error
+                : new MastraError(
+                    {
+                      id: 'AGENT_STREAM_ERROR',
+                      text:
+                        payload.error == null
+                          ? 'Agent stream finished with finishReason "error" but no error payload was provided'
+                          : undefined,
+                      domain: ErrorDomain.AGENT,
+                      category: ErrorCategory.SYSTEM,
+                      details: {
+                        runId,
+                        ...(provider && { provider }),
+                        ...(modelId && { modelId }),
+                      },
+                    },
+                    payload.error,
+                  );
+            const isUpstreamError = APICallError.isInstance(error);
 
             if (isUpstreamError) {
-              const providerInfo = provider ? ` from ${provider}` : '';
-              const modelInfo = modelId ? ` (model: ${modelId})` : '';
-              capabilities.logger.error(`Upstream LLM API error${providerInfo}${modelInfo}`, {
-                error: payload.error,
+              capabilities.logger.error('Upstream LLM API error', {
+                error,
                 runId,
                 ...(provider && { provider }),
                 ...(modelId && { modelId }),
               });
             } else {
               capabilities.logger.error('Error in agent stream', {
-                error: payload.error,
+                error,
                 runId,
                 ...(provider && { provider }),
                 ...(modelId && { modelId }),
               });
             }
+
+            // End the AGENT_RUN span so the trace is exported.
+            // Without this, the span is orphaned and exporters that wait
+            // for the root span to end (e.g. Datadog) never emit the trace.
+            agentSpan?.error({ error, endSpan: true });
             return;
           }
 
@@ -234,7 +309,24 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 error: e,
                 runId,
               });
+
+              const spanError =
+                e instanceof Error
+                  ? e
+                  : new MastraError(
+                      {
+                        id: 'AGENT_ON_FINISH_ERROR',
+                        domain: ErrorDomain.AGENT,
+                        category: ErrorCategory.SYSTEM,
+                        details: { runId },
+                      },
+                      e,
+                    );
+
+              agentSpan?.error({ error: spanError, endSpan: true });
             }
+          } else {
+            agentSpan?.end();
           }
 
           await options?.onFinish?.({
@@ -255,6 +347,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       structuredOutput: options.structuredOutput,
       inputProcessors: effectiveInputProcessors,
       outputProcessors: effectiveOutputProcessors,
+      errorProcessors: effectiveErrorProcessors,
       modelSettings: {
         temperature: 0,
         ...(options.modelSettings || {}),

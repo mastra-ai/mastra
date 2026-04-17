@@ -1,10 +1,14 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "ui": "stream",
+  "futureFlags": {
+    "affectedUsingTaskInputs": true
+  },
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"],
-      "env": ["RAPID_API_KEY", "ANTHROPIC_API_KEY"]
+      "outputLogs": "new-only"
     },
     "lint": {
       "dependsOn": []

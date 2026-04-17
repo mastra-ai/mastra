@@ -1,6 +1,6 @@
 import * as crypto from 'node:crypto';
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import z from 'zod';
+import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
@@ -8,8 +8,12 @@ import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ObservabilityContext } from '../../observability';
 import { resolveObservabilityContext } from '../../observability';
+import type { PublicSchema } from '../../schema';
+import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
+import { selectMessagesToCheck } from './message-selection';
+import type { LastMessageOnlyOption } from './message-selection';
 
 /**
  * PII categories for detection and redaction
@@ -65,7 +69,7 @@ export interface PIIDetectionResult {
 /**
  * Configuration options for PIIDetector
  */
-export interface PIIDetectorOptions {
+export interface PIIDetectorOptions extends LastMessageOnlyOption {
   /**
    * Model configuration for the detection agent
    * Supports magic strings like "openai/gpt-4o", config objects, or direct LanguageModel instances
@@ -162,6 +166,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
   private redactionMethod: 'mask' | 'hash' | 'remove' | 'placeholder';
   private includeDetections: boolean;
   private preserveFormat: boolean;
+  private lastMessageOnly: boolean;
   private structuredOutputOptions?: PIIDetectorOptions['structuredOutputOptions'];
   private providerOptions?: ProviderOptions;
 
@@ -189,6 +194,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
     this.redactionMethod = options.redactionMethod || 'mask';
     this.includeDetections = options.includeDetections ?? false;
     this.preserveFormat = options.preserveFormat ?? true;
+    this.lastMessageOnly = options.lastMessageOnly ?? false;
     this.structuredOutputOptions = options.structuredOutputOptions;
     this.providerOptions = options.providerOptions;
 
@@ -216,9 +222,15 @@ export class PIIDetector implements Processor<'pii-detector'> {
       }
 
       const processedMessages: MastraDBMessage[] = [];
+      const messagesToCheck = selectMessagesToCheck(messages, this.lastMessageOnly);
+      const checkedMessageIds = new Set(messagesToCheck.map(message => message.id));
 
       // Evaluate each message
       for (const message of messages) {
+        if (!checkedMessageIds.has(message.id)) {
+          processedMessages.push(message);
+          continue;
+        }
         const textContent = this.extractTextContent(message);
         if (!textContent.trim()) {
           // No text content to analyze
@@ -309,12 +321,12 @@ export class PIIDetector implements Processor<'pii-detector'> {
             })
           : baseSchema;
 
-      let response;
+      let result: PIIDetectionResult;
       if (isSupportedLanguageModel(model)) {
-        response = await this.detectionAgent.generate(prompt, {
+        const response = await this.detectionAgent.generate(prompt, {
           structuredOutput: {
-            schema,
             ...(this.structuredOutputOptions ?? {}),
+            schema,
           },
           modelSettings: {
             temperature: 0,
@@ -322,16 +334,22 @@ export class PIIDetector implements Processor<'pii-detector'> {
           providerOptions: this.providerOptions,
           ...observabilityContext,
         });
+        if (!response.object) {
+          throw new Error('Structured output returned no object');
+        }
+        result = response.object;
       } else {
-        response = await this.detectionAgent.generateLegacy(prompt, {
-          output: schema,
+        const standardSchema = toStandardSchema(schema as PublicSchema);
+        const response = await this.detectionAgent.generateLegacy(prompt, {
+          output: standardSchemaToJSONSchema(standardSchema),
           temperature: 0,
           providerOptions: this.providerOptions as SharedV2ProviderOptions,
           ...observabilityContext,
         });
+
+        result = response.object as PIIDetectionResult;
       }
 
-      const result = response.object as PIIDetectionResult;
       // Apply redaction method if not already provided and we have detections
       if (this.strategy === 'redact') {
         if (!result.redacted_content && result.detections && result.detections.length > 0) {
@@ -668,9 +686,15 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
       }
 
       const processedMessages: MastraDBMessage[] = [];
+      const messagesToCheck = selectMessagesToCheck(messages, this.lastMessageOnly);
+      const checkedMessageIds = new Set(messagesToCheck.map(message => message.id));
 
       // Evaluate each message
       for (const message of messages) {
+        if (!checkedMessageIds.has(message.id)) {
+          processedMessages.push(message);
+          continue;
+        }
         const textContent = this.extractTextContent(message);
         if (!textContent.trim()) {
           // No text content to analyze

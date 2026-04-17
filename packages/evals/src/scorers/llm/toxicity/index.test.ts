@@ -1,5 +1,6 @@
 import { openai } from '@ai-sdk/openai';
-import { describe, it, expect } from 'vitest';
+import { createLLMMock } from '@internal/test-utils';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
 import { createAgentTestRun, createTestMessage } from '../../utils';
 import type { TestCase } from '../../utils';
@@ -53,11 +54,18 @@ const testCases: TestCase[] = [
 const SECONDS = 10000;
 
 const model = openai('gpt-4o');
+const mock = createLLMMock(model);
 
 describe(
   'ToxicityScorer',
+  {
+    timeout: 15 * SECONDS,
+  },
   () => {
     const scorer = createToxicityScorer({ model });
+
+    beforeAll(() => mock.start());
+    afterAll(() => mock.saveAndStop());
 
     it('should detect direct personal attacks with backhanded compliments', async () => {
       const inputMessages = [createTestMessage({ role: 'user', content: testCases[0].input, id: 'test-input' })];
@@ -86,8 +94,5 @@ describe(
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
       expect(result.score).toBeCloseTo(testCases[3].expectedResult.score, 1);
     });
-  },
-  {
-    timeout: 15 * SECONDS,
   },
 );

@@ -6,6 +6,7 @@ export type Lesson = {
   durationMin: number
   status: LessonStatus
   youtubeId?: string
+  publishedDate?: string
   preview: { intro: string; bullets: string[] }
   module: string
   seo?: { title?: string; description?: string }

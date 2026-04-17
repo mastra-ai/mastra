@@ -21,18 +21,18 @@ describe('workspace_write_file', () => {
 
   it('should write file content', async () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute(
       {
-        path: '/new.txt',
+        path: 'new.txt',
         content: 'New content',
       },
       { workspace },
     );
 
     expect(typeof result).toBe('string');
-    expect(result).toContain('Wrote 11 bytes to /new.txt');
+    expect(result).toContain('Wrote 11 bytes to new.txt');
 
     const written = await fs.readFile(path.join(tempDir, 'new.txt'), 'utf-8');
     expect(written).toBe('New content');
@@ -41,14 +41,14 @@ describe('workspace_write_file', () => {
   it('should overwrite existing file by default', async () => {
     await fs.writeFile(path.join(tempDir, 'existing.txt'), 'original');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     // Read first (required by safety)
-    await workspace.filesystem!.readFile('/existing.txt');
+    await workspace.filesystem!.readFile('existing.txt');
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute(
       {
-        path: '/existing.txt',
+        path: 'existing.txt',
         content: 'updated',
       },
       { workspace },

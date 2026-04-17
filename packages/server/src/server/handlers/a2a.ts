@@ -10,7 +10,7 @@ import type {
 import type { Agent } from '@mastra/core/agent';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { RequestContext } from '@mastra/core/request-context';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { convertToCoreMessage, normalizeError, createSuccessResponse, createErrorResponse } from '../a2a/protocol';
 import type { InMemoryTaskStore } from '../a2a/store';
 import { applyUpdateToTask, createTaskContext, loadOrCreateTask } from '../a2a/tasks';
@@ -40,7 +40,7 @@ const messageSendParamsSchema = z.object({
     taskId: z.string().optional(),
     referenceTaskIds: z.array(z.string()).optional(),
     extensions: z.array(z.string()).optional(),
-    metadata: z.record(z.any()).optional(),
+    metadata: z.record(z.string(), z.any()).optional(),
   }),
 });
 
@@ -103,7 +103,7 @@ function validateMessageSendParams(params: MessageSendParams) {
     messageSendParamsSchema.parse(params);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      throw MastraA2AError.invalidParams((error as z.ZodError).errors[0]!.message);
+      throw MastraA2AError.invalidParams((error as z.ZodError).issues[0]!.message);
     }
 
     throw error;

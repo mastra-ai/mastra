@@ -1,4 +1,4 @@
-import z from 'zod';
+import { z } from 'zod/v4';
 import { createCombinedPaginationSchema, tracingOptionsSchema, messageResponseSchema } from './common';
 
 export const workflowRunStatusSchema = z.enum([
@@ -77,7 +77,7 @@ export const listWorkflowsResponseSchema = z.record(z.string(), workflowInfoSche
 const workflowRunSchema = z.object({
   workflowName: z.string(),
   runId: z.string(),
-  snapshot: z.union([z.object({}), z.string()]),
+  snapshot: z.union([z.record(z.string(), z.any()), z.string()]),
   createdAt: z.date(),
   updatedAt: z.date(),
   resourceId: z.string().optional(),

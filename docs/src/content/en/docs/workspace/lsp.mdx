@@ -1,0 +1,123 @@
+---
+title: "LSP inspection | Workspace"
+description: Configure Language Server Protocol support for semantic code inspection in workspace files.
+packages:
+  - "@mastra/core"
+---
+
+# LSP inspection
+
+**Added in:** `@mastra/core@1.1.0`
+
+LSP inspection gives workspace-backed agents semantic code intelligence. When you enable LSP on a workspace, agents can inspect symbols in supported files to retrieve hover information, jump to definitions, and find implementations.
+
+## When to use LSP inspection
+
+Use LSP inspection when your agent needs semantic code understanding instead of plain-text search alone:
+
+- Inspect TypeScript or JavaScript symbols and their inferred types
+- Find where a symbol is declared before editing related code
+- Explore implementations across a codebase without manually tracing every file
+- Combine semantic inspection with `view` and `search_content` for faster navigation
+
+## Basic usage
+
+Enable LSP on a workspace by setting `lsp: true`:
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  lsp: true,
+})
+```
+
+With this configuration, the workspace registers the default LSP inspection tool alongside the configured filesystem and sandbox tools.
+
+## Agent tool
+
+When LSP is enabled, the workspace exposes `mastra_workspace_lsp_inspect` by default.
+
+```json
+{
+  "path": "/absolute/path/to/file.ts",
+  "line": 10,
+  "match": "const foo = <<<bar()"
+}
+```
+
+The `match` field must include exactly one `<<<` cursor marker. The marker identifies the symbol position on the specified line.
+
+The tool returns up to three result groups:
+
+| Result | Description |
+| - | - |
+| `hover` | Type information or documentation for the symbol at the cursor |
+| `diagnostics` | Line-scoped LSP diagnostics for the inspected line, when present |
+| `definition` | Declaration locations with a one-line preview |
+| `implementation` | Implementation or usage locations |
+
+## Tool name remapping
+
+Rename the tool if your agent expects a shorter name:
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  lsp: true,
+  tools: {
+    [WORKSPACE_TOOLS.LSP.LSP_INSPECT]: {
+      name: 'lsp_inspect',
+    },
+  },
+})
+```
+
+This changes the exposed tool name only. The configuration key stays `WORKSPACE_TOOLS.LSP.LSP_INSPECT`.
+
+## LSP configuration
+
+Set `lsp` to `true` for default behavior, or provide an object to customize server startup and diagnostics:
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  lsp: {
+    diagnosticTimeout: 4000,
+    initTimeout: 8000,
+    disableServers: ['pyright'],
+    binaryOverrides: {
+      typescript: '/custom/path/to/typescript-language-server',
+    },
+    searchPaths: ['/opt/homebrew/bin'],
+  },
+})
+```
+
+Use custom configuration when you need to:
+
+- Increase timeouts for large repositories
+- Disable specific language servers
+- Point Mastra at custom language server binaries
+- Add extra binary search paths in constrained environments
+
+## Requirements and limitations
+
+- LSP inspection only works for file types with a matching language server
+- The `path` you inspect must resolve inside the workspace filesystem or allowed paths
+- External package inspection may resolve to declaration files such as `.d.ts` instead of runtime source files
+- `lsp_inspect` complements `view` and `search_content`, but does not replace reading implementation code when you need full context
+
+## Related
+
+- [Workspace overview](/docs/workspace/overview)
+- [Filesystem](/docs/workspace/filesystem)
+- [Sandbox](/docs/workspace/sandbox)
+- [Search and indexing](/docs/workspace/search)
+- [Workspace class reference](/reference/workspace/workspace-class)

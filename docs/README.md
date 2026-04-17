@@ -22,7 +22,7 @@ Here's a quick start to run the docs locally
 
 ### Remark
 
-To lint the markdown files, you can use `remark`:
+To lint markdown files according to remark rules (e.g. enforcing consistent heading levels, list markers, etc.), you can use `remark`:
 
 ```bash
 pnpm run lint:remark
@@ -30,14 +30,22 @@ pnpm run lint:remark
 
 ### Vale
 
-In order to run `lint:vale` you need to globally install `mdx2vast`:
+Vale is a syntax-aware linter for prose that can help enforce style and grammar rules. We use it to maintain consistency across our documentation.
 
-```bash
-npm install -g mdx2vast
-```
+1. Run the Vale download script to fetch a binary:
 
-Then you can run the Vale linter:
+   ```bash
+   pnpm run vale:download
+   ```
 
-```bash
-pnpm run lint:vale
-```
+1. Install `mdx2vast` globally, which is a dependency for Vale to lint MDX files:
+
+   ```bash
+   npm install -g mdx2vast
+   ```
+
+1. Then you can run the Vale linter:
+
+   ```bash
+   pnpm run lint:vale
+   ```

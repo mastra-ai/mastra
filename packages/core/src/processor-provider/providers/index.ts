@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import { BatchPartsProcessor } from '../../processors/processors/batch-parts';
 import { LanguageDetector } from '../../processors/processors/language-detector';

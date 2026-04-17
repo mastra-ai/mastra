@@ -13,6 +13,7 @@
  */
 
 import { createSandboxLifecycleTests, createMountOperationsTests } from '@internal/workspace-test-utils';
+import { SandboxNotReadyError } from '@mastra/core/workspace';
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 import { BlaxelSandbox } from './index';
@@ -339,20 +340,27 @@ describe('BlaxelSandbox', () => {
     });
   });
 
-  describe('instance accessor', () => {
+  describe('blaxel accessor', () => {
     it('throws SandboxNotReadyError if not started', () => {
       const sandbox = new BlaxelSandbox();
 
-      expect(() => sandbox.instance).toThrow();
+      expect(() => sandbox.blaxel).toThrow(SandboxNotReadyError);
     });
 
     it('returns Blaxel SandboxInstance when started', async () => {
       const sandbox = new BlaxelSandbox();
       await sandbox._start();
 
-      const instance = sandbox.instance;
+      const instance = sandbox.blaxel;
 
       expect(instance).toBe(mockSandbox);
+    });
+
+    it('deprecated instance getter delegates to blaxel', async () => {
+      const sandbox = new BlaxelSandbox();
+      await sandbox._start();
+
+      expect(sandbox.instance).toBe(sandbox.blaxel);
     });
   });
 
@@ -916,10 +924,10 @@ describe('BlaxelSandbox Error Handling', () => {
     (SandboxInstance.get as any).mockRejectedValue(new Error('not found'));
   });
 
-  it('SandboxNotReadyError thrown if instance accessed before start', () => {
+  it('SandboxNotReadyError thrown if blaxel accessed before start', () => {
     const sandbox = new BlaxelSandbox();
 
-    expect(() => sandbox.instance).toThrow(/not started|not ready|Sandbox/i);
+    expect(() => sandbox.blaxel).toThrow(SandboxNotReadyError);
   });
 
   it('executeCommand auto-starts sandbox if not running', async () => {

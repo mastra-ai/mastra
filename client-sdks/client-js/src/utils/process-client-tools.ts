@@ -1,5 +1,4 @@
 import type { ToolsInput } from '@mastra/core/agent';
-import { isVercelTool } from '@mastra/core/tools/is-vercel-tool';
 import { zodToJsonSchema } from './zod-to-json-schema';
 
 export function processClientTools(clientTools: ToolsInput | undefined): ToolsInput | undefined {
@@ -9,24 +8,19 @@ export function processClientTools(clientTools: ToolsInput | undefined): ToolsIn
 
   return Object.fromEntries(
     Object.entries(clientTools).map(([key, value]) => {
-      if (isVercelTool(value)) {
-        return [
-          key,
-          {
-            ...value,
-            parameters: value.parameters ? zodToJsonSchema(value.parameters) : undefined,
-          },
-        ];
-      } else {
-        return [
-          key,
-          {
-            ...value,
-            inputSchema: value.inputSchema ? zodToJsonSchema(value.inputSchema) : undefined,
-            outputSchema: value.outputSchema ? zodToJsonSchema(value.outputSchema) : undefined,
-          },
-        ];
-      }
+      const tool = value as any;
+      return [
+        key,
+        {
+          ...value,
+          // Serialize parameters (Vercel v4 tool format)
+          ...(tool.parameters !== undefined ? { parameters: zodToJsonSchema(tool.parameters) } : {}),
+          // Serialize inputSchema (Mastra tool, ClientTool, or Vercel v5 tool format)
+          ...(tool.inputSchema !== undefined ? { inputSchema: zodToJsonSchema(tool.inputSchema) } : {}),
+          // Serialize outputSchema
+          ...(tool.outputSchema !== undefined ? { outputSchema: zodToJsonSchema(tool.outputSchema) } : {}),
+        },
+      ];
     }),
   );
 }

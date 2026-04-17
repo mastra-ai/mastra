@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
-import { Harness, taskWriteTool, taskCheckTool } from '@mastra/core/harness';
+import type { MastraBrowser } from '@mastra/core/browser';
+import { Harness } from '@mastra/core/harness';
 import type {
   CustomAvailableModel,
   HeartbeatHandler,
@@ -7,13 +8,15 @@ import type {
   HarnessMode,
   HarnessSubagent,
 } from '@mastra/core/harness';
-import { PROVIDER_REGISTRY } from '@mastra/core/llm';
-import type { ProviderConfig } from '@mastra/core/llm';
+import { GatewayRegistry, PROVIDER_REGISTRY } from '@mastra/core/llm';
+import type { LanguageModel, ProviderConfig } from '@mastra/core/llm';
+import { AgentsMDInjector, PrefillErrorHandler } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
 import { getDynamicModel, resolveModel } from './agents/model.js';
+import { getStaticallyLoadedInstructionPaths } from './agents/prompts/agent-instructions.js';
 import { executeSubagent } from './agents/subagents/execute.js';
 import { exploreSubagent } from './agents/subagents/explore.js';
 import { planSubagent } from './agents/subagents/plan.js';
@@ -23,11 +26,13 @@ import { getDynamicWorkspace } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
 import { HookManager } from './hooks/index.js';
 import { createMcpManager } from './mcp/index.js';
+import type { McpServerConfig } from './mcp/index.js';
 import type { ProviderAccess } from './onboarding/packs.js';
 import { getAvailableModePacks, getAvailableOmPacks } from './onboarding/packs.js';
 import {
   getCustomProviderId,
   loadSettings,
+  MEMORY_GATEWAY_PROVIDER,
   resolveModelDefaults,
   resolveOmModel,
   saveSettings,
@@ -38,19 +43,12 @@ import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 
 import { stateSchema } from './schema.js';
-import {
-  createViewTool,
-  createGrepTool,
-  createGlobTool,
-  createExecuteCommandTool,
-  createWriteFileTool,
-  createStringReplaceLspTool,
-} from './tools/index.js';
+
 import { mastra } from './tui/theme.js';
 import { syncGateways } from './utils/gateway-sync.js';
 import { detectProject, getStorageConfig, getResourceIdOverride } from './utils/project.js';
 import type { StorageConfig } from './utils/project.js';
-import { createStorage } from './utils/storage-factory.js';
+import { createStorage, createVectorStore } from './utils/storage-factory.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
 const PROVIDER_TO_OAUTH_ID: Record<string, string> = {
@@ -62,7 +60,7 @@ export interface MastraCodeConfig {
   /** Working directory for project detection. Default: process.cwd() */
   cwd?: string;
   /** Override modes (model IDs, colors, which modes exist). Default: build/plan/fast */
-  modes?: HarnessMode[];
+  modes?: HarnessMode<Record<string, unknown>>[];
   /** Override or extend subagent definitions. Default: explore/plan/execute */
   subagents?: HarnessSubagent[];
   /** Extra tools merged into the dynamic tool set. Can be a static record or a function that receives requestContext. */
@@ -83,16 +81,22 @@ export interface MastraCodeConfig {
   storage?: StorageConfig;
   /** Observational memory scope. Default: auto-detected from env/config files, falls back to 'thread' */
   omScope?: 'thread' | 'resource';
+  /** Path to a custom settings.json file. Default: global settings */
+  settingsPath?: string;
   /** Initial state overrides (yolo, thinkingLevel, etc.) */
   initialState?: Record<string, unknown>;
   /** Override heartbeat handlers. Default: gateway-sync */
   heartbeatHandlers?: HeartbeatHandler[];
   /** Override the workspace. Default: local filesystem + local sandbox based on detected project */
   workspace?: HarnessConfig['workspace'];
+  /** Programmatic MCP server configurations, merged with (and overriding) file-based configs. */
+  mcpServers?: Record<string, McpServerConfig>;
   /** Disable MCP server discovery. Default: false */
   disableMcp?: boolean;
   /** Disable hooks. Default: false */
   disableHooks?: boolean;
+  /** Browser provider for browser automation tools. When set, the agent gains access to browser tools. */
+  browser?: MastraBrowser;
 }
 
 export function createAuthStorage() {
@@ -105,8 +109,52 @@ export function createAuthStorage() {
 export async function createMastraCode(config?: MastraCodeConfig) {
   const cwd = config?.cwd ?? process.cwd();
 
+  const gatewayRegistry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+
   // Auth storage (shared with Claude Max / OpenAI providers and Harness)
   const authStorage = createAuthStorage();
+  const globalSettings = loadSettings(config?.settingsPath);
+  const storedGatewayKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER);
+  const storedGatewayUrl = globalSettings.memoryGateway?.baseUrl;
+
+  if (storedGatewayKey) {
+    process.env['MASTRA_GATEWAY_API_KEY'] ??= storedGatewayKey;
+  }
+
+  if (storedGatewayUrl) {
+    process.env['MASTRA_GATEWAY_URL'] ??= storedGatewayUrl;
+  }
+
+  // Load user-entered API keys from auth.json into process.env
+  // (only sets env vars that aren't already present — env vars take precedence)
+  try {
+    const registry = PROVIDER_REGISTRY as Record<string, ProviderConfig>;
+    const providerEnvVars: Record<string, string | undefined> = {};
+    for (const [provider, cfg] of Object.entries(registry)) {
+      const envVars = cfg?.apiKeyEnvVar;
+      providerEnvVars[provider] = Array.isArray(envVars) ? envVars[0] : envVars;
+    }
+    providerEnvVars[MEMORY_GATEWAY_PROVIDER] ??= 'MASTRA_GATEWAY_API_KEY';
+    authStorage.loadStoredApiKeysIntoEnv(providerEnvVars);
+  } catch {
+    // Registry unavailable — load well-known provider keys so non-gateway flows still work
+    authStorage.loadStoredApiKeysIntoEnv({
+      [MEMORY_GATEWAY_PROVIDER]: 'MASTRA_GATEWAY_API_KEY',
+      anthropic: 'ANTHROPIC_API_KEY',
+      openai: 'OPENAI_API_KEY',
+      google: 'GOOGLE_GENERATIVE_AI_API_KEY',
+      cerebras: 'CEREBRAS_API_KEY',
+      deepseek: 'DEEPSEEK_API_KEY',
+    });
+  }
+
+  try {
+    await gatewayRegistry.syncGateways(true);
+  } catch (error) {
+    console.warn('Failed to sync gateways at startup', error);
+  }
+
+  const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
 
   // Project detection
   const project = detectProject(cwd);
@@ -117,19 +165,19 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     project.resourceIdOverride = true;
   }
 
-  // Load global settings to resolve storage preferences (needed before storage creation)
-  const globalSettings = loadSettings();
-
   // Storage
   const storageConfig = config?.storage ?? getStorageConfig(project.rootPath, globalSettings.storage);
   const storageResult = await createStorage(storageConfig);
   const storage = storageResult.storage;
   const storageWarning = storageResult.warning;
 
-  const memory = getDynamicMemory(storage);
+  // Vector store for recall search (separate DB file to avoid bloating main storage)
+  const vectorStore = await createVectorStore(storageConfig, storageResult.backend);
+
+  const memory = getDynamicMemory(storage, vectorStore);
 
   // MCP
-  const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath);
+  const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, config?.mcpServers);
 
   // Hooks
   const hookManager = config?.disableHooks ? undefined : new HookManager(project.rootPath, 'session-init');
@@ -147,87 +195,44 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     instructions: getDynamicInstructions,
     model: getDynamicModel,
     tools: createDynamicTools(mcpManager, config?.extraTools, hookManager, config?.disabledTools),
-  });
-
-  // Build subagent definitions with project-scoped tools
-  const viewTool = createViewTool(project.rootPath);
-  const grepTool = createGrepTool(project.rootPath);
-  const globTool = createGlobTool(project.rootPath);
-  const executeCommandTool = createExecuteCommandTool(project.rootPath);
-  const writeFileTool = createWriteFileTool(project.rootPath);
-  const stringReplaceLspTool = createStringReplaceLspTool(project.rootPath);
-
-  // Filter disabled tools from a tool map so subagents respect disabledTools config.
-  const filterDisabled = <T extends Record<string, unknown>>(tools: T): T => {
-    if (!config?.disabledTools?.length) return tools;
-    const filtered = { ...tools };
-    for (const name of config.disabledTools) {
-      delete (filtered as Record<string, unknown>)[name];
-    }
-    return filtered;
-  };
-
-  const readOnlyTools = filterDisabled({
-    view: viewTool,
-    search_content: grepTool,
-    find_files: globTool,
-  });
-
-  const defaultSubagents: HarnessSubagent[] = [
-    {
-      id: exploreSubagent.id,
-      name: exploreSubagent.name,
-      description:
-        "Read-only codebase exploration. Use for questions like 'find all usages of X', 'how does module Y work'.",
-      instructions: exploreSubagent.instructions,
-      tools: readOnlyTools,
-    },
-    {
-      id: planSubagent.id,
-      name: planSubagent.name,
-      description:
-        "Read-only analysis and planning. Use for 'create an implementation plan for X', 'analyze the architecture of Y'.",
-      instructions: planSubagent.instructions,
-      tools: readOnlyTools,
-    },
-    {
-      id: executeSubagent.id,
-      name: executeSubagent.name,
-      description:
-        "Task execution with write capabilities. Use for 'implement feature X', 'fix bug Y', 'refactor module Z'.",
-      instructions: executeSubagent.instructions,
-      tools: filterDisabled({
-        ...readOnlyTools,
-        string_replace_lsp: stringReplaceLspTool,
-        write_file: writeFileTool,
-        execute_command: executeCommandTool,
-        task_write: taskWriteTool,
-        task_check: taskCheckTool,
+    inputProcessors: [
+      new AgentsMDInjector({
+        getIgnoredInstructionPaths: ({ requestContext }) => {
+          const harnessContext = requestContext?.get('harness') as
+            | { state?: { projectPath?: string }; getState?: () => { projectPath?: string } }
+            | undefined;
+          const projectPath =
+            harnessContext?.getState?.()?.projectPath ?? harnessContext?.state?.projectPath ?? project.rootPath;
+          return getStaticallyLoadedInstructionPaths(projectPath);
+        },
       }),
-    },
-  ];
+    ],
+    errorProcessors: [new PrefillErrorHandler()],
+  });
 
-  const defaultModes: HarnessMode[] = [
+  const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];
+
+  const defaultModes: HarnessMode<Record<string, unknown>>[] = [
     {
       id: 'build',
       name: 'Build',
       default: true,
       defaultModelId: 'anthropic/claude-opus-4-6',
-      color: mastra.purple,
+      color: mastra.green,
       agent: codeAgent,
     },
     {
       id: 'plan',
       name: 'Plan',
       defaultModelId: 'openai/gpt-5.2-codex',
-      color: mastra.blue,
+      color: mastra.purple,
       agent: codeAgent,
     },
     {
       id: 'fast',
       name: 'Fast',
       defaultModelId: 'cerebras/zai-glm-4.7',
-      color: mastra.green,
+      color: mastra.orange,
       agent: codeAgent,
     },
   ];
@@ -241,8 +246,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   ];
 
   // Build lightweight provider access for resolving built-in packs at startup.
-  // Anthropic/OpenAI use AuthStorage only; other providers use env API keys.
-  // Also scan the full provider registry so configured env API keys satisfy access checks.
+  // Anthropic/OpenAI use AuthStorage; other providers use env API keys.
+  // Also scan the full provider registry so configured API keys satisfy access checks.
   const anthropicCred = authStorage.get('anthropic');
   const openaiCred = authStorage.get('openai-codex');
   const startupAccess: ProviderAccess = {
@@ -262,11 +267,16 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     google: process.env.GOOGLE_GENERATIVE_AI_API_KEY ? 'apikey' : false,
     deepseek: process.env.DEEPSEEK_API_KEY ? 'apikey' : false,
   };
+  // Gateway covers all providers — ensure Anthropic/OpenAI packs are visible
+  if (mgApiKey) {
+    if (!startupAccess.anthropic) startupAccess.anthropic = 'apikey';
+    if (!startupAccess.openai) startupAccess.openai = 'apikey';
+  }
   // Check all providers in the registry for API keys
   try {
     const registry = PROVIDER_REGISTRY as Record<string, ProviderConfig>;
     for (const [provider, config] of Object.entries(registry)) {
-      if (startupAccess[provider] && startupAccess[provider] !== false) continue; // Already enabled above
+      if (startupAccess[provider] === 'oauth' || startupAccess[provider] === 'apikey') continue; // Already enabled above
       if (provider === 'anthropic' || provider === 'openai') continue;
       const envVars = config?.apiKeyEnvVar;
       const envVarList = Array.isArray(envVars) ? envVars : envVars ? [envVars] : [];
@@ -281,6 +291,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const builtinOmPacks = getAvailableOmPacks(startupAccess);
   const effectiveDefaults = resolveModelDefaults(globalSettings, builtinPacks);
   const effectiveOmModel = resolveOmModel(globalSettings, builtinOmPacks);
+  const effectiveObservationThreshold = globalSettings.models.omObservationThreshold ?? undefined;
+  const effectiveReflectionThreshold = globalSettings.models.omReflectionThreshold ?? undefined;
 
   // Apply resolved model defaults to modes
   const modes = (config?.modes ?? defaultModes).map(mode => {
@@ -290,10 +302,27 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   // Map subagent types to mode models: explore→fast, plan→plan, execute→build
   const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
+  // Subagents inherit workspace tools from the parent agent's workspace automatically.
+  // Apply disabledTools filter to both default and custom subagents.
   const subagents = (config?.subagents ?? defaultSubagents).map(sa => {
     const modeId = subagentModeMap[sa.id];
     const model = modeId ? effectiveDefaults[modeId] : undefined;
-    return model ? { ...sa, defaultModelId: model } : sa;
+    let filtered = sa;
+    if (config?.disabledTools?.length) {
+      if (sa.allowedWorkspaceTools) {
+        filtered = {
+          ...filtered,
+          allowedWorkspaceTools: sa.allowedWorkspaceTools.filter(t => !config.disabledTools!.includes(t)),
+        };
+      }
+      if (sa.tools) {
+        filtered = {
+          ...filtered,
+          tools: Object.fromEntries(Object.entries(sa.tools).filter(([k]) => !config.disabledTools!.includes(k))),
+        };
+      }
+    }
+    return model ? { ...filtered, defaultModelId: model } : filtered;
   });
 
   // Build initial state with global preferences
@@ -301,6 +330,12 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   if (effectiveOmModel) {
     globalInitialState.observerModelId = effectiveOmModel;
     globalInitialState.reflectorModelId = effectiveOmModel;
+  }
+  if (effectiveObservationThreshold !== undefined) {
+    globalInitialState.observationThreshold = effectiveObservationThreshold;
+  }
+  if (effectiveReflectionThreshold !== undefined) {
+    globalInitialState.reflectionThreshold = effectiveReflectionThreshold;
   }
   if (globalSettings.preferences.yolo !== null) {
     globalInitialState.yolo = globalSettings.preferences.yolo;
@@ -311,7 +346,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   }
   // Seed subagent models from global settings
   for (const [key, modelId] of Object.entries(globalSettings.models.subagentModels)) {
-    if (key === '_default') {
+    if (key === 'default' || key === '_default') {
       globalInitialState.subagentModelId = modelId;
     } else {
       globalInitialState[`subagentModelId_${key}`] = modelId;
@@ -324,7 +359,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     memory,
     stateSchema,
     subagents,
-    resolveModel,
+    resolveModel: modelId => resolveModel(modelId) as LanguageModel,
     toolCategoryResolver: getToolCategory,
     initialState: {
       projectPath: project.rootPath,
@@ -335,13 +370,25 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       ...config?.initialState,
     },
     workspace: config?.workspace ?? getDynamicWorkspace,
+    browser: config?.browser,
     modes,
     heartbeatHandlers: config?.heartbeatHandlers ?? defaultHeartbeatHandlers,
     modelAuthChecker: provider => {
+      // Gateway key only authorizes providers that the Mastra gateway actually serves
+      const gatewayKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
+      if (gatewayKey) {
+        const providerConfig = gatewayRegistry.getProviders()[provider];
+        if (providerConfig?.gateway === 'mastra') return true;
+      }
       const oauthId = PROVIDER_TO_OAUTH_ID[provider];
       if (oauthId && authStorage.isLoggedIn(oauthId)) {
         return true;
       }
+      // Check for user-entered API keys stored in auth.json
+      if (authStorage.hasStoredApiKey(provider)) {
+        return true;
+      }
+      // Backward-compatible direct credential checks for Anthropic/OpenAI storage keys.
       if (provider === 'anthropic') {
         const cred = authStorage.get('anthropic');
         if (cred?.type === 'api_key' && cred.key.trim().length > 0) {
@@ -407,5 +454,15 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     });
   }
 
-  return { harness, mcpManager, hookManager, authStorage, resolveModel, storageWarning };
+  return {
+    harness,
+    mcpManager,
+    hookManager,
+    authStorage,
+    resolveModel,
+    storageWarning,
+    builtinPacks,
+    builtinOmPacks,
+    effectiveDefaults,
+  };
 }

@@ -1,0 +1,470 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Anthropic e2e test > should be succesful with structured_output 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "actualData": {
+      "description": "a valid sample date
+constraints: a valid date-time",
+      "type": "string",
+      "x-date": true,
+    },
+    "arrayMax": {
+      "description": "any valid sample array of strings with a maximum of 5 strings
+constraints: maximum length 5",
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
+    "arrayMin": {
+      "description": "any valid sample array of strings with a minimum of 1 string
+constraints: minimum length 1",
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
+    "date": {
+      "description": "a valid sample date
+constraints: a valid date-time",
+      "type": "string",
+      "x-date": false,
+    },
+    "dateAfter": {
+      "description": "a valid sample date after 2024-01-01
+constraints: a valid date-time",
+      "type": "string",
+      "x-date": false,
+    },
+    "dateBefore": {
+      "description": "a valid sample date before today
+constraints: a valid date-time",
+      "type": "string",
+      "x-date": false,
+    },
+    "default": {
+      "default": "test",
+      "description": "sample text that is the default value",
+      "type": "string",
+    },
+    "enum": {
+      "description": "The letter A, B, or C",
+      "enum": [
+        "A",
+        "B",
+        "C",
+      ],
+      "type": "string",
+    },
+    "exampleArray": {
+      "description": "any valid array of example strings",
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
+    "nativeEnum": {
+      "description": "The letter A, B, or C",
+      "enum": [
+        "A",
+        "B",
+        "C",
+      ],
+      "type": "string",
+    },
+    "nullable": {
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "type": "null",
+        },
+      ],
+      "description": "leave this field empty as an example of a nullable field",
+    },
+    "number": {
+      "description": "any valid sample number",
+      "type": "number",
+    },
+    "numberGt": {
+      "description": "any valid sample number greater than 3
+constraints: greater than 3",
+      "type": "number",
+    },
+    "numberGte": {
+      "description": "any valid sample number greater than or equal to 1
+constraints: greater than or equal to 1",
+      "type": "number",
+    },
+    "numberInt": {
+      "description": "any valid sample number that is an integer",
+      "type": "integer",
+    },
+    "numberLt": {
+      "description": "any valid sample number less than 6
+constraints: lower than 6",
+      "type": "number",
+    },
+    "numberLte": {
+      "description": "any valid sample number less than or equal to 1
+constraints: lower than or equal to 1",
+      "type": "number",
+    },
+    "numberMultipleOf": {
+      "description": "any valid sample number that is a multiple of 2
+constraints: multiple of 2",
+      "type": "number",
+    },
+    "object": {
+      "additionalProperties": false,
+      "description": "any valid sample object with a string and a number",
+      "properties": {
+        "bar": {
+          "type": "number",
+        },
+        "foo": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "foo",
+        "bar",
+      ],
+      "type": "object",
+    },
+    "objectLoose": {
+      "additionalProperties": true,
+      "description": "any sample object with example keys and data",
+      "properties": {},
+      "required": [],
+      "type": "object",
+    },
+    "objectNested": {
+      "additionalProperties": false,
+      "description": "any valid sample data",
+      "properties": {
+        "user": {
+          "additionalProperties": false,
+          "properties": {
+            "age": {
+              "description": "constraints: greater than or equal to 18",
+              "type": "number",
+            },
+            "name": {
+              "description": "constraints: minimum length 2",
+              "type": "string",
+            },
+          },
+          "required": [
+            "name",
+            "age",
+          ],
+          "type": "object",
+        },
+      },
+      "required": [
+        "user",
+      ],
+      "type": "object",
+    },
+    "objectPassthrough": {
+      "additionalProperties": true,
+      "description": "any sample object with example keys and data",
+      "properties": {},
+      "required": [],
+      "type": "object",
+    },
+    "optional": {
+      "description": "leave this field empty as an example of an optional field",
+      "type": "string",
+    },
+    "string": {
+      "description": "Sample text",
+      "type": "string",
+    },
+    "stringCuid": {
+      "description": "a valid sample cuid
+constraints: input must match this regex ^[cC][^\\s-]{8,}$",
+      "format": "cuid",
+      "type": "string",
+    },
+    "stringEmail": {
+      "description": "a sample email address
+constraints: a valid email",
+      "type": "string",
+    },
+    "stringEmoji": {
+      "description": "a valid sample emoji
+constraints: a valid emoji",
+      "type": "string",
+    },
+    "stringMax": {
+      "description": "sample text with a maximum of 10 characters
+constraints: maximum length 10",
+      "type": "string",
+    },
+    "stringMin": {
+      "description": "sample text with a minimum of 5 characters
+constraints: minimum length 5",
+      "type": "string",
+    },
+    "stringRegex": {
+      "description": "a valid sample string that satisfies the regex
+constraints: input must match this regex ^test-",
+      "type": "string",
+    },
+    "stringUrl": {
+      "description": "a valid sample url
+constraints: a valid uri",
+      "type": "string",
+    },
+    "stringUuid": {
+      "description": "a valid sample uuid
+constraints: a valid uuid",
+      "type": "string",
+    },
+    "unionObjects": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "amount": {
+              "type": "number",
+            },
+            "inventoryItemName": {
+              "type": "string",
+            },
+          },
+          "required": [
+            "amount",
+            "inventoryItemName",
+          ],
+          "type": "object",
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "permissions": {
+              "items": {
+                "type": "string",
+              },
+              "type": "array",
+            },
+            "type": {
+              "type": "string",
+            },
+          },
+          "required": [
+            "type",
+            "permissions",
+          ],
+          "type": "object",
+        },
+      ],
+      "description": "give an valid object",
+    },
+    "unionPrimitives": {
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "type": "number",
+        },
+      ],
+      "description": "sample text or number",
+    },
+  },
+  "required": [
+    "string",
+    "stringMin",
+    "stringMax",
+    "stringEmail",
+    "stringEmoji",
+    "stringUrl",
+    "stringUuid",
+    "stringCuid",
+    "stringRegex",
+    "number",
+    "numberGt",
+    "numberLt",
+    "numberGte",
+    "numberLte",
+    "numberMultipleOf",
+    "numberInt",
+    "exampleArray",
+    "arrayMin",
+    "arrayMax",
+    "date",
+    "dateAfter",
+    "dateBefore",
+    "actualData",
+    "object",
+    "objectNested",
+    "objectPassthrough",
+    "objectLoose",
+    "nullable",
+    "enum",
+    "nativeEnum",
+    "unionPrimitives",
+    "unionObjects",
+    "default",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`Anthropic e2e test > should be succesful with structured_output 2`] = `
+{
+  "value": {
+    "actualData": 2024-03-10T09:15:00.000Z,
+    "arrayMax": [
+      "one",
+      "two",
+      "three",
+    ],
+    "arrayMin": [
+      "required",
+    ],
+    "date": 2024-01-15T10:30:00.000Z,
+    "dateAfter": 2024-02-01T12:00:00.000Z,
+    "dateBefore": 2023-12-15T14:30:00.000Z,
+    "default": "test",
+    "enum": "A",
+    "exampleArray": [
+      "apple",
+      "banana",
+      "cherry",
+    ],
+    "nativeEnum": "B",
+    "nullable": null,
+    "number": 42.5,
+    "numberGt": 5.7,
+    "numberGte": 1,
+    "numberInt": 15,
+    "numberLt": 3.2,
+    "numberLte": 1,
+    "numberMultipleOf": 8,
+    "object": {
+      "bar": 123,
+      "foo": "example text",
+    },
+    "objectLoose": {
+      "count": 10,
+      "exampleField": "data",
+    },
+    "objectNested": {
+      "user": {
+        "age": 25,
+        "name": "John Doe",
+      },
+    },
+    "objectPassthrough": {
+      "anotherKey": 42,
+      "sampleKey": "sampleValue",
+    },
+    "optional": "null",
+    "string": "Sample text",
+    "stringCuid": "cuid1234567890",
+    "stringEmail": "test@example.com",
+    "stringEmoji": "😀",
+    "stringMax": "Test data",
+    "stringMin": "Hello world",
+    "stringRegex": "test-example",
+    "stringUrl": "https://example.com",
+    "stringUuid": "550e8400-e29b-41d4-a716-446655440000",
+    "unionObjects": {
+      "amount": 100,
+      "inventoryItemName": "Widget",
+    },
+    "unionPrimitives": 42,
+  },
+}
+`;
+
+exports[`Anthropic e2e test > should handle tool call with manySchemas input 1`] = `
+{
+  "value": {
+    "actualData": 2024-03-20T16:45:30.000Z,
+    "arrayMax": [
+      "a",
+      "b",
+      "c",
+    ],
+    "arrayMin": [
+      "item1",
+    ],
+    "date": 2023-06-15T14:30:00.000Z,
+    "dateAfter": 2024-06-15T10:00:00.000Z,
+    "dateBefore": 2023-12-01T09:00:00.000Z,
+    "default": "test",
+    "enum": "A",
+    "exampleArray": [
+      "apple",
+      "banana",
+      "cherry",
+    ],
+    "nativeEnum": "B",
+    "nullable": null,
+    "number": 42.5,
+    "numberGt": 5,
+    "numberGte": 1,
+    "numberInt": 100,
+    "numberLt": 4,
+    "numberLte": 1,
+    "numberMultipleOf": 8,
+    "object": {
+      "bar": 123,
+      "foo": "example",
+    },
+    "objectLoose": {
+      "active": true,
+      "id": 456,
+      "name": "Sample",
+    },
+    "objectNested": {
+      "user": {
+        "age": 25,
+        "name": "John Doe",
+      },
+    },
+    "objectPassthrough": {
+      "key1": "value1",
+      "key2": 42,
+      "key3": true,
+    },
+    "string": "Hello World",
+    "stringCuid": "c123456789",
+    "stringEmail": "user@example.com",
+    "stringEmoji": "😀",
+    "stringMax": "Short",
+    "stringMin": "Hello",
+    "stringRegex": "test-sample",
+    "stringUrl": "https://www.example.com",
+    "stringUuid": "550e8400-e29b-41d4-a716-446655440000",
+    "unionObjects": {
+      "amount": 150,
+      "inventoryItemName": "Widget",
+    },
+    "unionPrimitives": "Sample text",
+  },
+}
+`;
+
+exports[`Anthropic e2e test > should handle tool call with manySchemas input and output 1`] = `
+"The tool call was successful! The manySchemasTool validated all the sample data and returned the processed output. Here's what was validated:
+
+- **String fields**: Various text samples with different constraints (min/max length, email format, emoji, URL, UUID, CUID, regex pattern)
+- **Number fields**: Different numeric values with constraints (greater than, less than, multiples, integers)
+- **Array fields**: String arrays with minimum and maximum length constraints
+- **Date fields**: Valid ISO date-time strings with temporal constraints
+- **Object fields**: Nested objects with required properties and validation rules
+- **Special fields**: Nullable field set to null, enum values, union types
+- **Default field**: Used the default value "test"
+
+All the data passed validation according to the schema constraints, demonstrating that the tool properly handles complex validation rules including format validation, numerical constraints, array length limits, object structure requirements, and union types."
+`;

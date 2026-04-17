@@ -1,7 +1,7 @@
-import { type ItemListColumn } from './types';
 import { ItemListItems } from './item-list-items';
 import { ItemListRow } from './item-list-row';
 import { ItemListRowButton } from './item-list-row-button';
+import type { ItemListColumn } from './types';
 
 const widths = ['75%', '50%', '65%', '90%', '60%', '80%'];
 
@@ -26,7 +26,7 @@ export function ItemListItemsSkeleton({ columns, numberOfRows = 3 }: ItemListIte
               return (
                 <div
                   key={key}
-                  className="bg-surface4 rounded-md animate-pulse text-transparent h-[1rem] select-none"
+                  className="bg-surface4 rounded-md animate-pulse text-transparent h-4 select-none"
                   style={{ width: `${getPseudoRandomWidth(rowIdx, colIdx)}` }}
                 ></div>
               );

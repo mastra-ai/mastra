@@ -1,9 +1,140 @@
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 
 describe('Dynamic Model Selection with Fallback', () => {
+  it('should support a dynamic function returning a single v1 model', async () => {
+    const premiumModel = new MockLanguageModelV1({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { promptTokens: 5, completionTokens: 7 },
+        text: 'Premium v1 response',
+      }),
+    });
+
+    const standardModel = new MockLanguageModelV1({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { promptTokens: 4, completionTokens: 6 },
+        text: 'Standard v1 response',
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'dynamic-single-v1',
+      name: 'Dynamic Single V1 Test',
+      instructions: 'You are a test agent',
+      model: ({ requestContext }) => {
+        return requestContext.get('foo') ? premiumModel : standardModel;
+      },
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set('foo', true);
+
+    const result = await agent.generateLegacy('Test message', { requestContext });
+
+    expect(result.text).toBe('Premium v1 response');
+    await expect(agent.getModelList(requestContext)).resolves.toBeNull();
+  });
+
+  it('should support a dynamic function returning a single v2 model without exposing a model list', async () => {
+    const premiumModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        text: 'Premium v2 response',
+        content: [
+          {
+            type: 'text',
+            text: 'Premium v2 response',
+          },
+        ],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          {
+            type: 'response-metadata',
+            id: 'id-0',
+            modelId: 'premium-v2',
+            timestamp: new Date(0),
+          },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Premium v2 response' },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          },
+        ]),
+      }),
+    });
+
+    const standardModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 4, outputTokens: 8, totalTokens: 12 },
+        text: 'Standard v2 response',
+        content: [
+          {
+            type: 'text',
+            text: 'Standard v2 response',
+          },
+        ],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          {
+            type: 'response-metadata',
+            id: 'id-1',
+            modelId: 'standard-v2',
+            timestamp: new Date(0),
+          },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Standard v2 response' },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 4, outputTokens: 8, totalTokens: 12 },
+          },
+        ]),
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'dynamic-single-v2',
+      name: 'Dynamic Single V2 Test',
+      instructions: 'You are a test agent',
+      model: ({ requestContext }) => {
+        return requestContext.get('foo') ? premiumModel : standardModel;
+      },
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set('foo', true);
+
+    const result = await agent.stream('Test message', { requestContext });
+
+    expect(await result.text).toBe('Premium v2 response');
+    await expect(agent.getModelList(requestContext)).resolves.toBeNull();
+  });
+
   it('should support all models being dynamic in fallback array', async () => {
     const model1 = new MockLanguageModelV2({
       doGenerate: async () => {

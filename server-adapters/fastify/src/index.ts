@@ -3,7 +3,6 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { formatZodError } from '@mastra/server/handlers/error';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
@@ -13,6 +12,8 @@ import {
 } from '@mastra/server/server-adapter';
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler, RouteHandlerMethod } from 'fastify';
 import { ZodError } from 'zod';
+export { createAuthMiddleware } from './auth-middleware';
+export type { FastifyAuthMiddlewareOptions } from './auth-middleware';
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
@@ -319,13 +320,27 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       reply.status(fetchResponse.status);
       if (fetchResponse.body) {
         const reader = fetchResponse.body.getReader();
+
+        const onResError = (err: unknown) => {
+          this.mastra.getLogger()?.error('Error writing datastream response', {
+            error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+          });
+          void reader.cancel('response write error');
+        };
+        reply.raw.once('error', onResError);
+
         try {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
             reply.raw.write(value);
           }
+        } catch (error) {
+          this.mastra.getLogger()?.error('Error in datastream processing', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
         } finally {
+          reply.raw.off('error', onResError);
           reply.raw.end();
         }
       } else {
@@ -462,9 +477,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           this.mastra.getLogger()?.error('Error parsing query params', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
-          // Zod validation errors should return 400 Bad Request with structured issues
           if (error instanceof ZodError) {
-            return reply.status(400).send(formatZodError(error, 'query parameters'));
+            const { status, body } = this.resolveValidationError(route, error, 'query');
+            return reply.status(status).send(body);
           }
           return reply.status(400).send({
             error: 'Invalid query parameters',
@@ -480,9 +495,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           this.mastra.getLogger()?.error('Error parsing body', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
-          // Zod validation errors should return 400 Bad Request with structured issues
           if (error instanceof ZodError) {
-            return reply.status(400).send(formatZodError(error, 'request body'));
+            const { status, body } = this.resolveValidationError(route, error, 'body');
+            return reply.status(status).send(body);
           }
           return reply.status(400).send({
             error: 'Invalid request body',
@@ -500,7 +515,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
           if (error instanceof ZodError) {
-            return reply.status(400).send(formatZodError(error, 'path parameters'));
+            const { status, body } = this.resolveValidationError(route, error, 'path');
+            return reply.status(status).send(body);
           }
           return reply.status(400).send({
             error: 'Invalid path parameters',

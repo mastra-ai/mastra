@@ -55,6 +55,6 @@ export class EditorPromptNamespace extends CrudEditorNamespace<
     if (!storage) throw new Error('Storage is not configured');
     const store = await storage.getStore('promptBlocks');
     if (!store) throw new Error('Prompt blocks storage domain is not available');
-    return resolveInstructionBlocks(blocks, context, { promptBlocksStorage: store });
+    return resolveInstructionBlocks(blocks, context, { promptBlocksStorage: store, includeDrafts: true });
   }
 }

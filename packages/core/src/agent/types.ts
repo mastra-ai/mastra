@@ -1,7 +1,12 @@
 import type { GenerateTextOnStepFinishCallback } from '@internal/ai-sdk-v4';
+import type { CallSettings } from '@internal/ai-sdk-v5';
 import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
+import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
+import type { ZodType as ZodTypev4 } from 'zod/v4';
+import type { AgentBackgroundConfig } from '../background-tasks';
+import type { MastraBrowser } from '../browser';
+import type { AgentChannels, ChannelConfig } from '../channels/agent-channels';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type {
   CoreMessage,
@@ -24,11 +29,15 @@ import type { ProviderOptions } from '../llm/model/provider-options';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { MemoryConfig, StorageThreadType } from '../memory/types';
-import type { ObservabilityContext, Span, SpanType, TracingOptions, TracingPolicy } from '../observability';
-import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
+import type { MemoryConfigInternal, StorageThreadType } from '../memory/types';
+import type { Span, SpanType, TracingOptions, TracingPolicy, ObservabilityContext } from '../observability';
+import type {
+  ErrorProcessorOrWorkflow,
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+} from '../processors/index';
 import type { RequestContext } from '../request-context';
-import type { OutputSchema } from '../stream';
+import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
@@ -39,7 +48,6 @@ import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
-
 export type {
   MastraDBMessage,
   MastraMessageContentV2,
@@ -49,6 +57,11 @@ export type {
 } from './message-list/index';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type { LLMStepResult } from '../stream/types';
+export type { MastraBrowser } from '../browser/browser';
+// Screencast types now on MastraBrowser directly
+export type { ScreencastOptions, ScreencastStream } from '../browser/browser';
+
+export type ZodSchema = ZodSchemaV3 | ZodTypev4;
 
 /**
  * Accepts Mastra tools, Vercel AI SDK tools, and provider-defined tools
@@ -67,7 +80,9 @@ type FallbackFields<OUTPUT = undefined> =
   | { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never }
   | { errorStrategy: 'fallback'; fallbackValue: OUTPUT };
 
-type StructuredOutputOptionsBase<OUTPUT = {}> = {
+export type StructuredOutputOptionsBase<OUTPUT = {}> = {
+  /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
+  model?: MastraModelConfig;
   /**
    * Custom instructions for the structuring agent.
    * If not provided, will generate instructions based on the schema.
@@ -98,18 +113,19 @@ type StructuredOutputOptionsBase<OUTPUT = {}> = {
   providerOptions?: ProviderOptions;
 } & FallbackFields<OUTPUT>;
 
-export type StructuredOutputOptions<OUTPUT = {}> = {
+export type StructuredOutputOptions<OUTPUT = {}> = StructuredOutputOptionsBase<OUTPUT> & {
   /** Zod schema to validate the output against */
-  schema: NonNullable<OutputSchema<OUTPUT>>;
+  schema: StandardSchemaWithJSON<OUTPUT>;
+};
 
-  /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
-  model?: MastraModelConfig;
-} & StructuredOutputOptionsBase<OUTPUT>;
+export type PublicStructuredOutputOptions<OUTPUT = {}> = StructuredOutputOptionsBase<OUTPUT> & {
+  schema: PublicSchema<OUTPUT>;
+};
 
-export type SerializableStructuredOutputOptions<OUTPUT = {}> = StructuredOutputOptionsBase & {
+export type SerializableStructuredOutputOptions<OUTPUT = {}> = Omit<StructuredOutputOptionsBase<OUTPUT>, 'model'> & {
   model?: ModelRouterModelId | OpenAICompatibleConfig;
-  /** Zod schema to validate the output against */
-  schema: NonNullable<OutputSchema<OUTPUT>>;
+  /** JSON Schema to validate the output against */
+  schema: JSONSchema7;
 };
 
 /**
@@ -119,11 +135,16 @@ export interface AgentCreateOptions {
   tracingPolicy?: TracingPolicy;
 }
 
+export type ModelFallbackSettings = Omit<CallSettings, 'abortSignal' | 'maxRetries' | 'headers'>;
+
 export type ModelWithRetries = {
   id?: string;
   model: DynamicArgument<MastraModelConfig>;
   maxRetries?: number; // defaults to agent-level maxRetries
   enabled?: boolean; // defaults to true
+  modelSettings?: DynamicArgument<ModelFallbackSettings>;
+  providerOptions?: DynamicArgument<ProviderOptions>;
+  headers?: DynamicArgument<Record<string, string>>;
 };
 
 export interface AgentConfig<
@@ -174,6 +195,24 @@ export interface AgentConfig<
    * ]
    * ```
    *
+   * @example Static fallback array with per-entry settings
+   * ```typescript
+   * model: [
+   *   {
+   *     model: 'google/gemini-2.5-flash',
+   *     maxRetries: 2,
+   *     modelSettings: { temperature: 0.3 },
+   *     providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } },
+   *   },
+   *   {
+   *     model: 'openai/gpt-5-mini',
+   *     maxRetries: 2,
+   *     modelSettings: { temperature: 0.7 },
+   *     providerOptions: { openai: { reasoningEffort: 'low' } },
+   *   },
+   * ]
+   * ```
+   *
    * @example Dynamic single model (tier-based selection)
    * ```typescript
    * model: ({ requestContext }) => {
@@ -213,7 +252,7 @@ export interface AgentConfig<
    * }
    * ```
    */
-  model: DynamicArgument<MastraModelConfig | ModelWithRetries[]>;
+  model: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext>;
   /**
    * Maximum number of retries for model calls in case of failure.
    * @defaultValue 0
@@ -226,19 +265,19 @@ export interface AgentConfig<
   /**
    * Workflows that the agent can execute. Can be static or dynamically resolved.
    */
-  workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any, any>>>;
+  workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any, any>>, TRequestContext>;
   /**
    * Default options used when calling `generate()`.
    */
-  defaultGenerateOptionsLegacy?: DynamicArgument<AgentGenerateOptions>;
+  defaultGenerateOptionsLegacy?: DynamicArgument<AgentGenerateOptions, TRequestContext>;
   /**
    * Default options used when calling `stream()`.
    */
-  defaultStreamOptionsLegacy?: DynamicArgument<AgentStreamOptions>;
+  defaultStreamOptionsLegacy?: DynamicArgument<AgentStreamOptions, TRequestContext>;
   /**
    * Default options used when calling `stream()` in vNext mode.
    */
-  defaultOptions?: DynamicArgument<AgentExecutionOptions<TOutput>>;
+  defaultOptions?: DynamicArgument<AgentExecutionOptions<TOutput>, TRequestContext>;
   /**
    * Default options used when calling `network()`.
    * These are merged with options passed to each network() call.
@@ -263,7 +302,7 @@ export interface AgentConfig<
    * });
    * ```
    */
-  defaultNetworkOptions?: DynamicArgument<NetworkOptions>;
+  defaultNetworkOptions?: DynamicArgument<NetworkOptions, TRequestContext>;
   /**
    * Reference to the Mastra runtime instance (injected automatically).
    */
@@ -271,42 +310,73 @@ export interface AgentConfig<
   /**
    * Sub-Agents that the agent can access. Can be provided statically or resolved dynamically.
    */
-  agents?: DynamicArgument<Record<string, Agent>>;
+  agents?: DynamicArgument<Record<string, Agent>, TRequestContext>;
   /**
    * Scoring configuration for runtime evaluation and observability. Can be static or dynamically provided.
    */
-  scorers?: DynamicArgument<MastraScorers>;
+  scorers?: DynamicArgument<MastraScorers, TRequestContext>;
 
   /**
    * Memory module used for storing and retrieving stateful context.
    */
-  memory?: DynamicArgument<MastraMemory>;
+  memory?: DynamicArgument<MastraMemory, TRequestContext>;
   /**
    * Format for skill information injection when workspace has skills.
    * @default 'xml'
    */
   skillsFormat?: SkillFormat;
   /**
+   * Browser for web automation capabilities.
+   * When configured, browser tools are automatically injected into the agent.
+   * Accessible via agent.browser for server-side features like screencast.
+   */
+  browser?: MastraBrowser;
+  /**
    * Voice settings for speech input and output.
    */
   voice?: MastraVoice;
   /**
+   * Messaging channels the agent communicates over (e.g. Slack, Discord).
+   *
+   * @example
+   * ```ts
+   * channels: {
+   *   adapters: {
+   *     discord: createDiscordAdapter(),
+   *     slack: { adapter: createSlackAdapter(), cards: false },
+   *   },
+   *   handlers: {
+   *     // Wrap default DM handler with logging
+   *     onDirectMessage: async (thread, msg, defaultHandler) => {
+   *       console.log('Received DM:', msg.text);
+   *       await defaultHandler(thread, msg);
+   *     },
+   *     // Disable mention handling
+   *     onMention: false,
+   *   },
+   * }
+   * ```
+   *
+   * For full control, pass an `AgentChannels` instance directly.
+   */
+  channels?: ChannelConfig | AgentChannels;
+  /**
    * Workspace for file storage and code execution.
    * When configured, workspace tools are automatically injected into the agent.
    */
-  workspace?: DynamicArgument<AnyWorkspace | undefined>;
+  workspace?: DynamicArgument<AnyWorkspace | undefined, TRequestContext>;
   /**
    * Input processors that can modify or validate messages before they are processed by the agent.
    * These can be individual processors (implementing `processInput` or `processInputStep`) or
    * processor workflows (created with `createWorkflow` using `ProcessorStepSchema`).
    */
-  inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
+  inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[], TRequestContext>;
   /**
    * Output processors that can modify or validate messages from the agent, before it is sent to the client.
    * These can be individual processors (implementing `processOutputResult`, `processOutputStream`, or `processOutputStep`) or
    * processor workflows (created with `createWorkflow` using `ProcessorStepSchema`).
    */
-  outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
+  outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[], TRequestContext>;
   /**
    * Maximum number of times processors can trigger a retry per generation.
    * When a processor calls abort({ retry: true }), the agent will retry with feedback.
@@ -314,6 +384,12 @@ export interface AgentConfig<
    * If not set, no retries are performed.
    */
   maxProcessorRetries?: number;
+  /**
+   * Error processors that handle LLM API rejections.
+   * These implement `processAPIError` and can inspect the error, modify messages, and signal a retry.
+   * Error processors can also be placed in `inputProcessors` or `outputProcessors`.
+   */
+  errorProcessors?: DynamicArgument<ErrorProcessorOrWorkflow[], TRequestContext>;
   /**
    * Options to pass to the agent upon creation.
    */
@@ -328,13 +404,18 @@ export interface AgentConfig<
    * When provided, the request context will be validated against this schema at the start of generate() and stream() calls.
    * If validation fails, an error is thrown.
    */
-  requestContextSchema?: ZodSchema<TRequestContext>;
+  requestContextSchema?: PublicSchema<TRequestContext>;
+  /**
+   * Background task configuration for this agent.
+   * Controls which tools can run in the background and their behavior.
+   */
+  backgroundTasks?: AgentBackgroundConfig;
 }
 
 export type AgentMemoryOption = {
   thread: string | (Partial<StorageThreadType> & { id: string });
   resource: string;
-  options?: MemoryConfig;
+  options?: MemoryConfigInternal;
 };
 
 /**
@@ -388,6 +469,8 @@ export type AgentGenerateOptions<
    * If not set, no retries are performed.
    */
   maxProcessorRetries?: number;
+  /** Error processors to use for this generation call (overrides agent's default) */
+  errorProcessors?: ErrorProcessorOrWorkflow[];
   /** tracing options for starting new traces */
   tracingOptions?: TracingOptions;
   /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */
@@ -436,7 +519,7 @@ export type AgentStreamOptions<
   /**
    * @deprecated Use the `memory` property instead for all memory-related options.
    */
-  memoryOptions?: MemoryConfig;
+  memoryOptions?: MemoryConfigInternal;
   /** New memory options (preferred) */
   memory?: AgentMemoryOption;
   /** Unique ID for this generation run */
@@ -506,7 +589,7 @@ export type AgentExecuteOnFinishOptions = {
   resourceId?: string;
   requestContext: RequestContext;
   agentSpan?: Span<SpanType.AGENT_RUN>;
-  memoryConfig: MemoryConfig | undefined;
+  memoryConfig: MemoryConfigInternal | undefined;
   outputText: string;
   messageList: MessageList;
   threadExists: boolean;

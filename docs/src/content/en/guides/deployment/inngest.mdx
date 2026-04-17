@@ -90,7 +90,7 @@ const incrementStep = createStep({
 
 ### Creating the workflow
 
-Compose the steps into a workflow using the `dountil` loop pattern. The `createWorkflow()` function creates a function on Inngest server that is invocable.
+Compose the steps into a workflow using the `dountil` loop pattern. The `createWorkflow()` function creates a function on Inngest server that's invocable.
 
 ```ts title="src/mastra/workflows/index.ts"
 // workflow that is registered as a function on inngest server
@@ -156,7 +156,7 @@ export const mastra = new Mastra({
 
 1. Open the Inngest Dashboard at [http://localhost:8288](http://localhost:8288) and go to the **Apps** section in the sidebar to verify your Mastra workflow is registered
 
-1. Invoke the workflow by going to **Functions**, selecting your workflow, and clicking **Invoke** with the following input:
+1. Invoke the workflow by going to **Functions**, selecting your workflow, and selecting **Invoke** with the following input:
 
    ```json
    {
@@ -214,9 +214,9 @@ Before you begin, make sure you have:
    vercel --prod
    ```
 
-1. Sync with the [Inngest dashboard](https://app.inngest.com/env/production/apps) by clicking **Sync new app with Vercel** and following the instructions
+1. Sync with the [Inngest dashboard](https://app.inngest.com/env/production/apps) by selecting **Sync new app with Vercel** and following the instructions
 
-1. Invoke the workflow by going to **Functions**, selecting `workflow.increment-workflow`, clicking **All actions** > **Invoke**, and providing the following input:
+1. Invoke the workflow by going to **Functions**, selecting `workflow.increment-workflow`, selecting **All actions** > **Invoke**, and providing the following input:
 
    ```json
    {

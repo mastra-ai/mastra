@@ -142,6 +142,14 @@ export interface BuildCapabilitiesOptions {
    * ```
    */
   rbac?: IRBACProvider<EEUser>;
+
+  /**
+   * API route prefix used to construct SSO login URLs.
+   * Defaults to `/api` when not provided.
+   *
+   * @example `/mastra` results in SSO URL `/mastra/auth/sso/login`
+   */
+  apiPrefix?: string;
 }
 
 /**
@@ -179,6 +187,12 @@ export async function buildCapabilities(
   const hasSSO = implementsInterface<ISSOProvider>(auth, 'getLoginUrl') && isLicensedOrCloud;
   const hasCredentials = implementsInterface<ICredentialsProvider>(auth, 'signIn') && isLicensedOrCloud;
 
+  // Build SSO login URL using the configured prefix (default: /api)
+  const raw = (options?.apiPrefix || '/api').trim();
+  const withSlash = raw.startsWith('/') ? raw : `/${raw}`;
+  const prefix = withSlash.endsWith('/') ? withSlash.slice(0, -1) : withSlash;
+  const ssoLoginUrl = `${prefix}/auth/sso/login`;
+
   // Check if sign-up is enabled (defaults to true)
   let signUpEnabled = true;
   if (implementsInterface<ICredentialsProvider>(auth, 'signIn')) {
@@ -195,7 +209,7 @@ export async function buildCapabilities(
       signUpEnabled,
       sso: {
         ...ssoConfig,
-        url: '/api/auth/sso/login',
+        url: ssoLoginUrl,
       },
     };
   } else if (hasSSO) {
@@ -204,7 +218,7 @@ export async function buildCapabilities(
       type: 'sso',
       sso: {
         ...ssoConfig,
-        url: '/api/auth/sso/login',
+        url: ssoLoginUrl,
       },
     };
   } else if (hasCredentials) {

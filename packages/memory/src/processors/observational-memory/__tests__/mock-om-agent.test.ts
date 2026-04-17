@@ -12,59 +12,37 @@
  * 4. OM processor sees stepNumber=1, checks threshold, triggers observation
  */
 
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 
-import { Memory } from '../../../..';
+import { Memory } from '../../../index';
 
 // =============================================================================
 // Mock Model: Multi-step execution via tool call
 // =============================================================================
-
-type StreamPart =
-  | { type: 'stream-start'; warnings: unknown[] }
-  | { type: 'response-metadata'; id: string; modelId: string; timestamp: Date }
-  | { type: 'text-start'; id: string }
-  | { type: 'text-delta'; id?: string; delta: string }
-  | { type: 'text-end'; id: string }
-  | { type: 'tool-call'; toolCallId: string; toolName: string; input: string }
-  | {
-      type: 'finish';
-      finishReason: 'stop' | 'tool-calls';
-      usage: { inputTokens: number; outputTokens: number; totalTokens: number };
-    };
 
 function createMockOmModel(
   responseText: string,
   toolName = 'test',
   toolInput: Record<string, unknown> = { action: 'trigger' },
 ) {
-  let callCount = 0;
+  let generateCallCount = 0;
+  let streamCallCount = 0;
 
-  const isFirstCall = (): boolean => {
-    return callCount === 0;
-  };
+  return new MockLanguageModelV2({
+    doGenerate: async () => {
+      generateCallCount++;
 
-  return {
-    specificationVersion: 'v2' as const,
-    provider: 'mock',
-    modelId: 'mock-om-model',
-    defaultObjectGenerationMode: undefined,
-    supportsImageUrls: false,
-    supportedUrls: {},
-
-    async doGenerate() {
-      const firstCall = isFirstCall();
-      callCount++;
-
-      if (firstCall) {
+      if (generateCallCount === 1) {
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'tool-calls' as const,
           usage: { inputTokens: 50, outputTokens: 20, totalTokens: 70 },
+          text: '',
           content: [
             {
               type: 'tool-call' as const,
@@ -81,61 +59,68 @@ function createMockOmModel(
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
         usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+        text: responseText,
         content: [{ type: 'text' as const, text: responseText }],
         warnings: [],
       };
     },
+    doStream: async () => {
+      streamCallCount++;
 
-    async doStream() {
-      const firstCall = isFirstCall();
-      callCount++;
-
-      const parts: StreamPart[] = firstCall
-        ? [
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-0', modelId: 'mock-om-model', timestamp: new Date() },
+      if (streamCallCount === 1) {
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start' as const, warnings: [] },
             {
-              type: 'tool-call',
-              toolCallId: `call-${Date.now()}`,
-              toolName,
-              input: JSON.stringify(toolInput),
+              type: 'response-metadata' as const,
+              id: 'mock-response',
+              modelId: 'mock-model',
+              timestamp: new Date(),
             },
             {
-              type: 'finish',
-              finishReason: 'tool-calls',
+              type: 'tool-input-start' as const,
+              id: 'call-1',
+              toolName,
+            },
+            {
+              type: 'tool-input-delta' as const,
+              id: 'call-1',
+              delta: JSON.stringify(toolInput),
+            },
+            {
+              type: 'tool-input-end' as const,
+              id: 'call-1',
+            },
+            {
+              type: 'finish' as const,
+              finishReason: 'tool-calls' as const,
               usage: { inputTokens: 50, outputTokens: 20, totalTokens: 70 },
             },
-          ]
-        : [
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-1', modelId: 'mock-om-model', timestamp: new Date() },
-            { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: responseText },
-            { type: 'text-end', id: 'text-1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
-            },
-          ];
-
-      const stream = new ReadableStream<StreamPart>({
-        async start(controller) {
-          for (const part of parts) {
-            controller.enqueue(part);
-            await new Promise(resolve => setTimeout(resolve, 2));
-          }
-          controller.close();
-        },
-      });
+          ]),
+        };
+      }
 
       return {
-        stream,
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start' as const, warnings: [] },
+          {
+            type: 'response-metadata' as const,
+            id: 'mock-response-2',
+            modelId: 'mock-model',
+            timestamp: new Date(),
+          },
+          { type: 'text-start' as const, id: 'text-1' },
+          { type: 'text-delta' as const, id: 'text-1', delta: responseText },
+          { type: 'text-end' as const, id: 'text-1' },
+          {
+            type: 'finish' as const,
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          },
+        ]),
       };
     },
-  };
+  });
 }
 
 // =============================================================================
@@ -143,139 +128,80 @@ function createMockOmModel(
 // =============================================================================
 
 function createMockObserverModel() {
-  return {
-    specificationVersion: 'v2' as const,
-    provider: 'mock-observer',
-    modelId: 'mock-observer-model',
-    defaultObjectGenerationMode: undefined,
-    supportsImageUrls: false,
-    supportedUrls: {},
-
-    async doGenerate() {
-      return {
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop' as const,
-        usage: { inputTokens: 50, outputTokens: 100, totalTokens: 150 },
-        content: [
-          {
-            type: 'text' as const,
-            text: `<observations>
+  const text = `<observations>
 ## January 28, 2026
 
 ### Thread: test-thread
 - 🔴 User asked for help with a task
--  Assistant provided a detailed response
-</observations>
-<current-task>Help the user with their request</current-task>
-<suggested-response>I can help you with that.</suggested-response>`,
-          },
-        ],
-        warnings: [],
-      };
-    },
-
-    async doStream() {
-      const text = `<observations>
-## January 28, 2026
-
-### Thread: test-thread
-- 🔴 User asked for help with a task
--  Assistant provided a detailed response
+- Assistant provided a detailed response
 </observations>
 <current-task>Help the user with their request</current-task>
 <suggested-response>I can help you with that.</suggested-response>`;
 
-      const stream = new ReadableStream({
-        async start(controller) {
-          controller.enqueue({ type: 'stream-start', warnings: [] });
-          controller.enqueue({
+  return new MockLanguageModelV2({
+    doGenerate: async () => {
+      throw new Error('Unexpected doGenerate call — OM should use the stream path');
+    },
+    doStream: async () => {
+      return {
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          {
             type: 'response-metadata',
             id: 'obs-1',
             modelId: 'mock-observer-model',
             timestamp: new Date(),
-          });
-          controller.enqueue({ type: 'text-start', id: 'text-1' });
-          controller.enqueue({ type: 'text-delta', id: 'text-1', delta: text });
-          controller.enqueue({ type: 'text-end', id: 'text-1' });
-          controller.enqueue({
+          },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: text },
+          { type: 'text-end', id: 'text-1' },
+          {
             type: 'finish',
             finishReason: 'stop',
             usage: { inputTokens: 50, outputTokens: 100, totalTokens: 150 },
-          });
-          controller.close();
-        },
-      });
-
-      return {
-        stream,
+          },
+        ]),
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
       };
     },
-  };
+  });
 }
 
 function createMockReflectorModel() {
-  return {
-    specificationVersion: 'v2' as const,
-    provider: 'mock-reflector',
-    modelId: 'mock-reflector-model',
-    defaultObjectGenerationMode: undefined,
-    supportsImageUrls: false,
-    supportedUrls: {},
-
-    async doGenerate() {
-      return {
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop' as const,
-        usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
-        content: [
-          {
-            type: 'text' as const,
-            text: `<observations>
-## Condensed
-- 🔴 User needs help with tasks
-</observations>`,
-          },
-        ],
-        warnings: [],
-      };
-    },
-
-    async doStream() {
-      const text = `<observations>
+  const text = `<observations>
 ## Condensed
 - 🔴 User needs help with tasks
 </observations>`;
 
-      const stream = new ReadableStream({
-        async start(controller) {
-          controller.enqueue({ type: 'stream-start', warnings: [] });
-          controller.enqueue({
+  return new MockLanguageModelV2({
+    doGenerate: async () => {
+      throw new Error('Unexpected doGenerate call — OM should use the stream path');
+    },
+    doStream: async () => {
+      return {
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          {
             type: 'response-metadata',
             id: 'ref-1',
             modelId: 'mock-reflector-model',
             timestamp: new Date(),
-          });
-          controller.enqueue({ type: 'text-start', id: 'text-1' });
-          controller.enqueue({ type: 'text-delta', id: 'text-1', delta: text });
-          controller.enqueue({ type: 'text-end', id: 'text-1' });
-          controller.enqueue({
+          },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: text },
+          { type: 'text-end', id: 'text-1' },
+          {
             type: 'finish',
             finishReason: 'stop',
             usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
-          });
-          controller.close();
-        },
-      });
-
-      return {
-        stream,
+          },
+        ]),
         rawCall: { rawPrompt: null, rawSettings: {} },
         warnings: [],
       };
     },
-  };
+  });
 }
 
 // =============================================================================
@@ -542,5 +468,306 @@ describe('Mock OM Agent Integration', () => {
     expect(subRecord).toBeTruthy();
     expect(subRecord!.resourceId).toBe(subAgentResourceId);
     expect(subRecord!.activeObservations).toContain('User asked for help');
+  });
+
+  // TODO: processInputStep is not called by v5 execution engine for generate() — needs investigation.
+  // On main, OM implements Processor directly; in our refactored architecture, ObservationalMemoryProcessor
+  // is a separate class. The v5 execution engine's processor discovery may not find it.
+  it('should insert a message boundary with a date matching the observed messages', async () => {
+    // Create a model that supports multiple generate calls (alternating tool-call / text).
+    // The shared createMockOmModel only fires a tool call on the very first call,
+    // so a second agent.generate() would stay on step 0 and never trigger observation.
+    let genCount = 0;
+    const multiCallModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        genCount++;
+        // Odd calls → tool call, even calls → text response
+        if (genCount % 2 === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 50, outputTokens: 20, totalTokens: 70 },
+            text: '',
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: `call-${genCount}`,
+                toolName: 'test',
+                input: JSON.stringify({ action: 'trigger' }),
+              },
+            ],
+            warnings: [],
+          };
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          text: longResponseText,
+          content: [{ type: 'text' as const, text: longResponseText }],
+          warnings: [],
+        };
+      },
+    });
+
+    const boundaryAgent = new Agent({
+      id: 'test-om-boundary-agent',
+      name: 'Test OM Boundary Agent',
+      instructions: 'You are a helpful assistant. Always use the test tool first.',
+      model: multiCallModel as any,
+      tools: { test: omTriggerTool },
+      memory,
+    });
+
+    const threadId = 'test-thread-boundary-date';
+    const resourceId = 'test-resource';
+    const memoryOpts = { thread: threadId, resource: resourceId };
+
+    // First generate — creates initial observations (no boundary yet)
+    const beforeFirstCall = new Date();
+    await boundaryAgent.generate('Hello, I need help with something important.', { memory: memoryOpts });
+
+    const memoryStore = await store.getStore('memory');
+    const firstRecord = await memoryStore!.getObservationalMemory(threadId, resourceId);
+    expect(firstRecord).toBeTruthy();
+    expect(firstRecord!.activeObservations).toBeTruthy();
+    // No boundary in first observation
+    expect(firstRecord!.activeObservations).not.toMatch(/--- message boundary/);
+
+    // Second generate — appends observations with a boundary
+    await boundaryAgent.generate('Can you also help me with another task?', { memory: memoryOpts });
+    const afterSecondCall = new Date();
+
+    const secondRecord = await memoryStore!.getObservationalMemory(threadId, resourceId);
+    expect(secondRecord).toBeTruthy();
+
+    // Should now contain a message boundary delimiter with a date
+    const boundaryMatch = secondRecord!.activeObservations!.match(/--- message boundary \(([^)]+)\) ---/);
+    expect(boundaryMatch).toBeTruthy();
+
+    const boundaryDate = new Date(boundaryMatch![1]!);
+    expect(boundaryDate.getTime()).not.toBeNaN();
+
+    // The boundary date should be the max createdAt of the messages observed in the second cycle.
+    // Those messages were created between beforeFirstCall and afterSecondCall (wall-clock).
+    // Since getMaxMessageTimestamp picks the latest createdAt from the observed messages,
+    // and messages are saved at approximately wall-clock time, the boundary date should
+    // fall within this window.
+    expect(boundaryDate.getTime()).toBeGreaterThanOrEqual(beforeFirstCall.getTime());
+    expect(boundaryDate.getTime()).toBeLessThanOrEqual(afterSecondCall.getTime());
+
+    // The boundary date should also match the record's lastObservedAt
+    // (which is set from getMaxMessageTimestamp + a small offset in some paths)
+    expect(secondRecord!.lastObservedAt).toBeTruthy();
+    const lastObserved = new Date(secondRecord!.lastObservedAt!);
+    // lastObservedAt should be close to the boundary date (within a few seconds)
+    expect(Math.abs(lastObserved.getTime() - boundaryDate.getTime())).toBeLessThan(5000);
+  });
+
+  // ===========================================================================
+  // Message ordering regressions (agent-level)
+  // ===========================================================================
+
+  describe('Message ordering regressions', () => {
+    async function getMessages(threadId: string) {
+      const memoryStore = await store.getStore('memory');
+      const result = await memoryStore!.listMessages({
+        threadId,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        perPage: false,
+      });
+      return result.messages;
+    }
+
+    it('A — all messages persisted in correct order after multi-step generate', async () => {
+      const threadId = 'test-thread-order-a';
+      await agent.generate('Tell me something useful.', {
+        memory: { thread: threadId, resource: 'test-resource' },
+      });
+
+      const messages = await getMessages(threadId);
+
+      // Should have at least user + assistant messages
+      expect(messages.length).toBeGreaterThanOrEqual(2);
+
+      // User message should come before assistant
+      const userIdx = messages.findIndex(m => m.role === 'user');
+      const assistantIdx = messages.findIndex(m => m.role === 'assistant');
+      expect(userIdx).toBeGreaterThanOrEqual(0);
+      expect(assistantIdx).toBeGreaterThan(userIdx);
+
+      // All IDs unique
+      const ids = messages.map(m => m.id);
+      expect(new Set(ids).size).toBe(ids.length);
+
+      // createdAt monotonically non-decreasing
+      for (let i = 1; i < messages.length; i++) {
+        expect(new Date(messages[i]!.createdAt).getTime()).toBeGreaterThanOrEqual(
+          new Date(messages[i - 1]!.createdAt).getTime(),
+        );
+      }
+    });
+
+    it('B — no duplicate messages with buffering enabled', async () => {
+      const bufferStore = new InMemoryStore();
+      const bufferMemory = new Memory({
+        storage: bufferStore,
+        options: {
+          observationalMemory: {
+            enabled: true,
+            observation: {
+              model: createMockObserverModel() as any,
+              messageTokens: 20,
+              bufferTokens: 15,
+            },
+            reflection: {
+              model: createMockReflectorModel() as any,
+              observationTokens: 50000,
+            },
+          },
+        },
+      });
+      const bufferAgent = new Agent({
+        id: 'test-om-buffer-agent',
+        name: 'Buffer Agent',
+        instructions: 'You are a helpful assistant. Always use the test tool first.',
+        model: createMockOmModel(longResponseText) as any,
+        tools: { test: omTriggerTool },
+        memory: bufferMemory,
+      });
+
+      const threadId = 'test-thread-order-b';
+      await bufferAgent.generate('Help me with this task.', {
+        memory: { thread: threadId, resource: 'test-resource' },
+      });
+
+      const memoryStore = await bufferStore.getStore('memory');
+      const result = await memoryStore!.listMessages({
+        threadId,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        perPage: false,
+      });
+      const messages = result.messages;
+
+      // No duplicate IDs
+      const ids = messages.map(m => m.id);
+      expect(new Set(ids).size).toBe(ids.length);
+    });
+
+    it('C — second turn loads full context and maintains order', async () => {
+      const threadId = 'test-thread-order-c';
+      const memOpts = { thread: threadId, resource: 'test-resource' };
+
+      await agent.generate('First message', { memory: memOpts });
+      await agent.generate('Second message', { memory: memOpts });
+
+      const messages = await getMessages(threadId);
+
+      // Both user messages should be present
+      const userMsgs = messages.filter(m => m.role === 'user');
+      expect(userMsgs.length).toBeGreaterThanOrEqual(2);
+
+      // Chronological order
+      for (let i = 1; i < messages.length; i++) {
+        expect(new Date(messages[i]!.createdAt).getTime()).toBeGreaterThanOrEqual(
+          new Date(messages[i - 1]!.createdAt).getTime(),
+        );
+      }
+
+      // All IDs unique
+      const ids = messages.map(m => m.id);
+      expect(new Set(ids).size).toBe(ids.length);
+    });
+
+    it('D — message ordering survives sealing across turns', async () => {
+      const bufferStore = new InMemoryStore();
+      const bufferMemory = new Memory({
+        storage: bufferStore,
+        options: {
+          observationalMemory: {
+            enabled: true,
+            observation: {
+              model: createMockObserverModel() as any,
+              messageTokens: 20,
+              bufferTokens: 15,
+            },
+            reflection: {
+              model: createMockReflectorModel() as any,
+              observationTokens: 50000,
+            },
+          },
+        },
+      });
+
+      let genCount = 0;
+      const multiCallModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          genCount++;
+          if (genCount % 2 === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 50, outputTokens: 20, totalTokens: 70 },
+              text: '',
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: `call-${genCount}`,
+                  toolName: 'test',
+                  input: JSON.stringify({ action: 'trigger' }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+            text: longResponseText,
+            content: [{ type: 'text' as const, text: longResponseText }],
+            warnings: [],
+          };
+        },
+      });
+
+      const bufferAgent = new Agent({
+        id: 'test-om-seal-agent',
+        name: 'Seal Agent',
+        instructions: 'You are a helpful assistant. Always use the test tool first.',
+        model: multiCallModel as any,
+        tools: { test: omTriggerTool },
+        memory: bufferMemory,
+      });
+
+      const threadId = 'test-thread-order-d';
+      const memOpts = { thread: threadId, resource: 'test-resource' };
+
+      await bufferAgent.generate('Turn 1 message', { memory: memOpts });
+      await bufferAgent.generate('Turn 2 message', { memory: memOpts });
+
+      const memoryStore = await bufferStore.getStore('memory');
+      const result = await memoryStore!.listMessages({
+        threadId,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        perPage: false,
+      });
+      const messages = result.messages;
+
+      // Chronological order
+      for (let i = 1; i < messages.length; i++) {
+        expect(new Date(messages[i]!.createdAt).getTime()).toBeGreaterThanOrEqual(
+          new Date(messages[i - 1]!.createdAt).getTime(),
+        );
+      }
+
+      // No duplicate IDs
+      const ids = messages.map(m => m.id);
+      expect(new Set(ids).size).toBe(ids.length);
+
+      // Both user messages should be present
+      const userMsgs = messages.filter(m => m.role === 'user');
+      expect(userMsgs.length).toBeGreaterThanOrEqual(2);
+    });
   });
 });

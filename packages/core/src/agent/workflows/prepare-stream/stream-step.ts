@@ -1,8 +1,10 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
+import type { BackgroundTaskManager } from '../../../background-tasks';
+import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraMemory } from '../../../memory/memory';
-import type { MemoryConfig } from '../../../memory/types';
+import type { MemoryConfigInternal } from '../../../memory/types';
 import { resolveObservabilityContext } from '../../../observability';
 import { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
@@ -27,16 +29,18 @@ interface StreamStepOptions {
   toolCallId?: string;
   methodType: AgentMethodType;
   saveQueueManager?: SaveQueueManager;
-  memoryConfig?: MemoryConfig;
+  memoryConfig?: MemoryConfigInternal;
   memory?: MastraMemory;
   resourceId?: string;
   autoResumeSuspendedTools?: boolean;
   workspace?: Workspace;
+  backgroundTaskManager?: BackgroundTaskManager;
+  agentBackgroundConfig?: AgentBackgroundConfig;
 }
 
 export function createStreamStep<OUTPUT = undefined>({
   capabilities,
-  runId,
+  runId: _runId,
   returnScorerData,
   requireToolApproval,
   toolCallConcurrency,
@@ -51,6 +55,8 @@ export function createStreamStep<OUTPUT = undefined>({
   resourceId,
   autoResumeSuspendedTools,
   workspace,
+  backgroundTaskManager,
+  agentBackgroundConfig,
 }: StreamStepOptions) {
   return createStep({
     id: 'stream-text-step',
@@ -59,10 +65,6 @@ export function createStreamStep<OUTPUT = undefined>({
     execute: async ({ inputData, ...observabilityContext }) => {
       // Instead of validating inputData with zod, we just cast it to the type we know it should be
       const validatedInputData = inputData as ModelLoopStreamArgs<any, OUTPUT>;
-
-      capabilities.logger.debug(`Starting agent ${capabilities.agentName} llm stream call`, {
-        runId,
-      });
 
       const processors =
         validatedInputData.outputProcessors ||
@@ -91,6 +93,9 @@ export function createStreamStep<OUTPUT = undefined>({
           threadId: validatedInputData.threadId,
           resourceId,
           memory,
+          backgroundTaskManager,
+          agentBackgroundConfig,
+          backgroundTaskManagerConfig: backgroundTaskManager?.config,
         },
         agentId,
         agentName,

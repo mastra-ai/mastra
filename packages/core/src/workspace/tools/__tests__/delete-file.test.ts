@@ -22,12 +22,12 @@ describe('workspace_delete', () => {
   it('should delete file', async () => {
     await fs.writeFile(path.join(tempDir, 'test.txt'), 'content');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE].execute({ path: '/test.txt' }, { workspace });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE].execute({ path: 'test.txt' }, { workspace });
 
     expect(typeof result).toBe('string');
-    expect(result).toBe('Deleted /test.txt');
+    expect(result).toBe('Deleted test.txt');
 
     const exists = await fs
       .access(path.join(tempDir, 'test.txt'))
@@ -39,12 +39,12 @@ describe('workspace_delete', () => {
   it('should delete empty directory', async () => {
     await fs.mkdir(path.join(tempDir, 'emptydir'));
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE].execute({ path: '/emptydir' }, { workspace });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE].execute({ path: 'emptydir' }, { workspace });
 
     expect(typeof result).toBe('string');
-    expect(result).toBe('Deleted /emptydir');
+    expect(result).toBe('Deleted emptydir');
 
     const exists = await fs
       .access(path.join(tempDir, 'emptydir'))
@@ -57,18 +57,18 @@ describe('workspace_delete', () => {
     await fs.mkdir(path.join(tempDir, 'dirwithfiles'));
     await fs.writeFile(path.join(tempDir, 'dirwithfiles', 'file.txt'), 'content');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE].execute(
       {
-        path: '/dirwithfiles',
+        path: 'dirwithfiles',
         recursive: true,
       },
       { workspace },
     );
 
     expect(typeof result).toBe('string');
-    expect(result).toBe('Deleted /dirwithfiles');
+    expect(result).toBe('Deleted dirwithfiles');
 
     const exists = await fs
       .access(path.join(tempDir, 'dirwithfiles'))

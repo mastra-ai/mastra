@@ -2,7 +2,7 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { formatZodError } from '@mastra/server/handlers/error';
+
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
@@ -15,6 +15,10 @@ import type { Context, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
 import { ZodError } from 'zod';
+export { createAuthMiddleware } from './auth-middleware';
+export type { HonoAuthMiddlewareOptions } from './auth-middleware';
+// Browser stream setup (Hono-specific WebSocket implementation)
+export { setupBrowserStream } from './browser-stream';
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
@@ -294,32 +298,41 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       const { server, httpPath, mcpOptions: routeMcpOptions } = result as MCPHttpTransportResult;
       const { req, res } = toReqRes(response.req.raw);
 
-      try {
-        // Merge class-level mcpOptions with route-specific options (route takes precedence)
-        const options = { ...this.mcpOptions, ...routeMcpOptions };
+      // Merge class-level mcpOptions with route-specific options (route takes precedence)
+      const options = { ...this.mcpOptions, ...routeMcpOptions };
 
-        await server.startHTTP({
+      // Do NOT await startHTTP — let it run in the background so SSE
+      // notifications stream to the client as they are written.
+      // toFetchResponse resolves when headers are sent, not when the body finishes.
+      server
+        .startHTTP({
           url: new URL(response.req.url),
           httpPath: `${resolvedPrefix}${httpPath}`,
           req,
           res,
           options: Object.keys(options).length > 0 ? options : undefined,
+        })
+        .catch((e: unknown) => {
+          this.mastra.getLogger()?.error('[MCP HTTP] Error in background startHTTP:', {
+            error: e instanceof Error ? { message: e.message, stack: e.stack } : e,
+          });
+          try {
+            if (!res.headersSent) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(
+                JSON.stringify({
+                  jsonrpc: '2.0',
+                  error: { code: -32603, message: 'Internal server error' },
+                  id: null,
+                }),
+              );
+            }
+          } catch {
+            // Response stream already closed or destroyed - nothing more to do
+          }
         });
-        return await toFetchResponse(res);
-      } catch {
-        if (!res.headersSent) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(
-            JSON.stringify({
-              jsonrpc: '2.0',
-              error: { code: -32603, message: 'Internal server error' },
-              id: null,
-            }),
-          );
-          return await toFetchResponse(res);
-        }
-        return await toFetchResponse(res);
-      }
+
+      return await toFetchResponse(res);
     } else if (route.responseType === 'mcp-sse') {
       // MCP SSE transport
       const { server, ssePath, messagePath } = result as MCPSseTransportResult;
@@ -404,9 +417,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             this.mastra.getLogger()?.error('Error parsing query params', {
               error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
             });
-            // Zod validation errors should return 400 Bad Request with structured issues
             if (error instanceof ZodError) {
-              return c.json(formatZodError(error, 'query parameters'), 400);
+              const { status, body } = this.resolveValidationError(route, error, 'query');
+              return c.json(body as any, status as any);
             }
             return c.json(
               {
@@ -425,9 +438,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             this.mastra.getLogger()?.error('Error parsing body', {
               error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
             });
-            // Zod validation errors should return 400 Bad Request with structured issues
             if (error instanceof ZodError) {
-              return c.json(formatZodError(error, 'request body'), 400);
+              const { status, body } = this.resolveValidationError(route, error, 'body');
+              return c.json(body as any, status as any);
             }
             return c.json(
               {
@@ -448,7 +461,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
             });
             if (error instanceof ZodError) {
-              return c.json(formatZodError(error, 'path parameters'), 400);
+              const { status, body } = this.resolveValidationError(route, error, 'path');
+              return c.json(body as any, status as any);
             }
             return c.json(
               {

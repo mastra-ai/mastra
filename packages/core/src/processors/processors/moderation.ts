@@ -1,5 +1,5 @@
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import z from 'zod';
+import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
@@ -7,8 +7,12 @@ import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ObservabilityContext } from '../../observability';
 import { resolveObservabilityContext } from '../../observability';
+import type { PublicSchema } from '../../schema';
+import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
+import { selectMessagesToCheck } from './message-selection';
+import type { LastMessageOnlyOption } from './message-selection';
 
 /**
  * Individual moderation category score
@@ -31,7 +35,7 @@ export interface ModerationResult {
 /**
  * Configuration options for ModerationInputProcessor
  */
-export interface ModerationOptions {
+export interface ModerationOptions extends LastMessageOnlyOption {
   /**
    * Model configuration for the moderation agent
    * Supports magic strings like "openai/gpt-4o", config objects, or direct LanguageModel instances
@@ -118,6 +122,7 @@ export class ModerationProcessor implements Processor<'moderation'> {
   private strategy: 'block' | 'warn' | 'filter';
   private includeScores: boolean;
   private chunkWindow: number;
+  private lastMessageOnly: boolean;
   private structuredOutputOptions?: ModerationOptions['structuredOutputOptions'];
   private providerOptions?: ProviderOptions;
 
@@ -142,6 +147,7 @@ export class ModerationProcessor implements Processor<'moderation'> {
     this.strategy = options.strategy || 'block';
     this.includeScores = options.includeScores ?? false;
     this.chunkWindow = options.chunkWindow ?? 0;
+    this.lastMessageOnly = options.lastMessageOnly ?? false;
     this.structuredOutputOptions = options.structuredOutputOptions;
     this.providerOptions = options.providerOptions;
 
@@ -170,9 +176,15 @@ export class ModerationProcessor implements Processor<'moderation'> {
 
       const results: ModerationResult[] = [];
       const passedMessages: MastraDBMessage[] = [];
+      const messagesToCheck = selectMessagesToCheck(messages, this.lastMessageOnly);
+      const checkedMessageIds = new Set(messagesToCheck.map(message => message.id));
 
       // Evaluate each message
       for (const message of messages) {
+        if (!checkedMessageIds.has(message.id)) {
+          passedMessages.push(message);
+          continue;
+        }
         const textContent = this.extractTextContent(message);
         if (!textContent.trim()) {
           // No text content to moderate
@@ -285,12 +297,13 @@ export class ModerationProcessor implements Processor<'moderation'> {
           .nullable(),
         reason: z.string().describe('Brief explanation of why content was flagged').nullable(),
       });
-      let response;
+
+      let result: ModerationResult;
       if (isSupportedLanguageModel(model)) {
-        response = await this.moderationAgent.generate(prompt, {
+        const response = await this.moderationAgent.generate(prompt, {
           structuredOutput: {
-            schema,
             ...(this.structuredOutputOptions ?? {}),
+            schema,
           },
           modelSettings: {
             temperature: 0,
@@ -298,16 +311,22 @@ export class ModerationProcessor implements Processor<'moderation'> {
           providerOptions: this.providerOptions,
           ...observabilityContext,
         });
+
+        if (!response.object) {
+          throw new Error('Structured output returned no object');
+        }
+        result = response.object;
       } else {
-        response = await this.moderationAgent.generateLegacy(prompt, {
-          output: schema,
+        const standardSchema = toStandardSchema(schema as PublicSchema);
+        const response = await this.moderationAgent.generateLegacy(prompt, {
+          output: standardSchemaToJSONSchema(standardSchema),
           temperature: 0,
           providerOptions: this.providerOptions as SharedV2ProviderOptions,
           ...observabilityContext,
         });
-      }
 
-      const result = response.object satisfies ModerationResult;
+        result = response.object as ModerationResult;
+      }
 
       return result;
     } catch (error) {

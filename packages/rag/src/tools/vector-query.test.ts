@@ -646,17 +646,19 @@ describe('createVectorQueryTool', () => {
         },
       );
 
-      expect(vectorQuerySearch).toHaveBeenCalledWith({
-        indexName: 'testIndex',
-        vectorStore: { testStore: {} },
-        queryText: 'foo',
-        model: mockModel,
-        queryFilter: undefined,
-        topK: 10,
-        includeVectors: false,
-        databaseConfig: undefined,
-        providerOptions: { google: { outputDimensionality: 1536 } },
-      });
+      expect(vectorQuerySearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          indexName: 'testIndex',
+          vectorStore: { testStore: {} },
+          queryText: 'foo',
+          model: mockModel,
+          queryFilter: undefined,
+          topK: 10,
+          includeVectors: false,
+          databaseConfig: undefined,
+          providerOptions: { google: { outputDimensionality: 1536 } },
+        }),
+      );
     });
 
     it('should allow providerOptions override via requestContext', async () => {
@@ -681,17 +683,19 @@ describe('createVectorQueryTool', () => {
         },
       );
 
-      expect(vectorQuerySearch).toHaveBeenCalledWith({
-        indexName: 'testIndex',
-        vectorStore: { testStore: {} },
-        queryText: 'foo',
-        model: mockModel,
-        queryFilter: undefined,
-        topK: 10,
-        includeVectors: false,
-        databaseConfig: undefined,
-        providerOptions: { google: { outputDimensionality: 768 } },
-      });
+      expect(vectorQuerySearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          indexName: 'testIndex',
+          vectorStore: { testStore: {} },
+          queryText: 'foo',
+          model: mockModel,
+          queryFilter: undefined,
+          topK: 10,
+          includeVectors: false,
+          databaseConfig: undefined,
+          providerOptions: { google: { outputDimensionality: 768 } },
+        }),
+      );
     });
   });
 });

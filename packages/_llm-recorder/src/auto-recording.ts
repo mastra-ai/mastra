@@ -33,6 +33,9 @@ import { beforeAll, afterAll } from 'vitest';
 import { setupLLMRecording } from './llm-recorder';
 import { defaultNameGenerator } from './vite-plugin';
 
+// Re-export for external consumers (e.g. @internal/test-utils)
+export { defaultNameGenerator };
+
 export interface AutoRecordingOptions {
   /** Override the auto-derived recording name */
   nameOverride?: string;
@@ -93,8 +96,11 @@ export function enableAutoRecording(options: AutoRecordingOptions = {}) {
 /**
  * Get the file path of the caller by inspecting the call stack.
  * Returns null if the path cannot be determined.
+ *
+ * @param skipPatterns - Additional filename patterns to skip when walking the stack.
+ *   Defaults to skipping frames from 'auto-recording' and 'node_modules'.
  */
-function getCallerFilePath(): string | null {
+export function getCallerFilePath(skipPatterns: string[] = []): string | null {
   const originalPrepare = Error.prepareStackTrace;
   // Use an object to capture the result from the prepareStackTrace callback,
   // since TypeScript can't track closure mutations from callbacks.
@@ -104,10 +110,12 @@ function getCallerFilePath(): string | null {
     const err = new Error();
 
     Error.prepareStackTrace = (_err, stack) => {
+      const defaultSkip = ['auto-recording', 'node_modules'];
+      const allSkip = [...defaultSkip, ...skipPatterns];
       // Walk up the stack to find the first frame outside this module
       for (const frame of stack) {
         const filename = frame.getFileName();
-        if (filename && !filename.includes('auto-recording') && !filename.includes('node_modules')) {
+        if (filename && allSkip.every(pattern => !filename.includes(pattern))) {
           result.file = filename;
           break;
         }

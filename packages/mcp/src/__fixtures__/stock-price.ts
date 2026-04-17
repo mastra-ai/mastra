@@ -1,8 +1,8 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { z } from 'zod/v3';
+import zodToJsonSchema from 'zod-to-json-schema';
 
 const getStockPrice = async (symbol: string) => {
   // Return mock data for testing
@@ -103,7 +103,7 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
         content: [
           {
             type: 'text',
-            text: `Invalid arguments: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
+            text: `Invalid arguments: ${error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
           },
         ],
         isError: true,

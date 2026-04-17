@@ -56,7 +56,7 @@ readonly name = 'tracing-console-exporter';
 
 ## Methods
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
@@ -83,7 +83,7 @@ async shutdown(): Promise<void>
 
 Logs shutdown message.
 
-## Output Format
+## Output format
 
 The exporter outputs different formats based on event type:
 
@@ -152,7 +152,7 @@ const exporterWithLogger = new ConsoleExporter({
 })
 ```
 
-## Implementation Details
+## Implementation details
 
 - Formats attributes as JSON with 2-space indentation
 - Calculates and displays span duration in milliseconds
@@ -160,21 +160,21 @@ const exporterWithLogger = new ConsoleExporter({
 - Logs unimplemented event types as warnings
 - Uses 80-character separator lines between events
 
-## See Also
+## See also
 
 ### Documentation
 
-- [Tracing Overview](/docs/observability/tracing/overview) - Complete guide
-- [Exporters](/docs/observability/tracing/overview#exporters) - Exporter concepts
+- [Tracing Overview](/docs/observability/tracing/overview): Complete guide
+- [Exporters](/docs/observability/tracing/overview#exporters): Exporter concepts
 
 ### Other Exporters
 
-- [DefaultExporter](/reference/observability/tracing/exporters/default-exporter) - Storage persistence
-- [CloudExporter](/reference/observability/tracing/exporters/cloud-exporter) - Mastra Cloud
-- [Langfuse](/reference/observability/tracing/exporters/langfuse) - Langfuse integration
-- [Braintrust](/reference/observability/tracing/exporters/braintrust) - Braintrust integration
+- [DefaultExporter](/reference/observability/tracing/exporters/default-exporter): Storage persistence
+- [CloudExporter](/reference/observability/tracing/exporters/cloud-exporter): Mastra platform
+- [Langfuse](/reference/observability/tracing/exporters/langfuse): Langfuse integration
+- [Braintrust](/reference/observability/tracing/exporters/braintrust): Braintrust integration
 
 ### Reference
 
-- [Configuration](/reference/observability/tracing/configuration) - Configuration options
-- [Interfaces](/reference/observability/tracing/interfaces) - Type definitions
+- [Configuration](/reference/observability/tracing/configuration): Configuration options
+- [Interfaces](/reference/observability/tracing/interfaces): Type definitions

@@ -37,7 +37,7 @@ import {
 } from '../../handlers/voice';
 import type { ServerRoute } from '.';
 
-export const AGENTS_ROUTES: ServerRoute<any, any, any>[] = [
+export const AGENTS_ROUTES: readonly ServerRoute[] = [
   // ============================================================================
   // Agent Core Routes
   // ============================================================================
@@ -114,4 +114,44 @@ export const AGENTS_ROUTES: ServerRoute<any, any, any>[] = [
   STREAM_VNEXT_DEPRECATED_ROUTE,
   STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE,
   STREAM_UI_MESSAGE_DEPRECATED_ROUTE,
+];
+
+/**
+ * Type-level tuple preserving each agent route's specific schema types.
+ * Used by ServerRoutes to build the type-level route map.
+ */
+export type AgentRoutes = readonly [
+  typeof LIST_AGENTS_ROUTE,
+  typeof GET_PROVIDERS_ROUTE,
+  typeof GET_AGENT_BY_ID_ROUTE,
+  typeof CLONE_AGENT_ROUTE,
+  typeof GET_SPEAKERS_ROUTE,
+  typeof GET_SPEAKERS_DEPRECATED_ROUTE,
+  typeof GENERATE_AGENT_ROUTE,
+  typeof GENERATE_AGENT_VNEXT_ROUTE,
+  typeof STREAM_GENERATE_ROUTE,
+  typeof STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE,
+  typeof EXECUTE_AGENT_TOOL_ROUTE,
+  typeof APPROVE_TOOL_CALL_ROUTE,
+  typeof DECLINE_TOOL_CALL_ROUTE,
+  typeof APPROVE_TOOL_CALL_GENERATE_ROUTE,
+  typeof DECLINE_TOOL_CALL_GENERATE_ROUTE,
+  typeof APPROVE_NETWORK_TOOL_CALL_ROUTE,
+  typeof DECLINE_NETWORK_TOOL_CALL_ROUTE,
+  typeof STREAM_NETWORK_ROUTE,
+  typeof UPDATE_AGENT_MODEL_ROUTE,
+  typeof RESET_AGENT_MODEL_ROUTE,
+  typeof REORDER_AGENT_MODEL_LIST_ROUTE,
+  typeof UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE,
+  typeof ENHANCE_INSTRUCTIONS_ROUTE,
+  typeof GET_AGENT_TOOL_ROUTE,
+  typeof GET_AGENT_SKILL_ROUTE,
+  typeof GENERATE_SPEECH_ROUTE,
+  typeof GENERATE_SPEECH_DEPRECATED_ROUTE,
+  typeof TRANSCRIBE_SPEECH_ROUTE,
+  typeof TRANSCRIBE_SPEECH_DEPRECATED_ROUTE,
+  typeof GET_LISTENER_ROUTE,
+  typeof STREAM_VNEXT_DEPRECATED_ROUTE,
+  typeof STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE,
+  typeof STREAM_UI_MESSAGE_DEPRECATED_ROUTE,
 ];

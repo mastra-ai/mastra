@@ -184,6 +184,62 @@ describe('createOnScorerHook', () => {
     );
   });
 
+  it('should pass live span correlation context and metadata into scorer.run', async () => {
+    const correlationContext = {
+      traceId: 'trace-live',
+      spanId: 'span-live',
+      entityName: 'agent-run',
+      rootEntityName: 'workflow-root',
+      source: 'cloud',
+      serviceName: 'test-service',
+    };
+
+    const hookData = {
+      runId: 'test-run',
+      scorer: { id: 'test-scorer' },
+      input: [{ message: 'test' }],
+      output: { result: 'test' },
+      source: 'LIVE' as const,
+      entity: { id: 'test-entity' },
+      entityType: 'AGENT' as const,
+      tracingContext: {
+        currentSpan: {
+          id: 'span-live',
+          traceId: 'trace-live',
+          isValid: true,
+          metadata: { sessionId: 'session-1', inherited: true },
+          getCorrelationContext: vi.fn().mockReturnValue(correlationContext),
+          observabilityInstance: {
+            getExporters: () => [],
+          },
+        },
+      },
+    };
+
+    const mockScorer = {
+      id: 'test-scorer',
+      name: 'test-scorer',
+      run: vi.fn().mockResolvedValue({ score: 0.8 }),
+    };
+
+    mockMastra.getAgentById.mockReturnValue({
+      listScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
+    });
+
+    await hook(hookData);
+
+    expect(mockScorer.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scoreSource: 'live',
+        targetScope: 'span',
+        targetTraceId: 'trace-live',
+        targetSpanId: 'span-live',
+        targetCorrelationContext: correlationContext,
+        targetMetadata: { sessionId: 'session-1', inherited: true },
+      }),
+    );
+  });
+
   it('should handle scorer not found without throwing', async () => {
     const hookData = {
       runId: 'test-run',

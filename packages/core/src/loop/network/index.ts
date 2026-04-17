@@ -1,5 +1,5 @@
 import { parsePartialJson } from '@internal/ai-sdk-v5';
-import z from 'zod';
+import { z } from 'zod/v4';
 import type { Mastra } from '../..';
 import type { AgentExecutionOptions } from '../../agent';
 import type { MultiPrimitiveExecutionOptions, NetworkOptions } from '../../agent/agent.types';
@@ -14,6 +14,8 @@ import type { ObservabilityContext } from '../../observability';
 import { createObservabilityContext, resolveObservabilityContext } from '../../observability';
 import { ProcessorRunner } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
+import type { PublicSchema } from '../../schema';
+import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType } from '../../stream';
 import { escapeUnescapedControlCharsInJsonStrings } from '../../stream/base/output-format-handlers';
@@ -21,8 +23,25 @@ import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream'
 import type { IdGeneratorContext } from '../../types';
 import { createStep, createWorkflow } from '../../workflows';
 import type { Step, SuspendOptions } from '../../workflows';
-import { zodToJsonSchema } from '../../zod-to-json';
 import { PRIMITIVE_TYPES } from '../types';
+
+/**
+ * Convert a schema (PublicSchema) to JSON Schema.
+ * Handles Zod v4, AI SDK schemas, JSON Schema, and StandardSchemaWithJSON.
+ */
+function schemaToJsonSchema(schema: PublicSchema): unknown {
+  if (isStandardSchemaWithJSON(schema)) {
+    return standardSchemaToJSONSchema(schema);
+  }
+
+  // Try to convert raw Zod v4 schema to StandardSchema
+  try {
+    const standardSchema = toStandardSchema(schema);
+    return standardSchemaToJSONSchema(standardSchema);
+  } catch {
+    throw new Error('We could not convert the schema to a JSONSchema');
+  }
+}
 import type { CompletionConfig, CompletionContext } from './validation';
 import {
   runValidation,
@@ -145,7 +164,7 @@ export async function getRoutingAgent({
   const workflowList = Object.entries(workflowsToUse)
     .map(([name, workflow]) => {
       return ` - **${name}**: ${workflow.description}, input schema: ${JSON.stringify(
-        zodToJsonSchema(workflow.inputSchema ?? z.object({})),
+        schemaToJsonSchema(workflow.inputSchema ?? z.object({})),
       )}`;
     })
     .join('\n');
@@ -155,7 +174,7 @@ export async function getRoutingAgent({
     .map(([name, tool]) => {
       // Use 'in' check for type narrowing, then nullish coalescing for undefined values
       const inputSchema = 'inputSchema' in tool ? (tool.inputSchema ?? z.object({})) : z.object({});
-      return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(zodToJsonSchema(inputSchema))}`;
+      return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(schemaToJsonSchema(inputSchema))}`;
     })
     .join('\n');
 
@@ -288,6 +307,7 @@ export async function prepareMemoryStep({
               resourceId: thread?.resourceId,
             },
           ] as MastraDBMessage[],
+          observabilityContext,
         }),
       );
     }
@@ -303,6 +323,7 @@ export async function prepareMemoryStep({
       promises.push(
         memory.saveMessages({
           messages: messagesToSave,
+          observabilityContext,
         }),
       );
     }
@@ -331,6 +352,7 @@ export async function prepareMemoryStep({
       const existingMessages = await memory.recall({
         threadId: thread.id,
         resourceId: thread.resourceId,
+        observabilityContext,
       });
       const existingUserMessages = existingMessages.messages.filter(m => m.role === 'user');
       const isFirstUserMessage = existingUserMessages.length === 0;
@@ -374,7 +396,12 @@ export async function prepareMemoryStep({
  */
 async function saveMessagesWithProcessors(
   memory:
-    | { saveMessages: (params: { messages: MastraDBMessage[] }) => Promise<{ messages: MastraDBMessage[] }> }
+    | {
+        saveMessages: (params: {
+          messages: MastraDBMessage[];
+          observabilityContext?: Partial<ObservabilityContext>;
+        }) => Promise<{ messages: MastraDBMessage[] }>;
+      }
     | undefined,
   messages: MastraDBMessage[],
   processorRunner: ProcessorRunner | null,
@@ -384,8 +411,11 @@ async function saveMessagesWithProcessors(
 ): Promise<void> {
   if (!memory) return;
 
+  const { requestContext, ...observabilityContext } = context ?? {};
+  const resolved = resolveObservabilityContext(observabilityContext);
+
   if (!processorRunner || messages.length === 0) {
-    await memory.saveMessages({ messages });
+    await memory.saveMessages({ messages, observabilityContext: resolved });
     return;
   }
 
@@ -395,17 +425,11 @@ async function saveMessagesWithProcessors(
     messageList.add(msg, 'response');
   }
 
-  // Run output processors on the messages
-  const { requestContext, ...observabilityContext } = context ?? {};
-  await processorRunner.runOutputProcessors(
-    messageList,
-    resolveObservabilityContext(observabilityContext),
-    requestContext,
-  );
+  await processorRunner.runOutputProcessors(messageList, resolved, requestContext);
 
   // Get the processed messages and save them
   const processedMessages = messageList.get.response.db();
-  await memory.saveMessages({ messages: processedMessages });
+  await memory.saveMessages({ messages: processedMessages, observabilityContext: resolved });
 }
 
 async function saveFinalResultIfProvided({
@@ -1250,7 +1274,7 @@ export async function createNetworkLoop({
         }
         const wflowStepSchema = (wflowStep as Step<any, any, any, any, any, any>)?.resumeSchema;
         if (wflowStepSchema) {
-          resumeSchema = JSON.stringify(zodToJsonSchema(wflowStepSchema));
+          resumeSchema = JSON.stringify(schemaToJsonSchema(wflowStepSchema));
         } else {
           resumeSchema = '';
         }
@@ -1532,16 +1556,15 @@ export async function createNetworkLoop({
           });
         }
         if (!resumeData) {
+          const approvalSchema = z.object({
+            approved: z
+              .boolean()
+              .describe(
+                'Controls if the tool call is approved or not, should be true when approved and false when declined',
+              ),
+          });
           const requireApprovalResumeSchema = JSON.stringify(
-            zodToJsonSchema(
-              z.object({
-                approved: z
-                  .boolean()
-                  .describe(
-                    'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                  ),
-              }),
-            ),
+            standardSchemaToJSONSchema(toStandardSchema(approvalSchema)),
           );
           await saveMessagesWithProcessors(
             memory,
@@ -1690,6 +1713,7 @@ export async function createNetworkLoop({
           requestContext,
           mastra: agent.getMastraInstance(),
           agent: {
+            agentId: agent.id,
             resourceId: initData.threadResourceId || networkName,
             toolCallId,
             threadId: initData.threadId,
@@ -1727,7 +1751,7 @@ export async function createNetworkLoop({
                             type: 'suspension',
                             resumeSchema:
                               suspendOptions?.resumeSchema ??
-                              JSON.stringify(zodToJsonSchema((tool as any).resumeSchema)),
+                              JSON.stringify(schemaToJsonSchema((tool as any).resumeSchema)),
                             runId,
                             primitiveType: 'tool',
                             primitiveId: inputData.primitiveId,
@@ -1750,7 +1774,7 @@ export async function createNetworkLoop({
                   toolCallId,
                   args: inputDataToUse,
                   resumeSchema:
-                    suspendOptions?.resumeSchema ?? JSON.stringify(zodToJsonSchema((tool as any).resumeSchema)),
+                    suspendOptions?.resumeSchema ?? JSON.stringify(schemaToJsonSchema((tool as any).resumeSchema)),
                   suspendPayload,
                   runId,
                   selectionReason: inputData.selectionReason,
@@ -2180,7 +2204,6 @@ export async function networkLoop<OUTPUT = undefined>({
   // If validation fails, marks isComplete=false and adds feedback for next iteration
   const validationStep = createStep({
     id: 'validation-step',
-    // @ts-expect-error - will be fixed by standard schema
     inputSchema: networkWorkflow.outputSchema,
     outputSchema: z.object({
       task: z.string(),

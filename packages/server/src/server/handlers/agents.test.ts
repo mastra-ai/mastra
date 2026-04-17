@@ -166,7 +166,7 @@ describe('getProvidersHandler', () => {
       const registryEntry = PROVIDER_REGISTRY[provider.id as keyof typeof PROVIDER_REGISTRY];
       expect(registryEntry).toBeDefined();
       expect(provider.name).toBe(registryEntry.name);
-      expect(provider.envVar).toBe(registryEntry.apiKeyEnvVar);
+      expect(provider.envVar).toEqual(registryEntry.apiKeyEnvVar);
       // Models should match (converting readonly to regular array)
       expect(provider.models).toEqual([...registryEntry.models]);
     });
@@ -179,7 +179,7 @@ describe('getProvidersHandler', () => {
       name: 'Test Gateway',
       getId: () => 'test-gateway',
       fetchProviders: vi.fn().mockResolvedValue({
-        'test-gateway/custom-llm': {
+        'custom-llm': {
           name: 'Custom LLM',
           models: ['custom-model-1', 'custom-model-2'],
           apiKeyEnvVar: 'CUSTOM_LLM_API_KEY',

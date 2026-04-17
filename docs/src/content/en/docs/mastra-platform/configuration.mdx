@@ -1,0 +1,41 @@
+---
+title: "Configuration | Mastra platform"
+description: Configuration options and settings for the Mastra platform, including Studio and Server deployments.
+---
+
+# Configuration
+
+When you deploy to the Mastra platform, the CLI generates a `.mastra-project.json` config file and reads environment variables from your local `.env` files.
+
+This page explains both mechanisms and how they differ between Studio and Server deployments.
+
+## Project config
+
+The `.mastra-project.json` file is auto-generated on your first Studio or Server deploy. It links your local project to a platform project.
+
+Commit it to your version control so that subsequent deploys (including from CI) target the correct project.
+
+Your file will look something like this:
+
+```json title=".mastra-project.json"
+{
+  "projectId": "06daaac4-89b1-40f0-9e3f-0993e039a627",
+  "projectName": "my-project",
+  "organizationId": "org_01KNA5YSP52SX4M6YVSXC2MAHP"
+}
+```
+
+| Field | Description |
+| - | - |
+| projectId | UUID for the project. Assigned when the project is created. |
+| projectName | Human-readable project name. Used as a display label in the dashboard and CLI output. |
+| organizationId | The organization that owns the project. All deploys, API keys, and resources are scoped to this org. |
+
+## Environment variables
+
+The CLI reads from `.env` and `.env.local` files in your project directory during deploy. Variables from `.env.local` override those in `.env`.
+
+You can set environment variables like so:
+
+- **Studio**: Environment variables are read from your local `.env` files and bundled into the deploy artifact. To update them, redeploy.
+- **Server**: On the first deploy, the CLI automatically seeds environment variables from your local `.env` files. After that, manage them per-project through the dashboard or API.

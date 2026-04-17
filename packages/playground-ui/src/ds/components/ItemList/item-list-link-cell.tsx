@@ -1,17 +1,15 @@
+import { transitions, focusRing } from '@/ds/primitives/transitions';
+import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
-import { transitions } from '@/ds/primitives/transitions';
-import { focusRing } from '@/ds/primitives/transitions';
-import { useLinkComponent } from '@/lib/framework';
 
 export type ItemListLinkCellProps = {
   children?: React.ReactNode;
   className?: string;
   href: string;
+  LinkComponent: LinkComponent;
 };
 
-export function ItemListLinkCell({ children, href, className }: ItemListLinkCellProps) {
-  const { Link } = useLinkComponent();
-
+export function ItemListLinkCell({ children, href, className, LinkComponent: Link }: ItemListLinkCellProps) {
   return (
     <Link
       href={href}
