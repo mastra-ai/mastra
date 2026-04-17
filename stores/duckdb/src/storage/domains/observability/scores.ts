@@ -1,3 +1,4 @@
+import { generateSignalId } from '@mastra/core/observability';
 import type {
   BatchCreateScoresArgs,
   CreateScoreArgs,
@@ -238,7 +239,7 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
       scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope
     )
      VALUES (${[
-       v(s.scoreId ?? ''),
+       v(s.scoreId || generateSignalId()),
        v(s.timestamp),
        v(s.traceId),
        v(s.spanId ?? null),
@@ -286,7 +287,7 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
     const legacyScore = s as LegacyScoreRecord;
     const scoreSource = legacyScore.scoreSource ?? legacyScore.source ?? null;
     return `(${[
-      v(legacyScore.scoreId ?? ''),
+      v(legacyScore.scoreId || generateSignalId()),
       v(legacyScore.timestamp),
       v(legacyScore.traceId),
       v(legacyScore.spanId ?? null),

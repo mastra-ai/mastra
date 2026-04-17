@@ -609,17 +609,6 @@ export const ALL_MIGRATIONS = [
 
 export const ALL_DDL = [...ALL_TABLE_DDL, ...ALL_MV_DDL, ...DISCOVERY_MV_DDL];
 
-/**
- * Signal tables that need to be migrated from MergeTree to ReplacingMergeTree.
- * Used by init() to check the current engine and drop+recreate only if needed.
- */
-export const SIGNAL_TABLES_REQUIRING_ENGINE_MIGRATION = [
-  TABLE_METRIC_EVENTS,
-  TABLE_LOG_EVENTS,
-  TABLE_SCORE_EVENTS,
-  TABLE_FEEDBACK_EVENTS,
-];
-
 export const ALL_TABLE_NAMES = [
   TABLE_SPAN_EVENTS,
   TABLE_TRACE_ROOTS,

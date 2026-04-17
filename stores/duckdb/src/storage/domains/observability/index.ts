@@ -68,11 +68,12 @@ import type {
   ObservabilityStorageStrategy,
 } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
-import { ALL_DDL, ALL_MIGRATIONS, SIGNAL_TABLES_REQUIRING_PK_MIGRATION } from './ddl';
+import { ALL_DDL, ALL_MIGRATIONS } from './ddl';
 import * as discoveryOps from './discovery';
 import * as feedbackOps from './feedback';
 import * as logOps from './logs';
 import * as metricOps from './metrics';
+import { migrateSignalTables } from './migration';
 import * as scoreOps from './scores';
 import * as tracingOps from './tracing';
 
@@ -96,25 +97,11 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
 
   /** Create all observability tables if they don't exist. */
   async init(): Promise<void> {
-    // One-time migration: drop signal tables that lack a PRIMARY KEY on the signal ID
-    // so they can be recreated with the correct constraint. Tables already having a
-    // PRIMARY KEY (or not yet created) are skipped.
-    for (const { table } of SIGNAL_TABLES_REQUIRING_PK_MIGRATION) {
-      const tableRows = await this.db.query<{ table_name: string }>(
-        `SELECT table_name FROM information_schema.tables WHERE table_name = ?`,
-        [table],
-      );
-      if (tableRows.length === 0) continue;
-
-      const pkRows = await this.db.query<{ constraint_type: string }>(
-        `SELECT constraint_type FROM information_schema.table_constraints
-         WHERE table_name = ? AND constraint_type = 'PRIMARY KEY'`,
-        [table],
-      );
-      if (pkRows.length === 0) {
-        await this.db.execute(`DROP TABLE IF EXISTS ${table}`);
-      }
-    }
+    // One-time, non-destructive migration: signal tables created by older
+    // versions lack the PRIMARY KEY + NOT NULL signal-ID column. Copy their
+    // data into freshly-created tables so existing rows are preserved instead
+    // of dropped.
+    await migrateSignalTables(this.db);
 
     for (const ddl of ALL_DDL) {
       await this.db.execute(ddl);

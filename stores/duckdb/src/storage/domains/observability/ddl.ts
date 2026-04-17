@@ -387,15 +387,3 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE feedback_events ADD COLUMN IF NOT EXISTS feedbackSource VARCHAR`,
   `ALTER TABLE feedback_events ALTER COLUMN traceId DROP NOT NULL`,
 ];
-
-/**
- * Signal tables that need to be migrated to add PRIMARY KEY on signal IDs.
- * Used by init() to check if the constraint exists and drop+recreate if needed.
- * DuckDB cannot add a PRIMARY KEY to an existing table when duplicate values exist.
- */
-export const SIGNAL_TABLES_REQUIRING_PK_MIGRATION = [
-  { table: 'metric_events', pkColumn: 'metricId' },
-  { table: 'log_events', pkColumn: 'logId' },
-  { table: 'score_events', pkColumn: 'scoreId' },
-  { table: 'feedback_events', pkColumn: 'feedbackId' },
-];

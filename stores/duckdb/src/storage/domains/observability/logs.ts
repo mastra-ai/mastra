@@ -1,3 +1,4 @@
+import { generateSignalId } from '@mastra/core/observability';
 import type { BatchCreateLogsArgs, ListLogsArgs, ListLogsResponse } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';
@@ -85,7 +86,7 @@ export async function batchCreateLogs(db: DuckDBConnection, args: BatchCreateLog
 
   const tuples = args.logs.map(log => {
     return `(${[
-      v(log.logId ?? ''),
+      v(log.logId || generateSignalId()),
       v(log.timestamp),
       v(log.level),
       v(log.message),

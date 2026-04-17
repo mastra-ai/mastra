@@ -1,3 +1,4 @@
+import { generateSignalId } from '@mastra/core/observability';
 import type {
   BatchCreateMetricsArgs,
   ListMetricsArgs,
@@ -256,7 +257,7 @@ export async function batchCreateMetrics(db: DuckDBConnection, args: BatchCreate
 
   const tuples = args.metrics.map(m => {
     return `(${[
-      v(m.metricId ?? ''),
+      v(m.metricId || generateSignalId()),
       v(m.timestamp),
       v(m.name),
       v(m.value),
