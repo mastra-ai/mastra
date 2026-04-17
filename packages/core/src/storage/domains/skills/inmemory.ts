@@ -56,6 +56,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
       status: 'draft',
       activeVersionId: undefined,
       authorId: skill.authorId,
+      ...(skill.metadata !== undefined && { metadata: skill.metadata }),
       createdAt: now,
       updatedAt: now,
     };
@@ -63,7 +64,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
     this.db.skills.set(skill.id, newConfig);
 
     // Extract config fields from the flat input (everything except record fields)
-    const { id: _id, authorId: _authorId, ...snapshotConfig } = skill;
+    const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = skill;
 
     // Create version 1 from the config
     const versionId = randomUUID();
@@ -94,8 +95,10 @@ export class InMemorySkillsStorage extends SkillsStorage {
       throw new Error(`Skill with id ${id} not found`);
     }
 
-    // Separate metadata fields from config fields
-    const { authorId, activeVersionId, status, ...configFields } = updates;
+    // Separate metadata fields from config fields. `metadata` lives on the
+    // thin record (used by Agent Studio for visibility/star data), not on the
+    // version snapshot, so we pull it out alongside the other record fields.
+    const { authorId, activeVersionId, status, metadata, ...configFields } = updates;
 
     // Config field names from StorageSkillSnapshotType
     const configFieldNames = [
@@ -108,7 +111,6 @@ export class InMemorySkillsStorage extends SkillsStorage {
       'references',
       'scripts',
       'assets',
-      'metadata',
       'tree',
     ];
 
@@ -121,6 +123,9 @@ export class InMemorySkillsStorage extends SkillsStorage {
       ...(authorId !== undefined && { authorId }),
       ...(activeVersionId !== undefined && { activeVersionId }),
       ...(status !== undefined && { status: status as StorageSkillType['status'] }),
+      ...(metadata !== undefined && {
+        metadata: { ...(existingConfig.metadata ?? {}), ...metadata },
+      }),
       updatedAt: new Date(),
     };
 
@@ -215,12 +220,14 @@ export class InMemorySkillsStorage extends SkillsStorage {
       configs = configs.filter(config => config.authorId === authorId);
     }
 
-    // Filter by metadata if provided (AND logic) — skills don't have metadata on the record,
-    // but we support the filter interface for consistency
+    // Filter by metadata if provided (AND logic). Mirrors the agents
+    // implementation: every key in the filter must match the value on the
+    // skill's record-level metadata.
     if (metadata && Object.keys(metadata).length > 0) {
-      configs = configs.filter(_config => {
-        // StorageSkillType doesn't have metadata on the thin record
-        return false;
+      const entries = Object.entries(metadata);
+      configs = configs.filter(config => {
+        if (!config.metadata) return false;
+        return entries.every(([key, value]) => config.metadata![key] === value);
       });
     }
 
@@ -366,6 +373,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
   private deepCopyConfig(config: StorageSkillType): StorageSkillType {
     return {
       ...config,
+      ...(config.metadata !== undefined && { metadata: structuredClone(config.metadata) }),
     };
   }
 

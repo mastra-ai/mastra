@@ -9,6 +9,7 @@ import type {
   StoragePromptBlockType,
   StorageResourceType,
   StorageScorerDefinitionType,
+  StorageUserPreferencesType,
   StorageWorkspaceType,
   StorageSkillType,
   StorageWorkflowRun,
@@ -79,6 +80,9 @@ export class InMemoryDB {
   // Background tasks domain
   readonly backgroundTasks = new Map<string, BackgroundTask>();
 
+  // User preferences domain (Agent Studio per-user state)
+  readonly userPreferences = new Map<string, StorageUserPreferencesType>();
+
   /**
    * Clears all data from all collections.
    * Useful for testing.
@@ -115,5 +119,6 @@ export class InMemoryDB {
     this.experiments.clear();
     this.experimentResults.clear();
     this.backgroundTasks.clear();
+    this.userPreferences.clear();
   }
 }

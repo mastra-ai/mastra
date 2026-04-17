@@ -18,3 +18,4 @@ export * from './shared';
 export * from './datasets';
 export * from './experiments';
 export * from './background-tasks';
+export * from './user-preferences';

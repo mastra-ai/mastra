@@ -44,14 +44,16 @@ export class FilesystemSkillsStorage extends SkillsStorage {
       status: 'draft',
       activeVersionId: undefined,
       authorId: skill.authorId,
+      ...(skill.metadata !== undefined && { metadata: skill.metadata }),
       createdAt: now,
       updatedAt: now,
     };
 
     await this.helpers.createEntity(skill.id, entity);
 
-    // Skills don't have metadata on the thin record, so only exclude id and authorId
-    const { id: _id, authorId: _authorId, ...snapshotConfig } = skill;
+    // `metadata` lives on the thin record (Agent Studio visibility/star data),
+    // not on the version snapshot — exclude it from the snapshot payload.
+    const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = skill;
     const versionId = crypto.randomUUID();
     await this.createVersion({
       id: versionId,
@@ -73,7 +75,10 @@ export class FilesystemSkillsStorage extends SkillsStorage {
       throw new Error(`FilesystemSkillsStorage: skill with id ${id} not found`);
     }
 
-    const { authorId, activeVersionId, status, ...configFields } = updates;
+    // `metadata` is a thin-record field (visibility/star data for Agent Studio)
+    // and is not part of the version snapshot; pull it out alongside the other
+    // record-level fields so it doesn't trigger a new version.
+    const { authorId, activeVersionId, status, metadata, ...configFields } = updates;
 
     // Config field names from StorageSkillSnapshotType
     const configFieldNames = [
@@ -86,7 +91,6 @@ export class FilesystemSkillsStorage extends SkillsStorage {
       'references',
       'scripts',
       'assets',
-      'metadata',
       'tree',
     ];
 
@@ -155,6 +159,7 @@ export class FilesystemSkillsStorage extends SkillsStorage {
       ...(authorId !== undefined && { authorId }),
       ...(activeVersionId !== undefined && { activeVersionId }),
       ...(status !== undefined && { status }),
+      ...(metadata !== undefined && { metadata }),
     };
     if (activeVersionId !== undefined && status === undefined) {
       entityUpdates.status = 'published';

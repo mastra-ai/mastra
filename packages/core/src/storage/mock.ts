@@ -14,6 +14,7 @@ import { InMemoryPromptBlocksStorage } from './domains/prompt-blocks/inmemory';
 import { InMemoryScorerDefinitionsStorage } from './domains/scorer-definitions/inmemory';
 import { ScoresInMemory } from './domains/scores/inmemory';
 import { InMemorySkillsStorage } from './domains/skills/inmemory';
+import { InMemoryUserPreferencesStorage } from './domains/user-preferences/inmemory';
 import { WorkflowsInMemory } from './domains/workflows/inmemory';
 import { InMemoryWorkspacesStorage } from './domains/workspaces/inmemory';
 /**
@@ -70,6 +71,7 @@ export class InMemoryStore extends MastraCompositeStore {
       skills: new InMemorySkillsStorage({ db: this.#db }),
       blobs: new InMemoryBlobStore(),
       backgroundTasks: new BackgroundTasksInMemory({ db: this.#db }),
+      userPreferences: new InMemoryUserPreferencesStorage({ db: this.#db }),
     };
   }
 

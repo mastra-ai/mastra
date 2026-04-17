@@ -1861,9 +1861,23 @@ export interface StorageSkillType {
   activeVersionId?: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /**
+   * Additional metadata for the skill. Used by Agent Studio for visibility
+   * (`metadata.visibility`: `'private' | 'public'`) and other UX hints.
+   */
+  metadata?: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
 }
+
+/**
+ * Visibility convention used by Agent Studio for stored agents and skills.
+ * Stored under `metadata.visibility` on the thin record (no top-level column).
+ *
+ * - `'private'`: only the author can see the item in their Agents/Configure views.
+ * - `'public'`: visible to all authenticated users in the Marketplace.
+ */
+export type VisibilityValue = 'private' | 'public';
 
 /**
  * Resolved skill type that combines the thin record with version snapshot content.
@@ -1883,6 +1897,8 @@ export type StorageCreateSkillInput = {
   id: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /** Additional metadata for the skill (see {@link StorageSkillType.metadata}) */
+  metadata?: Record<string, unknown>;
 } & StorageSkillSnapshotType;
 
 /**
@@ -1897,6 +1913,8 @@ export type StorageUpdateSkillInput = {
   activeVersionId?: string;
   /** Skill status */
   status?: 'draft' | 'published' | 'archived';
+  /** Additional metadata for the skill (see {@link StorageSkillType.metadata}) */
+  metadata?: Record<string, unknown>;
 } & Partial<StorageSkillSnapshotType>;
 
 export type StorageListSkillsInput = {
@@ -2452,4 +2470,48 @@ export interface ExperimentReviewCounts {
   needsReview: number;
   reviewed: number;
   complete: number;
+}
+
+// ============================================================================
+// User Preferences
+// ============================================================================
+
+/**
+ * Per-user preferences scoped to Agent Studio. Stored separately from agent
+ * and skill records so that non-authors can star marketplace items and so
+ * appearance / view state survives across devices.
+ */
+export interface StorageUserPreferencesAgentStudio {
+  /** IDs of stored agents this user has starred from the marketplace. */
+  starredAgents?: string[];
+  /** IDs of stored skills this user has starred from the marketplace. */
+  starredSkills?: string[];
+  /** Whether the admin is viewing Agent Studio in end-user preview mode. */
+  previewMode?: boolean;
+  /** UI appearance preference. */
+  appearance?: 'light' | 'dark';
+  /** Preferred layout for the Agents grid. */
+  agentsView?: 'grid' | 'list';
+  /** Current scope selected on the Agents page. */
+  agentsScope?: 'all' | 'mine' | 'team';
+}
+
+export interface StorageUserPreferencesType {
+  /** Authenticated user ID these preferences belong to. */
+  userId: string;
+  /** Agent Studio scoped preferences. */
+  agentStudio: StorageUserPreferencesAgentStudio;
+  /** Arbitrary forward-compatible extensions. */
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Partial update payload. `agentStudio` is deep-merged into the existing
+ * record; `metadata` is shallow-merged.
+ */
+export interface StorageUpdateUserPreferencesInput {
+  agentStudio?: Partial<StorageUserPreferencesAgentStudio>;
+  metadata?: Record<string, unknown>;
 }

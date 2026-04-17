@@ -8,6 +8,7 @@ import { FilesystemMCPServersStorage } from './domains/mcp-servers/filesystem';
 import { FilesystemPromptBlocksStorage } from './domains/prompt-blocks/filesystem';
 import { FilesystemScorerDefinitionsStorage } from './domains/scorer-definitions/filesystem';
 import { FilesystemSkillsStorage } from './domains/skills/filesystem';
+import { FilesystemUserPreferencesStorage } from './domains/user-preferences/filesystem';
 import { FilesystemWorkspacesStorage } from './domains/workspaces/filesystem';
 import { FilesystemDB } from './filesystem-db';
 
@@ -63,6 +64,7 @@ export class FilesystemStore extends MastraCompositeStore {
       mcpServers: new FilesystemMCPServersStorage({ db: this.#db }),
       workspaces: new FilesystemWorkspacesStorage({ db: this.#db }),
       skills: new FilesystemSkillsStorage({ db: this.#db }),
+      userPreferences: new FilesystemUserPreferencesStorage({ db: this.#db }),
     } as unknown as StorageDomains;
   }
 
