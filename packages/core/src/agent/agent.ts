@@ -67,6 +67,7 @@ import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
+import { isProviderTool } from '../tools/toolchecks';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
@@ -3045,6 +3046,7 @@ export class Agent<
       this.logger.debug('Adding client tools', { agent: this.name, tools: Object.keys(clientTools || {}), runId });
       for (const [toolName, tool] of clientToolsForInput) {
         const { execute, ...toolRest } = tool;
+        const toolToConvert = isProviderTool(tool) ? tool : toolRest;
         const options: ToolOptions = {
           name: toolName,
           runId,
@@ -3063,7 +3065,7 @@ export class Agent<
           backgroundConfig: (tool as any).background,
         };
         const convertedToCoreTool = makeCoreTool(
-          toolRest,
+          toolToConvert,
           options,
           'client-tool',
           autoResumeSuspendedTools,

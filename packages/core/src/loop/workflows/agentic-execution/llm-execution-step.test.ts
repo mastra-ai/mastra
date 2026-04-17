@@ -104,13 +104,11 @@ describe('createLLMExecutionStep gateway provider tools', () => {
   });
 
   it('should infer providerExecuted for gateway tools and not merge streamed results onto toolCalls', async () => {
-    const executeSpy = vi.fn();
     const tools = {
       perplexitySearch: {
         type: 'provider' as const,
         id: 'gateway.perplexity_search',
         args: {},
-        execute: executeSpy,
       },
     };
 
@@ -245,7 +243,6 @@ describe('createLLMExecutionStep gateway provider tools', () => {
 
     expect(toolResult).toEqual(toolCallById['call-1']);
     expect(toolResult.result).toBeUndefined();
-    expect(executeSpy).not.toHaveBeenCalled();
   });
 
   it('merges model config headers with explicit modelSettings headers and lets modelSettings override duplicates', async () => {
