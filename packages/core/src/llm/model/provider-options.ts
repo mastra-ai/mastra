@@ -86,37 +86,3 @@ export type ProviderOptions = (SharedV2ProviderOptions | SharedV3ProviderOptions
   openai?: OpenAIProviderOptions & Record<string, any>;
   xai?: XaiProviderOptions & Record<string, any>;
 };
-
-/**
- * Recursively deep-merges provider-options. When both sides have plain objects
- * at the same key, their keys are merged. Arrays and class instances (Date,
- * Map, etc.) are replaced wholesale. Within colliding leaf keys, `override`
- * wins.
- */
-export function mergeProviderOptions<T extends ProviderOptions | SharedV2ProviderOptions | SharedV3ProviderOptions>(
-  base: T | undefined,
-  override: T | undefined,
-): T | undefined {
-  if (!base) return override;
-  if (!override) return base;
-  return deepMerge(base, override) as T;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (value === null || typeof value !== 'object') return false;
-  const proto = Object.getPrototypeOf(value);
-  return proto === null || proto === Object.prototype;
-}
-
-function deepMerge(base: unknown, override: unknown): unknown {
-  if (override === undefined) return base;
-  if (base === undefined) return override;
-  if (isPlainObject(base) && isPlainObject(override)) {
-    const out: Record<string, unknown> = { ...base };
-    for (const key of Object.keys(override)) {
-      out[key] = deepMerge(base[key], override[key]);
-    }
-    return out;
-  }
-  return override;
-}

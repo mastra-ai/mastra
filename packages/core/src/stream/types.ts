@@ -11,11 +11,11 @@ import type {
   LanguageModelRequestMetadata,
   LogProbs as LanguageModelV1LogProbs,
 } from '@internal/ai-sdk-v4';
-import type { CallSettings, ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
+import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
-import type { MastraLanguageModel, SharedProviderOptions } from '../llm/model/shared.types';
+import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { ScorerResult } from '../loop';
 import type { ObservabilityContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
@@ -867,8 +867,6 @@ export type ModelManagerModelConfig = {
   maxRetries: number;
   id: string;
   headers?: Record<string, string>;
-  modelSettings?: Omit<CallSettings, 'abortSignal' | 'maxRetries' | 'headers'>;
-  providerOptions?: SharedProviderOptions;
 };
 
 /**
