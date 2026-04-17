@@ -41,6 +41,7 @@ export * from './stored-skills';
 export * from './stored-workspaces';
 export * from './system';
 export * from './tool-providers';
+export * from './user-preferences';
 export * from './vectors';
 export * from './version-common';
 export * from './workspace';

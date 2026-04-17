@@ -438,6 +438,24 @@ export const previewInstructionsResponseSchema = z.object({
   result: z.string().describe('The resolved instructions string'),
 });
 
+// ============================================================================
+// Avatar Upload
+// ============================================================================
+
+/**
+ * POST /stored/agents/:storedAgentId/avatar
+ * Accepts a base64-encoded image (≤ 512 KB decoded) and a content type.
+ * The server persists the image as a data URL on the agent's metadata.avatarUrl.
+ */
+export const uploadAgentAvatarBodySchema = z.object({
+  contentBase64: z.string().min(1).describe('Base64-encoded image bytes (no data-url prefix)'),
+  contentType: z.enum(['image/png', 'image/jpeg', 'image/webp']).describe('MIME type of the uploaded image'),
+});
+
+export const uploadAgentAvatarResponseSchema = z.object({
+  avatarUrl: z.string().describe('The resulting avatar URL (data URL) stored on the agent'),
+});
+
 /**
  * Exported for use in agent-versions.ts schemas
  */

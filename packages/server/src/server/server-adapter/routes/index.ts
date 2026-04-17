@@ -33,6 +33,7 @@ import type { MastraStreamReturn } from './stream-types';
 import { SYSTEM_ROUTES } from './system';
 import { TOOL_PROVIDER_ROUTES } from './tool-providers';
 import { TOOLS_ROUTES } from './tools';
+import { USER_PREFERENCES_ROUTES } from './user-preferences';
 import { VECTORS_ROUTES } from './vectors';
 import { WORKFLOWS_ROUTES } from './workflows';
 import { WORKSPACE_ROUTES } from './workspace';
@@ -170,6 +171,7 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...SYSTEM_ROUTES,
   ...DATASETS_ROUTES,
   ...BACKGROUND_TASK_ROUTES,
+  ...USER_PREFERENCES_ROUTES,
 ];
 
 /**
@@ -204,6 +206,7 @@ export type ServerRoutes = readonly [
   ...typeof PROCESSOR_PROVIDER_ROUTES,
   ...typeof SYSTEM_ROUTES,
   ...typeof DATASETS_ROUTES,
+  ...typeof USER_PREFERENCES_ROUTES,
 ];
 
 // Export route builder and OpenAPI utilities

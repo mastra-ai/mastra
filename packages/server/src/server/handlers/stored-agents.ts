@@ -15,6 +15,8 @@ import {
   deleteStoredAgentResponseSchema,
   previewInstructionsBodySchema,
   previewInstructionsResponseSchema,
+  uploadAgentAvatarBodySchema,
+  uploadAgentAvatarResponseSchema,
 } from '../schemas/stored-agents';
 import type { ServerRoute, RouteSchemas, InferParams } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -470,6 +472,77 @@ export const PREVIEW_INSTRUCTIONS_ROUTE = createRoute({
       return { result };
     } catch (error) {
       return handleError(error, 'Error previewing instructions');
+    }
+  },
+});
+
+/**
+ * POST /stored/agents/:storedAgentId/avatar - Upload an avatar for a stored agent.
+ *
+ * Accepts a base64-encoded image, enforces a 512 KB decoded size limit, and stores
+ * the result as a data URL on the agent's metadata.avatarUrl field. This avoids
+ * introducing a separate blob-serving route and keeps avatar data in whatever
+ * storage backend the agents domain already uses.
+ */
+const AVATAR_MAX_BYTES = 512 * 1024;
+
+export const UPLOAD_STORED_AGENT_AVATAR_ROUTE = createRoute({
+  method: 'POST',
+  path: '/stored/agents/:storedAgentId/avatar',
+  responseType: 'json',
+  pathParamSchema: storedAgentIdPathParams,
+  bodySchema: uploadAgentAvatarBodySchema,
+  responseSchema: uploadAgentAvatarResponseSchema,
+  summary: 'Upload stored agent avatar',
+  description: 'Uploads an avatar image for a stored agent and persists it as a data URL on metadata.avatarUrl.',
+  tags: ['Stored Agents'],
+  requiresAuth: true,
+  handler: async ({ mastra, storedAgentId, contentBase64, contentType }) => {
+    try {
+      const storage = mastra.getStorage();
+      if (!storage) {
+        throw new HTTPException(500, { message: 'Storage is not configured' });
+      }
+
+      const agentsStore = await storage.getStore('agents');
+      if (!agentsStore) {
+        throw new HTTPException(500, { message: 'Agents storage domain is not available' });
+      }
+
+      const existing = await agentsStore.getById(storedAgentId);
+      if (!existing) {
+        throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
+      }
+
+      let decodedBytes: number;
+      try {
+        decodedBytes = Buffer.from(contentBase64, 'base64').byteLength;
+      } catch {
+        throw new HTTPException(400, { message: 'contentBase64 is not valid base64' });
+      }
+      if (decodedBytes === 0) {
+        throw new HTTPException(400, { message: 'Avatar is empty' });
+      }
+      if (decodedBytes > AVATAR_MAX_BYTES) {
+        throw new HTTPException(413, {
+          message: `Avatar exceeds ${AVATAR_MAX_BYTES}-byte limit (got ${decodedBytes})`,
+        });
+      }
+
+      const avatarUrl = `data:${contentType};base64,${contentBase64}`;
+      const nextMetadata = {
+        ...((existing.metadata as Record<string, unknown> | undefined) ?? {}),
+        avatarUrl,
+      };
+
+      await agentsStore.update({
+        id: storedAgentId,
+        metadata: nextMetadata,
+      } as StorageUpdateAgentInput);
+
+      return { avatarUrl };
+    } catch (error) {
+      return handleError(error, 'Error uploading agent avatar');
     }
   },
 });
