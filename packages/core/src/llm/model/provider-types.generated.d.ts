@@ -2433,9 +2433,8 @@ export type ProviderModelsMap = {
   readonly cerebras: readonly ['gpt-oss-120b', 'llama3.1-8b', 'qwen-3-235b-a22b-instruct-2507', 'zai-glm-4.7'];
   readonly firmware: readonly [
     'claude-haiku-4-5',
-    'claude-opus-4-5',
     'claude-opus-4-6',
-    'claude-sonnet-4-5',
+    'claude-opus-4-7',
     'claude-sonnet-4-6',
     'deepseek-v3-2',
     'gemini-2.5-flash',
