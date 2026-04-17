@@ -1155,6 +1155,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (step.type === 'loop') {
       //timeTravel is not passed to the processWorkflowLoop function becuase the step already ran the first time
       // with whatever information it needs from timeTravel, subsequent loop runs use the previous loop run result as it's input.
+      // perStep, state, and outputOptions are forwarded because processWorkflowLoop republishes workflow.step.run /
+      // workflow.step.end events and references these values in its pubsub payloads.
       await processWorkflowLoop(
         {
           workflow,

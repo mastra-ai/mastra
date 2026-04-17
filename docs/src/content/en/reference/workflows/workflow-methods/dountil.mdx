@@ -47,6 +47,45 @@ workflow.dountil(step1, async ({ inputData }) => true)
 ]}
 />
 
+## Behavior
+
+### Iteration history
+
+The step result preserves every iteration's output on `metadata.iterations`, alongside `metadata.iterationCount`. The step's top-level `output` continues to reflect the latest iteration.
+
+Each entry in `metadata.iterations` contains:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'iterationIndex',
+    type: 'number',
+    description: 'Zero-based index of the iteration',
+  },
+  {
+    name: 'output',
+    type: "Step['output']",
+    description: 'Output returned by that iteration',
+  },
+  {
+    name: 'status',
+    type: "'success' | 'failed' | 'suspended'",
+    description: 'Status that iteration ended in',
+  },
+  {
+    name: 'startedAt',
+    type: 'number',
+    description: 'Epoch ms when the iteration started',
+  },
+  {
+    name: 'endedAt',
+    type: 'number',
+    description: 'Epoch ms when the iteration ended',
+    isOptional: true,
+  },
+]}
+/>
+
 ## Related
 
 - [Control Flow](/docs/workflows/control-flow)

@@ -873,6 +873,18 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
+### Iteration history
+
+For `.dountil()` and `.dowhile()`, the step result preserves every iteration's output under `metadata.iterations` alongside `metadata.iterationCount`. Each entry records `iterationIndex`, `output`, `status`, `startedAt`, and `endedAt`. The step's top-level `output` still contains the latest iteration, so existing consumers are unaffected.
+
+```typescript prettier:false
+const result = await run.start({ inputData: { value: 0 } });
+
+result.steps.counter.output;                      // { value: 4 } — latest iteration
+result.steps.counter.metadata.iterationCount;     // 4
+result.steps.counter.metadata.iterations;         // [{ iterationIndex: 0, output: { value: 1 }, ... }, ...]
+```
+
 ## Related
 
 - [Suspend & Resume](/docs/workflows/suspend-and-resume)
