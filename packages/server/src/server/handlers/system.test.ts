@@ -156,8 +156,14 @@ describe('System Handlers', () => {
 
       const fakeBuilder = {
         getEnabledSections: () => ['tools', 'skills'],
-        getMarketplaceConfig: () => ({ enabled: true, showAgents: true, showSkills: true }),
-        getConfigureConfig: () => ({ allowSkillCreation: true, allowAppearance: true }),
+        getMarketplaceConfig: () => ({
+          enabled: true,
+          showAgents: true,
+          showSkills: true,
+          allowStarring: true,
+          allowSharing: true,
+        }),
+        getConfigureConfig: () => ({ allowSkillCreation: true, allowAppearance: true, allowAvatarUpload: true }),
         getRecentsConfig: () => ({ maxItems: 5 }),
       };
 
@@ -168,8 +174,14 @@ describe('System Handlers', () => {
       expect(result.agentBuilderEnabled).toBe(true);
       expect(result.agentBuilderConfig).toEqual({
         enabledSections: ['tools', 'skills'],
-        marketplace: { enabled: true, showAgents: true, showSkills: true },
-        configure: { allowSkillCreation: true, allowAppearance: true },
+        marketplace: {
+          enabled: true,
+          showAgents: true,
+          showSkills: true,
+          allowStarring: true,
+          allowSharing: true,
+        },
+        configure: { allowSkillCreation: true, allowAppearance: true, allowAvatarUpload: true },
         recents: { maxItems: 5 },
       });
     });

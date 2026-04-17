@@ -11,10 +11,13 @@ describe('MastraAgentBuilder', () => {
       enabled: true,
       showAgents: true,
       showSkills: true,
+      allowStarring: true,
+      allowSharing: true,
     });
     expect(builder.getConfigureConfig()).toEqual({
       allowSkillCreation: true,
       allowAppearance: true,
+      allowAvatarUpload: true,
     });
     expect(builder.getRecentsConfig()).toEqual({ maxItems: 5 });
   });
@@ -22,8 +25,8 @@ describe('MastraAgentBuilder', () => {
   it('merges user config over defaults without losing unspecified keys', () => {
     const builder = new MastraAgentBuilder({
       enabledSections: ['tools'],
-      marketplace: { enabled: false },
-      configure: { allowAppearance: false },
+      marketplace: { enabled: false, allowStarring: false },
+      configure: { allowAppearance: false, allowAvatarUpload: false },
       recents: { maxItems: 3 },
     });
 
@@ -32,10 +35,13 @@ describe('MastraAgentBuilder', () => {
       enabled: false,
       showAgents: true,
       showSkills: true,
+      allowStarring: false,
+      allowSharing: true,
     });
     expect(builder.getConfigureConfig()).toEqual({
       allowSkillCreation: true,
       allowAppearance: false,
+      allowAvatarUpload: false,
     });
     expect(builder.getRecentsConfig()).toEqual({ maxItems: 3 });
   });

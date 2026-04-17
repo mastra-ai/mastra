@@ -1626,10 +1626,13 @@ export interface AgentBuilderConfigResponse {
     enabled: boolean;
     showAgents: boolean;
     showSkills: boolean;
+    allowStarring: boolean;
+    allowSharing: boolean;
   };
   configure: {
     allowSkillCreation: boolean;
     allowAppearance: boolean;
+    allowAvatarUpload: boolean;
   };
   recents: {
     maxItems: number;

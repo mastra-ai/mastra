@@ -37,8 +37,18 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
       let agentBuilderEnabled = false;
       let agentBuilderConfig: {
         enabledSections: string[];
-        marketplace: { enabled: boolean; showAgents: boolean; showSkills: boolean };
-        configure: { allowSkillCreation: boolean; allowAppearance: boolean };
+        marketplace: {
+          enabled: boolean;
+          showAgents: boolean;
+          showSkills: boolean;
+          allowStarring: boolean;
+          allowSharing: boolean;
+        };
+        configure: {
+          allowSkillCreation: boolean;
+          allowAppearance: boolean;
+          allowAvatarUpload: boolean;
+        };
         recents: { maxItems: number };
       } | null = null;
 

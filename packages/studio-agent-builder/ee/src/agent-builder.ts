@@ -23,11 +23,14 @@ const DEFAULT_MARKETPLACE: ResolvedAgentBuilderMarketplaceConfig = {
   enabled: true,
   showAgents: true,
   showSkills: true,
+  allowStarring: true,
+  allowSharing: true,
 };
 
 const DEFAULT_CONFIGURE: ResolvedAgentBuilderConfigureConfig = {
   allowSkillCreation: true,
   allowAppearance: true,
+  allowAvatarUpload: true,
 };
 
 const DEFAULT_RECENTS: ResolvedAgentBuilderRecentsConfig = {

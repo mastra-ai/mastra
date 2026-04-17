@@ -11,10 +11,13 @@ export const agentBuilderConfigSchema = z.object({
     enabled: z.boolean(),
     showAgents: z.boolean(),
     showSkills: z.boolean(),
+    allowStarring: z.boolean(),
+    allowSharing: z.boolean(),
   }),
   configure: z.object({
     allowSkillCreation: z.boolean(),
     allowAppearance: z.boolean(),
+    allowAvatarUpload: z.boolean(),
   }),
   recents: z.object({
     maxItems: z.number(),

@@ -35,6 +35,10 @@ export interface AgentBuilderMarketplaceConfig {
   showAgents?: boolean;
   /** Whether the Skills tab is visible inside the Marketplace. */
   showSkills?: boolean;
+  /** Whether end-users may star marketplace items to pin them to their own sidebar. */
+  allowStarring?: boolean;
+  /** Whether authors may flip a private item to public via "Share to Marketplace". */
+  allowSharing?: boolean;
 }
 
 /**
@@ -45,6 +49,8 @@ export interface AgentBuilderConfigureConfig {
   allowSkillCreation?: boolean;
   /** Whether the light/dark appearance toggle is offered. */
   allowAppearance?: boolean;
+  /** Whether authors may upload an avatar image for an agent. */
+  allowAvatarUpload?: boolean;
 }
 
 /**
@@ -73,6 +79,8 @@ export interface ResolvedAgentBuilderMarketplaceConfig {
   enabled: boolean;
   showAgents: boolean;
   showSkills: boolean;
+  allowStarring: boolean;
+  allowSharing: boolean;
 }
 
 /**
@@ -81,6 +89,7 @@ export interface ResolvedAgentBuilderMarketplaceConfig {
 export interface ResolvedAgentBuilderConfigureConfig {
   allowSkillCreation: boolean;
   allowAppearance: boolean;
+  allowAvatarUpload: boolean;
 }
 
 /**
