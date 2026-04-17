@@ -754,6 +754,37 @@ describe('extractTrajectoryFromTrace', () => {
 });
 
 describe('extractTrajectory', () => {
+  it('extracts tool calls from content.toolInvocations when present', () => {
+    const output = [
+      {
+        role: 'assistant',
+        content: {
+          toolInvocations: [
+            {
+              state: 'result',
+              toolCallId: 'call-legacy',
+              toolName: 'legacyTool',
+              args: { q: 'x' },
+              result: { ok: true },
+            },
+          ],
+          parts: [],
+        },
+      },
+    ] as any;
+
+    const result = extractTrajectory(output);
+
+    expect(result.steps).toHaveLength(1);
+    expect(result.steps[0]).toMatchObject({
+      stepType: 'tool_call',
+      name: 'legacyTool',
+      toolArgs: { q: 'x' },
+      toolResult: { ok: true },
+      success: true,
+    });
+  });
+
   it('extracts tool calls from assistant messages that only have tool-invocation parts', () => {
     const output = [
       {
@@ -785,6 +816,50 @@ describe('extractTrajectory', () => {
       toolArgs: { city: 'Seoul' },
       toolResult: { temperature: 22 },
       success: true,
+    });
+  });
+
+  it('prefers content.toolInvocations over content.parts when both are present', () => {
+    const output = [
+      {
+        role: 'assistant',
+        content: {
+          toolInvocations: [
+            {
+              state: 'call',
+              toolCallId: 'call-top',
+              toolName: 'topLevelTool',
+              args: { source: 'top' },
+            },
+          ],
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-part',
+                toolName: 'partsTool',
+                args: { source: 'parts' },
+                result: { ok: true },
+              },
+            },
+          ],
+        },
+      },
+    ] as any;
+
+    const result = extractTrajectory(output);
+
+    expect(result.steps).toHaveLength(1);
+    expect(result.steps[0]).toMatchObject({
+      stepType: 'tool_call',
+      name: 'topLevelTool',
+      toolArgs: { source: 'top' },
+      success: false,
+    });
+    expect(result.steps[0]).not.toMatchObject({
+      name: 'partsTool',
     });
   });
 });
