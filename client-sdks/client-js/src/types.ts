@@ -1616,10 +1616,28 @@ export interface MastraPackage {
   version: string;
 }
 
+export interface AgentBuilderConfigResponse {
+  enabledSections: string[];
+  marketplace: {
+    enabled: boolean;
+    showAgents: boolean;
+    showSkills: boolean;
+  };
+  configure: {
+    allowSkillCreation: boolean;
+    allowAppearance: boolean;
+  };
+  recents: {
+    maxItems: number;
+  };
+}
+
 export interface GetSystemPackagesResponse {
   packages: MastraPackage[];
   isDev: boolean;
   cmsEnabled: boolean;
+  agentBuilderEnabled: boolean;
+  agentBuilderConfig: AgentBuilderConfigResponse | null;
   storageType?: string;
   observabilityStorageType?: string;
 }

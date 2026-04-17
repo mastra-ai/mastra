@@ -474,6 +474,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     this.registerAuthMiddleware();
     this.registerHttpLoggingMiddleware();
     await this.validateEELicense();
+    await this.validateAgentBuilderLicense();
     await this.registerCustomApiRoutes();
     await this.registerRoutes();
   }
@@ -503,6 +504,43 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       // @mastra/core/auth/ee module not available — RBAC cannot function
       throw new Error(
         '[mastra/auth-ee] RBAC is configured but the EE module (@mastra/core/auth/ee) could not be loaded.\n' +
+          'Ensure @mastra/core is updated to a version that includes EE support.',
+      );
+    }
+  }
+
+  /**
+   * Validate that the Agent Builder (Studio end-user surface) has a valid EE
+   * license in production. Throws if `agentBuilder` is configured on the
+   * Mastra instance without a valid license outside dev/test environments.
+   *
+   * Mirrors `validateEELicense` exactly — same dev carve-out, same error
+   * prefix, same env var.
+   */
+  async validateAgentBuilderLicense(): Promise<void> {
+    const agentBuilder = this.mastra.getAgentBuilder?.();
+    if (!agentBuilder) return;
+
+    try {
+      const { isEEEnabled, isDevEnvironment, isFeatureEnabled } = await import('@mastra/core/auth/ee');
+      // Dev/test environments get the same carve-out as other EE features.
+      // Production must both have a valid license AND that license must list
+      // the agent-builder feature.
+      const allowed = isEEEnabled() && (isDevEnvironment() || isFeatureEnabled('agent-builder'));
+      if (!allowed) {
+        throw new Error(
+          '[mastra/auth-ee] Agent Builder is configured but no valid EE license was found.\n' +
+            'Agent Builder requires a Mastra Enterprise License for production use.\n' +
+            'Set the MASTRA_EE_LICENSE environment variable with your license key.\n' +
+            'Learn more: https://github.com/mastra-ai/mastra/blob/main/ee/LICENSE',
+        );
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith('[mastra/auth-ee]')) {
+        throw err;
+      }
+      throw new Error(
+        '[mastra/auth-ee] Agent Builder is configured but the EE module (@mastra/core/auth/ee) could not be loaded.\n' +
           'Ensure @mastra/core is updated to a version that includes EE support.',
       );
     }

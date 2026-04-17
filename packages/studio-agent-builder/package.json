@@ -1,0 +1,55 @@
+{
+  "name": "@mastra/studio-agent-builder",
+  "version": "0.1.0",
+  "description": "Mastra Studio Agent Builder — end-user UI for creating and sharing stored agents (Enterprise)",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsup ee/src/index.ts --format cjs,esm --dts",
+    "dev": "tsup ee/src/index.ts --format cjs,esm --dts --watch",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/studio-agent-builder"
+  },
+  "homepage": "https://mastra.ai",
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "devDependencies": {
+    "@mastra/core": "workspace:*",
+    "tsup": "^8.5.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=1.7.1-0 <2.0.0-0"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

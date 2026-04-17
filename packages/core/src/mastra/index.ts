@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
+import type { IMastraAgentBuilder } from '../agent-builder/ee';
 import { BackgroundTaskManager } from '../background-tasks';
 import type { BackgroundTaskManagerConfig } from '../background-tasks/types';
 import type { BundlerConfig } from '../bundler/types';
@@ -270,6 +271,18 @@ export interface Config<
   editor?: IMastraEditor;
 
   /**
+   * Agent Builder instance that enables the end-user Agent Studio surface.
+   *
+   * Requires a valid Mastra Enterprise License (`MASTRA_EE_LICENSE`) in
+   * production. In dev/test environments the feature is available without a
+   * license per the Mastra EE LICENSE carve-out.
+   *
+   * See `@mastra/studio-agent-builder` for the implementation and the
+   * `@mastra/core/agent-builder/ee` subpath for the type contracts.
+   */
+  agentBuilder?: IMastraAgentBuilder;
+
+  /**
    * Background task configuration for running tool calls asynchronously.
    * When configured, agents can dispatch tool executions to run in the background
    * while the conversation continues.
@@ -370,6 +383,8 @@ export class Mastra<
   #promptBlocks: Record<string, StorageResolvedPromptBlockType> = {};
   // Editor instance for handling agent instantiation and configuration
   #editor?: IMastraEditor;
+  // Agent Builder (Studio end-user surface) — EE-gated at server boot.
+  #agentBuilder?: IMastraAgentBuilder;
   #datasets?: DatasetsManager;
 
   get pubsub() {
@@ -420,6 +435,25 @@ export class Mastra<
    */
   public getEditor() {
     return this.#editor;
+  }
+
+  /**
+   * Gets the currently configured Agent Builder instance, if any.
+   *
+   * The Agent Builder powers the end-user Agent Studio surface in Mastra
+   * Studio. Presence of an instance here is what the server's license
+   * gate checks at boot to enforce the EE requirement.
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   agentBuilder: new MastraAgentBuilder({ ... })
+   * });
+   * const builder = mastra.getAgentBuilder();
+   * ```
+   */
+  public getAgentBuilder() {
+    return this.#agentBuilder;
   }
 
   /**
@@ -592,6 +626,10 @@ export class Mastra<
     if (this.#editor && typeof this.#editor.registerWithMastra === 'function') {
       this.#editor.registerWithMastra(this);
     }
+
+    // Set the agent builder if provided. License enforcement happens at
+    // server boot (see `@mastra/server`'s `validateAgentBuilderLicense`).
+    this.#agentBuilder = config?.agentBuilder;
 
     if (config?.pubsub) {
       this.#pubsub = config.pubsub;

@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { isDevEnvironment, isEEEnabled, isLicenseValid, validateLicense, clearLicenseCache } from './license';
+import {
+  isDevEnvironment,
+  isEEEnabled,
+  isFeatureEnabled,
+  isLicenseValid,
+  validateLicense,
+  clearLicenseCache,
+} from './license';
 
 describe('license', () => {
   let originalNodeEnv: string | undefined;
@@ -37,6 +44,12 @@ describe('license', () => {
       const result = validateLicense(key);
       expect(result.valid).toBe(true);
       expect(result.tier).toBe('enterprise');
+    });
+
+    it('should include agent-builder in the default enterprise feature set', () => {
+      const result = validateLicense('a'.repeat(32));
+      expect(result.features).toContain('agent-builder');
+      expect(result.features).toContain('rbac');
     });
 
     it('should read from MASTRA_EE_LICENSE env var when no key argument', () => {
@@ -135,6 +148,20 @@ describe('license', () => {
       delete process.env['MASTRA_DEV'];
       process.env['NODE_ENV'] = 'production';
       expect(isEEEnabled()).toBe(false);
+    });
+  });
+
+  describe('isFeatureEnabled', () => {
+    it('should return true for agent-builder when a valid license is present', () => {
+      process.env['MASTRA_EE_LICENSE'] = 'a'.repeat(32);
+      expect(isFeatureEnabled('agent-builder')).toBe(true);
+    });
+
+    it('should return false for agent-builder when no license is present in production', () => {
+      delete process.env['MASTRA_EE_LICENSE'];
+      delete process.env['MASTRA_DEV'];
+      process.env['NODE_ENV'] = 'production';
+      expect(isFeatureEnabled('agent-builder')).toBe(false);
     });
   });
 });

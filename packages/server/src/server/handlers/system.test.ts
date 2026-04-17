@@ -4,11 +4,17 @@ import { join } from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GET_SYSTEM_PACKAGES_ROUTE } from './system';
 
-const createMockMastra = (hasEditor: boolean) =>
+const createMockMastra = (hasEditor: boolean, agentBuilder?: any) =>
   ({
     getEditor: () => (hasEditor ? {} : undefined),
+    getAgentBuilder: () => agentBuilder,
     getStorage: () => undefined,
   }) as any;
+
+const disabledAgentBuilderFields = {
+  agentBuilderEnabled: false,
+  agentBuilderConfig: null,
+};
 
 describe('System Handlers', () => {
   const originalEnv = process.env;
@@ -46,6 +52,7 @@ describe('System Handlers', () => {
         packages,
         isDev: false,
         cmsEnabled: false,
+        ...disabledAgentBuilderFields,
         storageType: undefined,
         observabilityStorageType: undefined,
       });
@@ -60,6 +67,7 @@ describe('System Handlers', () => {
         packages: [],
         isDev: false,
         cmsEnabled: false,
+        ...disabledAgentBuilderFields,
         storageType: undefined,
         observabilityStorageType: undefined,
       });
@@ -75,6 +83,7 @@ describe('System Handlers', () => {
         packages: [],
         isDev: false,
         cmsEnabled: false,
+        ...disabledAgentBuilderFields,
         storageType: undefined,
         observabilityStorageType: undefined,
       });
@@ -89,6 +98,7 @@ describe('System Handlers', () => {
         packages: [],
         isDev: false,
         cmsEnabled: false,
+        ...disabledAgentBuilderFields,
         storageType: undefined,
         observabilityStorageType: undefined,
       });
@@ -104,6 +114,7 @@ describe('System Handlers', () => {
         packages: [],
         isDev: true,
         cmsEnabled: false,
+        ...disabledAgentBuilderFields,
         storageType: undefined,
         observabilityStorageType: undefined,
       });
@@ -118,6 +129,7 @@ describe('System Handlers', () => {
         packages: [],
         isDev: false,
         cmsEnabled: true,
+        ...disabledAgentBuilderFields,
         storageType: undefined,
         observabilityStorageType: undefined,
       });
@@ -132,9 +144,45 @@ describe('System Handlers', () => {
         packages: [],
         isDev: false,
         cmsEnabled: false,
+        ...disabledAgentBuilderFields,
         storageType: undefined,
         observabilityStorageType: undefined,
       });
+    });
+
+    it('should return agentBuilderEnabled true with config when builder attached and dev env', async () => {
+      delete process.env.MASTRA_PACKAGES_FILE;
+      process.env.NODE_ENV = 'development';
+
+      const fakeBuilder = {
+        getEnabledSections: () => ['tools', 'skills'],
+        getMarketplaceConfig: () => ({ enabled: true, showAgents: true, showSkills: true }),
+        getConfigureConfig: () => ({ allowSkillCreation: true, allowAppearance: true }),
+        getRecentsConfig: () => ({ maxItems: 5 }),
+      };
+
+      const result = (await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra(false, fakeBuilder),
+      } as any)) as any;
+
+      expect(result.agentBuilderEnabled).toBe(true);
+      expect(result.agentBuilderConfig).toEqual({
+        enabledSections: ['tools', 'skills'],
+        marketplace: { enabled: true, showAgents: true, showSkills: true },
+        configure: { allowSkillCreation: true, allowAppearance: true },
+        recents: { maxItems: 5 },
+      });
+    });
+
+    it('should return agentBuilderEnabled false when no builder attached', async () => {
+      delete process.env.MASTRA_PACKAGES_FILE;
+
+      const result = (await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra(false),
+      } as any)) as any;
+
+      expect(result.agentBuilderEnabled).toBe(false);
+      expect(result.agentBuilderConfig).toBeNull();
     });
   });
 });
