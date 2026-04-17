@@ -97,10 +97,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
 
   /** Create all observability tables if they don't exist. */
   async init(): Promise<void> {
-    // One-time, non-destructive migration: signal tables created by older
-    // versions lack the PRIMARY KEY + NOT NULL signal-ID column. Copy their
-    // data into freshly-created tables so existing rows are preserved instead
-    // of dropped.
+    // Non-destructive migration for signal tables missing the signal-ID PK.
     await migrateSignalTables(this.db);
 
     for (const ddl of ALL_DDL) {

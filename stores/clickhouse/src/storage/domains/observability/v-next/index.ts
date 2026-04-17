@@ -126,10 +126,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   async init(): Promise<void> {
     try {
-      // One-time, non-destructive migration: signal tables created by older
-      // versions use MergeTree and lack a signal-ID column. Copy their data
-      // into freshly-created ReplacingMergeTree tables so existing rows are
-      // preserved instead of dropped.
+      // Non-destructive migration: MergeTree signal tables → ReplacingMergeTree with signal-ID.
       await migrateSignalTables(this.#client);
 
       // Core tables + incremental MVs (must succeed)
