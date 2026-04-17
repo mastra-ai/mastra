@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.26.0-alpha.5
+
+### Patch Changes
+
+- Fixed provider-defined tools with custom execute callbacks (e.g. openai.tools.applyPatch) being incorrectly skipped during execution. Previously, all provider-defined tools were assumed to be provider-executed, which meant user-supplied execute functions were never called. Now, provider tools with a custom execute are correctly identified as client-executed. ([#14819](https://github.com/mastra-ai/mastra/pull/14819))
+
 ## 1.26.0-alpha.4
 
 ### Minor Changes

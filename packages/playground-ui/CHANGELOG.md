@@ -1,5 +1,18 @@
 # @mastra/playground-ui
 
+## 22.1.3-alpha.5
+
+### Patch Changes
+
+- Added a Foundations/Tokens page to the @mastra/playground-ui Storybook so you can browse all typography, color, spacing, radius, shadow, and animation tokens in one place. ([#15475](https://github.com/mastra-ai/mastra/pull/15475))
+
+- Added `ScoresDataList` for rendering lists of score evaluation results. ([#15339](https://github.com/mastra-ai/mastra/pull/15339))
+
+- Updated dependencies [[`92dcf02`](https://github.com/mastra-ai/mastra/commit/92dcf029294210ac91b090900c1a0555a425c57a)]:
+  - @mastra/core@1.26.0-alpha.5
+  - @mastra/client-js@1.13.5-alpha.5
+  - @mastra/react@0.2.27-alpha.5
+
 ## 22.1.3-alpha.4
 
 ### Patch Changes
