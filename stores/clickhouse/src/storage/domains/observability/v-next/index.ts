@@ -127,7 +127,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   async init(): Promise<void> {
     try {
       // Non-destructive migration: MergeTree signal tables → ReplacingMergeTree with signal-ID.
-      await migrateSignalTables(this.#client);
+      await migrateSignalTables(this.#client, this.logger);
 
       // Core tables + incremental MVs (must succeed)
       for (const ddl of [...ALL_TABLE_DDL, ...ALL_MV_DDL]) {

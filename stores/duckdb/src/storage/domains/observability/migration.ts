@@ -1,3 +1,7 @@
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { IMastraLogger } from '@mastra/core/logger';
+import { createStorageErrorId } from '@mastra/core/storage';
+
 import type { DuckDBConnection } from '../../db/index';
 
 import { METRIC_EVENTS_DDL, LOG_EVENTS_DDL, SCORE_EVENTS_DDL, FEEDBACK_EVENTS_DDL } from './ddl';
@@ -46,10 +50,12 @@ async function getColumns(db: DuckDBConnection, table: string): Promise<string[]
  * (generating IDs) → drop backup. On failure the original table is restored
  * from the backup. Idempotent.
  */
-export async function migrateSignalTables(db: DuckDBConnection): Promise<void> {
+export async function migrateSignalTables(db: DuckDBConnection, logger?: IMastraLogger): Promise<void> {
   for (const { table, createDDL, idColumn } of SIGNAL_MIGRATIONS) {
     if (!(await tableExists(db, table))) continue;
     if (await hasPrimaryKey(db, table)) continue;
+
+    logger?.info?.(`Migrating ${table} to schema with ${idColumn} PRIMARY KEY`);
 
     const backup = `${table}_backup_${Date.now()}`;
 
@@ -74,20 +80,33 @@ export async function migrateSignalTables(db: DuckDBConnection): Promise<void> {
 
       await db.execute(`INSERT INTO ${table} (${columnList}) SELECT ${selectExprs} FROM ${backup}`);
       await db.execute(`DROP TABLE ${backup}`);
+
+      logger?.info?.(`Successfully migrated ${table}`);
     } catch (error) {
+      logger?.error?.(`Migration of ${table} failed: ${(error as Error).message}`);
       try {
         const newExists = await tableExists(db, table);
         const backupExists = await tableExists(db, backup);
         if (!newExists && backupExists) {
+          logger?.info?.(`Restoring ${table} from ${backup}`);
           await db.execute(`ALTER TABLE ${backup} RENAME TO ${table}`);
         } else if (newExists && backupExists) {
+          logger?.info?.(`Dropping partial ${table} and restoring from ${backup}`);
           await db.execute(`DROP TABLE IF EXISTS ${table}`);
           await db.execute(`ALTER TABLE ${backup} RENAME TO ${table}`);
         }
-      } catch {
-        // Swallow restore errors so the original failure is surfaced.
+      } catch (restoreError) {
+        logger?.error?.(`Failed to restore ${table} from backup: ${(restoreError as Error).message}`);
       }
-      throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DUCKDB', 'MIGRATE_SIGNAL_TABLES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { table, idColumn },
+        },
+        error,
+      );
     }
   }
 }

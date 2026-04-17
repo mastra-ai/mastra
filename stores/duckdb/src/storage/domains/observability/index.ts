@@ -98,7 +98,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   /** Create all observability tables if they don't exist. */
   async init(): Promise<void> {
     // Non-destructive migration for signal tables missing the signal-ID PK.
-    await migrateSignalTables(this.db);
+    await migrateSignalTables(this.db, this.logger);
 
     for (const ddl of ALL_DDL) {
       await this.db.execute(ddl);

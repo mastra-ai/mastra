@@ -1,6 +1,25 @@
+import { MastraError } from '@mastra/core/error';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DuckDBConnection } from '../../db/index';
 import { migrateSignalTables } from './migration';
+
+/** Wraps a connection so that INSERT statements throw — used to exercise rollback. */
+function dbThatFailsOnInsert(real: DuckDBConnection): DuckDBConnection {
+  return new Proxy(real, {
+    get(target, prop, receiver) {
+      if (prop === 'execute') {
+        return async (sql: string, ...rest: unknown[]) => {
+          if (/^\s*INSERT\s+INTO/i.test(sql)) {
+            throw new Error('Simulated INSERT failure');
+          }
+          // @ts-expect-error proxied call
+          return target.execute(sql, ...rest);
+        };
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  }) as DuckDBConnection;
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -160,5 +179,35 @@ describe('migrateSignalTables (DuckDB)', () => {
     for (const table of ['metric_events', 'log_events', 'score_events', 'feedback_events']) {
       expect(await hasPrimaryKey(db, table)).toBe(true);
     }
+  });
+
+  it('restores the original table from backup when INSERT fails', async () => {
+    await db.execute(`
+      CREATE TABLE log_events (
+        timestamp TIMESTAMP NOT NULL,
+        traceId VARCHAR,
+        level VARCHAR NOT NULL,
+        message VARCHAR NOT NULL
+      )
+    `);
+    await db.execute(
+      `INSERT INTO log_events (timestamp, traceId, level, message)
+       VALUES (TIMESTAMP '2026-01-01 00:00:00', 't1', 'info', 'keep-me')`,
+    );
+
+    await expect(migrateSignalTables(dbThatFailsOnInsert(db))).rejects.toBeInstanceOf(MastraError);
+
+    // Original table must be restored with its data intact and still in legacy shape (no PK).
+    expect(await tableExists(db, 'log_events')).toBe(true);
+    expect(await hasPrimaryKey(db, 'log_events')).toBe(false);
+    const rows = await db.query<{ message: string }>(`SELECT message FROM log_events`);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.message).toBe('keep-me');
+
+    // No orphaned backup tables.
+    const backups = await db.query<{ table_name: string }>(
+      `SELECT table_name FROM information_schema.tables WHERE table_name LIKE 'log_events_backup_%'`,
+    );
+    expect(backups).toHaveLength(0);
   });
 });

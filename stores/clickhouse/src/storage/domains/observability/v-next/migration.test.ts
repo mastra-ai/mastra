@@ -1,8 +1,26 @@
 import { createClient } from '@clickhouse/client';
 import type { ClickHouseClient } from '@clickhouse/client';
+import { MastraError } from '@mastra/core/error';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TABLE_LOG_EVENTS, TABLE_METRIC_EVENTS, TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS } from './ddl';
 import { migrateSignalTables } from './migration';
+
+/** Wraps a client so that INSERT commands throw — used to exercise rollback. */
+function clientThatFailsOnInsert(real: ClickHouseClient): ClickHouseClient {
+  return new Proxy(real, {
+    get(target, prop, receiver) {
+      if (prop === 'command') {
+        return async (args: { query: string }) => {
+          if (/^\s*INSERT\s+INTO/i.test(args.query)) {
+            throw new Error('Simulated INSERT failure');
+          }
+          return target.command(args);
+        };
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  }) as ClickHouseClient;
+}
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
@@ -217,5 +235,44 @@ describe('migrateSignalTables (ClickHouse v-next)', () => {
     ).json()) as Array<{ message: string }>;
     expect(deduped).toHaveLength(1);
     expect(deduped[0]!.message).toBe('updated');
+  });
+
+  it('restores the original table from backup when INSERT fails', async () => {
+    await client.command({ query: LEGACY_LOG_DDL });
+    await client.insert({
+      table: TABLE_LOG_EVENTS,
+      values: [{ timestamp: '2026-01-01 00:00:00.000', level: 'info', message: 'keep-me' }],
+      format: 'JSONEachRow',
+    });
+
+    await expect(migrateSignalTables(clientThatFailsOnInsert(client))).rejects.toBeInstanceOf(MastraError);
+
+    // Original table must be restored with its data intact and still in legacy (MergeTree) shape.
+    const engine = await (
+      await client.query({
+        query: `SELECT engine FROM system.tables WHERE database = currentDatabase() AND name = {table:String}`,
+        query_params: { table: TABLE_LOG_EVENTS },
+        format: 'JSONEachRow',
+      })
+    ).json();
+    expect((engine as Array<{ engine: string }>)[0]?.engine).toBe('MergeTree');
+
+    const rows = (await (
+      await client.query({
+        query: `SELECT message FROM ${TABLE_LOG_EVENTS}`,
+        format: 'JSONEachRow',
+      })
+    ).json()) as Array<{ message: string }>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.message).toBe('keep-me');
+
+    // No orphaned backup tables.
+    const backups = (await (
+      await client.query({
+        query: `SELECT name FROM system.tables WHERE database = currentDatabase() AND name LIKE '${TABLE_LOG_EVENTS}_backup_%'`,
+        format: 'JSONEachRow',
+      })
+    ).json()) as unknown[];
+    expect(backups).toHaveLength(0);
   });
 });

@@ -1,4 +1,7 @@
 import type { ClickHouseClient } from '@clickhouse/client';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { IMastraLogger } from '@mastra/core/logger';
+import { createStorageErrorId } from '@mastra/core/storage';
 
 import {
   TABLE_METRIC_EVENTS,
@@ -45,10 +48,12 @@ async function getTableColumns(client: ClickHouseClient, table: string): Promise
  * Copy-and-swap: rename → create new → INSERT…SELECT (generating IDs) → drop backup.
  * On failure the original table is restored from the backup. Idempotent.
  */
-export async function migrateSignalTables(client: ClickHouseClient): Promise<void> {
+export async function migrateSignalTables(client: ClickHouseClient, logger?: IMastraLogger): Promise<void> {
   for (const { table, createDDL, idColumn } of SIGNAL_MIGRATIONS) {
     const engine = await getTableEngine(client, table);
     if (!engine || engine === 'ReplacingMergeTree') continue;
+
+    logger?.info?.(`Migrating ${table} from ${engine} to ReplacingMergeTree with ${idColumn} column`);
 
     const backup = `${table}_backup_${Date.now()}`;
 
@@ -75,20 +80,33 @@ export async function migrateSignalTables(client: ClickHouseClient): Promise<voi
         query: `INSERT INTO ${table} (${columnList}) SELECT ${selectExprs} FROM ${backup}`,
       });
       await client.command({ query: `DROP TABLE ${backup}` });
+
+      logger?.info?.(`Successfully migrated ${table}`);
     } catch (error) {
+      logger?.error?.(`Migration of ${table} failed: ${(error as Error).message}`);
       try {
         const backupEngine = await getTableEngine(client, backup);
         const currentEngine = await getTableEngine(client, table);
         if (backupEngine && !currentEngine) {
+          logger?.info?.(`Restoring ${table} from ${backup}`);
           await client.command({ query: `RENAME TABLE ${backup} TO ${table}` });
         } else if (backupEngine && currentEngine) {
+          logger?.info?.(`Dropping partial ${table} and restoring from ${backup}`);
           await client.command({ query: `DROP TABLE IF EXISTS ${table}` });
           await client.command({ query: `RENAME TABLE ${backup} TO ${table}` });
         }
-      } catch {
-        // Swallow restore errors so the original failure is surfaced.
+      } catch (restoreError) {
+        logger?.error?.(`Failed to restore ${table} from backup: ${(restoreError as Error).message}`);
       }
-      throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'MIGRATE_SIGNAL_TABLES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { table, idColumn },
+        },
+        error,
+      );
     }
   }
 }
