@@ -1,6 +1,7 @@
 import type { StoredAgentResponse } from '@mastra/client-js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAgentStudioConfig } from './use-agent-studio-config';
+import { useStarredAgentIds } from './use-user-preferences';
 import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 
@@ -50,6 +51,7 @@ export const useRecentAgents = () => {
   const { data: user } = useCurrentUser();
   const { config } = useAgentStudioConfig();
   const maxItems = config?.recents?.maxItems ?? 5;
+  const starredAgentIds = useStarredAgentIds();
 
   const userId = user?.id ?? ANONYMOUS_KEY;
   const storageKey = `${STORAGE_KEY_PREFIX}.${userId}`;
@@ -103,7 +105,17 @@ export const useRecentAgents = () => {
     const ordered: StoredAgentResponse[] = [];
     const seen = new Set<string>();
 
-    // 1. Entries the user explicitly opened (most recent first).
+    // 1. Starred agents always pin to the top of the user's recents.
+    for (const starredId of starredAgentIds) {
+      const agent = livingAgentsById.get(starredId);
+      if (agent && !seen.has(agent.id)) {
+        ordered.push(agent);
+        seen.add(agent.id);
+      }
+      if (ordered.length >= maxItems) return ordered;
+    }
+
+    // 2. Entries the user explicitly opened (most recent first).
     for (const entry of entries) {
       const agent = livingAgentsById.get(entry.id);
       if (agent && !seen.has(agent.id)) {
@@ -113,7 +125,7 @@ export const useRecentAgents = () => {
       if (ordered.length >= maxItems) return ordered;
     }
 
-    // 2. Fill from the user's own most-recently-updated stored agents.
+    // 3. Fill from the user's own most-recently-updated stored agents.
     if (user?.id) {
       for (const agent of storedAgents?.agents ?? []) {
         if (seen.has(agent.id)) continue;
@@ -125,7 +137,7 @@ export const useRecentAgents = () => {
     }
 
     return ordered;
-  }, [entries, livingAgentsById, maxItems, storedAgents, user?.id]);
+  }, [entries, livingAgentsById, maxItems, starredAgentIds, storedAgents, user?.id]);
 
   return {
     recents,
