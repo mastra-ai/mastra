@@ -30,10 +30,14 @@ import AgentStudioAgents from './pages/agent-studio/agents';
 import AgentStudioAgentChat from './pages/agent-studio/agents/chat';
 import AgentStudioAgentCreate from './pages/agent-studio/agents/create';
 import AgentStudioAgentEdit from './pages/agent-studio/agents/edit';
+import AgentStudioConfigure from './pages/agent-studio/configure';
+import AgentStudioConfigureAppearance from './pages/agent-studio/configure/appearance';
+import AgentStudioConfigureSkills from './pages/agent-studio/configure/skills';
+import AgentStudioConfigureSkillCreate from './pages/agent-studio/configure/skills/create';
+import AgentStudioConfigureSkillEdit from './pages/agent-studio/configure/skills/edit';
 import AgentStudioMarketplaceAgents from './pages/agent-studio/marketplace/agents';
 import AgentStudioMarketplaceSkills from './pages/agent-studio/marketplace/skills';
 import AgentStudioMarketplaceSkillDetail from './pages/agent-studio/marketplace/skills/detail';
-import { AgentStudioPlaceholder } from './pages/agent-studio/placeholder';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
@@ -367,25 +371,23 @@ const routes = [
       },
       {
         path: '/agent-studio/configure',
-        element: (
-          <AgentStudioPlaceholder title="Configure" description="Manage your skills, appearance, and preferences." />
-        ),
+        element: <AgentStudioConfigure />,
       },
       {
         path: '/agent-studio/configure/skills',
-        element: <AgentStudioPlaceholder title="Configure — Skills" description="List and publish your own skills." />,
+        element: <AgentStudioConfigureSkills />,
       },
       {
         path: '/agent-studio/configure/skills/create',
-        element: <AgentStudioPlaceholder title="Create skill" />,
+        element: <AgentStudioConfigureSkillCreate />,
       },
       {
         path: '/agent-studio/configure/skills/:skillId',
-        element: <AgentStudioPlaceholder title="Edit skill" />,
+        element: <AgentStudioConfigureSkillEdit />,
       },
       {
         path: '/agent-studio/configure/appearance',
-        element: <AgentStudioPlaceholder title="Appearance" description="Choose light or dark mode." />,
+        element: <AgentStudioConfigureAppearance />,
       },
     ],
   },

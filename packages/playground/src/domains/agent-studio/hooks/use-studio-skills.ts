@@ -1,6 +1,11 @@
-import type { ListStoredSkillsParams, StoredSkillResponse } from '@mastra/client-js';
+import type {
+  CreateStoredSkillParams,
+  ListStoredSkillsParams,
+  StoredSkillResponse,
+  UpdateStoredSkillParams,
+} from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 
@@ -71,4 +76,32 @@ export const useStudioSkills = ({ scope = 'all', search = '', perPage = 100 }: U
     error,
     currentUserId: user?.id,
   };
+};
+
+export const useStoredSkillMutations = () => {
+  const client = useMastraClient();
+  const queryClient = useQueryClient();
+
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['stored-skills'] });
+    void queryClient.invalidateQueries({ queryKey: ['stored-skill'] });
+  };
+
+  const createStoredSkill = useMutation({
+    mutationFn: (params: CreateStoredSkillParams) => client.createStoredSkill(params),
+    onSuccess: invalidate,
+  });
+
+  const updateStoredSkill = useMutation({
+    mutationFn: ({ skillId, params }: { skillId: string; params: UpdateStoredSkillParams }) =>
+      client.getStoredSkill(skillId).update(params),
+    onSuccess: invalidate,
+  });
+
+  const deleteStoredSkill = useMutation({
+    mutationFn: (skillId: string) => client.getStoredSkill(skillId).delete(),
+    onSuccess: invalidate,
+  });
+
+  return { createStoredSkill, updateStoredSkill, deleteStoredSkill };
 };
