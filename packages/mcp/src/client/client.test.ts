@@ -295,6 +295,60 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     // The full CallToolResult envelope is returned — no extraction, no Zod stripping
     expect(result).toEqual(callToolResult);
   });
+
+  it('should preserve recursive $ref input schemas when creating tools', async () => {
+    const sdkClient = (client as any).client as Client;
+    const recursiveInputSchema = {
+      type: 'object' as const,
+      properties: {
+        root: { $ref: '#/$defs/node' },
+      },
+      required: ['root'],
+      $defs: {
+        node: {
+          type: 'object' as const,
+          properties: {
+            name: { type: 'string' as const },
+            children: {
+              type: 'array' as const,
+              items: { $ref: '#/$defs/node' },
+            },
+          },
+          required: ['name'],
+        },
+      },
+    };
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'recursive_tool',
+          description: 'Returns a recursive schema',
+          inputSchema: recursiveInputSchema,
+        },
+      ],
+    });
+
+    const tools = await client.tools();
+    const recursiveTool = tools['recursive_tool'];
+    expect(recursiveTool).toBeDefined();
+
+    const storedSchema = recursiveTool.inputSchema?.['~standard'].jsonSchema.input({ target: 'draft-07' }) as {
+      properties?: { root?: { $ref?: string } };
+      $defs?: {
+        node?: {
+          properties?: {
+            children?: {
+              items?: { $ref?: string };
+            };
+          };
+        };
+      };
+    };
+
+    expect(storedSchema.properties?.root?.$ref).toBe('#/$defs/node');
+    expect(storedSchema.$defs?.node?.properties?.children?.items?.$ref).toBe('#/$defs/node');
+  });
 });
 
 describe('MastraMCPClient - no outputSchema', () => {
@@ -1596,6 +1650,58 @@ describe('MastraMCPClient - Roots Capability (Issue #8660)', () => {
     await client.disconnect().catch(() => {});
   });
 
+  it('should preserve custom elicitation capability fields', async () => {
+    const customElicitationCapabilities = {
+      supportedContentTypes: ['text/uri-list', 'application/vnd.mastra.form+json'],
+    } as any;
+
+    const client = new InternalMastraMCPClient({
+      name: 'elicitation-capability-test-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+      capabilities: {
+        elicitation: customElicitationCapabilities,
+      } as any,
+    });
+
+    const internalClient = (client as any).client;
+    const capabilities = internalClient._options?.capabilities;
+
+    expect(capabilities).toMatchObject({
+      elicitation: customElicitationCapabilities,
+    });
+
+    await client.disconnect().catch(() => {});
+  });
+
+  it('should preserve custom elicitation fields while auto-enabling roots capability', async () => {
+    const customElicitationCapabilities = {
+      supportedContentTypes: ['text/uri-list'],
+    } as any;
+
+    const client = new InternalMastraMCPClient({
+      name: 'elicitation-with-roots-test-client',
+      server: {
+        url: testServer.baseUrl,
+        roots: [{ uri: 'file:///tmp', name: 'Temp Directory' }],
+      },
+      capabilities: {
+        elicitation: customElicitationCapabilities,
+      } as any,
+    });
+
+    const internalClient = (client as any).client;
+    const capabilities = internalClient._options?.capabilities;
+
+    expect(capabilities).toMatchObject({
+      roots: { listChanged: true },
+      elicitation: customElicitationCapabilities,
+    });
+
+    await client.disconnect().catch(() => {});
+  });
+
   it('should handle roots/list requests from server per MCP spec', async () => {
     /**
      * Per MCP Roots spec (https://modelcontextprotocol.io/specification/2025-11-25/client/roots):
@@ -2131,6 +2237,34 @@ describe('MastraMCPClient - mcpMetadata on tools', () => {
     expect(greetTool.mcpMetadata).toBeDefined();
     expect(greetTool.mcpMetadata!.serverVersion).toBe('1.0.0');
   });
+
+  it('should preserve strict mode from MCP tool metadata', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'strict_tool',
+          description: 'A strict MCP tool',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { query: { type: 'string' } },
+            required: ['query'],
+            additionalProperties: false,
+          },
+          _meta: {
+            mastra: {
+              strict: true,
+            },
+          },
+        },
+      ],
+    });
+
+    const tools = await client.tools();
+    expect(tools.strict_tool).toBeDefined();
+    expect(tools.strict_tool.strict).toBe(true);
+  });
 });
 
 describe('MastraMCPClient fetch with requestContext', () => {
@@ -2328,4 +2462,137 @@ describe('MastraMCPClient - Stdio stderr and cwd forwarding', () => {
 
     await client.disconnect();
   }, 30000);
+});
+
+describe('MastraMCPClient - requireToolApproval', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should set requireApproval=true on all tools when requireToolApproval is true', async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'approval-bool-client',
+      server: {
+        url: testServer.baseUrl,
+        requireToolApproval: true,
+      },
+    });
+    await client.connect();
+    const tools = await client.tools();
+    const greetTool = tools.greet;
+    expect(greetTool).toBeDefined();
+    expect(greetTool.requireApproval).toBe(true);
+    // No needsApprovalFn when boolean
+    expect((greetTool as any).needsApprovalFn).toBeUndefined();
+  });
+
+  it('should not set requireApproval when requireToolApproval is false', async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'approval-false-client',
+      server: {
+        url: testServer.baseUrl,
+        requireToolApproval: false,
+      },
+    });
+    await client.connect();
+    const tools = await client.tools();
+    const greetTool = tools.greet;
+    expect(greetTool).toBeDefined();
+    expect(greetTool.requireApproval).toBe(false);
+    expect((greetTool as any).needsApprovalFn).toBeUndefined();
+  });
+
+  it('should not set requireApproval when requireToolApproval is omitted', async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'approval-omitted-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+    });
+    await client.connect();
+    const tools = await client.tools();
+    const greetTool = tools.greet;
+    expect(greetTool).toBeDefined();
+    expect(greetTool.requireApproval).toBe(false);
+    expect((greetTool as any).needsApprovalFn).toBeUndefined();
+  });
+
+  it('should set requireApproval=true and needsApprovalFn when requireToolApproval is a function', async () => {
+    testServer = await setupTestServer(false);
+    const approvalFn = vi.fn().mockReturnValue(true);
+    client = new InternalMastraMCPClient({
+      name: 'approval-fn-client',
+      server: {
+        url: testServer.baseUrl,
+        requireToolApproval: approvalFn,
+      },
+    });
+    await client.connect();
+    const tools = await client.tools();
+    const greetTool = tools.greet;
+    expect(greetTool).toBeDefined();
+    expect(greetTool.requireApproval).toBe(true);
+    expect((greetTool as any).needsApprovalFn).toBeTypeOf('function');
+  });
+
+  it('should pass toolName and args to the wrapped needsApprovalFn', async () => {
+    testServer = await setupTestServer(false);
+    const approvalFn = vi.fn().mockReturnValue(false);
+    client = new InternalMastraMCPClient({
+      name: 'approval-fn-args-client',
+      server: {
+        url: testServer.baseUrl,
+        requireToolApproval: approvalFn,
+      },
+    });
+    await client.connect();
+    const tools = await client.tools();
+    const greetTool = tools.greet;
+
+    // Call the wrapped needsApprovalFn directly
+    const testArgs = { name: 'test' };
+    const testCtx = { requestContext: { userId: '123' } };
+    const result = await (greetTool as any).needsApprovalFn(testArgs, testCtx);
+
+    expect(result).toBe(false);
+    expect(approvalFn).toHaveBeenCalledWith({
+      toolName: 'greet',
+      args: testArgs,
+      requestContext: { userId: '123' },
+    });
+  });
+
+  it('should support async approval functions', async () => {
+    testServer = await setupTestServer(false);
+    const approvalFn = vi.fn().mockImplementation(async ({ toolName }) => {
+      return toolName === 'greet';
+    });
+    client = new InternalMastraMCPClient({
+      name: 'approval-async-client',
+      server: {
+        url: testServer.baseUrl,
+        requireToolApproval: approvalFn,
+      },
+    });
+    await client.connect();
+    const tools = await client.tools();
+    const greetTool = tools.greet;
+
+    const result = await (greetTool as any).needsApprovalFn({ name: 'test' }, {});
+    expect(result).toBe(true);
+  });
 });

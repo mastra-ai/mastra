@@ -1,24 +1,50 @@
 import {
-  Header,
   Breadcrumb,
-  Crumb,
-  Icon,
-  HeaderAction,
   Button,
+  Crumb,
   DocsIcon,
-  ProcessorPanel,
-  ProcessorCombobox,
-  ProcessorIcon,
-  useProcessor,
-  Skeleton,
+  Header,
+  HeaderAction,
+  Icon,
   PermissionDenied,
+  ProcessorIcon,
+  SessionExpired,
+  Skeleton,
+  is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { Link, useParams, Navigate } from 'react-router';
+import { ProcessorCombobox } from '@/domains/processors/components/processor-combobox';
+import { ProcessorPanel } from '@/domains/processors/components/processor-panel';
+import { useProcessor } from '@/domains/processors/hooks/use-processors';
 
 export function Processor() {
   const { processorId } = useParams();
   const { data: processor, isLoading, error } = useProcessor(processorId!);
+
+  // 401 check - session expired
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <div className="h-full w-full overflow-y-hidden">
+        <Header>
+          <Breadcrumb>
+            <Crumb as={Link} to={`/processors`}>
+              <Icon>
+                <ProcessorIcon />
+              </Icon>
+              Processors
+            </Crumb>
+            <Crumb as="span" to="" isCurrent>
+              {processorId}
+            </Crumb>
+          </Breadcrumb>
+        </Header>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </div>
+    );
+  }
 
   // 403 check - permission denied for processors
   if (error && is403ForbiddenError(error)) {

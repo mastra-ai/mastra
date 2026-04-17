@@ -14,7 +14,7 @@ import type { Event } from '../../events';
 import type { Mastra } from '../../mastra';
 import { EntityType, SpanType, createObservabilityContext, resolveObservabilityContext } from '../../observability';
 import type { ObservabilityContext } from '../../observability';
-import { executeWithContext } from '../../observability/context-storage';
+import { executeWithContext } from '../../observability/utils';
 import type { OutputResult, Processor } from '../../processors';
 import { ProcessorRunner, ProcessorState, ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors';
 import type { ProcessorStepOutput } from '../../processors/step-schema';
@@ -22,7 +22,7 @@ import { toStandardSchema } from '../../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../../schema';
 
 import { WorkflowRunOutput } from '../../stream/RunOutput';
-import type { ChunkType } from '../../stream/types';
+import type { ChunkType, LanguageModelUsage } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { Tool } from '../../tools';
 import type { ToolExecutionContext } from '../../tools/types';
@@ -751,6 +751,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         modelSettings,
         structuredOutput,
         steps,
+        usage,
         messageId,
         rotateResponseMessageId,
         // Shared processor states map for accessing persisted state
@@ -857,7 +858,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         stepNumber,
         systemMessages,
         streamParts,
-        state,
+        state: processorState,
+        processorStates,
         result: outputResult,
         finishReason,
         toolCalls,
@@ -872,6 +874,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         modelSettings,
         structuredOutput,
         steps,
+        usage,
         messageId: currentMessageId,
         rotateResponseMessageId: rotateCurrentResponseMessageId,
       };
@@ -1200,6 +1203,11 @@ function createStepFromProcessor<TProcessorId extends string>(
               const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
               const check = passThrough.messageList.makeMessageSourceChecker();
 
+              const defaultUsage: LanguageModelUsage = {
+                inputTokens: undefined,
+                outputTokens: undefined,
+                totalTokens: undefined,
+              };
               const result = await processor.processOutputStep({
                 ...baseContext,
                 messages: messages as MastraDBMessage[],
@@ -1208,6 +1216,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 finishReason,
                 toolCalls: toolCalls as any,
                 text,
+                usage: (usage as LanguageModelUsage) ?? defaultUsage,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 steps: steps ?? [],
               });

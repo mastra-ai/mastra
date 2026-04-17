@@ -818,6 +818,18 @@ const response = await agent.generate("Hello!", {
         "type": "string | null | undefined",
         "description": "",
         "isOptional": true
+    },
+    {
+        "name": "systemMessageMode",
+        "type": "\"remove\" | \"system\" | \"developer\" | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "forceReasoning",
+        "type": "boolean | undefined",
+        "description": "",
+        "isOptional": true
     }
 ]}
 />

@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
+import { BackgroundTaskManager } from '../background-tasks';
+import type { BackgroundTaskManagerConfig } from '../background-tasks/types';
 import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
@@ -28,6 +30,7 @@ import type {
   MetricsContext,
 } from '../observability';
 import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
+import { initContextStorage } from '../observability/context-storage';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
@@ -265,6 +268,13 @@ export interface Config<
    * The editor handles complex instantiation logic including memory resolution.
    */
   editor?: IMastraEditor;
+
+  /**
+   * Background task configuration for running tool calls asynchronously.
+   * When configured, agents can dispatch tool executions to run in the background
+   * while the conversation continues.
+   */
+  backgroundTasks?: BackgroundTaskManagerConfig;
 }
 
 /**
@@ -342,6 +352,8 @@ export class Mastra<
   #bundler?: BundlerConfig;
   #idGenerator?: MastraIdGenerator;
   #pubsub: PubSub;
+  #backgroundTaskConfig?: BackgroundTaskManagerConfig;
+  #backgroundTaskManager?: BackgroundTaskManager;
   #gateways?: Record<string, MastraModelGateway>;
 
   #events: {
@@ -362,6 +374,10 @@ export class Mastra<
 
   get pubsub() {
     return this.#pubsub;
+  }
+
+  get backgroundTaskManager() {
+    return this.#backgroundTaskManager;
   }
 
   get datasets(): DatasetsManager {
@@ -564,6 +580,10 @@ export class Mastra<
   constructor(
     config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger, TMCPServers, TScorers, TTools, TProcessors, TMemory>,
   ) {
+    // Register AsyncLocalStorage-backed context resolvers so that DualLogger
+    // can correlate logs to the active span. Must happen before any agent runs.
+    initContextStorage();
+
     // This is only used internally for server handlers that require temporary persistence
     this.#serverCache = new InMemoryServerCache();
 
@@ -652,6 +672,9 @@ export class Mastra<
     this.#logger = dualLogger as unknown as TLogger;
 
     this.#storage = storage;
+
+    this.#backgroundTaskConfig = config?.backgroundTasks;
+    this.#ensureBackgroundTaskManager();
 
     // Initialize all primitive storage objects first, we need to do this before adding primitives to avoid circular dependencies
     this.#vectors = {} as TVectors;
@@ -781,6 +804,19 @@ export class Mastra<
     this.#observability.setMastraContext({ mastra: this });
 
     this.setLogger({ logger });
+  }
+
+  #ensureBackgroundTaskManager(): void {
+    if (!this.#backgroundTaskConfig?.enabled || !this.#storage) {
+      return;
+    }
+
+    const bgManager = new BackgroundTaskManager(this.#backgroundTaskConfig);
+    bgManager.__registerMastra(this);
+    this.#backgroundTaskManager = bgManager;
+    void bgManager.init(this.#pubsub).catch(error => {
+      this.#logger?.error('Failed to initialize background task manager', error);
+    });
   }
 
   /**
@@ -2509,6 +2545,7 @@ export class Mastra<
    */
   public setStorage(storage: MastraCompositeStore) {
     this.#storage = augmentWithInit(storage);
+    this.#ensureBackgroundTaskManager();
   }
 
   public setLogger({ logger }: { logger: TLogger }) {

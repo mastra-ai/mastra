@@ -36,5 +36,9 @@ export {
   DEFAULT_TAIL_LINES,
 } from './output-helpers';
 
+// Tracing
+export { startWorkspaceSpan } from './tracing';
+export type { WorkspaceSpanOptions, WorkspaceSpanHandle } from './tracing';
+
 // Tree formatter
 export * from './tree-formatter';

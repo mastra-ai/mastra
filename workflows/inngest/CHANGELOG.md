@@ -1,5 +1,23 @@
 # @mastra/inngest
 
+## 1.2.1
+
+### Patch Changes
+
+- Add `entityName` to workflow span creation in the Inngest workflow engine, parallel to the core fix in #14949. Without this, workflows created via `init(inngest).createWorkflow({...})` show up as "unknown" in the metrics dashboard's workflow trace volume tab even when they have an explicit `id`. ([#15182](https://github.com/mastra-ai/mastra/pull/15182))
+
+- Updated dependencies [[`ef94400`](https://github.com/mastra-ai/mastra/commit/ef9440049402596b31f2ab976c5e4508f6cb6c91), [`3db852b`](https://github.com/mastra-ai/mastra/commit/3db852bff74e29f60d415a7b0f1583d6ce2bad92)]:
+  - @mastra/core@1.24.1
+
+## 1.2.1-alpha.0
+
+### Patch Changes
+
+- Add `entityName` to workflow span creation in the Inngest workflow engine, parallel to the core fix in #14949. Without this, workflows created via `init(inngest).createWorkflow({...})` show up as "unknown" in the metrics dashboard's workflow trace volume tab even when they have an explicit `id`. ([#15182](https://github.com/mastra-ai/mastra/pull/15182))
+
+- Updated dependencies [[`ef94400`](https://github.com/mastra-ai/mastra/commit/ef9440049402596b31f2ab976c5e4508f6cb6c91)]:
+  - @mastra/core@1.24.1-alpha.0
+
 ## 1.2.0
 
 ### Minor Changes

@@ -72,6 +72,8 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       spanOutputProcessors: config.spanOutputProcessors ?? [],
       bridge: config.bridge ?? undefined,
       includeInternalSpans: config.includeInternalSpans ?? false,
+      excludeSpanTypes: config.excludeSpanTypes,
+      spanFilter: config.spanFilter,
       requestContextKeys: config.requestContextKeys ?? [],
       serializationOptions: config.serializationOptions,
       logging: config.logging,
@@ -81,7 +83,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     this.cardinalityFilter = new CardinalityFilter(config.cardinality);
 
     // Initialize the unified ObservabilityBus
-    this.observabilityBus = new ObservabilityBus();
+    this.observabilityBus = new ObservabilityBus({
+      serializationOptions: this.config.serializationOptions,
+    });
 
     for (const exporter of this.exporters) {
       this.observabilityBus.registerExporter(exporter);
@@ -586,8 +590,24 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     if (!span.isValid) return undefined;
     if (span.isInternal && !this.config.includeInternalSpans) return undefined;
 
+    // Check excludeSpanTypes before processing
+    if (this.config.excludeSpanTypes?.includes(span.type)) return undefined;
+
     const processedSpan = this.processSpan(span);
-    return processedSpan?.exportSpan(this.config.includeInternalSpans);
+    const exportedSpan = processedSpan?.exportSpan(this.config.includeInternalSpans);
+    if (!exportedSpan) return undefined;
+
+    // Apply spanFilter on the exported span data
+    if (this.config.spanFilter) {
+      try {
+        if (!this.config.spanFilter(exportedSpan)) return undefined;
+      } catch (error) {
+        this.logger.error(`[Observability] spanFilter error`, error);
+        // On filter error, keep the span to avoid silent data loss
+      }
+    }
+
+    return exportedSpan;
   }
 
   /**

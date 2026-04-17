@@ -1247,7 +1247,12 @@ export const GET_PROVIDERS_ROUTE = createRoute({
             try {
               const gatewayProviders = await gateway.fetchProviders();
               for (const [providerId, config] of Object.entries(gatewayProviders)) {
-                allProviders[providerId] = config;
+                // Apply the same prefixing logic as registry-generator to avoid
+                // creating duplicate entries alongside PROVIDER_REGISTRY data.
+                // If providerId matches gateway.id, it's a unified gateway — use just the gateway ID.
+                // Otherwise, prefix with gateway.id (e.g., "netlify/anthropic").
+                const prefixedId = providerId === gateway.id ? gateway.id : `${gateway.id}/${providerId}`;
+                allProviders[prefixedId] = config;
               }
             } catch (error) {
               console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, error);

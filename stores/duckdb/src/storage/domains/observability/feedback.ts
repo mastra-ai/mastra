@@ -32,9 +32,12 @@ const FEEDBACK_GROUP_BY_COLUMNS = new Set([
   'entityType',
   'entityId',
   'entityName',
+  'entityVersionId',
+  'parentEntityVersionId',
   'parentEntityType',
   'parentEntityId',
   'parentEntityName',
+  'rootEntityVersionId',
   'rootEntityType',
   'rootEntityId',
   'rootEntityName',
@@ -168,9 +171,12 @@ function rowToFeedbackRecord(row: Record<string, unknown>): Record<string, unkno
     entityType: (row.entityType as string) ?? null,
     entityId: (row.entityId as string) ?? null,
     entityName: (row.entityName as string) ?? null,
+    entityVersionId: (row.entityVersionId as string) ?? null,
+    parentEntityVersionId: (row.parentEntityVersionId as string) ?? null,
     parentEntityType: (row.parentEntityType as string) ?? null,
     parentEntityId: (row.parentEntityId as string) ?? null,
     parentEntityName: (row.parentEntityName as string) ?? null,
+    rootEntityVersionId: (row.rootEntityVersionId as string) ?? null,
     rootEntityType: (row.rootEntityType as string) ?? null,
     rootEntityId: (row.rootEntityId as string) ?? null,
     rootEntityName: (row.rootEntityName as string) ?? null,
@@ -237,7 +243,7 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
   await db.execute(
     `INSERT INTO feedback_events (
       timestamp, traceId, spanId, experimentId,
-      entityType, entityId, entityName, parentEntityType, parentEntityId, parentEntityName, rootEntityType, rootEntityId, rootEntityName,
+      entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       feedbackUserId, sourceId, feedbackSource, feedbackType, value, comment, tags, metadata, scope
     )
@@ -249,9 +255,12 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
        v(f.entityType ?? null),
        v(f.entityId ?? null),
        v(f.entityName ?? null),
+       v(f.entityVersionId ?? null),
+       v(f.parentEntityVersionId ?? null),
        v(f.parentEntityType ?? null),
        v(f.parentEntityId ?? null),
        v(f.parentEntityName ?? null),
+       v(f.rootEntityVersionId ?? null),
        v(f.rootEntityType ?? null),
        v(f.rootEntityId ?? null),
        v(f.rootEntityName ?? null),
@@ -294,9 +303,12 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
       v(legacyFeedback.entityType ?? null),
       v(legacyFeedback.entityId ?? null),
       v(legacyFeedback.entityName ?? null),
+      v(legacyFeedback.entityVersionId ?? null),
+      v(legacyFeedback.parentEntityVersionId ?? null),
       v(legacyFeedback.parentEntityType ?? null),
       v(legacyFeedback.parentEntityId ?? null),
       v(legacyFeedback.parentEntityName ?? null),
+      v(legacyFeedback.rootEntityVersionId ?? null),
       v(legacyFeedback.rootEntityType ?? null),
       v(legacyFeedback.rootEntityId ?? null),
       v(legacyFeedback.rootEntityName ?? null),
@@ -325,7 +337,7 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
   await db.execute(
     `INSERT INTO feedback_events (
       timestamp, traceId, spanId, experimentId,
-      entityType, entityId, entityName, parentEntityType, parentEntityId, parentEntityName, rootEntityType, rootEntityId, rootEntityName,
+      entityType, entityId, entityName, entityVersionId, parentEntityVersionId, parentEntityType, parentEntityId, parentEntityName, rootEntityVersionId, rootEntityType, rootEntityId, rootEntityName,
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       feedbackUserId, sourceId, feedbackSource, feedbackType, value, comment, tags, metadata, scope
     )

@@ -11,7 +11,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
-import { createMessageListWithUserMessage, defaultSettings, mockDate, testUsage, testUsage2 } from './utils';
+import {
+  createMessageListWithUserMessage,
+  defaultSettings,
+  expectPromptWithoutMastraCreatedAt,
+  mockDate,
+  stripMastraCreatedAt,
+  testUsage,
+  testUsage2,
+} from './utils';
 import { testUsageV3, testUsageV3_2 } from './utils-v3';
 import { MastraLanguageModelV2Mock } from './MastraLanguageModelV2Mock';
 import { MastraLanguageModelV3Mock } from './MastraLanguageModelV3Mock';
@@ -83,7 +91,7 @@ export function fullStreamTests({
             id: 'test-model',
             model: new MockModel({
               doStream: async ({ prompt }: { prompt: unknown }) => {
-                expect(prompt).toStrictEqual([
+                expectPromptWithoutMastraCreatedAt(prompt, [
                   {
                     role: 'user',
                     content: [{ type: 'text', text: 'test-input' }],
@@ -129,7 +137,7 @@ export function fullStreamTests({
       });
 
       const data = await convertAsyncIterableToArray(result.fullStream);
-      expect(data).toMatchSnapshot();
+      expect(stripMastraCreatedAt(data)).toMatchSnapshot();
     });
 
     it('should send text deltas', async () => {
@@ -144,7 +152,7 @@ export function fullStreamTests({
             id: 'test-model',
             model: new MockModel({
               doStream: async ({ prompt }: { prompt: unknown }) => {
-                expect(prompt).toStrictEqual([
+                expectPromptWithoutMastraCreatedAt(prompt, [
                   {
                     role: 'user',
                     content: [{ type: 'text', text: 'test-input' }],
@@ -183,7 +191,7 @@ export function fullStreamTests({
       });
 
       const data = await convertAsyncIterableToArray(result.fullStream);
-      expect(data).toMatchSnapshot();
+      expect(stripMastraCreatedAt(data)).toMatchSnapshot();
     });
 
     it('should send reasoning deltas', async () => {
@@ -263,7 +271,7 @@ export function fullStreamTests({
         ...defaultSettings(),
       });
 
-      expect(await convertAsyncIterableToArray(result.fullStream)).toMatchSnapshot();
+      expect(stripMastraCreatedAt(await convertAsyncIterableToArray(result.fullStream))).toMatchSnapshot();
     });
 
     // https://github.com/mastra-ai/mastra/issues/9005
@@ -359,7 +367,7 @@ export function fullStreamTests({
         ...defaultSettings(),
       });
 
-      expect(await convertAsyncIterableToArray(result.fullStream)).toMatchSnapshot();
+      expect(stripMastraCreatedAt(await convertAsyncIterableToArray(result.fullStream))).toMatchSnapshot();
     });
 
     it('should send files', async () => {
@@ -393,7 +401,7 @@ export function fullStreamTests({
 
       const converted = await convertAsyncIterableToArray(result.fullStream);
 
-      expect(converted).toMatchSnapshot();
+      expect(stripMastraCreatedAt(converted)).toMatchSnapshot();
     });
 
     it('should use fallback response metadata when response metadata is not provided', async () => {
@@ -410,7 +418,7 @@ export function fullStreamTests({
             id: 'test-model',
             model: new MockModel({
               doStream: async ({ prompt }: { prompt: unknown }) => {
-                expect(prompt).toStrictEqual([
+                expectPromptWithoutMastraCreatedAt(prompt, [
                   {
                     role: 'user',
                     content: [{ type: 'text', text: 'test-input' }],
@@ -442,7 +450,7 @@ export function fullStreamTests({
         },
       });
 
-      expect(await convertAsyncIterableToArray(result.fullStream)).toMatchSnapshot();
+      expect(stripMastraCreatedAt(await convertAsyncIterableToArray(result.fullStream))).toMatchSnapshot();
     });
 
     it('should send tool calls', async () => {
@@ -485,7 +493,7 @@ export function fullStreamTests({
 
                 expect(toolChoice).toStrictEqual({ type: 'required' });
 
-                expect(prompt).toStrictEqual([
+                expectPromptWithoutMastraCreatedAt(prompt, [
                   {
                     role: 'user',
                     content: [{ type: 'text', text: 'test-input' }],
@@ -534,7 +542,7 @@ export function fullStreamTests({
         },
       });
 
-      expect(await convertAsyncIterableToArray(result.fullStream)).toMatchSnapshot();
+      expect(stripMastraCreatedAt(await convertAsyncIterableToArray(result.fullStream))).toMatchSnapshot();
     });
 
     it('should send tool call deltas', async () => {
@@ -631,7 +639,7 @@ export function fullStreamTests({
 
       const fullStream = await convertAsyncIterableToArray(result.fullStream);
 
-      expect(fullStream).toMatchSnapshot();
+      expect(stripMastraCreatedAt(fullStream)).toMatchSnapshot();
     });
 
     it('should send tool results', async () => {
@@ -701,7 +709,7 @@ export function fullStreamTests({
               // console.info('TOOL 1', inputData, options);
 
               expect(inputData).toStrictEqual({ value: 'value' });
-              expect(options.messages).toStrictEqual([
+              expectPromptWithoutMastraCreatedAt(options.messages, [
                 { role: 'user', content: [{ type: 'text', text: 'test-input' }] },
               ]);
               return `${inputData.value}-result`;
@@ -716,7 +724,7 @@ export function fullStreamTests({
 
       const fullStream = await convertAsyncIterableToArray(result.fullStream);
 
-      expect(fullStream).toMatchSnapshot();
+      expect(stripMastraCreatedAt(fullStream)).toMatchSnapshot();
     });
 
     it('should send delayed asynchronous tool results', async () => {
@@ -797,7 +805,7 @@ export function fullStreamTests({
 
       const fullStream = await convertAsyncIterableToArray(result.fullStream);
 
-      expect(fullStream).toMatchSnapshot();
+      expect(stripMastraCreatedAt(fullStream)).toMatchSnapshot();
       vi.useFakeTimers();
       vi.setSystemTime(mockDate);
     });
@@ -849,7 +857,7 @@ export function fullStreamTests({
 
       const fullStream = await convertAsyncIterableToArray(result.fullStream);
 
-      expect(fullStream).toMatchSnapshot();
+      expect(stripMastraCreatedAt(fullStream)).toMatchSnapshot();
     });
   });
 }

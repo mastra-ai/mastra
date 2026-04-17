@@ -1,5 +1,249 @@
 # @mastra/memory
 
+## 1.16.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`fdd54cf`](https://github.com/mastra-ai/mastra/commit/fdd54cf612a9af876e9fdd85e534454f6e7dd518), [`7db42a9`](https://github.com/mastra-ai/mastra/commit/7db42a9cccd3b29c44fb0731f792c51575e8421c), [`30456b6`](https://github.com/mastra-ai/mastra/commit/30456b6b08c8fd17e109dd093b73d93b65e83bc5), [`9d11a8c`](https://github.com/mastra-ai/mastra/commit/9d11a8c1c8924eb975a245a5884d40ca1b7e0491), [`d246696`](https://github.com/mastra-ai/mastra/commit/d246696139a3144a5b21b042d41c532688e957e1), [`354f9ce`](https://github.com/mastra-ai/mastra/commit/354f9ce1ca6af2074b6a196a23f8ec30012dccca), [`e9837b5`](https://github.com/mastra-ai/mastra/commit/e9837b53699e18711b09e0ca010a4106376f2653)]:
+  - @mastra/core@1.26.0-alpha.3
+  - @mastra/schema-compat@1.2.9-alpha.1
+
+## 1.16.0-alpha.0
+
+### Minor Changes
+
+- Added activateAfterIdle setting for observational memory so buffered observations can activate after idle time before the next prompt. ([#15365](https://github.com/mastra-ai/mastra/pull/15365))
+
+  **Example**
+
+  Set `activateAfterIdle: 300_000` (or `"5m"`) on the `observationalMemory` config to activate buffered context after 5 minutes of inactivity.
+
+  This helps long-running threads reuse compressed context after prompt cache TTLs expire instead of sending a larger raw message window on the next request.
+
+### Patch Changes
+
+- Updated dependencies [[`3d83d06`](https://github.com/mastra-ai/mastra/commit/3d83d06f776f00fb5f4163dddd32a030c5c20844), [`7e0e63e`](https://github.com/mastra-ai/mastra/commit/7e0e63e2e485e84442351f4c7a79a424c83539dc), [`9467ea8`](https://github.com/mastra-ai/mastra/commit/9467ea87695749a53dfc041576410ebf9ee7bb67), [`7338d94`](https://github.com/mastra-ai/mastra/commit/7338d949380cf68b095342e8e42610dc51d557c1), [`c65aec3`](https://github.com/mastra-ai/mastra/commit/c65aec356cc037ee7c4b30ccea946807d4c4f443)]:
+  - @mastra/core@1.26.0-alpha.2
+  - @mastra/schema-compat@1.2.9-alpha.0
+
+## 1.15.1
+
+### Patch Changes
+
+- Fixed gateway model detection to use duck typing instead of instanceof check, preventing potential failures from cross-package module resolution issues. Propagates `gatewayId` through the AISDKV5LanguageModel wrapper so duck-type detection works even when models are re-wrapped. ([#15168](https://github.com/mastra-ai/mastra/pull/15168))
+
+- Updated dependencies [[`87df955`](https://github.com/mastra-ai/mastra/commit/87df955c028660c075873fd5d74af28233ce32eb), [`8fad147`](https://github.com/mastra-ai/mastra/commit/8fad14759804179c8e080ce4d9dec6ef1a808b31), [`582644c`](https://github.com/mastra-ai/mastra/commit/582644c4a87f83b4f245a84d72b9e8590585012e), [`cbdf3e1`](https://github.com/mastra-ai/mastra/commit/cbdf3e12b3d0c30a6e5347be658e2009648c130a), [`8fe46d3`](https://github.com/mastra-ai/mastra/commit/8fe46d354027f3f0f0846e64219772348de106dd), [`18c67db`](https://github.com/mastra-ai/mastra/commit/18c67dbb9c9ebc26f26f65f7d3ff836e5691ef46), [`4ba3bb1`](https://github.com/mastra-ai/mastra/commit/4ba3bb1e465ad2ddaba3bbf2bc47e0faec32985e), [`5d84914`](https://github.com/mastra-ai/mastra/commit/5d84914e0e520c642a40329b210b413fcd139898), [`8dcc77e`](https://github.com/mastra-ai/mastra/commit/8dcc77e78a5340f5848f74b9e9f1b3da3513c1f5), [`aa67fc5`](https://github.com/mastra-ai/mastra/commit/aa67fc59ee8a5eeff1f23eb05970b8d7a536c8ff), [`fd2f314`](https://github.com/mastra-ai/mastra/commit/fd2f31473d3449b6b97e837ef8641264377f41a7), [`fa8140b`](https://github.com/mastra-ai/mastra/commit/fa8140bcd4251d2e3ac85fdc5547dfc4f372b5be), [`190f452`](https://github.com/mastra-ai/mastra/commit/190f45258b0640e2adfc8219fa3258cdc5b8f071), [`e80fead`](https://github.com/mastra-ai/mastra/commit/e80fead1412cc0d1b2f7d6a1ce5017d9e0098ff7), [`0287b64`](https://github.com/mastra-ai/mastra/commit/0287b644a5c3272755cf3112e71338106664103b), [`7e7bf60`](https://github.com/mastra-ai/mastra/commit/7e7bf606886bf374a6f9d4ca9b09dd83d0533372), [`184907d`](https://github.com/mastra-ai/mastra/commit/184907d775d8609c03c26e78ccaf37315f3aa287), [`075e91a`](https://github.com/mastra-ai/mastra/commit/075e91a4549baf46ad7a42a6a8ac8dfa78cc09e6), [`2a69802`](https://github.com/mastra-ai/mastra/commit/2a69802a0fc6d8a25a77fa6a42276e9d59a83914), [`0c4cd13`](https://github.com/mastra-ai/mastra/commit/0c4cd131931c04ac5405373c932a242dbe88edd6), [`b16a753`](https://github.com/mastra-ai/mastra/commit/b16a753d5748440248d7df82e29bb987a9c8386c)]:
+  - @mastra/core@1.25.0
+  - @mastra/schema-compat@1.2.8
+
+## 1.15.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`4ba3bb1`](https://github.com/mastra-ai/mastra/commit/4ba3bb1e465ad2ddaba3bbf2bc47e0faec32985e), [`2a69802`](https://github.com/mastra-ai/mastra/commit/2a69802a0fc6d8a25a77fa6a42276e9d59a83914)]:
+  - @mastra/core@1.25.0-alpha.2
+  - @mastra/schema-compat@1.2.8-alpha.0
+
+## 1.15.1-alpha.0
+
+### Patch Changes
+
+- Fixed gateway model detection to use duck typing instead of instanceof check, preventing potential failures from cross-package module resolution issues. Propagates `gatewayId` through the AISDKV5LanguageModel wrapper so duck-type detection works even when models are re-wrapped. ([#15168](https://github.com/mastra-ai/mastra/pull/15168))
+
+- Updated dependencies [[`87df955`](https://github.com/mastra-ai/mastra/commit/87df955c028660c075873fd5d74af28233ce32eb), [`075e91a`](https://github.com/mastra-ai/mastra/commit/075e91a4549baf46ad7a42a6a8ac8dfa78cc09e6)]:
+  - @mastra/core@1.24.2-alpha.0
+
+## 1.15.0
+
+### Minor Changes
+
+- Updated the recall tool to support more precise message browsing for agents. ([#15116](https://github.com/mastra-ai/mastra/pull/15116))
+
+  Agents using `recall` can now pass `partType` and `toolName` to narrow message results to specific parts, such as tool calls or tool results for one tool. This change also adds `threadId: "current"` support across recall modes and `anchor: "start" | "end"` for no-cursor message paging, making it easier to inspect recent thread activity and past tool usage.
+
+### Patch Changes
+
+- Fixed reflection threshold not respecting per-record overrides set via the PATCH API. Previously, lowering the reflection threshold for a specific record had no effect on the actual reflection trigger — only the default 40k threshold was used. Now per-record overrides are correctly applied in both sync and async reflection paths. ([#15170](https://github.com/mastra-ai/mastra/pull/15170))
+
+- Improved observational memory formatting to use part timestamps when rendering dates and times. ([#15121](https://github.com/mastra-ai/mastra/pull/15121))
+
+  Observer history now follows part-level timing more closely, so the rendered memory context is more accurate when messages contain parts created at different times.
+
+- Fixed message history doubling when using Observational Memory with the Mastra gateway. The local ObservationalMemoryProcessor now detects when the agent's model is routed through the Mastra gateway and skips its input/output processing, since the gateway handles OM server-side. ([#15161](https://github.com/mastra-ai/mastra/pull/15161))
+
+- Updated dependencies [[`8db7663`](https://github.com/mastra-ai/mastra/commit/8db7663c9a9c735828094c359d2e327fd4f8fba3), [`153e864`](https://github.com/mastra-ai/mastra/commit/153e86476b425db7cd0dc8490050096e92964a38), [`715710d`](https://github.com/mastra-ai/mastra/commit/715710d12fa47cf88e09d41f13843eddc29327b0), [`378c6c4`](https://github.com/mastra-ai/mastra/commit/378c6c4755726e8d8cf83a14809b350b90d46c62), [`9f91fd5`](https://github.com/mastra-ai/mastra/commit/9f91fd538ab2a44f8cc740bcad8e51205f74fbea), [`ba6fa9c`](https://github.com/mastra-ai/mastra/commit/ba6fa9cc0f3e1912c49fd70d4c3bb8c44903ddaa)]:
+  - @mastra/core@1.24.0
+
+## 1.15.0-alpha.3
+
+### Patch Changes
+
+- Fixed reflection threshold not respecting per-record overrides set via the PATCH API. Previously, lowering the reflection threshold for a specific record had no effect on the actual reflection trigger — only the default 40k threshold was used. Now per-record overrides are correctly applied in both sync and async reflection paths. ([#15170](https://github.com/mastra-ai/mastra/pull/15170))
+
+## 1.15.0-alpha.2
+
+### Patch Changes
+
+- Fixed message history doubling when using Observational Memory with the Mastra gateway. The local ObservationalMemoryProcessor now detects when the agent's model is routed through the Mastra gateway and skips its input/output processing, since the gateway handles OM server-side. ([#15161](https://github.com/mastra-ai/mastra/pull/15161))
+
+## 1.15.0-alpha.1
+
+### Patch Changes
+
+- Improved observational memory formatting to use part timestamps when rendering dates and times. ([#15121](https://github.com/mastra-ai/mastra/pull/15121))
+
+  Observer history now follows part-level timing more closely, so the rendered memory context is more accurate when messages contain parts created at different times.
+
+- Updated dependencies [[`8db7663`](https://github.com/mastra-ai/mastra/commit/8db7663c9a9c735828094c359d2e327fd4f8fba3), [`715710d`](https://github.com/mastra-ai/mastra/commit/715710d12fa47cf88e09d41f13843eddc29327b0), [`378c6c4`](https://github.com/mastra-ai/mastra/commit/378c6c4755726e8d8cf83a14809b350b90d46c62), [`9f91fd5`](https://github.com/mastra-ai/mastra/commit/9f91fd538ab2a44f8cc740bcad8e51205f74fbea), [`ba6fa9c`](https://github.com/mastra-ai/mastra/commit/ba6fa9cc0f3e1912c49fd70d4c3bb8c44903ddaa)]:
+  - @mastra/core@1.24.0-alpha.1
+
+## 1.15.0-alpha.0
+
+### Minor Changes
+
+- Updated the recall tool to support more precise message browsing for agents. ([#15116](https://github.com/mastra-ai/mastra/pull/15116))
+
+  Agents using `recall` can now pass `partType` and `toolName` to narrow message results to specific parts, such as tool calls or tool results for one tool. This change also adds `threadId: "current"` support across recall modes and `anchor: "start" | "end"` for no-cursor message paging, making it easier to inspect recent thread activity and past tool usage.
+
+## 1.14.0
+
+### Minor Changes
+
+- Added usage data to ObserveHooks callbacks and standalone reflect() return. ([#15047](https://github.com/mastra-ai/mastra/pull/15047))
+
+  **ObserveHooks:** `onObservationEnd` and `onReflectionEnd` now receive a result object containing token usage from the underlying LLM call. This enables reliable usage tracking across all observation and reflection paths (sync, async buffered, and resource-scoped).
+
+  **Standalone reflect():** `reflect()` now returns `{ reflected, record, usage? }` so callers can capture token usage without hooks.
+
+  **Examples**
+
+  ```ts
+  // Via hooks
+  await memory.observe({
+    threadId,
+    messages,
+    hooks: {
+      onObservationEnd: ({ usage }) => {
+        // usage: { inputTokens, outputTokens, totalTokens }
+      },
+      onReflectionEnd: ({ usage }) => {
+        // usage: { inputTokens, outputTokens, totalTokens }
+      },
+    },
+  });
+
+  // Via standalone reflect()
+  const { reflected, usage } = await memory.reflect(threadId, resourceId);
+  ```
+
+  Existing callbacks that accept no arguments continue to work without changes.
+
+- Added tracing support to Memory operations (recall, save, delete, update working memory). When an `observabilityContext` is provided, Memory creates `MEMORY_OPERATION` spans that capture operation type, message counts, embedding token usage, and vector result counts. Tracing is fully opt-in — existing usage without `observabilityContext` is unaffected. ([#14305](https://github.com/mastra-ai/mastra/pull/14305))
+
+  **Example usage:**
+
+  ```typescript
+  import { Memory } from '@mastra/memory';
+  import { InMemoryStore } from '@mastra/core/storage';
+
+  const memory = new Memory({ storage: new InMemoryStore() });
+
+  // Pass observabilityContext to create observable spans
+  await memory.recall({
+    threadId: 'thread-1',
+    observabilityContext: { tracingContext: { currentSpan: parentSpan } },
+  });
+
+  await memory.saveMessages({
+    messages: [userMessage, assistantMessage],
+    observabilityContext: { tracingContext: { currentSpan: parentSpan } },
+  });
+  ```
+
+- Added per-record config overrides for observation and reflection thresholds in Observational Memory. Each thread can now have its own `messageTokens` and `observationTokens` thresholds that override the instance-level defaults, without requiring a process restart or cache invalidation. If no per-record override is set, the instance-level config is used as before. ([#15102](https://github.com/mastra-ai/mastra/pull/15102))
+
+### Patch Changes
+
+- Fixed observational memory buffering so sealed assistant chunks stay split instead of being merged back into one persisted message during long tool runs. ([#14995](https://github.com/mastra-ai/mastra/pull/14995))
+
+- Fixed recall() to hide dynamic system reminder messages by default, with includeSystemReminders available when callers need raw reminder history. ([#15100](https://github.com/mastra-ai/mastra/pull/15100))
+
+- Updated dependencies [[`f32b9e1`](https://github.com/mastra-ai/mastra/commit/f32b9e115a3c754d1c8cfa3f4256fba87b09cfb7), [`7d6f521`](https://github.com/mastra-ai/mastra/commit/7d6f52164d0cca099f0b07cb2bba334360f1c8ab), [`a50d220`](https://github.com/mastra-ai/mastra/commit/a50d220b01ecbc5644d489a3d446c3bd4ab30245), [`665477b`](https://github.com/mastra-ai/mastra/commit/665477bc104fd52cfef8e7610d7664781a70c220), [`4cc2755`](https://github.com/mastra-ai/mastra/commit/4cc2755a7194cb08720ff2ab4dffb4b4a5103dfd), [`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`ed425d7`](https://github.com/mastra-ai/mastra/commit/ed425d78e7c66cbda8209fee910856f98c6c6b82), [`1371703`](https://github.com/mastra-ai/mastra/commit/1371703835080450ef3f9aea58059a95d0da2e5a), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`98f8a8b`](https://github.com/mastra-ai/mastra/commit/98f8a8bdf5761b9982f3ad3acbe7f1cc3efa71f3), [`ba6f7e9`](https://github.com/mastra-ai/mastra/commit/ba6f7e9086d8281393f2acae60fda61de3bff1f9), [`7eb2596`](https://github.com/mastra-ai/mastra/commit/7eb25960d607e07468c9a10c5437abd2deaf1e9a), [`1805ddc`](https://github.com/mastra-ai/mastra/commit/1805ddc9c9b3b14b63749735a13c05a45af43a80), [`fff91cf`](https://github.com/mastra-ai/mastra/commit/fff91cf914de0e731578aacebffdeebef82f0440), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/core@1.23.0
+
+## 1.14.0-alpha.2
+
+### Minor Changes
+
+- Added tracing support to Memory operations (recall, save, delete, update working memory). When an `observabilityContext` is provided, Memory creates `MEMORY_OPERATION` spans that capture operation type, message counts, embedding token usage, and vector result counts. Tracing is fully opt-in — existing usage without `observabilityContext` is unaffected. ([#14305](https://github.com/mastra-ai/mastra/pull/14305))
+
+  **Example usage:**
+
+  ```typescript
+  import { Memory } from '@mastra/memory';
+  import { InMemoryStore } from '@mastra/core/storage';
+
+  const memory = new Memory({ storage: new InMemoryStore() });
+
+  // Pass observabilityContext to create observable spans
+  await memory.recall({
+    threadId: 'thread-1',
+    observabilityContext: { tracingContext: { currentSpan: parentSpan } },
+  });
+
+  await memory.saveMessages({
+    messages: [userMessage, assistantMessage],
+    observabilityContext: { tracingContext: { currentSpan: parentSpan } },
+  });
+  ```
+
+- Added per-record config overrides for observation and reflection thresholds in Observational Memory. Each thread can now have its own `messageTokens` and `observationTokens` thresholds that override the instance-level defaults, without requiring a process restart or cache invalidation. If no per-record override is set, the instance-level config is used as before. ([#15102](https://github.com/mastra-ai/mastra/pull/15102))
+
+### Patch Changes
+
+- Fixed recall() to hide dynamic system reminder messages by default, with includeSystemReminders available when callers need raw reminder history. ([#15100](https://github.com/mastra-ai/mastra/pull/15100))
+
+- Updated dependencies [[`ac7baf6`](https://github.com/mastra-ai/mastra/commit/ac7baf66ef1db15e03975ef4ebb02724f015a391), [`0df8321`](https://github.com/mastra-ai/mastra/commit/0df832196eeb2450ab77ce887e8553abdd44c5a6), [`61109b3`](https://github.com/mastra-ai/mastra/commit/61109b34feb0e38d54bee4b8ca83eb7345b1d557), [`33f1ead`](https://github.com/mastra-ai/mastra/commit/33f1eadfa19c86953f593478e5fa371093b33779)]:
+  - @mastra/core@1.23.0-alpha.8
+
+## 1.14.0-alpha.1
+
+### Minor Changes
+
+- Added usage data to ObserveHooks callbacks and standalone reflect() return. ([#15047](https://github.com/mastra-ai/mastra/pull/15047))
+
+  **ObserveHooks:** `onObservationEnd` and `onReflectionEnd` now receive a result object containing token usage from the underlying LLM call. This enables reliable usage tracking across all observation and reflection paths (sync, async buffered, and resource-scoped).
+
+  **Standalone reflect():** `reflect()` now returns `{ reflected, record, usage? }` so callers can capture token usage without hooks.
+
+  **Examples**
+
+  ```ts
+  // Via hooks
+  await memory.observe({
+    threadId,
+    messages,
+    hooks: {
+      onObservationEnd: ({ usage }) => {
+        // usage: { inputTokens, outputTokens, totalTokens }
+      },
+      onReflectionEnd: ({ usage }) => {
+        // usage: { inputTokens, outputTokens, totalTokens }
+      },
+    },
+  });
+
+  // Via standalone reflect()
+  const { reflected, usage } = await memory.reflect(threadId, resourceId);
+  ```
+
+  Existing callbacks that accept no arguments continue to work without changes.
+
+### Patch Changes
+
+- Updated dependencies [[`fff91cf`](https://github.com/mastra-ai/mastra/commit/fff91cf914de0e731578aacebffdeebef82f0440)]:
+  - @mastra/core@1.23.0-alpha.4
+
 ## 1.13.2-alpha.0
 
 ### Patch Changes

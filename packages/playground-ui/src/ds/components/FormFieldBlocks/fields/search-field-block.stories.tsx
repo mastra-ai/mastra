@@ -1,11 +1,20 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { SearchFieldBlock, type SearchFieldBlockProps } from './search-field-block';
+import { TooltipProvider } from '../../Tooltip';
 
 function SearchFieldBlockControlled(props: SearchFieldBlockProps) {
   const [value, setValue] = useState(props.value ?? '');
+  const [isMinimized, setIsMinimized] = useState(props.isMinimized ?? false);
   return (
-    <SearchFieldBlock {...props} value={value} onChange={e => setValue(e.target.value)} onReset={() => setValue('')} />
+    <SearchFieldBlock
+      {...props}
+      value={value}
+      onChange={e => setValue(e.target.value)}
+      onReset={() => setValue('')}
+      isMinimized={props.isMinimized !== undefined ? isMinimized : undefined}
+      onMinimizedChange={props.isMinimized !== undefined ? setIsMinimized : undefined}
+    />
   );
 }
 
@@ -40,9 +49,11 @@ const meta: Meta<typeof SearchFieldBlock> = {
   },
   decorators: [
     Story => (
-      <div style={{ width: 320 }}>
-        <Story />
-      </div>
+      <TooltipProvider>
+        <div style={{ width: 320 }}>
+          <Story />
+        </div>
+      </TooltipProvider>
     ),
   ],
   render: args => <SearchFieldBlockControlled {...args} />,
@@ -113,6 +124,16 @@ export const HorizontalLayout: Story = {
     name: 'search',
     label: 'Search',
     layout: 'horizontal',
+  },
+};
+
+export const Minimized: Story = {
+  args: {
+    name: 'search',
+    label: 'Search',
+    labelIsHidden: true,
+    isMinimized: true,
+    size: 'sm',
   },
 };
 
