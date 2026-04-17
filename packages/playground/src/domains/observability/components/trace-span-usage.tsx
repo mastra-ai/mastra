@@ -1,5 +1,5 @@
-import type { InputTokenDetails, OutputTokenDetails } from '@mastra/core/observability';
-import type { SpanRecord } from '@mastra/core/storage';
+import type { InputTokenDetails, OutputTokenDetails } from '@mastra/core/client';
+import type { SpanRecord } from '@mastra/core/client';
 import { cn } from '@mastra/playground-ui';
 import { ArrowRightIcon, ArrowRightToLineIcon, CoinsIcon } from 'lucide-react';
 

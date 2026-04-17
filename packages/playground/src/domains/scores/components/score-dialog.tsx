@@ -1,4 +1,4 @@
-import type { ScoreRowData } from '@mastra/core/evals';
+import type { ScoreRowData } from '@mastra/core/client';
 import type { SideDialogRootProps } from '@mastra/playground-ui';
 import { Button, KeyValueList, SideDialog, TextAndIcon, getShortId, Icon, Sections } from '@mastra/playground-ui';
 import { format } from 'date-fns/format';

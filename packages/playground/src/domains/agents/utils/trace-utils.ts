@@ -1,4 +1,4 @@
-import type { SpanRecord } from '@mastra/core/storage';
+import type { SpanRecord } from '@mastra/core/client';
 import { format, isToday, isYesterday } from 'date-fns';
 
 /** Extract a readable input preview from the root span's input field */

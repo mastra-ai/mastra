@@ -1,4 +1,4 @@
-import type { ListTracesArgs, ListTracesResponse } from '@mastra/core/storage';
+import type { ListTracesArgs, ListTracesResponse } from '@mastra/core/client';
 import { useInView, is403ForbiddenError } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery, keepPreviousData } from '@tanstack/react-query';

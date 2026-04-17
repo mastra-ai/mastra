@@ -1,4 +1,4 @@
-import type { ListLogsArgs, ListLogsResponse } from '@mastra/core/storage';
+import type { ListLogsArgs, ListLogsResponse } from '@mastra/core/client';
 import { useInView } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery } from '@tanstack/react-query';

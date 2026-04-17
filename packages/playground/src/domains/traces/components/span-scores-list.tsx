@@ -1,4 +1,4 @@
-import type { ListScoresResponse, ScoreRowData } from '@mastra/core/evals';
+import type { ListScoresResponse, ScoreRowData } from '@mastra/core/client';
 import { DataList, DataListSkeleton, getShortId } from '@mastra/playground-ui';
 import { isToday, format } from 'date-fns';
 

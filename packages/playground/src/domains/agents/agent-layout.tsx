@@ -1,4 +1,4 @@
-import { coreFeatures } from '@mastra/core/features';
+import { coreFeatures } from '@mastra/core/client';
 import { MainContentLayout } from '@mastra/playground-ui';
 import { useParams, useLocation } from 'react-router';
 import { AgentHeader } from './agent-header';

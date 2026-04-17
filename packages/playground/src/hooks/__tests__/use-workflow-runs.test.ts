@@ -1,4 +1,4 @@
-import type { WorkflowRuns } from '@mastra/core/storage';
+import type { WorkflowRuns } from '@mastra/core/client';
 import { describe, it, expect } from 'vitest';
 import { getWorkflowRunsNextPageParam, selectUniqueRuns, PER_PAGE } from '../use-workflow-runs';
 

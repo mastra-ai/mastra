@@ -1,7 +1,7 @@
 import type { GetScorerResponse } from '@mastra/client-js';
-import type { ListScoresResponse } from '@mastra/core/evals';
-import { EntityType } from '@mastra/core/observability';
-import type { SpanRecord } from '@mastra/core/storage';
+import type { ListScoresResponse } from '@mastra/core/client';
+import { EntityType } from '@mastra/core/client';
+import type { SpanRecord } from '@mastra/core/client';
 import type { KeyValueListItemData } from '@mastra/playground-ui';
 import { Tabs, TabList, Tab, TabContent, KeyValueList, Section, Sections } from '@mastra/playground-ui';
 import { CircleGaugeIcon } from 'lucide-react';

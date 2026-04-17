@@ -1,5 +1,5 @@
 import type { MastraClient } from '@mastra/client-js';
-import { coreFeatures } from '@mastra/core/features';
+import { coreFeatures } from '@mastra/core/client';
 
 /**
  * Checks if a method exists on an object and is callable.

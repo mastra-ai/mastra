@@ -1,6 +1,6 @@
 'use client';
 
-import type { SpanRecord } from '@mastra/core/storage';
+import type { SpanRecord } from '@mastra/core/client';
 import { TextAndIcon, getShortId } from '@mastra/playground-ui';
 import type { SideDialogRootProps } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';

@@ -1,4 +1,4 @@
-import type { SpanRecord } from '@mastra/core/storage';
+import type { SpanRecord } from '@mastra/core/client';
 import type { ExperimentUISpan } from '../types';
 
 export const formatTraceSpans = (spans: SpanRecord[]): ExperimentUISpan[] => {

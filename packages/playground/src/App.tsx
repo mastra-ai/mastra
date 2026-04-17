@@ -1,5 +1,5 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import { coreFeatures } from '@mastra/core/features';
+import { coreFeatures } from '@mastra/core/client';
 
 // Extend window type for Mastra config
 declare global {

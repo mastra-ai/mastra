@@ -1,4 +1,4 @@
-import { RequestContext } from '@mastra/core/di';
+import { RequestContext } from '@mastra/core/client';
 import { toast } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useMutation } from '@tanstack/react-query';

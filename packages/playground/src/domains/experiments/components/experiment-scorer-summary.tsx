@@ -1,5 +1,5 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
-import type { ExperimentStatus } from '@mastra/core/storage';
+import type { ExperimentStatus } from '@mastra/core/client';
 import { EmptyState, ItemList } from '@mastra/playground-ui';
 import { GaugeIcon } from 'lucide-react';
 import { useMemo } from 'react';

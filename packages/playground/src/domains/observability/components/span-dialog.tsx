@@ -1,6 +1,6 @@
 import type { GetScorerResponse } from '@mastra/client-js';
-import type { ListScoresResponse } from '@mastra/core/evals';
-import type { SpanRecord } from '@mastra/core/storage';
+import type { ListScoresResponse } from '@mastra/core/client';
+import type { SpanRecord } from '@mastra/core/client';
 import type { KeyValueListItemData } from '@mastra/playground-ui';
 import { SideDialog, TextAndIcon, getShortId } from '@mastra/playground-ui';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';

@@ -1,4 +1,4 @@
-import type { SpanRecord } from '@mastra/core/storage';
+import type { SpanRecord } from '@mastra/core/client';
 import { format } from 'date-fns';
 import { useLinkComponent } from '@/lib/framework';
 

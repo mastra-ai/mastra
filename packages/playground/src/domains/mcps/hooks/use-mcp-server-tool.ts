@@ -1,4 +1,4 @@
-import type { RequestContext } from '@mastra/core/request-context';
+import type { RequestContext } from '@mastra/core/client';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { usePlaygroundStore } from '@/store/playground-store';

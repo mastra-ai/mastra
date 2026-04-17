@@ -1,4 +1,4 @@
-import type { EntityType } from '@mastra/core/observability';
+import type { EntityType } from '@mastra/core/client';
 import type { ReactNode } from 'react';
 
 export type UISpan = {

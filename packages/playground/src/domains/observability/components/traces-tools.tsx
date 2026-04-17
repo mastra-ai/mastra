@@ -1,4 +1,4 @@
-import type { EntityType } from '@mastra/core/observability';
+import type { EntityType } from '@mastra/core/client';
 import {
   Button,
   DatePicker,

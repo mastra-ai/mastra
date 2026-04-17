@@ -1,5 +1,5 @@
-import { TraceStatus } from '@mastra/core/storage';
-import type { ListTracesResponse, SpanRecord } from '@mastra/core/storage';
+import { TraceStatus } from '@mastra/core/client';
+import type { ListTracesResponse, SpanRecord } from '@mastra/core/client';
 import {
   Button,
   ButtonsGroup,

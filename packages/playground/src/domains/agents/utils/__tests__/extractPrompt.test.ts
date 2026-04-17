@@ -1,4 +1,4 @@
-import type { AgentInstructions } from '@mastra/core/agent';
+import type { AgentInstructions } from '@mastra/core/client';
 import { describe, it, expect } from 'vitest';
 import { extractPrompt } from '../extractPrompt';
 

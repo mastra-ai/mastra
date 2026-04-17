@@ -1,4 +1,4 @@
-import type { SpanRecord } from '@mastra/core/storage';
+import type { SpanRecord } from '@mastra/core/client';
 import { Button, ButtonWithTooltip, DataPanel, Icon, ButtonsGroup } from '@mastra/playground-ui';
 import { CircleGaugeIcon, ChevronsDownUpIcon, ChevronsUpDownIcon, Link2Icon, SaveIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';

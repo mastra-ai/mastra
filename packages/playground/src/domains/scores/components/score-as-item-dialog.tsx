@@ -1,6 +1,6 @@
 'use client';
 
-import type { ScoreRowData } from '@mastra/core/evals';
+import type { ScoreRowData } from '@mastra/core/client';
 import { TextAndIcon, getShortId } from '@mastra/playground-ui';
 import type { SideDialogRootProps } from '@mastra/playground-ui';
 import { CalculatorIcon } from 'lucide-react';

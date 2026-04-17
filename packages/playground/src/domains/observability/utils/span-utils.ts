@@ -1,4 +1,4 @@
-import type { SpanRecord } from '@mastra/core/storage';
+import type { SpanRecord } from '@mastra/core/client';
 
 type MessageLike = { role?: string; content?: unknown };
 

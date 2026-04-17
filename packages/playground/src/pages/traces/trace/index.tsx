@@ -1,5 +1,5 @@
-import type { ScoreRowData } from '@mastra/core/evals';
-import type { SpanRecord } from '@mastra/core/storage';
+import type { ScoreRowData } from '@mastra/core/client';
+import type { SpanRecord } from '@mastra/core/client';
 import {
   Button,
   ButtonWithTooltip,

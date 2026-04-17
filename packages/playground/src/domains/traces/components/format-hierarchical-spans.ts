@@ -1,4 +1,4 @@
-import type { SpanRecord } from '@mastra/core/storage';
+import type { SpanRecord } from '@mastra/core/client';
 import type { UISpan } from '../types';
 
 export const formatHierarchicalSpans = (spans: SpanRecord[]): UISpan[] => {

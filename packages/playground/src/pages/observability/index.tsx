@@ -1,4 +1,4 @@
-import { EntityType } from '@mastra/core/observability';
+import { EntityType } from '@mastra/core/client';
 import {
   ButtonWithTooltip,
   EntityListPageLayout,

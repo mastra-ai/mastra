@@ -1,5 +1,5 @@
 import type { McpToolInfo as SdkMcpToolInfo } from '@mastra/client-js';
-import type { ServerInfo } from '@mastra/core/mcp';
+import type { ServerInfo } from '@mastra/core/client';
 import { useMastraClient } from '@mastra/react';
 
 import { useQuery } from '@tanstack/react-query';

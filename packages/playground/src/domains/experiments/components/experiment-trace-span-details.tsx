@@ -1,4 +1,4 @@
-import type { SpanRecord } from '@mastra/core/storage';
+import type { SpanRecord } from '@mastra/core/client';
 import { SideDialog } from '@mastra/playground-ui';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 

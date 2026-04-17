@@ -1,4 +1,4 @@
-import type { SpanRecord } from '@mastra/core/storage';
+import type { SpanRecord } from '@mastra/core/client';
 import { describe, it, expect } from 'vitest';
 import { isTokenLimitExceeded, getTokenLimitMessage, getInputPreview } from '../span-utils';
 

@@ -1,4 +1,4 @@
-import type { SpanRecord } from '@mastra/core/storage';
+import type { SpanRecord } from '@mastra/core/client';
 import { Button, CombinedButtons, SearchFieldBlock, Icon } from '@mastra/playground-ui';
 import { XIcon, CircleDashedIcon } from 'lucide-react';
 import { Fragment, useEffect, useState } from 'react';

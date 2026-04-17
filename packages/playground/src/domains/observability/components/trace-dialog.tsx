@@ -1,5 +1,5 @@
 import type { GetScorerResponse } from '@mastra/client-js';
-import type { SpanRecord } from '@mastra/core/storage';
+import type { SpanRecord } from '@mastra/core/client';
 import {
   Button,
   ButtonsGroup,

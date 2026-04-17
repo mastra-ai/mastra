@@ -1,5 +1,5 @@
 import type { StoredAgentSkillConfig, StoredWorkspaceRef, ConditionalField } from '@mastra/client-js';
-import type { AgentInstructionBlock, StorageConditionalVariant } from '@mastra/core/storage';
+import type { AgentInstructionBlock, StorageConditionalVariant } from '@mastra/core/client';
 
 import type {
   EntityConfig,

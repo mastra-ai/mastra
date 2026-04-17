@@ -1,7 +1,7 @@
 import type { GetScorerResponse } from '@mastra/client-js';
-import type { ListScoresResponse, ScoreRowData } from '@mastra/core/evals';
-import { EntityType } from '@mastra/core/observability';
-import type { SpanRecord } from '@mastra/core/storage';
+import type { ListScoresResponse, ScoreRowData } from '@mastra/core/client';
+import { EntityType } from '@mastra/core/client';
+import type { SpanRecord } from '@mastra/core/client';
 import {
   Alert,
   AlertTitle,

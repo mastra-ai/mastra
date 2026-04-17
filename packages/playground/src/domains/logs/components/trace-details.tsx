@@ -1,4 +1,4 @@
-import type { SpanRecord } from '@mastra/core/storage';
+import type { SpanRecord } from '@mastra/core/client';
 import { DataDetailsPanel } from '@mastra/playground-ui';
 import { useEffect, useMemo, useState } from 'react';
 import { useTraceSpans } from '../hooks/use-trace-spans';

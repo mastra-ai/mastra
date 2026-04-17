@@ -1,5 +1,5 @@
 import type { TemplateInstallationRequest } from '@mastra/client-js';
-import { RequestContext } from '@mastra/core/request-context';
+import { RequestContext } from '@mastra/core/client';
 import { useMastraClient } from '@mastra/react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useState } from 'react';

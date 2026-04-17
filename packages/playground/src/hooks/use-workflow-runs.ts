@@ -1,4 +1,4 @@
-import type { WorkflowRuns } from '@mastra/core/storage';
+import type { WorkflowRuns } from '@mastra/core/client';
 import { toast, useInView } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';

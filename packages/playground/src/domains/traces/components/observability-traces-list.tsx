@@ -1,5 +1,5 @@
-import type { ScoreRowData } from '@mastra/core/evals';
-import type { SpanRecord } from '@mastra/core/storage';
+import type { ScoreRowData } from '@mastra/core/client';
+import type { SpanRecord } from '@mastra/core/client';
 import { TracesDataList, DataListSkeleton, cn } from '@mastra/playground-ui';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';

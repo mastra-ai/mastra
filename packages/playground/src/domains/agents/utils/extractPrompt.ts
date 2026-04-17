@@ -1,4 +1,4 @@
-import type { AgentInstructions } from '@mastra/core/agent';
+import type { AgentInstructions } from '@mastra/core/client';
 
 const resolveInstructionPart = (part: any) => {
   if (typeof part === 'string') {

@@ -1,4 +1,4 @@
-import type { SpanRecord } from '@mastra/core/storage';
+import type { SpanRecord } from '@mastra/core/client';
 import { LogsDataList, LogsDataListSkeleton, cn } from '@mastra/playground-ui';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { LogRecord } from '../types';

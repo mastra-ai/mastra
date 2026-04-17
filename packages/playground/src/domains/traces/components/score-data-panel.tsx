@@ -1,4 +1,4 @@
-import type { ScoreRowData } from '@mastra/core/evals';
+import type { ScoreRowData } from '@mastra/core/client';
 import { Button, ButtonsGroup, DataKeysAndValues, DataPanel, Icon, cn } from '@mastra/playground-ui';
 import { format } from 'date-fns/format';
 import { FileInputIcon, FileOutputIcon, GaugeIcon, ReceiptText, SaveIcon } from 'lucide-react';

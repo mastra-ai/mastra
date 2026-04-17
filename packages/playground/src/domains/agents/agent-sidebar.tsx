@@ -1,4 +1,4 @@
-import type { StorageThreadType } from '@mastra/core/memory';
+import type { StorageThreadType } from '@mastra/core/client';
 import { ChatThreads } from '@/domains/agents/components/chat-threads';
 import { useDeleteThread } from '@/domains/memory/hooks/use-memory';
 import { useLinkComponent } from '@/lib/framework';

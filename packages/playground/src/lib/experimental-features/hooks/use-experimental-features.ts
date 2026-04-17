@@ -1,4 +1,4 @@
-import { coreFeatures } from '@mastra/core/features';
+import { coreFeatures } from '@mastra/core/client';
 
 /**
  * Hook to check if experimental features are enabled.

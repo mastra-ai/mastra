@@ -1,4 +1,4 @@
-import type { ListTracesResponse } from '@mastra/core/storage';
+import type { ListTracesResponse } from '@mastra/core/client';
 import { describe, it, expect } from 'vitest';
 import { getTracesNextPageParam, selectUniqueTraces } from '../use-traces';
 

@@ -1,5 +1,5 @@
 import type { McpToolInfo } from '@mastra/client-js';
-import type { ServerInfo } from '@mastra/core/mcp';
+import type { ServerInfo } from '@mastra/core/client';
 import {
   Badge,
   CopyButton,

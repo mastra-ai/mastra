@@ -2,7 +2,7 @@ import type { ThreadMessageLike, AppendMessage } from '@assistant-ui/react';
 import { useExternalStoreRuntime, AssistantRuntimeProvider } from '@assistant-ui/react';
 import type { UIMessageWithMetadata } from '@mastra/client-js';
 import { MastraClient } from '@mastra/client-js';
-import { RequestContext } from '@mastra/core/di';
+import { RequestContext } from '@mastra/core/client';
 import type { CoreUserMessage } from '@mastra/core/llm';
 import { fileToBase64 } from '@mastra/playground-ui';
 import type { MastraUIMessage } from '@mastra/react';

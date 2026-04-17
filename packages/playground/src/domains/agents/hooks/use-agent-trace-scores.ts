@@ -1,5 +1,5 @@
-import { EntityType } from '@mastra/core/observability';
-import type { ScoreRecord } from '@mastra/core/storage';
+import { EntityType } from '@mastra/core/client';
+import type { ScoreRecord } from '@mastra/core/client';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';

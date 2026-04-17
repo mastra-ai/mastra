@@ -1,5 +1,5 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
-import type { ExperimentStatus } from '@mastra/core/storage';
+import type { ExperimentStatus } from '@mastra/core/client';
 import { useInView } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query';

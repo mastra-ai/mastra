@@ -1,4 +1,4 @@
-import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import type { MastraDBMessage } from '@mastra/core/client';
 import { useMastraClient } from '@mastra/react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { usePlaygroundStore } from '@/store/playground-store';

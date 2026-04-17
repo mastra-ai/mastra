@@ -1,4 +1,4 @@
-import type { ListScoresResponse, ScoreRowData } from '@mastra/core/evals';
+import type { ListScoresResponse, ScoreRowData } from '@mastra/core/client';
 import {
   EntryList,
   EntryListSkeleton,

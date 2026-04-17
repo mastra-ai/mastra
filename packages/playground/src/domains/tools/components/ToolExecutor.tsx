@@ -1,5 +1,5 @@
 import { jsonLanguage } from '@codemirror/lang-json';
-import type { MCPToolType } from '@mastra/core/mcp';
+import type { MCPToolType } from '@mastra/core/client';
 import { useCodemirrorTheme, CopyButton, MainContentContent, Tabs, Tab, TabList, cn } from '@mastra/playground-ui';
 import CodeMirror from '@uiw/react-codemirror';
 import { useState } from 'react';
