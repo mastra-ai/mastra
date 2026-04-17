@@ -217,7 +217,7 @@
         "default": "./dist/client/index.js"
       },
       "require": {
-        "types": "./dist/client/index.d.cts",
+        "types": "./dist/client/index.d.ts",
         "default": "./dist/client/index.cjs"
       }
     },

@@ -1,6 +1,5 @@
 import type { GetAgentResponse, UIMessageWithMetadata } from '@mastra/client-js';
-import type { LLMStepResult } from '@mastra/core/client';
-import type { AiMessageType } from '@mastra/core/client';
+import type { AiMessageType, LLMStepResult } from '@mastra/core/client';
 import type { MastraUIMessage } from '@mastra/react';
 
 export type Message = AiMessageType;
