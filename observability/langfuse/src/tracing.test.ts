@@ -189,6 +189,22 @@ describe('LangfuseExporter', () => {
       );
     });
 
+    it('passes batch controls to LangfuseSpanProcessor', () => {
+      exporter = new LangfuseExporter({
+        publicKey: 'pk-test',
+        secretKey: 'sk-test',
+        flushAt: 200,
+        flushInterval: 15,
+      });
+
+      expect(processorConstructorArgs[0]).toEqual(
+        expect.objectContaining({
+          flushAt: 200,
+          flushInterval: 15,
+        }),
+      );
+    });
+
     it('creates LangfuseClient with correct config', () => {
       exporter = new LangfuseExporter({
         publicKey: 'pk-test',
