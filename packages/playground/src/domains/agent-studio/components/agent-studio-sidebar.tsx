@@ -1,8 +1,11 @@
-import { AgentIcon, LogoWithoutText, MainSidebar, useMainSidebar } from '@mastra/playground-ui';
+import { LogoWithoutText, MainSidebar, useMainSidebar } from '@mastra/playground-ui';
 import { PlusIcon, SettingsIcon, StoreIcon, SparklesIcon, PaletteIcon } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { useAgentStudioConfig } from '../hooks/use-agent-studio-config';
 import { useRecentAgents } from '../hooks/use-recent-agents';
+import { useRecentSkills } from '../hooks/use-recent-skills';
+import { AgentAvatar } from './agent-avatar';
+import { resolveAgentAvatar } from './avatar';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
@@ -24,6 +27,7 @@ export function AgentStudioSidebar() {
 
   const { config } = useAgentStudioConfig();
   const { recents, maxItems } = useRecentAgents();
+  const { recents: recentSkills } = useRecentSkills();
 
   const canWriteAgents = !rbacEnabled || hasPermission('stored-agents:write');
   const canWriteSkills = !rbacEnabled || hasPermission('stored:write');
@@ -91,6 +95,7 @@ export function AgentStudioSidebar() {
               )}
               {recents.slice(0, maxItems).map(agent => {
                 const url = `/agent-studio/agents/${agent.id}/chat`;
+                const avatarUrl = resolveAgentAvatar(agent);
                 return (
                   <MainSidebar.NavLink
                     key={agent.id}
@@ -100,7 +105,7 @@ export function AgentStudioSidebar() {
                     link={{
                       name: agent.name || agent.id,
                       url,
-                      icon: <AgentIcon />,
+                      icon: <AgentAvatar name={agent.name} avatarUrl={avatarUrl} size={18} />,
                       isOnMastraPlatform: true,
                       indent: true,
                     }}
@@ -150,18 +155,38 @@ export function AgentStudioSidebar() {
                 />
               )}
               {showMarketplaceSkills && (
-                <MainSidebar.NavLink
-                  LinkComponent={Link}
-                  state={state}
-                  isActive={isActivePath(pathname, '/agent-studio/marketplace/skills')}
-                  link={{
-                    name: 'Skills',
-                    url: '/agent-studio/marketplace/skills',
-                    icon: <SparklesIcon />,
-                    isOnMastraPlatform: true,
-                    indent: true,
-                  }}
-                />
+                <>
+                  <MainSidebar.NavLink
+                    LinkComponent={Link}
+                    state={state}
+                    isActive={isActivePath(pathname, '/agent-studio/marketplace/skills')}
+                    link={{
+                      name: 'Skills',
+                      url: '/agent-studio/marketplace/skills',
+                      icon: <SparklesIcon />,
+                      isOnMastraPlatform: true,
+                      indent: true,
+                    }}
+                  />
+                  {recentSkills.slice(0, maxItems).map(skill => {
+                    const url = `/agent-studio/marketplace/skills/${skill.id}`;
+                    return (
+                      <MainSidebar.NavLink
+                        key={skill.id}
+                        LinkComponent={Link}
+                        state={state}
+                        isActive={isActivePath(pathname, url)}
+                        link={{
+                          name: skill.name || skill.id,
+                          url,
+                          icon: <SparklesIcon />,
+                          isOnMastraPlatform: true,
+                          indent: true,
+                        }}
+                      />
+                    );
+                  })}
+                </>
               )}
             </MainSidebar.NavList>
           </MainSidebar.NavSection>

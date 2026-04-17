@@ -228,10 +228,10 @@ test.describe('Agent Studio Configure > Skills — behavior', () => {
 
     // Back on the list, the skill is visible.
     await page.goto('/agent-studio/configure/skills');
-    await expect(page.getByText(skillName)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(skillName).first()).toBeVisible({ timeout: 10000 });
 
     // Persistence across reload.
     await page.reload();
-    await expect(page.getByText(skillName)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(skillName).first()).toBeVisible({ timeout: 10000 });
   });
 });

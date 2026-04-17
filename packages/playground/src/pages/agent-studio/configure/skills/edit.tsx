@@ -3,6 +3,7 @@ import { ArrowLeftIcon, SparklesIcon, Trash2Icon } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { SkillForm } from '@/domains/agent-studio/components/skill-form';
+import { SkillSharingPanel } from '@/domains/agent-studio/components/skill-sharing-panel';
 import { useStoredSkill, useStoredSkillMutations } from '@/domains/agent-studio/hooks/use-studio-skills';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -89,6 +90,12 @@ export function AgentStudioConfigureSkillEdit() {
           </PageLayout.Column>
         </PageLayout.Row>
       </PageLayout.TopArea>
+
+      {skill && skillId && (
+        <div className="px-4 pt-4">
+          <SkillSharingPanel skillId={skillId} />
+        </div>
+      )}
 
       {skill && (
         <div className="p-4">

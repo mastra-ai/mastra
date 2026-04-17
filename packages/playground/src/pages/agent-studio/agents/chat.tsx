@@ -11,6 +11,10 @@ import {
 import { Pencil } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router';
+import { AgentAvatar } from '@/domains/agent-studio/components/agent-avatar';
+import { resolveAgentAvatar } from '@/domains/agent-studio/components/avatar';
+import { resolveVisibility } from '@/domains/agent-studio/components/visibility';
+import { VisibilityBadge } from '@/domains/agent-studio/components/visibility-badge';
 import { useRecentAgents } from '@/domains/agent-studio/hooks/use-recent-agents';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
@@ -22,6 +26,7 @@ import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-me
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-context';
 import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
+import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
@@ -47,6 +52,7 @@ export function AgentStudioAgentChat() {
   const { trackAgentOpened } = useRecentAgents();
 
   const { data: agent, isLoading: isAgentLoading } = useAgent(agentId!);
+  const { data: storedAgent } = useStoredAgent(agentId);
   const { data: memory } = useMemory(agentId!);
 
   const isNewThread = threadId === 'new';
@@ -132,6 +138,9 @@ export function AgentStudioAgentChat() {
   const newThreadUrl = `/agent-studio/agents/${agentId}/chat/new`;
   const threadUrl = (tid: string) => `/agent-studio/agents/${agentId}/chat/${tid}`;
 
+  const avatarUrl = storedAgent ? resolveAgentAvatar(storedAgent) : undefined;
+  const visibility = storedAgent?.visibility ?? resolveVisibility(storedAgent?.metadata);
+
   return (
     <TracingSettingsProvider entityId={agentId} entityType="agent">
       <AgentSettingsProvider agentId={agentId} defaultSettings={defaultSettings}>
@@ -150,7 +159,9 @@ export function AgentStudioAgentChat() {
                         <Header>
                           <HeaderTitle>
                             <LogoWithoutText className="h-5 w-8 shrink-0" />
+                            <AgentAvatar name={agent.name} avatarUrl={avatarUrl} size={24} />
                             {agent.name ?? 'Mastra Studio'}
+                            {storedAgent && <VisibilityBadge visibility={visibility} />}
                             <AuthStatus />
                           </HeaderTitle>
 

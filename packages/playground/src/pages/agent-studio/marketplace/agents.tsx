@@ -18,7 +18,11 @@ import { useStudioAgents } from '@/domains/agent-studio/hooks/use-studio-agents'
 
 export function AgentStudioMarketplaceAgents() {
   const [search, setSearch] = useState('');
-  const { agents, isLoading, error, currentUserId } = useStudioAgents({ scope: 'team', search });
+  const { agents, isLoading, error, currentUserId } = useStudioAgents({
+    scope: 'team',
+    search,
+    visibility: 'public',
+  });
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -76,7 +80,7 @@ export function AgentStudioMarketplaceAgents() {
           data-testid="marketplace-agents-grid"
         >
           {agents.map(agent => (
-            <AgentStudioCard key={agent.id} agent={agent} showAuthor currentUserId={currentUserId} />
+            <AgentStudioCard key={agent.id} agent={agent} showAuthor currentUserId={currentUserId} showStar />
           ))}
         </div>
       )}

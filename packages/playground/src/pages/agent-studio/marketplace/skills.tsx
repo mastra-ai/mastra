@@ -17,7 +17,11 @@ import { useStudioSkills } from '@/domains/agent-studio/hooks/use-studio-skills'
 
 export function AgentStudioMarketplaceSkills() {
   const [search, setSearch] = useState('');
-  const { skills, isLoading, error, currentUserId } = useStudioSkills({ scope: 'team', search });
+  const { skills, isLoading, error, currentUserId } = useStudioSkills({
+    scope: 'team',
+    search,
+    visibility: 'public',
+  });
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -81,6 +85,7 @@ export function AgentStudioMarketplaceSkills() {
               linkBasePath="/agent-studio/marketplace/skills"
               showAuthor
               currentUserId={currentUserId}
+              showStar
             />
           ))}
         </div>

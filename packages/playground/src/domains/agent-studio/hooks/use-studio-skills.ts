@@ -3,10 +3,12 @@ import type {
   ListStoredSkillsParams,
   StoredSkillResponse,
   UpdateStoredSkillParams,
+  VisibilityValue,
 } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
+import { resolveVisibility } from '../components/visibility';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 
 export type StudioSkillScope = 'all' | 'mine' | 'team';
@@ -15,6 +17,8 @@ type UseStudioSkillsOptions = {
   scope?: StudioSkillScope;
   search?: string;
   perPage?: number;
+  /** When set, only skills whose resolved visibility matches are returned. */
+  visibility?: VisibilityValue;
 };
 
 export const useListStoredSkills = (params?: ListStoredSkillsParams) => {
@@ -44,7 +48,12 @@ export const useStoredSkill = (skillId?: string) => {
   });
 };
 
-export const useStudioSkills = ({ scope = 'all', search = '', perPage = 100 }: UseStudioSkillsOptions = {}) => {
+export const useStudioSkills = ({
+  scope = 'all',
+  search = '',
+  perPage = 100,
+  visibility,
+}: UseStudioSkillsOptions = {}) => {
   const { data: user } = useCurrentUser();
   const { data, isLoading, error } = useListStoredSkills({
     orderBy: { field: 'updatedAt', direction: 'DESC' },
@@ -54,10 +63,15 @@ export const useStudioSkills = ({ scope = 'all', search = '', perPage = 100 }: U
   const skills: StoredSkillResponse[] = useMemo(() => data?.skills ?? [], [data]);
 
   const scoped = useMemo(() => {
-    if (scope === 'all' || !user?.id) return skills;
-    if (scope === 'mine') return skills.filter(s => s.authorId === user.id);
-    return skills.filter(s => !s.authorId || s.authorId !== user.id);
-  }, [skills, scope, user?.id]);
+    const byScope =
+      scope === 'all' || !user?.id
+        ? skills
+        : scope === 'mine'
+          ? skills.filter(s => s.authorId === user.id)
+          : skills.filter(s => !s.authorId || s.authorId !== user.id);
+    if (!visibility) return byScope;
+    return byScope.filter(s => (s.visibility ?? resolveVisibility(s.metadata)) === visibility);
+  }, [skills, scope, user?.id, visibility]);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();

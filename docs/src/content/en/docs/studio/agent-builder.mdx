@@ -71,6 +71,11 @@ export MASTRA_EE_LICENSE="..."
 | `marketplace.showSkills` | `boolean` | `true` | Show the Skills marketplace tab. |
 | `configure.allowSkillCreation` | `boolean` | `true` | Allow end users to publish new skills from **Configure**. |
 | `configure.allowAppearance` | `boolean` | `true` | Show the light/dark appearance toggle under **Configure**. |
+| `configure.allowAgentAvatarUpload` | `boolean` | `true` | Allow end users to upload an avatar image for agents they author. |
+| `marketplace.allowAgentStarring` | `boolean` | `true` | Allow starring agents from the Marketplace. |
+| `marketplace.allowSkillStarring` | `boolean` | `true` | Allow starring skills from the Marketplace. |
+| `marketplace.allowAgentSharing` | `boolean` | `true` | Allow authors to flip an agent's visibility to public. |
+| `marketplace.allowSkillSharing` | `boolean` | `true` | Allow authors to flip a skill's visibility to public. |
 | `recents.maxItems` | `number` | `5` | How many recent agents to surface in the sidebar. |
 
 ## Permissions
@@ -86,3 +91,26 @@ See [Studio Auth](/docs/studio/auth) for the full RBAC model.
 ## Marketplace scope
 
 The Marketplace intentionally excludes the current user's own work. Users' own agents appear in the **Agents** sidebar section, and their own skills appear under **Configure → Skills**.
+
+## Visibility, stars, and avatars
+
+Agent Builder layers three end-user features on top of stored agents and skills.
+
+### Visibility
+
+Every stored agent and skill carries a `metadata.visibility` of `'private'` or `'public'`. The **Marketplace** only surfaces items with `metadata.visibility: 'public'`. Authors flip visibility from the agent **Identity** page and the **Configure → Skills** edit page with **Share to Marketplace**. Nothing is shared by default.
+
+### Starring
+
+Starred agents and skills are stored as per-user preferences (`starredAgents`, `starredSkills`) in the new `user_preferences` storage domain. Stars are not metadata on the agent/skill itself, so non-authors can star shared work without mutating it.
+
+- Starred agents join the Agents recents sidebar.
+- Starred skills appear under **Marketplace → Skills**.
+
+Preferences are keyed by the authenticated user's id, so an auth provider must be configured for stars to persist.
+
+### Avatars
+
+Agents can have a square avatar that renders rounded on cards, in the chat header, and next to recents entries. Uploads go through `POST /stored/agents/:agentId/avatar` with a base64 payload. The client resizes to 256×256 and the server persists the URL on `metadata.avatarUrl`.
+
+Turn off uploads per deployment with `configure.allowAgentAvatarUpload: false`.

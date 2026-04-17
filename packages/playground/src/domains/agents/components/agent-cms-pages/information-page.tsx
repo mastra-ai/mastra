@@ -2,12 +2,13 @@ import { Input, Label, ScrollArea, SectionRoot, SubSectionRoot, Textarea } from 
 import { Controller } from 'react-hook-form';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { AgentSharingPanel } from '@/domains/agent-studio/components/agent-sharing-panel';
 import { SectionHeader } from '@/domains/cms';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
 import { LLMProviders, LLMModels } from '@/domains/llm';
 
 export function InformationPage() {
-  const { form, readOnly } = useAgentEditFormContext();
+  const { form, readOnly, mode, agentId } = useAgentEditFormContext();
   const {
     register,
     control,
@@ -93,6 +94,12 @@ export function InformationPage() {
             </div>
           </SubSectionRoot>
         </div>
+
+        {mode === 'edit' && agentId && !readOnly && (
+          <div className="border-t border-border1 pt-8">
+            <AgentSharingPanel agentId={agentId} />
+          </div>
+        )}
       </SectionRoot>
     </ScrollArea>
   );
