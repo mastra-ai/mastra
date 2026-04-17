@@ -397,8 +397,8 @@ renameMethods(j, root, instances, { oldMethod: 'newMethod' });
 
 BAD Manual implementation 2 passes
 const instances = new Set<string>();
-root.find(j.NewExpression).forEach(/_ ... _/);
-root.find(j.CallExpression).forEach(/_ ... _/);
+root.find(j.NewExpression).forEach(path => collectInstance(path));
+root.find(j.CallExpression).forEach(path => renameCall(path));
 
 Combine Operations
 
@@ -411,7 +411,7 @@ if (!instances.has(callee.object.name)) return;
 });
 
 BAD Multiple passes
-root.find(j.CallExpression).filter(/_ ... _/).forEach(/_ ... _/);
+root.find(j.CallExpression).filter(path => shouldRename(path)).forEach(path => renameCall(path));
 
 Add Early Returns
 
@@ -421,7 +421,7 @@ if (instances.size === 0) return; // Exit immediately if nothing to do
 
 BAD Continues even when nothing to transform
 const instances = trackClassInstances(j, root, 'ClassName');
-root.find(j.CallExpression).forEach(/_ ... _/); // Runs even if instances is empty
+root.find(j.CallExpression).forEach(path => renameCall(path)); // Runs even if instances is empty
 
 Pitfall 1 Transforming Too Much
 
