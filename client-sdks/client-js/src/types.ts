@@ -1077,6 +1077,10 @@ export interface StoredAgentResponse {
   activeVersionId?: string;
   authorId?: string;
   metadata?: Record<string, unknown>;
+  /** Convenience derived from `metadata.visibility` ('private' | 'public'). */
+  visibility?: VisibilityValue;
+  /** Convenience mirror of `metadata.avatarUrl` when set by the avatar upload route. */
+  avatarUrl?: string;
   createdAt: string;
   updatedAt: string;
   // Version snapshot config fields (resolved from active version)
@@ -1643,6 +1647,48 @@ export interface GetSystemPackagesResponse {
 }
 
 // ============================================================================
+// User Preferences
+// ============================================================================
+
+/** Visibility of a marketplace item. */
+export type VisibilityValue = 'private' | 'public';
+
+/** Agent Studio-scoped preferences persisted per user. */
+export interface AgentStudioPreferences {
+  starredAgents?: string[];
+  starredSkills?: string[];
+  previewMode?: boolean;
+  appearance?: 'light' | 'dark';
+  agentsView?: 'grid' | 'list';
+  agentsScope?: 'all' | 'mine' | 'team';
+}
+
+/** Response from GET /user/preferences. */
+export interface UserPreferencesResponse {
+  userId: string;
+  agentStudio: AgentStudioPreferences;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Body for PATCH /user/preferences. */
+export interface UpdateUserPreferencesParams {
+  agentStudio?: AgentStudioPreferences;
+}
+
+/** Body for POST /stored/agents/:id/avatar. */
+export interface UploadAgentAvatarParams {
+  contentBase64: string;
+  contentType: 'image/png' | 'image/jpeg' | 'image/webp';
+}
+
+/** Response from POST /stored/agents/:id/avatar. */
+export interface UploadAgentAvatarResponse {
+  avatarUrl: string;
+}
+
+// ============================================================================
 // Workspace Types
 // ============================================================================
 
@@ -1936,6 +1982,8 @@ export interface StoredSkillResponse {
   status: string;
   authorId?: string;
   metadata?: Record<string, unknown>;
+  /** Convenience derived from `metadata.visibility` ('private' | 'public'). */
+  visibility?: VisibilityValue;
   createdAt: string;
   updatedAt: string;
   name: string;

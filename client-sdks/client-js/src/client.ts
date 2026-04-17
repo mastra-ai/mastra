@@ -138,6 +138,8 @@ import type {
   CreateStoredSkillParams,
   StoredSkillResponse,
   GetSystemPackagesResponse,
+  UserPreferencesResponse,
+  UpdateUserPreferencesParams,
   ListScoresResponse as ListScoresResponseOld,
   GetObservationalMemoryParams,
   GetObservationalMemoryResponse,
@@ -1434,6 +1436,29 @@ export class MastraClient extends BaseResource {
    */
   public getSystemPackages(): Promise<GetSystemPackagesResponse> {
     return this.request('/system/packages');
+  }
+
+  // ============================================================================
+  // User Preferences
+  // ============================================================================
+
+  /**
+   * Retrieves the authenticated user's Agent Studio preferences.
+   * Returns safe defaults if no record has been persisted yet.
+   */
+  public getUserPreferences(): Promise<UserPreferencesResponse> {
+    return this.request('/user/preferences');
+  }
+
+  /**
+   * Partially updates the authenticated user's preferences.
+   * Missing keys are preserved; arrays are replaced, not merged.
+   */
+  public updateUserPreferences(params: UpdateUserPreferencesParams): Promise<UserPreferencesResponse> {
+    return this.request('/user/preferences', {
+      method: 'PATCH',
+      body: params,
+    });
   }
 
   // ============================================================================

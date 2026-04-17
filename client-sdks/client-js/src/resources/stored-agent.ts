@@ -12,6 +12,8 @@ import type {
   ActivateAgentVersionResponse,
   CompareVersionsResponse,
   DeleteAgentVersionResponse,
+  UploadAgentAvatarParams,
+  UploadAgentAvatarResponse,
 } from '../types';
 import { requestContextQueryString } from '../utils';
 
@@ -75,6 +77,20 @@ export class StoredAgent extends BaseResource {
         method: 'DELETE',
       },
     );
+  }
+
+  /**
+   * Uploads an avatar image for the stored agent. The server stores it as a data URL
+   * on the agent's `metadata.avatarUrl` so that list/detail responses can render it
+   * without a second round trip.
+   * @param params - Base64-encoded image content and mime type
+   * @returns Promise containing the resolved avatar URL
+   */
+  uploadAvatar(params: UploadAgentAvatarParams): Promise<UploadAgentAvatarResponse> {
+    return this.request(`/stored/agents/${encodeURIComponent(this.storedAgentId)}/avatar`, {
+      method: 'POST',
+      body: params,
+    });
   }
 
   // ==========================================================================
