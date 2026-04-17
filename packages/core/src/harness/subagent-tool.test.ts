@@ -239,6 +239,48 @@ describe('createSubagentTool requestContext forwarding', () => {
     expect(streamCall[1].requestContext).toBeInstanceOf(RequestContext);
     expect(result.isError).toBe(false);
   });
+
+  it('forwards tracingContext to subagent.stream when provided', async () => {
+    mockStream.mockResolvedValue(createMockStreamResponse('result text'));
+
+    const tool = createSubagentTool({
+      subagents,
+      resolveModel,
+      fallbackModelId: 'test-model',
+    });
+
+    const mockSpan = { spanContext: () => ({ traceId: 'abc', spanId: 'def' }) };
+    const tracingContext = { currentSpan: mockSpan as any };
+
+    await (tool as any).execute(
+      { agentType: 'explore', task: 'Explore with tracing' },
+      { agent: { toolCallId: 'tc-tracing-1' }, tracingContext },
+    );
+
+    expect(mockStream).toHaveBeenCalledTimes(1);
+    const streamOpts = mockStream.mock.calls[0]![1];
+    expect(streamOpts).toHaveProperty('tracingContext');
+    expect(streamOpts.tracingContext).toBe(tracingContext);
+  });
+
+  it('does not include tracingContext in subagent.stream when not provided', async () => {
+    mockStream.mockResolvedValue(createMockStreamResponse('result text'));
+
+    const tool = createSubagentTool({
+      subagents,
+      resolveModel,
+      fallbackModelId: 'test-model',
+    });
+
+    await (tool as any).execute(
+      { agentType: 'explore', task: 'Explore without tracing' },
+      { agent: { toolCallId: 'tc-tracing-2' } },
+    );
+
+    expect(mockStream).toHaveBeenCalledTimes(1);
+    const streamOpts = mockStream.mock.calls[0]![1];
+    expect(streamOpts).not.toHaveProperty('tracingContext');
+  });
 });
 
 describe('createSubagentTool workspace propagation', () => {
