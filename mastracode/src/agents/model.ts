@@ -1,4 +1,5 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
+import { createOpenAI } from '@ai-sdk/openai';
 import type { LanguageModelV1 } from '@ai-sdk/provider';
 import type { MastraLanguageModel } from '@mastra/core/agent';
 import type { HarnessRequestContext } from '@mastra/core/harness';
@@ -36,9 +37,22 @@ export function resolveModel(modelId: string): LanguageModelV1 | MastraLanguageM
       name: 'moonshotai.anthropicv1',
     })(modelId.substring('moonshotai/'.length));
   } else if (isAnthropicModel) {
-    return opencodeClaudeMaxProvider(modelId.substring(`anthropic/`.length));
-  } else if (isOpenAIModel && authStorage.isLoggedIn('openai-codex')) {
-    return openaiCodexProvider(modelId.substring(`openai/`.length));
+    const bareModelId = modelId.substring('anthropic/'.length);
+    const apiKey = authStorage.getStoredApiKey('anthropic') ?? process.env.ANTHROPIC_API_KEY;
+    if (apiKey) {
+      return createAnthropic({ apiKey })(bareModelId);
+    }
+    return opencodeClaudeMaxProvider(bareModelId);
+  } else if (isOpenAIModel) {
+    const bareModelId = modelId.substring('openai/'.length);
+    if (authStorage.isLoggedIn('openai-codex')) {
+      return openaiCodexProvider(bareModelId);
+    }
+    const apiKey = authStorage.getStoredApiKey('openai-codex') ?? process.env.OPENAI_API_KEY;
+    if (apiKey) {
+      return createOpenAI({ apiKey }).chat(bareModelId);
+    }
+    return new ModelRouterLanguageModel(modelId);
   } else {
     return new ModelRouterLanguageModel(modelId);
   }
