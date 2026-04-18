@@ -32,8 +32,8 @@ export class NoOpSpan<TType extends SpanType = any> extends BaseSpan<TType> {
     return false;
   }
 
-  // NoOpSpan is never exported, so skip deepClean of its attributes/metadata/etc.
-  protected override get alwaysSkipSerialization(): boolean {
+  // NoOpSpan is never exported, so treat it as always excluded.
+  protected override get alwaysExcluded(): boolean {
     return true;
   }
 }

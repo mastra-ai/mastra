@@ -147,27 +147,27 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   /** Deep clean options for serialization */
   protected deepCleanOptions: DeepCleanOptions;
   /**
-   * Whether this span will never reach exporters. When true, BaseSpan/
+   * Whether this span is filtered out before export. When true, BaseSpan/
    * DefaultSpan skip attaching attributes/input/output/errorInfo/requestContext
-   * entirely -- they are never read on filtered spans, and skipping avoids
+   * entirely -- they are never read on excluded spans, and skipping avoids
    * both the deepClean cost and holding references to large payloads for
    * the lifetime of the span. Set when excludeSpanTypes drops the type,
    * when the span is internal and includeInternalSpans is false, or when
-   * the subclass is a NoOpSpan.
+   * the subclass is always excluded (e.g., NoOpSpan).
    *
    * Note: metadata is still attached and deepCleaned because it is read in
    * process by getCorrelationContext() and by getLoggerContext() /
    * getMetricsContext() (which structuredClone it).
    */
-  protected shouldSkipSerialization: boolean;
+  protected isExcluded: boolean;
   /** Cached canonical correlation context for this live span */
   protected correlationContext?: CorrelationContext;
 
   /**
-   * Subclasses can override to unconditionally skip serialization.
+   * Subclasses can override to unconditionally mark the span as excluded.
    * NoOpSpan uses this because it is never exported regardless of config.
    */
-  protected get alwaysSkipSerialization(): boolean {
+  protected get alwaysExcluded(): boolean {
     return false;
   }
 
@@ -185,8 +185,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     // skip both the deepClean cost and the retention of large payload
     // references for the lifetime of the span (notably per-chunk
     // MODEL_CHUNK spans when excludeSpanTypes: [MODEL_CHUNK] is set).
-    this.shouldSkipSerialization =
-      this.alwaysSkipSerialization ||
+    this.isExcluded =
+      this.alwaysExcluded ||
       observabilityConfig.excludeSpanTypes?.includes(this.type) === true ||
       (this.isInternal && !observabilityConfig.includeInternalSpans);
 
@@ -212,7 +212,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.entityId = options.entityId ?? entityParent?.entityId;
     this.entityName = options.entityName ?? entityParent?.entityName;
 
-    if (this.shouldSkipSerialization) {
+    if (this.isExcluded) {
       // Keep the shape of attributes stable for any live-span reader.
       // input/output/errorInfo/requestContext stay undefined.
       this.attributes = {} as SpanTypeMap[TType];

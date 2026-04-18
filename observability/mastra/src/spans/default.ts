@@ -70,7 +70,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     if (options?.metadata) {
       this.metadata = { ...this.metadata, ...deepClean(options.metadata, this.deepCleanOptions) };
     }
-    if (this.shouldSkipSerialization) {
+    if (this.isExcluded) {
       // Span is filtered before export; skip attaching heavy fields.
       return;
     }
@@ -94,7 +94,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
       this.metadata = { ...this.metadata, ...deepClean(metadata, this.deepCleanOptions) };
     }
 
-    if (!this.shouldSkipSerialization) {
+    if (!this.isExcluded) {
       this.errorInfo = deepClean(
         error instanceof MastraError
           ? {
@@ -142,7 +142,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     if (options.metadata) {
       this.metadata = { ...this.metadata, ...deepClean(options.metadata, this.deepCleanOptions) };
     }
-    if (this.shouldSkipSerialization) {
+    if (this.isExcluded) {
       return;
     }
     if (options.input !== undefined) {
