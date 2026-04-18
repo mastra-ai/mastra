@@ -157,17 +157,20 @@ export function summarizeToolChoiceForSpan(
     candidate =>
       candidate.summary.id === toolKey || candidate.summary.name === toolKey || candidate.registryKey === toolKey,
   );
+  const fallbackToolId = readString(toolChoice.toolId) ?? toolKey;
+  const fallbackToolName = readString(toolChoice.toolName) ?? toolKey;
 
   return {
     type,
-    ...(match
+    tool: match
       ? {
-          tool: {
-            id: match.summary.id,
-            name: match.summary.name,
-          },
+          id: match.summary.id,
+          name: match.summary.name,
         }
-      : {}),
+      : {
+          id: fallbackToolId,
+          name: fallbackToolName,
+        },
   };
 }
 

@@ -202,14 +202,22 @@ function buildProcessInputStepSpanOutput(args: {
     }
   }
 
-  if (args.result.toolChoice !== undefined || args.afterStepInput.toolChoice !== args.beforeStepInput.toolChoice) {
+  if (
+    args.result.toolChoice !== undefined ||
+    args.afterStepInput.toolChoice !== args.beforeStepInput.toolChoice ||
+    args.afterStepInput.tools !== args.beforeStepInput.tools
+  ) {
     const toolChoice = summarizeToolChoiceForSpan(args.afterStepInput.toolChoice, args.afterStepInput.tools);
     if (toolChoice) {
       output.toolChoice = toolChoice;
     }
   }
 
-  if (args.result.activeTools !== undefined || args.afterStepInput.activeTools !== args.beforeStepInput.activeTools) {
+  if (
+    args.result.activeTools !== undefined ||
+    args.afterStepInput.activeTools !== args.beforeStepInput.activeTools ||
+    args.afterStepInput.tools !== args.beforeStepInput.tools
+  ) {
     const activeTools = summarizeActiveToolsForSpan(args.afterStepInput.activeTools, args.afterStepInput.tools);
     if (activeTools) {
       output.activeTools = activeTools;
@@ -408,15 +416,15 @@ export class ProcessorRunner {
         continue;
       }
 
+      const outputMessagesBefore = processableMessages;
+      const outputSystemMessagesBefore = messageList.getAllSystemMessages();
       const defaultResult: OutputResult = {
         text: '',
         usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
         finishReason: 'unknown',
         steps: [],
       };
-      const outputMessagesBefore = processableMessages;
-      const outputSystemMessagesBefore = messageList.getAllSystemMessages();
-      const summarizedResult = summarizeProcessorResultForSpan(result ?? defaultResult);
+      const summarizedResult = result ? summarizeProcessorResultForSpan(result) : undefined;
       const currentSpan = observabilityContext?.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
@@ -1498,6 +1506,7 @@ export class ProcessorRunner {
       const processableMessages: MastraDBMessage[] = messageList.get.all.db();
       const systemMessagesBefore = messageList.getAllSystemMessages();
       const messageIdBefore = args.messageId;
+      let messageIdAfter = args.messageId;
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
@@ -1542,7 +1551,11 @@ export class ProcessorRunner {
           messageId: args.messageId,
           ...(args.rotateResponseMessageId
             ? {
-                rotateResponseMessageId: args.rotateResponseMessageId,
+                rotateResponseMessageId: () => {
+                  const nextMessageId = args.rotateResponseMessageId!();
+                  messageIdAfter = nextMessageId;
+                  return nextMessageId;
+                },
               }
             : {}),
         });
@@ -1551,8 +1564,6 @@ export class ProcessorRunner {
         const mutations = messageList.stopRecording();
         const messagesAfter = messageList.get.all.db();
         const systemMessagesAfter = messageList.getAllSystemMessages();
-        const messageIdAfter = args.messageId;
-
         const output: Record<string, unknown> = {
           retry: result?.retry ?? false,
         };
