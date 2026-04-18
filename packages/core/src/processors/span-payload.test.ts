@@ -72,6 +72,17 @@ describe('processor span summaries', () => {
         name: 'search',
       },
     ]);
+
+    expect(summarizeActiveToolsForSpan(['weather', 'search'], tools)).toEqual([
+      {
+        id: 'weather-tool',
+        name: 'Weather Tool',
+      },
+      {
+        id: 'search',
+        name: 'search',
+      },
+    ]);
   });
 
   it('normalizes toolChoice to a stable object shape', () => {
@@ -84,6 +95,13 @@ describe('processor span summaries', () => {
 
     expect(summarizeToolChoiceForSpan('auto', tools)).toEqual({ type: 'auto' });
     expect(summarizeToolChoiceForSpan({ type: 'tool', toolName: 'weather-tool' }, tools)).toEqual({
+      type: 'tool',
+      tool: {
+        id: 'weather-tool',
+        name: 'Weather Tool',
+      },
+    });
+    expect(summarizeToolChoiceForSpan({ type: 'tool', toolName: 'weather' }, tools)).toEqual({
       type: 'tool',
       tool: {
         id: 'weather-tool',

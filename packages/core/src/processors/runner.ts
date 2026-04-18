@@ -432,6 +432,7 @@ export class ProcessorRunner {
         input: {
           messages: processableMessages,
           ...(summarizedResult ? { result: summarizedResult } : {}),
+          retryCount,
         },
       });
 
@@ -1495,6 +1496,8 @@ export class ProcessorRunner {
       };
 
       const processableMessages: MastraDBMessage[] = messageList.get.all.db();
+      const systemMessagesBefore = messageList.getAllSystemMessages();
+      const messageIdBefore = args.messageId;
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
@@ -1546,9 +1549,28 @@ export class ProcessorRunner {
 
         // Stop recording and get mutations for this processor
         const mutations = messageList.stopRecording();
+        const messagesAfter = messageList.get.all.db();
+        const systemMessagesAfter = messageList.getAllSystemMessages();
+        const messageIdAfter = args.messageId;
+
+        const output: Record<string, unknown> = {
+          retry: result?.retry ?? false,
+        };
+
+        if (!areProcessorMessageArraysEqual(processableMessages, messagesAfter)) {
+          output.messages = messagesAfter;
+        }
+
+        if (!areProcessorMessageArraysEqual(systemMessagesBefore, systemMessagesAfter)) {
+          output.systemMessages = systemMessagesAfter;
+        }
+
+        if (messageIdAfter !== messageIdBefore) {
+          output.messageId = messageIdAfter;
+        }
 
         processorSpan?.end({
-          output: { retry: result?.retry ?? false },
+          output,
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
 

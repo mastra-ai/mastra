@@ -76,12 +76,30 @@ export function summarizeProcessorToolsForSpan(tools: unknown): ProcessorToolSum
   return summaries.length > 0 ? summaries : undefined;
 }
 
+function summarizeProcessorToolRegistry(
+  tools: unknown,
+): Array<{ registryKey: string; summary: ProcessorToolSummary }> | undefined {
+  if (!isPlainObject(tools)) {
+    return undefined;
+  }
+
+  const summaries = summarizeProcessorToolsForSpan(tools);
+  if (!summaries) {
+    return undefined;
+  }
+
+  return Object.keys(tools).map((registryKey, index) => ({
+    registryKey,
+    summary: summaries[index]!,
+  }));
+}
+
 export function summarizeActiveToolsForSpan(activeTools: unknown, tools?: unknown): ActiveToolSummary[] | undefined {
   if (!Array.isArray(activeTools)) {
     return undefined;
   }
 
-  const toolSummaries = summarizeProcessorToolsForSpan(tools) ?? [];
+  const toolRegistry = summarizeProcessorToolRegistry(tools) ?? [];
   const summaries = activeTools
     .map(tool => {
       const toolKey = readString(tool);
@@ -89,10 +107,13 @@ export function summarizeActiveToolsForSpan(activeTools: unknown, tools?: unknow
         return undefined;
       }
 
-      const match = toolSummaries.find(summary => summary.id === toolKey || summary.name === toolKey);
+      const match = toolRegistry.find(
+        candidate =>
+          candidate.summary.id === toolKey || candidate.summary.name === toolKey || candidate.registryKey === toolKey,
+      );
       return {
-        id: match?.id ?? toolKey,
-        name: match?.name ?? toolKey,
+        id: match?.summary.id ?? toolKey,
+        name: match?.summary.name ?? toolKey,
       };
     })
     .filter((tool): tool is ActiveToolSummary => tool !== undefined);
@@ -131,10 +152,22 @@ export function summarizeToolChoiceForSpan(
     return { type };
   }
 
-  const tool = summarizeActiveToolsForSpan([toolKey], tools)?.[0];
+  const toolRegistry = summarizeProcessorToolRegistry(tools) ?? [];
+  const match = toolRegistry.find(
+    candidate =>
+      candidate.summary.id === toolKey || candidate.summary.name === toolKey || candidate.registryKey === toolKey,
+  );
+
   return {
     type,
-    ...(tool ? { tool } : {}),
+    ...(match
+      ? {
+          tool: {
+            id: match.summary.id,
+            name: match.summary.name,
+          },
+        }
+      : {}),
   };
 }
 
