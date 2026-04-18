@@ -78,25 +78,28 @@ type FallbackFields<OUTPUT = undefined> =
   | { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never }
   | { errorStrategy: 'fallback'; fallbackValue: OUTPUT };
 
-export type StructuredOutputOptionsBase<OUTPUT = {}> = {
-  /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
-  model?: MastraModelConfig;
+/** Fields available in both direct and processor modes */
+export type StructuredOutputCommonFields<SCHEMA = unknown> = {
+  /**
+   * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
+   */
+  jsonPromptInjection?: boolean;
+  /** Validation schema to validate the output against */
+  schema: SCHEMA;
+};
+
+export type StructuredOutputProcessorFields<MODEL, OUTPUT = {}, SCHEMA = unknown> = {
+  /** Model to use for the internal structuring agent. When provided, enables two-stage processing where the main agent generates text and a separate structuring agent converts it to JSON. */
+  model: MODEL;
   /**
    * Custom instructions for the structuring agent.
    * If not provided, will generate instructions based on the schema.
    */
   instructions?: string;
-
-  /**
-   * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
-   */
-  jsonPromptInjection?: boolean;
-
   /**
    * Optional logger instance for structured logging
    */
   logger?: IMastraLogger;
-
   /**
    * Provider-specific options passed to the internal structuring agent.
    * Use this to control model behavior like reasoning effort for thinking models.
@@ -109,22 +112,39 @@ export type StructuredOutputOptionsBase<OUTPUT = {}> = {
    * ```
    */
   providerOptions?: ProviderOptions;
-} & FallbackFields<OUTPUT>;
+} & StructuredOutputCommonFields<SCHEMA> &
+  FallbackFields<OUTPUT>;
 
-export type StructuredOutputOptions<OUTPUT = {}> = StructuredOutputOptionsBase<OUTPUT> & {
-  /** Zod schema to validate the output against */
-  schema: StandardSchemaWithJSON<OUTPUT>;
-};
+export type StructuredOutputDirectFields<SCHEMA = unknown> = {
+  model?: never;
+  instructions?: never;
+  logger?: never;
+  providerOptions?: never;
+  errorStrategy?: never;
+  fallbackValue?: never;
+} & StructuredOutputCommonFields<SCHEMA>;
 
-export type PublicStructuredOutputOptions<OUTPUT = {}> = StructuredOutputOptionsBase<OUTPUT> & {
-  schema: PublicSchema<OUTPUT>;
-};
+export type StructuredOutputOptionsBase<MODEL, OUTPUT = {}, SCHEMA = unknown> =
+  | StructuredOutputProcessorFields<MODEL, OUTPUT, SCHEMA>
+  | StructuredOutputDirectFields<SCHEMA>;
 
-export type SerializableStructuredOutputOptions<OUTPUT = {}> = Omit<StructuredOutputOptionsBase<OUTPUT>, 'model'> & {
-  model?: ModelRouterModelId | OpenAICompatibleConfig;
-  /** JSON Schema to validate the output against */
-  schema: JSONSchema7;
-};
+export type StructuredOutputOptions<OUTPUT = {}> = StructuredOutputOptionsBase<
+  MastraModelConfig,
+  OUTPUT,
+  StandardSchemaWithJSON<OUTPUT>
+>;
+
+export type PublicStructuredOutputOptions<OUTPUT = {}> = StructuredOutputOptionsBase<
+  MastraModelConfig,
+  OUTPUT,
+  PublicSchema<OUTPUT>
+>;
+
+export type SerializableStructuredOutputOptions<OUTPUT = {}> = StructuredOutputOptionsBase<
+  ModelRouterModelId | OpenAICompatibleConfig,
+  OUTPUT,
+  JSONSchema7
+>;
 
 /**
  * Provide options while creating an agent.
