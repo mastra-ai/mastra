@@ -2,14 +2,30 @@
 '@mastra/core': patch
 ---
 
-Prevent LLM model and gateway credentials from leaking into observability spans.
+Fixed credential leakage in observability spans. LLM API keys, authentication headers, and gateway tokens could previously appear in span input or output data sent to telemetry backends like Datadog or OpenTelemetry collectors.
 
-**What changed**
+**What's fixed**
 
-- `ModelRouterLanguageModel` now implements `serializeForSpan()`, returning only `modelId`, `provider`, `gatewayId`, and `specificationVersion`. The underlying gateway and OpenAI-compatible config (`apiKey`, `headers`, `url`) are no longer walked when the model appears in a span input, output, attribute, or metadata.
-- Gateway classes (`MastraGateway`, `NetlifyGateway`, `ModelsDevGateway`, `AzureOpenAIGateway`) inherit a `serializeForSpan()` from `MastraModelGateway` that exposes only the gateway `id` and `name`. Credentials, cached OAuth tokens, and management secrets can no longer leak.
-- `MastraVoice` implements `serializeForSpan()` to exclude `apiKey` fields on `listeningModel`, `speechModel`, and `realtimeConfig`.
+The model router, built-in gateways (Mastra, Netlify, Models.dev, Azure OpenAI), and the voice provider base class now restrict what they expose to spans. Only public identity fields — model ID, provider, gateway ID, voice name — are included. Private configuration such as API keys, `Authorization` headers, OAuth tokens, and proxy credentials is no longer serialized into spans.
 
-**Why**
+**Recommended action**
 
-TypeScript `private` is compile-time only; at runtime those fields are enumerable and were being walked by span serialization, leaking credentials into telemetry backends (Datadog, etc.).
+- Review existing telemetry data for leaked credentials and rotate any keys that may have been captured.
+- If you maintain a custom gateway or voice provider, add a `serializeForSpan()` method to control what appears in spans. Every enumerable field on the class is otherwise serialized, including TypeScript-`private` properties.
+
+```ts
+class MyGateway extends MastraModelGateway {
+  readonly id = 'my-gateway';
+  readonly name = 'My Gateway';
+
+  constructor(private config: { apiKey: string }) {
+    super();
+  }
+
+  // Inherits a safe default from MastraModelGateway that returns
+  // only { id, name }. Override only if you need to expose more.
+  serializeForSpan() {
+    return { id: this.id, name: this.name };
+  }
+}
+```
