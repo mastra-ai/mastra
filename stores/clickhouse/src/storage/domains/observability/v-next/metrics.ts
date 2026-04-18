@@ -282,7 +282,7 @@ export async function getMetricAggregate(
   const combined = mergeFilters(nameFilter, signalFilter);
   const whereClause = toWhereClause(combined);
 
-  const sql = `SELECT ${aggSql} AS value, ${getCostSummarySelect()} FROM ${TABLE_METRIC_EVENTS} ${whereClause}`;
+  const sql = `SELECT ${aggSql} AS value, ${getCostSummarySelect()} FROM ${TABLE_METRIC_EVENTS} FINAL ${whereClause}`;
   const result = await queryJson<Record<string, unknown>>(client, sql, combined.params);
   const row = result[0] ?? {};
   const value = row.value == null ? null : Number(row.value);
@@ -327,7 +327,7 @@ export async function getMetricAggregate(
       const prevCombined = mergeFilters(nameFilter, prevSignalFilter);
       const prevWhereClause = toWhereClause(prevCombined);
 
-      const prevSql = `SELECT ${aggSql} AS value, ${getCostSummarySelect()} FROM ${TABLE_METRIC_EVENTS} ${prevWhereClause}`;
+      const prevSql = `SELECT ${aggSql} AS value, ${getCostSummarySelect()} FROM ${TABLE_METRIC_EVENTS} FINAL ${prevWhereClause}`;
       const prevResult = await queryJson<Record<string, unknown>>(client, prevSql, prevCombined.params);
       const prevRow = prevResult[0] ?? {};
       const previousValue = prevRow.value == null ? null : Number(prevRow.value);
@@ -386,7 +386,7 @@ export async function getMetricBreakdown(
 
   const sql = `
     SELECT ${selectGroupBy}, ${aggSql} AS value, ${getCostSummarySelect()}
-    FROM ${TABLE_METRIC_EVENTS}
+    FROM ${TABLE_METRIC_EVENTS} FINAL
     ${fullWhereClause}
     GROUP BY ${groupByCols}
     ORDER BY value DESC
@@ -437,7 +437,7 @@ export async function getMetricTimeSeries(
              ${selectGroupBy},
              ${aggSql} AS value,
              ${getCostSummarySelect()}
-      FROM ${TABLE_METRIC_EVENTS}
+      FROM ${TABLE_METRIC_EVENTS} FINAL
       ${tsWhereClause}
       GROUP BY bucket, ${groupByCols}
       ORDER BY bucket
@@ -486,7 +486,7 @@ export async function getMetricTimeSeries(
     SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
            ${aggSql} AS value,
            ${getCostSummarySelect()}
-    FROM ${TABLE_METRIC_EVENTS}
+    FROM ${TABLE_METRIC_EVENTS} FINAL
     ${whereClause}
     GROUP BY bucket
     ORDER BY bucket
@@ -538,7 +538,7 @@ export async function getMetricPercentiles(
     const sql = `
       SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
              quantile(${p})(value) AS pvalue
-      FROM ${TABLE_METRIC_EVENTS}
+      FROM ${TABLE_METRIC_EVENTS} FINAL
       ${whereClause}
       GROUP BY bucket
       ORDER BY bucket
