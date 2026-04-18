@@ -694,6 +694,62 @@ describe('Span', () => {
       expect(result.tracingContext).toBeUndefined();
     });
 
+    it('should strip common credential field names by default', () => {
+      const input = {
+        name: 'test',
+        apiKey: 'sk-secret',
+        clientSecret: 'client-secret-value',
+        accessToken: 'access-token-value',
+        refreshToken: 'refresh-token-value',
+        data: 'keep',
+      };
+
+      const result = deepClean(input);
+
+      expect(result.name).toBe('test');
+      expect(result.data).toBe('keep');
+      expect(result.apiKey).toBeUndefined();
+      expect(result.clientSecret).toBeUndefined();
+      expect(result.accessToken).toBeUndefined();
+      expect(result.refreshToken).toBeUndefined();
+    });
+
+    it('should strip credential fields nested inside objects', () => {
+      const input = {
+        model: {
+          provider: 'openai',
+          config: { apiKey: 'sk-should-not-leak', url: 'https://api.example.com' },
+        },
+      };
+
+      const result = deepClean(input);
+
+      expect(result.model.provider).toBe('openai');
+      expect(result.model.config.url).toBe('https://api.example.com');
+      expect(result.model.config.apiKey).toBeUndefined();
+    });
+
+    it("should honor an object's serializeForSpan() method and skip default keys on the replacement", () => {
+      class FakeModel {
+        modelId = 'gpt-4o';
+        provider = 'openai';
+        private config = { apiKey: 'sk-leak-me', headers: { Authorization: 'Bearer x' } };
+        private gateway = { name: 'proxy', apiKey: 'gateway-secret' };
+
+        serializeForSpan() {
+          return { modelId: this.modelId, provider: this.provider };
+        }
+      }
+
+      const input = { model: new FakeModel() };
+      const result = deepClean(input);
+
+      expect(result.model).toEqual({ modelId: 'gpt-4o', provider: 'openai' });
+      expect(JSON.stringify(result)).not.toContain('sk-leak-me');
+      expect(JSON.stringify(result)).not.toContain('gateway-secret');
+      expect(JSON.stringify(result)).not.toContain('Bearer x');
+    });
+
     it('should handle keysToStrip as a plain object (bundler compatibility)', () => {
       const input = { name: 'test', logger: { level: 'info' }, tracingContext: { traceId: '123' }, data: 'keep' };
       const options = {
