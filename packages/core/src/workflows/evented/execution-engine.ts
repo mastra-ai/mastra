@@ -189,6 +189,22 @@ export class EventedExecutionEngine extends ExecutionEngine {
     // Wait for workflow to complete
     const resultData: any = await resultPromise;
 
+    // Multi-branch suspend: pub/sub payload can omit sibling step rows; merge persisted snapshot
+    // so `suspended` / `steps` match storage (same guarantee as default engine).
+    if (resultData?.prevResult?.status === 'suspended' && resultData.stepResults) {
+      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+      const snap = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: params.workflowId,
+        runId: params.runId,
+      });
+      if (snap?.context && typeof snap.context === 'object') {
+        resultData.stepResults = {
+          ...(snap.context as Record<string, unknown>),
+          ...resultData.stepResults,
+        };
+      }
+    }
+
     // Extract state from resultData (stored in stepResults.__state)
     const finalState = resultData.state ?? resultData.stepResults?.__state ?? params.initialState ?? {};
 

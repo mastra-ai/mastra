@@ -14,6 +14,12 @@ import { WorkflowsStorage } from './base';
 export class WorkflowsInMemory extends WorkflowsStorage {
   private db: InMemoryDB;
 
+  /**
+   * Serializes `updateWorkflowResults` for the same workflow run so parallel branches
+   * cannot read a stale snapshot and drop another branch's step result.
+   */
+  private workflowResultUpdateChains = new Map<string, Promise<unknown>>();
+
   constructor({ db }: { db: InMemoryDB }) {
     super();
     this.db = db;
@@ -31,7 +37,27 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return `${workflowName}-${runId}`;
   }
 
-  async updateWorkflowResults({
+  async updateWorkflowResults(params: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    requestContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    const key = this.getWorkflowKey(params.workflowName, params.runId);
+    const previous = this.workflowResultUpdateChains.get(key) ?? Promise.resolve();
+    const current = previous.then(() => this.mergeWorkflowResultUpdate(params)) as Promise<
+      Record<string, StepResult<any, any, any, any>>
+    >;
+    this.workflowResultUpdateChains.set(key, current);
+    return current.finally(() => {
+      if (this.workflowResultUpdateChains.get(key) === current) {
+        this.workflowResultUpdateChains.delete(key);
+      }
+    }) as Promise<Record<string, StepResult<any, any, any, any>>>;
+  }
+
+  private mergeWorkflowResultUpdate({
     workflowName,
     runId,
     stepId,
@@ -43,7 +69,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+  }): Record<string, StepResult<any, any, any, any>> {
     const key = this.getWorkflowKey(workflowName, runId);
     const run = this.db.workflows.get(key);
 
