@@ -1121,6 +1121,15 @@
       "gateway": "models.dev",
       "npm": "@openrouter/ai-sdk-provider"
     },
+    "tencent-token-plan": {
+      "url": "https://api.lkeap.cloud.tencent.com/plan/v3",
+      "apiKeyEnvVar": "TENCENT_TOKEN_PLAN_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Tencent Token Plan",
+      "models": ["hy3-preview"],
+      "docUrl": "https://cloud.tencent.com/document/product/1823/130060",
+      "gateway": "models.dev"
+    },
     "fireworks-ai": {
       "url": "https://api.fireworks.ai/inference/v1/",
       "apiKeyEnvVar": "FIREWORKS_API_KEY",
@@ -4337,6 +4346,15 @@
       "docUrl": "https://www.qhaigc.net/docs",
       "gateway": "models.dev"
     },
+    "tencent-tokenhub": {
+      "url": "https://tokenhub.tencentmaas.com/v1",
+      "apiKeyEnvVar": "TENCENT_TOKENHUB_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Tencent TokenHub",
+      "models": ["hy3-preview"],
+      "docUrl": "https://cloud.tencent.com/document/product/1823/130050",
+      "gateway": "models.dev"
+    },
     "anthropic": {
       "apiKeyEnvVar": "ANTHROPIC_API_KEY",
       "name": "Anthropic",
@@ -5573,6 +5591,7 @@
       "z-ai/glm-5-turbo",
       "z-ai/glm-5.1"
     ],
+    "tencent-token-plan": ["hy3-preview"],
     "fireworks-ai": [
       "accounts/fireworks/models/deepseek-v3p1",
       "accounts/fireworks/models/deepseek-v3p2",
@@ -8175,6 +8194,7 @@
       "gpt-5.2",
       "gpt-5.2-codex"
     ],
+    "tencent-tokenhub": ["hy3-preview"],
     "anthropic": [
       "claude-3-5-haiku-20241022",
       "claude-3-5-haiku-latest",

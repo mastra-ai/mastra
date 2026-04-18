@@ -503,6 +503,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/tencent-token-plan',
+          label: 'Tencent Token Plan',
+        },
+        {
+          type: 'doc',
+          id: 'providers/tencent-tokenhub',
+          label: 'Tencent TokenHub',
+        },
+        {
+          type: 'doc',
           id: 'providers/the-grid-ai',
           label: 'The Grid AI',
         },

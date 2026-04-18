@@ -1025,6 +1025,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-5-turbo',
     'z-ai/glm-5.1',
   ];
+  readonly 'tencent-token-plan': readonly ['hy3-preview'];
   readonly 'fireworks-ai': readonly [
     'accounts/fireworks/models/deepseek-v3p1',
     'accounts/fireworks/models/deepseek-v3p2',
@@ -3633,6 +3634,7 @@ export type ProviderModelsMap = {
     'gpt-5.2',
     'gpt-5.2-codex',
   ];
+  readonly 'tencent-tokenhub': readonly ['hy3-preview'];
   readonly anthropic: readonly [
     'claude-3-5-haiku-20241022',
     'claude-3-5-haiku-latest',
