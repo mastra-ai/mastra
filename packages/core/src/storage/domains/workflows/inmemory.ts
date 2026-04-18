@@ -46,9 +46,10 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     const key = this.getWorkflowKey(params.workflowName, params.runId);
     const previous = this.workflowResultUpdateChains.get(key) ?? Promise.resolve();
-    const current = previous.then(() => this.mergeWorkflowResultUpdate(params)) as Promise<
-      Record<string, StepResult<any, any, any, any>>
-    >;
+    // Swallow prior rejections so one failed merge cannot skip subsequent branches' merges.
+    const current = Promise.resolve(previous)
+      .catch(() => undefined)
+      .then(() => this.mergeWorkflowResultUpdate(params));
     this.workflowResultUpdateChains.set(key, current);
     return current.finally(() => {
       if (this.workflowResultUpdateChains.get(key) === current) {
