@@ -653,6 +653,46 @@ describe('ToolSearchProcessor', () => {
       expect(loadResult.alreadyLoaded).toEqual(['weather', 'calendar']);
       expect(loadResult.notFound).toBeUndefined();
     });
+
+    it('should merge and deduplicate when both toolName and toolNames are provided', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+          calendar: createMockTool('calendar', 'Manage calendar'),
+        },
+      });
+
+      const args = createMockArgs('thread-merge');
+      const result = await processor.processInputStep(args);
+      const loadTool = result.tools?.load_tool;
+
+      // toolName 'weather' should be merged with toolNames ['calendar']
+      const loadResult = await loadTool!.execute?.({ toolName: 'weather', toolNames: ['calendar'] }, undefined);
+
+      expect(loadResult.success).toBe(true);
+      // weather from toolName, calendar from toolNames — both deduplicated
+      expect(loadResult.loaded).toEqual(expect.arrayContaining(['weather', 'calendar']));
+      expect(loadResult.loadedCount).toBe(2);
+    });
+
+    it('should deduplicate duplicate names within toolNames array', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: {
+          weather: createMockTool('weather', 'Get weather'),
+        },
+      });
+
+      const args = createMockArgs('thread-dedup');
+      const result = await processor.processInputStep(args);
+      const loadTool = result.tools?.load_tool;
+
+      // Duplicate 'weather' entries should only load once
+      const loadResult = await loadTool!.execute?.({ toolNames: ['weather', 'weather'] }, undefined);
+
+      expect(loadResult.success).toBe(true);
+      expect(loadResult.loaded).toEqual(['weather']);
+      expect(loadResult.loadedCount).toBe(1);
+    });
   });
 
   describe('processInputStep integration', () => {

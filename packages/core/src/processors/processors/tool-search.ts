@@ -343,7 +343,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     // Add system instruction about the meta-tools
     messageList.addSystem(
       'To discover available tools, call search_tools with a keyword query. ' +
-        'To add a tool to the conversation, call load_tool with the tool name. ' +
+        'To add one or more tools to the conversation, call load_tool with a toolName or toolNames array. ' +
         'Tools must be loaded before they can be used.',
     );
 
@@ -381,7 +381,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
 
         return {
           results,
-          message: `Found ${results.length} tool(s). Use load_tool with the exact tool name to make it available.`,
+          message: `Found ${results.length} tool(s). Use load_tool with an exact toolName or a toolNames array to make them available.`,
         };
       },
     });
@@ -492,7 +492,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
 
         // Multi-tool response
         const parts: string[] = [];
-        if (loaded.length > 0) parts.push(`Loaded: ${loaded.join(', ')}`);
+        if (loaded.length > 0) parts.push(`Loaded: ${loaded.join(', ')} — available on your next turn`);
         if (alreadyLoaded.length > 0) parts.push(`Already loaded: ${alreadyLoaded.join(', ')}`);
         if (notFound.length > 0) parts.push(`Not found: ${notFound.join(', ')}`);
 
