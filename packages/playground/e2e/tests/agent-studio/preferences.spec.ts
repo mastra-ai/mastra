@@ -50,10 +50,10 @@ test.describe('User preferences API gating', () => {
 
     await page.goto('/agent-studio/agents');
 
-    // Sidebar should still render with its default sections even though the
+    // Sidebar should still render its flat top-level links even when the
     // preferences fetch 401s — we fall back to empty starred lists.
-    await expect(page.locator('a[href="/agent-studio/agents/create"]')).toBeVisible();
-    await expect(page.locator('a[href="/agent-studio/library/agents"]')).toBeVisible();
-    await expect(page.locator('a[href="/agent-studio/configure/skills"]').first()).toBeVisible();
+    await expect(page.locator('nav a[href="/agent-studio/agents"]').first()).toBeVisible();
+    await expect(page.locator('nav a[href="/agent-studio/library"]').first()).toBeVisible();
+    await expect(page.locator('nav a[href="/agent-studio/configure"]').first()).toBeVisible();
   });
 });

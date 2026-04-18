@@ -23,13 +23,16 @@ test.describe('Agent Studio Projects — behavior', () => {
     await resetStorage();
   });
 
-  test('sidebar exposes Projects + New project links gated by stored-agents:write', async ({ page }) => {
+  test('sidebar exposes a top-level Projects link that routes to the projects list', async ({ page }) => {
     await setupMockAuth(page, { role: 'member', permissions: END_USER_PERMISSIONS });
 
     await page.goto('/agent-studio/agents');
 
-    await expect(page.locator('a[href="/agent-studio/projects/create"]').first()).toBeVisible();
-    await expect(page.locator('nav a[href="/agent-studio/projects"]').first()).toBeVisible();
+    const projectsLink = page.locator('nav a[href="/agent-studio/projects"]').first();
+    await expect(projectsLink).toBeVisible();
+
+    await projectsLink.click();
+    await expect(page).toHaveURL(/\/agent-studio\/projects$/);
   });
 
   test('creating a project lands on the chat view and the task pane', async ({ page }) => {

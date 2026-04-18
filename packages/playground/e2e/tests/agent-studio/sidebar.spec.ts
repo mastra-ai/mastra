@@ -34,35 +34,25 @@ test.describe('Agent Studio sidebar — behavior', () => {
     await resetStorage();
   });
 
-  test('non-admin member sees Agents + Library + Configure sections with navigable links', async ({ page }) => {
+  test('non-admin member sees flat Agents / Projects / Library / Configure links', async ({ page }) => {
     await setupMockAuth(page, { role: 'member', permissions: END_USER_PERMISSIONS });
 
     await page.goto('/agent-studio/agents');
 
-    // The end-user sidebar should render: it's the only sidebar that links to
-    // /agent-studio/agents/create via the "New agent" entry.
-    const newAgent = page.locator('a[href="/agent-studio/agents/create"]');
-    await expect(newAgent).toBeVisible();
+    // The simplified end-user sidebar exposes four top-level links.
+    const agentsLink = page.locator('nav a[href="/agent-studio/agents"]');
+    const projectsLink = page.locator('nav a[href="/agent-studio/projects"]');
+    const libraryLink = page.locator('nav a[href="/agent-studio/library"]');
+    const configureLink = page.locator('nav a[href="/agent-studio/configure"]');
 
-    // Agents section: "View all" link routes to the full agents list.
-    const viewAll = page.locator('a[href="/agent-studio/agents"]');
-    await expect(viewAll.first()).toBeVisible();
+    await expect(agentsLink.first()).toBeVisible();
+    await expect(projectsLink.first()).toBeVisible();
+    await expect(libraryLink.first()).toBeVisible();
+    await expect(configureLink.first()).toBeVisible();
 
-    // Library section: both Agents and Skills links exist (defaults enable both).
-    const libraryAgents = page.locator('a[href="/agent-studio/library/agents"]');
-    const librarySkills = page.locator('a[href="/agent-studio/library/skills"]');
-    await expect(libraryAgents).toBeVisible();
-    await expect(librarySkills).toBeVisible();
-
-    // Configure section: Skills + Appearance (defaults enable both).
-    const configureSkills = page.locator('a[href="/agent-studio/configure/skills"]');
-    const configureAppearance = page.locator('a[href="/agent-studio/configure/appearance"]');
-    await expect(configureSkills).toBeVisible();
-    await expect(configureAppearance).toBeVisible();
-
-    // Clicking a library link must actually navigate.
-    await librarySkills.click();
-    await expect(page).toHaveURL(/\/agent-studio\/library\/skills$/);
+    // Clicking the Library link navigates to the library landing route.
+    await libraryLink.first().click();
+    await expect(page).toHaveURL(/\/agent-studio\/library(\/agents)?$/);
   });
 
   test('admin without preview toggle does NOT see the end-user sidebar', async ({ page }) => {
@@ -70,10 +60,10 @@ test.describe('Agent Studio sidebar — behavior', () => {
 
     await page.goto('/');
 
-    // Admin should land on the regular Studio sidebar — the end-user "New agent"
-    // entry from the Agent Studio sidebar must not be present.
-    const newAgent = page.locator('a[href="/agent-studio/agents/create"]');
-    await expect(newAgent).toHaveCount(0);
+    // Admin should land on the regular Studio sidebar — the end-user Projects
+    // top-level link from the Agent Studio sidebar must not be present.
+    const projectsLink = page.locator('nav a[href="/agent-studio/projects"]');
+    await expect(projectsLink).toHaveCount(0);
   });
 
   test('viewer (no stored:write) does not see the "New skill" / "Create" affordances under Configure', async ({
@@ -130,10 +120,11 @@ test.describe('Agent Studio agents list — behavior', () => {
 });
 
 /**
- * FEATURE: Agent Studio recents sidebar
+ * FEATURE: Agent Studio recents tracking
  * BEHAVIOR UNDER TEST: opening an agent via /agent-studio/agents/:id/chat
- * persists the agent as a recent (localStorage, keyed by user id), and the
- * sidebar shows it on the next navigation.
+ * persists the agent as a recent in localStorage (keyed by user id). The
+ * simplified sidebar no longer surfaces recents directly, but the underlying
+ * tracking behavior is still exercised by the agents list page.
  */
 
 test.describe('Agent Studio recents — behavior', () => {
@@ -141,13 +132,13 @@ test.describe('Agent Studio recents — behavior', () => {
     await resetStorage();
   });
 
-  test('opening an agent via the studio chat route surfaces it in the recents sidebar', async ({ page }) => {
+  test('opening an agent via the studio chat route records a recent in localStorage', async ({ page }) => {
     await setupMockAuth(page, { role: 'member', permissions: END_USER_PERMISSIONS });
 
     // Seed a stored agent owned by the mock member. Stored agents are created
     // in draft status, so we also need to publish it (via version activation)
-    // so it appears in the default /stored/agents query that the recents
-    // sidebar joins against.
+    // so it appears in the default /stored/agents query the studio joins
+    // against.
     const createResponse = await page.request.post('/api/stored/agents', {
       data: {
         name: 'Recents Test Agent',
@@ -167,33 +158,22 @@ test.describe('Agent Studio recents — behavior', () => {
     );
     expect(activateResponse.ok()).toBeTruthy();
 
-    // Sanity check: the published agent must be visible to the stored-agents
-    // API the sidebar reads — otherwise the recents filter will drop it.
-    const listResponse = await page.request.get('/api/stored/agents?perPage=100');
-    expect(listResponse.ok()).toBeTruthy();
-    const listBody = (await listResponse.json()) as { agents: Array<{ id: string }> };
-    expect(listBody.agents.map(a => a.id)).toContain(agentId);
-
-    // Start at the list so the member user is loaded before we touch recents.
+    // Start on an agent-studio page so the member user is loaded into the
+    // recents hook's localStorage key.
     await page.goto('/agent-studio/agents');
     await expect(page.getByRole('heading', { name: 'Agents' }).first()).toBeVisible();
 
-    // Seed the recents localStorage directly under the member's user key —
-    // this is the same storage format the chat entry point writes on mount.
-    await page.evaluate(agentIdArg => {
-      window.localStorage.setItem(
-        `mastra.agentStudio.recents.user_member_456`,
-        JSON.stringify([{ id: agentIdArg, lastOpenedAt: Date.now() }]),
-      );
-    }, agentId);
+    // Open the studio chat route — this mounts the recents tracker.
+    await page.goto(`/agent-studio/agents/${agentId}/chat`);
 
-    // Navigate back to an agent-studio page so the sidebar re-reads recents.
-    await page.goto('/agent-studio/agents');
-
-    // The recents sidebar entry routes back to the studio chat URL once the
-    // recent id joins against the live stored-agents list.
-    const recentsLink = page.locator(`nav a[href="/agent-studio/agents/${agentId}/chat"]`);
-    await expect(recentsLink.first()).toBeVisible({ timeout: 15000 });
+    // The recents hook writes to localStorage keyed by the authenticated user.
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(() => window.localStorage.getItem('mastra.agentStudio.recents.user_member_456') ?? ''),
+        { timeout: 15000 },
+      )
+      .toContain(agentId);
   });
 });
 
