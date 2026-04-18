@@ -10,6 +10,7 @@
  */
 
 import * as crypto from 'node:crypto';
+import { realpathSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -650,16 +651,28 @@ export class LocalSandbox extends MastraSandbox {
    *
    * - Seatbelt: pushes to readWritePaths, regenerates inline profile
    * - Bwrap: pushes to readWritePaths (buildBwrapCommand reads config each call)
+   *
+   * Local mounts are symlinks under `workingDirectory`. Bubblewrap cannot
+   * `--bind` a symlink (it fails with "Unable to mount source on destination"),
+   * so we store the canonical path (`realpath`) of the mount point — the same
+   * directory the symlink refers to.
    */
-  private addMountPathToIsolation(mountPath: string): void {
+  private addMountPathToIsolation(hostPath: string): void {
     if (this.isolation === 'none') return;
+
+    let isolationPath = hostPath;
+    try {
+      isolationPath = realpathSync(hostPath);
+    } catch {
+      // Symlink not visible yet or race; keep literal path for best-effort allowlist
+    }
 
     // Add to readWritePaths
     if (!this._nativeSandboxConfig.readWritePaths) {
       this._nativeSandboxConfig = { ...this._nativeSandboxConfig, readWritePaths: [] };
     }
-    if (!this._nativeSandboxConfig.readWritePaths!.includes(mountPath)) {
-      this._nativeSandboxConfig.readWritePaths!.push(mountPath);
+    if (!this._nativeSandboxConfig.readWritePaths!.includes(isolationPath)) {
+      this._nativeSandboxConfig.readWritePaths!.push(isolationPath);
     }
 
     // Seatbelt: regenerate the inline profile so the next executeCommand() picks it up

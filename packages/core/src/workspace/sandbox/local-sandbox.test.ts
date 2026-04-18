@@ -1213,10 +1213,38 @@ describe('LocalSandbox', () => {
 
       const info = await seatbeltSandbox.getInfo();
       const isoConfig = info.metadata?.isolationConfig as { readWritePaths?: string[] } | undefined;
-      // Isolation allowlist uses the resolved host path
-      expect(isoConfig?.readWritePaths).toEqual(expect.arrayContaining([path.join(mountDir, 'seatbelt-test')]));
+      // Symlink mount points are stored as canonical paths (realpath) for native sandbox bind rules
+      expect(isoConfig?.readWritePaths).toEqual(expect.arrayContaining([path.join(mountDir, 'seatbelt-source')]));
 
       await seatbeltSandbox._destroy();
+    });
+
+    it('should add resolved symlink target to bwrap readWritePaths (not the symlink path)', async () => {
+      if (os.platform() !== 'linux' || !isBwrapAvailable()) {
+        return;
+      }
+
+      const bwrapMountRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-bwrap-mount-'));
+      const bwrapSandbox = new LocalSandbox({
+        workingDirectory: bwrapMountRoot,
+        isolation: 'bwrap',
+      });
+      await bwrapSandbox._start();
+
+      try {
+        const source = path.join(bwrapMountRoot, 'preset-skills-root');
+        await fs.mkdir(source, { recursive: true });
+
+        await bwrapSandbox.mount(makeMockLocalFs(source), '/default-skills');
+
+        const info = await bwrapSandbox.getInfo();
+        const isoConfig = info.metadata?.isolationConfig as { readWritePaths?: string[] } | undefined;
+        expect(isoConfig?.readWritePaths).toEqual(expect.arrayContaining([source]));
+        expect(isoConfig?.readWritePaths).not.toContain(path.join(bwrapMountRoot, 'default-skills'));
+      } finally {
+        await bwrapSandbox._destroy();
+        await fs.rm(bwrapMountRoot, { recursive: true, force: true });
+      }
     });
 
     it('should block mounting over a regular file', async () => {
