@@ -203,6 +203,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/digitalocean',
+          label: 'DigitalOcean',
+        },
+        {
+          type: 'doc',
           id: 'providers/dinference',
           label: 'DInference',
         },
