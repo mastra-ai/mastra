@@ -146,30 +146,58 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   protected parentSpanId?: string;
   /** Deep clean options for serialization */
   protected deepCleanOptions: DeepCleanOptions;
+  /**
+   * Whether this span will never reach exporters, so deepClean can be skipped
+   * on its attributes/metadata/requestContext/input/output/errorInfo. Set when
+   * excludeSpanTypes drops the type, when the span is internal and
+   * includeInternalSpans is false, or when the subclass is a NoOpSpan.
+   */
+  protected shouldSkipSerialization: boolean;
   /** Cached canonical correlation context for this live span */
   protected correlationContext?: CorrelationContext;
 
+  /**
+   * Subclasses can override to unconditionally skip serialization.
+   * NoOpSpan uses this because it is never exported regardless of config.
+   */
+  protected get alwaysSkipSerialization(): boolean {
+    return false;
+  }
+
   constructor(options: CreateSpanOptions<TType>, observabilityInstance: ObservabilityInstance) {
     // Get serialization options from observability instance config
-    const serializationOptions = observabilityInstance.getConfig().serializationOptions;
-    this.deepCleanOptions = mergeSerializationOptions(serializationOptions);
+    const observabilityConfig = observabilityInstance.getConfig();
+    this.deepCleanOptions = mergeSerializationOptions(observabilityConfig.serializationOptions);
 
     this.name = options.name;
     this.type = options.type;
-    this.attributes = deepClean(options.attributes, this.deepCleanOptions) || ({} as SpanTypeMap[TType]);
+    this.isInternal = isSpanInternal(this.type, options.tracingPolicy?.internal);
+
+    // Short-circuit deepClean when this span will never reach exporters.
+    // getSpanForExport() drops these same spans before export, so deepClean
+    // would just be wasted work on the hot path (notably per-chunk MODEL_CHUNK
+    // spans when excludeSpanTypes: [MODEL_CHUNK] is set).
+    //
+    // Safe because: children inherit parent metadata and then deepClean it in
+    // their own constructor. Attributes, input, output, errorInfo, and
+    // requestContext are set per-span and only read by exportSpan().
+    this.shouldSkipSerialization =
+      this.alwaysSkipSerialization ||
+      observabilityConfig.excludeSpanTypes?.includes(this.type) === true ||
+      (this.isInternal && !observabilityConfig.includeInternalSpans);
+
+    this.attributes = this.cleanForExport(options.attributes) || ({} as SpanTypeMap[TType]);
     // Metadata - inherit from parent if not explicitly provided, merge if both exist
-    this.metadata = deepClean(
+    this.metadata = this.cleanForExport(
       options.parent?.metadata || options.metadata ? { ...options.parent?.metadata, ...options.metadata } : undefined,
-      this.deepCleanOptions,
     );
     if (options.requestContext && options.requestContext.size() > 0) {
-      this.requestContext = deepClean(options.requestContext.all, this.deepCleanOptions);
+      this.requestContext = this.cleanForExport(options.requestContext.all);
     }
     this.parent = options.parent;
     this.startTime = options.startTime ?? new Date();
     this.observabilityInstance = observabilityInstance;
     this.isEvent = options.isEvent ?? false;
-    this.isInternal = isSpanInternal(this.type, options.tracingPolicy?.internal);
     this.traceState = options.traceState;
     // Tags are only set for root spans (spans without a parent)
     this.tags = !options.parent && options.tags?.length ? options.tags : undefined;
@@ -182,10 +210,16 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     if (this.isEvent) {
       // Event spans don't have endTime or input.
       // Event spans are immediately emitted by the BaseObservability class via the end() event.
-      this.output = deepClean(options.output, this.deepCleanOptions);
+      this.output = this.cleanForExport(options.output);
     } else {
-      this.input = deepClean(options.input, this.deepCleanOptions);
+      this.input = this.cleanForExport(options.input);
     }
+  }
+
+  /** Deep clean a value if this span may be exported; otherwise pass through. */
+  protected cleanForExport<T>(value: T): T {
+    if (this.shouldSkipSerialization) return value;
+    return deepClean(value, this.deepCleanOptions);
   }
 
   // Methods for span lifecycle

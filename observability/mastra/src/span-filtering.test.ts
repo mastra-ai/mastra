@@ -1,4 +1,4 @@
-import { SpanType, SamplingStrategyType } from '@mastra/core/observability';
+import { SpanType, SamplingStrategyType, InternalSpans } from '@mastra/core/observability';
 import type { TracingEvent, ObservabilityExporter, AnyExportedSpan } from '@mastra/core/observability';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
@@ -263,6 +263,148 @@ describe('Span Filtering', () => {
       const spanNames = testExporter.events.map(e => e.exportedSpan.name);
       expect(spanNames).toContain('prod-agent');
       expect(spanNames).not.toContain('dev-agent');
+    });
+  });
+
+  describe('deepClean short-circuit for filtered spans', () => {
+    // When a span will be dropped by excludeSpanTypes or by the
+    // internal-span filter, deepClean is skipped to avoid serializing
+    // payloads that will never leave the process. This is a hot-path
+    // optimization for things like per-chunk MODEL_CHUNK spans on streaming.
+
+    it('should skip deepClean on excluded span types (input/output/attributes preserved by reference)', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        excludeSpanTypes: [SpanType.MODEL_CHUNK],
+      });
+
+      const parent = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent' });
+
+      // A function-valued payload field is a cheap witness: deepClean would
+      // replace functions with '[Function]', so if the function survives,
+      // deepClean was skipped.
+      const toolResult = { fn: () => 'raw', nested: { deep: 'value' } };
+      const chunkAttributes = { chunkType: 'tool-result', sequenceNumber: 1 };
+
+      const chunk = parent.createChildSpan({
+        type: SpanType.MODEL_CHUNK,
+        name: 'chunk',
+        input: toolResult,
+        attributes: chunkAttributes,
+      });
+
+      // Same reference — no deepClean traversal happened.
+      expect((chunk as any).input).toBe(toolResult);
+      expect((chunk as any).input.fn).toBe(toolResult.fn);
+      expect((chunk as any).attributes).toBe(chunkAttributes);
+
+      parent.end();
+    });
+
+    it('should skip deepClean on internal spans when includeInternalSpans is false', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        includeInternalSpans: false,
+      });
+
+      const payload = { fn: () => 'raw' };
+
+      // WORKFLOW_STEP is marked internal when WORKFLOW internal flag is set.
+      const span = tracing.startSpan({
+        type: SpanType.WORKFLOW_STEP,
+        name: 'step',
+        input: payload,
+        tracingPolicy: { internal: InternalSpans.WORKFLOW },
+      });
+
+      expect(span.isInternal).toBe(true);
+      expect((span as any).input).toBe(payload);
+      expect((span as any).input.fn).toBe(payload.fn);
+
+      span.end();
+    });
+
+    it('should still deepClean internal spans when includeInternalSpans is true', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        includeInternalSpans: true,
+      });
+
+      const payload = { fn: () => 'raw' };
+
+      const span = tracing.startSpan({
+        type: SpanType.WORKFLOW_STEP,
+        name: 'step',
+        input: payload,
+        tracingPolicy: { internal: InternalSpans.WORKFLOW },
+      });
+
+      expect(span.isInternal).toBe(true);
+      // deepClean replaces functions with '[Function]'
+      expect((span as any).input).not.toBe(payload);
+      expect((span as any).input.fn).toBe('[Function]');
+
+      span.end();
+    });
+
+    it('should still deepClean non-excluded spans', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        excludeSpanTypes: [SpanType.MODEL_CHUNK],
+      });
+
+      const payload = { fn: () => 'raw' };
+
+      const span = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'agent',
+        input: payload,
+      });
+
+      expect((span as any).input).not.toBe(payload);
+      expect((span as any).input.fn).toBe('[Function]');
+
+      span.end();
+    });
+
+    it('should skip deepClean on excluded span updates via end()/update()', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        excludeSpanTypes: [SpanType.MODEL_CHUNK],
+      });
+
+      const parent = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent' });
+
+      const chunk = parent.createChildSpan({
+        type: SpanType.MODEL_CHUNK,
+        name: 'chunk',
+      });
+
+      const endOutput = { fn: () => 'end', data: 'x' };
+      const updateOutput = { fn: () => 'update' };
+
+      chunk.update({ output: updateOutput });
+      expect((chunk as any).output).toBe(updateOutput);
+
+      chunk.end({ output: endOutput });
+      expect((chunk as any).output).toBe(endOutput);
+
+      parent.end();
     });
   });
 

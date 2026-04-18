@@ -8,7 +8,6 @@ import type {
   CreateSpanOptions,
 } from '@mastra/core/observability';
 import { BaseSpan } from './base';
-import { deepClean } from './serialization';
 
 export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
   public id: string;
@@ -67,13 +66,13 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     }
     this.endTime = new Date();
     if (options?.output !== undefined) {
-      this.output = deepClean(options.output, this.deepCleanOptions);
+      this.output = this.cleanForExport(options.output);
     }
     if (options?.attributes) {
-      this.attributes = { ...this.attributes, ...deepClean(options.attributes, this.deepCleanOptions) };
+      this.attributes = { ...this.attributes, ...this.cleanForExport(options.attributes) };
     }
     if (options?.metadata) {
-      this.metadata = { ...this.metadata, ...deepClean(options.metadata, this.deepCleanOptions) };
+      this.metadata = { ...this.metadata, ...this.cleanForExport(options.metadata) };
     }
     // Tracing events automatically handled by base class
   }
@@ -85,7 +84,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
 
     const { error, endSpan = true, attributes, metadata } = options;
 
-    this.errorInfo = deepClean(
+    this.errorInfo = this.cleanForExport(
       error instanceof MastraError
         ? {
             id: error.id,
@@ -104,15 +103,14 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
             name: error.name,
             stack: error.stack,
           },
-      this.deepCleanOptions,
     );
 
     // Update attributes if provided
     if (attributes) {
-      this.attributes = { ...this.attributes, ...deepClean(attributes, this.deepCleanOptions) };
+      this.attributes = { ...this.attributes, ...this.cleanForExport(attributes) };
     }
     if (metadata) {
-      this.metadata = { ...this.metadata, ...deepClean(metadata, this.deepCleanOptions) };
+      this.metadata = { ...this.metadata, ...this.cleanForExport(metadata) };
     }
 
     if (endSpan) {
@@ -132,16 +130,16 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
       this.name = options.name;
     }
     if (options.input !== undefined) {
-      this.input = deepClean(options.input, this.deepCleanOptions);
+      this.input = this.cleanForExport(options.input);
     }
     if (options.output !== undefined) {
-      this.output = deepClean(options.output, this.deepCleanOptions);
+      this.output = this.cleanForExport(options.output);
     }
     if (options.attributes) {
-      this.attributes = { ...this.attributes, ...deepClean(options.attributes, this.deepCleanOptions) };
+      this.attributes = { ...this.attributes, ...this.cleanForExport(options.attributes) };
     }
     if (options.metadata) {
-      this.metadata = { ...this.metadata, ...deepClean(options.metadata, this.deepCleanOptions) };
+      this.metadata = { ...this.metadata, ...this.cleanForExport(options.metadata) };
     }
     // Tracing events automatically handled by base class
   }

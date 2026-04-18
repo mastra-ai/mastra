@@ -31,4 +31,9 @@ export class NoOpSpan<TType extends SpanType = any> extends BaseSpan<TType> {
   get isValid(): boolean {
     return false;
   }
+
+  // NoOpSpan is never exported, so skip deepClean of its attributes/metadata/etc.
+  protected override get alwaysSkipSerialization(): boolean {
+    return true;
+  }
 }
