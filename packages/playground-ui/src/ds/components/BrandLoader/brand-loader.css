@@ -1,0 +1,53 @@
+.brand-loader svg {
+  filter: drop-shadow(0 0 0.7px currentColor);
+  shape-rendering: geometricPrecision;
+}
+.brand-loader circle {
+  fill: currentColor;
+}
+.brand-loader line {
+  stroke: currentColor;
+  stroke-width: 2.8;
+  stroke-linecap: round;
+}
+.brand-loader circle,
+.brand-loader line {
+  animation: brand-loader-pulse 1.8s ease-in-out infinite;
+}
+.brand-loader .brand-loader__b1 {
+  animation-delay: 0s;
+}
+.brand-loader .brand-loader__b2 {
+  animation-delay: 0.09s;
+}
+.brand-loader .brand-loader__ln23 {
+  animation-delay: 0.135s;
+}
+.brand-loader .brand-loader__b3 {
+  animation-delay: 0.18s;
+}
+.brand-loader .brand-loader__ln34 {
+  animation-delay: 0.225s;
+}
+.brand-loader .brand-loader__b4 {
+  animation-delay: 0.27s;
+}
+.brand-loader .brand-loader__ln45 {
+  animation-delay: 0.315s;
+}
+.brand-loader .brand-loader__b5 {
+  animation-delay: 0.36s;
+}
+
+@keyframes brand-loader-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  40% {
+    opacity: 0;
+  }
+  70% {
+    opacity: 1;
+  }
+}
