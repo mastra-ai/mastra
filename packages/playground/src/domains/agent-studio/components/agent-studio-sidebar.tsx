@@ -1,11 +1,9 @@
 import { LogoWithoutText, MainSidebar, useMainSidebar } from '@mastra/playground-ui';
 import { SettingsIcon, StoreIcon, UsersIcon, BotIcon } from 'lucide-react';
 import { useLocation } from 'react-router';
-import { useShouldShowAgentStudio } from '../hooks/use-should-show-agent-studio';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { isAuthenticated } from '@/domains/auth/types';
-import { MastraVersionFooter } from '@/domains/configuration/components/mastra-version-footer';
 import { useLinkComponent } from '@/lib/framework';
 
 const isActivePath = (pathname: string, url: string): boolean => pathname === url || pathname.startsWith(url + '/');
@@ -18,7 +16,6 @@ export function AgentStudioSidebar() {
 
   const { data: authCapabilities } = useAuthCapabilities();
   const isUserAuthenticated = authCapabilities && isAuthenticated(authCapabilities);
-  const { isAdmin } = useShouldShowAgentStudio();
 
   return (
     <MainSidebar>
@@ -96,12 +93,6 @@ export function AgentStudioSidebar() {
       </MainSidebar.Nav>
 
       <MainSidebar.Bottom>
-        {isAdmin && state !== 'collapsed' && (
-          <>
-            <MainSidebar.NavSeparator />
-            <MastraVersionFooter collapsed={false} />
-          </>
-        )}
         <MainSidebar.NavSeparator />
         <div className="flex justify-end pb-3">
           <MainSidebar.Trigger />
