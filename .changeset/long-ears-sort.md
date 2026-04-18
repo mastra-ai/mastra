@@ -13,21 +13,17 @@ The `SensitiveDataFilter` span output processor already redacted values under co
 **Recommended action**
 
 - Review existing telemetry data for leaked credentials and rotate any keys that may have been captured.
-- If you maintain a custom gateway or voice provider, add a `serializeForSpan()` method to control what appears in spans. Every enumerable field on the class is otherwise serialized, including TypeScript-`private` properties.
+- Custom gateways extending `MastraModelGateway` and custom voice providers extending `MastraVoice` are automatically covered — they inherit the new safe default. Override `serializeForSpan()` only if you want to expose additional non-sensitive fields.
+- For any other class you pass into a span (e.g. as `input`, `output`, `attributes`, or `metadata`) that holds enumerable fields with credentials or other sensitive state, add a `serializeForSpan()` method. TypeScript-`private` properties are still walked by span serialization because `private` is compile-time only.
 
 ```ts
-class MyGateway extends MastraModelGateway {
-  readonly id = 'my-gateway';
-  readonly name = 'My Gateway';
+class MyServiceClient {
+  constructor(private config: { apiKey: string; endpoint: string }) {}
 
-  constructor(private config: { apiKey: string }) {
-    super();
-  }
-
-  // Inherits a safe default from MastraModelGateway that returns
-  // only { id, name }. Override only if you need to expose more.
+  // Without this, spans carrying a MyServiceClient instance would
+  // serialize `config.apiKey` through every enumerable property.
   serializeForSpan() {
-    return { id: this.id, name: this.name };
+    return { endpoint: this.config.endpoint };
   }
 }
 ```
