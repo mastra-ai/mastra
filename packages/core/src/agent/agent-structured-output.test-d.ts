@@ -55,5 +55,28 @@ describe('Agent Structured Output Type Tests', () => {
       providerOptions: { openai: { reasoningEffort: 'low' } },
       schema: z.object({ name: z.string() }),
     };
+
+    // @ts-expect-error - errorStrategy requires model
+    const _opt4: PublicStructuredOutputOptions<{ name: string }> = {
+      errorStrategy: 'warn',
+      schema: z.object({ name: z.string() }),
+    };
+
+    // @ts-expect-error - fallbackValue requires model
+    const _opt5: PublicStructuredOutputOptions<{ name: string }> = {
+      errorStrategy: 'fallback',
+      fallbackValue: { name: 'default' },
+      schema: z.object({ name: z.string() }),
+    };
+  });
+
+  it('should allow fallback fields in Processor Mode', () => {
+    const options: PublicStructuredOutputOptions<{ name: string }> = {
+      model: 'openai/gpt-4o',
+      schema: z.object({ name: z.string() }),
+      errorStrategy: 'fallback',
+      fallbackValue: { name: 'default' },
+    };
+    expectTypeOf(options).toBeObject();
   });
 });
