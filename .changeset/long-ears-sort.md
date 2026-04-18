@@ -1,5 +1,4 @@
 ---
-'@mastra/observability': patch
 '@mastra/core': patch
 ---
 

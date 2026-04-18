@@ -29,11 +29,6 @@
 /**
  * Default keys to strip from objects during deep cleaning.
  * These are typically internal/sensitive fields that shouldn't be traced.
- *
- * Match is exact (case- and separator-sensitive), so this is a minimal
- * belt-and-suspenders list for common camelCase credential field names.
- * For broader coverage (partial matches, separator normalization), use
- * the `SensitiveDataFilter` span output processor.
  */
 export const DEFAULT_KEYS_TO_STRIP = new Set([
   'logger',
@@ -43,12 +38,6 @@ export const DEFAULT_KEYS_TO_STRIP = new Set([
   'tracingContext',
   'execute', // Tool execute functions
   'validate', // Schema validate functions
-  // Sensitive credential fields (camelCase). Classes carrying these should
-  // also implement `serializeForSpan()` — this list is a safety net.
-  'apiKey',
-  'clientSecret',
-  'accessToken',
-  'refreshToken',
 ]);
 
 export interface DeepCleanOptions {

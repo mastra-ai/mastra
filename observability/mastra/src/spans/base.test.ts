@@ -694,45 +694,12 @@ describe('Span', () => {
       expect(result.tracingContext).toBeUndefined();
     });
 
-    it('should strip common credential field names by default', () => {
-      const input = {
-        name: 'test',
-        apiKey: 'sk-secret',
-        clientSecret: 'client-secret-value',
-        accessToken: 'access-token-value',
-        refreshToken: 'refresh-token-value',
-        data: 'keep',
-      };
-
-      const result = deepClean(input);
-
-      expect(result.name).toBe('test');
-      expect(result.data).toBe('keep');
-      expect(result.apiKey).toBeUndefined();
-      expect(result.clientSecret).toBeUndefined();
-      expect(result.accessToken).toBeUndefined();
-      expect(result.refreshToken).toBeUndefined();
-    });
-
-    it('should strip credential fields nested inside objects', () => {
-      const input = {
-        model: {
-          provider: 'openai',
-          config: { apiKey: 'sk-should-not-leak', url: 'https://api.example.com' },
-        },
-      };
-
-      const result = deepClean(input);
-
-      expect(result.model.provider).toBe('openai');
-      expect(result.model.config.url).toBe('https://api.example.com');
-      expect(result.model.config.apiKey).toBeUndefined();
-    });
-
-    it("should honor an object's serializeForSpan() method and skip default keys on the replacement", () => {
+    it("should honor an object's serializeForSpan() method so private fields are not walked", () => {
       class FakeModel {
         modelId = 'gpt-4o';
         provider = 'openai';
+        // TypeScript-private fields are enumerable at runtime; serializeForSpan
+        // gives classes a hook to opt out of having them walked.
         private config = { apiKey: 'sk-leak-me', headers: { Authorization: 'Bearer x' } };
         private gateway = { name: 'proxy', apiKey: 'gateway-secret' };
 

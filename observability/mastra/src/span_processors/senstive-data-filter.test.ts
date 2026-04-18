@@ -465,10 +465,8 @@ describe('Tracing', () => {
           },
         });
 
-        // Update span with non-standard fields. `apiKey` is stripped at span
-        // construction by DEFAULT_KEYS_TO_STRIP (defense-in-depth); `password`
-        // is not in that list and exercises the SensitiveDataFilter's matcher.
-        span.update({ attributes: { apiKey: 'secret-key-456', password: 'hunter2' } as any });
+        // Update span with non-standard field that should be filtered
+        span.update({ attributes: { apiKey: 'secret-key-456' } as any });
 
         span.end();
 
@@ -480,12 +478,9 @@ describe('Tracing', () => {
         expect((startSpan.attributes as any)?.['agentId']).toBe('agent-123');
         expect((startSpan.attributes as any)?.['instructions']).toBe('Test agent');
 
-        // Check the updated span:
-        // - apiKey is stripped entirely by DEFAULT_KEYS_TO_STRIP at deepClean time
-        // - password is redacted by the SensitiveDataFilter post-processor
+        // Check the updated span for the filtered field
         const updatedSpan = testExporter.events[1].exportedSpan; // span_updated event
-        expect((updatedSpan.attributes as any)?.['apiKey']).toBeUndefined();
-        expect((updatedSpan.attributes as any)?.['password']).toBe('[REDACTED]');
+        expect((updatedSpan.attributes as any)?.['apiKey']).toBe('[REDACTED]');
       });
     });
   });
