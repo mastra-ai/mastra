@@ -481,6 +481,15 @@ export interface ActiveSubagentState {
   result?: string;
 }
 
+export type HarnessQuestionSelectionMode = 'single_select' | 'multi_select';
+
+export interface HarnessQuestionOption {
+  label: string;
+  description?: string;
+}
+
+export type HarnessQuestionAnswer = string | string[];
+
 /**
  * Canonical display state maintained by the Harness.
  *
@@ -535,7 +544,8 @@ export interface HarnessDisplayState {
   pendingQuestion: {
     questionId: string;
     question: string;
-    options?: Array<{ label: string; description?: string }>;
+    options?: HarnessQuestionOption[];
+    selectionMode?: HarnessQuestionSelectionMode;
   } | null;
 
   /** A plan awaiting user approval (null when none) */
@@ -773,7 +783,8 @@ export type HarnessEvent =
       type: 'ask_question';
       questionId: string;
       question: string;
-      options?: Array<{ label: string; description?: string }>;
+      options?: HarnessQuestionOption[];
+      selectionMode?: HarnessQuestionSelectionMode;
     }
   | {
       type: 'plan_approval_required';
@@ -911,7 +922,7 @@ export interface HarnessRequestContext<TState = unknown> {
   emitEvent?: (event: HarnessEvent) => void;
 
   /** Register a pending question resolver (used by ask_user tools) */
-  registerQuestion?: (params: { questionId: string; resolve: (answer: string) => void }) => void;
+  registerQuestion?: (params: { questionId: string; resolve: (answer: HarnessQuestionAnswer) => void }) => void;
 
   /** Register a pending plan approval resolver (used by submit_plan tools) */
   registerPlanApproval?: (params: {
