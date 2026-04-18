@@ -286,7 +286,8 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
        jsonV(f.tags ?? null),
        jsonV(f.metadata),
        jsonV(f.scope ?? null),
-     ].join(', ')})`,
+     ].join(', ')})
+     ON CONFLICT DO NOTHING`,
   );
 }
 
@@ -345,7 +346,8 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       feedbackUserId, sourceId, feedbackSource, feedbackType, value, comment, tags, metadata, scope
     )
-     VALUES ${tuples.join(',\n       ')}`,
+     VALUES ${tuples.join(',\n       ')}
+     ON CONFLICT DO NOTHING`,
   );
 }
 

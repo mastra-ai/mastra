@@ -1360,4 +1360,86 @@ describe('ObservabilityStorageDuckDB', () => {
       });
     });
   });
+
+  // ==========================================================================
+  // Idempotent retries (signal-id primary keys)
+  // ==========================================================================
+
+  describe('retry idempotency', () => {
+    it('re-inserting the same logId does not throw or duplicate', async () => {
+      const log = {
+        logId: 'log-retry-1',
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        level: 'info',
+        message: 'retry-test',
+        data: null,
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        tags: null,
+        metadata: null,
+      };
+      await storage.batchCreateLogs({ logs: [log] });
+      await storage.batchCreateLogs({ logs: [log] });
+      const result = await storage.listLogs({ filters: { traceId: 'trace-1' } });
+      expect(result.logs).toHaveLength(1);
+      expect(result.logs[0]!.logId).toBe('log-retry-1');
+    });
+
+    it('re-inserting the same metricId does not throw or duplicate', async () => {
+      const metric = {
+        metricId: 'metric-retry-1',
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        name: 'mastra_agent_duration_ms',
+        value: 100,
+        labels: null,
+        tags: null,
+      };
+      await storage.batchCreateMetrics({ metrics: [metric] });
+      await storage.batchCreateMetrics({ metrics: [metric] });
+      const result = await storage.listMetrics({ filters: { name: 'mastra_agent_duration_ms' } });
+      expect(result.metrics).toHaveLength(1);
+      expect(result.metrics[0]!.metricId).toBe('metric-retry-1');
+    });
+
+    it('re-inserting the same scoreId does not throw or duplicate', async () => {
+      const score = {
+        scoreId: 'score-retry-1',
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: 'trace-retry-score',
+        spanId: null,
+        scorerId: 'scorer-1',
+        score: 0.9,
+        reason: null,
+        experimentId: null,
+        metadata: null,
+      };
+      await storage.createScore({ score });
+      await storage.createScore({ score });
+      const result = await storage.listScores({ filters: { traceId: 'trace-retry-score' } });
+      expect(result.scores).toHaveLength(1);
+      expect(result.scores[0]!.scoreId).toBe('score-retry-1');
+    });
+
+    it('re-inserting the same feedbackId does not throw or duplicate', async () => {
+      const feedback = {
+        feedbackId: 'feedback-retry-1',
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: 'trace-retry-feedback',
+        spanId: null,
+        feedbackType: 'rating',
+        feedbackSource: 'user',
+        value: 5,
+        comment: null,
+        experimentId: null,
+        feedbackUserId: null,
+        sourceId: null,
+        metadata: null,
+      };
+      await storage.createFeedback({ feedback });
+      await storage.createFeedback({ feedback });
+      const result = await storage.listFeedback({ filters: { traceId: 'trace-retry-feedback' } });
+      expect(result.feedback).toHaveLength(1);
+      expect(result.feedback[0]!.feedbackId).toBe('feedback-retry-1');
+    });
+  });
 });

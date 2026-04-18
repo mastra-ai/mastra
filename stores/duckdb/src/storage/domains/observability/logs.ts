@@ -122,7 +122,7 @@ export async function batchCreateLogs(db: DuckDBConnection, args: BatchCreateLog
     ].join(', ')})`;
   });
 
-  await db.execute(`INSERT INTO log_events (${COLUMNS_SQL}) VALUES ${tuples.join(',\n')}`);
+  await db.execute(`INSERT INTO log_events (${COLUMNS_SQL}) VALUES ${tuples.join(',\n')} ON CONFLICT DO NOTHING`);
 }
 
 /** Query log events with filtering, ordering, and pagination. */

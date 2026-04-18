@@ -298,7 +298,9 @@ export async function batchCreateMetrics(db: DuckDBConnection, args: BatchCreate
     ].join(', ')})`;
   });
 
-  await db.execute(`INSERT INTO metric_events (${METRIC_COLUMNS_SQL}) VALUES ${tuples.join(',\n')}`);
+  await db.execute(
+    `INSERT INTO metric_events (${METRIC_COLUMNS_SQL}) VALUES ${tuples.join(',\n')} ON CONFLICT DO NOTHING`,
+  );
 }
 
 /** Query metric events with filtering, ordering, and pagination. */

@@ -184,13 +184,13 @@ export async function listScores(client: ClickHouseClient, args: ListScoresArgs)
 
   const countResult = await queryJson<{ total?: number }>(
     client,
-    `SELECT count() AS total FROM ${TABLE_SCORE_EVENTS} AS s ${whereClause}`,
+    `SELECT count() AS total FROM ${TABLE_SCORE_EVENTS} AS s FINAL ${whereClause}`,
     filter.params,
   );
 
   const rows = await queryJson<Record<string, any>>(
     client,
-    `SELECT * FROM ${TABLE_SCORE_EVENTS} AS s ${whereClause} ORDER BY ${orderBy} LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
+    `SELECT * FROM ${TABLE_SCORE_EVENTS} AS s FINAL ${whereClause} ORDER BY ${orderBy} LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
     { ...filter.params, limit: pagination.limit, offset: pagination.offset },
   );
 

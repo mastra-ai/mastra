@@ -245,13 +245,13 @@ export async function listMetrics(client: ClickHouseClient, args: ListMetricsArg
 
   const countResult = await queryJson<{ total?: number }>(
     client,
-    `SELECT count() AS total FROM ${TABLE_METRIC_EVENTS} AS m ${whereClause}`,
+    `SELECT count() AS total FROM ${TABLE_METRIC_EVENTS} AS m FINAL ${whereClause}`,
     filter.params,
   );
 
   const rows = await queryJson<Record<string, any>>(
     client,
-    `SELECT * FROM ${TABLE_METRIC_EVENTS} AS m ${whereClause} ORDER BY ${orderBy} LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
+    `SELECT * FROM ${TABLE_METRIC_EVENTS} AS m FINAL ${whereClause} ORDER BY ${orderBy} LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
     { ...filter.params, limit: pagination.limit, offset: pagination.offset },
   );
 

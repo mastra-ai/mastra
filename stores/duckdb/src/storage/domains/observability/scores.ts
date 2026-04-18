@@ -275,7 +275,8 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
        jsonV(s.tags ?? null),
        jsonV(s.metadata),
        jsonV(s.scope ?? null),
-     ].join(', ')})`,
+     ].join(', ')})
+     ON CONFLICT DO NOTHING`,
   );
 }
 
@@ -333,7 +334,8 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
       userId, organizationId, resourceId, runId, sessionId, threadId, requestId, environment, executionSource, serviceName,
       scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope
     )
-     VALUES ${tuples.join(',\n       ')}`,
+     VALUES ${tuples.join(',\n       ')}
+     ON CONFLICT DO NOTHING`,
   );
 }
 
