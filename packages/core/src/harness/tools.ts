@@ -7,20 +7,24 @@ import { RequestContext } from '../request-context';
 import { createTool } from '../tools/tool';
 import { createWorkspaceTools } from '../workspace/tools/tools';
 
-import type { HarnessRequestContext, HarnessSubagent } from './types';
+import type { HarnessQuestionAnswer, HarnessRequestContext, HarnessSubagent } from './types';
 
 let questionCounter = 0;
 let planCounter = 0;
 
+function formatQuestionAnswer(answer: HarnessQuestionAnswer): string {
+  return Array.isArray(answer) ? answer.join(', ') : answer;
+}
+
 /**
  * Built-in harness tool: ask the user a question and wait for their response.
- * Supports single-select options and free-text input.
+ * Supports free-text input, single-select options, and multi-select options.
  * The tool pauses execution while the UI shows the dialog.
  */
 export const askUserTool = createTool({
   id: 'ask_user',
   description:
-    'Ask the user a question and wait for their response. Use this when you need clarification, want to validate assumptions, or need the user to make a decision between options. Provide options for structured choices (2-4 options), or omit them for open-ended questions.',
+    'Ask the user a question and wait for their response. Use this when you need clarification, want to validate assumptions, or need the user to make a decision between options. Provide options for structured choices (2-4 options), or omit them for open-ended questions. Use selectionMode to choose whether the user can pick one option or multiple options.',
   inputSchema: z.object({
     question: z.string().min(1).describe('The question to ask the user. Should be clear and specific.'),
     options: z
@@ -32,21 +36,37 @@ export const askUserTool = createTool({
       )
       .optional()
       .describe('Optional choices. If provided, shows a selection list. If omitted, shows a free-text input.'),
+    selectionMode: z
+      .enum(['single_select', 'multi_select'])
+      .optional()
+      .describe(
+        'Controls how many provided options the user can select. Defaults to single_select when options are provided. Requires options.',
+      ),
   }),
-  execute: async ({ question, options }, context) => {
+  execute: async ({ question, options, selectionMode }, context) => {
     try {
       const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext | undefined;
+      const resolvedSelectionMode = options?.length ? (selectionMode ?? 'single_select') : undefined;
+
+      if (selectionMode && !options?.length) {
+        return {
+          content: 'Failed to ask user: selectionMode requires options.',
+          isError: true,
+        };
+      }
 
       if (!harnessCtx?.emitEvent || !harnessCtx?.registerQuestion) {
         return {
-          content: `[Question for user]: ${question}${options ? '\nOptions: ' + options.map(o => o.label).join(', ') : ''}`,
+          content: `[Question for user]: ${question}${
+            options?.length ? '\nOptions: ' + options.map(o => o.label).join(', ') : ''
+          }${resolvedSelectionMode ? '\nSelection mode: ' + resolvedSelectionMode : ''}`,
           isError: false,
         };
       }
 
       const questionId = `q_${++questionCounter}_${Date.now()}`;
 
-      const answer = await new Promise<string>((resolve, reject) => {
+      const answer = await new Promise<HarnessQuestionAnswer>((resolve, reject) => {
         const signal = harnessCtx.abortSignal;
         if (signal?.aborted) {
           reject(new DOMException('Aborted', 'AbortError'));
@@ -68,10 +88,11 @@ export const askUserTool = createTool({
           questionId,
           question,
           options,
+          selectionMode: resolvedSelectionMode,
         });
       });
 
-      return { content: `User answered: ${answer}`, isError: false };
+      return { content: `User answered: ${formatQuestionAnswer(answer)}`, isError: false };
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       return { content: `Failed to ask user: ${msg}`, isError: true };
