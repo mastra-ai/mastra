@@ -8,6 +8,7 @@ import type {
   CreateSpanOptions,
 } from '@mastra/core/observability';
 import { BaseSpan } from './base';
+import { deepClean } from './serialization';
 
 export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
   public id: string;
@@ -65,14 +66,19 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
       return;
     }
     this.endTime = new Date();
+    // Metadata is always updated (read by correlation/logger/metrics contexts).
+    if (options?.metadata) {
+      this.metadata = { ...this.metadata, ...deepClean(options.metadata, this.deepCleanOptions) };
+    }
+    if (this.shouldSkipSerialization) {
+      // Span is filtered before export; skip attaching heavy fields.
+      return;
+    }
     if (options?.output !== undefined) {
-      this.output = this.cleanForExport(options.output);
+      this.output = deepClean(options.output, this.deepCleanOptions);
     }
     if (options?.attributes) {
-      this.attributes = { ...this.attributes, ...this.cleanForExport(options.attributes) };
-    }
-    if (options?.metadata) {
-      this.metadata = { ...this.metadata, ...this.cleanForExport(options.metadata) };
+      this.attributes = { ...this.attributes, ...deepClean(options.attributes, this.deepCleanOptions) };
     }
     // Tracing events automatically handled by base class
   }
@@ -84,33 +90,36 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
 
     const { error, endSpan = true, attributes, metadata } = options;
 
-    this.errorInfo = this.cleanForExport(
-      error instanceof MastraError
-        ? {
-            id: error.id,
-            details: error.details,
-            category: error.category,
-            domain: error.domain,
-            message: error.message,
-            name: error.name,
-            // Prefer the original cause's stack when available. MastraError wraps
-            // thrown errors, so its own stack points to the wrapping site rather
-            // than where the underlying error was thrown.
-            stack: (error.cause instanceof Error && error.cause.stack) || error.stack,
-          }
-        : {
-            message: error.message,
-            name: error.name,
-            stack: error.stack,
-          },
-    );
-
-    // Update attributes if provided
-    if (attributes) {
-      this.attributes = { ...this.attributes, ...this.cleanForExport(attributes) };
-    }
     if (metadata) {
-      this.metadata = { ...this.metadata, ...this.cleanForExport(metadata) };
+      this.metadata = { ...this.metadata, ...deepClean(metadata, this.deepCleanOptions) };
+    }
+
+    if (!this.shouldSkipSerialization) {
+      this.errorInfo = deepClean(
+        error instanceof MastraError
+          ? {
+              id: error.id,
+              details: error.details,
+              category: error.category,
+              domain: error.domain,
+              message: error.message,
+              name: error.name,
+              // Prefer the original cause's stack when available. MastraError wraps
+              // thrown errors, so its own stack points to the wrapping site rather
+              // than where the underlying error was thrown.
+              stack: (error.cause instanceof Error && error.cause.stack) || error.stack,
+            }
+          : {
+              message: error.message,
+              name: error.name,
+              stack: error.stack,
+            },
+        this.deepCleanOptions,
+      );
+
+      if (attributes) {
+        this.attributes = { ...this.attributes, ...deepClean(attributes, this.deepCleanOptions) };
+      }
     }
 
     if (endSpan) {
@@ -129,17 +138,21 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     if (options.name !== undefined) {
       this.name = options.name;
     }
+    // Metadata is always updated (read by correlation/logger/metrics contexts).
+    if (options.metadata) {
+      this.metadata = { ...this.metadata, ...deepClean(options.metadata, this.deepCleanOptions) };
+    }
+    if (this.shouldSkipSerialization) {
+      return;
+    }
     if (options.input !== undefined) {
-      this.input = this.cleanForExport(options.input);
+      this.input = deepClean(options.input, this.deepCleanOptions);
     }
     if (options.output !== undefined) {
-      this.output = this.cleanForExport(options.output);
+      this.output = deepClean(options.output, this.deepCleanOptions);
     }
     if (options.attributes) {
-      this.attributes = { ...this.attributes, ...this.cleanForExport(options.attributes) };
-    }
-    if (options.metadata) {
-      this.metadata = { ...this.metadata, ...this.cleanForExport(options.metadata) };
+      this.attributes = { ...this.attributes, ...deepClean(options.attributes, this.deepCleanOptions) };
     }
     // Tracing events automatically handled by base class
   }

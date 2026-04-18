@@ -266,13 +266,15 @@ describe('Span Filtering', () => {
     });
   });
 
-  describe('deepClean short-circuit for filtered spans', () => {
-    // When a span will be dropped by excludeSpanTypes or by the
-    // internal-span filter, deepClean is skipped to avoid serializing
-    // payloads that will never leave the process. This is a hot-path
-    // optimization for things like per-chunk MODEL_CHUNK spans on streaming.
+  describe('heavy-field short-circuit for filtered spans', () => {
+    // Spans that will be dropped by excludeSpanTypes or the internal-span
+    // filter skip attaching attributes/input/output/errorInfo/requestContext
+    // entirely. Metadata is still attached (it is read in-process by
+    // correlation/logger/metrics contexts). This avoids both the deepClean
+    // cost and retention of large payload references for the lifetime of
+    // the span -- important for per-chunk MODEL_CHUNK spans on streaming.
 
-    it('should skip deepClean on excluded span types (input/output/attributes preserved by reference)', () => {
+    it('should not attach input/attributes on excluded span types', () => {
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'test',
         name: 'test-instance',
@@ -283,28 +285,53 @@ describe('Span Filtering', () => {
 
       const parent = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent' });
 
-      // A function-valued payload field is a cheap witness: deepClean would
-      // replace functions with '[Function]', so if the function survives,
-      // deepClean was skipped.
-      const toolResult = { fn: () => 'raw', nested: { deep: 'value' } };
-      const chunkAttributes = { chunkType: 'tool-result', sequenceNumber: 1 };
-
       const chunk = parent.createChildSpan({
         type: SpanType.MODEL_CHUNK,
         name: 'chunk',
-        input: toolResult,
-        attributes: chunkAttributes,
+        input: { fn: () => 'raw', nested: { deep: 'value' } },
+        attributes: { chunkType: 'tool-result', sequenceNumber: 1 },
       });
 
-      // Same reference — no deepClean traversal happened.
-      expect((chunk as any).input).toBe(toolResult);
-      expect((chunk as any).input.fn).toBe(toolResult.fn);
-      expect((chunk as any).attributes).toBe(chunkAttributes);
+      expect((chunk as any).input).toBeUndefined();
+      expect((chunk as any).output).toBeUndefined();
+      expect((chunk as any).errorInfo).toBeUndefined();
+      expect((chunk as any).requestContext).toBeUndefined();
+      // attributes shape is kept stable for live-span readers.
+      expect((chunk as any).attributes).toEqual({});
 
       parent.end();
     });
 
-    it('should skip deepClean on internal spans when includeInternalSpans is false', () => {
+    it('should still attach metadata on excluded spans for correlation context', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        excludeSpanTypes: [SpanType.MODEL_CHUNK],
+      });
+
+      const parent = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'agent',
+        metadata: { runId: 'run-1', userId: 'u-1' },
+      });
+
+      const chunk = parent.createChildSpan({
+        type: SpanType.MODEL_CHUNK,
+        name: 'chunk',
+      });
+
+      // Metadata is inherited from the parent even on filtered spans so that
+      // getCorrelationContext and getLoggerContext/getMetricsContext still work.
+      expect((chunk as any).metadata).toEqual({ runId: 'run-1', userId: 'u-1' });
+      expect(chunk.getCorrelationContext().runId).toBe('run-1');
+      expect(chunk.getCorrelationContext().userId).toBe('u-1');
+
+      parent.end();
+    });
+
+    it('should not attach input on internal spans when includeInternalSpans is false', () => {
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'test',
         name: 'test-instance',
@@ -313,24 +340,20 @@ describe('Span Filtering', () => {
         includeInternalSpans: false,
       });
 
-      const payload = { fn: () => 'raw' };
-
-      // WORKFLOW_STEP is marked internal when WORKFLOW internal flag is set.
       const span = tracing.startSpan({
         type: SpanType.WORKFLOW_STEP,
         name: 'step',
-        input: payload,
+        input: { fn: () => 'raw' },
         tracingPolicy: { internal: InternalSpans.WORKFLOW },
       });
 
       expect(span.isInternal).toBe(true);
-      expect((span as any).input).toBe(payload);
-      expect((span as any).input.fn).toBe(payload.fn);
+      expect((span as any).input).toBeUndefined();
 
       span.end();
     });
 
-    it('should still deepClean internal spans when includeInternalSpans is true', () => {
+    it('should still attach + deepClean fields on internal spans when includeInternalSpans is true', () => {
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'test',
         name: 'test-instance',
@@ -356,7 +379,7 @@ describe('Span Filtering', () => {
       span.end();
     });
 
-    it('should still deepClean non-excluded spans', () => {
+    it('should still attach + deepClean fields on non-excluded spans', () => {
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'test',
         name: 'test-instance',
@@ -379,7 +402,7 @@ describe('Span Filtering', () => {
       span.end();
     });
 
-    it('should skip deepClean on excluded span updates via end()/update()', () => {
+    it('should not attach updates via end()/update() on excluded spans', () => {
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'test',
         name: 'test-instance',
@@ -395,14 +418,38 @@ describe('Span Filtering', () => {
         name: 'chunk',
       });
 
-      const endOutput = { fn: () => 'end', data: 'x' };
-      const updateOutput = { fn: () => 'update' };
+      chunk.update({ output: { fn: () => 'update' }, attributes: { x: 1 } });
+      expect((chunk as any).output).toBeUndefined();
+      expect((chunk as any).attributes).toEqual({});
 
-      chunk.update({ output: updateOutput });
-      expect((chunk as any).output).toBe(updateOutput);
+      chunk.end({ output: { fn: () => 'end' } });
+      expect((chunk as any).output).toBeUndefined();
 
-      chunk.end({ output: endOutput });
-      expect((chunk as any).output).toBe(endOutput);
+      parent.end();
+    });
+
+    it('should still apply metadata updates via end()/update() on excluded spans', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        excludeSpanTypes: [SpanType.MODEL_CHUNK],
+      });
+
+      const parent = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent' });
+
+      const chunk = parent.createChildSpan({
+        type: SpanType.MODEL_CHUNK,
+        name: 'chunk',
+        metadata: { runId: 'run-1' },
+      });
+
+      chunk.update({ metadata: { userId: 'u-1' } });
+      expect((chunk as any).metadata).toEqual({ runId: 'run-1', userId: 'u-1' });
+
+      chunk.end({ metadata: { threadId: 't-1' } });
+      expect((chunk as any).metadata).toEqual({ runId: 'run-1', userId: 'u-1', threadId: 't-1' });
 
       parent.end();
     });

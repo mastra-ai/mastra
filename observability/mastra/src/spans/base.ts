@@ -147,10 +147,17 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   /** Deep clean options for serialization */
   protected deepCleanOptions: DeepCleanOptions;
   /**
-   * Whether this span will never reach exporters, so deepClean can be skipped
-   * on its attributes/metadata/requestContext/input/output/errorInfo. Set when
-   * excludeSpanTypes drops the type, when the span is internal and
-   * includeInternalSpans is false, or when the subclass is a NoOpSpan.
+   * Whether this span will never reach exporters. When true, BaseSpan/
+   * DefaultSpan skip attaching attributes/input/output/errorInfo/requestContext
+   * entirely -- they are never read on filtered spans, and skipping avoids
+   * both the deepClean cost and holding references to large payloads for
+   * the lifetime of the span. Set when excludeSpanTypes drops the type,
+   * when the span is internal and includeInternalSpans is false, or when
+   * the subclass is a NoOpSpan.
+   *
+   * Note: metadata is still attached and deepCleaned because it is read in
+   * process by getCorrelationContext() and by getLoggerContext() /
+   * getMetricsContext() (which structuredClone it).
    */
   protected shouldSkipSerialization: boolean;
   /** Cached canonical correlation context for this live span */
@@ -173,27 +180,25 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.type = options.type;
     this.isInternal = isSpanInternal(this.type, options.tracingPolicy?.internal);
 
-    // Short-circuit deepClean when this span will never reach exporters.
-    // getSpanForExport() drops these same spans before export, so deepClean
-    // would just be wasted work on the hot path (notably per-chunk MODEL_CHUNK
-    // spans when excludeSpanTypes: [MODEL_CHUNK] is set).
-    //
-    // Safe because: children inherit parent metadata and then deepClean it in
-    // their own constructor. Attributes, input, output, errorInfo, and
-    // requestContext are set per-span and only read by exportSpan().
+    // Determine up front whether this span will ever reach exporters.
+    // getSpanForExport() drops these same spans before export, so we can
+    // skip both the deepClean cost and the retention of large payload
+    // references for the lifetime of the span (notably per-chunk
+    // MODEL_CHUNK spans when excludeSpanTypes: [MODEL_CHUNK] is set).
     this.shouldSkipSerialization =
       this.alwaysSkipSerialization ||
       observabilityConfig.excludeSpanTypes?.includes(this.type) === true ||
       (this.isInternal && !observabilityConfig.includeInternalSpans);
 
-    this.attributes = this.cleanForExport(options.attributes) || ({} as SpanTypeMap[TType]);
-    // Metadata - inherit from parent if not explicitly provided, merge if both exist
-    this.metadata = this.cleanForExport(
+    // Metadata is always attached and deepCleaned: it is read in-process
+    // by getCorrelationContext() and by getLoggerContext() /
+    // getMetricsContext() (which structuredClone it), and non-filtered
+    // child spans inherit it via options.parent?.metadata.
+    this.metadata = deepClean(
       options.parent?.metadata || options.metadata ? { ...options.parent?.metadata, ...options.metadata } : undefined,
+      this.deepCleanOptions,
     );
-    if (options.requestContext && options.requestContext.size() > 0) {
-      this.requestContext = this.cleanForExport(options.requestContext.all);
-    }
+
     this.parent = options.parent;
     this.startTime = options.startTime ?? new Date();
     this.observabilityInstance = observabilityInstance;
@@ -207,19 +212,25 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.entityId = options.entityId ?? entityParent?.entityId;
     this.entityName = options.entityName ?? entityParent?.entityName;
 
+    if (this.shouldSkipSerialization) {
+      // Keep the shape of attributes stable for any live-span reader.
+      // input/output/errorInfo/requestContext stay undefined.
+      this.attributes = {} as SpanTypeMap[TType];
+      return;
+    }
+
+    this.attributes = deepClean(options.attributes, this.deepCleanOptions) || ({} as SpanTypeMap[TType]);
+    if (options.requestContext && options.requestContext.size() > 0) {
+      this.requestContext = deepClean(options.requestContext.all, this.deepCleanOptions);
+    }
+
     if (this.isEvent) {
       // Event spans don't have endTime or input.
       // Event spans are immediately emitted by the BaseObservability class via the end() event.
-      this.output = this.cleanForExport(options.output);
+      this.output = deepClean(options.output, this.deepCleanOptions);
     } else {
-      this.input = this.cleanForExport(options.input);
+      this.input = deepClean(options.input, this.deepCleanOptions);
     }
-  }
-
-  /** Deep clean a value if this span may be exported; otherwise pass through. */
-  protected cleanForExport<T>(value: T): T {
-    if (this.shouldSkipSerialization) return value;
-    return deepClean(value, this.deepCleanOptions);
   }
 
   // Methods for span lifecycle
