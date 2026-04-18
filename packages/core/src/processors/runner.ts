@@ -1,6 +1,6 @@
 import type { StepResult } from '@internal/ai-sdk-v5';
-import type { MastraDBMessage } from '../agent/message-list';
-import { MessageList } from '../agent/message-list';
+import type { MastraDBMessage, MessageInput } from '../agent/message-list';
+import { MessageList, messagesAreEqual } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
 import type { TripWireOptions } from '../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../agent/utils';
@@ -13,6 +13,13 @@ import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage } from '../stream/types';
+import {
+  summarizeActiveToolsForSpan,
+  summarizeProcessorModelForSpan,
+  summarizeProcessorResultForSpan,
+  summarizeProcessorToolsForSpan,
+  summarizeToolChoiceForSpan,
+} from './span-payload';
 import type { ProcessorStepOutput } from './step-schema';
 import { isMaybeClaude46, TrailingAssistantGuard } from './trailing-assistant-guard';
 import { isProcessorWorkflow } from './index';
@@ -113,6 +120,108 @@ export class ProcessorState<OUTPUT = undefined> {
  * Union type for processor or workflow that can be used as a processor
  */
 type ProcessorOrWorkflow = Processor | ProcessorWorkflow;
+
+function areProcessorMessageArraysEqual(before: unknown[] | undefined, after: unknown[] | undefined): boolean {
+  if (before === after) {
+    return true;
+  }
+
+  if (!before || !after) {
+    return before === after;
+  }
+
+  return (
+    before.length === after.length &&
+    before.every((message, index) => messagesAreEqual(message as MessageInput, after[index] as MessageInput))
+  );
+}
+
+function buildProcessInputStepSpanInput(args: {
+  messages: MastraDBMessage[];
+  systemMessages: unknown[];
+  stepNumber: number;
+  messageId?: string;
+  retryCount: number;
+  model: unknown;
+  tools?: unknown;
+  toolChoice?: unknown;
+  activeTools?: unknown;
+}) {
+  const summarizedModel = summarizeProcessorModelForSpan(args.model);
+  const summarizedTools = summarizeProcessorToolsForSpan(args.tools);
+  const summarizedToolChoice = summarizeToolChoiceForSpan(args.toolChoice, args.tools);
+  const summarizedActiveTools = summarizeActiveToolsForSpan(args.activeTools, args.tools);
+
+  return {
+    messages: args.messages,
+    systemMessages: args.systemMessages,
+    stepNumber: args.stepNumber,
+    ...(args.messageId ? { messageId: args.messageId } : {}),
+    retryCount: args.retryCount,
+    ...(summarizedModel ? { model: summarizedModel } : {}),
+    ...(summarizedTools ? { tools: summarizedTools } : {}),
+    ...(summarizedToolChoice ? { toolChoice: summarizedToolChoice } : {}),
+    ...(summarizedActiveTools ? { activeTools: summarizedActiveTools } : {}),
+  };
+}
+
+function buildProcessInputStepSpanOutput(args: {
+  result: RunProcessInputStepResult;
+  beforeStepInput: Pick<RunProcessInputStepResult, 'messageId' | 'model' | 'tools' | 'toolChoice' | 'activeTools'>;
+  afterStepInput: RunProcessInputStepResult;
+  beforeMessages: MastraDBMessage[];
+  beforeSystemMessages: unknown[];
+  messages: MastraDBMessage[];
+  systemMessages: unknown[];
+}) {
+  const output: Record<string, unknown> = {};
+
+  if (!areProcessorMessageArraysEqual(args.beforeMessages, args.messages)) {
+    output.messages = args.messages;
+  }
+
+  if (!areProcessorMessageArraysEqual(args.beforeSystemMessages, args.systemMessages)) {
+    output.systemMessages = args.systemMessages;
+  }
+
+  if (args.afterStepInput.messageId !== args.beforeStepInput.messageId) {
+    output.messageId = args.afterStepInput.messageId;
+  }
+
+  if (args.result.model !== undefined || args.afterStepInput.model !== args.beforeStepInput.model) {
+    const model = summarizeProcessorModelForSpan(args.afterStepInput.model);
+    if (model) {
+      output.model = model;
+    }
+  }
+
+  if (args.result.tools !== undefined || args.afterStepInput.tools !== args.beforeStepInput.tools) {
+    const tools = summarizeProcessorToolsForSpan(args.afterStepInput.tools);
+    if (tools) {
+      output.tools = tools;
+    }
+  }
+
+  if (args.result.toolChoice !== undefined || args.afterStepInput.toolChoice !== args.beforeStepInput.toolChoice) {
+    const toolChoice = summarizeToolChoiceForSpan(args.afterStepInput.toolChoice, args.afterStepInput.tools);
+    if (toolChoice) {
+      output.toolChoice = toolChoice;
+    }
+  }
+
+  if (args.result.activeTools !== undefined || args.afterStepInput.activeTools !== args.beforeStepInput.activeTools) {
+    const activeTools = summarizeActiveToolsForSpan(args.afterStepInput.activeTools, args.afterStepInput.tools);
+    if (activeTools) {
+      output.activeTools = activeTools;
+    }
+  }
+
+  if (args.result.retryCount !== undefined) {
+    output.retryCount = args.result.retryCount;
+  }
+
+  return output;
+}
 
 export class ProcessorRunner {
   public readonly inputProcessors: ProcessorOrWorkflow[];
@@ -299,6 +408,15 @@ export class ProcessorRunner {
         continue;
       }
 
+      const defaultResult: OutputResult = {
+        text: '',
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        finishReason: 'unknown',
+        steps: [],
+      };
+      const outputMessagesBefore = processableMessages;
+      const outputSystemMessagesBefore = messageList.getAllSystemMessages();
+      const summarizedResult = summarizeProcessorResultForSpan(result ?? defaultResult);
       const currentSpan = observabilityContext?.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
@@ -311,7 +429,10 @@ export class ProcessorRunner {
           processorExecutor: 'legacy',
           processorIndex: index,
         },
-        input: processableMessages,
+        input: {
+          messages: processableMessages,
+          ...(summarizedResult ? { result: summarizedResult } : {}),
+        },
       });
 
       // Start recording MessageList mutations for this processor
@@ -320,13 +441,6 @@ export class ProcessorRunner {
       try {
         // Get per-processor state that persists across all method calls within this request
         const processorState = this.getProcessorState(processor.id);
-
-        const defaultResult: OutputResult = {
-          text: '',
-          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-          finishReason: 'unknown',
-          steps: [],
-        };
 
         const processResult = await processMethod({
           messages: processableMessages,
@@ -373,7 +487,14 @@ export class ProcessorRunner {
         }
 
         processorSpan?.end({
-          output: processableMessages,
+          output: {
+            ...(!areProcessorMessageArraysEqual(outputMessagesBefore, processableMessages)
+              ? { messages: processableMessages }
+              : {}),
+            ...(!areProcessorMessageArraysEqual(outputSystemMessagesBefore, messageList.getAllSystemMessages())
+              ? { systemMessages: messageList.getAllSystemMessages() }
+              : {}),
+          },
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
       } catch (error) {
@@ -686,6 +807,9 @@ export class ProcessorRunner {
         continue;
       }
 
+      const currentSystemMessages = messageList.getAllSystemMessages();
+      const inputMessagesBefore = processableMessages;
+      const inputSystemMessagesBefore = currentSystemMessages;
       const currentSpan = observabilityContext?.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
@@ -698,16 +822,16 @@ export class ProcessorRunner {
           processorExecutor: 'legacy',
           processorIndex: index,
         },
-        input: processableMessages,
+        input: {
+          messages: processableMessages,
+          systemMessages: currentSystemMessages,
+        },
       });
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
 
       try {
-        // Get all system messages to pass to the processor
-        const currentSystemMessages = messageList.getAllSystemMessages();
-
         // Get per-processor state that persists across all method calls within this request
         const processorState = this.getProcessorState(processor.id);
 
@@ -825,7 +949,14 @@ export class ProcessorRunner {
         }
 
         processorSpan?.end({
-          output: processableMessages,
+          output: {
+            ...(!areProcessorMessageArraysEqual(inputMessagesBefore, processableMessages)
+              ? { messages: processableMessages }
+              : {}),
+            ...(!areProcessorMessageArraysEqual(inputSystemMessagesBefore, messageList.getAllSystemMessages())
+              ? { systemMessages: messageList.getAllSystemMessages() }
+              : {}),
+          },
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
       } catch (error) {
@@ -974,14 +1105,17 @@ export class ProcessorRunner {
           processorExecutor: 'legacy',
           processorIndex: index,
         },
-        input: {
-          ...inputData,
-          model: {
-            id: inputData.model.modelId,
-            provider: inputData.model.provider,
-            specificationVersion: inputData.model.specificationVersion,
-          },
-        },
+        input: buildProcessInputStepSpanInput({
+          messages: inputData.messages,
+          systemMessages: inputData.systemMessages,
+          stepNumber: inputData.stepNumber,
+          messageId: inputData.messageId,
+          retryCount: args.retryCount ?? 0,
+          model: inputData.model,
+          tools: inputData.tools,
+          toolChoice: inputData.toolChoice,
+          activeTools: inputData.activeTools,
+        }),
       });
 
       // Start recording MessageList mutations for this processor
@@ -990,6 +1124,13 @@ export class ProcessorRunner {
       try {
         // Get per-processor state that persists across all method calls within this request
         const processorState = this.getProcessorState(processor.id);
+        const beforeStepInput = {
+          messageId: inputData.messageId,
+          model: inputData.model,
+          tools: inputData.tools,
+          toolChoice: inputData.toolChoice,
+          activeTools: inputData.activeTools,
+        };
 
         const processMethodArgs = {
           messageList,
@@ -1032,18 +1173,15 @@ export class ProcessorRunner {
         const mutations = messageList.stopRecording();
 
         processorSpan?.end({
-          output: {
-            ...stepInput,
+          output: buildProcessInputStepSpanOutput({
+            result,
+            beforeStepInput,
+            afterStepInput: stepInput,
+            beforeMessages: inputData.messages,
+            beforeSystemMessages: inputData.systemMessages,
             messages: messageList.get.all.db(),
             systemMessages: messageList.getAllSystemMessages(),
-            model: stepInput.model
-              ? {
-                  modelId: stepInput.model.modelId,
-                  provider: stepInput.model.provider,
-                  specificationVersion: stepInput.model.specificationVersion,
-                }
-              : undefined,
-          },
+          }),
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
       } catch (error) {
@@ -1180,6 +1318,12 @@ export class ProcessorRunner {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
       };
 
+      const currentSystemMessages = messageList.getAllSystemMessages();
+      const defaultUsage: LanguageModelUsage = {
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+      };
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
@@ -1192,24 +1336,23 @@ export class ProcessorRunner {
           processorExecutor: 'legacy',
           processorIndex: index,
         },
-        input: { messages: processableMessages, stepNumber, finishReason, toolCalls, text },
+        input: {
+          messages: processableMessages,
+          systemMessages: currentSystemMessages,
+          stepNumber,
+          ...(finishReason !== undefined ? { finishReason } : {}),
+          ...(toolCalls !== undefined ? { toolCalls } : {}),
+          ...(text !== undefined ? { text } : {}),
+        },
       });
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
 
-      // Get all system messages to pass to the processor
-      const currentSystemMessages = messageList.getAllSystemMessages();
-
       // Get or create processor state (persists across steps within a request)
       const processorState = this.getProcessorState(processor.id);
 
       try {
-        const defaultUsage: LanguageModelUsage = {
-          inputTokens: undefined,
-          outputTokens: undefined,
-          totalTokens: undefined,
-        };
         const result = await processMethod({
           messages: processableMessages,
           messageList,
@@ -1267,7 +1410,14 @@ export class ProcessorRunner {
         }
 
         processorSpan?.end({
-          output: messageList.get.all.db(),
+          output: {
+            ...(!areProcessorMessageArraysEqual(processableMessages, messageList.get.all.db())
+              ? { messages: messageList.get.all.db() }
+              : {}),
+            ...(!areProcessorMessageArraysEqual(currentSystemMessages, messageList.getAllSystemMessages())
+              ? { systemMessages: messageList.getAllSystemMessages() }
+              : {}),
+          },
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
       } catch (error) {
@@ -1344,6 +1494,7 @@ export class ProcessorRunner {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
       };
 
+      const processableMessages: MastraDBMessage[] = messageList.get.all.db();
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
       const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
@@ -1356,13 +1507,17 @@ export class ProcessorRunner {
           processorExecutor: 'legacy',
           processorIndex: index,
         },
-        input: { error: error instanceof Error ? error.message : String(error), stepNumber },
+        input: {
+          messages: processableMessages,
+          error: error instanceof Error ? error.message : String(error),
+          stepNumber,
+          ...(args.messageId ? { messageId: args.messageId } : {}),
+          retryCount,
+        },
       });
 
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
-
-      const processableMessages: MastraDBMessage[] = messageList.get.all.db();
 
       // Get or create processor state (persists across steps within a request)
       const processorState = this.getProcessorState(processor.id);
