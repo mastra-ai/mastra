@@ -17,7 +17,8 @@ const sizeClasses = {
 };
 
 function BrandLoader({ className, size = 'md', 'aria-label': ariaLabel = 'Loading' }: BrandLoaderProps) {
-  const filterId = useId();
+  const reactId = useId();
+  const filterId = `brand-loader-${reactId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
 
   return (
     <div
@@ -38,14 +39,14 @@ function BrandLoader({ className, size = 'md', 'aria-label': ariaLabel = 'Loadin
           </filter>
         </defs>
         <g filter={`url(#${filterId})`}>
-          <line className="brand-loader__ln23" x1="10.4" y1="4.5" x2="16.8" y2="16.2" />
-          <line className="brand-loader__ln34" x1="16.8" y1="16.2" x2="23.2" y2="4.5" />
-          <line className="brand-loader__ln45" x1="23.2" y1="4.5" x2="29.5" y2="16.2" />
-          <circle className="brand-loader__b1" cx="4.5" cy="16.2" r="4.5" />
-          <circle className="brand-loader__b2" cx="10.4" cy="4.5" r="4.5" />
-          <circle className="brand-loader__b3" cx="16.8" cy="16.2" r="4.5" />
-          <circle className="brand-loader__b4" cx="23.2" cy="4.5" r="4.5" />
-          <circle className="brand-loader__b5" cx="29.5" cy="16.2" r="4.5" />
+          <line className="brand-loader-ln23" x1="10.4" y1="4.5" x2="16.8" y2="16.2" />
+          <line className="brand-loader-ln34" x1="16.8" y1="16.2" x2="23.2" y2="4.5" />
+          <line className="brand-loader-ln45" x1="23.2" y1="4.5" x2="29.5" y2="16.2" />
+          <circle className="brand-loader-b1" cx="4.5" cy="16.2" r="4.5" />
+          <circle className="brand-loader-b2" cx="10.4" cy="4.5" r="4.5" />
+          <circle className="brand-loader-b3" cx="16.8" cy="16.2" r="4.5" />
+          <circle className="brand-loader-b4" cx="23.2" cy="4.5" r="4.5" />
+          <circle className="brand-loader-b5" cx="29.5" cy="16.2" r="4.5" />
         </g>
       </svg>
     </div>
