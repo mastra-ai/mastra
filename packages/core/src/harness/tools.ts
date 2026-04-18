@@ -464,6 +464,7 @@ Use this tool when:
           abortSignal,
           requireToolApproval: false,
           requestContext: subagentRequestContext,
+          ...(context?.tracingContext && { tracingContext: context.tracingContext }),
           // When allowedWorkspaceTools is set, hide workspace tools not in
           // the list. Non-workspace tools always pass through.
           prepareStep:
