@@ -1,5 +1,11 @@
 # @mastra/langfuse
 
+## 1.2.0-alpha.2
+
+### Patch Changes
+
+- Improved Langfuse trace batching for streamed runs by adding `flushAt` and `flushInterval` controls. ([#15460](https://github.com/mastra-ai/mastra/pull/15460))
+
 ## 1.2.0-alpha.1
 
 ### Minor Changes
