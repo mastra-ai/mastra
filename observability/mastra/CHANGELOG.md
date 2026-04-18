@@ -1,5 +1,14 @@
 # @mastra/observability
 
+## 1.9.2-alpha.1
+
+### Patch Changes
+
+- Improved tracing overhead when filtering spans. Spans dropped by `excludeSpanTypes` or the internal-span filter (`includeInternalSpans: false`) now skip payload serialization and retention entirely instead of paying the cost and discarding at export time. ([#15487](https://github.com/mastra-ai/mastra/pull/15487))
+
+- Updated dependencies [[`6315317`](https://github.com/mastra-ai/mastra/commit/63153175fe9a7b224e5be7c209bbebc01dd9b0d5), [`9d3b24b`](https://github.com/mastra-ai/mastra/commit/9d3b24b19407ae9c09586cf7766d38dc4dff4a69)]:
+  - @mastra/core@1.26.0-alpha.6
+
 ## 1.9.2-alpha.0
 
 ### Patch Changes
