@@ -1,13 +1,5 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import {
-  Button,
-  Header,
-  HeaderAction,
-  HeaderTitle,
-  Icon,
-  LogoWithoutText,
-  MainContentLayout,
-} from '@mastra/playground-ui';
+import { Button, Header, HeaderAction, HeaderTitle, Icon, MainContentLayout } from '@mastra/playground-ui';
 import { Pencil } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router';
@@ -23,7 +15,6 @@ import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-me
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-context';
 import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
-import { AuthStatus } from '@/domains/auth/components/auth-status';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
@@ -150,12 +141,10 @@ export function AgentStudioProjectChat() {
                       <MainContentLayout>
                         <Header>
                           <HeaderTitle>
-                            <LogoWithoutText className="h-5 w-8 shrink-0" />
                             {project.name ?? 'Project'}
                             <span className="text-xs text-icon3 ml-2">
                               {teamSize} agent{teamSize === 1 ? '' : 's'}
                             </span>
-                            <AuthStatus />
                           </HeaderTitle>
 
                           {canEditProject && (

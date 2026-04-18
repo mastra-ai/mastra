@@ -48,7 +48,7 @@ export function AgentStudioAgents() {
   const scopedIds = new Set(studioAgents.map(a => a.id));
   const listRecord = Object.fromEntries(Object.entries(allAgentsRecord).filter(([id]) => scopedIds.has(id)));
 
-  const createPath = '/cms/agents/create';
+  const createPath = '/agent-studio/agents/create';
   const showCreateCta = canCreateAgent;
 
   if (studioError && is401UnauthorizedError(studioError)) {

@@ -42,12 +42,14 @@ export class MastraAgentBuilder implements IMastraAgentBuilder {
   readonly marketplace: ResolvedAgentBuilderMarketplaceConfig;
   readonly configure: ResolvedAgentBuilderConfigureConfig;
   readonly recents: ResolvedAgentBuilderRecentsConfig;
+  readonly defaultMemoryConfig: Record<string, unknown> | null;
 
   constructor(config: MastraAgentBuilderConfig = {}) {
     this.enabledSections = config.enabledSections ?? DEFAULT_ENABLED_SECTIONS;
     this.marketplace = { ...DEFAULT_MARKETPLACE, ...(config.marketplace ?? {}) };
     this.configure = { ...DEFAULT_CONFIGURE, ...(config.configure ?? {}) };
     this.recents = { ...DEFAULT_RECENTS, ...(config.recents ?? {}) };
+    this.defaultMemoryConfig = config.defaultMemoryConfig ?? null;
   }
 
   getEnabledSections(): AgentBuilderEnabledSection[] {
@@ -64,5 +66,9 @@ export class MastraAgentBuilder implements IMastraAgentBuilder {
 
   getRecentsConfig(): ResolvedAgentBuilderRecentsConfig {
     return this.recents;
+  }
+
+  getDefaultMemoryConfig(): Record<string, unknown> | null {
+    return this.defaultMemoryConfig;
   }
 }

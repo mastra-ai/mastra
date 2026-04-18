@@ -112,9 +112,10 @@ test.describe('Agent Studio agents list — behavior', () => {
     await page.getByTestId('agent-studio-view-list').click();
     await page.getByTestId('agent-studio-view-grid').click();
 
-    // The Create entry points to the CMS create page so end-users with
-    // stored-agents:write can author a new stored agent.
-    const createLink = page.locator('a[href="/cms/agents/create"]');
+    // The Create entry points to the Agent Studio create page so end-users
+    // with stored-agents:write can author a new stored agent without leaving
+    // the Studio shell.
+    const createLink = page.locator('a[href="/agent-studio/agents/create"]');
     await expect(createLink.first()).toBeVisible();
   });
 });

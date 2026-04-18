@@ -69,6 +69,15 @@ export interface MastraAgentBuilderConfig {
   marketplace?: AgentBuilderMarketplaceConfig;
   configure?: AgentBuilderConfigureConfig;
   recents?: AgentBuilderRecentsConfig;
+  /**
+   * Default memory configuration applied to new stored agents + projects
+   * created through Agent Studio. When set, the Memory section in the CMS
+   * form is hidden and end-users cannot override this.
+   *
+   * The shape matches `SerializedMemoryConfig` (kept as `unknown` here so
+   * this types module doesn't pull in memory internals).
+   */
+  defaultMemoryConfig?: Record<string, unknown>;
 }
 
 /**
@@ -109,9 +118,11 @@ export interface IMastraAgentBuilder {
   readonly marketplace: ResolvedAgentBuilderMarketplaceConfig;
   readonly configure: ResolvedAgentBuilderConfigureConfig;
   readonly recents: ResolvedAgentBuilderRecentsConfig;
+  readonly defaultMemoryConfig: Record<string, unknown> | null;
 
   getEnabledSections(): AgentBuilderEnabledSection[];
   getMarketplaceConfig(): ResolvedAgentBuilderMarketplaceConfig;
   getConfigureConfig(): ResolvedAgentBuilderConfigureConfig;
   getRecentsConfig(): ResolvedAgentBuilderRecentsConfig;
+  getDefaultMemoryConfig(): Record<string, unknown> | null;
 }

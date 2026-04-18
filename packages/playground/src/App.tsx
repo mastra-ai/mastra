@@ -344,6 +344,7 @@ const routes = [
       {
         path: '/agent-studio/agents/create',
         element: <AgentStudioAgentCreate />,
+        children: agentCmsChildRoutes,
       },
       {
         path: '/agent-studio/agents/:agentId/edit',

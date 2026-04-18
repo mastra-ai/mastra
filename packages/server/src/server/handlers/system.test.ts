@@ -183,6 +183,7 @@ describe('System Handlers', () => {
         },
         configure: { allowSkillCreation: true, allowAppearance: true, allowAvatarUpload: true },
         recents: { maxItems: 5 },
+        hasDefaultMemoryConfig: false,
       });
     });
 

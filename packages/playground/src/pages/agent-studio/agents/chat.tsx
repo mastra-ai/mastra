@@ -1,13 +1,5 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import {
-  Button,
-  Header,
-  HeaderAction,
-  HeaderTitle,
-  Icon,
-  LogoWithoutText,
-  MainContentLayout,
-} from '@mastra/playground-ui';
+import { Button, Header, HeaderAction, HeaderTitle, Icon, MainContentLayout } from '@mastra/playground-ui';
 import { Pencil } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router';
@@ -27,7 +19,6 @@ import { BrowserSessionProvider } from '@/domains/agents/context/browser-session
 import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
-import { AuthStatus } from '@/domains/auth/components/auth-status';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
@@ -158,11 +149,9 @@ export function AgentStudioAgentChat() {
                       <MainContentLayout>
                         <Header>
                           <HeaderTitle>
-                            <LogoWithoutText className="h-5 w-8 shrink-0" />
                             <AgentAvatar name={agent.name} avatarUrl={avatarUrl} size={24} />
                             {agent.name ?? 'Mastra Studio'}
                             {storedAgent && <VisibilityBadge visibility={visibility} />}
-                            <AuthStatus />
                           </HeaderTitle>
 
                           {canEditAgent && (

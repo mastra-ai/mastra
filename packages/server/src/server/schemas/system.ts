@@ -22,6 +22,7 @@ export const agentBuilderConfigSchema = z.object({
   recents: z.object({
     maxItems: z.number(),
   }),
+  hasDefaultMemoryConfig: z.boolean(),
 });
 
 export const systemPackagesResponseSchema = z.object({

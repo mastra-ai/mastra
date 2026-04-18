@@ -1,6 +1,7 @@
 import type { ToolCallMessagePartProps } from '@assistant-ui/react';
 
 import type { MastraUIMessage } from '@mastra/react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 import { FileTreeBadge } from './badges/file-tree-badge';
@@ -61,6 +62,15 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
     if (props.status?.type !== 'complete') return;
     activateSkill(args.name);
   }, [toolName, args?.name, props.status?.type, activateSkill]);
+
+  // Refresh project tasks / members when project_* tools complete
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!toolName?.startsWith('project_')) return;
+    if (props.status?.type !== 'complete') return;
+    void queryClient.invalidateQueries({ queryKey: ['project'] });
+    void queryClient.invalidateQueries({ queryKey: ['projects'] });
+  }, [toolName, props.status?.type, queryClient]);
 
   useWorkflowStream(result);
 

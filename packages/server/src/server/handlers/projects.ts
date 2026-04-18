@@ -226,6 +226,8 @@ export const CREATE_PROJECT_ROUTE = createRoute({
         invitedSkillIds: [],
       };
 
+      const defaultMemory = mastra.getAgentBuilder?.()?.getDefaultMemoryConfig?.() ?? null;
+
       await agents.create({
         agent: {
           id,
@@ -237,6 +239,7 @@ export const CREATE_PROJECT_ROUTE = createRoute({
           model,
           tools: toolsMap,
           agents: agentsMap,
+          ...(defaultMemory ? { memory: defaultMemory } : {}),
         } as any,
       });
 

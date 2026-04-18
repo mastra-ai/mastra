@@ -203,6 +203,11 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         throw new HTTPException(409, { message: `Agent with id ${id} already exists` });
       }
 
+      // Apply Agent Studio default memory if configured and the caller
+      // didn't pass an explicit memory block (projects + end-user creates).
+      const defaultMemory = mastra.getAgentBuilder?.()?.getDefaultMemoryConfig?.() ?? null;
+      const resolvedMemory = memory ?? (defaultMemory as typeof memory | null) ?? undefined;
+
       // Create agent with flat StorageCreateAgentInput
       // Cast needed because Zod's passthrough() output types don't exactly match the handwritten TS interfaces
       await agentsStore.create({
@@ -222,7 +227,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
           mcpClients,
           inputProcessors,
           outputProcessors,
-          memory,
+          memory: resolvedMemory,
           scorers,
           skills,
           workspace,

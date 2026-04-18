@@ -21,6 +21,18 @@ import { useStoredAgentMutations } from './use-stored-agents';
 type CreateOptions = {
   mode: 'create';
   onSuccess: (agentId: string) => void;
+  /**
+   * Optional author id attached to the stored agent on creation. The Agent
+   * Studio passes the current user's id so "Mine" scope and marketplace
+   * attribution work without requiring an auth provider on the server.
+   */
+  authorId?: string;
+  /**
+   * When true, immediately activate the first version so the agent is
+   * published and shows up in default (published-only) agent lists. The Agent
+   * Studio end-user flow uses this so users see their new agent right away.
+   */
+  autoPublish?: boolean;
 };
 
 type EditOptions = {
@@ -223,6 +235,9 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
   const handleSaveDraft = useCallback(
     async (changeMessage?: string) => {
       if (!isEdit) return;
+      // Guard against `onClick={handleSaveDraft}` wiring the click event into
+      // `changeMessage` — serializing that causes a circular JSON error.
+      const safeChangeMessage = typeof changeMessage === 'string' ? changeMessage : undefined;
 
       const isValid = await form.trigger();
       if (!isValid) {
@@ -250,7 +265,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
           await updateStoredAgent.mutateAsync({
             ...sharedParams,
             memory: editMemory,
-            ...(changeMessage ? { changeMessage } : {}),
+            ...(safeChangeMessage ? { changeMessage: safeChangeMessage } : {}),
           });
         }
 
@@ -360,9 +375,25 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
           const createParams: CreateStoredAgentParams = {
             ...sharedParams,
             memory: memoryBase,
+            ...(options.mode === 'create' && options.authorId ? { authorId: options.authorId } : {}),
           };
 
           const created = await createStoredAgent.mutateAsync(createParams);
+
+          if (options.mode === 'create' && options.autoPublish) {
+            const versionsResponse = await client
+              .getStoredAgent(created.id)
+              .listVersions({ sortDirection: 'DESC', perPage: 1 });
+            const latestVersion = versionsResponse.versions[0];
+            if (latestVersion) {
+              await client.getStoredAgent(created.id).activateVersion(latestVersion.id);
+            }
+            await Promise.all([
+              queryClient.invalidateQueries({ queryKey: ['stored-agents'] }),
+              queryClient.invalidateQueries({ queryKey: ['agents'] }),
+            ]);
+          }
+
           toast.success('Agent created successfully');
           options.onSuccess(created.id);
         }

@@ -1637,6 +1637,7 @@ export interface AgentBuilderConfigResponse {
   recents: {
     maxItems: number;
   };
+  hasDefaultMemoryConfig: boolean;
 }
 
 export interface GetSystemPackagesResponse {

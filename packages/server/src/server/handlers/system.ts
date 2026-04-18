@@ -50,6 +50,7 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
           allowAvatarUpload: boolean;
         };
         recents: { maxItems: number };
+        hasDefaultMemoryConfig: boolean;
       } | null = null;
 
       if (agentBuilder) {
@@ -68,6 +69,7 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
             marketplace: agentBuilder.getMarketplaceConfig(),
             configure: agentBuilder.getConfigureConfig(),
             recents: agentBuilder.getRecentsConfig(),
+            hasDefaultMemoryConfig: agentBuilder.getDefaultMemoryConfig?.() != null,
           };
         }
       }
