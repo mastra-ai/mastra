@@ -52,7 +52,7 @@ export const browserAgent = new Agent({
 Use the workspace_execute_command tool to run browser commands. The browser CLI is available for navigation, interaction, and data extraction.
 
 Browser context (current URL, page title) will be provided when available.`,
-  model: 'openai/gpt-4.1',
+  model: 'openai/gpt-5.4',
   workspace: browserWorkspace,
   memory,
 });

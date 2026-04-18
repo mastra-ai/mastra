@@ -17,7 +17,7 @@ export const sdkStagehandAgent = new Agent({
 You can browse the web, interact with pages, and help users with web-based tasks.
 
 When asked to visit a website or interact with web content, use your browser tools.`,
-  model: 'openai/gpt-4.1',
+  model: 'openai/gpt-5.4',
   browser: new StagehandBrowser({
     headless: false,
   }),

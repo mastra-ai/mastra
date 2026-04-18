@@ -78,7 +78,7 @@ When interacting with pages:
 4. Use "browse extract" to get structured data
 
 Browser context (current URL, page title) will be provided when available.`,
-  model: 'openai/gpt-4.1',
+  model: 'openai/gpt-5.4',
   workspace: browseCLIWorkspace,
   memory,
 });
