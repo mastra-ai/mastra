@@ -414,7 +414,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
         // Determine which tools to load
         let toLoad: string[];
         const toolNamesProvided = toolNames !== undefined;
-        if (toolNamesProvided && toolNames!.length === 0) {
+        if (toolNamesProvided && toolNames!.length === 0 && !toolName) {
           return {
             success: false,
             message: 'toolNames array must not be empty.',
