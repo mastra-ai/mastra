@@ -28,6 +28,7 @@ import {
 import { executeWithContext } from '../observability/utils';
 import { ProcessorRunner, ProcessorState } from '../processors';
 import type { OutputResult, Processor, ProcessorStreamWriter } from '../processors';
+import { projectProcessorSpanPayload } from '../processors/span-output';
 import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';
 import type { ProcessorStepInput, ProcessorStepOutput } from '../processors/step-schema';
 import { toStandardSchema } from '../schema';
@@ -858,7 +859,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       const executePhaseWithSpan = async <T>(fn: () => Promise<T>): Promise<T> => {
         try {
           const result = await executeWithContext({ span: processorSpan, fn });
-          processorSpan?.end({ output: result });
+          processorSpan?.end({ output: projectProcessorSpanPayload(result) });
           return result;
         } catch (error) {
           // TripWire errors should end span but bubble up to halt the workflow
