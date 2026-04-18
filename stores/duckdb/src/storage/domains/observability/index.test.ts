@@ -6,6 +6,42 @@ import type { ObservabilityStorageDuckDB } from './index';
 describe('ObservabilityStorageDuckDB', () => {
   let store: DuckDBStore;
   let storage: ObservabilityStorageDuckDB;
+  let signalIdSeq = 0;
+
+  const nextSignalId = (prefix: string) => `${prefix}-test-${++signalIdSeq}`;
+
+  const batchCreateLogs = async (logs: any[]) =>
+    storage.batchCreateLogs({
+      logs: logs.map(log => ({ logId: log.logId ?? nextSignalId('log'), ...log })),
+    });
+
+  const batchCreateMetrics = async (metrics: any[]) =>
+    storage.batchCreateMetrics({
+      metrics: metrics.map(metric => ({ metricId: metric.metricId ?? nextSignalId('metric'), ...metric })),
+    });
+
+  const createScore = async (score: any) =>
+    storage.createScore({
+      score: { scoreId: score.scoreId ?? nextSignalId('score'), ...score },
+    });
+
+  const batchCreateScores = async (scores: any[]) =>
+    storage.batchCreateScores({
+      scores: scores.map(score => ({ scoreId: score.scoreId ?? nextSignalId('score'), ...score })),
+    });
+
+  const createFeedback = async (feedback: any) =>
+    storage.createFeedback({
+      feedback: { feedbackId: feedback.feedbackId ?? nextSignalId('feedback'), ...feedback },
+    });
+
+  const batchCreateFeedback = async (feedbacks: any[]) =>
+    storage.batchCreateFeedback({
+      feedbacks: feedbacks.map(feedback => ({
+        feedbackId: feedback.feedbackId ?? nextSignalId('feedback'),
+        ...feedback,
+      })),
+    });
 
   beforeAll(async () => {
     store = new DuckDBStore({ path: ':memory:' });
@@ -14,6 +50,7 @@ describe('ObservabilityStorageDuckDB', () => {
   });
 
   beforeEach(async () => {
+    signalIdSeq = 0;
     await storage.dangerouslyClearAll();
   });
 
@@ -265,7 +302,7 @@ describe('ObservabilityStorageDuckDB', () => {
     });
   });
 
-  it('adds missing score and feedback columns for legacy tables during init', async () => {
+  it('requires manual migration for legacy score and feedback tables before init', async () => {
     const legacyStore = new DuckDBStore({ path: ':memory:' });
 
     await legacyStore.db.execute(`
@@ -299,11 +336,15 @@ describe('ObservabilityStorageDuckDB', () => {
       )
     `);
 
+    await expect(legacyStore.observability.init()).rejects.toThrow(/MIGRATION REQUIRED/);
+
+    await legacyStore.observability.migrateSpans();
     await legacyStore.observability.init();
 
     await legacyStore.observability.batchCreateScores({
       scores: [
         {
+          scoreId: 'legacy-score-1',
           timestamp: new Date('2026-01-01T00:00:00Z'),
           traceId: 'legacy-trace',
           spanId: 'legacy-span',
@@ -322,6 +363,7 @@ describe('ObservabilityStorageDuckDB', () => {
     await legacyStore.observability.batchCreateFeedback({
       feedbacks: [
         {
+          feedbackId: 'legacy-feedback-1',
           timestamp: new Date('2026-01-01T00:00:00Z'),
           traceId: 'legacy-trace',
           feedbackType: 'thumbs',
@@ -376,7 +418,7 @@ describe('ObservabilityStorageDuckDB', () => {
     await legacyStore.db.close();
   });
 
-  it('relaxes legacy score and feedback traceId columns during init', async () => {
+  it('relaxes legacy score and feedback traceId columns during manual migration', async () => {
     const legacyStore = new DuckDBStore({ path: ':memory:' });
 
     await legacyStore.db.execute(`
@@ -410,10 +452,14 @@ describe('ObservabilityStorageDuckDB', () => {
       )
     `);
 
+    await expect(legacyStore.observability.init()).rejects.toThrow(/MIGRATION REQUIRED/);
+
+    await legacyStore.observability.migrateSpans();
     await legacyStore.observability.init();
 
     await legacyStore.observability.createScore({
       score: {
+        scoreId: 'legacy-score-null-trace',
         timestamp: new Date('2026-01-01T00:00:00Z'),
         traceId: null,
         spanId: null,
@@ -428,6 +474,7 @@ describe('ObservabilityStorageDuckDB', () => {
 
     await legacyStore.observability.createFeedback({
       feedback: {
+        feedbackId: 'legacy-feedback-null-trace',
         timestamp: new Date('2026-01-01T00:00:00Z'),
         traceId: null,
         spanId: null,
@@ -456,33 +503,31 @@ describe('ObservabilityStorageDuckDB', () => {
 
   describe('logs', () => {
     it('creates and lists logs', async () => {
-      await storage.batchCreateLogs({
-        logs: [
-          {
-            timestamp: new Date(),
-            level: 'info',
-            message: 'Test log message',
-            data: { key: 'value' },
-            traceId: 'trace-1',
-            spanId: 'span-1',
-            tags: ['test'],
-            entityType: EntityType.AGENT,
-            entityId: 'agent-1',
-            entityName: 'myAgent',
-            metadata: null,
-          },
-          {
-            timestamp: new Date(),
-            level: 'error',
-            message: 'Error occurred',
-            data: null,
-            traceId: 'trace-1',
-            spanId: null,
-            tags: null,
-            metadata: null,
-          },
-        ],
-      });
+      await batchCreateLogs([
+        {
+          timestamp: new Date(),
+          level: 'info',
+          message: 'Test log message',
+          data: { key: 'value' },
+          traceId: 'trace-1',
+          spanId: 'span-1',
+          tags: ['test'],
+          entityType: EntityType.AGENT,
+          entityId: 'agent-1',
+          entityName: 'myAgent',
+          metadata: null,
+        },
+        {
+          timestamp: new Date(),
+          level: 'error',
+          message: 'Error occurred',
+          data: null,
+          traceId: 'trace-1',
+          spanId: null,
+          tags: null,
+          metadata: null,
+        },
+      ]);
 
       const result = await storage.listLogs({});
       expect(result.logs).toHaveLength(2);
@@ -502,58 +547,56 @@ describe('ObservabilityStorageDuckDB', () => {
   describe('metrics', () => {
     beforeEach(async () => {
       // Insert sample metrics
-      await storage.batchCreateMetrics({
-        metrics: [
-          {
-            timestamp: new Date('2026-01-01T00:00:00Z'),
-            name: 'mastra_agent_duration_ms',
-            value: 100,
-            labels: { status: 'ok' },
-            provider: 'openai',
-            model: 'gpt-4o-mini',
-            estimatedCost: 0.1,
-            costUnit: 'usd',
-            tags: ['prod'],
-            entityType: EntityType.AGENT,
-            entityName: 'weatherAgent',
-          },
-          {
-            timestamp: new Date('2026-01-01T00:00:05Z'),
-            name: 'mastra_agent_duration_ms',
-            value: 200,
-            labels: { status: 'ok' },
-            provider: 'openai',
-            model: 'gpt-4o-mini',
-            estimatedCost: 0.2,
-            costUnit: 'usd',
-            tags: ['prod'],
-            entityType: EntityType.AGENT,
-            entityName: 'weatherAgent',
-          },
-          {
-            timestamp: new Date('2026-01-01T00:00:10Z'),
-            name: 'mastra_agent_duration_ms',
-            value: 500,
-            labels: { status: 'error' },
-            provider: 'anthropic',
-            model: 'claude-3-7-sonnet',
-            estimatedCost: 0.5,
-            costUnit: 'usd',
-            tags: ['prod'],
-            entityType: EntityType.AGENT,
-            entityName: 'codeAgent',
-          },
-          {
-            timestamp: new Date('2026-01-01T01:00:00Z'),
-            name: 'mastra_tool_calls_started',
-            value: 1,
-            labels: {},
-            tags: ['prod'],
-            entityType: EntityType.TOOL,
-            entityName: 'search',
-          },
-        ],
-      });
+      await batchCreateMetrics([
+        {
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          name: 'mastra_agent_duration_ms',
+          value: 100,
+          labels: { status: 'ok' },
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+          estimatedCost: 0.1,
+          costUnit: 'usd',
+          tags: ['prod'],
+          entityType: EntityType.AGENT,
+          entityName: 'weatherAgent',
+        },
+        {
+          timestamp: new Date('2026-01-01T00:00:05Z'),
+          name: 'mastra_agent_duration_ms',
+          value: 200,
+          labels: { status: 'ok' },
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+          estimatedCost: 0.2,
+          costUnit: 'usd',
+          tags: ['prod'],
+          entityType: EntityType.AGENT,
+          entityName: 'weatherAgent',
+        },
+        {
+          timestamp: new Date('2026-01-01T00:00:10Z'),
+          name: 'mastra_agent_duration_ms',
+          value: 500,
+          labels: { status: 'error' },
+          provider: 'anthropic',
+          model: 'claude-3-7-sonnet',
+          estimatedCost: 0.5,
+          costUnit: 'usd',
+          tags: ['prod'],
+          entityType: EntityType.AGENT,
+          entityName: 'codeAgent',
+        },
+        {
+          timestamp: new Date('2026-01-01T01:00:00Z'),
+          name: 'mastra_tool_calls_started',
+          value: 1,
+          labels: {},
+          tags: ['prod'],
+          entityType: EntityType.TOOL,
+          entityName: 'search',
+        },
+      ]);
     });
 
     it('getMetricAggregate returns sum', async () => {
@@ -641,26 +684,24 @@ describe('ObservabilityStorageDuckDB', () => {
     });
 
     it('getMetricBreakdown accepts discovered label keys with non-identifier characters', async () => {
-      await storage.batchCreateMetrics({
-        metrics: [
-          {
-            timestamp: new Date('2026-01-01T00:00:20Z'),
-            name: 'mastra_agent_duration_ms',
-            value: 300,
-            labels: { 'foo-bar': 'alpha' },
-            entityType: EntityType.AGENT,
-            entityName: 'weatherAgent',
-          },
-          {
-            timestamp: new Date('2026-01-01T00:00:25Z'),
-            name: 'mastra_agent_duration_ms',
-            value: 400,
-            labels: { 'foo-bar': 'beta' },
-            entityType: EntityType.AGENT,
-            entityName: 'codeAgent',
-          },
-        ],
-      });
+      await batchCreateMetrics([
+        {
+          timestamp: new Date('2026-01-01T00:00:20Z'),
+          name: 'mastra_agent_duration_ms',
+          value: 300,
+          labels: { 'foo-bar': 'alpha' },
+          entityType: EntityType.AGENT,
+          entityName: 'weatherAgent',
+        },
+        {
+          timestamp: new Date('2026-01-01T00:00:25Z'),
+          name: 'mastra_agent_duration_ms',
+          value: 400,
+          labels: { 'foo-bar': 'beta' },
+          entityType: EntityType.AGENT,
+          entityName: 'codeAgent',
+        },
+      ]);
 
       const keys = await storage.getMetricLabelKeys({ metricName: 'mastra_agent_duration_ms' });
       expect(keys.keys).toContain('foo-bar');
@@ -694,26 +735,24 @@ describe('ObservabilityStorageDuckDB', () => {
     });
 
     it('getMetricTimeSeries keeps colliding display names as separate grouped series', async () => {
-      await storage.batchCreateMetrics({
-        metrics: [
-          {
-            timestamp: new Date('2026-01-01T02:00:00Z'),
-            name: 'mastra_collision_metric',
-            value: 10,
-            labels: { segmentA: 'a', segmentB: 'b|c' },
-            entityType: EntityType.TOOL,
-            entityName: 'search',
-          },
-          {
-            timestamp: new Date('2026-01-01T02:00:00Z'),
-            name: 'mastra_collision_metric',
-            value: 20,
-            labels: { segmentA: 'a|b', segmentB: 'c' },
-            entityType: EntityType.TOOL,
-            entityName: 'search',
-          },
-        ],
-      });
+      await batchCreateMetrics([
+        {
+          timestamp: new Date('2026-01-01T02:00:00Z'),
+          name: 'mastra_collision_metric',
+          value: 10,
+          labels: { segmentA: 'a', segmentB: 'b|c' },
+          entityType: EntityType.TOOL,
+          entityName: 'search',
+        },
+        {
+          timestamp: new Date('2026-01-01T02:00:00Z'),
+          name: 'mastra_collision_metric',
+          value: 20,
+          labels: { segmentA: 'a|b', segmentB: 'c' },
+          entityType: EntityType.TOOL,
+          entityName: 'search',
+        },
+      ]);
 
       const result = await storage.getMetricTimeSeries({
         name: ['mastra_collision_metric'],
@@ -763,49 +802,45 @@ describe('ObservabilityStorageDuckDB', () => {
 
   describe('discovery', () => {
     beforeEach(async () => {
-      await storage.batchCreateMetrics({
-        metrics: [
-          {
-            timestamp: new Date(),
-            name: 'mastra_agent_duration_ms',
-            value: 100,
-            labels: { agent: 'weatherAgent', status: 'ok' },
-            entityType: EntityType.AGENT,
-            entityName: 'weatherAgent',
-            serviceName: 'metric-service',
-            environment: 'metric-env',
-            tags: ['metric-tag'],
-          },
-          {
-            timestamp: new Date(),
-            name: 'mastra_tool_calls_started',
-            value: 1,
-            labels: { tool: 'search' },
-            entityType: EntityType.TOOL,
-            entityName: 'metricTool',
-            serviceName: 'metric-service',
-            environment: 'metric-env',
-            tags: ['metric-tag'],
-          },
-        ],
-      });
+      await batchCreateMetrics([
+        {
+          timestamp: new Date(),
+          name: 'mastra_agent_duration_ms',
+          value: 100,
+          labels: { agent: 'weatherAgent', status: 'ok' },
+          entityType: EntityType.AGENT,
+          entityName: 'weatherAgent',
+          serviceName: 'metric-service',
+          environment: 'metric-env',
+          tags: ['metric-tag'],
+        },
+        {
+          timestamp: new Date(),
+          name: 'mastra_tool_calls_started',
+          value: 1,
+          labels: { tool: 'search' },
+          entityType: EntityType.TOOL,
+          entityName: 'metricTool',
+          serviceName: 'metric-service',
+          environment: 'metric-env',
+          tags: ['metric-tag'],
+        },
+      ]);
 
-      await storage.batchCreateLogs({
-        logs: [
-          {
-            timestamp: new Date(),
-            level: 'info',
-            message: 'discovery-log',
-            data: null,
-            entityType: EntityType.INPUT_PROCESSOR,
-            entityName: 'logProcessor',
-            serviceName: 'log-service',
-            environment: 'log-env',
-            tags: ['log-tag'],
-            metadata: null,
-          },
-        ],
-      });
+      await batchCreateLogs([
+        {
+          timestamp: new Date(),
+          level: 'info',
+          message: 'discovery-log',
+          data: null,
+          entityType: EntityType.INPUT_PROCESSOR,
+          entityName: 'logProcessor',
+          serviceName: 'log-service',
+          environment: 'log-env',
+          tags: ['log-tag'],
+          metadata: null,
+        },
+      ]);
 
       await storage.batchCreateSpans({
         records: [
@@ -917,30 +952,26 @@ describe('ObservabilityStorageDuckDB', () => {
 
   describe('scores', () => {
     it('creates and lists scores', async () => {
-      await storage.createScore({
-        score: {
-          timestamp: new Date(),
-          traceId: 'trace-1',
-          spanId: null,
-          scorerId: 'relevance',
-          score: 0.85,
-          reason: 'Good answer',
-          experimentId: 'exp-1',
-          metadata: { entityType: 'agent' },
-        },
+      await createScore({
+        timestamp: new Date(),
+        traceId: 'trace-1',
+        spanId: null,
+        scorerId: 'relevance',
+        score: 0.85,
+        reason: 'Good answer',
+        experimentId: 'exp-1',
+        metadata: { entityType: 'agent' },
       });
 
-      await storage.createScore({
-        score: {
-          timestamp: new Date(),
-          traceId: 'trace-1',
-          spanId: 'span-1',
-          scorerId: 'factuality',
-          score: 0.9,
-          reason: null,
-          experimentId: null,
-          metadata: null,
-        },
+      await createScore({
+        timestamp: new Date(),
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        scorerId: 'factuality',
+        score: 0.9,
+        reason: null,
+        experimentId: null,
+        metadata: null,
       });
 
       const result = await storage.listScores({});
@@ -954,18 +985,16 @@ describe('ObservabilityStorageDuckDB', () => {
     });
 
     it('supports deprecated source aliases for scores', async () => {
-      await storage.createScore({
-        score: {
-          timestamp: new Date('2026-01-01T00:00:00Z'),
-          traceId: 'trace-legacy-score',
-          spanId: null,
-          scorerId: 'legacy',
-          source: 'manual',
-          score: 1,
-          reason: null,
-          experimentId: null,
-          metadata: null,
-        },
+      await createScore({
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: 'trace-legacy-score',
+        spanId: null,
+        scorerId: 'legacy',
+        source: 'manual',
+        score: 1,
+        reason: null,
+        experimentId: null,
+        metadata: null,
       });
 
       const filtered = await storage.listScores({
@@ -979,19 +1008,17 @@ describe('ObservabilityStorageDuckDB', () => {
     });
 
     it('supports nullable traceId for scores at the storage boundary', async () => {
-      await storage.createScore({
-        score: {
-          timestamp: new Date('2026-01-01T00:00:00Z'),
-          traceId: null,
-          spanId: null,
-          scorerId: 'quality',
-          scoreSource: 'automated',
-          score: 0.9,
-          reason: null,
-          experimentId: null,
-          metadata: null,
-        } as any,
-      });
+      await createScore({
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: null,
+        spanId: null,
+        scorerId: 'quality',
+        scoreSource: 'automated',
+        score: 0.9,
+        reason: null,
+        experimentId: null,
+        metadata: null,
+      } as any);
 
       const result = await storage.listScores({});
       expect(result.scores).toHaveLength(1);
@@ -1000,37 +1027,35 @@ describe('ObservabilityStorageDuckDB', () => {
     });
 
     it('supports score OLAP queries keyed by scorerId and optional scoreSource', async () => {
-      await storage.batchCreateScores({
-        scores: [
-          {
-            timestamp: new Date('2026-01-01T00:00:00Z'),
-            traceId: 'score-olap-1',
-            scorerId: 'relevance',
-            scoreSource: 'manual',
-            score: 0.8,
-            experimentId: 'exp-1',
-            entityName: 'agent-a',
-          },
-          {
-            timestamp: new Date('2026-01-01T00:20:00Z'),
-            traceId: 'score-olap-2',
-            scorerId: 'relevance',
-            scoreSource: 'manual',
-            score: 0.6,
-            experimentId: 'exp-2',
-            entityName: 'agent-b',
-          },
-          {
-            timestamp: new Date('2026-01-01T00:40:00Z'),
-            traceId: 'score-olap-3',
-            scorerId: 'relevance',
-            scoreSource: 'automated',
-            score: 0.2,
-            experimentId: 'exp-3',
-            entityName: 'agent-c',
-          },
-        ],
-      });
+      await batchCreateScores([
+        {
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'score-olap-1',
+          scorerId: 'relevance',
+          scoreSource: 'manual',
+          score: 0.8,
+          experimentId: 'exp-1',
+          entityName: 'agent-a',
+        },
+        {
+          timestamp: new Date('2026-01-01T00:20:00Z'),
+          traceId: 'score-olap-2',
+          scorerId: 'relevance',
+          scoreSource: 'manual',
+          score: 0.6,
+          experimentId: 'exp-2',
+          entityName: 'agent-b',
+        },
+        {
+          timestamp: new Date('2026-01-01T00:40:00Z'),
+          traceId: 'score-olap-3',
+          scorerId: 'relevance',
+          scoreSource: 'automated',
+          score: 0.2,
+          experimentId: 'exp-3',
+          entityName: 'agent-c',
+        },
+      ]);
 
       expect(
         await storage.getScoreAggregate({
@@ -1094,36 +1119,32 @@ describe('ObservabilityStorageDuckDB', () => {
 
   describe('feedback', () => {
     it('creates and lists feedback', async () => {
-      await storage.createFeedback({
-        feedback: {
-          timestamp: new Date(),
-          traceId: 'trace-1',
-          spanId: null,
-          feedbackSource: 'user',
-          feedbackType: 'thumbs',
-          value: 1,
-          comment: 'Great!',
-          experimentId: null,
-          feedbackUserId: 'user-1',
-          sourceId: 'source-1',
-          metadata: null,
-        },
+      await createFeedback({
+        timestamp: new Date(),
+        traceId: 'trace-1',
+        spanId: null,
+        feedbackSource: 'user',
+        feedbackType: 'thumbs',
+        value: 1,
+        comment: 'Great!',
+        experimentId: null,
+        feedbackUserId: 'user-1',
+        sourceId: 'source-1',
+        metadata: null,
       });
 
-      await storage.createFeedback({
-        feedback: {
-          timestamp: new Date(),
-          traceId: 'trace-2',
-          spanId: null,
-          feedbackSource: 'reviewer',
-          feedbackType: 'rating',
-          value: 4,
-          comment: null,
-          experimentId: 'exp-1',
-          feedbackUserId: 'user-2',
-          sourceId: 'source-2',
-          metadata: null,
-        },
+      await createFeedback({
+        timestamp: new Date(),
+        traceId: 'trace-2',
+        spanId: null,
+        feedbackSource: 'reviewer',
+        feedbackType: 'rating',
+        value: 4,
+        comment: null,
+        experimentId: 'exp-1',
+        feedbackUserId: 'user-2',
+        sourceId: 'source-2',
+        metadata: null,
       });
 
       const result = await storage.listFeedback({});
@@ -1139,19 +1160,17 @@ describe('ObservabilityStorageDuckDB', () => {
     });
 
     it('supports deprecated source aliases for feedback', async () => {
-      await storage.createFeedback({
-        feedback: {
-          timestamp: new Date('2026-01-01T00:00:00Z'),
-          traceId: 'trace-legacy-feedback',
-          spanId: null,
-          source: 'manual',
-          feedbackType: 'rating',
-          value: 5,
-          comment: null,
-          experimentId: null,
-          sourceId: null,
-          metadata: null,
-        },
+      await createFeedback({
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: 'trace-legacy-feedback',
+        spanId: null,
+        source: 'manual',
+        feedbackType: 'rating',
+        value: 5,
+        comment: null,
+        experimentId: null,
+        sourceId: null,
+        metadata: null,
       });
 
       const filtered = await storage.listFeedback({
@@ -1165,20 +1184,18 @@ describe('ObservabilityStorageDuckDB', () => {
     });
 
     it('supports nullable traceId for feedback at the storage boundary', async () => {
-      await storage.createFeedback({
-        feedback: {
-          timestamp: new Date('2026-01-01T00:00:00Z'),
-          traceId: null,
-          spanId: null,
-          feedbackSource: 'manual',
-          feedbackType: 'rating',
-          value: 5,
-          comment: null,
-          experimentId: null,
-          sourceId: null,
-          metadata: null,
-        } as any,
-      });
+      await createFeedback({
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: null,
+        spanId: null,
+        feedbackSource: 'manual',
+        feedbackType: 'rating',
+        value: 5,
+        comment: null,
+        experimentId: null,
+        sourceId: null,
+        metadata: null,
+      } as any);
 
       const result = await storage.listFeedback({});
       expect(result.feedback).toHaveLength(1);
@@ -1187,49 +1204,47 @@ describe('ObservabilityStorageDuckDB', () => {
     });
 
     it('batch creates and lists feedback', async () => {
-      await storage.batchCreateFeedback({
-        feedbacks: [
-          {
-            timestamp: new Date('2026-01-01T00:00:00Z'),
-            traceId: 'batch-trace-1',
-            spanId: null,
-            feedbackSource: 'user',
-            feedbackType: 'thumbs',
-            value: 1,
-            comment: 'Helpful',
-            experimentId: null,
-            feedbackUserId: 'user-1',
-            sourceId: 'source-1',
-            metadata: null,
-          },
-          {
-            timestamp: new Date('2026-01-01T00:00:01Z'),
-            traceId: 'batch-trace-2',
-            spanId: 'span-2',
-            feedbackSource: 'reviewer',
-            feedbackType: 'rating',
-            value: 4,
-            comment: null,
-            experimentId: 'exp-1',
-            feedbackUserId: 'user-2',
-            sourceId: 'source-2',
-            metadata: { category: 'quality' },
-          },
-          {
-            timestamp: new Date('2026-01-01T00:00:02Z'),
-            traceId: 'batch-trace-3',
-            spanId: null,
-            feedbackSource: 'system',
-            feedbackType: 'flag',
-            value: 'needs-review',
-            comment: 'Escalated',
-            experimentId: null,
-            feedbackUserId: null,
-            sourceId: 'source-3',
-            metadata: { severity: 'high' },
-          },
-        ],
-      });
+      await batchCreateFeedback([
+        {
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'batch-trace-1',
+          spanId: null,
+          feedbackSource: 'user',
+          feedbackType: 'thumbs',
+          value: 1,
+          comment: 'Helpful',
+          experimentId: null,
+          feedbackUserId: 'user-1',
+          sourceId: 'source-1',
+          metadata: null,
+        },
+        {
+          timestamp: new Date('2026-01-01T00:00:01Z'),
+          traceId: 'batch-trace-2',
+          spanId: 'span-2',
+          feedbackSource: 'reviewer',
+          feedbackType: 'rating',
+          value: 4,
+          comment: null,
+          experimentId: 'exp-1',
+          feedbackUserId: 'user-2',
+          sourceId: 'source-2',
+          metadata: { category: 'quality' },
+        },
+        {
+          timestamp: new Date('2026-01-01T00:00:02Z'),
+          traceId: 'batch-trace-3',
+          spanId: null,
+          feedbackSource: 'system',
+          feedbackType: 'flag',
+          value: 'needs-review',
+          comment: 'Escalated',
+          experimentId: null,
+          feedbackUserId: null,
+          sourceId: 'source-3',
+          metadata: { severity: 'high' },
+        },
+      ]);
 
       const result = await storage.listFeedback({
         orderBy: { field: 'timestamp', direction: 'ASC' },
@@ -1268,42 +1283,40 @@ describe('ObservabilityStorageDuckDB', () => {
     });
 
     it('supports feedback OLAP queries keyed by feedbackType and optional feedbackSource', async () => {
-      await storage.batchCreateFeedback({
-        feedbacks: [
-          {
-            timestamp: new Date('2026-01-01T00:00:00Z'),
-            traceId: 'feedback-olap-1',
-            feedbackType: 'rating',
-            feedbackSource: 'user',
-            value: 5,
-            entityName: 'agent-a',
-          },
-          {
-            timestamp: new Date('2026-01-01T00:10:00Z'),
-            traceId: 'feedback-olap-2',
-            feedbackType: 'rating',
-            feedbackSource: 'user',
-            value: '4',
-            entityName: 'agent-b',
-          },
-          {
-            timestamp: new Date('2026-01-01T00:20:00Z'),
-            traceId: 'feedback-olap-3',
-            feedbackType: 'rating',
-            feedbackSource: 'system',
-            value: 1,
-            entityName: 'agent-a',
-          },
-          {
-            timestamp: new Date('2026-01-01T00:30:00Z'),
-            traceId: 'feedback-olap-4',
-            feedbackType: 'rating',
-            feedbackSource: 'user',
-            value: 'needs-review',
-            entityName: 'agent-a',
-          },
-        ],
-      });
+      await batchCreateFeedback([
+        {
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'feedback-olap-1',
+          feedbackType: 'rating',
+          feedbackSource: 'user',
+          value: 5,
+          entityName: 'agent-a',
+        },
+        {
+          timestamp: new Date('2026-01-01T00:10:00Z'),
+          traceId: 'feedback-olap-2',
+          feedbackType: 'rating',
+          feedbackSource: 'user',
+          value: '4',
+          entityName: 'agent-b',
+        },
+        {
+          timestamp: new Date('2026-01-01T00:20:00Z'),
+          traceId: 'feedback-olap-3',
+          feedbackType: 'rating',
+          feedbackSource: 'system',
+          value: 1,
+          entityName: 'agent-a',
+        },
+        {
+          timestamp: new Date('2026-01-01T00:30:00Z'),
+          traceId: 'feedback-olap-4',
+          feedbackType: 'rating',
+          feedbackSource: 'user',
+          value: 'needs-review',
+          entityName: 'agent-a',
+        },
+      ]);
 
       expect(
         await storage.getFeedbackAggregate({

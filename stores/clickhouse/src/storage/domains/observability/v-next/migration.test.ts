@@ -4,6 +4,7 @@ import { MastraError } from '@mastra/core/error';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TABLE_LOG_EVENTS, TABLE_METRIC_EVENTS, TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS } from './ddl';
 import { migrateSignalTables } from './migration';
+import { ObservabilityStorageClickhouseVNext } from '.';
 
 /** Wraps a client so that INSERT commands throw — used to exercise rollback. */
 function clientThatFailsOnInsert(real: ClickHouseClient): ClickHouseClient {
@@ -203,6 +204,38 @@ describe('migrateSignalTables (ClickHouse v-next)', () => {
     expect(second[0]!.metricId).toBe(first[0]!.metricId);
   });
 
+  it('requires manual migration before init and migrates legacy signal tables through migrateSpans()', async () => {
+    await client.command({ query: LEGACY_LOG_DDL });
+    await client.insert({
+      table: TABLE_LOG_EVENTS,
+      values: [
+        { timestamp: '2026-01-01 00:00:00.000', traceId: 'trace-a', spanId: 'span-a', level: 'info', message: 'hello' },
+      ],
+      format: 'JSONEachRow',
+    });
+
+    const legacyStore = new ObservabilityStorageClickhouseVNext({ client });
+
+    await expect(legacyStore.init()).rejects.toThrow(/MIGRATION REQUIRED/);
+
+    await expect(legacyStore.migrateSpans()).resolves.toMatchObject({
+      success: true,
+      alreadyMigrated: false,
+    });
+
+    await expect(legacyStore.init()).resolves.not.toThrow();
+
+    const result = await client.query({
+      query: `SELECT logId, message FROM ${TABLE_LOG_EVENTS} ORDER BY timestamp`,
+      format: 'JSONEachRow',
+    });
+    const rows = (await result.json()) as Array<{ logId: string; message: string }>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.message).toBe('hello');
+    expect(rows[0]!.logId).toMatch(UUID_RE);
+    expect(await getEngine(client, TABLE_LOG_EVENTS)).toBe('ReplacingMergeTree');
+  });
+
   it('enables ReplacingMergeTree dedup on the migrated signal ID', async () => {
     await client.command({ query: LEGACY_LOG_DDL });
     await client.insert({
@@ -237,7 +270,7 @@ describe('migrateSignalTables (ClickHouse v-next)', () => {
     expect(deduped[0]!.message).toBe('updated');
   });
 
-  it('restores the original table from backup when INSERT fails', async () => {
+  it('leaves the original table untouched when INSERT into the temp table fails', async () => {
     await client.command({ query: LEGACY_LOG_DDL });
     await client.insert({
       table: TABLE_LOG_EVENTS,

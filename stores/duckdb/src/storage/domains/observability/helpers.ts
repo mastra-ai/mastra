@@ -1,3 +1,5 @@
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { createStorageErrorId } from '@mastra/core/storage';
 import { DuckDBConnection } from '../../db/index';
 
 /** Shorthand for {@link DuckDBConnection.sqlValue}. */
@@ -45,4 +47,22 @@ export function parseJsonArray(value: unknown): unknown[] | null {
   if (value === null || value === undefined) return null;
   const parsed = parseJson(value);
   return Array.isArray(parsed) ? parsed : null;
+}
+
+export function requireSignalId(
+  value: unknown,
+  signalIdField: 'logId' | 'metricId' | 'scoreId' | 'feedbackId',
+): string {
+  const normalized = typeof value === 'string' ? value : value === null || value === undefined ? null : String(value);
+
+  if (normalized && normalized !== '') {
+    return normalized;
+  }
+
+  throw new MastraError({
+    id: createStorageErrorId('DUCKDB', 'SIGNAL_ID', `MISSING_${signalIdField.toUpperCase()}`),
+    domain: ErrorDomain.STORAGE,
+    category: ErrorCategory.USER,
+    text: `${signalIdField} is required for DuckDB observability signal records.`,
+  });
 }

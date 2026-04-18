@@ -256,7 +256,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_METRIC_EVENTS} (
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
-ORDER BY (name, metricId)
+ORDER BY (name, timestamp, metricId)
 `;
 
 // ---------------------------------------------------------------------------
@@ -314,7 +314,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_LOG_EVENTS} (
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
-ORDER BY (logId)
+ORDER BY (timestamp, logId)
 `;
 
 // ---------------------------------------------------------------------------
@@ -379,7 +379,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
-ORDER BY (traceId, scoreId)
+ORDER BY (traceId, timestamp, scoreId)
 SETTINGS allow_nullable_key = 1
 `;
 
@@ -448,7 +448,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS} (
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
-ORDER BY (traceId, feedbackId)
+ORDER BY (traceId, timestamp, feedbackId)
 SETTINGS allow_nullable_key = 1
 `;
 

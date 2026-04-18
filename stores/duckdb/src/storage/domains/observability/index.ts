@@ -1,4 +1,5 @@
-import { ObservabilityStorage } from '@mastra/core/storage';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { createStorageErrorId, ObservabilityStorage } from '@mastra/core/storage';
 import type {
   CreateSpanArgs,
   GetSpanArgs,
@@ -73,9 +74,38 @@ import * as discoveryOps from './discovery';
 import * as feedbackOps from './feedback';
 import * as logOps from './logs';
 import * as metricOps from './metrics';
-import { migrateSignalTables } from './migration';
+import { checkSignalTablesMigrationStatus, migrateSignalTables } from './migration';
 import * as scoreOps from './scores';
 import * as tracingOps from './tracing';
+
+function buildSignalMigrationRequiredMessage(args: { tables: Array<{ table: string }> }): string {
+  const tableList = args.tables.map(table => `  - ${table.table}`).join('\n');
+
+  return (
+    `\n` +
+    `===========================================================================\n` +
+    `MIGRATION REQUIRED: DuckDB observability signal tables need signal IDs\n` +
+    `===========================================================================\n` +
+    `\n` +
+    `The following signal tables still use the legacy schema and must be migrated\n` +
+    `before observability storage can initialize:\n` +
+    `\n` +
+    `${tableList}\n` +
+    `\n` +
+    `To fix this, run the manual migration command:\n` +
+    `\n` +
+    `  npx mastra migrate\n` +
+    `\n` +
+    `This command will:\n` +
+    `  1. Create replacement signal tables with signal-ID primary keys\n` +
+    `  2. Backfill missing signal IDs for legacy rows\n` +
+    `  3. Swap the migrated tables into place\n` +
+    `\n` +
+    `WARNING: This migration recreates the signal tables and may take significant\n` +
+    `time for large datasets. Please ensure you have a backup before proceeding.\n` +
+    `===========================================================================\n`
+  );
+}
 
 /** Configuration for the DuckDB observability storage domain. */
 export interface ObservabilityDuckDBConfig {
@@ -97,8 +127,17 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
 
   /** Create all observability tables if they don't exist. */
   async init(): Promise<void> {
-    // Non-destructive migration for signal tables missing the signal-ID PK.
-    await migrateSignalTables(this.db, this.logger);
+    const migrationStatus = await checkSignalTablesMigrationStatus(this.db);
+    if (migrationStatus.needsMigration) {
+      throw new MastraError({
+        id: createStorageErrorId('DUCKDB', 'MIGRATION_REQUIRED', 'SIGNAL_TABLES'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: buildSignalMigrationRequiredMessage({
+          tables: migrationStatus.tables.map(({ table }) => ({ table })),
+        }),
+      });
+    }
 
     for (const ddl of ALL_DDL) {
       await this.db.execute(ddl);
@@ -107,6 +146,38 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
     for (const migration of ALL_MIGRATIONS) {
       await this.db.execute(migration);
     }
+  }
+
+  /**
+   * Manually migrate legacy signal tables to the signal-ID primary-key schema.
+   * The public method name is historical; the CLI still calls `migrateSpans()`
+   * for observability migrations even though this now also migrates signal tables.
+   */
+  async migrateSpans(): Promise<{
+    success: boolean;
+    alreadyMigrated: boolean;
+    duplicatesRemoved: number;
+    message: string;
+  }> {
+    const migrationStatus = await checkSignalTablesMigrationStatus(this.db);
+
+    if (!migrationStatus.needsMigration) {
+      return {
+        success: true,
+        alreadyMigrated: true,
+        duplicatesRemoved: 0,
+        message: 'Migration already complete. Signal tables already use signal-ID primary keys.',
+      };
+    }
+
+    await migrateSignalTables(this.db, this.logger);
+
+    return {
+      success: true,
+      alreadyMigrated: false,
+      duplicatesRemoved: 0,
+      message: `Migration complete. Migrated signal tables: ${migrationStatus.tables.map(t => t.table).join(', ')}.`,
+    };
   }
 
   /** Delete all rows from every observability table. Use with caution. */

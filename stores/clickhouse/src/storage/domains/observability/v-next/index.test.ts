@@ -20,6 +20,42 @@ vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 describe('ObservabilityStorageClickhouseVNext', () => {
   let storage: ObservabilityStorageClickhouseVNext;
+  let signalIdSeq = 0;
+
+  const nextSignalId = (prefix: string) => `${prefix}-test-${++signalIdSeq}`;
+
+  const batchCreateLogs = async (logs: any[]) =>
+    storage.batchCreateLogs({
+      logs: logs.map(log => ({ logId: log.logId ?? nextSignalId('log'), ...log })),
+    });
+
+  const batchCreateMetrics = async (metrics: any[]) =>
+    storage.batchCreateMetrics({
+      metrics: metrics.map(metric => ({ metricId: metric.metricId ?? nextSignalId('metric'), ...metric })),
+    });
+
+  const createScore = async (score: any) =>
+    storage.createScore({
+      score: { scoreId: score.scoreId ?? nextSignalId('score'), ...score },
+    });
+
+  const batchCreateScores = async (scores: any[]) =>
+    storage.batchCreateScores({
+      scores: scores.map(score => ({ scoreId: score.scoreId ?? nextSignalId('score'), ...score })),
+    });
+
+  const createFeedback = async (feedback: any) =>
+    storage.createFeedback({
+      feedback: { feedbackId: feedback.feedbackId ?? nextSignalId('feedback'), ...feedback },
+    });
+
+  const batchCreateFeedback = async (feedbacks: any[]) =>
+    storage.batchCreateFeedback({
+      feedbacks: feedbacks.map(feedback => ({
+        feedbackId: feedback.feedbackId ?? nextSignalId('feedback'),
+        ...feedback,
+      })),
+    });
 
   beforeAll(async () => {
     storage = new ObservabilityStorageClickhouseVNext({
@@ -31,6 +67,7 @@ describe('ObservabilityStorageClickhouseVNext', () => {
   });
 
   beforeEach(async () => {
+    signalIdSeq = 0;
     await storage.dangerouslyClearAll();
   });
 
@@ -263,33 +300,31 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
   describe('logs', () => {
     it('creates and lists logs', async () => {
-      await storage.batchCreateLogs({
-        logs: [
-          {
-            timestamp: new Date(),
-            level: 'info',
-            message: 'Test log message',
-            data: { key: 'value' },
-            traceId: 'trace-1',
-            spanId: 'span-1',
-            tags: ['test'],
-            entityType: EntityType.AGENT,
-            entityId: 'agent-1',
-            entityName: 'myAgent',
-            metadata: null,
-          },
-          {
-            timestamp: new Date(),
-            level: 'error',
-            message: 'Error occurred',
-            data: null,
-            traceId: 'trace-1',
-            spanId: null,
-            tags: null,
-            metadata: null,
-          },
-        ],
-      });
+      await batchCreateLogs([
+        {
+          timestamp: new Date(),
+          level: 'info',
+          message: 'Test log message',
+          data: { key: 'value' },
+          traceId: 'trace-1',
+          spanId: 'span-1',
+          tags: ['test'],
+          entityType: EntityType.AGENT,
+          entityId: 'agent-1',
+          entityName: 'myAgent',
+          metadata: null,
+        },
+        {
+          timestamp: new Date(),
+          level: 'error',
+          message: 'Error occurred',
+          data: null,
+          traceId: 'trace-1',
+          spanId: null,
+          tags: null,
+          metadata: null,
+        },
+      ]);
 
       const result = await storage.listLogs({});
       expect(result.logs).toHaveLength(2);
@@ -308,58 +343,56 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
   describe('metrics', () => {
     beforeEach(async () => {
-      await storage.batchCreateMetrics({
-        metrics: [
-          {
-            timestamp: new Date('2026-01-01T00:00:00Z'),
-            name: 'mastra_agent_duration_ms',
-            value: 100,
-            labels: { status: 'ok' },
-            provider: 'openai',
-            model: 'gpt-4o-mini',
-            estimatedCost: 0.1,
-            costUnit: 'usd',
-            tags: ['prod'],
-            entityType: EntityType.AGENT,
-            entityName: 'weatherAgent',
-          },
-          {
-            timestamp: new Date('2026-01-01T00:00:05Z'),
-            name: 'mastra_agent_duration_ms',
-            value: 200,
-            labels: { status: 'ok' },
-            provider: 'openai',
-            model: 'gpt-4o-mini',
-            estimatedCost: 0.2,
-            costUnit: 'usd',
-            tags: ['prod'],
-            entityType: EntityType.AGENT,
-            entityName: 'weatherAgent',
-          },
-          {
-            timestamp: new Date('2026-01-01T00:00:10Z'),
-            name: 'mastra_agent_duration_ms',
-            value: 500,
-            labels: { status: 'error' },
-            provider: 'anthropic',
-            model: 'claude-3-7-sonnet',
-            estimatedCost: 0.5,
-            costUnit: 'usd',
-            tags: ['prod'],
-            entityType: EntityType.AGENT,
-            entityName: 'codeAgent',
-          },
-          {
-            timestamp: new Date('2026-01-01T01:00:00Z'),
-            name: 'mastra_tool_calls_started',
-            value: 1,
-            labels: {},
-            tags: ['prod'],
-            entityType: EntityType.TOOL,
-            entityName: 'search',
-          },
-        ],
-      });
+      await batchCreateMetrics([
+        {
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          name: 'mastra_agent_duration_ms',
+          value: 100,
+          labels: { status: 'ok' },
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+          estimatedCost: 0.1,
+          costUnit: 'usd',
+          tags: ['prod'],
+          entityType: EntityType.AGENT,
+          entityName: 'weatherAgent',
+        },
+        {
+          timestamp: new Date('2026-01-01T00:00:05Z'),
+          name: 'mastra_agent_duration_ms',
+          value: 200,
+          labels: { status: 'ok' },
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+          estimatedCost: 0.2,
+          costUnit: 'usd',
+          tags: ['prod'],
+          entityType: EntityType.AGENT,
+          entityName: 'weatherAgent',
+        },
+        {
+          timestamp: new Date('2026-01-01T00:00:10Z'),
+          name: 'mastra_agent_duration_ms',
+          value: 500,
+          labels: { status: 'error' },
+          provider: 'anthropic',
+          model: 'claude-3-7-sonnet',
+          estimatedCost: 0.5,
+          costUnit: 'usd',
+          tags: ['prod'],
+          entityType: EntityType.AGENT,
+          entityName: 'codeAgent',
+        },
+        {
+          timestamp: new Date('2026-01-01T01:00:00Z'),
+          name: 'mastra_tool_calls_started',
+          value: 1,
+          labels: {},
+          tags: ['prod'],
+          entityType: EntityType.TOOL,
+          entityName: 'search',
+        },
+      ]);
     });
 
     it('getMetricAggregate returns sum', async () => {
@@ -449,26 +482,24 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     it('getMetricBreakdown excludes rows missing label keys (v-next design)', async () => {
       // The beforeEach inserts 3 mastra_agent_duration_ms rows with 'status' label.
       // Insert 2 more rows with a different label key ('foo-bar'), but NOT 'status'.
-      await storage.batchCreateMetrics({
-        metrics: [
-          {
-            timestamp: new Date('2026-01-01T00:00:20Z'),
-            name: 'mastra_agent_duration_ms',
-            value: 300,
-            labels: { 'foo-bar': 'alpha' },
-            entityType: EntityType.AGENT,
-            entityName: 'weatherAgent',
-          },
-          {
-            timestamp: new Date('2026-01-01T00:00:25Z'),
-            name: 'mastra_agent_duration_ms',
-            value: 400,
-            labels: { 'foo-bar': 'beta' },
-            entityType: EntityType.AGENT,
-            entityName: 'codeAgent',
-          },
-        ],
-      });
+      await batchCreateMetrics([
+        {
+          timestamp: new Date('2026-01-01T00:00:20Z'),
+          name: 'mastra_agent_duration_ms',
+          value: 300,
+          labels: { 'foo-bar': 'alpha' },
+          entityType: EntityType.AGENT,
+          entityName: 'weatherAgent',
+        },
+        {
+          timestamp: new Date('2026-01-01T00:00:25Z'),
+          name: 'mastra_agent_duration_ms',
+          value: 400,
+          labels: { 'foo-bar': 'beta' },
+          entityType: EntityType.AGENT,
+          entityName: 'codeAgent',
+        },
+      ]);
 
       // Group by 'foo-bar' — only the 2 rows with 'foo-bar' label should appear.
       // The 3 original rows with 'status' label (but no 'foo-bar') are excluded.
@@ -502,26 +533,24 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     });
 
     it('getMetricTimeSeries keeps colliding display names as separate grouped series', async () => {
-      await storage.batchCreateMetrics({
-        metrics: [
-          {
-            timestamp: new Date('2026-01-01T02:00:00Z'),
-            name: 'mastra_collision_metric',
-            value: 10,
-            labels: { segmentA: 'a', segmentB: 'b|c' },
-            entityType: EntityType.TOOL,
-            entityName: 'search',
-          },
-          {
-            timestamp: new Date('2026-01-01T02:00:00Z'),
-            name: 'mastra_collision_metric',
-            value: 20,
-            labels: { segmentA: 'a|b', segmentB: 'c' },
-            entityType: EntityType.TOOL,
-            entityName: 'search',
-          },
-        ],
-      });
+      await batchCreateMetrics([
+        {
+          timestamp: new Date('2026-01-01T02:00:00Z'),
+          name: 'mastra_collision_metric',
+          value: 10,
+          labels: { segmentA: 'a', segmentB: 'b|c' },
+          entityType: EntityType.TOOL,
+          entityName: 'search',
+        },
+        {
+          timestamp: new Date('2026-01-01T02:00:00Z'),
+          name: 'mastra_collision_metric',
+          value: 20,
+          labels: { segmentA: 'a|b', segmentB: 'c' },
+          entityType: EntityType.TOOL,
+          entityName: 'search',
+        },
+      ]);
 
       const result = await storage.getMetricTimeSeries({
         name: ['mastra_collision_metric'],
@@ -540,23 +569,21 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
     it('getMetricAggregate returns costUnit: null when costUnits are mixed', async () => {
       // Add a metric with a different costUnit (the beforeEach already inserts 'usd' metrics)
-      await storage.batchCreateMetrics({
-        metrics: [
-          {
-            timestamp: new Date('2026-01-01T00:00:15Z'),
-            name: 'mastra_agent_duration_ms',
-            value: 50,
-            labels: { status: 'ok' },
-            provider: 'openai',
-            model: 'gpt-4o-mini',
-            estimatedCost: 0.05,
-            costUnit: 'eur',
-            tags: ['prod'],
-            entityType: EntityType.AGENT,
-            entityName: 'weatherAgent',
-          },
-        ],
-      });
+      await batchCreateMetrics([
+        {
+          timestamp: new Date('2026-01-01T00:00:15Z'),
+          name: 'mastra_agent_duration_ms',
+          value: 50,
+          labels: { status: 'ok' },
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+          estimatedCost: 0.05,
+          costUnit: 'eur',
+          tags: ['prod'],
+          entityType: EntityType.AGENT,
+          entityName: 'weatherAgent',
+        },
+      ]);
 
       const result = await storage.getMetricAggregate({
         name: ['mastra_agent_duration_ms'],
@@ -569,23 +596,21 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     });
 
     it('getMetricBreakdown returns costUnit: null for mixed-unit groups', async () => {
-      await storage.batchCreateMetrics({
-        metrics: [
-          {
-            timestamp: new Date('2026-01-01T00:00:15Z'),
-            name: 'mastra_agent_duration_ms',
-            value: 50,
-            labels: { status: 'ok' },
-            provider: 'openai',
-            model: 'gpt-4o-mini',
-            estimatedCost: 0.05,
-            costUnit: 'eur',
-            tags: ['prod'],
-            entityType: EntityType.AGENT,
-            entityName: 'weatherAgent',
-          },
-        ],
-      });
+      await batchCreateMetrics([
+        {
+          timestamp: new Date('2026-01-01T00:00:15Z'),
+          name: 'mastra_agent_duration_ms',
+          value: 50,
+          labels: { status: 'ok' },
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+          estimatedCost: 0.05,
+          costUnit: 'eur',
+          tags: ['prod'],
+          entityType: EntityType.AGENT,
+          entityName: 'weatherAgent',
+        },
+      ]);
 
       const result = await storage.getMetricBreakdown({
         name: ['mastra_agent_duration_ms'],
@@ -637,13 +662,11 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
   describe('default ORDER BY', () => {
     it('listLogs defaults to timestamp DESC', async () => {
-      await storage.batchCreateLogs({
-        logs: [
-          { timestamp: new Date('2026-01-01T00:00:01Z'), level: 'info', message: 'first', data: null, metadata: null },
-          { timestamp: new Date('2026-01-01T00:00:03Z'), level: 'info', message: 'third', data: null, metadata: null },
-          { timestamp: new Date('2026-01-01T00:00:02Z'), level: 'info', message: 'second', data: null, metadata: null },
-        ],
-      });
+      await batchCreateLogs([
+        { timestamp: new Date('2026-01-01T00:00:01Z'), level: 'info', message: 'first', data: null, metadata: null },
+        { timestamp: new Date('2026-01-01T00:00:03Z'), level: 'info', message: 'third', data: null, metadata: null },
+        { timestamp: new Date('2026-01-01T00:00:02Z'), level: 'info', message: 'second', data: null, metadata: null },
+      ]);
 
       const result = await storage.listLogs({});
       expect(result.logs).toHaveLength(3);
@@ -654,13 +677,11 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     });
 
     it('listMetrics defaults to timestamp DESC', async () => {
-      await storage.batchCreateMetrics({
-        metrics: [
-          { timestamp: new Date('2026-01-01T00:00:01Z'), name: 'order_test', value: 1, labels: {} },
-          { timestamp: new Date('2026-01-01T00:00:03Z'), name: 'order_test', value: 3, labels: {} },
-          { timestamp: new Date('2026-01-01T00:00:02Z'), name: 'order_test', value: 2, labels: {} },
-        ],
-      });
+      await batchCreateMetrics([
+        { timestamp: new Date('2026-01-01T00:00:01Z'), name: 'order_test', value: 1, labels: {} },
+        { timestamp: new Date('2026-01-01T00:00:03Z'), name: 'order_test', value: 3, labels: {} },
+        { timestamp: new Date('2026-01-01T00:00:02Z'), name: 'order_test', value: 2, labels: {} },
+      ]);
 
       const result = await storage.listMetrics({ filters: { name: ['order_test'] } });
       expect(result.metrics).toHaveLength(3);
@@ -670,41 +691,35 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     });
 
     it('listScores defaults to timestamp DESC', async () => {
-      await storage.createScore({
-        score: {
-          timestamp: new Date('2026-01-01T00:00:01Z'),
-          traceId: 'ord-1',
-          spanId: null,
-          scorerId: 'q',
-          score: 0.1,
-          reason: null,
-          experimentId: null,
-          metadata: null,
-        },
+      await createScore({
+        timestamp: new Date('2026-01-01T00:00:01Z'),
+        traceId: 'ord-1',
+        spanId: null,
+        scorerId: 'q',
+        score: 0.1,
+        reason: null,
+        experimentId: null,
+        metadata: null,
       });
-      await storage.createScore({
-        score: {
-          timestamp: new Date('2026-01-01T00:00:03Z'),
-          traceId: 'ord-3',
-          spanId: null,
-          scorerId: 'q',
-          score: 0.3,
-          reason: null,
-          experimentId: null,
-          metadata: null,
-        },
+      await createScore({
+        timestamp: new Date('2026-01-01T00:00:03Z'),
+        traceId: 'ord-3',
+        spanId: null,
+        scorerId: 'q',
+        score: 0.3,
+        reason: null,
+        experimentId: null,
+        metadata: null,
       });
-      await storage.createScore({
-        score: {
-          timestamp: new Date('2026-01-01T00:00:02Z'),
-          traceId: 'ord-2',
-          spanId: null,
-          scorerId: 'q',
-          score: 0.2,
-          reason: null,
-          experimentId: null,
-          metadata: null,
-        },
+      await createScore({
+        timestamp: new Date('2026-01-01T00:00:02Z'),
+        traceId: 'ord-2',
+        spanId: null,
+        scorerId: 'q',
+        score: 0.2,
+        reason: null,
+        experimentId: null,
+        metadata: null,
       });
 
       const result = await storage.listScores({});
@@ -715,50 +730,44 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     });
 
     it('listFeedback defaults to timestamp DESC', async () => {
-      await storage.createFeedback({
-        feedback: {
-          timestamp: new Date('2026-01-01T00:00:01Z'),
-          traceId: 'fb-ord-1',
-          spanId: null,
-          feedbackSource: 'user',
-          feedbackType: 'thumbs',
-          value: 1,
-          comment: null,
-          experimentId: null,
-          userId: null,
-          sourceId: null,
-          metadata: null,
-        },
+      await createFeedback({
+        timestamp: new Date('2026-01-01T00:00:01Z'),
+        traceId: 'fb-ord-1',
+        spanId: null,
+        feedbackSource: 'user',
+        feedbackType: 'thumbs',
+        value: 1,
+        comment: null,
+        experimentId: null,
+        userId: null,
+        sourceId: null,
+        metadata: null,
       });
-      await storage.createFeedback({
-        feedback: {
-          timestamp: new Date('2026-01-01T00:00:03Z'),
-          traceId: 'fb-ord-3',
-          spanId: null,
-          feedbackSource: 'user',
-          feedbackType: 'thumbs',
-          value: 3,
-          comment: null,
-          experimentId: null,
-          userId: null,
-          sourceId: null,
-          metadata: null,
-        },
+      await createFeedback({
+        timestamp: new Date('2026-01-01T00:00:03Z'),
+        traceId: 'fb-ord-3',
+        spanId: null,
+        feedbackSource: 'user',
+        feedbackType: 'thumbs',
+        value: 3,
+        comment: null,
+        experimentId: null,
+        userId: null,
+        sourceId: null,
+        metadata: null,
       });
-      await storage.createFeedback({
-        feedback: {
-          timestamp: new Date('2026-01-01T00:00:02Z'),
-          traceId: 'fb-ord-2',
-          spanId: null,
-          feedbackSource: 'user',
-          feedbackType: 'thumbs',
-          value: 2,
-          comment: null,
-          experimentId: null,
-          userId: null,
-          sourceId: null,
-          metadata: null,
-        },
+      await createFeedback({
+        timestamp: new Date('2026-01-01T00:00:02Z'),
+        traceId: 'fb-ord-2',
+        spanId: null,
+        feedbackSource: 'user',
+        feedbackType: 'thumbs',
+        value: 2,
+        comment: null,
+        experimentId: null,
+        userId: null,
+        sourceId: null,
+        metadata: null,
       });
 
       const result = await storage.listFeedback({});
@@ -882,51 +891,49 @@ describe('ObservabilityStorageClickhouseVNext', () => {
   describe('filter surface coverage', () => {
     describe('logs filters', () => {
       beforeEach(async () => {
-        await storage.batchCreateLogs({
-          logs: [
-            {
-              timestamp: new Date('2026-01-01T00:00:00Z'),
-              level: 'info',
-              message: 'log-A',
-              data: null,
-              traceId: 'ft-trace-1',
-              spanId: 'ft-span-1',
-              entityType: EntityType.AGENT,
-              entityName: 'agentA',
-              parentEntityType: EntityType.WORKFLOW_RUN,
-              parentEntityName: 'wfA',
-              rootEntityType: EntityType.WORKFLOW_RUN,
-              rootEntityName: 'rootWfA',
-              userId: 'user-A',
-              organizationId: 'org-A',
-              sessionId: 'sess-A',
-              threadId: 'thread-A',
-              requestId: 'req-A',
-              environment: 'staging',
-              executionSource: 'cloud',
-              serviceName: 'svc-A',
-              experimentId: 'exp-A',
-              tags: ['alpha'],
-              metadata: null,
-            },
-            {
-              timestamp: new Date('2026-01-01T00:00:05Z'),
-              level: 'error',
-              message: 'log-B',
-              data: null,
-              traceId: 'ft-trace-2',
-              spanId: 'ft-span-2',
-              entityType: EntityType.TOOL,
-              entityName: 'toolB',
-              userId: 'user-B',
-              environment: 'production',
-              executionSource: 'local',
-              serviceName: 'svc-B',
-              tags: ['beta'],
-              metadata: null,
-            },
-          ],
-        });
+        await batchCreateLogs([
+          {
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            level: 'info',
+            message: 'log-A',
+            data: null,
+            traceId: 'ft-trace-1',
+            spanId: 'ft-span-1',
+            entityType: EntityType.AGENT,
+            entityName: 'agentA',
+            parentEntityType: EntityType.WORKFLOW_RUN,
+            parentEntityName: 'wfA',
+            rootEntityType: EntityType.WORKFLOW_RUN,
+            rootEntityName: 'rootWfA',
+            userId: 'user-A',
+            organizationId: 'org-A',
+            sessionId: 'sess-A',
+            threadId: 'thread-A',
+            requestId: 'req-A',
+            environment: 'staging',
+            executionSource: 'cloud',
+            serviceName: 'svc-A',
+            experimentId: 'exp-A',
+            tags: ['alpha'],
+            metadata: null,
+          },
+          {
+            timestamp: new Date('2026-01-01T00:00:05Z'),
+            level: 'error',
+            message: 'log-B',
+            data: null,
+            traceId: 'ft-trace-2',
+            spanId: 'ft-span-2',
+            entityType: EntityType.TOOL,
+            entityName: 'toolB',
+            userId: 'user-B',
+            environment: 'production',
+            executionSource: 'local',
+            serviceName: 'svc-B',
+            tags: ['beta'],
+            metadata: null,
+          },
+        ]);
       });
 
       it('filters by entityType', async () => {
@@ -1043,49 +1050,47 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
     describe('metrics filters', () => {
       beforeEach(async () => {
-        await storage.batchCreateMetrics({
-          metrics: [
-            {
-              timestamp: new Date('2026-01-01T00:00:00Z'),
-              name: 'ft_metric',
-              value: 100,
-              labels: {},
-              traceId: 'mt-trace-1',
-              spanId: 'mt-span-1',
-              entityType: EntityType.AGENT,
-              entityName: 'agentA',
-              parentEntityType: EntityType.WORKFLOW_RUN,
-              parentEntityName: 'wfA',
-              rootEntityType: EntityType.WORKFLOW_RUN,
-              rootEntityName: 'rootWfA',
-              userId: 'user-A',
-              organizationId: 'org-A',
-              sessionId: 'sess-A',
-              threadId: 'thread-A',
-              requestId: 'req-A',
-              environment: 'staging',
-              executionSource: 'cloud',
-              serviceName: 'svc-A',
-              experimentId: 'exp-A',
-              tags: ['alpha'],
-            },
-            {
-              timestamp: new Date('2026-01-01T00:00:05Z'),
-              name: 'ft_metric',
-              value: 200,
-              labels: {},
-              traceId: 'mt-trace-2',
-              spanId: 'mt-span-2',
-              entityType: EntityType.TOOL,
-              entityName: 'toolB',
-              userId: 'user-B',
-              environment: 'production',
-              executionSource: 'local',
-              serviceName: 'svc-B',
-              tags: ['beta'],
-            },
-          ],
-        });
+        await batchCreateMetrics([
+          {
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            name: 'ft_metric',
+            value: 100,
+            labels: {},
+            traceId: 'mt-trace-1',
+            spanId: 'mt-span-1',
+            entityType: EntityType.AGENT,
+            entityName: 'agentA',
+            parentEntityType: EntityType.WORKFLOW_RUN,
+            parentEntityName: 'wfA',
+            rootEntityType: EntityType.WORKFLOW_RUN,
+            rootEntityName: 'rootWfA',
+            userId: 'user-A',
+            organizationId: 'org-A',
+            sessionId: 'sess-A',
+            threadId: 'thread-A',
+            requestId: 'req-A',
+            environment: 'staging',
+            executionSource: 'cloud',
+            serviceName: 'svc-A',
+            experimentId: 'exp-A',
+            tags: ['alpha'],
+          },
+          {
+            timestamp: new Date('2026-01-01T00:00:05Z'),
+            name: 'ft_metric',
+            value: 200,
+            labels: {},
+            traceId: 'mt-trace-2',
+            spanId: 'mt-span-2',
+            entityType: EntityType.TOOL,
+            entityName: 'toolB',
+            userId: 'user-B',
+            environment: 'production',
+            executionSource: 'local',
+            serviceName: 'svc-B',
+            tags: ['beta'],
+          },
+        ]);
       });
 
       it('filters by entityType', async () => {
@@ -1155,31 +1160,27 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
     describe('scores filters', () => {
       beforeEach(async () => {
-        await storage.createScore({
-          score: {
-            timestamp: new Date('2026-01-01T00:00:00Z'),
-            traceId: 'sf-trace-1',
-            spanId: 'sf-span-1',
-            scorerId: 'quality',
-            score: 0.8,
-            reason: null,
-            experimentId: 'exp-A',
-            organizationId: 'org-A',
-            metadata: null,
-          },
+        await createScore({
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'sf-trace-1',
+          spanId: 'sf-span-1',
+          scorerId: 'quality',
+          score: 0.8,
+          reason: null,
+          experimentId: 'exp-A',
+          organizationId: 'org-A',
+          metadata: null,
         });
-        await storage.createScore({
-          score: {
-            timestamp: new Date('2026-01-01T00:00:05Z'),
-            traceId: 'sf-trace-2',
-            spanId: null,
-            scorerId: 'factuality',
-            score: 0.6,
-            reason: null,
-            experimentId: null,
-            organizationId: 'org-B',
-            metadata: null,
-          },
+        await createScore({
+          timestamp: new Date('2026-01-01T00:00:05Z'),
+          traceId: 'sf-trace-2',
+          spanId: null,
+          scorerId: 'factuality',
+          score: 0.6,
+          reason: null,
+          experimentId: null,
+          organizationId: 'org-B',
+          metadata: null,
         });
       });
 
@@ -1235,37 +1236,33 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
     describe('feedback filters', () => {
       beforeEach(async () => {
-        await storage.createFeedback({
-          feedback: {
-            timestamp: new Date('2026-01-01T00:00:00Z'),
-            traceId: 'ff-trace-1',
-            spanId: 'ff-span-1',
-            feedbackSource: 'user',
-            feedbackType: 'thumbs',
-            value: 1,
-            comment: null,
-            experimentId: 'exp-A',
-            userId: 'user-A',
-            sourceId: null,
-            organizationId: 'org-A',
-            metadata: null,
-          },
+        await createFeedback({
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'ff-trace-1',
+          spanId: 'ff-span-1',
+          feedbackSource: 'user',
+          feedbackType: 'thumbs',
+          value: 1,
+          comment: null,
+          experimentId: 'exp-A',
+          userId: 'user-A',
+          sourceId: null,
+          organizationId: 'org-A',
+          metadata: null,
         });
-        await storage.createFeedback({
-          feedback: {
-            timestamp: new Date('2026-01-01T00:00:05Z'),
-            traceId: 'ff-trace-2',
-            spanId: null,
-            feedbackSource: 'reviewer',
-            feedbackType: 'rating',
-            value: 4,
-            comment: null,
-            experimentId: null,
-            userId: 'user-B',
-            sourceId: null,
-            organizationId: 'org-B',
-            metadata: null,
-          },
+        await createFeedback({
+          timestamp: new Date('2026-01-01T00:00:05Z'),
+          traceId: 'ff-trace-2',
+          spanId: null,
+          feedbackSource: 'reviewer',
+          feedbackType: 'rating',
+          value: 4,
+          comment: null,
+          experimentId: null,
+          userId: 'user-B',
+          sourceId: null,
+          organizationId: 'org-B',
+          metadata: null,
         });
       });
 
@@ -1326,49 +1323,45 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
   describe('discovery', () => {
     beforeEach(async () => {
-      await storage.batchCreateMetrics({
-        metrics: [
-          {
-            timestamp: new Date(),
-            name: 'mastra_agent_duration_ms',
-            value: 100,
-            labels: { agent: 'weatherAgent', status: 'ok' },
-            entityType: EntityType.AGENT,
-            entityName: 'weatherAgent',
-            serviceName: 'metric-service',
-            environment: 'metric-env',
-            tags: ['metric-tag'],
-          },
-          {
-            timestamp: new Date(),
-            name: 'mastra_tool_calls_started',
-            value: 1,
-            labels: { tool: 'search' },
-            entityType: EntityType.TOOL,
-            entityName: 'metricTool',
-            serviceName: 'metric-service',
-            environment: 'metric-env',
-            tags: ['metric-tag'],
-          },
-        ],
-      });
+      await batchCreateMetrics([
+        {
+          timestamp: new Date(),
+          name: 'mastra_agent_duration_ms',
+          value: 100,
+          labels: { agent: 'weatherAgent', status: 'ok' },
+          entityType: EntityType.AGENT,
+          entityName: 'weatherAgent',
+          serviceName: 'metric-service',
+          environment: 'metric-env',
+          tags: ['metric-tag'],
+        },
+        {
+          timestamp: new Date(),
+          name: 'mastra_tool_calls_started',
+          value: 1,
+          labels: { tool: 'search' },
+          entityType: EntityType.TOOL,
+          entityName: 'metricTool',
+          serviceName: 'metric-service',
+          environment: 'metric-env',
+          tags: ['metric-tag'],
+        },
+      ]);
 
-      await storage.batchCreateLogs({
-        logs: [
-          {
-            timestamp: new Date(),
-            level: 'info',
-            message: 'discovery-log',
-            data: null,
-            entityType: EntityType.INPUT_PROCESSOR,
-            entityName: 'logProcessor',
-            serviceName: 'log-service',
-            environment: 'log-env',
-            tags: ['log-tag'],
-            metadata: null,
-          },
-        ],
-      });
+      await batchCreateLogs([
+        {
+          timestamp: new Date(),
+          level: 'info',
+          message: 'discovery-log',
+          data: null,
+          entityType: EntityType.INPUT_PROCESSOR,
+          entityName: 'logProcessor',
+          serviceName: 'log-service',
+          environment: 'log-env',
+          tags: ['log-tag'],
+          metadata: null,
+        },
+      ]);
 
       await storage.batchCreateSpans({
         records: [
@@ -1485,30 +1478,26 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
   describe('scores', () => {
     it('creates and lists scores', async () => {
-      await storage.createScore({
-        score: {
-          timestamp: new Date(),
-          traceId: 'trace-1',
-          spanId: null,
-          scorerId: 'relevance',
-          score: 0.85,
-          reason: 'Good answer',
-          experimentId: 'exp-1',
-          metadata: { entityType: 'agent' },
-        },
+      await createScore({
+        timestamp: new Date(),
+        traceId: 'trace-1',
+        spanId: null,
+        scorerId: 'relevance',
+        score: 0.85,
+        reason: 'Good answer',
+        experimentId: 'exp-1',
+        metadata: { entityType: 'agent' },
       });
 
-      await storage.createScore({
-        score: {
-          timestamp: new Date(),
-          traceId: 'trace-1',
-          spanId: 'span-1',
-          scorerId: 'factuality',
-          score: 0.9,
-          reason: null,
-          experimentId: null,
-          metadata: null,
-        },
+      await createScore({
+        timestamp: new Date(),
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        scorerId: 'factuality',
+        score: 0.9,
+        reason: null,
+        experimentId: null,
+        metadata: null,
       });
 
       const result = await storage.listScores({});
@@ -1522,18 +1511,16 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     });
 
     it('scoreSource round-trips through CH scoreSource column', async () => {
-      await storage.createScore({
-        score: {
-          timestamp: new Date(),
-          traceId: 'trace-score-src',
-          spanId: null,
-          scorerId: 'quality',
-          score: 0.9,
-          reason: null,
-          experimentId: null,
-          scoreSource: 'automated',
-          metadata: null,
-        },
+      await createScore({
+        timestamp: new Date(),
+        traceId: 'trace-score-src',
+        spanId: null,
+        scorerId: 'quality',
+        score: 0.9,
+        reason: null,
+        experimentId: null,
+        scoreSource: 'automated',
+        metadata: null,
       });
 
       const result = await storage.listScores({});
@@ -1543,19 +1530,17 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     });
 
     it('supports nullable traceId for scores at the storage boundary', async () => {
-      await storage.createScore({
-        score: {
-          timestamp: new Date(),
-          traceId: null,
-          spanId: null,
-          scorerId: 'quality',
-          score: 0.9,
-          reason: null,
-          experimentId: null,
-          scoreSource: 'automated',
-          metadata: null,
-        } as any,
-      });
+      await createScore({
+        timestamp: new Date(),
+        traceId: null,
+        spanId: null,
+        scorerId: 'quality',
+        score: 0.9,
+        reason: null,
+        experimentId: null,
+        scoreSource: 'automated',
+        metadata: null,
+      } as any);
 
       const result = await storage.listScores({});
       expect(result.scores).toHaveLength(1);
@@ -1564,31 +1549,27 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     });
 
     it('filters scores by scoreSource', async () => {
-      await storage.createScore({
-        score: {
-          timestamp: new Date(),
-          traceId: 'trace-ss-1',
-          spanId: null,
-          scorerId: 'relevance',
-          score: 0.8,
-          reason: null,
-          experimentId: null,
-          scoreSource: 'automated',
-          metadata: null,
-        },
+      await createScore({
+        timestamp: new Date(),
+        traceId: 'trace-ss-1',
+        spanId: null,
+        scorerId: 'relevance',
+        score: 0.8,
+        reason: null,
+        experimentId: null,
+        scoreSource: 'automated',
+        metadata: null,
       });
-      await storage.createScore({
-        score: {
-          timestamp: new Date(),
-          traceId: 'trace-ss-2',
-          spanId: null,
-          scorerId: 'relevance',
-          score: 0.7,
-          reason: null,
-          experimentId: null,
-          scoreSource: 'manual',
-          metadata: null,
-        },
+      await createScore({
+        timestamp: new Date(),
+        traceId: 'trace-ss-2',
+        spanId: null,
+        scorerId: 'relevance',
+        score: 0.7,
+        reason: null,
+        experimentId: null,
+        scoreSource: 'manual',
+        metadata: null,
       });
 
       const result = await storage.listScores({
@@ -1605,36 +1586,32 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
   describe('feedback', () => {
     it('creates and lists feedback', async () => {
-      await storage.createFeedback({
-        feedback: {
-          timestamp: new Date(),
-          traceId: 'trace-1',
-          spanId: null,
-          feedbackSource: 'user',
-          feedbackType: 'thumbs',
-          value: 1,
-          comment: 'Great!',
-          experimentId: null,
-          userId: 'user-1',
-          sourceId: 'source-1',
-          metadata: null,
-        },
+      await createFeedback({
+        timestamp: new Date(),
+        traceId: 'trace-1',
+        spanId: null,
+        feedbackSource: 'user',
+        feedbackType: 'thumbs',
+        value: 1,
+        comment: 'Great!',
+        experimentId: null,
+        userId: 'user-1',
+        sourceId: 'source-1',
+        metadata: null,
       });
 
-      await storage.createFeedback({
-        feedback: {
-          timestamp: new Date(),
-          traceId: 'trace-2',
-          spanId: null,
-          feedbackSource: 'reviewer',
-          feedbackType: 'rating',
-          value: 4,
-          comment: null,
-          experimentId: 'exp-1',
-          userId: 'user-2',
-          sourceId: 'source-2',
-          metadata: null,
-        },
+      await createFeedback({
+        timestamp: new Date(),
+        traceId: 'trace-2',
+        spanId: null,
+        feedbackSource: 'reviewer',
+        feedbackType: 'rating',
+        value: 4,
+        comment: null,
+        experimentId: 'exp-1',
+        userId: 'user-2',
+        sourceId: 'source-2',
+        metadata: null,
       });
 
       const result = await storage.listFeedback({});
@@ -1650,20 +1627,18 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     });
 
     it('feedbackUserId round-trips through CH userId column', async () => {
-      await storage.createFeedback({
-        feedback: {
-          timestamp: new Date(),
-          traceId: 'trace-fbu',
-          spanId: null,
-          feedbackSource: 'user',
-          feedbackType: 'thumbs',
-          value: 1,
-          comment: null,
-          experimentId: null,
-          feedbackUserId: 'reviewer-1',
-          sourceId: null,
-          metadata: null,
-        },
+      await createFeedback({
+        timestamp: new Date(),
+        traceId: 'trace-fbu',
+        spanId: null,
+        feedbackSource: 'user',
+        feedbackType: 'thumbs',
+        value: 1,
+        comment: null,
+        experimentId: null,
+        feedbackUserId: 'reviewer-1',
+        sourceId: null,
+        metadata: null,
       });
 
       const result = await storage.listFeedback({});
@@ -1673,35 +1648,31 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     });
 
     it('filters feedback by feedbackUserId', async () => {
-      await storage.createFeedback({
-        feedback: {
-          timestamp: new Date(),
-          traceId: 'trace-fbu-f1',
-          spanId: null,
-          feedbackSource: 'user',
-          feedbackType: 'thumbs',
-          value: 1,
-          comment: null,
-          experimentId: null,
-          feedbackUserId: 'reviewer-1',
-          sourceId: null,
-          metadata: null,
-        },
+      await createFeedback({
+        timestamp: new Date(),
+        traceId: 'trace-fbu-f1',
+        spanId: null,
+        feedbackSource: 'user',
+        feedbackType: 'thumbs',
+        value: 1,
+        comment: null,
+        experimentId: null,
+        feedbackUserId: 'reviewer-1',
+        sourceId: null,
+        metadata: null,
       });
-      await storage.createFeedback({
-        feedback: {
-          timestamp: new Date(),
-          traceId: 'trace-fbu-f2',
-          spanId: null,
-          feedbackSource: 'user',
-          feedbackType: 'thumbs',
-          value: 0,
-          comment: null,
-          experimentId: null,
-          feedbackUserId: 'reviewer-2',
-          sourceId: null,
-          metadata: null,
-        },
+      await createFeedback({
+        timestamp: new Date(),
+        traceId: 'trace-fbu-f2',
+        spanId: null,
+        feedbackSource: 'user',
+        feedbackType: 'thumbs',
+        value: 0,
+        comment: null,
+        experimentId: null,
+        feedbackUserId: 'reviewer-2',
+        sourceId: null,
+        metadata: null,
       });
 
       const result = await storage.listFeedback({
@@ -1712,20 +1683,18 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     });
 
     it('feedbackSource round-trips through CH feedbackSource column', async () => {
-      await storage.createFeedback({
-        feedback: {
-          timestamp: new Date(),
-          traceId: 'trace-fbs',
-          spanId: null,
-          feedbackSource: 'manual',
-          feedbackType: 'rating',
-          value: 5,
-          comment: null,
-          experimentId: null,
-          userId: null,
-          sourceId: null,
-          metadata: null,
-        },
+      await createFeedback({
+        timestamp: new Date(),
+        traceId: 'trace-fbs',
+        spanId: null,
+        feedbackSource: 'manual',
+        feedbackType: 'rating',
+        value: 5,
+        comment: null,
+        experimentId: null,
+        userId: null,
+        sourceId: null,
+        metadata: null,
       });
 
       const result = await storage.listFeedback({});
@@ -1735,21 +1704,19 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     });
 
     it('supports nullable traceId for feedback at the storage boundary', async () => {
-      await storage.createFeedback({
-        feedback: {
-          timestamp: new Date(),
-          traceId: null,
-          spanId: null,
-          feedbackSource: 'manual',
-          feedbackType: 'rating',
-          value: 5,
-          comment: null,
-          experimentId: null,
-          userId: null,
-          sourceId: null,
-          metadata: null,
-        } as any,
-      });
+      await createFeedback({
+        timestamp: new Date(),
+        traceId: null,
+        spanId: null,
+        feedbackSource: 'manual',
+        feedbackType: 'rating',
+        value: 5,
+        comment: null,
+        experimentId: null,
+        userId: null,
+        sourceId: null,
+        metadata: null,
+      } as any);
 
       const result = await storage.listFeedback({});
       expect(result.feedback).toHaveLength(1);
@@ -1758,20 +1725,18 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     });
 
     it('deprecated feedback source alias still writes to feedbackSource column', async () => {
-      await storage.createFeedback({
-        feedback: {
-          timestamp: new Date(),
-          traceId: 'trace-fbs-compat',
-          spanId: null,
-          source: 'legacy-user',
-          feedbackType: 'thumbs',
-          value: 1,
-          comment: null,
-          experimentId: null,
-          userId: null,
-          sourceId: null,
-          metadata: null,
-        },
+      await createFeedback({
+        timestamp: new Date(),
+        traceId: 'trace-fbs-compat',
+        spanId: null,
+        source: 'legacy-user',
+        feedbackType: 'thumbs',
+        value: 1,
+        comment: null,
+        experimentId: null,
+        userId: null,
+        sourceId: null,
+        metadata: null,
       });
 
       const result = await storage.listFeedback({});
@@ -1781,35 +1746,31 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     });
 
     it('filters feedback by feedbackSource', async () => {
-      await storage.createFeedback({
-        feedback: {
-          timestamp: new Date(),
-          traceId: 'trace-fbs-f1',
-          spanId: null,
-          feedbackSource: 'manual',
-          feedbackType: 'rating',
-          value: 5,
-          comment: null,
-          experimentId: null,
-          userId: null,
-          sourceId: null,
-          metadata: null,
-        },
+      await createFeedback({
+        timestamp: new Date(),
+        traceId: 'trace-fbs-f1',
+        spanId: null,
+        feedbackSource: 'manual',
+        feedbackType: 'rating',
+        value: 5,
+        comment: null,
+        experimentId: null,
+        userId: null,
+        sourceId: null,
+        metadata: null,
       });
-      await storage.createFeedback({
-        feedback: {
-          timestamp: new Date(),
-          traceId: 'trace-fbs-f2',
-          spanId: null,
-          feedbackSource: 'automated',
-          feedbackType: 'rating',
-          value: 3,
-          comment: null,
-          experimentId: null,
-          userId: null,
-          sourceId: null,
-          metadata: null,
-        },
+      await createFeedback({
+        timestamp: new Date(),
+        traceId: 'trace-fbs-f2',
+        spanId: null,
+        feedbackSource: 'automated',
+        feedbackType: 'rating',
+        value: 3,
+        comment: null,
+        experimentId: null,
+        userId: null,
+        sourceId: null,
+        metadata: null,
       });
 
       const result = await storage.listFeedback({
@@ -1820,49 +1781,47 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     });
 
     it('batch creates feedback with mixed value types', async () => {
-      await storage.batchCreateFeedback({
-        feedbacks: [
-          {
-            timestamp: new Date('2026-01-01T00:00:00Z'),
-            traceId: 'batch-trace-1',
-            spanId: null,
-            feedbackSource: 'user',
-            feedbackType: 'thumbs',
-            value: 1,
-            comment: 'Helpful',
-            experimentId: null,
-            userId: 'user-1',
-            sourceId: 'source-1',
-            metadata: null,
-          },
-          {
-            timestamp: new Date('2026-01-01T00:00:01Z'),
-            traceId: 'batch-trace-2',
-            spanId: 'span-2',
-            feedbackSource: 'reviewer',
-            feedbackType: 'rating',
-            value: 4,
-            comment: null,
-            experimentId: 'exp-1',
-            userId: 'user-2',
-            sourceId: 'source-2',
-            metadata: { category: 'quality' },
-          },
-          {
-            timestamp: new Date('2026-01-01T00:00:02Z'),
-            traceId: 'batch-trace-3',
-            spanId: null,
-            feedbackSource: 'system',
-            feedbackType: 'flag',
-            value: 'needs-review',
-            comment: 'Escalated',
-            experimentId: null,
-            userId: null,
-            sourceId: 'source-3',
-            metadata: { severity: 'high' },
-          },
-        ],
-      });
+      await batchCreateFeedback([
+        {
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'batch-trace-1',
+          spanId: null,
+          feedbackSource: 'user',
+          feedbackType: 'thumbs',
+          value: 1,
+          comment: 'Helpful',
+          experimentId: null,
+          userId: 'user-1',
+          sourceId: 'source-1',
+          metadata: null,
+        },
+        {
+          timestamp: new Date('2026-01-01T00:00:01Z'),
+          traceId: 'batch-trace-2',
+          spanId: 'span-2',
+          feedbackSource: 'reviewer',
+          feedbackType: 'rating',
+          value: 4,
+          comment: null,
+          experimentId: 'exp-1',
+          userId: 'user-2',
+          sourceId: 'source-2',
+          metadata: { category: 'quality' },
+        },
+        {
+          timestamp: new Date('2026-01-01T00:00:02Z'),
+          traceId: 'batch-trace-3',
+          spanId: null,
+          feedbackSource: 'system',
+          feedbackType: 'flag',
+          value: 'needs-review',
+          comment: 'Escalated',
+          experimentId: null,
+          userId: null,
+          sourceId: 'source-3',
+          metadata: { severity: 'high' },
+        },
+      ]);
 
       const result = await storage.listFeedback({
         orderBy: { field: 'timestamp', direction: 'ASC' },
@@ -1989,46 +1948,40 @@ describe('ObservabilityStorageClickhouseVNext', () => {
   describe('retry-idempotency via signal id', () => {
     it('duplicate score inserts with the same scoreId collapse to one row under FINAL', async () => {
       const scoreId = 'retry-score-aaa';
-      // Three retries simulate the same logical write arriving with different
-      // server-assigned timestamps.
-      await storage.createScore({
-        score: {
-          scoreId,
-          timestamp: new Date('2026-01-01T00:00:01Z'),
-          traceId: 'retry-score-trace',
-          spanId: null,
-          scorerId: 'q',
-          score: 0.5,
-          reason: 'attempt 1',
-          experimentId: null,
-          metadata: null,
-        },
+      const timestamp = new Date('2026-01-01T00:00:01Z');
+      // Retries resend the same logical event, including its original timestamp.
+      await createScore({
+        scoreId,
+        timestamp,
+        traceId: 'retry-score-trace',
+        spanId: null,
+        scorerId: 'q',
+        score: 0.5,
+        reason: 'attempt 1',
+        experimentId: null,
+        metadata: null,
       });
-      await storage.createScore({
-        score: {
-          scoreId,
-          timestamp: new Date('2026-01-01T00:00:02Z'),
-          traceId: 'retry-score-trace',
-          spanId: null,
-          scorerId: 'q',
-          score: 0.5,
-          reason: 'attempt 2',
-          experimentId: null,
-          metadata: null,
-        },
+      await createScore({
+        scoreId,
+        timestamp,
+        traceId: 'retry-score-trace',
+        spanId: null,
+        scorerId: 'q',
+        score: 0.5,
+        reason: 'attempt 2',
+        experimentId: null,
+        metadata: null,
       });
-      await storage.createScore({
-        score: {
-          scoreId,
-          timestamp: new Date('2026-01-01T00:00:03Z'),
-          traceId: 'retry-score-trace',
-          spanId: null,
-          scorerId: 'q',
-          score: 0.5,
-          reason: 'attempt 3',
-          experimentId: null,
-          metadata: null,
-        },
+      await createScore({
+        scoreId,
+        timestamp,
+        traceId: 'retry-score-trace',
+        spanId: null,
+        scorerId: 'q',
+        score: 0.5,
+        reason: 'attempt 3',
+        experimentId: null,
+        metadata: null,
       });
 
       const result = await storage.listScores({ filters: { traceId: 'retry-score-trace' } });
@@ -2038,37 +1991,34 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
     it('duplicate feedback inserts with the same feedbackId collapse to one row under FINAL', async () => {
       const feedbackId = 'retry-fb-aaa';
-      await storage.createFeedback({
-        feedback: {
-          feedbackId,
-          timestamp: new Date('2026-01-01T00:00:01Z'),
-          traceId: 'retry-fb-trace',
-          spanId: null,
-          feedbackSource: 'user',
-          feedbackType: 'thumbs',
-          value: 1,
-          comment: 'attempt 1',
-          experimentId: null,
-          userId: null,
-          sourceId: null,
-          metadata: null,
-        },
+      const timestamp = new Date('2026-01-01T00:00:01Z');
+      await createFeedback({
+        feedbackId,
+        timestamp,
+        traceId: 'retry-fb-trace',
+        spanId: null,
+        feedbackSource: 'user',
+        feedbackType: 'thumbs',
+        value: 1,
+        comment: 'attempt 1',
+        experimentId: null,
+        userId: null,
+        sourceId: null,
+        metadata: null,
       });
-      await storage.createFeedback({
-        feedback: {
-          feedbackId,
-          timestamp: new Date('2026-01-01T00:00:02Z'),
-          traceId: 'retry-fb-trace',
-          spanId: null,
-          feedbackSource: 'user',
-          feedbackType: 'thumbs',
-          value: 1,
-          comment: 'attempt 2',
-          experimentId: null,
-          userId: null,
-          sourceId: null,
-          metadata: null,
-        },
+      await createFeedback({
+        feedbackId,
+        timestamp,
+        traceId: 'retry-fb-trace',
+        spanId: null,
+        feedbackSource: 'user',
+        feedbackType: 'thumbs',
+        value: 1,
+        comment: 'attempt 2',
+        experimentId: null,
+        userId: null,
+        sourceId: null,
+        metadata: null,
       });
 
       const result = await storage.listFeedback({ filters: { traceId: 'retry-fb-trace' } });
@@ -2078,30 +2028,27 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
     it('duplicate log inserts with the same logId collapse to one row under FINAL', async () => {
       const logId = 'retry-log-aaa';
-      await storage.batchCreateLogs({
-        logs: [
-          {
-            logId,
-            timestamp: new Date('2026-01-01T00:00:01Z'),
-            level: 'info',
-            message: 'attempt 1',
-            traceId: 'retry-log-trace',
-            spanId: null,
-          },
-        ],
-      });
-      await storage.batchCreateLogs({
-        logs: [
-          {
-            logId,
-            timestamp: new Date('2026-01-01T00:00:02Z'),
-            level: 'info',
-            message: 'attempt 2',
-            traceId: 'retry-log-trace',
-            spanId: null,
-          },
-        ],
-      });
+      const timestamp = new Date('2026-01-01T00:00:01Z');
+      await batchCreateLogs([
+        {
+          logId,
+          timestamp,
+          level: 'info',
+          message: 'attempt 1',
+          traceId: 'retry-log-trace',
+          spanId: null,
+        },
+      ]);
+      await batchCreateLogs([
+        {
+          logId,
+          timestamp,
+          level: 'info',
+          message: 'attempt 2',
+          traceId: 'retry-log-trace',
+          spanId: null,
+        },
+      ]);
 
       const result = await storage.listLogs({ filters: { traceId: 'retry-log-trace' } });
       expect(result.logs).toHaveLength(1);
@@ -2110,30 +2057,27 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
     it('duplicate metric inserts with the same metricId collapse to one row under FINAL', async () => {
       const metricId = 'retry-metric-aaa';
-      await storage.batchCreateMetrics({
-        metrics: [
-          {
-            metricId,
-            timestamp: new Date('2026-01-01T00:00:01Z'),
-            name: 'retry-metric',
-            value: 1,
-            traceId: 'retry-metric-trace',
-            spanId: null,
-          },
-        ],
-      });
-      await storage.batchCreateMetrics({
-        metrics: [
-          {
-            metricId,
-            timestamp: new Date('2026-01-01T00:00:02Z'),
-            name: 'retry-metric',
-            value: 1,
-            traceId: 'retry-metric-trace',
-            spanId: null,
-          },
-        ],
-      });
+      const timestamp = new Date('2026-01-01T00:00:01Z');
+      await batchCreateMetrics([
+        {
+          metricId,
+          timestamp,
+          name: 'retry-metric',
+          value: 1,
+          traceId: 'retry-metric-trace',
+          spanId: null,
+        },
+      ]);
+      await batchCreateMetrics([
+        {
+          metricId,
+          timestamp,
+          name: 'retry-metric',
+          value: 1,
+          traceId: 'retry-metric-trace',
+          spanId: null,
+        },
+      ]);
 
       const result = await storage.listMetrics({ filters: { name: ['retry-metric'] } });
       expect(result.metrics).toHaveLength(1);
@@ -2935,17 +2879,15 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     });
 
     it('labels are trimmed and empty keys/values dropped', async () => {
-      await storage.batchCreateMetrics({
-        metrics: [
-          {
-            timestamp: new Date('2026-01-01T00:00:00Z'),
-            name: 'norm_labels_metric',
-            value: 1,
-            labels: { '  key1  ': '  val1  ', '': 'empty-key', key2: '', goodKey: 'goodVal' },
-            entityType: null,
-          },
-        ],
-      });
+      await batchCreateMetrics([
+        {
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          name: 'norm_labels_metric',
+          value: 1,
+          labels: { '  key1  ': '  val1  ', '': 'empty-key', key2: '', goodKey: 'goodVal' },
+          entityType: null,
+        },
+      ]);
 
       const result = await storage.listMetrics({ filters: { name: ['norm_labels_metric'] } });
       expect(result.metrics).toHaveLength(1);
@@ -3000,18 +2942,16 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     });
 
     it('log executionSource round-trips through CH executionSource column', async () => {
-      await storage.batchCreateLogs({
-        logs: [
-          {
-            timestamp: new Date(),
-            level: 'info',
-            message: 'exec-source-test',
-            data: null,
-            executionSource: 'cloud',
-            metadata: null,
-          },
-        ],
-      });
+      await batchCreateLogs([
+        {
+          timestamp: new Date(),
+          level: 'info',
+          message: 'exec-source-test',
+          data: null,
+          executionSource: 'cloud',
+          metadata: null,
+        },
+      ]);
 
       const result = await storage.listLogs({});
       expect(result.logs).toHaveLength(1);
@@ -3019,17 +2959,15 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     });
 
     it('metric executionSource round-trips through CH executionSource column', async () => {
-      await storage.batchCreateMetrics({
-        metrics: [
-          {
-            timestamp: new Date(),
-            name: 'exec_source_metric',
-            value: 1,
-            labels: {},
-            executionSource: 'ci',
-          },
-        ],
-      });
+      await batchCreateMetrics([
+        {
+          timestamp: new Date(),
+          name: 'exec_source_metric',
+          value: 1,
+          labels: {},
+          executionSource: 'ci',
+        },
+      ]);
 
       const result = await storage.listMetrics({ filters: { name: ['exec_source_metric'] } });
       expect(result.metrics).toHaveLength(1);
@@ -3086,63 +3024,61 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
   describe('scores OLAP', () => {
     beforeEach(async () => {
-      await storage.batchCreateScores({
-        scores: [
-          {
-            timestamp: new Date('2026-01-01T00:00:00Z'),
-            traceId: 'olap-s-1',
-            spanId: null,
-            scorerId: 'quality',
-            score: 0.8,
-            reason: null,
-            experimentId: null,
-            scoreSource: 'automated',
-            entityType: EntityType.AGENT,
-            entityName: 'weatherAgent',
-            environment: 'production',
-            metadata: null,
-          },
-          {
-            timestamp: new Date('2026-01-01T00:00:05Z'),
-            traceId: 'olap-s-2',
-            spanId: null,
-            scorerId: 'quality',
-            score: 0.6,
-            reason: null,
-            experimentId: null,
-            scoreSource: 'automated',
-            entityType: EntityType.AGENT,
-            entityName: 'weatherAgent',
-            environment: 'production',
-            metadata: null,
-          },
-          {
-            timestamp: new Date('2026-01-01T00:00:10Z'),
-            traceId: 'olap-s-3',
-            spanId: null,
-            scorerId: 'quality',
-            score: 0.9,
-            reason: null,
-            experimentId: null,
-            scoreSource: 'automated',
-            entityType: EntityType.AGENT,
-            entityName: 'codeAgent',
-            environment: 'staging',
-            metadata: null,
-          },
-          {
-            timestamp: new Date('2026-01-01T01:00:00Z'),
-            traceId: 'olap-s-4',
-            spanId: null,
-            scorerId: 'factuality',
-            score: 0.5,
-            reason: null,
-            experimentId: null,
-            scoreSource: 'manual',
-            metadata: null,
-          },
-        ],
-      });
+      await batchCreateScores([
+        {
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'olap-s-1',
+          spanId: null,
+          scorerId: 'quality',
+          score: 0.8,
+          reason: null,
+          experimentId: null,
+          scoreSource: 'automated',
+          entityType: EntityType.AGENT,
+          entityName: 'weatherAgent',
+          environment: 'production',
+          metadata: null,
+        },
+        {
+          timestamp: new Date('2026-01-01T00:00:05Z'),
+          traceId: 'olap-s-2',
+          spanId: null,
+          scorerId: 'quality',
+          score: 0.6,
+          reason: null,
+          experimentId: null,
+          scoreSource: 'automated',
+          entityType: EntityType.AGENT,
+          entityName: 'weatherAgent',
+          environment: 'production',
+          metadata: null,
+        },
+        {
+          timestamp: new Date('2026-01-01T00:00:10Z'),
+          traceId: 'olap-s-3',
+          spanId: null,
+          scorerId: 'quality',
+          score: 0.9,
+          reason: null,
+          experimentId: null,
+          scoreSource: 'automated',
+          entityType: EntityType.AGENT,
+          entityName: 'codeAgent',
+          environment: 'staging',
+          metadata: null,
+        },
+        {
+          timestamp: new Date('2026-01-01T01:00:00Z'),
+          traceId: 'olap-s-4',
+          spanId: null,
+          scorerId: 'factuality',
+          score: 0.5,
+          reason: null,
+          experimentId: null,
+          scoreSource: 'manual',
+          metadata: null,
+        },
+      ]);
     });
 
     it('getScoreAggregate returns avg', async () => {
@@ -3258,69 +3194,67 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
   describe('feedback OLAP', () => {
     beforeEach(async () => {
-      await storage.batchCreateFeedback({
-        feedbacks: [
-          {
-            timestamp: new Date('2026-01-01T00:00:00Z'),
-            traceId: 'olap-f-1',
-            spanId: null,
-            feedbackType: 'thumbs',
-            feedbackSource: 'user',
-            value: 1,
-            comment: null,
-            entityType: EntityType.AGENT,
-            entityName: 'weatherAgent',
-            environment: 'production',
-            metadata: null,
-          },
-          {
-            timestamp: new Date('2026-01-01T00:00:05Z'),
-            traceId: 'olap-f-2',
-            spanId: null,
-            feedbackType: 'thumbs',
-            feedbackSource: 'user',
-            value: 0,
-            comment: null,
-            entityType: EntityType.AGENT,
-            entityName: 'weatherAgent',
-            environment: 'production',
-            metadata: null,
-          },
-          {
-            timestamp: new Date('2026-01-01T00:00:10Z'),
-            traceId: 'olap-f-3',
-            spanId: null,
-            feedbackType: 'thumbs',
-            feedbackSource: 'user',
-            value: 1,
-            comment: null,
-            entityType: EntityType.AGENT,
-            entityName: 'codeAgent',
-            environment: 'staging',
-            metadata: null,
-          },
-          {
-            timestamp: new Date('2026-01-01T01:00:00Z'),
-            traceId: 'olap-f-4',
-            spanId: null,
-            feedbackType: 'rating',
-            feedbackSource: 'reviewer',
-            value: 4,
-            comment: null,
-            metadata: null,
-          },
-          {
-            timestamp: new Date('2026-01-01T01:00:05Z'),
-            traceId: 'olap-f-5',
-            spanId: null,
-            feedbackType: 'flag',
-            feedbackSource: 'system',
-            value: 'needs-review',
-            comment: null,
-            metadata: null,
-          },
-        ],
-      });
+      await batchCreateFeedback([
+        {
+          timestamp: new Date('2026-01-01T00:00:00Z'),
+          traceId: 'olap-f-1',
+          spanId: null,
+          feedbackType: 'thumbs',
+          feedbackSource: 'user',
+          value: 1,
+          comment: null,
+          entityType: EntityType.AGENT,
+          entityName: 'weatherAgent',
+          environment: 'production',
+          metadata: null,
+        },
+        {
+          timestamp: new Date('2026-01-01T00:00:05Z'),
+          traceId: 'olap-f-2',
+          spanId: null,
+          feedbackType: 'thumbs',
+          feedbackSource: 'user',
+          value: 0,
+          comment: null,
+          entityType: EntityType.AGENT,
+          entityName: 'weatherAgent',
+          environment: 'production',
+          metadata: null,
+        },
+        {
+          timestamp: new Date('2026-01-01T00:00:10Z'),
+          traceId: 'olap-f-3',
+          spanId: null,
+          feedbackType: 'thumbs',
+          feedbackSource: 'user',
+          value: 1,
+          comment: null,
+          entityType: EntityType.AGENT,
+          entityName: 'codeAgent',
+          environment: 'staging',
+          metadata: null,
+        },
+        {
+          timestamp: new Date('2026-01-01T01:00:00Z'),
+          traceId: 'olap-f-4',
+          spanId: null,
+          feedbackType: 'rating',
+          feedbackSource: 'reviewer',
+          value: 4,
+          comment: null,
+          metadata: null,
+        },
+        {
+          timestamp: new Date('2026-01-01T01:00:05Z'),
+          traceId: 'olap-f-5',
+          spanId: null,
+          feedbackType: 'flag',
+          feedbackSource: 'system',
+          value: 'needs-review',
+          comment: null,
+          metadata: null,
+        },
+      ]);
     });
 
     it('getFeedbackAggregate returns sum of numeric values', async () => {
@@ -3439,39 +3373,37 @@ describe('ObservabilityStorageClickhouseVNext', () => {
 
   describe('broadened context fields round-trip', () => {
     it('score with full context fields round-trips', async () => {
-      await storage.createScore({
-        score: {
-          timestamp: new Date('2026-01-01T00:00:00Z'),
-          traceId: 'ctx-score-1',
-          spanId: 'ctx-span-1',
-          scorerId: 'quality',
-          score: 0.95,
-          reason: 'excellent',
-          experimentId: 'exp-1',
-          scoreSource: 'automated',
-          entityType: EntityType.AGENT,
-          entityId: 'a-1',
-          entityName: 'myAgent',
-          parentEntityType: EntityType.WORKFLOW_RUN,
-          parentEntityId: 'wf-1',
-          parentEntityName: 'myWorkflow',
-          rootEntityType: EntityType.WORKFLOW_RUN,
-          rootEntityId: 'root-1',
-          rootEntityName: 'rootWorkflow',
-          userId: 'user-1',
-          organizationId: 'org-1',
-          resourceId: 'res-1',
-          runId: 'run-1',
-          sessionId: 'sess-1',
-          threadId: 'thread-1',
-          requestId: 'req-1',
-          environment: 'production',
-          executionSource: 'cloud',
-          serviceName: 'my-service',
-          tags: ['tag1', 'tag2'],
-          metadata: { custom: 'data' },
-          scope: { tenant: 'acme' },
-        },
+      await createScore({
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: 'ctx-score-1',
+        spanId: 'ctx-span-1',
+        scorerId: 'quality',
+        score: 0.95,
+        reason: 'excellent',
+        experimentId: 'exp-1',
+        scoreSource: 'automated',
+        entityType: EntityType.AGENT,
+        entityId: 'a-1',
+        entityName: 'myAgent',
+        parentEntityType: EntityType.WORKFLOW_RUN,
+        parentEntityId: 'wf-1',
+        parentEntityName: 'myWorkflow',
+        rootEntityType: EntityType.WORKFLOW_RUN,
+        rootEntityId: 'root-1',
+        rootEntityName: 'rootWorkflow',
+        userId: 'user-1',
+        organizationId: 'org-1',
+        resourceId: 'res-1',
+        runId: 'run-1',
+        sessionId: 'sess-1',
+        threadId: 'thread-1',
+        requestId: 'req-1',
+        environment: 'production',
+        executionSource: 'cloud',
+        serviceName: 'my-service',
+        tags: ['tag1', 'tag2'],
+        metadata: { custom: 'data' },
+        scope: { tenant: 'acme' },
       });
 
       const result = await storage.listScores({});
@@ -3508,41 +3440,39 @@ describe('ObservabilityStorageClickhouseVNext', () => {
     });
 
     it('feedback with full context fields round-trips', async () => {
-      await storage.createFeedback({
-        feedback: {
-          timestamp: new Date('2026-01-01T00:00:00Z'),
-          traceId: 'ctx-fb-1',
-          spanId: 'ctx-fb-span-1',
-          feedbackType: 'rating',
-          feedbackSource: 'manual',
-          feedbackUserId: 'reviewer-1',
-          value: 5,
-          comment: 'great job',
-          experimentId: 'exp-1',
-          entityType: EntityType.AGENT,
-          entityId: 'a-1',
-          entityName: 'myAgent',
-          parentEntityType: EntityType.WORKFLOW_RUN,
-          parentEntityId: 'wf-1',
-          parentEntityName: 'myWorkflow',
-          rootEntityType: EntityType.WORKFLOW_RUN,
-          rootEntityId: 'root-1',
-          rootEntityName: 'rootWorkflow',
-          userId: 'reviewer-1',
-          organizationId: 'org-1',
-          resourceId: 'res-1',
-          runId: 'run-1',
-          sessionId: 'sess-1',
-          threadId: 'thread-1',
-          requestId: 'req-1',
-          environment: 'production',
-          executionSource: 'cloud',
-          serviceName: 'my-service',
-          sourceId: 'src-1',
-          tags: ['feedback-tag'],
-          metadata: { category: 'quality' },
-          scope: { org: 'acme' },
-        },
+      await createFeedback({
+        timestamp: new Date('2026-01-01T00:00:00Z'),
+        traceId: 'ctx-fb-1',
+        spanId: 'ctx-fb-span-1',
+        feedbackType: 'rating',
+        feedbackSource: 'manual',
+        feedbackUserId: 'reviewer-1',
+        value: 5,
+        comment: 'great job',
+        experimentId: 'exp-1',
+        entityType: EntityType.AGENT,
+        entityId: 'a-1',
+        entityName: 'myAgent',
+        parentEntityType: EntityType.WORKFLOW_RUN,
+        parentEntityId: 'wf-1',
+        parentEntityName: 'myWorkflow',
+        rootEntityType: EntityType.WORKFLOW_RUN,
+        rootEntityId: 'root-1',
+        rootEntityName: 'rootWorkflow',
+        userId: 'reviewer-1',
+        organizationId: 'org-1',
+        resourceId: 'res-1',
+        runId: 'run-1',
+        sessionId: 'sess-1',
+        threadId: 'thread-1',
+        requestId: 'req-1',
+        environment: 'production',
+        executionSource: 'cloud',
+        serviceName: 'my-service',
+        sourceId: 'src-1',
+        tags: ['feedback-tag'],
+        metadata: { category: 'quality' },
+        scope: { org: 'acme' },
       });
 
       const result = await storage.listFeedback({});

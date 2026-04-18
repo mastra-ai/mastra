@@ -12,6 +12,16 @@ interface SignalMigration {
   idColumn: string;
 }
 
+export interface SignalMigrationStatusTable {
+  table: string;
+  idColumn: string;
+}
+
+export interface SignalMigrationStatus {
+  needsMigration: boolean;
+  tables: SignalMigrationStatusTable[];
+}
+
 const SIGNAL_MIGRATIONS: SignalMigration[] = [
   { table: 'metric_events', createDDL: METRIC_EVENTS_DDL, idColumn: 'metricId' },
   { table: 'log_events', createDDL: LOG_EVENTS_DDL, idColumn: 'logId' },
@@ -44,11 +54,54 @@ async function getColumns(db: DuckDBConnection, table: string): Promise<string[]
   return rows.map(r => r.column_name);
 }
 
+function buildTemporaryTableDDL(createDDL: string, table: string, tempTable: string): string {
+  return createDDL.replace(`CREATE TABLE IF NOT EXISTS ${table}`, `CREATE TABLE ${tempTable}`);
+}
+
+async function dropTableIfExists(db: DuckDBConnection, table: string): Promise<void> {
+  if (await tableExists(db, table)) {
+    await db.execute(`DROP TABLE ${table}`);
+  }
+}
+
+function createMigrationError(args: { table: string; idColumn: string }, error: unknown): MastraError {
+  return new MastraError(
+    {
+      id: createStorageErrorId('DUCKDB', 'MIGRATE_SIGNAL_TABLES', 'FAILED'),
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      details: args,
+    },
+    error,
+  );
+}
+
+export async function checkSignalTablesMigrationStatus(db: DuckDBConnection): Promise<SignalMigrationStatus> {
+  const tables: SignalMigrationStatusTable[] = [];
+
+  for (const { table, idColumn } of SIGNAL_MIGRATIONS) {
+    if (!(await tableExists(db, table))) {
+      continue;
+    }
+
+    if (await hasPrimaryKey(db, table)) {
+      continue;
+    }
+
+    tables.push({ table, idColumn });
+  }
+
+  return {
+    needsMigration: tables.length > 0,
+    tables,
+  };
+}
+
 /**
  * Migrate signal tables to a schema with PRIMARY KEY + NOT NULL on the signal ID
- * without dropping data. Copy-and-swap: rename → create new → INSERT…SELECT
- * (generating IDs) → drop backup. On failure the original table is restored
- * from the backup. Idempotent.
+ * without dropping data. Copy-and-swap: create temp → INSERT…SELECT
+ * (generating IDs) → rename old to backup → rename temp to live → drop backup.
+ * The live table is only touched during the final swap step.
  */
 export async function migrateSignalTables(db: DuckDBConnection, logger?: IMastraLogger): Promise<void> {
   for (const { table, createDDL, idColumn } of SIGNAL_MIGRATIONS) {
@@ -57,56 +110,81 @@ export async function migrateSignalTables(db: DuckDBConnection, logger?: IMastra
 
     logger?.info?.(`Migrating ${table} to schema with ${idColumn} PRIMARY KEY`);
 
+    const temp = `${table}_migrating_${Date.now()}`;
     const backup = `${table}_backup_${Date.now()}`;
+    let originalRenamed = false;
+    let swapCompleted = false;
 
     try {
-      await db.execute(`ALTER TABLE ${table} RENAME TO ${backup}`);
-      await db.execute(createDDL);
+      await db.execute(buildTemporaryTableDDL(createDDL, table, temp));
 
-      const newColumns = await getColumns(db, table);
-      const backupColumns = new Set(await getColumns(db, backup));
+      const newColumns = await getColumns(db, temp);
+      const currentColumns = new Set(await getColumns(db, table));
 
       const columnList = newColumns.map(c => `"${c}"`).join(', ');
       const selectExprs = newColumns
         .map(c => {
           if (c === idColumn) {
-            return backupColumns.has(c)
+            return currentColumns.has(c)
               ? `COALESCE(NULLIF("${c}", ''), CAST(uuid() AS VARCHAR)) AS "${c}"`
               : `CAST(uuid() AS VARCHAR) AS "${c}"`;
           }
-          return backupColumns.has(c) ? `"${c}"` : `NULL AS "${c}"`;
+          return currentColumns.has(c) ? `"${c}"` : `NULL AS "${c}"`;
         })
         .join(', ');
 
-      await db.execute(`INSERT INTO ${table} (${columnList}) SELECT ${selectExprs} FROM ${backup}`);
-      await db.execute(`DROP TABLE ${backup}`);
+      await db.execute(`INSERT INTO ${temp} (${columnList}) SELECT ${selectExprs} FROM ${table}`);
+
+      try {
+        await db.execute(`ALTER TABLE ${table} RENAME TO ${backup}`);
+        originalRenamed = true;
+        await db.execute(`ALTER TABLE ${temp} RENAME TO ${table}`);
+        swapCompleted = true;
+      } catch (swapError) {
+        if (originalRenamed && !swapCompleted) {
+          try {
+            await db.execute(`ALTER TABLE ${backup} RENAME TO ${table}`);
+            originalRenamed = false;
+          } catch (restoreError) {
+            logger?.error?.(
+              `Failed to restore original table ${table} from backup ${backup}: ${(restoreError as Error).message}`,
+            );
+          }
+        }
+        throw swapError;
+      }
+
+      try {
+        await db.execute(`DROP TABLE ${backup}`);
+      } catch (cleanupError) {
+        logger?.warn?.(
+          `Migration of ${table} completed, but failed to drop backup ${backup}: ${(cleanupError as Error).message}`,
+        );
+      }
 
       logger?.info?.(`Successfully migrated ${table}`);
     } catch (error) {
       logger?.error?.(`Migration of ${table} failed: ${(error as Error).message}`);
       try {
-        const newExists = await tableExists(db, table);
-        const backupExists = await tableExists(db, backup);
-        if (!newExists && backupExists) {
-          logger?.info?.(`Restoring ${table} from ${backup}`);
-          await db.execute(`ALTER TABLE ${backup} RENAME TO ${table}`);
-        } else if (newExists && backupExists) {
-          logger?.info?.(`Dropping partial ${table} and restoring from ${backup}`);
-          await db.execute(`DROP TABLE IF EXISTS ${table}`);
-          await db.execute(`ALTER TABLE ${backup} RENAME TO ${table}`);
-        }
+        await dropTableIfExists(db, temp);
       } catch (restoreError) {
-        logger?.error?.(`Failed to restore ${table} from backup: ${(restoreError as Error).message}`);
+        logger?.error?.(`Failed to clean up temporary table ${temp}: ${(restoreError as Error).message}`);
       }
-      throw new MastraError(
-        {
-          id: createStorageErrorId('DUCKDB', 'MIGRATE_SIGNAL_TABLES', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { table, idColumn },
-        },
-        error,
-      );
+      if (originalRenamed && !swapCompleted) {
+        try {
+          await dropTableIfExists(db, table);
+        } catch (cleanupError) {
+          logger?.error?.(`Failed to clean up partially swapped table ${table}: ${(cleanupError as Error).message}`);
+        }
+        try {
+          await db.execute(`ALTER TABLE ${backup} RENAME TO ${table}`);
+        } catch (restoreError) {
+          logger?.error?.(
+            `Failed to restore original table ${table} from backup ${backup}: ${(restoreError as Error).message}`,
+          );
+        }
+      }
+      throw createMigrationError({ table, idColumn }, error);
     }
   }
 }

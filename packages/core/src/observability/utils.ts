@@ -20,6 +20,11 @@ export function resolveCurrentSpan(): AnySpan | undefined {
   return currentSpanResolver?.();
 }
 
+/** Generate a unique id for an observability signal (log, metric, score, feedback). */
+export function generateSignalId(): string {
+  return crypto.randomUUID();
+}
+
 // --- Lazy resolvers for executeWithContext / executeWithContextSync ---
 // The real implementations live in context-storage.ts (which imports AsyncLocalStorage).
 // context-storage.ts registers them at import time so that consumer code can call these

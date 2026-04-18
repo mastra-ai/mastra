@@ -1,4 +1,3 @@
-import { generateSignalId } from '@mastra/core/observability';
 import type {
   BatchCreateMetricsArgs,
   ListMetricsArgs,
@@ -23,7 +22,7 @@ import type {
 import { parseFieldKey } from '@mastra/core/utils';
 import type { DuckDBConnection } from '../../db/index';
 import { buildJsonPath, buildOrderByClause, buildPaginationClause, buildWhereClause } from './filters';
-import { parseJson, parseJsonArray, toDate, v, jsonV } from './helpers';
+import { parseJson, parseJsonArray, requireSignalId, toDate, v, jsonV } from './helpers';
 
 // ============================================================================
 // Helpers
@@ -206,7 +205,7 @@ function resolveGroupBy(groupBy: string[]): ResolvedGroupBy[] {
 
 function rowToMetricRecord(row: Record<string, unknown>): Record<string, unknown> {
   return {
-    metricId: (row.metricId as string) ?? '',
+    metricId: requireSignalId(row.metricId, 'metricId'),
     timestamp: toDate(row.timestamp),
     name: row.name as string,
     value: Number(row.value),
@@ -257,7 +256,7 @@ export async function batchCreateMetrics(db: DuckDBConnection, args: BatchCreate
 
   const tuples = args.metrics.map(m => {
     return `(${[
-      v(m.metricId || generateSignalId()),
+      v(requireSignalId(m.metricId, 'metricId')),
       v(m.timestamp),
       v(m.name),
       v(m.value),

@@ -104,10 +104,42 @@ import * as discoveryOps from './discovery';
 import * as feedbackOps from './feedback';
 import * as logsOps from './logs';
 import * as metricsOps from './metrics';
-import { migrateSignalTables } from './migration';
+import { checkSignalTablesMigrationStatus, migrateSignalTables } from './migration';
 import * as scoresOps from './scores';
 import * as traceRootsOps from './trace-roots';
 import * as tracingOps from './tracing';
+
+function buildSignalMigrationRequiredMessage(args: {
+  store: 'ClickHouse';
+  tables: Array<{ table: string; engine: string }>;
+}): string {
+  const tableList = args.tables.map(table => `  - ${table.table} (${table.engine})`).join('\n');
+
+  return (
+    `\n` +
+    `===========================================================================\n` +
+    `MIGRATION REQUIRED: ${args.store} observability signal tables need signal IDs\n` +
+    `===========================================================================\n` +
+    `\n` +
+    `The following signal tables still use the legacy schema and must be migrated\n` +
+    `before observability storage can initialize:\n` +
+    `\n` +
+    `${tableList}\n` +
+    `\n` +
+    `To fix this, run the manual migration command:\n` +
+    `\n` +
+    `  npx mastra migrate\n` +
+    `\n` +
+    `This command will:\n` +
+    `  1. Create replacement signal tables with signal-ID dedupe keys\n` +
+    `  2. Backfill missing signal IDs for legacy rows\n` +
+    `  3. Swap the migrated tables into place\n` +
+    `\n` +
+    `WARNING: This migration recreates the signal tables and may take significant\n` +
+    `time for large datasets. Please ensure you have a backup before proceeding.\n` +
+    `===========================================================================\n`
+  );
+}
 
 export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   readonly #client: ClickHouseClient;
@@ -125,10 +157,20 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   // -------------------------------------------------------------------------
 
   async init(): Promise<void> {
-    try {
-      // Non-destructive migration: MergeTree signal tables → ReplacingMergeTree with signal-ID.
-      await migrateSignalTables(this.#client, this.logger);
+    const migrationStatus = await checkSignalTablesMigrationStatus(this.#client);
+    if (migrationStatus.needsMigration) {
+      throw new MastraError({
+        id: createStorageErrorId('CLICKHOUSE', 'MIGRATION_REQUIRED', 'SIGNAL_TABLES'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: buildSignalMigrationRequiredMessage({
+          store: 'ClickHouse',
+          tables: migrationStatus.tables.map(({ table, engine }) => ({ table, engine })),
+        }),
+      });
+    }
 
+    try {
       // Core tables + incremental MVs (must succeed)
       for (const ddl of [...ALL_TABLE_DDL, ...ALL_MV_DDL]) {
         await this.#client.command({ query: ddl });
@@ -148,6 +190,9 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         }
       }
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'VNEXT_INIT', 'FAILED'),
@@ -178,6 +223,38 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       // Discovery MVs may fail on ClickHouse versions without refreshable MV support.
       // Discovery methods will return empty results until the MVs are created and refreshed.
     }
+  }
+
+  /**
+   * Manually migrate legacy signal tables to the signal-ID ReplacingMergeTree schema.
+   * The public method name is historical; the CLI still calls `migrateSpans()`
+   * for observability migrations even though this now also migrates signal tables.
+   */
+  async migrateSpans(): Promise<{
+    success: boolean;
+    alreadyMigrated: boolean;
+    duplicatesRemoved: number;
+    message: string;
+  }> {
+    const migrationStatus = await checkSignalTablesMigrationStatus(this.#client);
+
+    if (!migrationStatus.needsMigration) {
+      return {
+        success: true,
+        alreadyMigrated: true,
+        duplicatesRemoved: 0,
+        message: 'Migration already complete. Signal tables already use signal-ID dedupe keys.',
+      };
+    }
+
+    await migrateSignalTables(this.#client, this.logger);
+
+    return {
+      success: true,
+      alreadyMigrated: false,
+      duplicatesRemoved: 0,
+      message: `Migration complete. Migrated signal tables: ${migrationStatus.tables.map(t => t.table).join(', ')}.`,
+    };
   }
 
   // -------------------------------------------------------------------------

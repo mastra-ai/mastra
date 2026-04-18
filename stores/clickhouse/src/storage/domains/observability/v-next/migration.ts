@@ -20,6 +20,17 @@ interface SignalMigration {
   idColumn: string;
 }
 
+export interface SignalMigrationStatusTable {
+  table: string;
+  engine: string;
+  idColumn: string;
+}
+
+export interface SignalMigrationStatus {
+  needsMigration: boolean;
+  tables: SignalMigrationStatusTable[];
+}
+
 const SIGNAL_MIGRATIONS: SignalMigration[] = [
   { table: TABLE_METRIC_EVENTS, createDDL: METRIC_EVENTS_DDL, idColumn: 'metricId' },
   { table: TABLE_LOG_EVENTS, createDDL: LOG_EVENTS_DDL, idColumn: 'logId' },
@@ -43,10 +54,50 @@ async function getTableColumns(client: ClickHouseClient, table: string): Promise
   return rows.map(r => r.name);
 }
 
+function buildTemporaryTableDDL(createDDL: string, table: string, tempTable: string): string {
+  return createDDL.replace(`CREATE TABLE IF NOT EXISTS ${table}`, `CREATE TABLE ${tempTable}`);
+}
+
+async function dropTableIfExists(client: ClickHouseClient, table: string): Promise<void> {
+  if ((await getTableEngine(client, table)) !== null) {
+    await client.command({ query: `DROP TABLE ${table}` });
+  }
+}
+
+function createMigrationError(args: { table: string; idColumn: string }, error: unknown): MastraError {
+  return new MastraError(
+    {
+      id: createStorageErrorId('CLICKHOUSE', 'MIGRATE_SIGNAL_TABLES', 'FAILED'),
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.THIRD_PARTY,
+      details: args,
+    },
+    error,
+  );
+}
+
+export async function checkSignalTablesMigrationStatus(client: ClickHouseClient): Promise<SignalMigrationStatus> {
+  const tables: SignalMigrationStatusTable[] = [];
+
+  for (const { table, idColumn } of SIGNAL_MIGRATIONS) {
+    const engine = await getTableEngine(client, table);
+    if (!engine || engine === 'ReplacingMergeTree') {
+      continue;
+    }
+
+    tables.push({ table, engine, idColumn });
+  }
+
+  return {
+    needsMigration: tables.length > 0,
+    tables,
+  };
+}
+
 /**
  * Migrate signal tables from MergeTree to ReplacingMergeTree without dropping data.
- * Copy-and-swap: rename → create new → INSERT…SELECT (generating IDs) → drop backup.
- * On failure the original table is restored from the backup. Idempotent.
+ * Copy-and-swap: create temp → INSERT…SELECT (generating IDs) → rename old to backup
+ * and temp to live → drop backup. The live table is only touched in the final swap step.
  */
 export async function migrateSignalTables(client: ClickHouseClient, logger?: IMastraLogger): Promise<void> {
   for (const { table, createDDL, idColumn } of SIGNAL_MIGRATIONS) {
@@ -55,58 +106,50 @@ export async function migrateSignalTables(client: ClickHouseClient, logger?: IMa
 
     logger?.info?.(`Migrating ${table} from ${engine} to ReplacingMergeTree with ${idColumn} column`);
 
+    const temp = `${table}_migrating_${Date.now()}`;
     const backup = `${table}_backup_${Date.now()}`;
 
     try {
-      await client.command({ query: `RENAME TABLE ${table} TO ${backup}` });
-      await client.command({ query: createDDL });
+      await client.command({ query: buildTemporaryTableDDL(createDDL, table, temp) });
 
-      const newColumns = await getTableColumns(client, table);
-      const backupColumns = new Set(await getTableColumns(client, backup));
+      const newColumns = await getTableColumns(client, temp);
+      const currentColumns = new Set(await getTableColumns(client, table));
 
       const columnList = newColumns.map(c => `"${c}"`).join(', ');
       const selectExprs = newColumns
         .map(c => {
           if (c === idColumn) {
-            return backupColumns.has(c)
+            return currentColumns.has(c)
               ? `COALESCE(nullIf("${c}", ''), toString(generateUUIDv4())) AS "${c}"`
               : `toString(generateUUIDv4()) AS "${c}"`;
           }
-          return backupColumns.has(c) ? `"${c}"` : `NULL AS "${c}"`;
+          return currentColumns.has(c) ? `"${c}"` : `NULL AS "${c}"`;
         })
         .join(', ');
 
       await client.command({
-        query: `INSERT INTO ${table} (${columnList}) SELECT ${selectExprs} FROM ${backup}`,
+        query: `INSERT INTO ${temp} (${columnList}) SELECT ${selectExprs} FROM ${table}`,
       });
-      await client.command({ query: `DROP TABLE ${backup}` });
+
+      await client.command({ query: `RENAME TABLE ${table} TO ${backup}, ${temp} TO ${table}` });
+
+      try {
+        await client.command({ query: `DROP TABLE ${backup}` });
+      } catch (cleanupError) {
+        logger?.warn?.(
+          `Migration of ${table} completed, but failed to drop backup ${backup}: ${(cleanupError as Error).message}`,
+        );
+      }
 
       logger?.info?.(`Successfully migrated ${table}`);
     } catch (error) {
       logger?.error?.(`Migration of ${table} failed: ${(error as Error).message}`);
       try {
-        const backupEngine = await getTableEngine(client, backup);
-        const currentEngine = await getTableEngine(client, table);
-        if (backupEngine && !currentEngine) {
-          logger?.info?.(`Restoring ${table} from ${backup}`);
-          await client.command({ query: `RENAME TABLE ${backup} TO ${table}` });
-        } else if (backupEngine && currentEngine) {
-          logger?.info?.(`Dropping partial ${table} and restoring from ${backup}`);
-          await client.command({ query: `DROP TABLE IF EXISTS ${table}` });
-          await client.command({ query: `RENAME TABLE ${backup} TO ${table}` });
-        }
+        await dropTableIfExists(client, temp);
       } catch (restoreError) {
-        logger?.error?.(`Failed to restore ${table} from backup: ${(restoreError as Error).message}`);
+        logger?.error?.(`Failed to clean up temporary table ${temp}: ${(restoreError as Error).message}`);
       }
-      throw new MastraError(
-        {
-          id: createStorageErrorId('CLICKHOUSE', 'MIGRATE_SIGNAL_TABLES', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { table, idColumn },
-        },
-        error,
-      );
+      throw createMigrationError({ table, idColumn }, error);
     }
   }
 }

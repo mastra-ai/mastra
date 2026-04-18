@@ -1,8 +1,7 @@
-import { generateSignalId } from '@mastra/core/observability';
 import type { BatchCreateLogsArgs, ListLogsArgs, ListLogsResponse } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';
-import { v, jsonV, toDate, parseJson, parseJsonArray } from './helpers';
+import { v, jsonV, toDate, parseJson, parseJsonArray, requireSignalId } from './helpers';
 
 const COLUMNS = [
   'logId',
@@ -44,7 +43,7 @@ const COLUMNS_SQL = COLUMNS.join(', ');
 
 function rowToLogRecord(row: Record<string, unknown>): Record<string, unknown> {
   return {
-    logId: (row.logId as string) ?? '',
+    logId: requireSignalId(row.logId, 'logId'),
     timestamp: toDate(row.timestamp),
     level: row.level as string,
     message: row.message as string,
@@ -86,7 +85,7 @@ export async function batchCreateLogs(db: DuckDBConnection, args: BatchCreateLog
 
   const tuples = args.logs.map(log => {
     return `(${[
-      v(log.logId || generateSignalId()),
+      v(requireSignalId(log.logId, 'logId')),
       v(log.timestamp),
       v(log.level),
       v(log.message),
