@@ -6,7 +6,9 @@ Fixed potential credential leakage in observability spans. LLM API keys, authent
 
 **What's fixed**
 
-The model router, AI SDK v5/v6 model wrappers, built-in gateways (Mastra, Netlify, Models.dev, Azure OpenAI), and the voice provider base class now restrict what they expose to spans. Only public identity fields — model ID, provider, gateway ID, voice name — are included. Private configuration such as API keys, `Authorization` headers, OAuth tokens, and proxy credentials is no longer serialized into spans.
+The model router, AI SDK model wrappers (v4 legacy, v5, v6), built-in gateways (Mastra, Netlify, Models.dev, Azure OpenAI), and the voice provider base class now restrict what they expose to spans. Only public identity fields — model ID, provider, gateway ID, voice name — are included. Private configuration such as API keys, `Authorization` headers, OAuth tokens, and proxy credentials is no longer serialized into spans.
+
+Legacy AI SDK v4 models passed to `resolveModelConfig` were previously returned unwrapped. They are now wrapped in `AISDKV4LegacyLanguageModel`, which applies the same `serializeForSpan()` safety as the v5/v6 wrappers while preserving the `LanguageModelV1` interface so existing consumers continue to work.
 
 The `SensitiveDataFilter` span output processor already redacted values under common field names (`apiKey`, `token`, `authorization`, etc.) when enabled. This fix closes the gap for users who did not have it configured, and for cases where credentials were nested under custom field names that the filter's exact-match list did not cover.
 
