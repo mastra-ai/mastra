@@ -89,38 +89,42 @@ export type StructuredOutputCommonFields<SCHEMA = unknown> = {
 };
 
 export type StructuredOutputProcessorFields<MODEL, OUTPUT = {}, SCHEMA = unknown> = {
-  /** Model to use for the internal structuring agent. When provided, enables two-stage processing where the main agent generates text and a separate structuring agent converts it to JSON. */
+  /**
+   * Model to use for the internal structuring agent.
+   * @required Providing this enables **Two-Stage Processing**: the main agent generates text, and this model converts that text into JSON.
+   */
   model: MODEL;
   /**
    * Custom instructions for the structuring agent.
-   * If not provided, will generate instructions based on the schema.
+   * @requires **model** must be provided to use this field.
+   * If using native LLM structuring (no separate model), include these instructions in the main prompt/instructions instead.
    */
   instructions?: string;
   /**
-   * Optional logger instance for structured logging
+   * Optional logger instance for structured logging.
+   * @requires **model** must be provided to use this field.
    */
   logger?: IMastraLogger;
   /**
-   * Provider-specific options passed to the internal structuring agent.
-   * Use this to control model behavior like reasoning effort for thinking models.
-   *
-   * @example
-   * ```ts
-   * providerOptions: {
-   *   openai: { reasoningEffort: 'low' }
-   * }
-   * ```
+   * Provider-specific options for the structuring agent.
+   * @requires **model** must be provided to use this field.
    */
   providerOptions?: ProviderOptions;
 } & StructuredOutputCommonFields<SCHEMA> &
   FallbackFields<OUTPUT>;
 
 export type StructuredOutputDirectFields<SCHEMA = unknown> = {
+  /** @internal Not allowed in Direct Mode */
   model?: never;
+  /** @internal Not allowed in Direct Mode. Use main agent instructions instead. */
   instructions?: never;
+  /** @internal Not allowed in Direct Mode */
   logger?: never;
+  /** @internal Not allowed in Direct Mode */
   providerOptions?: never;
+  /** @internal Not allowed in Direct Mode */
   errorStrategy?: never;
+  /** @internal Not allowed in Direct Mode */
   fallbackValue?: never;
 } & StructuredOutputCommonFields<SCHEMA>;
 
