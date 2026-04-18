@@ -481,13 +481,32 @@ export interface ActiveSubagentState {
   result?: string;
 }
 
+/**
+ * Controls whether an `ask_user` prompt accepts one choice or multiple choices.
+ *
+ * `single_select` is the default for prompts that provide options, preserving the
+ * original one-answer behavior. `multi_select` tells the UI that the user may choose
+ * more than one option and return those selections as an array.
+ */
 export type HarnessQuestionSelectionMode = 'single_select' | 'multi_select';
 
+/**
+ * A structured choice rendered by the UI for an `ask_user` prompt.
+ *
+ * The label is the value returned to the model when the option is selected. The
+ * optional description gives the UI more context without changing the answer value.
+ */
 export interface HarnessQuestionOption {
   label: string;
   description?: string;
 }
 
+/**
+ * Answer shape accepted by `respondToQuestion()` for pending `ask_user` prompts.
+ *
+ * Free-text and single-select prompts resolve with a string. Multi-select prompts
+ * resolve with a string array containing each selected option label.
+ */
 export type HarnessQuestionAnswer = string | string[];
 
 /**

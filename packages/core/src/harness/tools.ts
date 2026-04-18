@@ -12,14 +12,33 @@ import type { HarnessQuestionAnswer, HarnessRequestContext, HarnessSubagent } fr
 let questionCounter = 0;
 let planCounter = 0;
 
+/**
+ * Converts the user's answer into the text returned to the model after the `ask_user`
+ * tool resumes. Free-text and single-select prompts already produce a single string,
+ * while multi-select prompts return an array of selected labels that must be flattened
+ * before the tool result is added back into the generation context.
+ *
+ * The formatter intentionally keeps the model-facing output compact by joining
+ * multi-select answers with commas. This mirrors the old single-answer behavior while
+ * still preserving every selected option in a readable form.
+ */
 function formatQuestionAnswer(answer: HarnessQuestionAnswer): string {
   return Array.isArray(answer) ? answer.join(', ') : answer;
 }
 
 /**
  * Built-in harness tool: ask the user a question and wait for their response.
- * Supports free-text input, single-select options, and multi-select options.
- * The tool pauses execution while the UI shows the dialog.
+ *
+ * The tool supports three prompt shapes. Omitting `options` asks an open-ended
+ * free-text question. Providing `options` without `selectionMode` asks the UI to
+ * render a single-select prompt for backwards compatibility. Providing
+ * `selectionMode: 'multi_select'` lets the UI return multiple selected option labels
+ * as a string array through `respondToQuestion()`.
+ *
+ * During normal harness execution the tool emits an `ask_question` event, registers a
+ * resolver, and pauses until the UI answers. When the tool is executed without harness
+ * callbacks, it returns a readable fallback prompt so non-UI execution paths still
+ * expose the question and available choices to the model.
  */
 export const askUserTool = createTool({
   id: 'ask_user',
