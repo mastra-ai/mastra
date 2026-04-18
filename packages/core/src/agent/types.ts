@@ -401,7 +401,7 @@ export type StructuredOutputProcessorFields<MODEL, OUTPUT = {}, SCHEMA = unknown
   model: MODEL;
   /**
    * Custom instructions for the structuring agent.
-   * @remarks Processor-mode only. **model** must be provided to use this field.
+   * @remarks Processor-mode only. Requires `structuredOutput.model`.
    * If using native LLM structuring (no separate model), include these instructions in the main prompt/instructions instead.
    */
   instructions?: string;
@@ -409,17 +409,17 @@ export type StructuredOutputProcessorFields<MODEL, OUTPUT = {}, SCHEMA = unknown
    * When true and `model` is also provided, reuse the parent agent for the separate
    * structuring pass. If a thread is available, Mastra attaches read-only memory so
    * the structuring model has full conversation context.
-   * @remarks Processor-mode only. **model** must be provided to use this field.
+   * @remarks Processor-mode only. Requires `structuredOutput.model`.
    */
   useAgent?: boolean;
   /**
    * Optional logger instance for structured logging.
-   * @remarks Processor-mode only. **model** must be provided to use this field.
+   * @remarks Processor-mode only. Requires `structuredOutput.model`.
    */
   logger?: IMastraLogger;
   /**
    * Provider-specific options passed to the internal structuring agent.
-   * @remarks Processor-mode only. **model** must be provided to use this field.
+   * @remarks Processor-mode only. Requires `structuredOutput.model`.
    * Use this to control model behavior like reasoning effort for thinking models.
    *
    * @example
