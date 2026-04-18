@@ -28,7 +28,7 @@ export function SkillSharingPanel({ skillId }: SkillSharingPanelProps) {
         skillId,
         params: { metadata: { ...(skill.metadata ?? {}), visibility: next } },
       });
-      toast.success(next === 'public' ? 'Shared to Marketplace' : 'Removed from Marketplace');
+      toast.success(next === 'public' ? 'Shared to Library' : 'Removed from Library');
     } catch (error) {
       toast.error(`Failed to update visibility: ${(error as Error).message}`);
     }
@@ -47,7 +47,7 @@ export function SkillSharingPanel({ skillId }: SkillSharingPanelProps) {
           disabled={updateStoredSkill.isPending}
           data-testid="skill-share-toggle"
         >
-          {visibility === 'public' ? 'Make private' : 'Share to Marketplace'}
+          {visibility === 'public' ? 'Make private' : 'Share to Library'}
         </Button>
       )}
     </div>

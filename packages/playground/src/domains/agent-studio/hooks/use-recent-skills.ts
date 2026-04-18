@@ -9,7 +9,7 @@ import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 
 /**
  * Returns the skills to surface in the end-user sidebar:
- *   1. Skills the current user has starred from the Marketplace.
+ *   1. Skills the current user has starred from the Library.
  *   2. Fill from the user's own most-recently-updated skills.
  */
 export const useRecentSkills = () => {

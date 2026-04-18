@@ -36,9 +36,9 @@ export function AgentStudioSidebar() {
   const canWriteSkills = !rbacEnabled || hasPermission('stored:write');
   const canRead = !rbacEnabled || hasPermission('stored-agents:read');
 
-  const marketplaceEnabled = config?.marketplace?.enabled !== false;
-  const showMarketplaceAgents = marketplaceEnabled && config?.marketplace?.showAgents !== false;
-  const showMarketplaceSkills = marketplaceEnabled && config?.marketplace?.showSkills !== false;
+  const libraryEnabled = config?.marketplace?.enabled !== false;
+  const showLibraryAgents = libraryEnabled && config?.marketplace?.showAgents !== false;
+  const showLibrarySkills = libraryEnabled && config?.marketplace?.showSkills !== false;
 
   const allowSkillCreation = config?.configure?.allowSkillCreation !== false && canWriteSkills;
   const allowAppearance = config?.configure?.allowAppearance !== false;
@@ -194,48 +194,48 @@ export function AgentStudioSidebar() {
           </MainSidebar.NavSection>
         )}
 
-        {/* Marketplace */}
-        {marketplaceEnabled && canRead && (showMarketplaceAgents || showMarketplaceSkills) && (
+        {/* Library */}
+        {libraryEnabled && canRead && (showLibraryAgents || showLibrarySkills) && (
           <MainSidebar.NavSection>
             <MainSidebar.NavHeader
               LinkComponent={Link}
               state={state}
-              href="/agent-studio/marketplace"
-              isActive={pathname === '/agent-studio/marketplace'}
+              href="/agent-studio/library"
+              isActive={pathname === '/agent-studio/library'}
             >
-              Marketplace
+              Library
             </MainSidebar.NavHeader>
             <MainSidebar.NavList>
-              {showMarketplaceAgents && (
+              {showLibraryAgents && (
                 <MainSidebar.NavLink
                   LinkComponent={Link}
                   state={state}
-                  isActive={isActivePath(pathname, '/agent-studio/marketplace/agents')}
+                  isActive={isActivePath(pathname, '/agent-studio/library/agents')}
                   link={{
                     name: 'Agents',
-                    url: '/agent-studio/marketplace/agents',
+                    url: '/agent-studio/library/agents',
                     icon: <StoreIcon />,
                     isOnMastraPlatform: true,
                     indent: true,
                   }}
                 />
               )}
-              {showMarketplaceSkills && (
+              {showLibrarySkills && (
                 <>
                   <MainSidebar.NavLink
                     LinkComponent={Link}
                     state={state}
-                    isActive={isActivePath(pathname, '/agent-studio/marketplace/skills')}
+                    isActive={isActivePath(pathname, '/agent-studio/library/skills')}
                     link={{
                       name: 'Skills',
-                      url: '/agent-studio/marketplace/skills',
+                      url: '/agent-studio/library/skills',
                       icon: <SparklesIcon />,
                       isOnMastraPlatform: true,
                       indent: true,
                     }}
                   />
                   {recentSkills.slice(0, maxItems).map(skill => {
-                    const url = `/agent-studio/marketplace/skills/${skill.id}`;
+                    const url = `/agent-studio/library/skills/${skill.id}`;
                     return (
                       <MainSidebar.NavLink
                         key={skill.id}

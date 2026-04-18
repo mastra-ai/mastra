@@ -62,7 +62,7 @@ export function AgentSharingPanel({ agentId }: AgentSharingPanelProps) {
       await updateStoredAgent.mutateAsync({
         metadata: { ...(storedAgent.metadata ?? {}), visibility: next },
       });
-      toast.success(next === 'public' ? 'Shared to Marketplace' : 'Removed from Marketplace');
+      toast.success(next === 'public' ? 'Shared to Library' : 'Removed from Library');
     } catch (error) {
       toast.error(`Failed to update visibility: ${(error as Error).message}`);
     }
@@ -110,7 +110,7 @@ export function AgentSharingPanel({ agentId }: AgentSharingPanelProps) {
                 disabled={updateStoredAgent.isPending}
                 data-testid="agent-share-toggle"
               >
-                {visibility === 'public' ? 'Make private' : 'Share to Marketplace'}
+                {visibility === 'public' ? 'Make private' : 'Share to Library'}
               </Button>
             )}
           </div>

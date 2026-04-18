@@ -20,7 +20,7 @@ export function VisibilityBadge({ visibility, showLabel = false, className }: Vi
 
   return (
     <span
-      title={isPublic ? 'Visible to your team in the Marketplace' : 'Only visible to you and admins'}
+      title={isPublic ? 'Visible to your team in the Library' : 'Only visible to you and admins'}
       data-visibility={isPublic ? 'public' : 'private'}
       className={cn(
         'inline-flex items-center gap-1 text-xs text-icon4',

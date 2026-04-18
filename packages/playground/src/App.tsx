@@ -35,9 +35,9 @@ import AgentStudioConfigureAppearance from './pages/agent-studio/configure/appea
 import AgentStudioConfigureSkills from './pages/agent-studio/configure/skills';
 import AgentStudioConfigureSkillCreate from './pages/agent-studio/configure/skills/create';
 import AgentStudioConfigureSkillEdit from './pages/agent-studio/configure/skills/edit';
-import AgentStudioMarketplaceAgents from './pages/agent-studio/marketplace/agents';
-import AgentStudioMarketplaceSkills from './pages/agent-studio/marketplace/skills';
-import AgentStudioMarketplaceSkillDetail from './pages/agent-studio/marketplace/skills/detail';
+import AgentStudioLibraryAgents from './pages/agent-studio/library/agents';
+import AgentStudioLibrarySkills from './pages/agent-studio/library/skills';
+import AgentStudioLibrarySkillDetail from './pages/agent-studio/library/skills/detail';
 import AgentStudioProjects from './pages/agent-studio/projects';
 import AgentStudioProjectChat from './pages/agent-studio/projects/chat';
 import AgentStudioProjectCreate from './pages/agent-studio/projects/create';
@@ -378,20 +378,20 @@ const routes = [
         element: <AgentStudioProjectChat />,
       },
       {
-        path: '/agent-studio/marketplace',
-        loader: () => redirect('/agent-studio/marketplace/agents'),
+        path: '/agent-studio/library',
+        loader: () => redirect('/agent-studio/library/agents'),
       },
       {
-        path: '/agent-studio/marketplace/agents',
-        element: <AgentStudioMarketplaceAgents />,
+        path: '/agent-studio/library/agents',
+        element: <AgentStudioLibraryAgents />,
       },
       {
-        path: '/agent-studio/marketplace/skills',
-        element: <AgentStudioMarketplaceSkills />,
+        path: '/agent-studio/library/skills',
+        element: <AgentStudioLibrarySkills />,
       },
       {
-        path: '/agent-studio/marketplace/skills/:skillId',
-        element: <AgentStudioMarketplaceSkillDetail />,
+        path: '/agent-studio/library/skills/:skillId',
+        element: <AgentStudioLibrarySkillDetail />,
       },
       {
         path: '/agent-studio/configure',

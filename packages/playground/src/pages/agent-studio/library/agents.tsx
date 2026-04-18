@@ -16,7 +16,7 @@ import { useState } from 'react';
 import { AgentStudioCard } from '@/domains/agent-studio/components/agent-studio-card';
 import { useStudioAgents } from '@/domains/agent-studio/hooks/use-studio-agents';
 
-export function AgentStudioMarketplaceAgents() {
+export function AgentStudioLibraryAgents() {
   const [search, setSearch] = useState('');
   const { agents, isLoading, error, currentUserId } = useStudioAgents({
     scope: 'team',
@@ -26,7 +26,7 @@ export function AgentStudioMarketplaceAgents() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Marketplace — Agents" icon={<StoreIcon />}>
+      <NoDataPageLayout title="Library — Agents" icon={<StoreIcon />}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -34,7 +34,7 @@ export function AgentStudioMarketplaceAgents() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="Marketplace — Agents" icon={<StoreIcon />}>
+      <NoDataPageLayout title="Library — Agents" icon={<StoreIcon />}>
         <PermissionDenied resource="agents" />
       </NoDataPageLayout>
     );
@@ -42,8 +42,8 @@ export function AgentStudioMarketplaceAgents() {
 
   if (error) {
     return (
-      <NoDataPageLayout title="Marketplace — Agents" icon={<StoreIcon />}>
-        <ErrorState title="Failed to load marketplace agents" message={(error as Error).message} />
+      <NoDataPageLayout title="Library — Agents" icon={<StoreIcon />}>
+        <ErrorState title="Failed to load library agents" message={(error as Error).message} />
       </NoDataPageLayout>
     );
   }
@@ -55,7 +55,7 @@ export function AgentStudioMarketplaceAgents() {
           <PageLayout.Column>
             <PageHeader>
               <PageHeader.Title isLoading={isLoading}>
-                <StoreIcon /> Marketplace — Agents
+                <StoreIcon /> Library — Agents
               </PageHeader.Title>
             </PageHeader>
           </PageLayout.Column>
@@ -77,7 +77,7 @@ export function AgentStudioMarketplaceAgents() {
         <div
           className="grid gap-4 p-4"
           style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(18rem, 1fr))' }}
-          data-testid="marketplace-agents-grid"
+          data-testid="library-agents-grid"
         >
           {agents.map(agent => (
             <AgentStudioCard key={agent.id} agent={agent} showAuthor currentUserId={currentUserId} showStar />
@@ -88,4 +88,4 @@ export function AgentStudioMarketplaceAgents() {
   );
 }
 
-export default AgentStudioMarketplaceAgents;
+export default AgentStudioLibraryAgents;

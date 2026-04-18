@@ -77,7 +77,7 @@ export const useUserPreferences = () => {
 };
 
 /**
- * Returns true/false plus a toggle callback for starring a marketplace item.
+ * Returns true/false plus a toggle callback for starring a library item.
  * Writes through to the server preferences document.
  */
 export const useToggleStar = (kind: 'agent' | 'skill', id?: string) => {

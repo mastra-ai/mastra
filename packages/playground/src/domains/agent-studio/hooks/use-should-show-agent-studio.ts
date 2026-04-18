@@ -4,7 +4,7 @@ import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 /**
  * Determines whether the end-user Agent Studio experience (recents sidebar,
- * marketplace, configure) should be shown instead of the default admin
+ * library, configure) should be shown instead of the default admin
  * Studio sidebar.
  *
  * Rules:

@@ -23,7 +23,7 @@ const VIEWER_ONLY_PERMISSIONS = ['agents:read', 'stored-agents:read', 'stored:re
  * FEATURE: Agent Studio end-user sidebar
  * USER STORY: As a non-admin team member, when the Agent Builder is attached
  * to the Mastra instance, I see a focused sidebar with my recent agents, a
- * team marketplace, and configure settings — instead of the full admin Studio.
+ * team library, and configure settings — instead of the full admin Studio.
  * BEHAVIOR UNDER TEST: /system/packages reports agentBuilderEnabled + config,
  * and the sidebar honors the role and the server config to render the right
  * sections with the right links.
@@ -34,7 +34,7 @@ test.describe('Agent Studio sidebar — behavior', () => {
     await resetStorage();
   });
 
-  test('non-admin member sees Agents + Marketplace + Configure sections with navigable links', async ({ page }) => {
+  test('non-admin member sees Agents + Library + Configure sections with navigable links', async ({ page }) => {
     await setupMockAuth(page, { role: 'member', permissions: END_USER_PERMISSIONS });
 
     await page.goto('/agent-studio/agents');
@@ -48,11 +48,11 @@ test.describe('Agent Studio sidebar — behavior', () => {
     const viewAll = page.locator('a[href="/agent-studio/agents"]');
     await expect(viewAll.first()).toBeVisible();
 
-    // Marketplace section: both Agents and Skills links exist (defaults enable both).
-    const marketplaceAgents = page.locator('a[href="/agent-studio/marketplace/agents"]');
-    const marketplaceSkills = page.locator('a[href="/agent-studio/marketplace/skills"]');
-    await expect(marketplaceAgents).toBeVisible();
-    await expect(marketplaceSkills).toBeVisible();
+    // Library section: both Agents and Skills links exist (defaults enable both).
+    const libraryAgents = page.locator('a[href="/agent-studio/library/agents"]');
+    const librarySkills = page.locator('a[href="/agent-studio/library/skills"]');
+    await expect(libraryAgents).toBeVisible();
+    await expect(librarySkills).toBeVisible();
 
     // Configure section: Skills + Appearance (defaults enable both).
     const configureSkills = page.locator('a[href="/agent-studio/configure/skills"]');
@@ -60,9 +60,9 @@ test.describe('Agent Studio sidebar — behavior', () => {
     await expect(configureSkills).toBeVisible();
     await expect(configureAppearance).toBeVisible();
 
-    // Clicking a marketplace link must actually navigate.
-    await marketplaceSkills.click();
-    await expect(page).toHaveURL(/\/agent-studio\/marketplace\/skills$/);
+    // Clicking a library link must actually navigate.
+    await librarySkills.click();
+    await expect(page).toHaveURL(/\/agent-studio\/library\/skills$/);
   });
 
   test('admin without preview toggle does NOT see the end-user sidebar', async ({ page }) => {

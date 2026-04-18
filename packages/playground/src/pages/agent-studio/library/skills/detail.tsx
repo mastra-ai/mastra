@@ -5,7 +5,7 @@ import { useStoredSkill } from '@/domains/agent-studio/hooks/use-studio-skills';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { useLinkComponent } from '@/lib/framework';
 
-export function AgentStudioMarketplaceSkillDetail() {
+export function AgentStudioLibrarySkillDetail() {
   const { skillId } = useParams<{ skillId: string }>();
   const { Link } = useLinkComponent();
   const { data: skill, isLoading, error } = useStoredSkill(skillId);
@@ -35,10 +35,10 @@ export function AgentStudioMarketplaceSkillDetail() {
         <PageLayout.Row>
           <PageLayout.Column>
             <Link
-              href="/agent-studio/marketplace/skills"
+              href="/agent-studio/library/skills"
               className="inline-flex items-center gap-1 text-sm text-icon4 hover:text-icon6"
             >
-              <ArrowLeftIcon className="h-4 w-4" /> Back to marketplace
+              <ArrowLeftIcon className="h-4 w-4" /> Back to library
             </Link>
             <PageHeader>
               <PageHeader.Title isLoading={isLoading}>
@@ -71,4 +71,4 @@ export function AgentStudioMarketplaceSkillDetail() {
   );
 }
 
-export default AgentStudioMarketplaceSkillDetail;
+export default AgentStudioLibrarySkillDetail;

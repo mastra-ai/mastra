@@ -15,7 +15,7 @@ import { useState } from 'react';
 import { SkillStudioCard } from '@/domains/agent-studio/components/skill-studio-card';
 import { useStudioSkills } from '@/domains/agent-studio/hooks/use-studio-skills';
 
-export function AgentStudioMarketplaceSkills() {
+export function AgentStudioLibrarySkills() {
   const [search, setSearch] = useState('');
   const { skills, isLoading, error, currentUserId } = useStudioSkills({
     scope: 'team',
@@ -25,7 +25,7 @@ export function AgentStudioMarketplaceSkills() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Marketplace — Skills" icon={<StoreIcon />}>
+      <NoDataPageLayout title="Library — Skills" icon={<StoreIcon />}>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -33,7 +33,7 @@ export function AgentStudioMarketplaceSkills() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="Marketplace — Skills" icon={<StoreIcon />}>
+      <NoDataPageLayout title="Library — Skills" icon={<StoreIcon />}>
         <PermissionDenied resource="skills" />
       </NoDataPageLayout>
     );
@@ -41,8 +41,8 @@ export function AgentStudioMarketplaceSkills() {
 
   if (error) {
     return (
-      <NoDataPageLayout title="Marketplace — Skills" icon={<StoreIcon />}>
-        <ErrorState title="Failed to load marketplace skills" message={(error as Error).message} />
+      <NoDataPageLayout title="Library — Skills" icon={<StoreIcon />}>
+        <ErrorState title="Failed to load library skills" message={(error as Error).message} />
       </NoDataPageLayout>
     );
   }
@@ -54,7 +54,7 @@ export function AgentStudioMarketplaceSkills() {
           <PageLayout.Column>
             <PageHeader>
               <PageHeader.Title isLoading={isLoading}>
-                <StoreIcon /> Marketplace — Skills
+                <StoreIcon /> Library — Skills
               </PageHeader.Title>
             </PageHeader>
           </PageLayout.Column>
@@ -76,13 +76,13 @@ export function AgentStudioMarketplaceSkills() {
         <div
           className="grid gap-4 p-4"
           style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(18rem, 1fr))' }}
-          data-testid="marketplace-skills-grid"
+          data-testid="library-skills-grid"
         >
           {skills.map(skill => (
             <SkillStudioCard
               key={skill.id}
               skill={skill}
-              linkBasePath="/agent-studio/marketplace/skills"
+              linkBasePath="/agent-studio/library/skills"
               showAuthor
               currentUserId={currentUserId}
               showStar
@@ -94,4 +94,4 @@ export function AgentStudioMarketplaceSkills() {
   );
 }
 
-export default AgentStudioMarketplaceSkills;
+export default AgentStudioLibrarySkills;

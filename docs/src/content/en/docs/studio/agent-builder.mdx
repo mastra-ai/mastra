@@ -11,7 +11,7 @@ packages:
 Agent Builder is a Studio surface for non-engineer end users. Admins wire it onto the `Mastra` instance, and Studio switches to a focused sidebar with three sections:
 
 - **Agents** — the user's five most recently opened agents plus a **View all** grid.
-- **Marketplace** — agents and skills published by other teammates.
+- **Library** — agents and skills published by other teammates.
 - **Configure** — user-managed skills and a light/dark appearance toggle.
 
 Engineers and admins keep the full admin Studio by default, and can flip a **View as end-user** toggle from the user menu to preview the end-user surface.
@@ -51,7 +51,7 @@ export const mastra = new Mastra({
 })
 ```
 
-All options are optional — the defaults enable every section, enable the marketplace with agents and skills visible, allow skill creation and appearance toggling, and show five recent agents.
+All options are optional — the defaults enable every section, enable the Library (configured via the `marketplace` key) with agents and skills visible, allow skill creation and appearance toggling, and show five recent agents.
 
 ## Enable in production
 
@@ -66,14 +66,14 @@ export MASTRA_EE_LICENSE="..."
 | Option | Type | Default | Description |
 | - | - | - | - |
 | `enabledSections` | `Array<'tools' \| 'agents' \| 'workflows' \| 'scorers' \| 'skills' \| 'memory' \| 'variables'>` | all | Sections exposed in the end-user agent editor. |
-| `marketplace.enabled` | `boolean` | `true` | Master switch for the Marketplace sidebar section. |
-| `marketplace.showAgents` | `boolean` | `true` | Show the Agents marketplace tab. |
-| `marketplace.showSkills` | `boolean` | `true` | Show the Skills marketplace tab. |
+| `marketplace.enabled` | `boolean` | `true` | Master switch for the Library sidebar section. |
+| `marketplace.showAgents` | `boolean` | `true` | Show the Agents tab in the Library. |
+| `marketplace.showSkills` | `boolean` | `true` | Show the Skills tab in the Library. |
 | `configure.allowSkillCreation` | `boolean` | `true` | Allow end users to publish new skills from **Configure**. |
 | `configure.allowAppearance` | `boolean` | `true` | Show the light/dark appearance toggle under **Configure**. |
 | `configure.allowAgentAvatarUpload` | `boolean` | `true` | Allow end users to upload an avatar image for agents they author. |
-| `marketplace.allowAgentStarring` | `boolean` | `true` | Allow starring agents from the Marketplace. |
-| `marketplace.allowSkillStarring` | `boolean` | `true` | Allow starring skills from the Marketplace. |
+| `marketplace.allowAgentStarring` | `boolean` | `true` | Allow starring agents from the Library. |
+| `marketplace.allowSkillStarring` | `boolean` | `true` | Allow starring skills from the Library. |
 | `marketplace.allowAgentSharing` | `boolean` | `true` | Allow authors to flip an agent's visibility to public. |
 | `marketplace.allowSkillSharing` | `boolean` | `true` | Allow authors to flip a skill's visibility to public. |
 | `recents.maxItems` | `number` | `5` | How many recent agents to surface in the sidebar. |
@@ -88,9 +88,9 @@ Agent Builder reuses the existing `stored-agents:*` and `stored:*` (stored-skill
 
 See [Studio Auth](/docs/studio/auth) for the full RBAC model.
 
-## Marketplace scope
+## Library scope
 
-The Marketplace intentionally excludes the current user's own work. Users' own agents appear in the **Agents** sidebar section, and their own skills appear under **Configure → Skills**.
+The Library intentionally excludes the current user's own work. Users' own agents appear in the **Agents** sidebar section, and their own skills appear under **Configure → Skills**.
 
 ## Visibility, stars, and avatars
 
@@ -98,14 +98,14 @@ Agent Builder layers three end-user features on top of stored agents and skills.
 
 ### Visibility
 
-Every stored agent and skill carries a `metadata.visibility` of `'private'` or `'public'`. The **Marketplace** only surfaces items with `metadata.visibility: 'public'`. Authors flip visibility from the agent **Identity** page and the **Configure → Skills** edit page with **Share to Marketplace**. Nothing is shared by default.
+Every stored agent and skill carries a `metadata.visibility` of `'private'` or `'public'`. The **Library** only surfaces items with `metadata.visibility: 'public'`. Authors flip visibility from the agent **Identity** page and the **Configure → Skills** edit page with **Share to Library**. Nothing is shared by default.
 
 ### Starring
 
 Starred agents and skills are stored as per-user preferences (`starredAgents`, `starredSkills`) in the new `user_preferences` storage domain. Stars are not metadata on the agent/skill itself, so non-authors can star shared work without mutating it.
 
 - Starred agents join the Agents recents sidebar.
-- Starred skills appear under **Marketplace → Skills**.
+- Starred skills appear under **Library → Skills**.
 
 Preferences are keyed by the authenticated user's id, so an auth provider must be configured for stars to persist.
 
@@ -121,7 +121,7 @@ A **project** is a collaborative workspace led by a **supervisor agent** (the "p
 
 - **Chat** — the team chat view (left = memory threads, center = chat, right = task list). Users can `@mention` a specific sub-agent to route a turn to that agent only.
 - **Tasks** — a right-side pane drives a shared checklist. The supervisor can read and write tasks through built-in `project_add_task`, `project_update_task`, and `project_list_tasks` tools.
-- **Marketplace search** — the supervisor can call `project_search_marketplace` to propose existing public agents or skills. The user approves additions, which both joins the team and stars the resource.
+- **Library search** — the supervisor can call `project_search_marketplace` to propose existing public agents or skills. The user approves additions, which both joins the team and stars the resource.
 
 Under the hood a project is a stored agent with `role: 'supervisor'` and a `metadata.project` payload. All reads/writes go through the existing stored-agent storage plus a handful of project-specific routes:
 
