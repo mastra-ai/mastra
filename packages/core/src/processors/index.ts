@@ -515,7 +515,6 @@ export * from './processors';
 export { PrefillErrorHandler } from './prefill-error-handler';
 export { ProcessorState, ProcessorRunner } from './runner';
 export * from './memory';
-export { projectProcessorSpanPayload, SAFE_PROCESSOR_SPAN_FIELDS } from './span-output';
 export type { TripWireOptions } from '../agent/trip-wire';
 export {
   ProcessorStepSchema,

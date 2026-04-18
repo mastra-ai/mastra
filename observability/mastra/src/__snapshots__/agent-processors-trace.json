@@ -65,6 +65,49 @@
             },
             "output": {
               "phase": "input",
+              "messageList": {
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "  Hello! How are you?  "
+                      }
+                    ]
+                  }
+                ],
+                "systemMessages": [
+                  {
+                    "role": "system",
+                    "content": "You are a helpful assistant"
+                  }
+                ]
+              },
+              "systemMessages": [
+                {
+                  "role": "system",
+                  "content": "You are a helpful assistant"
+                }
+              ],
+              "state": {},
+              "processorStates": {
+                "__type": "Map",
+                "__map_entries": [
+                  [
+                    "string",
+                    "validator",
+                    {
+                      "inputAccumulatedText": "",
+                      "outputAccumulatedText": "",
+                      "outputChunkCount": 0,
+                      "customState": {},
+                      "streamParts": []
+                    }
+                  ]
+                ]
+              },
+              "retryCount": 0,
               "messages": [
                 {
                   "id": "<id-1>",
@@ -82,14 +125,7 @@
                     "content": "  Hello! How are you?  "
                   }
                 }
-              ],
-              "systemMessages": [
-                {
-                  "role": "system",
-                  "content": "You are a helpful assistant"
-                }
-              ],
-              "retryCount": 0
+              ]
             }
           },
           "children": [
@@ -416,9 +452,131 @@
             },
             "output": {
               "phase": "outputResult",
+              "messageList": {
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "  Hello! How are you?  "
+                      }
+                    ]
+                  },
+                  {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Mock V2 stream response",
+                        "createdAt": "<date>"
+                      }
+                    ]
+                  }
+                ],
+                "systemMessages": [
+                  {
+                    "role": "system",
+                    "content": "You are a helpful assistant"
+                  }
+                ]
+              },
+              "state": {},
+              "processorStates": {
+                "__type": "Map",
+                "__map_entries": [
+                  [
+                    "string",
+                    "validator",
+                    {
+                      "inputAccumulatedText": "",
+                      "outputAccumulatedText": "",
+                      "outputChunkCount": 0,
+                      "customState": {},
+                      "streamParts": []
+                    }
+                  ],
+                  [
+                    "string",
+                    "test-agent-output-processor",
+                    {
+                      "inputAccumulatedText": "Mock V2 stream response",
+                      "outputAccumulatedText": "Mock V2 stream response",
+                      "outputChunkCount": 3,
+                      "customState": {},
+                      "streamParts": [
+                        {
+                          "type": "response-metadata",
+                          "runId": "<runId-1>",
+                          "from": "AGENT",
+                          "payload": {
+                            "type": "response-metadata",
+                            "id": "<id-2>",
+                            "modelId": "mock-model-id"
+                          }
+                        },
+                        {
+                          "type": "text-delta",
+                          "runId": "<runId-1>",
+                          "from": "AGENT",
+                          "payload": {
+                            "id": "<id-2>",
+                            "text": "Mock V2 stream response"
+                          }
+                        },
+                        {
+                          "type": "finish",
+                          "runId": "<runId-1>",
+                          "from": "AGENT",
+                          "payload": {
+                            "stepResult": {
+                              "reason": "stop"
+                            },
+                            "output": {
+                              "usage": {
+                                "inputTokens": 15,
+                                "outputTokens": 25,
+                                "totalTokens": 40
+                              }
+                            },
+                            "metadata": {},
+                            "messages": {
+                              "all": [],
+                              "user": [],
+                              "nonUser": []
+                            },
+                            "type": "finish"
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  [
+                    "string",
+                    "summarizer",
+                    {
+                      "inputAccumulatedText": "",
+                      "outputAccumulatedText": "",
+                      "outputChunkCount": 0,
+                      "customState": {},
+                      "streamParts": []
+                    }
+                  ]
+                ]
+              },
+              "result": {
+                "text": "Mock V2 stream response",
+                "usage": {
+                  "inputTokens": 15,
+                  "outputTokens": 25,
+                  "totalTokens": 40
+                },
+                "finishReason": "stop"
+              },
+              "retryCount": 0,
               "messages": [
                 {
-                  "id": "<id-2>",
+                  "id": "<id-3>",
                   "role": "assistant",
                   "content": {
                     "format": 2,
@@ -437,17 +595,7 @@
                   },
                   "createdAt": "<date>"
                 }
-              ],
-              "retryCount": 0,
-              "result": {
-                "text": "Mock V2 stream response",
-                "usage": {
-                  "inputTokens": 15,
-                  "outputTokens": 25,
-                  "totalTokens": 40
-                },
-                "finishReason": "stop"
-              }
+              ]
             }
           },
           "children": [

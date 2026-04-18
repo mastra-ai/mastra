@@ -13,7 +13,6 @@ import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage } from '../stream/types';
-import { projectProcessorSpanPayload } from './span-output';
 import type { ProcessorStepOutput } from './step-schema';
 import { isMaybeClaude46, TrailingAssistantGuard } from './trailing-assistant-guard';
 import { isProcessorWorkflow } from './index';
@@ -976,7 +975,7 @@ export class ProcessorRunner {
           processorIndex: index,
         },
         input: {
-          ...projectProcessorSpanPayload(inputData),
+          ...inputData,
           model: {
             id: inputData.model.modelId,
             provider: inputData.model.provider,
@@ -1034,7 +1033,7 @@ export class ProcessorRunner {
 
         processorSpan?.end({
           output: {
-            ...projectProcessorSpanPayload(stepInput),
+            ...stepInput,
             messages: messageList.get.all.db(),
             systemMessages: messageList.getAllSystemMessages(),
             model: stepInput.model

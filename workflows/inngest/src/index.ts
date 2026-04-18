@@ -7,12 +7,7 @@ import type { CoreMessage } from '@mastra/core/llm';
 import type { TracingContext } from '@mastra/core/observability';
 import { EntityType, SpanType } from '@mastra/core/observability';
 import type { Processor, ProcessorStepOutput, ProcessorStepInputSchema, OutputResult } from '@mastra/core/processors';
-import {
-  ProcessorRunner,
-  ProcessorStepOutputSchema,
-  ProcessorStepSchema,
-  projectProcessorSpanPayload,
-} from '@mastra/core/processors';
+import { ProcessorRunner, ProcessorStepOutputSchema, ProcessorStepSchema } from '@mastra/core/processors';
 import type { InferPublicSchema, PublicSchema, StandardSchemaWithJSON } from '@mastra/core/schema';
 import { toStandardSchema } from '@mastra/core/schema';
 import type { ChunkType, LanguageModelUsage } from '@mastra/core/stream';
@@ -682,7 +677,7 @@ function createStepFromProcessor<TProcessorId extends string>(
       const executePhaseWithSpan = async <T>(fn: () => Promise<T>): Promise<T> => {
         try {
           const result = await fn();
-          processorSpan?.end({ output: projectProcessorSpanPayload(result) });
+          processorSpan?.end({ output: result });
           return result;
         } catch (error) {
           // TripWire errors should end span but bubble up to halt the workflow
