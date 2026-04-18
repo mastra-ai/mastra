@@ -72,8 +72,7 @@ export function summarizeProcessorToolsForSpan(tools: unknown): ProcessorToolSum
     return undefined;
   }
 
-  const summaries = Object.entries(tools).map(([key, value]) => summarizeProcessorToolEntry(key, value));
-  return summaries.length > 0 ? summaries : undefined;
+  return Object.entries(tools).map(([key, value]) => summarizeProcessorToolEntry(key, value));
 }
 
 function summarizeProcessorToolRegistry(
@@ -94,6 +93,16 @@ function summarizeProcessorToolRegistry(
   }));
 }
 
+function resolveToolInRegistry(
+  toolRegistry: Array<{ registryKey: string; summary: ProcessorToolSummary }>,
+  toolKey: string,
+) {
+  return toolRegistry.find(
+    candidate =>
+      candidate.summary.id === toolKey || candidate.summary.name === toolKey || candidate.registryKey === toolKey,
+  );
+}
+
 export function summarizeActiveToolsForSpan(activeTools: unknown, tools?: unknown): ActiveToolSummary[] | undefined {
   if (!Array.isArray(activeTools)) {
     return undefined;
@@ -107,10 +116,7 @@ export function summarizeActiveToolsForSpan(activeTools: unknown, tools?: unknow
         return undefined;
       }
 
-      const match = toolRegistry.find(
-        candidate =>
-          candidate.summary.id === toolKey || candidate.summary.name === toolKey || candidate.registryKey === toolKey,
-      );
+      const match = resolveToolInRegistry(toolRegistry, toolKey);
       return {
         id: match?.summary.id ?? toolKey,
         name: match?.summary.name ?? toolKey,
@@ -118,7 +124,7 @@ export function summarizeActiveToolsForSpan(activeTools: unknown, tools?: unknow
     })
     .filter((tool): tool is ActiveToolSummary => tool !== undefined);
 
-  return summaries.length > 0 ? summaries : undefined;
+  return summaries;
 }
 
 export function summarizeToolChoiceForSpan(
@@ -153,10 +159,7 @@ export function summarizeToolChoiceForSpan(
   }
 
   const toolRegistry = summarizeProcessorToolRegistry(tools) ?? [];
-  const match = toolRegistry.find(
-    candidate =>
-      candidate.summary.id === toolKey || candidate.summary.name === toolKey || candidate.registryKey === toolKey,
-  );
+  const match = resolveToolInRegistry(toolRegistry, toolKey);
   const fallbackToolId = readString(toolChoice.toolId) ?? toolKey;
   const fallbackToolName = readString(toolChoice.toolName) ?? toolKey;
 

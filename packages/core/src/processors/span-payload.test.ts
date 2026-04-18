@@ -83,6 +83,9 @@ describe('processor span summaries', () => {
         name: 'search',
       },
     ]);
+
+    expect(summarizeProcessorToolsForSpan({})).toEqual([]);
+    expect(summarizeActiveToolsForSpan([], tools)).toEqual([]);
   });
 
   it('normalizes toolChoice to a stable object shape', () => {
