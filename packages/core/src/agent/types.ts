@@ -91,23 +91,23 @@ export type StructuredOutputCommonFields<SCHEMA = unknown> = {
 export type StructuredOutputProcessorFields<MODEL, OUTPUT = {}, SCHEMA = unknown> = {
   /**
    * Model to use for the internal structuring agent.
-   * @required Providing this enables **Two-Stage Processing**: the main agent generates text, and this model converts that text into JSON.
+   * @remarks Providing this enables **Two-Stage Processing**: the main agent generates text, and this model converts that text into JSON.
    */
   model: MODEL;
   /**
    * Custom instructions for the structuring agent.
-   * @requires **model** must be provided to use this field.
+   * @remarks **model** must be provided to use this field.
    * If using native LLM structuring (no separate model), include these instructions in the main prompt/instructions instead.
    */
   instructions?: string;
   /**
    * Optional logger instance for structured logging.
-   * @requires **model** must be provided to use this field.
+   * @remarks **model** must be provided to use this field.
    */
   logger?: IMastraLogger;
   /**
    * Provider-specific options for the structuring agent.
-   * @requires **model** must be provided to use this field.
+   * @remarks **model** must be provided to use this field.
    */
   providerOptions?: ProviderOptions;
 } & StructuredOutputCommonFields<SCHEMA> &

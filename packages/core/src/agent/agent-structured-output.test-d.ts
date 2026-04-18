@@ -36,7 +36,7 @@ describe('Agent Structured Output Type Tests', () => {
     expectTypeOf(processorOptions).toBeObject();
   });
 
-  // These should fail if uncommented or tested with @ts-expect-error
+  // Negative cases: processor-only fields must be rejected when `model` is missing
   it('should NOT allow processor fields without model', () => {
     // @ts-expect-error - instructions requires model
     const _opt1: PublicStructuredOutputOptions<{ name: string }> = {
