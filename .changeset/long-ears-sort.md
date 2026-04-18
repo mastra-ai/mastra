@@ -2,7 +2,7 @@
 '@mastra/core': patch
 ---
 
-Fixed credential leakage in observability spans. LLM API keys, authentication headers, and gateway tokens could previously appear in span input or output data sent to telemetry backends like Datadog or OpenTelemetry collectors.
+Fixed credential leakage in observability spans. LLM API keys, authentication headers, and gateway tokens could previously appear in span input or output data sent to telemetry backends.
 
 **What's fixed**
 
