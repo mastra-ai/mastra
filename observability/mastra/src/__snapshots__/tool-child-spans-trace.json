@@ -254,9 +254,6 @@
                       "runId": "<runId-1>",
                       "toolCallId": "call-child-span-1",
                       "toolName": "childSpanTool"
-                    },
-                    "output": {
-                      "output": "Tool processed: test-data"
                     }
                   }
                 }

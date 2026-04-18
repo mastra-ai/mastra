@@ -314,11 +314,6 @@
                       "id2": "tacos",
                       "toolCallId": "call-workflow-1",
                       "toolName": "workflowExecutor"
-                    },
-                    "output": {
-                      "result": {
-                        "output": "test input processed"
-                      }
                     }
                   }
                 }
