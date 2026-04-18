@@ -1692,6 +1692,85 @@ export interface UploadAgentAvatarResponse {
 }
 
 // ============================================================================
+// Project Types (Agent Studio > Projects)
+// ============================================================================
+
+/** A task tracked on a project (persisted under metadata.project.tasks). */
+export interface ProjectTaskResponse {
+  id: string;
+  title: string;
+  description?: string;
+  assigneeAgentId?: string;
+  status: 'open' | 'in_progress' | 'done' | 'blocked';
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Project metadata surfaced from the supervisor stored agent. */
+export interface ProjectMetadataResponse {
+  isProject: true;
+  tasks: ProjectTaskResponse[];
+  invitedAgentIds: string[];
+  invitedSkillIds: string[];
+}
+
+/** A project (supervisor stored agent) returned by the server. */
+export interface ProjectResponse {
+  id: string;
+  name: string;
+  description?: string;
+  instructions?: string;
+  model?: { provider: string; name: string };
+  authorId?: string;
+  status: 'draft' | 'published' | 'archived';
+  project: ProjectMetadataResponse;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Body for POST /projects. */
+export interface CreateProjectParams {
+  id?: string;
+  name: string;
+  description?: string;
+  instructions?: string;
+  model: { provider: string; name: string };
+  invitedAgentIds?: string[];
+}
+
+/** Body for PATCH /projects/:projectId. */
+export interface UpdateProjectParams {
+  name?: string;
+  description?: string;
+  instructions?: string;
+  model?: { provider: string; name: string };
+}
+
+/** Body for POST /projects/:projectId/invite-agent. */
+export interface InviteProjectAgentParams {
+  agentId: string;
+}
+
+/** Body for POST /projects/:projectId/tasks. */
+export interface CreateProjectTaskParams {
+  title: string;
+  description?: string;
+  assigneeAgentId?: string;
+}
+
+/** Body for PATCH /projects/:projectId/tasks/:taskId. */
+export interface UpdateProjectTaskParams {
+  title?: string;
+  description?: string;
+  status?: 'open' | 'in_progress' | 'done' | 'blocked';
+  assigneeAgentId?: string;
+}
+
+export interface ListProjectsResponse extends PaginationInfo {
+  projects: ProjectResponse[];
+}
+
+// ============================================================================
 // Workspace Types
 // ============================================================================
 

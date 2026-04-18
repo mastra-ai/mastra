@@ -19,3 +19,13 @@ export type {
   ResolvedAgentBuilderConfigureConfig,
   ResolvedAgentBuilderRecentsConfig,
 } from './types';
+
+export {
+  PROJECT_TOOL_IDS,
+  addTaskTool,
+  updateTaskTool,
+  listTasksTool,
+  searchMarketplaceTool,
+  proposeAgentTool,
+  getProjectTools,
+} from './tools';

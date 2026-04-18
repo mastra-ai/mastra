@@ -69,6 +69,7 @@ export class FilesystemAgentsStorage extends AgentsStorage {
       status: 'draft',
       activeVersionId: undefined,
       authorId: agent.authorId,
+      role: agent.role,
       metadata: agent.metadata,
       createdAt: now,
       updatedAt: now,
@@ -76,7 +77,7 @@ export class FilesystemAgentsStorage extends AgentsStorage {
 
     await this.helpers.createEntity(agent.id, entity);
 
-    const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
+    const { id: _id, authorId: _authorId, role: _role, metadata: _metadata, ...snapshotConfig } = agent;
     const filtered = stripUnusedFields(snapshotConfig);
     const versionId = crypto.randomUUID();
     await this.createVersion({
@@ -95,7 +96,7 @@ export class FilesystemAgentsStorage extends AgentsStorage {
     const { id, ...updates } = input;
     // Strip snapshot config fields that don't belong on the entity record
     const entityUpdates: Record<string, unknown> = {};
-    const entityFields = new Set(['authorId', 'metadata', 'activeVersionId', 'status']);
+    const entityFields = new Set(['authorId', 'metadata', 'activeVersionId', 'status', 'role']);
     for (const [key, value] of Object.entries(updates)) {
       if (entityFields.has(key)) {
         entityUpdates[key] = value;
@@ -109,13 +110,13 @@ export class FilesystemAgentsStorage extends AgentsStorage {
   }
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page, perPage, orderBy, authorId, metadata, status } = args || {};
+    const { page, perPage, orderBy, authorId, metadata, status, role } = args || {};
     const result = await this.helpers.listEntities({
       page,
       perPage,
       orderBy,
       listKey: 'agents',
-      filters: { authorId, metadata, status },
+      filters: { authorId, metadata, status, role },
     });
     return result as unknown as StorageListAgentsOutput;
   }

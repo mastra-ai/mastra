@@ -38,6 +38,10 @@ import AgentStudioConfigureSkillEdit from './pages/agent-studio/configure/skills
 import AgentStudioMarketplaceAgents from './pages/agent-studio/marketplace/agents';
 import AgentStudioMarketplaceSkills from './pages/agent-studio/marketplace/skills';
 import AgentStudioMarketplaceSkillDetail from './pages/agent-studio/marketplace/skills/detail';
+import AgentStudioProjects from './pages/agent-studio/projects';
+import AgentStudioProjectChat from './pages/agent-studio/projects/chat';
+import AgentStudioProjectCreate from './pages/agent-studio/projects/create';
+import AgentStudioProjectEdit from './pages/agent-studio/projects/edit';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
@@ -352,6 +356,26 @@ const routes = [
       {
         path: '/agent-studio/agents/:agentId/chat/:threadId',
         element: <AgentStudioAgentChat />,
+      },
+      {
+        path: '/agent-studio/projects',
+        element: <AgentStudioProjects />,
+      },
+      {
+        path: '/agent-studio/projects/create',
+        element: <AgentStudioProjectCreate />,
+      },
+      {
+        path: '/agent-studio/projects/:projectId/edit',
+        element: <AgentStudioProjectEdit />,
+      },
+      {
+        path: '/agent-studio/projects/:projectId/chat',
+        element: <AgentStudioProjectChat />,
+      },
+      {
+        path: '/agent-studio/projects/:projectId/chat/:threadId',
+        element: <AgentStudioProjectChat />,
       },
       {
         path: '/agent-studio/marketplace',

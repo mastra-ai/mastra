@@ -114,3 +114,28 @@ Preferences are keyed by the authenticated user's id, so an auth provider must b
 Agents can have a square avatar that renders rounded on cards, in the chat header, and next to recents entries. Uploads go through `POST /stored/agents/:agentId/avatar` with a base64 payload. The client resizes to 256×256 and the server persists the URL on `metadata.avatarUrl`.
 
 Turn off uploads per deployment with `configure.allowAgentAvatarUpload: false`.
+
+## Projects
+
+A **project** is a collaborative workspace led by a **supervisor agent** (the "project manager"). The user invites other agents into the team, chats with the supervisor, and the supervisor delegates to the team.
+
+- **Chat** — the team chat view (left = memory threads, center = chat, right = task list). Users can `@mention` a specific sub-agent to route a turn to that agent only.
+- **Tasks** — a right-side pane drives a shared checklist. The supervisor can read and write tasks through built-in `project_add_task`, `project_update_task`, and `project_list_tasks` tools.
+- **Marketplace search** — the supervisor can call `project_search_marketplace` to propose existing public agents or skills. The user approves additions, which both joins the team and stars the resource.
+
+Under the hood a project is a stored agent with `role: 'supervisor'` and a `metadata.project` payload. All reads/writes go through the existing stored-agent storage plus a handful of project-specific routes:
+
+```
+POST   /projects
+GET    /projects
+GET    /projects/:projectId
+PATCH  /projects/:projectId
+DELETE /projects/:projectId
+POST   /projects/:projectId/invite-agent
+DELETE /projects/:projectId/invite-agent/:agentId
+POST   /projects/:projectId/tasks
+PATCH  /projects/:projectId/tasks/:taskId
+DELETE /projects/:projectId/tasks/:taskId
+```
+
+Permissions reuse `stored-agents:read` / `stored-agents:write` — no new role work is required.

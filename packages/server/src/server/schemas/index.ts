@@ -28,6 +28,7 @@ export * from './mcp-client-versions';
 export * from './memory';
 export * from './memory-config';
 export * from './processor-providers';
+export * from './projects';
 export * from './prompt-block-versions';
 export * from './responses';
 export * from './rule-group';

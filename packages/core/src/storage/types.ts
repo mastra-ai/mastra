@@ -434,6 +434,39 @@ export interface StorageAgentSnapshotType {
 }
 
 /**
+ * Role for a stored agent.
+ * - 'agent' (default): a regular stored agent.
+ * - 'supervisor': a project supervisor that coordinates invited sub-agents.
+ *   Supervisor records are surfaced as "Projects" in Agent Studio.
+ */
+export type StorageAgentRole = 'agent' | 'supervisor';
+
+/**
+ * Project task entry, persisted under `metadata.project.tasks` on a
+ * supervisor stored agent (a.k.a. Project).
+ */
+export interface ProjectTask {
+  id: string;
+  title: string;
+  description?: string;
+  /** Optional sub-agent assignee (stored agent id) */
+  assigneeAgentId?: string;
+  status: 'open' | 'in_progress' | 'done' | 'blocked';
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Project metadata stored under `metadata.project` on a supervisor stored agent.
+ */
+export interface ProjectMetadata {
+  isProject: true;
+  tasks: ProjectTask[];
+  invitedAgentIds: string[];
+  invitedSkillIds: string[];
+}
+
+/**
  * Thin agent record type containing only metadata fields.
  * All configuration lives in version snapshots (StorageAgentSnapshotType).
  */
@@ -446,6 +479,11 @@ export interface StorageAgentType {
   activeVersionId?: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /**
+   * Role marker. Defaults to 'agent' when absent.
+   * Supervisor records represent Projects in Agent Studio.
+   */
+  role?: StorageAgentRole;
   /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
   createdAt: Date;
@@ -471,6 +509,8 @@ export type StorageCreateAgentInput = {
   id: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /** Role marker ('agent' | 'supervisor'). Defaults to 'agent' when omitted. */
+  role?: StorageAgentRole;
   /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
 } & StorageAgentSnapshotType;
@@ -485,6 +525,8 @@ export type StorageUpdateAgentInput = {
   id: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /** Role marker ('agent' | 'supervisor'). */
+  role?: StorageAgentRole;
   /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
   /** FK to agent_versions.id - the currently active version */
@@ -523,6 +565,11 @@ export type StorageListAgentsInput = {
    * Defaults to 'published' if not specified.
    */
   status?: 'draft' | 'published' | 'archived';
+  /**
+   * Filter agents by role ('agent' | 'supervisor').
+   * When omitted, all roles are returned.
+   */
+  role?: StorageAgentRole;
 };
 
 export type StorageListAgentsOutput = PaginationInfo & {

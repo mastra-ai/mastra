@@ -15,6 +15,7 @@ export const RESOURCES = [
   'a2a',
   'agent-builder',
   'agents',
+  'background-tasks',
   'datasets',
   'embedders',
   'experiments',
@@ -30,6 +31,7 @@ export const RESOURCES = [
   'system',
   'tool-providers',
   'tools',
+  'user',
   'vector',
   'vectors',
   'workflows',
@@ -50,7 +52,7 @@ export type Resource = (typeof RESOURCES)[number];
  * - DELETE → delete
  * - Additional actions from explicit requiresPermission overrides
  */
-export const ACTIONS = ['delete', 'execute', 'read', 'write'] as const;
+export const ACTIONS = ['create', 'delete', 'execute', 'read', 'write'] as const;
 
 /**
  * Action type union.
@@ -64,6 +66,8 @@ export type Action = (typeof ACTIONS)[number];
 export const PERMISSION_PATTERNS = {
   /** Full access to all resources and actions */
   '*': '*',
+  /** create all resources */
+  '*:create': '*:create',
   /** Delete all resources */
   '*:delete': '*:delete',
   /** Execute all resources */
@@ -78,6 +82,8 @@ export const PERMISSION_PATTERNS = {
   'agent-builder:*': 'agent-builder:*',
   /** Full access to agents */
   'agents:*': 'agents:*',
+  /** Full access to background-tasks */
+  'background-tasks:*': 'background-tasks:*',
   /** Full access to datasets */
   'datasets:*': 'datasets:*',
   /** Full access to embedders */
@@ -108,6 +114,8 @@ export const PERMISSION_PATTERNS = {
   'tool-providers:*': 'tool-providers:*',
   /** Full access to tools */
   'tools:*': 'tools:*',
+  /** Full access to user */
+  'user:*': 'user:*',
   /** Full access to vector stores */
   'vector:*': 'vector:*',
   /** Full access to vectors */
@@ -126,12 +134,18 @@ export const PERMISSION_PATTERNS = {
   'agent-builder:read': 'agent-builder:read',
   /** Create and modify agent builder */
   'agent-builder:write': 'agent-builder:write',
+  /** create agents */
+  'agents:create': 'agents:create',
+  /** Delete agents */
+  'agents:delete': 'agents:delete',
   /** Execute agents */
   'agents:execute': 'agents:execute',
   /** View agents */
   'agents:read': 'agents:read',
   /** Create and modify agents */
   'agents:write': 'agents:write',
+  /** View background-tasks */
+  'background-tasks:read': 'background-tasks:read',
   /** Delete datasets */
   'datasets:delete': 'datasets:delete',
   /** Execute datasets */
@@ -194,6 +208,10 @@ export const PERMISSION_PATTERNS = {
   'tools:execute': 'tools:execute',
   /** View tools */
   'tools:read': 'tools:read',
+  /** View user */
+  'user:read': 'user:read',
+  /** Create and modify user */
+  'user:write': 'user:write',
   /** Delete vector stores */
   'vector:delete': 'vector:delete',
   /** Execute vector stores */
@@ -239,9 +257,12 @@ export const PERMISSIONS = [
   'agent-builder:execute',
   'agent-builder:read',
   'agent-builder:write',
+  'agents:create',
+  'agents:delete',
   'agents:execute',
   'agents:read',
   'agents:write',
+  'background-tasks:read',
   'datasets:delete',
   'datasets:execute',
   'datasets:read',
@@ -273,6 +294,8 @@ export const PERMISSIONS = [
   'tool-providers:read',
   'tools:execute',
   'tools:read',
+  'user:read',
+  'user:write',
   'vector:delete',
   'vector:execute',
   'vector:read',

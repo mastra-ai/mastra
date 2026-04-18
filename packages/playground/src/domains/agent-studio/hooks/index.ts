@@ -5,3 +5,4 @@ export { useRecentSkills } from './use-recent-skills';
 export { useAgentStudioPreviewMode } from './use-agent-studio-preview-mode';
 export { useShouldShowAgentStudio } from './use-should-show-agent-studio';
 export { useUserPreferences, useToggleStar, useStarredAgentIds, useStarredSkillIds } from './use-user-preferences';
+export { useProjects, useProject, useProjectMutations } from './use-projects';

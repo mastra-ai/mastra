@@ -20,6 +20,7 @@ import { MEMORY_ROUTES } from './memory';
 import { OBSERVABILITY_ROUTES } from './observability';
 import { PROCESSOR_PROVIDER_ROUTES } from './processor-providers';
 import { PROCESSORS_ROUTES } from './processors';
+import { PROJECT_ROUTES } from './projects';
 import { RESPONSES_ROUTES } from './responses';
 import { SCORES_ROUTES } from './scorers';
 import { STORED_AGENTS_ROUTES } from './stored-agents';
@@ -172,6 +173,7 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...DATASETS_ROUTES,
   ...BACKGROUND_TASK_ROUTES,
   ...USER_PREFERENCES_ROUTES,
+  ...PROJECT_ROUTES,
 ];
 
 /**
@@ -207,6 +209,7 @@ export type ServerRoutes = readonly [
   ...typeof SYSTEM_ROUTES,
   ...typeof DATASETS_ROUTES,
   ...typeof USER_PREFERENCES_ROUTES,
+  ...typeof PROJECT_ROUTES,
 ];
 
 // Export route builder and OpenAPI utilities

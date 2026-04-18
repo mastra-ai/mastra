@@ -367,4 +367,58 @@ describe('InMemoryAgentsStorage - Stored Agents Feature', () => {
       expect(versionsAfter).toBe(0);
     });
   });
+
+  describe('role', () => {
+    it('persists role on the thin record when provided', async () => {
+      const result = await storage.create({
+        agent: {
+          id: 'supervisor-1',
+          authorId: 'user-abc',
+          role: 'supervisor',
+          name: 'PM',
+          instructions: 'Coordinate the team',
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
+      });
+
+      expect(result.role).toBe('supervisor');
+
+      const fetched = await storage.getById('supervisor-1');
+      expect(fetched?.role).toBe('supervisor');
+    });
+
+    it('filters listAgents by role', async () => {
+      await storage.create({
+        agent: {
+          id: 'agent-a',
+          authorId: 'u1',
+          name: 'A',
+          instructions: 'a',
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
+      });
+      await storage.create({
+        agent: {
+          id: 'supervisor-a',
+          authorId: 'u1',
+          role: 'supervisor',
+          name: 'Sup',
+          instructions: 's',
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
+      });
+
+      // Publish both so they show up with default status filter
+      const a = await storage.getById('agent-a');
+      await storage.update({ id: 'agent-a', status: 'published', activeVersionId: a?.activeVersionId });
+      const s = await storage.getById('supervisor-a');
+      await storage.update({ id: 'supervisor-a', status: 'published', activeVersionId: s?.activeVersionId });
+
+      const supervisors = await storage.list({ role: 'supervisor' });
+      expect(supervisors.agents.map(a => a.id)).toEqual(['supervisor-a']);
+
+      const plain = await storage.list({ role: 'agent' });
+      expect(plain.agents.map(a => a.id)).toEqual(['agent-a']);
+    });
+  });
 });

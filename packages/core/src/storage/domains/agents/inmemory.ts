@@ -55,6 +55,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       status: 'draft',
       activeVersionId: undefined,
       authorId: agent.authorId,
+      role: agent.role,
       metadata: agent.metadata,
       createdAt: now,
       updatedAt: now,
@@ -63,7 +64,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     this.db.agents.set(agent.id, newAgent);
 
     // Extract config fields from the flat input (everything except agent-record fields)
-    const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
+    const { id: _id, authorId: _authorId, role: _role, metadata: _metadata, ...snapshotConfig } = agent;
 
     // Create version 1 from the config
     const versionId = crypto.randomUUID();
@@ -88,12 +89,13 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       throw new Error(`Agent with id ${id} not found`);
     }
 
-    const { authorId, activeVersionId, metadata, status } = updates;
+    const { authorId, activeVersionId, metadata, status, role } = updates;
 
     const updatedAgent: StorageAgentType = {
       ...existingAgent,
       ...(authorId !== undefined && { authorId }),
       ...(activeVersionId !== undefined && { activeVersionId }),
+      ...(role !== undefined && { role }),
       ...(metadata !== undefined && {
         metadata: { ...existingAgent.metadata, ...metadata },
       }),
@@ -113,7 +115,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   }
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status, role } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 100)
@@ -140,6 +142,11 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     // Filter by authorId if provided
     if (authorId !== undefined) {
       agents = agents.filter(agent => agent.authorId === authorId);
+    }
+
+    // Filter by role if provided (missing role treated as 'agent')
+    if (role !== undefined) {
+      agents = agents.filter(agent => (agent.role ?? 'agent') === role);
     }
 
     // Filter by metadata if provided (AND logic - all key-value pairs must match)

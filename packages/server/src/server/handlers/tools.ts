@@ -1,3 +1,4 @@
+import { getProjectTools } from '@mastra/core/agent-builder/ee';
 import { isVercelTool, isProviderDefinedTool } from '@mastra/core/tools';
 import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import type { PublicSchema } from '@mastra/schema-compat/schema';
@@ -76,6 +77,15 @@ function serializeTool(tool: any): any {
   };
 }
 
+/**
+ * Returns the built-in project tools when `mastra.agentBuilder` is configured,
+ * keyed by tool id so callers can merge into `registeredTools` / lookup.
+ */
+function getBuiltInProjectTools(mastra: any): Record<string, any> {
+  if (!mastra?.getAgentBuilder?.()) return {};
+  return getProjectTools() as unknown as Record<string, any>;
+}
+
 // ============================================================================
 // Route Definitions (new pattern - handlers defined inline with createRoute)
 // ============================================================================
@@ -91,8 +101,9 @@ export const LIST_TOOLS_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, registeredTools }) => {
     try {
-      const allTools =
+      const baseTools =
         registeredTools && Object.keys(registeredTools).length > 0 ? registeredTools : mastra.listTools() || {};
+      const allTools = { ...getBuiltInProjectTools(mastra), ...baseTools };
 
       const serializedTools = Object.entries(allTools).reduce(
         (acc, [id, _tool]) => {
@@ -128,6 +139,11 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
         tool = Object.values(registeredTools).find((t: any) => t.id === toolId);
       } else {
         tool = mastra.getToolById(toolId);
+      }
+
+      // Built-in project tools (agent-builder) are never in mastra.tools; look them up here.
+      if (!tool) {
+        tool = getBuiltInProjectTools(mastra)[toolId];
       }
 
       if (!tool) {
@@ -166,6 +182,11 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
         tool = Object.values(registeredTools).find((t: any) => t.id === toolId);
       } else {
         tool = mastra.getToolById(toolId);
+      }
+
+      // Built-in project tools (agent-builder) are never in mastra.tools; look them up here.
+      if (!tool) {
+        tool = getBuiltInProjectTools(mastra)[toolId];
       }
 
       if (!tool) {

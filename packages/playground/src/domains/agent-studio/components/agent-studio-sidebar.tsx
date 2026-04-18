@@ -1,7 +1,8 @@
 import { LogoWithoutText, MainSidebar, useMainSidebar } from '@mastra/playground-ui';
-import { PlusIcon, SettingsIcon, StoreIcon, SparklesIcon, PaletteIcon } from 'lucide-react';
+import { PlusIcon, SettingsIcon, StoreIcon, SparklesIcon, PaletteIcon, UsersIcon } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { useAgentStudioConfig } from '../hooks/use-agent-studio-config';
+import { useProjects } from '../hooks/use-projects';
 import { useRecentAgents } from '../hooks/use-recent-agents';
 import { useRecentSkills } from '../hooks/use-recent-skills';
 import { AgentAvatar } from './agent-avatar';
@@ -28,6 +29,8 @@ export function AgentStudioSidebar() {
   const { config } = useAgentStudioConfig();
   const { recents, maxItems } = useRecentAgents();
   const { recents: recentSkills } = useRecentSkills();
+  const { data: projectsData } = useProjects();
+  const projects = projectsData?.projects ?? [];
 
   const canWriteAgents = !rbacEnabled || hasPermission('stored-agents:write');
   const canWriteSkills = !rbacEnabled || hasPermission('stored:write');
@@ -66,6 +69,69 @@ export function AgentStudioSidebar() {
       </div>
 
       <MainSidebar.Nav>
+        {/* Projects — user's collaborative workspaces */}
+        {canRead && (
+          <MainSidebar.NavSection>
+            <MainSidebar.NavHeader
+              LinkComponent={Link}
+              state={state}
+              href="/agent-studio/projects"
+              isActive={pathname === '/agent-studio/projects'}
+            >
+              Projects
+            </MainSidebar.NavHeader>
+            <MainSidebar.NavList>
+              {canWriteAgents && (
+                <MainSidebar.NavLink
+                  LinkComponent={Link}
+                  state={state}
+                  isActive={pathname === '/agent-studio/projects/create'}
+                  link={{
+                    name: 'New project',
+                    url: '/agent-studio/projects/create',
+                    icon: <PlusIcon />,
+                    isOnMastraPlatform: true,
+                    indent: true,
+                    variant: 'featured',
+                  }}
+                />
+              )}
+              {projects.slice(0, maxItems).map(project => {
+                const url = `/agent-studio/projects/${project.id}/chat`;
+                return (
+                  <MainSidebar.NavLink
+                    key={project.id}
+                    LinkComponent={Link}
+                    state={state}
+                    isActive={isActivePath(pathname, url)}
+                    link={{
+                      name: project.name || project.id,
+                      url,
+                      icon: <UsersIcon />,
+                      isOnMastraPlatform: true,
+                      indent: true,
+                    }}
+                  />
+                );
+              })}
+              {projects.length > 0 && (
+                <MainSidebar.NavLink
+                  LinkComponent={Link}
+                  state={state}
+                  isActive={pathname === '/agent-studio/projects'}
+                  link={{
+                    name: 'View all',
+                    url: '/agent-studio/projects',
+                    icon: <UsersIcon />,
+                    isOnMastraPlatform: true,
+                    indent: true,
+                  }}
+                />
+              )}
+            </MainSidebar.NavList>
+          </MainSidebar.NavSection>
+        )}
+
         {/* Agents — recents + View all */}
         {canRead && (
           <MainSidebar.NavSection>

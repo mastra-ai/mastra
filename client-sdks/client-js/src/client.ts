@@ -140,6 +140,14 @@ import type {
   GetSystemPackagesResponse,
   UserPreferencesResponse,
   UpdateUserPreferencesParams,
+  ListProjectsResponse,
+  ProjectResponse,
+  ProjectTaskResponse,
+  CreateProjectParams,
+  UpdateProjectParams,
+  InviteProjectAgentParams,
+  CreateProjectTaskParams,
+  UpdateProjectTaskParams,
   ListScoresResponse as ListScoresResponseOld,
   GetObservationalMemoryParams,
   GetObservationalMemoryResponse,
@@ -1458,6 +1466,74 @@ export class MastraClient extends BaseResource {
     return this.request('/user/preferences', {
       method: 'PATCH',
       body: params,
+    });
+  }
+
+  // ============================================================================
+  // Projects (Agent Studio > Projects)
+  // ============================================================================
+
+  /** Lists all projects (supervisor stored agents). */
+  public listProjects(): Promise<ListProjectsResponse> {
+    return this.request('/projects');
+  }
+
+  /** Gets a single project by id. */
+  public getProject(projectId: string): Promise<ProjectResponse> {
+    return this.request(`/projects/${encodeURIComponent(projectId)}`);
+  }
+
+  /** Creates a new project (supervisor stored agent) and auto-publishes v1. */
+  public createProject(params: CreateProjectParams): Promise<ProjectResponse> {
+    return this.request('/projects', { method: 'POST', body: params });
+  }
+
+  /** Updates name, description, instructions, or model for a project. */
+  public updateProject(projectId: string, params: UpdateProjectParams): Promise<ProjectResponse> {
+    return this.request(`/projects/${encodeURIComponent(projectId)}`, { method: 'PATCH', body: params });
+  }
+
+  /** Deletes a project by id. */
+  public deleteProject(projectId: string): Promise<{ id: string; deleted: true }> {
+    return this.request(`/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' });
+  }
+
+  /** Invites a stored agent into a project's team. */
+  public inviteProjectAgent(projectId: string, params: InviteProjectAgentParams): Promise<ProjectResponse> {
+    return this.request(`/projects/${encodeURIComponent(projectId)}/invite-agent`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /** Removes a previously invited agent from a project's team. */
+  public removeProjectAgent(projectId: string, agentId: string): Promise<ProjectResponse> {
+    return this.request(`/projects/${encodeURIComponent(projectId)}/invite-agent/${encodeURIComponent(agentId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /** Adds a task to a project's task list. */
+  public addProjectTask(projectId: string, params: CreateProjectTaskParams): Promise<ProjectTaskResponse> {
+    return this.request(`/projects/${encodeURIComponent(projectId)}/tasks`, { method: 'POST', body: params });
+  }
+
+  /** Updates a project task. */
+  public updateProjectTask(
+    projectId: string,
+    taskId: string,
+    params: UpdateProjectTaskParams,
+  ): Promise<ProjectTaskResponse> {
+    return this.request(`/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}`, {
+      method: 'PATCH',
+      body: params,
+    });
+  }
+
+  /** Deletes a project task. */
+  public deleteProjectTask(projectId: string, taskId: string): Promise<{ id: string; deleted: true }> {
+    return this.request(`/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}`, {
+      method: 'DELETE',
     });
   }
 
