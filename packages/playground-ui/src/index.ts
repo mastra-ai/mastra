@@ -48,6 +48,7 @@ export * from './ds/components/Select';
 export * from './ds/components/Skeleton';
 export * from './ds/components/Slider';
 export * from './ds/components/Spinner';
+export * from './ds/components/BrandLoader';
 export * from './ds/components/Switch';
 export * from './ds/components/Tooltip';
 export * from './ds/components/Truncate';
