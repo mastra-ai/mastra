@@ -103,6 +103,36 @@ function makeSupervisorModel(agentKey: string, prompt: string) {
   });
 }
 
+/** Supervisor + subagent that runs one `calculator` tool call (used for subAgentToolResults delegation tests). */
+function makeCalculatorWorkerSupervisor() {
+  const calculator = createTool({
+    id: 'calculator',
+    description: 'Adds numbers',
+    inputSchema: z.object({ expression: z.string() }),
+    execute: async () => ({ result: 2 }),
+  });
+
+  const subAgent = new Agent({
+    id: 'worker',
+    name: 'worker',
+    instructions: 'Use calculator when needed',
+    model: makeSubAgentModelWithTool('calculator', { expression: '1+1' }),
+    tools: { calculator },
+    memory: new MockMemory(),
+  });
+
+  const supervisorAgent = new Agent({
+    id: 'supervisor',
+    name: 'supervisor',
+    instructions: 'Delegate work',
+    model: makeSupervisorModel('worker', 'compute'),
+    agents: { worker: subAgent },
+    memory: new MockMemory(),
+  });
+
+  return { supervisorAgent };
+}
+
 /**
  * Integration tests for the supervisor pattern with delegation hooks.
  * Tests the complete flow of delegation hooks, iteration hooks, and bail mechanism.
@@ -301,30 +331,7 @@ describe('Supervisor Pattern Integration Tests', () => {
     });
 
     it('omits subAgentToolResults when includeSubAgentToolResults is false', async () => {
-      const calculator = createTool({
-        id: 'calculator',
-        description: 'Adds numbers',
-        inputSchema: z.object({ expression: z.string() }),
-        execute: async () => ({ result: 2 }),
-      });
-
-      const subAgent = new Agent({
-        id: 'worker',
-        name: 'worker',
-        instructions: 'Use calculator when needed',
-        model: makeSubAgentModelWithTool('calculator', { expression: '1+1' }),
-        tools: { calculator },
-        memory: new MockMemory(),
-      });
-
-      const supervisorAgent = new Agent({
-        id: 'supervisor',
-        name: 'supervisor',
-        instructions: 'Delegate work',
-        model: makeSupervisorModel('worker', 'compute'),
-        agents: { worker: subAgent },
-        memory: new MockMemory(),
-      });
+      const { supervisorAgent } = makeCalculatorWorkerSupervisor();
 
       const result = await supervisorAgent.generate('Go', {
         maxSteps: 5,
@@ -338,67 +345,41 @@ describe('Supervisor Pattern Integration Tests', () => {
     });
 
     it('maps subAgentToolResults via mapSubAgentToolResults', async () => {
-      const calculator = createTool({
-        id: 'calculator',
-        description: 'Adds numbers',
-        inputSchema: z.object({ expression: z.string() }),
-        execute: async () => ({ result: 2 }),
+      const baselineHarness = makeCalculatorWorkerSupervisor();
+      const baseline = await baselineHarness.supervisorAgent.generate('Go', {
+        maxSteps: 5,
+        delegation: {},
       });
+      const baselineTr = baseline.toolResults?.find((tc: any) => tc.payload?.toolName === 'agent-worker');
+      const baselineNested = baselineTr!.payload.result.subAgentToolResults as Array<{
+        toolName: string;
+        toolCallId: string;
+        result: unknown;
+      }>;
+      expect(baselineNested?.length).toBe(1);
 
-      const subAgent = new Agent({
-        id: 'worker',
-        name: 'worker',
-        instructions: 'Use calculator when needed',
-        model: makeSubAgentModelWithTool('calculator', { expression: '1+1' }),
-        tools: { calculator },
-        memory: new MockMemory(),
-      });
+      const mapSubAgentToolResults = vi.fn((rows: typeof baselineNested) =>
+        rows.map(r => ({ ...r, result: '[redacted]' })),
+      );
 
-      const supervisorAgent = new Agent({
-        id: 'supervisor',
-        name: 'supervisor',
-        instructions: 'Delegate work',
-        model: makeSupervisorModel('worker', 'compute'),
-        agents: { worker: subAgent },
-        memory: new MockMemory(),
-      });
-
+      const { supervisorAgent } = makeCalculatorWorkerSupervisor();
       const result = await supervisorAgent.generate('Go', {
         maxSteps: 5,
-        delegation: {
-          mapSubAgentToolResults: rows => rows.map(r => ({ ...r, result: '[redacted]' })),
-        },
+        delegation: { mapSubAgentToolResults },
       });
 
+      expect(mapSubAgentToolResults).toHaveBeenCalledTimes(1);
+
       const tr = result.toolResults?.find((tc: any) => tc.payload?.toolName === 'agent-worker');
-      expect(tr!.payload.result.subAgentToolResults?.[0].result).toBe('[redacted]');
+      const nested = tr!.payload.result.subAgentToolResults as typeof baselineNested;
+      expect(nested?.length).toBe(baselineNested.length);
+      expect(nested?.[0].toolName).toBe(baselineNested[0].toolName);
+      expect(nested?.[0].toolCallId).toBe(baselineNested[0].toolCallId);
+      expect(nested?.[0].result).toBe('[redacted]');
     });
 
     it('strips subAgentToolResults via onDelegationComplete delegationResult', async () => {
-      const calculator = createTool({
-        id: 'calculator',
-        description: 'Adds numbers',
-        inputSchema: z.object({ expression: z.string() }),
-        execute: async () => ({ result: 2 }),
-      });
-
-      const subAgent = new Agent({
-        id: 'worker',
-        name: 'worker',
-        instructions: 'Use calculator when needed',
-        model: makeSubAgentModelWithTool('calculator', { expression: '1+1' }),
-        tools: { calculator },
-        memory: new MockMemory(),
-      });
-
-      const supervisorAgent = new Agent({
-        id: 'supervisor',
-        name: 'supervisor',
-        instructions: 'Delegate work',
-        model: makeSupervisorModel('worker', 'compute'),
-        agents: { worker: subAgent },
-        memory: new MockMemory(),
-      });
+      const { supervisorAgent } = makeCalculatorWorkerSupervisor();
 
       const result = await supervisorAgent.generate('Go', {
         maxSteps: 5,
