@@ -1,5 +1,13 @@
 # @mastra/posthog
 
+## 1.0.18-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`8613972`](https://github.com/mastra-ai/mastra/commit/86139723d82536d204f66a79a3a5d30af286a2e7), [`8786a61`](https://github.com/mastra-ai/mastra/commit/8786a61fa54ba265f85eeff9985ca39863d18bb6), [`8fb2405`](https://github.com/mastra-ai/mastra/commit/8fb2405138f2d208b7962ad03f121ca25bcc28c5)]:
+  - @mastra/observability@1.10.0-alpha.2
+  - @mastra/core@1.26.0-alpha.7
+
 ## 1.0.18-alpha.1
 
 ### Patch Changes
