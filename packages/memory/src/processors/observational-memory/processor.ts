@@ -10,6 +10,7 @@ import type { ObservationTurn } from './observation-turn/index';
 import type { ObservationalMemory } from './observational-memory';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import type { TokenCounterModelContext } from './token-counter';
+import { propagateVertexThoughtSignaturesToToolInvocations } from './vertex-thought-signature';
 
 /** Subset of Memory that the processor needs — avoids circular imports. */
 export interface MemoryContextProvider {
@@ -242,6 +243,11 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           .getStorage()
           .setPendingMessageTokens(freshRecord.id, finalTotalPending)
           .catch(() => {});
+
+        // Gemini Vertex validates thought signatures per content block; parallel tool calls
+        // only receive a signature on the first part. OM splits calls into separate
+        // assistant messages — propagate the last known signature so each block validates.
+        propagateVertexThoughtSignaturesToToolInvocations(messageList.get.all.db());
 
         // ── Repro capture (processor-specific) ──────────────
         if (reproCaptureEnabled) {
