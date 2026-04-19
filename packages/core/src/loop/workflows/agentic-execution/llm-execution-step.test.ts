@@ -735,4 +735,115 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(secondModelStream).toHaveBeenCalledTimes(2);
     expect(firstModelStream).toHaveBeenCalledTimes(1);
   });
+
+  it('re-stamps MODEL_GENERATION span attributes when a fallback model takes over', async () => {
+    const primaryStream = vi.fn(async () => {
+      throw new APICallError({
+        message: 'primary down',
+        url: 'https://primary.example.com/v1/messages',
+        requestBodyValues: {},
+        statusCode: 503,
+        isRetryable: true,
+      });
+    });
+    const secondaryStream = vi.fn(async () => ({
+      stream: convertArrayToReadableStream([
+        {
+          type: 'response-metadata',
+          id: 'resp-secondary',
+          modelId: 'secondary-model',
+          timestamp: new Date(0),
+        },
+        {
+          type: 'text-delta',
+          textDelta: 'from secondary',
+        },
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: testUsage,
+        },
+      ]),
+      request: {},
+      response: { headers: undefined },
+      warnings: [],
+    }));
+
+    const modelSpanTracker = {
+      getTracingContext: vi.fn(() => ({})),
+      reportGenerationError: vi.fn(),
+      endGeneration: vi.fn(),
+      updateGeneration: vi.fn(),
+      wrapStream: vi.fn(<T>(stream: T) => stream),
+      startStep: vi.fn(),
+    };
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      modelSpanTracker: modelSpanTracker as any,
+      models: [
+        {
+          id: 'primary-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'primary-provider',
+            modelId: 'primary-model',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: primaryStream,
+          } as any,
+        },
+        {
+          id: 'secondary-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'secondary-provider',
+            modelId: 'secondary-model',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: secondaryStream,
+          } as any,
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const input = createIterationInput();
+    input.stepResult.isContinued = false;
+
+    await llmExecutionStep.execute(createExecuteParams(input));
+
+    expect(primaryStream).toHaveBeenCalledTimes(1);
+    expect(secondaryStream).toHaveBeenCalledTimes(1);
+    expect(modelSpanTracker.updateGeneration).toHaveBeenCalledWith({
+      name: `llm: 'secondary-model'`,
+      attributes: {
+        model: 'secondary-model',
+        provider: 'secondary-provider',
+      },
+    });
+  });
 });
