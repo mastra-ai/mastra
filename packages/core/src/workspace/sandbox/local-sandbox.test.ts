@@ -1258,9 +1258,10 @@ describe('LocalSandbox', () => {
         workingDirectory: bwrapMountRoot,
         isolation: 'bwrap',
       });
-      await bwrapSandbox._start();
 
       try {
+        await bwrapSandbox._start();
+
         const source = path.join(bwrapMountRoot, 'preset-skills-root');
         await fs.mkdir(source, { recursive: true });
         const resolvedSource = await fs.realpath(source);
