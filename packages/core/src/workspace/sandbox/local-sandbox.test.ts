@@ -1207,6 +1207,7 @@ describe('LocalSandbox', () => {
 
       const source = path.join(mountDir, 'seatbelt-source');
       await fs.mkdir(source, { recursive: true });
+      const resolvedSource = await fs.realpath(source);
 
       const mountPath = '/seatbelt-test';
       await seatbeltSandbox.mount(makeMockLocalFs(source), mountPath);
@@ -1214,7 +1215,35 @@ describe('LocalSandbox', () => {
       const info = await seatbeltSandbox.getInfo();
       const isoConfig = info.metadata?.isolationConfig as { readWritePaths?: string[] } | undefined;
       // Symlink mount points are stored as canonical paths (realpath) for native sandbox bind rules
-      expect(isoConfig?.readWritePaths).toEqual(expect.arrayContaining([path.join(mountDir, 'seatbelt-source')]));
+      expect(isoConfig?.readWritePaths).toEqual(expect.arrayContaining([resolvedSource]));
+
+      await seatbeltSandbox._destroy();
+    });
+
+    it('should remove mount-owned isolation path from readWritePaths on unmount', async () => {
+      if (os.platform() !== 'darwin') return;
+
+      const seatbeltSandbox = new LocalSandbox({
+        workingDirectory: mountDir,
+        isolation: 'seatbelt',
+      });
+      await seatbeltSandbox._start();
+
+      const source = path.join(mountDir, 'seatbelt-unmount-src');
+      await fs.mkdir(source, { recursive: true });
+      const resolvedSource = await fs.realpath(source);
+
+      await seatbeltSandbox.mount(makeMockLocalFs(source), '/seatbelt-unmount-test');
+
+      let info = await seatbeltSandbox.getInfo();
+      let isoConfig = info.metadata?.isolationConfig as { readWritePaths?: string[] } | undefined;
+      expect(isoConfig?.readWritePaths).toEqual(expect.arrayContaining([resolvedSource]));
+
+      await seatbeltSandbox.unmount('/seatbelt-unmount-test');
+
+      info = await seatbeltSandbox.getInfo();
+      isoConfig = info.metadata?.isolationConfig as { readWritePaths?: string[] } | undefined;
+      expect(isoConfig?.readWritePaths).not.toContain(resolvedSource);
 
       await seatbeltSandbox._destroy();
     });
@@ -1234,12 +1263,13 @@ describe('LocalSandbox', () => {
       try {
         const source = path.join(bwrapMountRoot, 'preset-skills-root');
         await fs.mkdir(source, { recursive: true });
+        const resolvedSource = await fs.realpath(source);
 
         await bwrapSandbox.mount(makeMockLocalFs(source), '/default-skills');
 
         const info = await bwrapSandbox.getInfo();
         const isoConfig = info.metadata?.isolationConfig as { readWritePaths?: string[] } | undefined;
-        expect(isoConfig?.readWritePaths).toEqual(expect.arrayContaining([source]));
+        expect(isoConfig?.readWritePaths).toEqual(expect.arrayContaining([resolvedSource]));
         expect(isoConfig?.readWritePaths).not.toContain(path.join(bwrapMountRoot, 'default-skills'));
       } finally {
         await bwrapSandbox._destroy();
