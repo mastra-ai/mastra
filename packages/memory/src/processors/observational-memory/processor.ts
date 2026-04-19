@@ -247,6 +247,8 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         // Gemini Vertex validates thought signatures per content block; parallel tool calls
         // only receive a signature on the first part. OM splits calls into separate
         // assistant messages — propagate the last known signature so each block validates.
+        // In-place mutation is intentional: the same MastraDBMessage objects must be
+        // updated for the upcoming model request (see vertex-thought-signature.ts).
         propagateVertexThoughtSignaturesToToolInvocations(messageList.get.all.db());
 
         // ── Repro capture (processor-specific) ──────────────

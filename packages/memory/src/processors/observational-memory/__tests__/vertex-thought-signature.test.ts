@@ -81,6 +81,45 @@ describe('propagateVertexThoughtSignaturesToToolInvocations', () => {
     expect(second.providerMetadata?.vertex?.thoughtSignature).toBe('sig-google');
   });
 
+  it('does not copy a thoughtSignature across a user message (new turn boundary)', () => {
+    const messages: MastraDBMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [toolPart('c1', 'query_data', { vertex: { thoughtSignature: 'from-earlier-turn' } })],
+        },
+      },
+      {
+        id: 'u1',
+        role: 'user',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Tool results here' }],
+        },
+      },
+      {
+        id: 'a2',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [toolPart('c2', 'query_data')],
+        },
+      },
+    ];
+
+    propagateVertexThoughtSignaturesToToolInvocations(messages);
+
+    const laterPart = messages[2]!.content.parts[0] as {
+      providerMetadata?: { vertex?: { thoughtSignature?: string } };
+    };
+    expect(laterPart.providerMetadata?.vertex?.thoughtSignature).toBeUndefined();
+  });
+
   it('does not overwrite an existing tool-invocation thoughtSignature', () => {
     const messages: MastraDBMessage[] = [
       {

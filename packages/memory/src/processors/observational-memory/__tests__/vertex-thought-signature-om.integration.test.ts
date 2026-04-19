@@ -29,7 +29,8 @@ function createStubMemoryProvider(): MemoryContextProvider {
   };
 }
 
-function toolResultPart(
+/** Mirrors OM-split parallel calls: still in `call` before results are merged. */
+function toolInvocationPart(
   callId: string,
   toolName: string,
   providerMetadata?: { vertex?: { thoughtSignature?: string }; google?: { thoughtSignature?: string } },
@@ -37,11 +38,10 @@ function toolResultPart(
   return {
     type: 'tool-invocation',
     toolInvocation: {
-      state: 'result',
+      state: 'call',
       toolCallId: callId,
       toolName,
       args: {},
-      result: { ok: true },
     },
     ...(providerMetadata ? { providerMetadata } : {}),
   } as MastraDBMessage['content']['parts'][number];
@@ -92,7 +92,7 @@ describe('ObservationalMemoryProcessor + Vertex thought signatures (#15294)', ()
       resourceId,
       content: {
         format: 2,
-        parts: [toolResultPart('c1', 'query_data', { vertex: { thoughtSignature: 'sig-from-stream' } })],
+        parts: [toolInvocationPart('c1', 'query_data', { vertex: { thoughtSignature: 'sig-from-stream' } })],
       },
     };
 
@@ -104,7 +104,7 @@ describe('ObservationalMemoryProcessor + Vertex thought signatures (#15294)', ()
       resourceId,
       content: {
         format: 2,
-        parts: [toolResultPart('c2', 'query_data')],
+        parts: [toolInvocationPart('c2', 'query_data')],
       },
     };
 

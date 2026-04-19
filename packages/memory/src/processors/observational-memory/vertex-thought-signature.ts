@@ -36,12 +36,26 @@ function writeVertexThoughtSignature(part: PartWithProviderMetadata, signature: 
  * signature are rejected (400). Copy the most recent prior signature onto
  * `tool-invocation` parts that are missing one so the reconstructed history validates.
  *
+ * Only assistant messages are updated. `lastKnown` resets on each `user` message so
+ * signatures from an earlier model turn are not applied after tool results or a new
+ * user message.
+ *
+ * Mutates message objects in place so the same list the agent sends to the model is
+ * updated; copying would detach edits from `MessageList` storage.
+ *
  * @see https://github.com/mastra-ai/mastra/issues/15294
  */
 export function propagateVertexThoughtSignaturesToToolInvocations(messages: MastraDBMessage[]): void {
   let lastKnown: string | undefined;
 
   for (const msg of messages) {
+    if (msg.role === 'user') {
+      lastKnown = undefined;
+    }
+    if (msg.role !== 'assistant') {
+      continue;
+    }
+
     const parts = msg.content?.parts;
     if (!parts?.length) continue;
 
