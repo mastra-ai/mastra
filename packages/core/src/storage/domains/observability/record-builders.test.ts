@@ -310,6 +310,7 @@ describe('record-builders', () => {
 
       expect(buildScoreRecord(event)).toEqual(
         expect.objectContaining({
+          scoreId: 'score-builder-legacy',
           scoreSource: 'legacy-eval',
           source: 'legacy-eval',
         }),
@@ -330,6 +331,7 @@ describe('record-builders', () => {
 
       expect(buildScoreRecord(event)).toEqual(
         expect.objectContaining({
+          scoreId: 'score-builder-unanchored',
           traceId: null,
           spanId: null,
           scorerId: 'judge-unanchored',
@@ -423,6 +425,7 @@ describe('record-builders', () => {
 
       expect(buildFeedbackRecord(event)).toEqual(
         expect.objectContaining({
+          feedbackId: 'feedback-builder-legacy',
           feedbackSource: 'legacy-api',
           source: 'legacy-api',
         }),
@@ -444,6 +447,7 @@ describe('record-builders', () => {
 
       expect(buildFeedbackRecord(event)).toEqual(
         expect.objectContaining({
+          feedbackId: 'feedback-builder-unanchored',
           traceId: null,
           spanId: null,
           feedbackSource: 'user',
