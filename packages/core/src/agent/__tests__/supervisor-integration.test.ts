@@ -300,6 +300,119 @@ describe('Supervisor Pattern Integration Tests', () => {
       );
     });
 
+    it('omits subAgentToolResults when includeSubAgentToolResults is false', async () => {
+      const calculator = createTool({
+        id: 'calculator',
+        description: 'Adds numbers',
+        inputSchema: z.object({ expression: z.string() }),
+        execute: async () => ({ result: 2 }),
+      });
+
+      const subAgent = new Agent({
+        id: 'worker',
+        name: 'worker',
+        instructions: 'Use calculator when needed',
+        model: makeSubAgentModelWithTool('calculator', { expression: '1+1' }),
+        tools: { calculator },
+        memory: new MockMemory(),
+      });
+
+      const supervisorAgent = new Agent({
+        id: 'supervisor',
+        name: 'supervisor',
+        instructions: 'Delegate work',
+        model: makeSupervisorModel('worker', 'compute'),
+        agents: { worker: subAgent },
+        memory: new MockMemory(),
+      });
+
+      const result = await supervisorAgent.generate('Go', {
+        maxSteps: 5,
+        delegation: { includeSubAgentToolResults: false },
+      });
+
+      const tr = result.toolResults?.find((tc: any) => tc.payload?.toolName === 'agent-worker');
+      expect(tr).toBeDefined();
+      expect(tr!.payload.result.subAgentToolResults).toBeUndefined();
+      expect(tr!.payload.result.text).toBe('Task completed.');
+    });
+
+    it('maps subAgentToolResults via mapSubAgentToolResults', async () => {
+      const calculator = createTool({
+        id: 'calculator',
+        description: 'Adds numbers',
+        inputSchema: z.object({ expression: z.string() }),
+        execute: async () => ({ result: 2 }),
+      });
+
+      const subAgent = new Agent({
+        id: 'worker',
+        name: 'worker',
+        instructions: 'Use calculator when needed',
+        model: makeSubAgentModelWithTool('calculator', { expression: '1+1' }),
+        tools: { calculator },
+        memory: new MockMemory(),
+      });
+
+      const supervisorAgent = new Agent({
+        id: 'supervisor',
+        name: 'supervisor',
+        instructions: 'Delegate work',
+        model: makeSupervisorModel('worker', 'compute'),
+        agents: { worker: subAgent },
+        memory: new MockMemory(),
+      });
+
+      const result = await supervisorAgent.generate('Go', {
+        maxSteps: 5,
+        delegation: {
+          mapSubAgentToolResults: rows => rows.map(r => ({ ...r, result: '[redacted]' })),
+        },
+      });
+
+      const tr = result.toolResults?.find((tc: any) => tc.payload?.toolName === 'agent-worker');
+      expect(tr!.payload.result.subAgentToolResults?.[0].result).toBe('[redacted]');
+    });
+
+    it('strips subAgentToolResults via onDelegationComplete delegationResult', async () => {
+      const calculator = createTool({
+        id: 'calculator',
+        description: 'Adds numbers',
+        inputSchema: z.object({ expression: z.string() }),
+        execute: async () => ({ result: 2 }),
+      });
+
+      const subAgent = new Agent({
+        id: 'worker',
+        name: 'worker',
+        instructions: 'Use calculator when needed',
+        model: makeSubAgentModelWithTool('calculator', { expression: '1+1' }),
+        tools: { calculator },
+        memory: new MockMemory(),
+      });
+
+      const supervisorAgent = new Agent({
+        id: 'supervisor',
+        name: 'supervisor',
+        instructions: 'Delegate work',
+        model: makeSupervisorModel('worker', 'compute'),
+        agents: { worker: subAgent },
+        memory: new MockMemory(),
+      });
+
+      const result = await supervisorAgent.generate('Go', {
+        maxSteps: 5,
+        delegation: {
+          onDelegationComplete: () => ({
+            delegationResult: { subAgentToolResults: null },
+          }),
+        },
+      });
+
+      const tr = result.toolResults?.find((tc: any) => tc.payload?.toolName === 'agent-worker');
+      expect(tr!.payload.result.subAgentToolResults).toBeUndefined();
+    });
+
     it('should skip sub-agent when onDelegationStart returns proceed: false', async () => {
       const subAgentGenerate = vi.fn();
       const subAgent = makeSubAgent('blocked-agent', 'Should not be called');

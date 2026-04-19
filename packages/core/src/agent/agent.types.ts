@@ -127,6 +127,18 @@ export type OnDelegationStartHandler = (
 ) => DelegationStartResult | void | Promise<DelegationStartResult | void>;
 
 /**
+ * A single tool call result from a delegated sub-agent run, included in the
+ * supervisor-facing delegation tool output when enabled.
+ */
+export interface DelegationSubAgentToolResult {
+  toolName: string;
+  toolCallId: string;
+  result: unknown;
+  args?: unknown;
+  isError?: boolean;
+}
+
+/**
  * Context passed to the onDelegationComplete hook.
  */
 export interface DelegationCompleteContext {
@@ -141,6 +153,8 @@ export interface DelegationCompleteContext {
     text: string;
     subAgentThreadId?: string;
     subAgentResourceId?: string;
+    /** Present for agent delegations when sub-agent tool results are included in the parent payload */
+    subAgentToolResults?: DelegationSubAgentToolResult[];
   };
   /** Duration of the delegation in milliseconds */
   duration: number;
@@ -168,11 +182,32 @@ export interface DelegationCompleteContext {
 }
 
 /**
+ * Optional overrides applied to the delegation tool return value after
+ * `onDelegationComplete` runs (what the supervisor model sees as the tool result).
+ */
+export interface DelegationResultPatch {
+  text?: string;
+  subAgentThreadId?: string;
+  subAgentResourceId?: string;
+  /**
+   * Replace the list of sub-agent tool results, or remove the field from the parent payload.
+   * - `undefined`: leave unchanged (after `mapSubAgentToolResults` / `includeSubAgentToolResults`)
+   * - `null`: omit `subAgentToolResults` from the delegation tool output
+   */
+  subAgentToolResults?: DelegationSubAgentToolResult[] | null;
+}
+
+/**
  * Result returned from onDelegationComplete hook.
  */
 export interface DelegationCompleteResult {
   /** Optional feedback to add to the conversation */
   feedback?: string;
+  /**
+   * Shallow overrides for the delegation tool return value observed by the supervisor.
+   * Use `delegationResult.subAgentToolResults: null` to strip nested tool results from the parent stream.
+   */
+  delegationResult?: DelegationResultPatch;
 }
 
 /**
@@ -268,9 +303,22 @@ export interface DelegationConfig {
 
   /**
    * Hook called after a subagent execution completes.
-   * Can provide feedback or stop processing.
+   * Can provide feedback, override the delegation tool return value, or stop processing.
    */
   onDelegationComplete?: OnDelegationCompleteHandler;
+
+  /**
+   * When `false`, omits `subAgentToolResults` from the delegation tool output returned to the
+   * supervisor (sub-agent thread/resource IDs and `text` are unchanged). Default: `true`.
+   */
+  includeSubAgentToolResults?: boolean;
+
+  /**
+   * Transform or drop nested sub-agent tool results before they are attached to the delegation
+   * tool output. Return `undefined` to omit `subAgentToolResults` entirely.
+   * Runs before {@link includeSubAgentToolResults} and before `onDelegationComplete` overrides.
+   */
+  mapSubAgentToolResults?: (toolResults: DelegationSubAgentToolResult[]) => DelegationSubAgentToolResult[] | undefined;
 
   /**
    * Callback that controls which parent messages are passed to each subagent as conversation
