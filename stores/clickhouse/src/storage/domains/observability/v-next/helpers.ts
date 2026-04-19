@@ -6,7 +6,6 @@
  * - ClickHouse query settings
  */
 
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type {
   SpanRecord,
   CreateSpanRecord,
@@ -19,7 +18,7 @@ import type {
   FeedbackRecord,
   CreateFeedbackRecord,
 } from '@mastra/core/storage';
-import { createStorageErrorId, EntityType } from '@mastra/core/storage';
+import { EntityType } from '@mastra/core/storage';
 
 // ---------------------------------------------------------------------------
 // ClickHouse query settings
@@ -66,20 +65,6 @@ function nullableEntityType(value: unknown): EntityType | null {
   const normalized = nullableString(value);
   if (!normalized) return null;
   return Object.values(EntityType).includes(normalized as EntityType) ? (normalized as EntityType) : null;
-}
-
-function requireSignalId(value: unknown, signalIdField: 'logId' | 'metricId' | 'scoreId' | 'feedbackId'): string {
-  const normalized = nullableString(value);
-  if (normalized) {
-    return normalized;
-  }
-
-  throw new MastraError({
-    id: createStorageErrorId('CLICKHOUSE', 'SIGNAL_ID', `MISSING_${signalIdField.toUpperCase()}`),
-    domain: ErrorDomain.STORAGE,
-    category: ErrorCategory.USER,
-    text: `${signalIdField} is required for ClickHouse observability signal records.`,
-  });
 }
 
 export function normalizeTags(tags: unknown): string[] {
@@ -267,7 +252,7 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
 
 export function rowToLogRecord(row: Record<string, any>): LogRecord {
   return {
-    logId: requireSignalId(row.logId, 'logId'),
+    logId: row.logId,
     timestamp: toDate(row.timestamp),
     level: row.level,
     message: row.message,
@@ -305,7 +290,7 @@ export function rowToLogRecord(row: Record<string, any>): LogRecord {
 
 export function logRecordToRow(log: CreateLogRecord): Record<string, unknown> {
   return {
-    logId: requireSignalId(log.logId, 'logId'),
+    logId: log.logId,
     timestamp: toISOString(log.timestamp),
     level: log.level,
     message: log.message,
@@ -343,7 +328,7 @@ export function logRecordToRow(log: CreateLogRecord): Record<string, unknown> {
 
 export function rowToMetricRecord(row: Record<string, any>): MetricRecord {
   return {
-    metricId: requireSignalId(row.metricId, 'metricId'),
+    metricId: row.metricId,
     timestamp: toDate(row.timestamp),
     name: row.name,
     value: Number(row.value),
@@ -386,7 +371,7 @@ export function rowToMetricRecord(row: Record<string, any>): MetricRecord {
 
 export function metricRecordToRow(metric: CreateMetricRecord): Record<string, unknown> {
   return {
-    metricId: requireSignalId(metric.metricId, 'metricId'),
+    metricId: metric.metricId,
     timestamp: toISOString(metric.timestamp),
     name: metric.name,
     value: metric.value,
@@ -429,7 +414,7 @@ export function metricRecordToRow(metric: CreateMetricRecord): Record<string, un
 
 export function rowToScoreRecord(row: Record<string, any>): ScoreRecord {
   return {
-    scoreId: requireSignalId(row.scoreId, 'scoreId'),
+    scoreId: row.scoreId,
     timestamp: toDate(row.timestamp),
     // Core score/feedback shapes still type traceId as required for now.
     traceId: nullableString(row.traceId) as ScoreRecord['traceId'],
@@ -474,7 +459,7 @@ export function scoreRecordToRow(score: CreateScoreRecord): Record<string, unkno
   const scoreSource = score.scoreSource ?? score.source ?? null;
 
   return {
-    scoreId: requireSignalId(score.scoreId, 'scoreId'),
+    scoreId: score.scoreId,
     timestamp: toISOString(score.timestamp),
     traceId: score.traceId ?? null,
     spanId: score.spanId ?? null,
@@ -518,7 +503,7 @@ export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
   const feedbackSource = nullableString(row.feedbackSource);
   const feedbackUserId = nullableString(row.feedbackUserId) ?? nullableString(row.userId);
   return {
-    feedbackId: requireSignalId(row.feedbackId, 'feedbackId'),
+    feedbackId: row.feedbackId,
     timestamp: toDate(row.timestamp),
     // Core score/feedback shapes still type traceId as required for now.
     traceId: nullableString(row.traceId) as FeedbackRecord['traceId'],
@@ -564,7 +549,7 @@ export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<stri
   const feedbackUserId = feedback.feedbackUserId ?? feedback.userId ?? null;
 
   return {
-    feedbackId: requireSignalId(feedback.feedbackId, 'feedbackId'),
+    feedbackId: feedback.feedbackId,
     timestamp: toISOString(feedback.timestamp),
     traceId: feedback.traceId ?? null,
     spanId: feedback.spanId ?? null,

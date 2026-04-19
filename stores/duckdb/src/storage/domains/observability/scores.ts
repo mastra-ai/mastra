@@ -17,7 +17,7 @@ import type {
 import { parseFieldKey } from '@mastra/core/utils';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';
-import { v, jsonV, toDate, parseJson, parseJsonArray, requireSignalId } from './helpers';
+import { v, jsonV, toDate, parseJson, parseJsonArray } from './helpers';
 
 type LegacyScoreRecord = CreateScoreArgs['score'] & {
   source?: string | null;
@@ -154,7 +154,7 @@ function toSeriesName(values: unknown[]): string {
 
 function rowToScoreRecord(row: Record<string, unknown>): Record<string, unknown> {
   return {
-    scoreId: requireSignalId(row.scoreId, 'scoreId'),
+    scoreId: row.scoreId as string,
     timestamp: toDate(row.timestamp),
     traceId: (row.traceId as string) ?? null,
     spanId: (row.spanId as string) ?? null,
@@ -238,7 +238,7 @@ export async function createScore(db: DuckDBConnection, args: CreateScoreArgs): 
       scorerId, scorerVersion, scoreSource, score, reason, tags, metadata, scope
     )
      VALUES (${[
-       v(requireSignalId(s.scoreId, 'scoreId')),
+       v(s.scoreId),
        v(s.timestamp),
        v(s.traceId),
        v(s.spanId ?? null),
@@ -287,7 +287,7 @@ export async function batchCreateScores(db: DuckDBConnection, args: BatchCreateS
     const legacyScore = s as LegacyScoreRecord;
     const scoreSource = legacyScore.scoreSource ?? legacyScore.source ?? null;
     return `(${[
-      v(requireSignalId(legacyScore.scoreId, 'scoreId')),
+      v(legacyScore.scoreId),
       v(legacyScore.timestamp),
       v(legacyScore.traceId),
       v(legacyScore.spanId ?? null),

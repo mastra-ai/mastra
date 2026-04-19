@@ -17,7 +17,7 @@ import type {
 import { parseFieldKey } from '@mastra/core/utils';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';
-import { v, jsonV, toDate, parseJson, parseJsonArray, requireSignalId } from './helpers';
+import { v, jsonV, toDate, parseJson, parseJsonArray } from './helpers';
 
 type LegacyFeedbackRecord = CreateFeedbackArgs['feedback'] & {
   source?: string | null;
@@ -164,7 +164,7 @@ function rowToFeedbackRecord(row: Record<string, unknown>): Record<string, unkno
   if (!isNaN(numValue)) value = numValue;
 
   return {
-    feedbackId: requireSignalId(row.feedbackId, 'feedbackId'),
+    feedbackId: row.feedbackId as string,
     timestamp: toDate(row.timestamp),
     traceId: (row.traceId as string) ?? null,
     spanId: (row.spanId as string) ?? null,
@@ -249,7 +249,7 @@ export async function createFeedback(db: DuckDBConnection, args: CreateFeedbackA
       feedbackUserId, sourceId, feedbackSource, feedbackType, value, comment, tags, metadata, scope
     )
      VALUES (${[
-       v(requireSignalId(f.feedbackId, 'feedbackId')),
+       v(f.feedbackId),
        v(f.timestamp),
        v(f.traceId),
        v(f.spanId ?? null),
@@ -299,7 +299,7 @@ export async function batchCreateFeedback(db: DuckDBConnection, args: BatchCreat
     const feedbackSource = legacyFeedback.feedbackSource ?? legacyFeedback.source ?? '';
     const feedbackUserId = legacyFeedback.feedbackUserId ?? legacyFeedback.userId ?? null;
     return `(${[
-      v(requireSignalId(legacyFeedback.feedbackId, 'feedbackId')),
+      v(legacyFeedback.feedbackId),
       v(legacyFeedback.timestamp),
       v(legacyFeedback.traceId),
       v(legacyFeedback.spanId ?? null),
