@@ -135,24 +135,10 @@ export async function migrateSignalTables(db: DuckDBConnection, logger?: IMastra
 
       await db.execute(`INSERT INTO ${temp} (${columnList}) SELECT ${selectExprs} FROM ${table}`);
 
-      try {
-        await db.execute(`ALTER TABLE ${table} RENAME TO ${backup}`);
-        originalRenamed = true;
-        await db.execute(`ALTER TABLE ${temp} RENAME TO ${table}`);
-        swapCompleted = true;
-      } catch (swapError) {
-        if (originalRenamed && !swapCompleted) {
-          try {
-            await db.execute(`ALTER TABLE ${backup} RENAME TO ${table}`);
-            originalRenamed = false;
-          } catch (restoreError) {
-            logger?.error?.(
-              `Failed to restore original table ${table} from backup ${backup}: ${(restoreError as Error).message}`,
-            );
-          }
-        }
-        throw swapError;
-      }
+      await db.execute(`ALTER TABLE ${table} RENAME TO ${backup}`);
+      originalRenamed = true;
+      await db.execute(`ALTER TABLE ${temp} RENAME TO ${table}`);
+      swapCompleted = true;
 
       try {
         await db.execute(`DROP TABLE ${backup}`);
@@ -171,11 +157,6 @@ export async function migrateSignalTables(db: DuckDBConnection, logger?: IMastra
         logger?.error?.(`Failed to clean up temporary table ${temp}: ${(restoreError as Error).message}`);
       }
       if (originalRenamed && !swapCompleted) {
-        try {
-          await dropTableIfExists(db, table);
-        } catch (cleanupError) {
-          logger?.error?.(`Failed to clean up partially swapped table ${table}: ${(cleanupError as Error).message}`);
-        }
         try {
           await db.execute(`ALTER TABLE ${backup} RENAME TO ${table}`);
         } catch (restoreError) {

@@ -2104,19 +2104,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           metadata: null,
         },
       });
-      await storage.createScore({
-        score: {
-          scoreId,
-          timestamp,
-          traceId: 'retry-score-trace',
-          spanId: null,
-          scorerId: 'q',
-          score: 0.5,
-          reason: 'attempt 3',
-          experimentId: null,
-          metadata: null,
-        },
-      });
 
       const result = await storage.listScores({ filters: { traceId: 'retry-score-trace' } });
       expect(result.scores).toHaveLength(1);

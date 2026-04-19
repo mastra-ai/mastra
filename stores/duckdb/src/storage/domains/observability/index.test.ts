@@ -3,6 +3,47 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DuckDBStore } from '../../index';
 import type { ObservabilityStorageDuckDB } from './index';
 
+async function setupLegacyStore(): Promise<DuckDBStore> {
+  const legacyStore = new DuckDBStore({ path: ':memory:' });
+
+  await legacyStore.db.execute(`
+    CREATE TABLE score_events (
+      timestamp TIMESTAMP NOT NULL,
+      traceId VARCHAR NOT NULL,
+      spanId VARCHAR,
+      experimentId VARCHAR,
+      scoreTraceId VARCHAR,
+      scorerId VARCHAR NOT NULL,
+      scorerVersion VARCHAR,
+      source VARCHAR,
+      score DOUBLE NOT NULL,
+      reason VARCHAR,
+      metadata JSON
+    )
+  `);
+
+  await legacyStore.db.execute(`
+    CREATE TABLE feedback_events (
+      timestamp TIMESTAMP NOT NULL,
+      traceId VARCHAR NOT NULL,
+      spanId VARCHAR,
+      experimentId VARCHAR,
+      userId VARCHAR,
+      source VARCHAR,
+      feedbackType VARCHAR NOT NULL,
+      value VARCHAR NOT NULL,
+      comment VARCHAR,
+      metadata JSON
+    )
+  `);
+
+  await expect(legacyStore.observability.init()).rejects.toThrow(/MIGRATION REQUIRED/);
+  await legacyStore.observability.migrateSpans();
+  await legacyStore.observability.init();
+
+  return legacyStore;
+}
+
 describe('ObservabilityStorageDuckDB', () => {
   let store: DuckDBStore;
   let storage: ObservabilityStorageDuckDB;
@@ -266,43 +307,7 @@ describe('ObservabilityStorageDuckDB', () => {
   });
 
   it('requires manual migration for legacy score and feedback tables before init', async () => {
-    const legacyStore = new DuckDBStore({ path: ':memory:' });
-
-    await legacyStore.db.execute(`
-      CREATE TABLE score_events (
-        timestamp TIMESTAMP NOT NULL,
-        traceId VARCHAR NOT NULL,
-        spanId VARCHAR,
-        experimentId VARCHAR,
-        scoreTraceId VARCHAR,
-        scorerId VARCHAR NOT NULL,
-        scorerVersion VARCHAR,
-        source VARCHAR,
-        score DOUBLE NOT NULL,
-        reason VARCHAR,
-        metadata JSON
-      )
-    `);
-
-    await legacyStore.db.execute(`
-      CREATE TABLE feedback_events (
-        timestamp TIMESTAMP NOT NULL,
-        traceId VARCHAR NOT NULL,
-        spanId VARCHAR,
-        experimentId VARCHAR,
-        userId VARCHAR,
-        source VARCHAR,
-        feedbackType VARCHAR NOT NULL,
-        value VARCHAR NOT NULL,
-        comment VARCHAR,
-        metadata JSON
-      )
-    `);
-
-    await expect(legacyStore.observability.init()).rejects.toThrow(/MIGRATION REQUIRED/);
-
-    await legacyStore.observability.migrateSpans();
-    await legacyStore.observability.init();
+    const legacyStore = await setupLegacyStore();
 
     await legacyStore.observability.batchCreateScores({
       scores: [
@@ -382,43 +387,7 @@ describe('ObservabilityStorageDuckDB', () => {
   });
 
   it('relaxes legacy score and feedback traceId columns during manual migration', async () => {
-    const legacyStore = new DuckDBStore({ path: ':memory:' });
-
-    await legacyStore.db.execute(`
-      CREATE TABLE score_events (
-        timestamp TIMESTAMP NOT NULL,
-        traceId VARCHAR NOT NULL,
-        spanId VARCHAR,
-        experimentId VARCHAR,
-        scoreTraceId VARCHAR,
-        scorerId VARCHAR NOT NULL,
-        scorerVersion VARCHAR,
-        source VARCHAR,
-        score DOUBLE NOT NULL,
-        reason VARCHAR,
-        metadata JSON
-      )
-    `);
-
-    await legacyStore.db.execute(`
-      CREATE TABLE feedback_events (
-        timestamp TIMESTAMP NOT NULL,
-        traceId VARCHAR NOT NULL,
-        spanId VARCHAR,
-        experimentId VARCHAR,
-        userId VARCHAR,
-        source VARCHAR,
-        feedbackType VARCHAR NOT NULL,
-        value VARCHAR NOT NULL,
-        comment VARCHAR,
-        metadata JSON
-      )
-    `);
-
-    await expect(legacyStore.observability.init()).rejects.toThrow(/MIGRATION REQUIRED/);
-
-    await legacyStore.observability.migrateSpans();
-    await legacyStore.observability.init();
+    const legacyStore = await setupLegacyStore();
 
     await legacyStore.observability.createScore({
       score: {

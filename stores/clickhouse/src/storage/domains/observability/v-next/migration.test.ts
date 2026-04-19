@@ -1,7 +1,7 @@
 import { createClient } from '@clickhouse/client';
 import type { ClickHouseClient } from '@clickhouse/client';
 import { MastraError } from '@mastra/core/error';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TABLE_LOG_EVENTS, TABLE_METRIC_EVENTS, TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS } from './ddl';
 import { migrateSignalTables } from './migration';
 import { ObservabilityStorageClickhouseVNext } from '.';
@@ -92,11 +92,8 @@ describe('migrateSignalTables (ClickHouse v-next)', () => {
     await dropAll(client);
   });
 
-  afterEach(async () => {
-    await dropAll(client);
-  });
-
   afterAll(async () => {
+    await dropAll(client);
     await client.close();
   });
 
@@ -281,14 +278,7 @@ describe('migrateSignalTables (ClickHouse v-next)', () => {
     await expect(migrateSignalTables(clientThatFailsOnInsert(client))).rejects.toBeInstanceOf(MastraError);
 
     // Original table must be restored with its data intact and still in legacy (MergeTree) shape.
-    const engine = await (
-      await client.query({
-        query: `SELECT engine FROM system.tables WHERE database = currentDatabase() AND name = {table:String}`,
-        query_params: { table: TABLE_LOG_EVENTS },
-        format: 'JSONEachRow',
-      })
-    ).json();
-    expect((engine as Array<{ engine: string }>)[0]?.engine).toBe('MergeTree');
+    expect(await getEngine(client, TABLE_LOG_EVENTS)).toBe('MergeTree');
 
     const rows = (await (
       await client.query({

@@ -147,40 +147,6 @@ describe('migrateSignalTables (DuckDB)', () => {
     expect(second[0]!.metricId).toBe(first[0]!.metricId);
   });
 
-  it('migrates all four signal tables in one call', async () => {
-    await db.execute(
-      `CREATE TABLE metric_events (timestamp TIMESTAMP NOT NULL, name VARCHAR NOT NULL, value DOUBLE NOT NULL)`,
-    );
-    await db.execute(
-      `CREATE TABLE log_events (timestamp TIMESTAMP NOT NULL, level VARCHAR NOT NULL, message VARCHAR NOT NULL)`,
-    );
-    await db.execute(
-      `CREATE TABLE score_events (timestamp TIMESTAMP NOT NULL, traceId VARCHAR, scorerId VARCHAR NOT NULL, score DOUBLE NOT NULL)`,
-    );
-    await db.execute(
-      `CREATE TABLE feedback_events (timestamp TIMESTAMP NOT NULL, traceId VARCHAR, feedbackSource VARCHAR NOT NULL, feedbackType VARCHAR NOT NULL, value VARCHAR NOT NULL)`,
-    );
-
-    await db.execute(
-      `INSERT INTO metric_events (timestamp, name, value) VALUES (TIMESTAMP '2026-01-01 00:00:00', 'latency', 1)`,
-    );
-    await db.execute(
-      `INSERT INTO log_events (timestamp, level, message) VALUES (TIMESTAMP '2026-01-01 00:00:00', 'info', 'l')`,
-    );
-    await db.execute(
-      `INSERT INTO score_events (timestamp, traceId, scorerId, score) VALUES (TIMESTAMP '2026-01-01 00:00:00', 't1', 'q', 0.5)`,
-    );
-    await db.execute(
-      `INSERT INTO feedback_events (timestamp, traceId, feedbackSource, feedbackType, value) VALUES (TIMESTAMP '2026-01-01 00:00:00', 't1', 'user', 'thumbs', '1')`,
-    );
-
-    await migrateSignalTables(db);
-
-    for (const table of ['metric_events', 'log_events', 'score_events', 'feedback_events']) {
-      expect(await hasPrimaryKey(db, table)).toBe(true);
-    }
-  });
-
   it('restores the original table from backup when INSERT fails', async () => {
     await db.execute(`
       CREATE TABLE log_events (

@@ -192,8 +192,8 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
     supported: ObservabilityStorageStrategy[];
   } {
     return {
-      preferred: 'event-sourced' as const,
-      supported: ['event-sourced' as const],
+      preferred: 'event-sourced',
+      supported: ['event-sourced'],
     };
   }
 
