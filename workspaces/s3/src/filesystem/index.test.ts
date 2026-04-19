@@ -638,9 +638,7 @@ describe('Credential resolution', () => {
     // Trigger client creation
     fs.client;
 
-    expect(S3Client).toHaveBeenCalledWith(
-      expect.objectContaining({ credentials: provider }),
-    );
+    expect(S3Client).toHaveBeenCalledWith(expect.objectContaining({ credentials: provider }));
   });
 
   it('uses static credentials when accessKeyId/secretAccessKey provided', async () => {
@@ -693,9 +691,7 @@ describe('Credential resolution', () => {
 
     fs.client;
 
-    expect(S3Client).toHaveBeenCalledWith(
-      expect.objectContaining({ credentials: provider }),
-    );
+    expect(S3Client).toHaveBeenCalledWith(expect.objectContaining({ credentials: provider }));
   });
 });
 
