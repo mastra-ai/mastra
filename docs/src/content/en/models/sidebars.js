@@ -203,6 +203,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/digitalocean',
+          label: 'DigitalOcean',
+        },
+        {
+          type: 'doc',
           id: 'providers/dinference',
           label: 'DInference',
         },
@@ -245,6 +250,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/helicone',
           label: 'Helicone',
+        },
+        {
+          type: 'doc',
+          id: 'providers/hpc-ai',
+          label: 'HPC-AI',
         },
         {
           type: 'doc',
@@ -490,6 +500,16 @@ const sidebars = {
           type: 'doc',
           id: 'providers/tencent-coding-plan',
           label: 'Tencent Coding Plan (China)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/tencent-token-plan',
+          label: 'Tencent Token Plan',
+        },
+        {
+          type: 'doc',
+          id: 'providers/tencent-tokenhub',
+          label: 'Tencent TokenHub',
         },
         {
           type: 'doc',

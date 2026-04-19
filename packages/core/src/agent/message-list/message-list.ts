@@ -797,6 +797,42 @@ export class MessageList {
     return true;
   }
 
+  public enrichLastStepStart(model: string): boolean {
+    const lastMsg = this.messages[this.messages.length - 1];
+    if (!lastMsg || lastMsg.role !== 'assistant' || !lastMsg.content?.parts) {
+      return false;
+    }
+
+    if (MessageMerger.isSealed(lastMsg)) {
+      return false;
+    }
+
+    for (let i = lastMsg.content.parts.length - 1; i >= 0; i--) {
+      const part = lastMsg.content.parts[i];
+      if (part?.type !== 'step-start') {
+        continue;
+      }
+
+      // Only stamp step-starts that haven't already been attributed. A prior
+      // iteration (or a re-used message loaded from memory) may have already
+      // stamped its model, and overwriting it would mis-attribute history.
+      if (part.model) {
+        return false;
+      }
+
+      part.model = model;
+
+      if (!this.stateManager.isResponseMessage(lastMsg)) {
+        this.stateManager.removeMessage(lastMsg);
+        this.stateManager.addToSource(lastMsg, 'response');
+      }
+
+      return true;
+    }
+
+    return false;
+  }
+
   public getSystemMessages(tag?: string): CoreMessageV4[] {
     if (tag) {
       return this.taggedSystemMessages[tag] || [];

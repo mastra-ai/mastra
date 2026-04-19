@@ -901,6 +901,26 @@ describe('CloudExporter', () => {
       mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200 }));
     });
 
+    it('should default to observability.mastra.ai when no endpoint override is configured', async () => {
+      const derivedExporter = new CloudExporter({
+        accessToken: testJWT,
+      });
+
+      await derivedExporter.onMetricEvent(getMockMetricEvent());
+      await derivedExporter.flush();
+
+      expect(mockFetchWithRetry).toHaveBeenCalledWith(
+        'https://observability.mastra.ai/ai/metrics/publish',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.any(String),
+        }),
+        3,
+      );
+
+      await derivedExporter.shutdown();
+    });
+
     it('should upload logs, metrics, scores, and feedback to their derived endpoints', async () => {
       const multiSignalExporter = new CloudExporter({
         accessToken: testJWT,

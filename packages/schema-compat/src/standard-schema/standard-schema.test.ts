@@ -593,6 +593,48 @@ describe('standardSchemaToJSONSchema', () => {
       expect(result.properties!.name).toEqual({ type: 'string' });
       expect(result.properties!.age).toEqual({ type: 'number' });
     });
+
+    it('should preserve recursive $ref schemas when normalizing standard schemas', () => {
+      const recursiveJsonSchema = {
+        type: 'object',
+        properties: {
+          root: { $ref: '#/$defs/node' },
+        },
+        required: ['root'],
+        $defs: {
+          node: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              children: {
+                type: 'array',
+                items: { $ref: '#/$defs/node' },
+              },
+            },
+            required: ['name'],
+          },
+        },
+      } as JSONSchema7 & {
+        properties: {
+          root: { $ref: string };
+        };
+        $defs: {
+          node: {
+            properties: {
+              children: {
+                items: { $ref: string };
+              };
+            };
+          };
+        };
+      };
+
+      const wrapped = toStandardSchema(recursiveJsonSchema);
+      const result = standardSchemaToJSONSchema(wrapped) as typeof recursiveJsonSchema;
+
+      expect(result.properties.root).toEqual({ $ref: '#/$defs/node' });
+      expect(result.$defs.node.properties.children.items).toEqual({ $ref: '#/$defs/node' });
+    });
   });
 
   describe('options', () => {

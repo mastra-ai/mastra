@@ -21,7 +21,14 @@ export function useTraceInfo(trace: SpanRecord | undefined) {
   const entityLink =
     isAgent && entityId ? paths.agentLink(entityId) : isWorkflow && entityId ? paths.workflowLink(entityId) : undefined;
 
-  return [
+  const experimentId = trace.experimentId;
+  const entityVersionId = trace.entityVersionId;
+
+  const info: Array<{
+    key: string;
+    label: string;
+    value: string | Array<{ id: string; name: string; path?: string }>;
+  }> = [
     {
       key: 'entityId',
       label: 'Entity Id',
@@ -44,6 +51,35 @@ export function useTraceInfo(trace: SpanRecord | undefined) {
         },
       ],
     },
+  ];
+
+  if (entityVersionId) {
+    const versionLink =
+      isAgent && entityId
+        ? `${paths.agentLink(entityId)}/editor?version=${encodeURIComponent(entityVersionId)}`
+        : undefined;
+    info.push({
+      key: 'entityVersionId',
+      label: 'Version',
+      value: versionLink ? [{ id: entityVersionId, name: entityVersionId, path: versionLink }] : entityVersionId,
+    });
+  }
+
+  if (experimentId) {
+    info.push({
+      key: 'experimentId',
+      label: 'Experiment',
+      value: [
+        {
+          id: experimentId,
+          name: experimentId,
+          path: paths.experimentLink?.(experimentId),
+        },
+      ],
+    });
+  }
+
+  info.push(
     {
       key: 'status',
       label: 'Status',
@@ -59,7 +95,9 @@ export function useTraceInfo(trace: SpanRecord | undefined) {
       label: 'Ended at',
       value: trace?.endedAt ? format(new Date(trace?.endedAt), 'MMM dd, h:mm:ss.SSS aaa') : '-',
     },
-  ];
+  );
+
+  return info;
 }
 
 type getSpanInfoProps = {

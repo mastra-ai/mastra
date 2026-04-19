@@ -7,7 +7,9 @@ import type { StructuredOutputOptions } from '../../../agent';
 import type { MastraDBMessage, MastraMessagePart, MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
+import { generateBackgroundTaskSystemPrompt } from '../../../background-tasks';
 import { getErrorFromUnknown } from '../../../error/utils.js';
+import { mergeProviderOptions } from '../../../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../../../llm/model/router';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import type { IMastraLogger } from '../../../logger';
@@ -48,6 +50,7 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   messageList: MessageList;
   outputStream: MastraModelOutput<OUTPUT>;
   runState: AgenticRunState;
+  model?: { provider?: string };
   options?: LoopConfig<OUTPUT>;
   controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
   responseFromModel: {
@@ -60,9 +63,22 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   transportResolver?: () => StreamTransport | undefined;
 };
 
-function buildResponseModelMetadata(runState: AgenticRunState): { metadata: Record<string, unknown> } | undefined {
+function buildResponseModelMetadata(
+  runState: AgenticRunState,
+  model?: { provider?: string },
+): { metadata: Record<string, unknown> } | undefined {
+  const metadata: Record<string, unknown> = {};
   const modelId = runState.state.responseMetadata?.modelId;
-  return modelId ? { metadata: { modelId } } : undefined;
+
+  if (modelId) {
+    metadata.modelId = modelId;
+  }
+
+  if (model?.provider) {
+    metadata.provider = model.provider;
+  }
+
+  return Object.keys(metadata).length > 0 ? { metadata } : undefined;
 }
 
 function flushReasoningBuffer({
@@ -70,11 +86,13 @@ function flushReasoningBuffer({
   messageId,
   messageList,
   runState,
+  model,
 }: {
   buffer: { deltas: string[]; providerMetadata: Record<string, any> | undefined };
   messageId: string;
   messageList: MessageList;
   runState: AgenticRunState;
+  model?: { provider?: string };
 }) {
   const message: MastraDBMessage = {
     id: messageId,
@@ -89,7 +107,7 @@ function flushReasoningBuffer({
           providerMetadata: buffer.providerMetadata,
         },
       ],
-      ...buildResponseModelMetadata(runState),
+      ...buildResponseModelMetadata(runState, model),
     },
     createdAt: new Date(),
   };
@@ -103,6 +121,7 @@ async function processOutputStream<OUTPUT = undefined>({
   messageList,
   outputStream,
   runState,
+  model,
   options,
   controller,
   responseFromModel,
@@ -173,7 +192,7 @@ async function processOutputStream<OUTPUT = undefined>({
                 ...(providerMetadata ? { providerMetadata } : {}),
               },
             ],
-            ...buildResponseModelMetadata(runState),
+            ...buildResponseModelMetadata(runState, model),
           },
           createdAt: new Date(),
         };
@@ -211,6 +230,7 @@ async function processOutputStream<OUTPUT = undefined>({
           messageId,
           messageList,
           runState,
+          model,
         });
       }
 
@@ -344,7 +364,7 @@ async function processOutputStream<OUTPUT = undefined>({
                   providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
                 },
               ],
-              ...buildResponseModelMetadata(runState),
+              ...buildResponseModelMetadata(runState, model),
             },
             createdAt: new Date(),
           };
@@ -402,6 +422,7 @@ async function processOutputStream<OUTPUT = undefined>({
           messageId,
           messageList,
           runState,
+          model,
         });
 
         reasoningBuffers.delete(chunk.payload.id);
@@ -435,7 +456,7 @@ async function processOutputStream<OUTPUT = undefined>({
                   ...(chunk.payload.providerMetadata ? { providerMetadata: chunk.payload.providerMetadata } : {}),
                 },
               ],
-              ...buildResponseModelMetadata(runState),
+              ...buildResponseModelMetadata(runState, model),
             },
             createdAt: new Date(),
           };
@@ -463,7 +484,7 @@ async function processOutputStream<OUTPUT = undefined>({
                   },
                 },
               ],
-              ...buildResponseModelMetadata(runState),
+              ...buildResponseModelMetadata(runState, model),
             },
             createdAt: new Date(),
           };
@@ -558,7 +579,7 @@ async function processOutputStream<OUTPUT = undefined>({
           content: {
             format: 2,
             parts: [toolCallPart],
-            ...buildResponseModelMetadata(runState),
+            ...buildResponseModelMetadata(runState, model),
           },
           createdAt: new Date(),
         };
@@ -703,6 +724,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let request: any;
       let rawResponse: any;
       let activeFallbackModelIndex = inputData.fallbackModelIndex || 0;
+      let executedStepModel: string | undefined;
       const maxErrorProcessorRetries = maxProcessorRetries ?? (errorProcessors?.length ? 10 : undefined);
       const { outputStream, callBail, runState, stepTools, stepWorkspace, processAPIErrorRetry } =
         await executeStreamWithFallbackModels<{
@@ -799,6 +821,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 abortSignal: options?.abortSignal,
               });
               Object.assign(currentStep, processInputStepResult);
+              executedStepModel =
+                currentStep.model.provider && currentStep.model.modelId
+                  ? `${currentStep.model.provider}/${currentStep.model.modelId}`
+                  : undefined;
 
               // Update MODEL_GENERATION span if processor actually changed model or modelSettings
               const modelChanged = processInputStepResult.model && processInputStepResult.model !== model;
@@ -1017,6 +1043,16 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             }
           }
 
+          if (_internal?.backgroundTaskManager && currentStep.tools) {
+            const bgPrompt = generateBackgroundTaskSystemPrompt(currentStep.tools, _internal?.agentBackgroundConfig);
+            inputMessages = inputMessages.map((message, index) => {
+              if (message.role === 'system' && index === 0) {
+                message.content = message.content + `\n\n${bgPrompt}`;
+              }
+              return message;
+            });
+          }
+
           if (isSupportedLanguageModel(currentStep.model)) {
             modelResult = executeWithContextSync({
               span: modelSpanTracker?.getTracingContext()?.currentSpan,
@@ -1024,15 +1060,20 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 execute({
                   runId,
                   model: currentStep.model,
-                  providerOptions: currentStep.providerOptions,
+                  // Per-model providerOptions deep-merge per provider key on top of call-time providerOptions
+                  providerOptions: mergeProviderOptions(currentStep.providerOptions, modelConfig.providerOptions),
                   inputMessages,
                   tools: currentStep.tools,
                   toolChoice: currentStep.toolChoice,
                   activeTools: currentStep.activeTools as string[] | undefined,
                   options,
-                  // Per-model maxRetries takes precedence over global modelSettings.maxRetries
-                  // This ensures p-retry uses the correct retry count for each model in the fallback chain
-                  modelSettings: { ...currentStep.modelSettings, maxRetries: modelConfig.maxRetries },
+                  // Per-model modelSettings shallow-merge on top of call-time modelSettings.
+                  // Per-model maxRetries always wins so p-retry uses the right retry count for this model.
+                  modelSettings: {
+                    ...currentStep.modelSettings,
+                    ...modelConfig.modelSettings,
+                    maxRetries: modelConfig.maxRetries,
+                  },
                   includeRawChunks,
                   structuredOutput: currentStep.structuredOutput,
                   // Merge headers: memory context first, then modelConfig headers, then modelSettings overrides
@@ -1115,6 +1156,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               messageId: currentStep.messageId,
               messageList,
               runState,
+              model: currentStep.model,
               options,
               controller,
               responseFromModel: {
@@ -1258,6 +1300,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             stepWorkspace: currentStep.workspace,
           };
         });
+
+      if (executedStepModel) {
+        messageList.enrichLastStepStart(executedStepModel);
+      }
 
       // Store modified tools and workspace in _internal so toolCallStep can access them
       // without going through workflow serialization (which would lose execute functions)
@@ -1464,6 +1510,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             finishReason: immediateFinishReason,
             toolCalls: toolCallInfos.length > 0 ? toolCallInfos : undefined,
             text: immediateText,
+            usage: outputStream._getImmediateUsage(),
             ...createObservabilityContext(outputStepTracingContext),
             requestContext,
             retryCount: currentRetryCount,

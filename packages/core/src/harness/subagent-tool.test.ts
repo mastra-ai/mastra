@@ -241,6 +241,63 @@ describe('createSubagentTool requestContext forwarding', () => {
   });
 });
 
+describe('createSubagentTool tracingContext forwarding', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('forwards tracingContext to subagent.stream() when provided', async () => {
+    mockStream.mockResolvedValue(createMockStreamResponse('done'));
+
+    const tool = createSubagentTool({
+      subagents,
+      resolveModel,
+      fallbackModelId: 'test-model',
+    });
+
+    const mockSpan = { spanContext: () => ({ traceId: 'abc', spanId: 'def' }) };
+    const tracingContext = { currentSpan: mockSpan } as any;
+
+    const requestContext = new RequestContext();
+    requestContext.set('harness', { emitEvent: vi.fn() });
+
+    await (tool as any).execute(
+      { agentType: 'explore', task: 'Investigate' },
+      { requestContext, tracingContext, agent: { toolCallId: 'tc-trace-1' } },
+    );
+
+    expect(mockStream).toHaveBeenCalledTimes(1);
+    const streamOpts = mockStream.mock.calls[0]![1];
+    expect(streamOpts.tracingContext).toBe(tracingContext);
+  });
+
+  it('does not include tracingContext when not provided', async () => {
+    mockStream.mockResolvedValue(createMockStreamResponse('done'));
+
+    const tool = createSubagentTool({
+      subagents,
+      resolveModel,
+      fallbackModelId: 'test-model',
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set('harness', { emitEvent: vi.fn() });
+
+    await (tool as any).execute(
+      { agentType: 'explore', task: 'Investigate' },
+      { requestContext, agent: { toolCallId: 'tc-trace-2' } },
+    );
+
+    expect(mockStream).toHaveBeenCalledTimes(1);
+    const streamOpts = mockStream.mock.calls[0]![1];
+    expect(streamOpts).not.toHaveProperty('tracingContext');
+  });
+});
+
 describe('createSubagentTool workspace propagation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
