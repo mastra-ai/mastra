@@ -2,6 +2,7 @@ import { Container, Text } from '@mariozechner/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SystemReminderComponent } from '../../components/system-reminder.js';
+import { TemporalGapComponent } from '../../components/temporal-gap.js';
 import { UserMessageComponent } from '../../components/user-message.js';
 import type { TUIState } from '../../state.js';
 import { handleMessageUpdate } from '../message.js';
@@ -125,14 +126,16 @@ describe('handleMessageUpdate system reminders', () => {
         {
           type: 'system_reminder',
           reminderType: 'temporal-gap',
-          message: '1 hour later',
+          message: '1 hour later — 04/20/2026, 03:35 PM PDT',
+          gapText: '1 hour later',
           precedesMessageId: 'user-1',
         } as never,
       ]),
     );
 
     expect(state.chatContainer.children).toHaveLength(4);
-    expect(state.chatContainer.children[1]).toBeInstanceOf(SystemReminderComponent);
+    expect(state.chatContainer.children[1]).toBeInstanceOf(TemporalGapComponent);
+    expect((state.chatContainer.children[1] as TemporalGapComponent).render(80).join('\n')).toContain('⏳ 1 hour later');
     expect(state.chatContainer.children[2]).toBe(userMessage);
     expect(state.chatContainer.children[3]).toBe(streamingMessage);
   });
@@ -154,7 +157,8 @@ describe('handleMessageUpdate system reminders', () => {
         {
           type: 'system_reminder',
           reminderType: 'temporal-gap',
-          message: '30 minutes later',
+          message: '30 minutes later — 04/20/2026, 03:35 PM PDT',
+          gapText: '30 minutes later',
           precedesMessageId: 'actual-user-id-from-core',
         } as never,
       ]),
@@ -162,7 +166,7 @@ describe('handleMessageUpdate system reminders', () => {
 
     expect(state.chatContainer.children).toHaveLength(4);
     expect(state.chatContainer.children[0]).toBe(earlierUserMessage);
-    expect(state.chatContainer.children[1]).toBeInstanceOf(SystemReminderComponent);
+    expect(state.chatContainer.children[1]).toBeInstanceOf(TemporalGapComponent);
     expect(state.chatContainer.children[2]).toBe(optimisticUserMessage);
     expect(state.chatContainer.children[3]).toBe(streamingMessage);
   });

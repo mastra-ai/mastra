@@ -16,6 +16,7 @@ import { PlanResultComponent } from './components/plan-approval-inline.js';
 import { SlashCommandComponent } from './components/slash-command.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
 import { SystemReminderComponent } from './components/system-reminder.js';
+import { TemporalGapComponent } from './components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
 import { UserMessageComponent } from './components/user-message.js';
 import { formatToolResult } from './handlers/tool.js';
@@ -98,6 +99,24 @@ export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem
 // addUserMessage
 // =============================================================================
 
+function createReminderComponent(
+  reminderType: string | undefined,
+  options: { message?: string; path?: string; gapText?: string },
+): SystemReminderComponent | TemporalGapComponent {
+  if (reminderType === 'temporal-gap') {
+    return new TemporalGapComponent({
+      message: options.message,
+      gapText: options.gapText,
+    });
+  }
+
+  return new SystemReminderComponent({
+    message: options.message,
+    reminderType,
+    path: options.path,
+  });
+}
+
 function addChildBeforeFollowUps(state: TUIState, child: Component): void {
   if (state.followUpComponents.length > 0) {
     const firstFollowUp = state.followUpComponents[0];
@@ -158,9 +177,8 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
     const reminderType = attrs.match(/\btype="([^"]*)"/)?.[1];
     const path = attrs.match(/\bpath="([^"]*)"/)?.[1];
     const precedesMessageId = attrs.match(/\bprecedesMessageId="([^"]*)"/)?.[1];
-    const reminderComponent = new SystemReminderComponent({
+    const reminderComponent = createReminderComponent(reminderType, {
       message: reminderText,
-      reminderType,
       path,
     });
     reminderComponent.setExpanded(state.toolOutputExpanded);

@@ -2,7 +2,7 @@ import { Container } from '@mariozechner/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 import { describe, expect, it, vi } from 'vitest';
 
-import { SystemReminderComponent } from '../components/system-reminder.js';
+import { TemporalGapComponent } from '../components/temporal-gap.js';
 import { UserMessageComponent } from '../components/user-message.js';
 import { addUserMessage } from '../render-messages.js';
 import type { TUIState } from '../state.js';
@@ -42,7 +42,8 @@ describe('addUserMessage', () => {
     );
 
     expect(state.chatContainer.children).toHaveLength(1);
-    expect(state.chatContainer.children[0]).toBeInstanceOf(SystemReminderComponent);
+    expect(state.chatContainer.children[0]).toBeInstanceOf(TemporalGapComponent);
+    expect((state.chatContainer.children[0] as TemporalGapComponent).render(80).join('\n')).toContain('⏳ 15 minutes later');
     expect(state.messageComponentsById.size).toBe(0);
   });
 
@@ -59,7 +60,7 @@ describe('addUserMessage', () => {
     );
 
     expect(state.chatContainer.children).toHaveLength(2);
-    expect(state.chatContainer.children[0]).toBeInstanceOf(SystemReminderComponent);
+    expect(state.chatContainer.children[0]).toBeInstanceOf(TemporalGapComponent);
     expect(state.chatContainer.children[1]).toBeInstanceOf(UserMessageComponent);
     expect(state.messageComponentsById.get('user-1')).toBe(state.chatContainer.children[1]);
   });
