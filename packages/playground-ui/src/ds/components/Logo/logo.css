@@ -65,5 +65,6 @@
   .logo .logo-fill,
   .logo .logo-stroke {
     transition: none;
+    animation: none;
   }
 }

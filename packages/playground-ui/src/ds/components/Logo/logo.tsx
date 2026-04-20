@@ -19,12 +19,22 @@ const sizeClasses = {
   md: 'w-10',
 };
 
+function prefersReducedMotion() {
+  if (typeof window === 'undefined' || !window.matchMedia) return false;
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
 function Logo({ className, size = 'md', animateOnHover = false, 'aria-label': ariaLabel = 'Mastra' }: LogoProps) {
   const reactId = useId();
   const clipId = `logo-clip-${reactId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
   const [playing, setPlaying] = useState(false);
 
-  const handleMouseEnter = animateOnHover ? () => setPlaying(true) : undefined;
+  const handleMouseEnter = animateOnHover
+    ? () => {
+        if (prefersReducedMotion()) return;
+        setPlaying(true);
+      }
+    : undefined;
   const handleAnimationEnd = animateOnHover && playing ? () => setPlaying(false) : undefined;
 
   return (
