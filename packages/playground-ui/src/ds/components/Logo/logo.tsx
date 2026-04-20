@@ -1,3 +1,4 @@
+import type { AnimationEvent } from 'react';
 import { useId, useState } from 'react';
 
 import { cn } from '@/lib/utils';
@@ -35,7 +36,13 @@ function Logo({ className, size = 'md', animateOnHover = false, 'aria-label': ar
         setPlaying(true);
       }
     : undefined;
-  const handleAnimationEnd = animateOnHover && playing ? () => setPlaying(false) : undefined;
+  const handleAnimationEnd =
+    animateOnHover && playing
+      ? (e: AnimationEvent<HTMLDivElement>) => {
+          if (e.animationName !== 'logo-stroke-cycle') return;
+          setPlaying(false);
+        }
+      : undefined;
 
   return (
     <div
