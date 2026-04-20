@@ -62,7 +62,15 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     this.setState({ errorInfo });
-    this.props.onError?.(error, errorInfo);
+    if (this.props.onError) {
+      try {
+        this.props.onError(error, errorInfo);
+      } catch (handlerError) {
+        if (typeof console !== 'undefined') {
+          console.error('[ErrorBoundary] onError handler threw:', handlerError);
+        }
+      }
+    }
     if (typeof console !== 'undefined') {
       console.error('[ErrorBoundary] Uncaught error:', error, errorInfo);
     }
