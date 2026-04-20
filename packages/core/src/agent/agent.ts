@@ -30,6 +30,7 @@ import type {
   StreamTextResult,
 } from '../llm/model/base.types';
 import { MastraLLMVNext } from '../llm/model/model.loop';
+import type { ProviderOptions } from '../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
@@ -66,6 +67,7 @@ import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
+import { isProviderTool } from '../tools/toolchecks';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
@@ -106,6 +108,7 @@ import type {
   AgentMethodType,
   StructuredOutputOptions,
   PublicStructuredOutputOptions,
+  ModelFallbackSettings,
   ModelWithRetries,
   ZodSchema,
 } from './types';
@@ -120,6 +123,9 @@ type ModelFallbacks = {
   model: DynamicArgument<MastraModelConfig>;
   maxRetries: number;
   enabled: boolean;
+  modelSettings?: DynamicArgument<ModelFallbackSettings>;
+  providerOptions?: DynamicArgument<ProviderOptions>;
+  headers?: DynamicArgument<Record<string, string>>;
 }[];
 
 type ResolvedModelSelection = MastraModelConfig | ModelFallbacks;
@@ -255,12 +261,7 @@ export class Agent<
         this.logger.trackException(mastraError);
         throw mastraError;
       }
-      this.model = config.model.map(mdl => ({
-        id: mdl.id ?? randomUUID(),
-        model: mdl.model,
-        maxRetries: mdl.maxRetries ?? config?.maxRetries ?? 0,
-        enabled: mdl.enabled ?? true,
-      })) as ModelFallbacks;
+      this.model = config.model.map(mdl => Agent.toFallbackEntry(mdl, config?.maxRetries ?? 0)) as ModelFallbacks;
       this.#originalModel = [...this.model];
     } else {
       this.model = config.model;
@@ -1625,10 +1626,16 @@ export class Agent<
       return resolveMaybePromise(resolvedModel, modelInfo => {
         let llm: MastraLLM | Promise<MastraLLM>;
         if (isSupportedLanguageModel(modelInfo)) {
-          llm = this.prepareModels(requestContext, modelSelection).then(models => {
-            const enabledModels = models.filter(model => model.enabled);
+          // Filter disabled entries before prepareModels so their model factories and
+          // dynamic resolvers are never invoked on the streaming path. A disabled
+          // entry's throwing/side-effecting factory must not break the request.
+          const enabledSelection = Array.isArray(modelSelection)
+            ? (modelSelection.filter(m => m.enabled) as typeof modelSelection)
+            : modelSelection;
+
+          llm = this.prepareModels(requestContext, enabledSelection).then(models => {
             return new MastraLLMVNext({
-              models: enabledModels,
+              models,
               mastra: this.#mastra,
               options: { tracingPolicy: this.#options?.tracingPolicy },
             });
@@ -1708,12 +1715,24 @@ export class Agent<
       return models;
     }
 
-    return models.map(m => ({
-      id: m.id ?? randomUUID(),
-      model: m.model as DynamicArgument<MastraModelConfig>,
-      maxRetries: m.maxRetries ?? this.maxRetries,
-      enabled: m.enabled ?? true,
-    })) as ModelFallbacks;
+    return models.map(m => Agent.toFallbackEntry(m, this.maxRetries ?? 0)) as ModelFallbacks;
+  }
+
+  /**
+   * Builds a single normalized fallback entry from a user-supplied `ModelWithRetries`.
+   * Shared by the constructor and `normalizeModelFallbacks` to keep the mapping in one place.
+   * @internal
+   */
+  private static toFallbackEntry(mdl: ModelWithRetries, defaultMaxRetries: number): ModelFallbacks[number] {
+    return {
+      id: mdl.id ?? randomUUID(),
+      model: mdl.model as DynamicArgument<MastraModelConfig>,
+      maxRetries: mdl.maxRetries ?? defaultMaxRetries,
+      enabled: mdl.enabled ?? true,
+      modelSettings: mdl.modelSettings,
+      providerOptions: mdl.providerOptions,
+      headers: mdl.headers,
+    };
   }
 
   /**
@@ -3027,6 +3046,7 @@ export class Agent<
       this.logger.debug('Adding client tools', { agent: this.name, tools: Object.keys(clientTools || {}), runId });
       for (const [toolName, tool] of clientToolsForInput) {
         const { execute, ...toolRest } = tool;
+        const toolToConvert = isProviderTool(tool) ? tool : toolRest;
         const options: ToolOptions = {
           name: toolName,
           runId,
@@ -3045,7 +3065,7 @@ export class Agent<
           backgroundConfig: (tool as any).background,
         };
         const convertedToCoreTool = makeCoreTool(
-          toolRest,
+          toolToConvert,
           options,
           'client-tool',
           autoResumeSuspendedTools,
@@ -4636,22 +4656,56 @@ export class Agent<
         }
 
         // Extract headers from ModelRouterLanguageModel if available
-        let headers: Record<string, string> | undefined;
+        let routerHeaders: Record<string, string> | undefined;
         if (model instanceof ModelRouterLanguageModel) {
-          headers = (model as any).config?.headers;
+          routerHeaders = (model as any).config?.headers;
         }
+
+        // Disabled entries are filtered out in getLLM(); skip resolving their dynamic
+        // fields so a throwing or side-effecting resolver on an unused entry can't
+        // break the whole fallback array.
+        const isEnabled = modelConfig.enabled ?? true;
+        const [resolvedModelSettings, resolvedProviderOptions, resolvedUserHeaders] = isEnabled
+          ? await Promise.all([
+              this.resolveFallbackDynamic(modelConfig.modelSettings, requestContext),
+              this.resolveFallbackDynamic(modelConfig.providerOptions, requestContext),
+              this.resolveFallbackDynamic(modelConfig.headers, requestContext),
+            ])
+          : [undefined, undefined, undefined];
+
+        const mergedHeaders =
+          routerHeaders || resolvedUserHeaders
+            ? { ...(routerHeaders ?? {}), ...(resolvedUserHeaders ?? {}) }
+            : undefined;
 
         return {
           id: modelId,
           model: model,
           maxRetries: modelConfig.maxRetries ?? 0,
-          enabled: modelConfig.enabled ?? true,
-          headers,
+          enabled: isEnabled,
+          headers: mergedHeaders,
+          modelSettings: resolvedModelSettings,
+          providerOptions: resolvedProviderOptions,
         };
       }),
     );
 
     return models;
+  }
+
+  /** @internal */
+  private async resolveFallbackDynamic<T>(
+    value: DynamicArgument<T> | undefined,
+    requestContext: RequestContext,
+  ): Promise<T | undefined> {
+    if (value === undefined) return undefined;
+    if (typeof value === 'function') {
+      return await (value as (args: { requestContext: RequestContext; mastra?: Mastra }) => Promise<T> | T)({
+        requestContext,
+        mastra: this.#mastra,
+      });
+    }
+    return value;
   }
 
   /**
@@ -4693,8 +4747,7 @@ export class Agent<
         provider: this.#browser.provider,
         sessionId: this.#browser.getSessionId(browserThreadId),
         headless: this.#browser.headless,
-        currentUrl: (await this.#browser.getCurrentUrl(browserThreadId)) ?? undefined,
-        isRunning: isThreadRunning,
+        currentUrl: isThreadRunning ? ((await this.#browser.getCurrentUrl(browserThreadId)) ?? undefined) : undefined,
       };
       requestContext.set('browser', browserCtx);
     }

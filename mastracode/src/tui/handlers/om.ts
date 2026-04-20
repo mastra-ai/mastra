@@ -154,6 +154,8 @@ export function handleOMBufferingStart(
 ): void {
   const { state } = ctx;
   state.activeActivationMarker = undefined;
+  state.activeActivationTTLMarker = undefined;
+  state.activeActivationProviderChangeMarker = undefined;
   state.activeBufferingMarker = new OMMarkerComponent({
     type: 'om_buffering_start',
     operationType,
@@ -206,8 +208,44 @@ export function handleOMActivation(
   operationType: 'observation' | 'reflection',
   tokensActivated: number,
   observationTokens: number,
+  triggeredBy?: 'threshold' | 'ttl' | 'provider_change',
+  activateAfterIdle?: number,
+  ttlExpiredMs?: number,
+  previousModel?: string,
+  currentModel?: string,
 ): void {
   const { state } = ctx;
+
+  if (triggeredBy === 'ttl' && activateAfterIdle !== undefined && ttlExpiredMs !== undefined) {
+    const ttlData: OMMarkerData = {
+      type: 'om_activation_ttl',
+      activateAfterIdle,
+      ttlExpiredMs,
+    };
+
+    if (state.activeActivationTTLMarker) {
+      state.activeActivationTTLMarker.update(ttlData);
+    } else {
+      state.activeActivationTTLMarker = new OMMarkerComponent(ttlData);
+      addChildBeforeStreaming(ctx, state.activeActivationTTLMarker);
+    }
+  }
+
+  if (triggeredBy === 'provider_change' && previousModel && currentModel) {
+    const providerChangeData: OMMarkerData = {
+      type: 'om_activation_provider_change',
+      previousModel,
+      currentModel,
+    };
+
+    if (state.activeActivationProviderChangeMarker) {
+      state.activeActivationProviderChangeMarker.update(providerChangeData);
+    } else {
+      state.activeActivationProviderChangeMarker = new OMMarkerComponent(providerChangeData);
+      addChildBeforeStreaming(ctx, state.activeActivationProviderChangeMarker);
+    }
+  }
+
   const activationData: OMMarkerData = {
     type: 'om_activation',
     operationType,

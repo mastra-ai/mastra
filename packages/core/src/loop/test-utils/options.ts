@@ -2742,6 +2742,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     "format": 2,
                     "metadata": {
                       "modelId": "mock-model-id",
+                      "provider": "mock-provider",
                     },
                     "parts": [
                       {
@@ -2759,16 +2760,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       {
                         "createdAt": 1704067200000,
                         "type": "step-start",
-                      },
-                    ],
-                    "toolInvocations": [
-                      {
-                        "args": {
-                          "value": "value",
-                        },
-                        "state": "call",
-                        "toolCallId": "call-1",
-                        "toolName": "tool1",
                       },
                     ],
                   },
