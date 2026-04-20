@@ -1,0 +1,51 @@
+version: 2
+
+# Dependabot configuration for mastra-ai/mastra.
+#
+# Scope of this initial config: only exclude `e2e-tests/**` from Dependabot
+# version-update PRs. These are private, non-shipped harnesses that regenerate
+# their lockfiles per-test-run; updating them produces churn with no security
+# impact on shipped code.
+#
+# Note: `exclude-paths` only suppresses Dependabot PRs. It does NOT close
+# existing security alerts for those manifests — those are dismissed via the
+# GitHub API (see PR body for context).
+#
+# Other non-shipped manifests (observability/_examples, examples/,
+# packages/*/integration-tests, packages/_vendored) will be handled in
+# follow-up PRs once this baseline config is validated.
+
+updates:
+  # Root monorepo (pnpm workspace). This covers every workspace package
+  # listed in pnpm-workspace.yaml — the actual shipped code.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+    exclude-paths:
+      # Non-shipped e2e test harnesses. Each has its own lockfile that is
+      # regenerated per-test-run; Dependabot PRs against them are pure noise.
+      - e2e-tests/**
+
+  # Standalone npm project used by maintainers for issue triage automation.
+  - package-ecosystem: npm
+    directory: /scripts/gh-issue-triage
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - area/scripts
+
+  # Keep GitHub Actions workflow pins current.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - area/ci
