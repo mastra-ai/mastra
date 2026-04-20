@@ -75,6 +75,28 @@ async function fixExportBugInDtsFile(dtsFile: string) {
     fixCount++;
   }
 
+  const exportedNames = new Set(
+    sourceFile
+      .getExportDeclarations()
+      .flatMap(declaration => declaration.getNamedExports())
+      .flatMap(specifier => [specifier.getName(), specifier.getAliasNode()?.getText()].filter(Boolean)),
+  );
+
+  const providerOptionsType = sourceFile.getTypeAlias('ProviderOptions');
+  if (
+    providerOptionsType &&
+    !exportedNames.has('ProviderOptions') &&
+    exportedNames.has('EmbeddingModelV3CallOptions')
+  ) {
+    sourceFile.addTypeAlias({
+      isExported: true,
+      name: 'ProviderOptions',
+      type: "NonNullable<EmbeddingModelV3CallOptions['providerOptions']>",
+    });
+    providerOptionsType.remove();
+    fixCount++;
+  }
+
   if (fixCount > 0) {
     // eslint-disable-next-line no-console
     console.log(`Fixed ${fixCount} broken namespace export(s)`);

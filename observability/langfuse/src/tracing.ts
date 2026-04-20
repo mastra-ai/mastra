@@ -28,6 +28,10 @@ export interface LangfuseExporterConfig extends BaseExporterConfig {
   baseUrl?: string;
   /** Enable realtime mode - flushes after each event for immediate visibility */
   realtime?: boolean;
+  /** Maximum number of spans per OTEL export batch */
+  flushAt?: number;
+  /** Maximum time in seconds before pending spans are exported */
+  flushInterval?: number;
   /** Langfuse environment tag for traces */
   environment?: string;
   /** Langfuse release tag for traces */
@@ -76,6 +80,8 @@ export class LangfuseExporter extends BaseExporter {
       environment: config.environment,
       release: config.release,
       exportMode: this.#realtime ? 'immediate' : 'batched',
+      flushAt: config.flushAt,
+      flushInterval: config.flushInterval,
       // Export all spans — the default filter only passes spans with gen_ai.* attributes
       // or known LLM instrumentation scopes, but Mastra spans use mastra.* attributes.
       shouldExportSpan: () => true,
@@ -251,6 +257,34 @@ function mapMastraToLangfuseAttributes(attributes: Record<string, any>, environm
   if (attributes['mastra.tags']) {
     attributes['langfuse.trace.tags'] = attributes['mastra.tags'];
     delete attributes['mastra.tags'];
+  }
+
+  // Trace name: mastra.metadata.traceName → langfuse.trace.name
+  if (attributes['mastra.metadata.traceName']) {
+    attributes['langfuse.trace.name'] = attributes['mastra.metadata.traceName'];
+    delete attributes['mastra.metadata.traceName'];
+  }
+
+  // Trace version: mastra.metadata.version → langfuse.trace.version
+  if (attributes['mastra.metadata.version']) {
+    attributes['langfuse.trace.version'] = attributes['mastra.metadata.version'];
+    delete attributes['mastra.metadata.version'];
+  }
+
+  // Observation metadata: map semantic attributes to langfuse.observation.metadata.*
+  // so they become top-level filterable keys on each observation in Langfuse.
+  // @see https://langfuse.com/integrations/native/opentelemetry#how-metadata-mapping-works
+  if (attributes['gen_ai.agent.id']) {
+    attributes['langfuse.observation.metadata.agentId'] = attributes['gen_ai.agent.id'];
+  }
+  if (attributes['gen_ai.agent.name']) {
+    attributes['langfuse.observation.metadata.agentName'] = attributes['gen_ai.agent.name'];
+  }
+  if (attributes['mastra.span.type']) {
+    attributes['langfuse.observation.metadata.spanType'] = attributes['mastra.span.type'];
+  }
+  if (attributes['gen_ai.operation.name']) {
+    attributes['langfuse.observation.metadata.operationName'] = attributes['gen_ai.operation.name'];
   }
 
   // Input/Output: mastra.*.input/output → langfuse.observation.input/output
