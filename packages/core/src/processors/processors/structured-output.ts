@@ -9,8 +9,7 @@ import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { ObservabilityContext } from '../../observability';
 import { resolveObservabilityContext } from '../../observability';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../../request-context';
-import type { RequestContext } from '../../request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import type { StandardSchemaWithJSON } from '../../schema';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType } from '../../stream';
@@ -235,10 +234,11 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         promptMessage,
       ];
 
+      const structuringRequestContext = requestContext ? new RequestContext(requestContext.entries()) : undefined;
+
       return this.agent.stream(messages, {
         model: this.structuringModel,
-        requestContext,
-        maxSteps: 1,
+        requestContext: structuringRequestContext,
         toolChoice: 'none',
         structuredOutput: {
           schema: this.schema,

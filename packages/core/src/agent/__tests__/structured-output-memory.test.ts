@@ -328,6 +328,111 @@ describe('Structured output memory inheritance', () => {
     expect(promptText).toContain('Mochi');
   });
 
+  it('does not leak the structuring agent readOnly memory config into the parent request context', async () => {
+    const threadId = randomUUID();
+    const resourceId = `structured-output-memory-${randomUUID()}`;
+    const mockMemory = new MockMemory();
+
+    const mainModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: 'Main agent summary.' }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          {
+            type: 'response-metadata',
+            id: 'main-response-request-context',
+            modelId: 'main-model',
+            timestamp: new Date(0),
+          },
+          { type: 'text-start', id: 'main-text-request-context' },
+          { type: 'text-delta', id: 'main-text-request-context', delta: 'Main agent summary.' },
+          { type: 'text-end', id: 'main-text-request-context' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+
+    const structuringModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: JSON.stringify({ summary: 'Structured summary' }) }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        request: { body: undefined },
+        response: { headers: {}, body: undefined },
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          {
+            type: 'response-metadata',
+            id: 'structuring-response-request-context',
+            modelId: 'structuring-model',
+            timestamp: new Date(0),
+          },
+          { type: 'text-start', id: 'structuring-text-request-context' },
+          { type: 'text-delta', id: 'structuring-text-request-context', delta: '{"summary":"Structured summary"}' },
+          { type: 'text-end', id: 'structuring-text-request-context' },
+          { type: 'object-result', object: { summary: 'Structured summary' } } as any,
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ] as any),
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'structured-output-request-context-isolation-test',
+      name: 'Request Context Isolation Agent',
+      instructions: 'Answer briefly and use the provided conversation context.',
+      model: mainModel,
+      memory: mockMemory,
+    });
+
+    await mockMemory.createThread({ threadId, resourceId });
+
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+
+    const result = await agent.generate('Return a short structured summary.', {
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
+      requestContext,
+      structuredOutput: {
+        schema: z.object({
+          summary: z.string(),
+        }),
+        model: structuringModel,
+        useAgent: true,
+      },
+    });
+
+    expect(result.object).toEqual({ summary: 'Structured summary' });
+
+    const mastraMemory = requestContext.get('MastraMemory') as { memoryConfig?: { readOnly?: boolean } } | undefined;
+    expect(mastraMemory?.memoryConfig?.readOnly).not.toBe(true);
+  });
+
   it('does not include prior memory context when useAgent is omitted for a separate structuring model', async () => {
     const threadId = randomUUID();
     const resourceId = `structured-output-memory-${randomUUID()}`;
