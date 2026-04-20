@@ -225,6 +225,8 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         model: this.structuringModel,
         instructions: this.structuringInstructions,
         requestContext,
+        maxSteps: 1,
+        toolChoice: 'none',
         structuredOutput: {
           schema: this.schema,
           jsonPromptInjection: this.jsonPromptInjection,

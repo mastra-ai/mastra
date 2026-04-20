@@ -262,6 +262,8 @@ describe('StructuredOutputProcessor', () => {
           model: mockModel,
           instructions: expect.any(String),
           requestContext,
+          maxSteps: 1,
+          toolChoice: 'none',
           structuredOutput: {
             schema: testSchema,
             jsonPromptInjection: undefined,
@@ -338,6 +340,8 @@ describe('StructuredOutputProcessor', () => {
           model: mockModel,
           instructions: expect.any(String),
           requestContext,
+          maxSteps: 1,
+          toolChoice: 'none',
           structuredOutput: {
             schema: testSchema,
             jsonPromptInjection: undefined,
@@ -421,6 +425,8 @@ describe('StructuredOutputProcessor', () => {
         expect.objectContaining({
           model: mockModel,
           instructions: expect.any(String),
+          maxSteps: 1,
+          toolChoice: 'none',
           structuredOutput: {
             schema: testSchema,
             jsonPromptInjection: undefined,
