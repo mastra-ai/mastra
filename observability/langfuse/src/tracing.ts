@@ -28,6 +28,10 @@ export interface LangfuseExporterConfig extends BaseExporterConfig {
   baseUrl?: string;
   /** Enable realtime mode - flushes after each event for immediate visibility */
   realtime?: boolean;
+  /** Maximum number of spans per OTEL export batch */
+  flushAt?: number;
+  /** Maximum time in seconds before pending spans are exported */
+  flushInterval?: number;
   /** Langfuse environment tag for traces */
   environment?: string;
   /** Langfuse release tag for traces */
@@ -76,6 +80,8 @@ export class LangfuseExporter extends BaseExporter {
       environment: config.environment,
       release: config.release,
       exportMode: this.#realtime ? 'immediate' : 'batched',
+      flushAt: config.flushAt,
+      flushInterval: config.flushInterval,
       // Export all spans — the default filter only passes spans with gen_ai.* attributes
       // or known LLM instrumentation scopes, but Mastra spans use mastra.* attributes.
       shouldExportSpan: () => true,

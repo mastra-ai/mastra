@@ -31,6 +31,13 @@ const mockScoreCreate = vi.fn();
 const mockClientFlush = vi.fn().mockResolvedValue(undefined);
 const mockClientShutdown = vi.fn().mockResolvedValue(undefined);
 const clientConstructorArgs: any[] = [];
+const originalLangfuseEnv = {
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+  secretKey: process.env.LANGFUSE_SECRET_KEY,
+  baseUrl: process.env.LANGFUSE_BASE_URL,
+  environment: process.env.LANGFUSE_TRACING_ENVIRONMENT,
+  release: process.env.LANGFUSE_RELEASE,
+};
 
 vi.mock('@langfuse/client', () => {
   class MockLangfuseClient {
@@ -112,6 +119,11 @@ describe('LangfuseExporter', () => {
     mockShutdown.mockClear();
     mockClientFlush.mockClear();
     mockClientShutdown.mockClear();
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.LANGFUSE_TRACING_ENVIRONMENT;
+    delete process.env.LANGFUSE_RELEASE;
   });
 
   afterEach(async () => {
@@ -119,6 +131,17 @@ describe('LangfuseExporter', () => {
       await exporter.shutdown();
       exporter = undefined;
     }
+
+    if (originalLangfuseEnv.publicKey === undefined) delete process.env.LANGFUSE_PUBLIC_KEY;
+    else process.env.LANGFUSE_PUBLIC_KEY = originalLangfuseEnv.publicKey;
+    if (originalLangfuseEnv.secretKey === undefined) delete process.env.LANGFUSE_SECRET_KEY;
+    else process.env.LANGFUSE_SECRET_KEY = originalLangfuseEnv.secretKey;
+    if (originalLangfuseEnv.baseUrl === undefined) delete process.env.LANGFUSE_BASE_URL;
+    else process.env.LANGFUSE_BASE_URL = originalLangfuseEnv.baseUrl;
+    if (originalLangfuseEnv.environment === undefined) delete process.env.LANGFUSE_TRACING_ENVIRONMENT;
+    else process.env.LANGFUSE_TRACING_ENVIRONMENT = originalLangfuseEnv.environment;
+    if (originalLangfuseEnv.release === undefined) delete process.env.LANGFUSE_RELEASE;
+    else process.env.LANGFUSE_RELEASE = originalLangfuseEnv.release;
   });
 
   describe('configuration', () => {
@@ -185,6 +208,22 @@ describe('LangfuseExporter', () => {
       expect(processorConstructorArgs[0]).toEqual(
         expect.objectContaining({
           exportMode: 'immediate',
+        }),
+      );
+    });
+
+    it('passes batch controls to LangfuseSpanProcessor', () => {
+      exporter = new LangfuseExporter({
+        publicKey: 'pk-test',
+        secretKey: 'sk-test',
+        flushAt: 200,
+        flushInterval: 15,
+      });
+
+      expect(processorConstructorArgs[0]).toEqual(
+        expect.objectContaining({
+          flushAt: 200,
+          flushInterval: 15,
         }),
       );
     });

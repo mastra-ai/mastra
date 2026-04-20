@@ -515,12 +515,14 @@ describe('interactive prompts', () => {
       questionId: 'q1',
       question: 'Which option?',
       options: [{ label: 'A' }, { label: 'B' }],
+      selectionMode: 'multi_select',
     });
     const q = harness.getDisplayState().pendingQuestion;
     expect(q).not.toBeNull();
     expect(q!.questionId).toBe('q1');
     expect(q!.question).toBe('Which option?');
     expect(q!.options).toHaveLength(2);
+    expect(q!.selectionMode).toBe('multi_select');
   });
 
   it('sets pendingPlanApproval on plan_approval_required', () => {
