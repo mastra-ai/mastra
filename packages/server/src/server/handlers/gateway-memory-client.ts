@@ -3,6 +3,7 @@
  * Used to proxy memory operations from the local Mastra server to the remote gateway
  * when agents use `mastra/` model strings.
  */
+import type { MastraDBMessage } from '@mastra/core/agent';
 
 interface GatewayThread {
   id: string;
@@ -167,6 +168,33 @@ export class GatewayMemoryClient {
     }
   }
 
+  async saveMessages(
+    threadId: string,
+    params: { messages: Array<{ role: string; content: unknown; type?: string }> },
+  ): Promise<{ messages: GatewayMessage[] } | null> {
+    try {
+      return await this.request(`${this.threadPath(threadId)}/messages`, {
+        method: 'POST',
+        body: JSON.stringify(params),
+      });
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message.includes('404')) return null;
+      throw e;
+    }
+  }
+
+  async deleteMessages(threadId: string, params: { messageIds: string[] }): Promise<{ ok: boolean }> {
+    try {
+      return await this.request(`${this.threadPath(threadId)}/messages`, {
+        method: 'DELETE',
+        body: JSON.stringify(params),
+      });
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message.includes('404')) return { ok: false };
+      throw e;
+    }
+  }
+
   // ── Observational Memory ─────────────────────────────────────
 
   async getObservations(threadId: string, resourceId?: string): Promise<{ observations: unknown }> {
@@ -227,15 +255,23 @@ export function toLocalThread(gt: GatewayThread) {
 /**
  * Convert a gateway message to the local server message format.
  */
-export function toLocalMessage(gm: GatewayMessage) {
+export function toLocalMessage(gm: GatewayMessage): MastraDBMessage {
+  const normalizedContent =
+    typeof gm.content === 'string'
+      ? {
+          format: 2 as const,
+          parts: [{ type: 'text' as const, text: gm.content }],
+        }
+      : gm.content;
+
   return {
     id: gm.id,
     threadId: gm.threadId,
-    role: gm.role,
-    content: gm.content,
+    role: gm.role as MastraDBMessage['role'],
+    content: normalizedContent,
     type: gm.type,
     createdAt: new Date(gm.createdAt),
-  };
+  } as MastraDBMessage;
 }
 
 /**
