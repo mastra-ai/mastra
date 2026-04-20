@@ -67,37 +67,24 @@ export const SuperposedOnLogo: Story = {
   parameters: { layout: 'centered' },
   render: () => (
     <div className="flex flex-col items-center gap-10">
-      {(['sm', 'md', 'lg'] as const).map((size) => (
+      {(['sm', 'md', 'lg'] as const).map(size => (
         <div key={size} className="flex flex-col items-center gap-2">
           <span className="text-ui-sm text-neutral3">
             size=&quot;{size}&quot; · {SIZE_PX[size]}px (per-size stroke)
           </span>
-          <div
-            className="relative"
-            style={{ width: SIZE_PX[size], aspectRatio: '34 / 21' }}
-          >
-            <LogoWithoutText
-              className="absolute inset-0 h-full w-full text-[#ef4444]/70"
-              aria-hidden
-            />
+          <div className="relative" style={{ width: SIZE_PX[size], aspectRatio: '34 / 21' }}>
+            <LogoWithoutText className="absolute inset-0 h-full w-full text-[#ef4444]/70" aria-hidden />
             <div className="absolute inset-0">
-              <BrandLoader
-                size={size}
-                aria-label={`BrandLoader overlay ${size}`}
-                className="h-full w-full"
-              />
+              <BrandLoader size={size} aria-label={`BrandLoader overlay ${size}`} className="h-full w-full" />
             </div>
           </div>
         </div>
       ))}
-      {[240, 400, 640].map((px) => (
+      {[240, 400, 640].map(px => (
         <div key={px} className="flex flex-col items-center gap-2">
           <span className="text-ui-sm text-neutral3">{px}px (uses lg stroke via className)</span>
           <div className="relative" style={{ width: px, aspectRatio: '34 / 21' }}>
-            <LogoWithoutText
-              className="absolute inset-0 h-full w-full text-[#ef4444]/70"
-              aria-hidden
-            />
+            <LogoWithoutText className="absolute inset-0 h-full w-full text-[#ef4444]/70" aria-hidden />
             <div className="absolute inset-0">
               <BrandLoader aria-label="BrandLoader overlay" className="h-full w-full" />
             </div>
