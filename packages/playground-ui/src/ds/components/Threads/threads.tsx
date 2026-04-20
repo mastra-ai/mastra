@@ -56,7 +56,7 @@ export const ThreadItem = ({ children, isActive, className }: ThreadItemProps) =
   return (
     <li
       className={cn(
-        'group/thread-item flex items-center justify-between gap-2 mx-2 px-2 py-0.5 rounded-lg',
+        'group/thread-item flex items-center justify-between gap-2 mx-2 px-1 py-0.5 rounded-lg',
         transitions.colors,
         'hover:bg-surface3',
         isActive && 'bg-surface4',
