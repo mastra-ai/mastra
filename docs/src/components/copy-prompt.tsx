@@ -76,7 +76,7 @@ export function CopyPrompt({
   }
 
   return (
-    <div className="mb-4 rounded-xl border border-gray-300 px-4 py-2 shadow-sm dark:border-gray-700">
+    <div className="copy-prompt mb-4 rounded-xl border border-gray-300 px-4 py-2 shadow-sm dark:border-gray-700">
       <div className="flex items-center justify-between gap-4">
         <button
           id={toggleId}
