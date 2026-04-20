@@ -203,6 +203,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/digitalocean',
+          label: 'DigitalOcean',
+        },
+        {
+          type: 'doc',
           id: 'providers/dinference',
           label: 'DInference',
         },
@@ -498,6 +503,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/tencent-token-plan',
+          label: 'Tencent Token Plan',
+        },
+        {
+          type: 'doc',
+          id: 'providers/tencent-tokenhub',
+          label: 'Tencent TokenHub',
+        },
+        {
+          type: 'doc',
           id: 'providers/the-grid-ai',
           label: 'The Grid AI',
         },
@@ -520,6 +535,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/vultr',
           label: 'Vultr',
+        },
+        {
+          type: 'doc',
+          id: 'providers/wafer.ai',
+          label: 'Wafer',
         },
         {
           type: 'doc',

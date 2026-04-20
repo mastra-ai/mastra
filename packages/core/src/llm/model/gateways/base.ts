@@ -77,4 +77,17 @@ export abstract class MastraModelGateway {
     apiKey: string;
     headers?: Record<string, string>;
   }): Promise<GatewayLanguageModel> | GatewayLanguageModel;
+
+  /**
+   * Custom serialization for tracing/observability spans.
+   * Gateways typically hold credentials (apiKey, OAuth tokens, customFetch
+   * closures that capture secrets). The base implementation exposes only
+   * the gateway identity so subclasses are safe by default.
+   *
+   * Subclasses that want to expose additional non-sensitive fields
+   * (e.g. baseUrl when it's a public URL) can override this method.
+   */
+  serializeForSpan(): { id: string; name: string } {
+    return { id: this.id, name: this.name };
+  }
 }
