@@ -1,9 +1,8 @@
 /**
  * ClickHouse v-next observability storage domain.
  *
- * Insert-only model: only completed spans stored. Uses ReplacingMergeTree for
- * tracing tables with dedupeKey for retry-idempotency, and ReplacingMergeTree
- * for metric/log/score/feedback signals with signal IDs for de-duplication.
+ * Insert-only model: Uses ReplacingMergeTree for all signals
+ * with dedupeKey for retry-idempotency.
  *
  * Domain layout follows DuckDB reference: thin class delegating to module functions.
  */
@@ -136,7 +135,7 @@ function buildSignalMigrationRequiredMessage(args: {
     `  3. Swap the migrated tables into place\n` +
     `\n` +
     `WARNING: This migration recreates the signal tables and may take significant\n` +
-    `time for large datasets. Please ensure you have a backup before proceeding.\n` +
+    `time for large databases. Please ensure you have a backup before proceeding.\n` +
     `===========================================================================\n`
   );
 }

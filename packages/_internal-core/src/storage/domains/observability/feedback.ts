@@ -56,7 +56,7 @@ function normalizeLegacyFeedbackActor<T>(input: T): T {
  * Includes all fields from ExportedFeedback plus storage-specific fields.
  */
 const feedbackRecordObjectSchema = z.object({
-  feedbackId: z.string().nullish().describe('Unique id for this feedback event (de-duplication key)'),
+  feedbackId: z.string().nullish().describe('Unique id for this feedback event'),
   timestamp: z.date().describe('When the feedback was recorded'),
 
   // Target
