@@ -1,5 +1,5 @@
-import * as React from 'react';
 import { AlertTriangle } from 'lucide-react';
+import * as React from 'react';
 import { Button } from '../Button';
 import { cn } from '@/lib/utils';
 
