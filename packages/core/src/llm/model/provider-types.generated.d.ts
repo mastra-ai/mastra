@@ -2872,6 +2872,7 @@ export type ProviderModelsMap = {
     'claude-haiku-4-5',
     'claude-opus4-5',
     'claude-opus4-6',
+    'claude-opus4-7',
     'claude-sonnet-4',
     'deepseek-v3-0324',
     'devstral-2512',
@@ -3523,10 +3524,7 @@ export type ProviderModelsMap = {
     'kimi-k2.5',
   ];
   readonly berget: readonly [
-    'BAAI/bge-reranker-v2-m3',
-    'KBLab/kb-whisper-large',
-    'intfloat/multilingual-e5-large',
-    'intfloat/multilingual-e5-large-instruct',
+    'google/gemma-4-31B-it',
     'meta-llama/Llama-3.3-70B-Instruct',
     'mistralai/Mistral-Small-3.2-24B-Instruct-2506',
     'openai/gpt-oss-120b',
