@@ -241,7 +241,11 @@ export type ClientResponseKind<P extends ClientPath, M extends ClientMethod<P>> 
 }
 
 const fileContent = generateRouteTypesFileContent();
-fs.writeFileSync(OUTPUT_PATH, fileContent);
+const existingFileContent = fs.existsSync(OUTPUT_PATH) ? fs.readFileSync(OUTPUT_PATH, 'utf8') : null;
+
+if (existingFileContent !== fileContent) {
+  fs.writeFileSync(OUTPUT_PATH, fileContent);
+}
 
 console.info(`✓ Generated ${OUTPUT_PATH}`);
 console.info(`  - ${SERVER_ROUTES.length} routes`);
