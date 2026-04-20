@@ -95,7 +95,7 @@ export type LoopConfig<OUTPUT = undefined> = {
   onError?: ({ error }: { error: Error | string }) => Promise<void> | void;
   onFinish?: MastraOnFinishCallback<OUTPUT>;
   onStepFinish?: MastraOnStepFinishCallback<OUTPUT>;
-  onAbort?: (event: any) => Promise<void> | void;
+  onAbort?: (event: { steps: any[]; text?: string }) => Promise<void> | void;
   abortSignal?: AbortSignal;
   returnScorerData?: boolean;
   prepareStep?: PrepareStepFunction;

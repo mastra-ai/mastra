@@ -1205,8 +1205,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             }
 
             if (isAbortError(error) && options?.abortSignal?.aborted) {
+              const partialText = runState.state.textDeltas?.join('') ?? '';
               await options?.onAbort?.({
                 steps: inputData?.output?.steps ?? [],
+                text: partialText,
               });
 
               safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
@@ -1296,8 +1298,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // The model may not have thrown an AbortError (e.g. it continued streaming despite abort),
           // so this handles the case where processOutputStream completed normally via `break`.
           if (options?.abortSignal?.aborted) {
+            const partialText = runState.state.textDeltas?.join('') ?? '';
             await options?.onAbort?.({
               steps: inputData?.output?.steps ?? [],
+              text: partialText,
             });
 
             safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
