@@ -147,13 +147,13 @@ await run.resume({
 })
 ```
 
-When a [`.foreach()`](/reference/workflows/workflow-methods/foreach) step suspends across multiple iterations, pass `forEachIndex` to resume one iteration at a time. Iterations you don't target remain suspended.
+When a [`.foreach()`](/reference/workflows/workflow-methods/foreach) step suspends across multiple iterations, pass `forEachIndex` (zero-based; `0` targets the first iteration) to resume one iteration at a time. Iterations you don't target remain suspended.
 
 ```typescript
 await run.resume({
   step: 'approve',
   resumeData: { ok: true },
-  forEachIndex: 1,
+  forEachIndex: 1, // resumes the second iteration
 })
 ```
 
