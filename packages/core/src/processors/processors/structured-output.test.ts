@@ -257,10 +257,19 @@ describe('StructuredOutputProcessor', () => {
       });
 
       expect(agent.stream).toHaveBeenCalledWith(
-        [{ role: 'user', content: expect.stringContaining('# Assistant Response') }],
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: 'user',
+            content: expect.arrayContaining([
+              expect.objectContaining({
+                type: 'text',
+                text: expect.stringContaining('Rely on the provided text and conversation history.'),
+              }),
+            ]),
+          }),
+        ]),
         expect.objectContaining({
           model: mockModel,
-          instructions: expect.any(String),
           requestContext,
           maxSteps: 1,
           toolChoice: 'none',
@@ -335,10 +344,19 @@ describe('StructuredOutputProcessor', () => {
       });
 
       expect(agent.stream).toHaveBeenCalledWith(
-        [{ role: 'user', content: expect.stringContaining('# Assistant Response') }],
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: 'user',
+            content: expect.arrayContaining([
+              expect.objectContaining({
+                type: 'text',
+                text: expect.stringContaining('Rely on the provided text and conversation history.'),
+              }),
+            ]),
+          }),
+        ]),
         expect.objectContaining({
           model: mockModel,
-          instructions: expect.any(String),
           requestContext,
           maxSteps: 1,
           toolChoice: 'none',
@@ -353,7 +371,7 @@ describe('StructuredOutputProcessor', () => {
         }),
       );
       expect(agent.stream).not.toHaveBeenCalledWith(
-        expect.any(String),
+        expect.any(Array),
         expect.objectContaining({
           memory: expect.objectContaining({
             resource: expect.anything(),
@@ -421,10 +439,19 @@ describe('StructuredOutputProcessor', () => {
       });
 
       expect(agent.stream).toHaveBeenCalledWith(
-        [{ role: 'user', content: expect.stringContaining('# Assistant Response') }],
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: 'user',
+            content: expect.arrayContaining([
+              expect.objectContaining({
+                type: 'text',
+                text: expect.stringContaining('Rely on the provided text and conversation history.'),
+              }),
+            ]),
+          }),
+        ]),
         expect.objectContaining({
           model: mockModel,
-          instructions: expect.any(String),
           maxSteps: 1,
           toolChoice: 'none',
           structuredOutput: {
@@ -533,14 +560,25 @@ describe('StructuredOutputProcessor', () => {
         [
           unsavedInputMessage,
           unsavedResponseMessage,
-          { role: 'user', content: expect.stringContaining('# Assistant Response') },
+          {
+            role: 'user',
+            content: [
+              expect.objectContaining({
+                type: 'text',
+                text: expect.stringContaining('Rely on the provided text and conversation history.'),
+              }),
+            ],
+          },
         ],
         expect.objectContaining({
           model: mockModel,
-          instructions: expect.any(String),
           requestContext,
           maxSteps: 1,
           toolChoice: 'none',
+          structuredOutput: {
+            schema: testSchema,
+            jsonPromptInjection: undefined,
+          },
           memory: {
             thread: 'thread-123',
             resource: 'resource-456',

@@ -1,6 +1,6 @@
 import type { TransformStreamDefaultController } from 'node:stream/web';
 import { Agent } from '../../agent';
-import type { MessageInput } from '../../agent/message-list';
+import type { MessageInput, MessageListInput } from '../../agent/message-list';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { ProviderOptions } from '../../llm/model/provider-options';
@@ -131,8 +131,8 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     if (this.isStructuringAgentStreamStarted) return;
     this.isStructuringAgentStreamStarted = true;
     try {
-      const structuringPrompt = this.buildStructuringPrompt(streamParts);
-      const prompt = `Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n${structuringPrompt}`;
+      const structuringPrompt = this.useAgent ? '' : this.buildStructuringPrompt(streamParts);
+      const prompt = `Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details. Rely on the provided text and conversation history.\n\n${structuringPrompt}`;
 
       const structuringAgentStream = await this.getStructuringStream(
         prompt,
@@ -222,15 +222,19 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     // use that agent with a model override and read-only memory.
     // This gives the structuring model full conversation context.
     if (this.useAgent && this.agent && threadId) {
-      const messages: MessageInput[] = [
+      const promptMessage: MessageInput = {
+        role: 'user',
+        content: [{ type: 'text', text: prompt }],
+      };
+
+      const messages: MessageListInput = [
         ...(messageList?.get?.input?.db() || []),
         ...(messageList?.get?.response?.db() || []),
-        { role: 'user', content: prompt },
+        promptMessage,
       ];
 
       return this.agent.stream(messages, {
         model: this.structuringModel,
-        instructions: this.structuringInstructions,
         requestContext,
         maxSteps: 1,
         toolChoice: 'none',
