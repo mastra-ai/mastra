@@ -5,7 +5,6 @@ import { AgentHeader } from './agent-header';
 import { AgentPageTabs } from '@/domains/agents/components/agent-page-tabs';
 import type { AgentPageTab } from '@/domains/agents/components/agent-page-tabs';
 import { AgentTopBarControls } from '@/domains/agents/components/agent-top-bar-controls';
-import { AgentInfoPanelProvider, useAgentInfoPanel } from '@/domains/agents/context/agent-info-panel-context';
 import { PlaygroundModelProvider } from '@/domains/agents/context/playground-model-context';
 import { ReviewQueueProvider } from '@/domains/agents/context/review-queue-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
@@ -15,12 +14,11 @@ import { GenerationProvider } from '@/domains/datasets/context/generation-contex
 import { cleanProviderId } from '@/domains/llm/utils';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 
-function AgentLayoutInner({ children }: { children: React.ReactNode }) {
+export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const { agentId } = useParams();
   const location = useLocation();
   const { isCmsAvailable } = useIsCmsAvailable();
   const { hasObservability } = useHasObservability();
-  const { showAgentInfo, toggleAgentInfo } = useAgentInfoPanel();
 
   const isExperimentalFeatures = coreFeatures.has('datasets');
   const showPlayground = isCmsAvailable && isExperimentalFeatures;
@@ -46,37 +44,28 @@ function AgentLayoutInner({ children }: { children: React.ReactNode }) {
     (activeTab === 'versions' || activeTab === 'evaluate' || activeTab === 'review') &&
     (showPlayground || showObservability);
 
-  const content = (
-    <MainContentLayout className="grid-rows-[auto_auto_1fr]">
-      <AgentHeader agentId={agentId!} />
-      <AgentPageTabs
-        agentId={agentId!}
-        activeTab={activeTab}
-        showPlayground={showPlayground}
-        showObservability={showObservability}
-        showAgentInfo={showAgentInfo}
-        onToggleAgentInfo={toggleAgentInfo}
-        rightSlot={showTopBarControls ? <AgentTopBarControls requestContextSchema={requestContextSchema} /> : undefined}
-      />
-      {children}
-    </MainContentLayout>
-  );
-
   return (
     <SchemaRequestContextProvider>
       <PlaygroundModelProvider defaultProvider={defaultProvider} defaultModel={defaultModel}>
         <GenerationProvider>
-          <ReviewQueueProvider>{content}</ReviewQueueProvider>
+          <ReviewQueueProvider>
+            <MainContentLayout className="grid-rows-[auto_1fr]">
+              <AgentHeader agentId={agentId!}>
+                <AgentPageTabs
+                  agentId={agentId!}
+                  activeTab={activeTab}
+                  showPlayground={showPlayground}
+                  showObservability={showObservability}
+                  rightSlot={
+                    showTopBarControls ? <AgentTopBarControls requestContextSchema={requestContextSchema} /> : undefined
+                  }
+                />
+              </AgentHeader>
+              {children}
+            </MainContentLayout>
+          </ReviewQueueProvider>
         </GenerationProvider>
       </PlaygroundModelProvider>
     </SchemaRequestContextProvider>
-  );
-}
-
-export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
-  return (
-    <AgentInfoPanelProvider>
-      <AgentLayoutInner>{children}</AgentLayoutInner>
-    </AgentInfoPanelProvider>
   );
 };

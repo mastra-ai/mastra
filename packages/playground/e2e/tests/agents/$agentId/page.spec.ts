@@ -10,10 +10,6 @@ test('overall layout information', async ({ page }) => {
 
   // Header
   await expect(page).toHaveTitle(/Mastra Studio/);
-  await expect(page.locator('text=Agents documentation')).toHaveAttribute(
-    'href',
-    'https://mastra.ai/en/docs/agents/overview',
-  );
   const breadcrumb = page.locator('header>nav');
   expect(breadcrumb).toMatchAriaSnapshot();
 
@@ -33,6 +29,21 @@ test('overall layout information', async ({ page }) => {
 
   // Model settings now live on a composer popover trigger, not a sidebar tab
   await expect(page.getByRole('button', { name: 'Model settings' })).toBeVisible();
+});
+
+test('closing the agent information panel hides its content and re-expands via the chevron', async ({ page }) => {
+  await page.goto('/agents/weather-agent/chat/1234');
+
+  const agentHeading = page.locator('h2:has-text("Weather Agent")');
+  await expect(agentHeading).toBeVisible();
+
+  // Close via the in-card button (the right-side panel).
+  await page.getByRole('button', { name: 'Close panel' }).last().click();
+  await expect(agentHeading).not.toBeVisible();
+
+  // Expand again via the chevron IconButton shown when collapsed.
+  await page.getByRole('button', { name: 'Expand' }).last().click();
+  await expect(agentHeading).toBeVisible();
 });
 
 test.describe('agent panels', () => {

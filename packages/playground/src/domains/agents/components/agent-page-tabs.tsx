@@ -1,5 +1,5 @@
-import { Txt, Icon, Tooltip, TooltipContent, TooltipTrigger, cn, IconButton } from '@mastra/playground-ui';
-import { ExternalLink, EyeIcon, FlaskConical, MessageSquare, ClipboardCheck, GitBranch, PanelRight, PanelRightClose } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger, buttonVariants, cn } from '@mastra/playground-ui';
+import { ExternalLink, EyeIcon, FlaskConical, MessageSquare, ClipboardCheck, GitBranch } from 'lucide-react';
 
 import { useLinkComponent } from '@/lib/framework';
 
@@ -12,8 +12,6 @@ interface AgentPageTabsProps {
   showObservability?: boolean;
   reviewBadge?: number;
   rightSlot?: React.ReactNode;
-  showAgentInfo?: boolean;
-  onToggleAgentInfo?: () => void;
 }
 
 function DocsLink({ href, children }: { href: string; children: React.ReactNode }) {
@@ -30,15 +28,7 @@ function DocsLink({ href, children }: { href: string; children: React.ReactNode 
   );
 }
 
-function TabLink({
-  href,
-  active,
-  icon,
-  label,
-  badge,
-  disabled,
-  disabledReason,
-}: {
+interface TabLinkProps {
   href: string;
   active: boolean;
   icon: React.ReactNode;
@@ -46,18 +36,30 @@ function TabLink({
   badge?: number;
   disabled?: boolean;
   disabledReason?: React.ReactNode;
-}) {
-  const { navigate } = useLinkComponent();
+}
+
+function TabLink({ href, active, icon, label, badge, disabled, disabledReason }: TabLinkProps) {
+  const { Link } = useLinkComponent();
+  const tabClasses = buttonVariants({ variant: active ? 'default' : 'ghost', size: 'default' });
+
+  const content = (
+    <>
+      {icon}
+      {label}
+      {badge !== undefined && badge > 0 && (
+        <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent1 px-1 text-ui-xs font-medium text-white">
+          {badge}
+        </span>
+      )}
+    </>
+  );
 
   if (disabled) {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg text-neutral2 cursor-not-allowed opacity-50">
-            <Icon size="sm">{icon}</Icon>
-            <Txt variant="ui-sm" className="text-inherit">
-              {label}
-            </Txt>
+          <span className={cn(tabClasses, 'cursor-not-allowed opacity-50')} aria-disabled>
+            {content}
           </span>
         </TooltipTrigger>
         {disabledReason && <TooltipContent side="bottom">{disabledReason}</TooltipContent>}
@@ -66,26 +68,9 @@ function TabLink({
   }
 
   return (
-    <button
-      type="button"
-      onClick={() => navigate(href)}
-      className={cn(
-        'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors',
-        active
-          ? 'bg-surface4 text-neutral5'
-          : 'bg-transparent text-neutral3 hover:bg-surface3 hover:text-neutral5',
-      )}
-    >
-      <Icon size="sm">{icon}</Icon>
-      <Txt variant="ui-sm" className="text-inherit">
-        {label}
-      </Txt>
-      {badge !== undefined && badge > 0 && (
-        <span className="ml-1 bg-accent1 text-white text-xs font-medium rounded-full px-1.5 py-0 min-w-[18px] text-center leading-[18px]">
-          {badge}
-        </span>
-      )}
-    </button>
+    <Link to={href} className={tabClasses}>
+      {content}
+    </Link>
   );
 }
 
@@ -96,8 +81,6 @@ export function AgentPageTabs({
   showObservability = false,
   reviewBadge,
   rightSlot,
-  showAgentInfo,
-  onToggleAgentInfo,
 }: AgentPageTabsProps) {
   const playgroundDisabledReason = !showPlayground ? (
     <p>
@@ -113,7 +96,7 @@ export function AgentPageTabs({
   ) : undefined;
 
   return (
-    <div className="flex items-center gap-1 px-4 py-2">
+    <div className="flex w-full items-center gap-1">
       <TabLink
         href={`/agents/${agentId}/chat/new`}
         active={activeTab === 'chat'}
@@ -153,19 +136,7 @@ export function AgentPageTabs({
         disabled={!showObservability}
         disabledReason={observabilityDisabledReason}
       />
-      <div className="ml-auto flex items-center gap-2">
-        {rightSlot}
-        {onToggleAgentInfo && (
-          <IconButton
-            tooltip={showAgentInfo ? 'Hide agent info' : 'Show agent info'}
-            onClick={onToggleAgentInfo}
-            variant="ghost"
-            size="sm"
-          >
-            {showAgentInfo ? <PanelRightClose /> : <PanelRight />}
-          </IconButton>
-        )}
-      </div>
+      {rightSlot && <div className="ml-auto flex items-center gap-2">{rightSlot}</div>}
     </div>
   );
 }

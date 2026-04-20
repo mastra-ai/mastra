@@ -1,10 +1,26 @@
-import { ArrowLeft, ArrowRight } from 'lucide-react';
-import { useState } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import type { PanelProps } from 'react-resizable-panels';
 import { Panel, usePanelRef } from 'react-resizable-panels';
-import { Button } from '@/ds/components/Button/Button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { IconButton } from '@/ds/components/IconButton/IconButton';
 import { Icon } from '@/ds/icons';
+
+interface CollapsiblePanelContextValue {
+  collapsed: boolean;
+  collapse: () => void;
+  expand: () => void;
+  toggle: () => void;
+}
+
+const CollapsiblePanelContext = createContext<CollapsiblePanelContextValue | null>(null);
+
+export const useCollapsiblePanel = () => {
+  const ctx = useContext(CollapsiblePanelContext);
+  if (!ctx) {
+    throw new Error('useCollapsiblePanel must be used inside a <CollapsiblePanel>.');
+  }
+  return ctx;
+};
 
 export interface CollapsiblePanelProps extends PanelProps {
   direction: 'left' | 'right';
@@ -14,10 +30,24 @@ export const CollapsiblePanel = ({ collapsedSize, children, direction, ...props 
   const [collapsed, setCollapsed] = useState(false);
   const panelRef = usePanelRef();
 
-  const expand = () => {
+  const expand = useCallback(() => {
+    panelRef.current?.expand();
+  }, [panelRef]);
+
+  const collapse = useCallback(() => {
+    panelRef.current?.collapse();
+  }, [panelRef]);
+
+  const toggle = useCallback(() => {
     if (!panelRef.current) return;
-    panelRef.current.expand();
-  };
+    if (collapsed) panelRef.current.expand();
+    else panelRef.current.collapse();
+  }, [collapsed, panelRef]);
+
+  const ctx = useMemo<CollapsiblePanelContextValue>(
+    () => ({ collapsed, collapse, expand, toggle }),
+    [collapsed, collapse, expand, toggle],
+  );
 
   return (
     <Panel
@@ -25,31 +55,27 @@ export const CollapsiblePanel = ({ collapsedSize, children, direction, ...props 
       collapsedSize={collapsedSize}
       {...props}
       onResize={size => {
-        if (!collapsedSize) return;
         if (typeof collapsedSize !== 'number') return;
-
-        if (size.inPixels <= collapsedSize) {
-          setCollapsed(true);
-        } else if (collapsed) {
-          setCollapsed(false);
-        }
+        if (size.inPixels <= collapsedSize) setCollapsed(true);
+        else if (collapsed) setCollapsed(false);
       }}
     >
-      {collapsed ? (
-        <Tooltip>
-          <div className="flex items-center justify-center h-full">
-            <TooltipTrigger asChild>
-              <Button onClick={expand} className="h-48! border-none">
-                <Icon>{direction === 'left' ? <ArrowRight /> : <ArrowLeft />}</Icon>
-              </Button>
-            </TooltipTrigger>
-          </div>
-
-          <TooltipContent>Expand</TooltipContent>
-        </Tooltip>
-      ) : (
-        children
-      )}
+      <CollapsiblePanelContext.Provider value={ctx}>
+        {collapsed ? <CollapsedPanelHandle direction={direction} onExpand={expand} /> : children}
+      </CollapsiblePanelContext.Provider>
     </Panel>
   );
 };
+
+interface CollapsedPanelHandleProps {
+  direction: 'left' | 'right';
+  onExpand: () => void;
+}
+
+const CollapsedPanelHandle = ({ direction, onExpand }: CollapsedPanelHandleProps) => (
+  <div className="flex h-full items-start justify-center pt-3">
+    <IconButton variant="default" size="sm" tooltip="Expand" onClick={onExpand}>
+      <Icon>{direction === 'left' ? <ChevronRight /> : <ChevronLeft />}</Icon>
+    </IconButton>
+  </div>
+);

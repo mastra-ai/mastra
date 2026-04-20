@@ -1,4 +1,5 @@
-import { Card, Tabs, Tab, TabContent, TabList } from '@mastra/playground-ui';
+import { Card, IconButton, Icon, Tabs, Tab, TabContent, TabList, useCollapsiblePanel } from '@mastra/playground-ui';
+import { X } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { useBrowserSession } from '../../context/browser-session-context';
 import { useAgent } from '../../hooks/use-agent';
@@ -109,10 +110,22 @@ export interface AgentInformationLayoutProps {
 }
 
 export const AgentInformationLayout = ({ children }: AgentInformationLayoutProps) => {
+  const { collapse } = useCollapsiblePanel();
   return (
     <div className="h-full p-4">
-      <Card elevation="flat" as="aside" className="h-full w-full grid grid-rows-[1fr] items-start overflow-y-auto overflow-x-hidden min-w-0">
-        {children}
+      <Card
+        elevation="flat"
+        as="aside"
+        className="grid h-full w-full grid-rows-[auto_1fr] overflow-hidden min-w-0"
+      >
+        <div className="flex items-center justify-end border-b border-border1 px-2 py-1.5">
+          <IconButton variant="ghost" size="sm" tooltip="Close panel" onClick={collapse}>
+            <Icon>
+              <X />
+            </Icon>
+          </IconButton>
+        </div>
+        <div className="min-h-0 overflow-y-auto overflow-x-hidden">{children}</div>
       </Card>
     </div>
   );
