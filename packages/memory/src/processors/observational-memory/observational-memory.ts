@@ -130,7 +130,7 @@ export function getLastModelFromMessages(messages?: MastraDBMessage[]): string |
 
     for (let j = message.content.parts.length - 1; j >= 0; j--) {
       const part = message.content.parts[j];
-      if (part?.type === 'step-start' && typeof part.model === 'string' && part.model.length > 0) {
+      if (part?.type === 'step-start' && 'model' in part && typeof part.model === 'string' && part.model.length > 0) {
         return part.model;
       }
     }
@@ -3289,7 +3289,9 @@ ${formattedMessages}
 
       // Get hints from the most recent activated chunk
       const activatedChunks = freshChunks.filter(c => activationResult.activatedCycleIds.includes(c.cycleId));
-      const lastActivated = activatedChunks[activatedChunks.length - 1] as BufferedObservationChunkWithThreadTitle | undefined;
+      const lastActivated = activatedChunks[activatedChunks.length - 1] as
+        | BufferedObservationChunkWithThreadTitle
+        | undefined;
       if (lastActivated) {
         const chunkThreadTitle = lastActivated.threadTitle;
         const newMetadata = setThreadOMMetadata(thread.metadata, {

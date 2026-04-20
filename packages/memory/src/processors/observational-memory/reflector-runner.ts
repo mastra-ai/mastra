@@ -65,7 +65,7 @@ function getLastModelFromMessageList(messageList?: MessageList): string | undefi
 
     for (let j = message.content.parts.length - 1; j >= 0; j--) {
       const part = message.content.parts[j];
-      if (part?.type === 'step-start' && typeof part.model === 'string' && part.model.length > 0) {
+      if (part?.type === 'step-start' && 'model' in part && typeof part.model === 'string' && part.model.length > 0) {
         return part.model;
       }
     }
