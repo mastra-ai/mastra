@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.26.0-alpha.9
+
+### Patch Changes
+
+- Fixed resume errors for suspended agent runs: `resumeStream()` and `resumeGenerate()` now return a clear message when storage is missing or the `runId` is invalid. ([#15514](https://github.com/mastra-ai/mastra/pull/15514))
+
 ## 1.26.0-alpha.8
 
 ### Patch Changes
