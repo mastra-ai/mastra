@@ -8069,6 +8069,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           [
             {
               "steps": [],
+              "text": "Hello",
             },
           ]
         `);
