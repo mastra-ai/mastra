@@ -5,6 +5,7 @@ import { AgentHeader } from './agent-header';
 import { AgentPageTabs } from '@/domains/agents/components/agent-page-tabs';
 import type { AgentPageTab } from '@/domains/agents/components/agent-page-tabs';
 import { AgentTopBarControls } from '@/domains/agents/components/agent-top-bar-controls';
+import { PanelSizingProvider } from '@/domains/agents/context/panel-sizing-context';
 import { PanelVisibilityProvider } from '@/domains/agents/context/panel-visibility-context';
 import { PlaygroundModelProvider } from '@/domains/agents/context/playground-model-context';
 import { ReviewQueueProvider } from '@/domains/agents/context/review-queue-context';
@@ -50,31 +51,33 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <PanelVisibilityProvider>
-      <SchemaRequestContextProvider>
-        <PlaygroundModelProvider defaultProvider={defaultProvider} defaultModel={defaultModel}>
-          <GenerationProvider>
-            <ReviewQueueProvider>
-              <MainContentLayout className="grid-rows-[auto_1fr]">
-                <AgentHeader agentId={agentId!}>
-                  <AgentPageTabs
-                    agentId={agentId!}
-                    activeTab={activeTab}
-                    hasMemory={hasMemory}
-                    showPlayground={showPlayground}
-                    showObservability={showObservability}
-                    rightSlot={
-                      showTopBarControls ? (
-                        <AgentTopBarControls requestContextSchema={requestContextSchema} />
-                      ) : undefined
-                    }
-                  />
-                </AgentHeader>
-                {children}
-              </MainContentLayout>
-            </ReviewQueueProvider>
-          </GenerationProvider>
-        </PlaygroundModelProvider>
-      </SchemaRequestContextProvider>
+      <PanelSizingProvider>
+        <SchemaRequestContextProvider>
+          <PlaygroundModelProvider defaultProvider={defaultProvider} defaultModel={defaultModel}>
+            <GenerationProvider>
+              <ReviewQueueProvider>
+                <MainContentLayout className="grid-rows-[auto_1fr]">
+                  <AgentHeader agentId={agentId!}>
+                    <AgentPageTabs
+                      agentId={agentId!}
+                      activeTab={activeTab}
+                      hasMemory={hasMemory}
+                      showPlayground={showPlayground}
+                      showObservability={showObservability}
+                      rightSlot={
+                        showTopBarControls ? (
+                          <AgentTopBarControls requestContextSchema={requestContextSchema} />
+                        ) : undefined
+                      }
+                    />
+                  </AgentHeader>
+                  {children}
+                </MainContentLayout>
+              </ReviewQueueProvider>
+            </GenerationProvider>
+          </PlaygroundModelProvider>
+        </SchemaRequestContextProvider>
+      </PanelSizingProvider>
     </PanelVisibilityProvider>
   );
 };

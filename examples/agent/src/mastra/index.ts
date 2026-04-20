@@ -119,6 +119,13 @@ const config = {
   server: {
     auth: mastraAuth,
     rbac: rbacProvider,
+    cors: {
+      origin: ['http://localhost:5173', 'http://localhost:4111'],
+      credentials: true,
+      allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type'],
+      exposeHeaders: ['Content-Length', 'X-Requested-With'],
+    },
   },
 };
 

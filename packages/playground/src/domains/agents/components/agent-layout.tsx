@@ -1,7 +1,10 @@
 import { cn, getMainContentContentClassName, Icon, IconButton, PanelSeparator } from '@mastra/playground-ui';
 import { ChevronRight } from 'lucide-react';
+
 import { Panel, useDefaultLayout, Group } from 'react-resizable-panels';
+import { RIGHT_PANEL_MAX_PERCENT } from '../context/panel-sizing-context';
 import { SidebarCollapseProvider } from '../context/sidebar-collapse-context';
+import { usePanelSizing } from '../context/use-panel-sizing';
 import { useSidebarCollapse } from '../context/use-sidebar-collapse';
 
 export interface AgentLayoutProps {
@@ -24,12 +27,13 @@ export const AgentLayout = ({ agentId, children, leftSlot, rightSlot, browserOve
 
 function AgentLayoutInner({ agentId, children, leftSlot, rightSlot, browserOverlay }: AgentLayoutProps) {
   const panelIds = ['main-slot', ...(rightSlot ? ['right-slot'] : [])];
-  const { defaultLayout, onLayoutChange } = useDefaultLayout({
+  const { defaultLayout, onLayoutChanged } = useDefaultLayout({
     id: `agent-layout-v2-${agentId}`,
     panelIds,
     storage: localStorage,
   });
   const { collapsed, expand } = useSidebarCollapse();
+  const { rightPanelRef } = usePanelSizing();
 
   const computedClassName = getMainContentContentClassName({
     isCentered: false,
@@ -40,14 +44,9 @@ function AgentLayoutInner({ agentId, children, leftSlot, rightSlot, browserOverl
   const separatorClassName = 'bg-transparent! group-hover/agent-layout:bg-surface3! transition-colors duration-normal';
 
   return (
-    <div className="group/agent-layout relative h-full w-full overflow-hidden flex">
+    <div className="group/agent-layout relative h-full w-full overflow-hidden flex pt-1">
       {leftSlot && (
-        <aside
-          className={cn(
-            'shrink-0 h-full overflow-hidden transition-all duration-normal',
-            collapsed ? 'w-[48px]' : 'w-[260px]',
-          )}
-        >
+        <aside className={cn('shrink-0 h-full overflow-hidden pb-4', collapsed ? 'w-[48px]' : 'w-[260px]')}>
           {collapsed ? (
             <div className="flex h-full items-start justify-center pt-3">
               <IconButton variant="default" size="sm" tooltip="Expand thread list" onClick={expand}>
@@ -61,15 +60,21 @@ function AgentLayoutInner({ agentId, children, leftSlot, rightSlot, browserOverl
           )}
         </aside>
       )}
-      <div className="flex-1 min-w-0 h-full">
-        <Group className={computedClassName} defaultLayout={defaultLayout} onLayoutChange={onLayoutChange}>
+      <div className={cn('flex-1 min-w-0 h-full')}>
+        <Group className={computedClassName} defaultLayout={defaultLayout} onLayoutChange={onLayoutChanged}>
           <Panel id="main-slot" className="grid overflow-y-auto relative pb-4">
             {children}
           </Panel>
           {rightSlot && (
             <>
               <PanelSeparator className={separatorClassName} />
-              <Panel id="right-slot" minSize={300} maxSize={'50%'} defaultSize="30%">
+              <Panel
+                id="right-slot"
+                panelRef={rightPanelRef}
+                minSize="30%"
+                maxSize={`${RIGHT_PANEL_MAX_PERCENT}%`}
+                defaultSize="30%"
+              >
                 {rightSlot}
               </Panel>
             </>

@@ -56,7 +56,7 @@ export const ThreadItem = ({ children, isActive, className }: ThreadItemProps) =
   return (
     <li
       className={cn(
-        'group/thread-item flex items-center justify-between gap-2 mx-2 px-1 py-0.5 rounded-lg',
+        'group/thread-item flex items-center justify-between gap-2 mx-2 pl-2 pr-0.5 py-0.5 rounded-lg',
         transitions.colors,
         'hover:bg-surface3',
         isActive && 'bg-surface4',
@@ -88,13 +88,7 @@ export const ThreadDeleteButton = ({ onClick }: ThreadDeleteButtonProps) => {
         'group-hover/thread-item:opacity-100 group-hover/thread-item:pointer-events-auto',
       )}
     >
-      <IconButton
-        tooltip="Delete thread"
-        variant="ghost"
-        size="sm"
-        className="hover:text-accent2"
-        onClick={handleClick}
-      >
+      <IconButton tooltip="Delete thread" variant="ghost" size="sm" onClick={handleClick}>
         <X aria-label="delete thread" />
       </IconButton>
     </span>

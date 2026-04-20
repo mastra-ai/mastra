@@ -10,6 +10,7 @@ import { AssistantMessage } from './messages/assistant-message';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { UserMessage } from './messages/user-messages';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
+import { AgentRequestContextDialog } from '@/domains/agents/components/agent-request-context-dialog';
 import { AgentSettingsDialog } from '@/domains/agents/components/agent-settings-dialog';
 import { AgentTracingDialog } from '@/domains/agents/components/agent-tracing-dialog';
 import { ComposerModelSwitcher } from '@/domains/agents/components/composer-model-switcher';
@@ -158,23 +159,27 @@ const Composer = ({ threadId, agentId, hasModelList, hideModelSwitcher }: Compos
           <ComposerAttachments />
         </div>
 
-        <div className="bg-surface3 rounded-lg border border-border1 py-4 mt-auto max-w-3xl w-full mx-auto px-4 focus-within:outline-solid focus-within:outline-accent1 -outline-offset-2">
-          <ComposerPrimitive.Input asChild className="w-full">
-            <textarea
-              ref={textareaRef}
-              autoFocus={false}
-              className="text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-hidden resize-none outline-hidden disabled:cursor-not-allowed disabled:opacity-50"
-              placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
-              name=""
-              id=""
-              onChange={e => setThreadInput?.(e.target.value)}
-              disabled={!canExecuteAgent}
-            />
-          </ComposerPrimitive.Input>
-          <div className="flex items-center justify-between gap-2">
+        <div className="mt-auto max-w-3xl w-full mx-auto">
+          <div className="bg-surface3 rounded-lg border border-border1 py-4 px-4 focus-within:outline-solid focus-within:outline-accent1 -outline-offset-2">
+            <ComposerPrimitive.Input asChild className="w-full">
+              <textarea
+                ref={textareaRef}
+                rows={1}
+                autoFocus={false}
+                className="text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-hidden resize-none outline-hidden disabled:cursor-not-allowed disabled:opacity-50 block w-full field-sizing-content max-h-[200px] overflow-y-auto"
+                placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
+                name=""
+                id=""
+                onChange={e => setThreadInput?.(e.target.value)}
+                disabled={!canExecuteAgent}
+              />
+            </ComposerPrimitive.Input>
+          </div>
+          <div className="flex items-center justify-between gap-2 pt-2">
             <div className="flex items-center gap-1.5">
               {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelSwitcher agentId={agentId} />}
               {agentId && <AgentSettingsDialog agentId={agentId} />}
+              {agentId && <AgentRequestContextDialog agentId={agentId} />}
               {agentId && <AgentTracingDialog />}
             </div>
             <div className="flex items-center gap-2 ml-auto">

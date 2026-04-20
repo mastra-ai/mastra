@@ -23,14 +23,14 @@ function getInitialState(): PanelVisibilityState {
     if (stored) {
       const parsed = JSON.parse(stored);
       return {
-        overview: typeof parsed.overview === 'boolean' ? parsed.overview : true,
-        memory: typeof parsed.memory === 'boolean' ? parsed.memory : true,
+        overview: typeof parsed.overview === 'boolean' ? parsed.overview : false,
+        memory: typeof parsed.memory === 'boolean' ? parsed.memory : false,
       };
     }
   } catch {
     // Ignore parsing errors
   }
-  return { overview: true, memory: true };
+  return { overview: false, memory: false };
 }
 
 export function PanelVisibilityProvider({ children }: { children: ReactNode }) {

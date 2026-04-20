@@ -4,6 +4,7 @@ import { lessComplexWorkflow, myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
 import { ModerationProcessor } from '@mastra/core/processors';
 import { cookingTool } from '../tools';
+import { z } from 'zod';
 import {
   advancedModerationWorkflow,
   branchingModerationWorkflow,
@@ -101,6 +102,17 @@ export const chefModelV2Agent = new Agent({
   defaultOptions: {
     autoResumeSuspendedTools: true,
   },
+  requestContextSchema: z.object({
+    userId: z.string().describe('The ID of the current user'),
+    apiKey: z.string().describe('API key for external service access'),
+    featureFlags: z
+      .object({
+        enableSearch: z.boolean().default(false).describe('Enable web search capabilities'),
+        debugMode: z.boolean().default(false).describe('Enable debug logging'),
+      })
+      .optional()
+      .describe('Optional feature flags'),
+  }),
 });
 
 const weatherAgent = new Agent({

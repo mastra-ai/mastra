@@ -36,9 +36,8 @@ function Agent() {
   const newThreadId = useMemo(() => uuid(), [threadId]);
 
   const hasMemory = Boolean(memory?.result);
-  const hasRequestContext = Boolean(agent?.requestContextSchema);
   const { visibility } = usePanelVisibility();
-  const hasRightPanelContent = visibility.overview || (visibility.memory && hasMemory) || hasRequestContext;
+  const hasRightPanelContent = visibility.overview || (visibility.memory && hasMemory);
 
   const {
     data: threads,

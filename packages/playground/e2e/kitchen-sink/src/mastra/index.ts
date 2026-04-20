@@ -3,7 +3,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import { MastraEditor } from '@mastra/editor';
 import { PinoLogger } from '@mastra/loggers';
 
-import { weatherAgent, omAgent, omAdaptiveAgent } from './agents';
+import { weatherAgent, omAgent, omAdaptiveAgent, contextSchemaAgent } from './agents';
 import { simpleMcpServer } from './mcps';
 import { loggingProcessor, contentFilterProcessor } from './processors';
 import { responseQualityScorer, responseTimeScorer } from './scorers';
@@ -12,7 +12,7 @@ import { complexWorkflow, lessComplexWorkflow } from './workflows/complex-workfl
 
 export const mastra = new Mastra({
   workflows: { complexWorkflow, lessComplexWorkflow },
-  agents: { weatherAgent, omAgent, omAdaptiveAgent },
+  agents: { weatherAgent, omAgent, omAdaptiveAgent, contextSchemaAgent },
   logger: new PinoLogger({
     name: 'Mastra',
     level: 'error',

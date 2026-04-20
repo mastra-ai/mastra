@@ -44,7 +44,7 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
     resourceType === 'agent' ? paths.agentNewThreadLink(resourceId) : paths.networkNewThreadLink(resourceId);
 
   return (
-    <div className="h-full p-4">
+    <>
       <Card elevation="flat" as="aside" className="h-full w-full flex flex-col py-2">
         <div className="flex items-center justify-between px-2 pb-1">
           <IconButton variant="ghost" size="sm" tooltip="Collapse thread list" onClick={collapse}>
@@ -100,7 +100,7 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
           }
         }}
       />
-    </div>
+    </>
   );
 };
 

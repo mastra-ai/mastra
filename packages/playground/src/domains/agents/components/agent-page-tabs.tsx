@@ -98,47 +98,60 @@ export function AgentPageTabs({
     </p>
   ) : undefined;
 
+  const tabs: Array<TabLinkProps & { id: AgentPageTab }> = [
+    {
+      id: 'chat',
+      href: `/agents/${agentId}/chat/new`,
+      active: activeTab === 'chat',
+      icon: <MessageSquare />,
+      label: 'Chat',
+    },
+    {
+      id: 'versions',
+      href: `/agents/${agentId}/editor`,
+      active: activeTab === 'versions',
+      icon: <GitBranch />,
+      label: 'Editor',
+      disabled: !showPlayground,
+      disabledReason: playgroundDisabledReason,
+    },
+    {
+      id: 'evaluate',
+      href: `/agents/${agentId}/evaluate`,
+      active: activeTab === 'evaluate',
+      icon: <FlaskConical />,
+      label: 'Evaluate',
+      disabled: !showObservability,
+      disabledReason: observabilityDisabledReason,
+    },
+    {
+      id: 'review',
+      href: `/agents/${agentId}/review`,
+      active: activeTab === 'review',
+      icon: <ClipboardCheck />,
+      label: 'Review',
+      badge: reviewBadge,
+      disabled: !showObservability,
+      disabledReason: observabilityDisabledReason,
+    },
+    {
+      id: 'traces',
+      href: `/agents/${agentId}/traces`,
+      active: activeTab === 'traces',
+      icon: <EyeIcon />,
+      label: 'Traces',
+      disabled: !showObservability,
+      disabledReason: observabilityDisabledReason,
+    },
+  ];
+
   return (
-    <div className="flex w-full items-center gap-1">
-      <TabLink
-        href={`/agents/${agentId}/chat/new`}
-        active={activeTab === 'chat'}
-        icon={<MessageSquare />}
-        label="Chat"
-      />
-      <TabLink
-        href={`/agents/${agentId}/editor`}
-        active={activeTab === 'versions'}
-        icon={<GitBranch />}
-        label="Editor"
-        disabled={!showPlayground}
-        disabledReason={playgroundDisabledReason}
-      />
-      <TabLink
-        href={`/agents/${agentId}/evaluate`}
-        active={activeTab === 'evaluate'}
-        icon={<FlaskConical />}
-        label="Evaluate"
-        disabled={!showObservability}
-        disabledReason={observabilityDisabledReason}
-      />
-      <TabLink
-        href={`/agents/${agentId}/review`}
-        active={activeTab === 'review'}
-        icon={<ClipboardCheck />}
-        label="Review"
-        badge={reviewBadge}
-        disabled={!showObservability}
-        disabledReason={observabilityDisabledReason}
-      />
-      <TabLink
-        href={`/agents/${agentId}/traces`}
-        active={activeTab === 'traces'}
-        icon={<EyeIcon />}
-        label="Traces"
-        disabled={!showObservability}
-        disabledReason={observabilityDisabledReason}
-      />
+    <div className="flex w-full items-center">
+      <nav aria-label="Agent sections" className="flex items-center gap-3">
+        {tabs.map(({ id, ...tab }) => (
+          <TabLink key={id} {...tab} />
+        ))}
+      </nav>
       <div className="ml-auto flex items-center gap-2">
         <PanelToggleButtons hasMemory={hasMemory} />
         {rightSlot}

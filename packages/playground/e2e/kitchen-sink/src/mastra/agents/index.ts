@@ -326,3 +326,34 @@ Always use the test tool first before responding to the user.`,
   tools: { test: omTriggerTool },
   memory: omAdaptiveMemory,
 });
+
+/**
+ * Agent with a requestContextSchema.
+ * Used for testing that the Request Context form renders in the composer
+ * (next to Model settings) rather than in the right-side information panel.
+ */
+export const contextSchemaAgent = new Agent({
+  id: 'context-schema-agent',
+  name: 'Context Schema Agent',
+  instructions: 'You are a helpful agent used for testing request context schemas.',
+  model: new aiTest.MockLanguageModelV2({
+    provider: 'mock',
+    modelId: 'mock-context',
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop' as const,
+      usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+      content: [{ type: 'text' as const, text: 'ok' }],
+      warnings: [],
+    }),
+    doStream: async () => ({
+      stream: createTextStream('ok', 'mock-context'),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    }),
+  }),
+  requestContextSchema: z.object({
+    userId: z.string().describe('The user id'),
+    tier: z.string().describe('Subscription tier'),
+  }),
+});
