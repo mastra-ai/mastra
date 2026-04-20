@@ -7,9 +7,23 @@ describe('inferProviderExecuted', () => {
     expect(inferProviderExecuted(false, { type: 'provider', id: 'openai.web_search' })).toBe(false);
   });
 
-  it('should infer true for provider-defined tools when providerExecuted is undefined', () => {
+  it('should infer true for provider tools without a custom execute', () => {
     expect(inferProviderExecuted(undefined, { type: 'provider', id: 'openai.web_search' })).toBe(true);
     expect(inferProviderExecuted(undefined, { type: 'provider-defined', id: 'openai.web_search' })).toBe(true);
+  });
+
+  it('should infer false for provider tools with a custom execute', () => {
+    const toolWithExecute = { type: 'provider-defined', id: 'openai.apply_patch', execute: async () => ({}) };
+    expect(inferProviderExecuted(undefined, toolWithExecute)).toBe(false);
+
+    const v6ToolWithExecute = { type: 'provider', id: 'openai.apply_patch', execute: async () => ({}) };
+    expect(inferProviderExecuted(undefined, v6ToolWithExecute)).toBe(false);
+  });
+
+  it('should respect explicit providerExecuted even when execute is present', () => {
+    const toolWithExecute = { type: 'provider-defined', id: 'openai.apply_patch', execute: async () => ({}) };
+    expect(inferProviderExecuted(true, toolWithExecute)).toBe(true);
+    expect(inferProviderExecuted(false, toolWithExecute)).toBe(false);
   });
 
   it('should return undefined for regular tools or missing tools when providerExecuted is undefined', () => {

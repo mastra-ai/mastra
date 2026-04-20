@@ -1,4 +1,4 @@
-import { TraceStatus } from '@mastra/core/storage';
+import { TraceStatus } from '@internal-temp/core/index';
 import type { ListTracesResponse, SpanRecord } from '@mastra/core/storage';
 import {
   Button,
@@ -426,7 +426,7 @@ export function AgentTracesPanel({
     refetchInterval: query => (is403ForbiddenError(query.state.error) ? false : 3000),
   });
 
-  const traces: TraceSpan[] = tracesData ?? [];
+  const traces = useMemo<TraceSpan[]>(() => tracesData ?? [], [tracesData]);
 
   // Client-side search filter
   const filteredTraces = useMemo(() => {
@@ -676,7 +676,7 @@ export function AgentTracesPanel({
           setDialogIsOpen(true);
         },
       }),
-    [displayTraces, selectedTraceId],
+    [buildTraceUrl, displayTraces, navigate, selectedTraceId],
   );
 
   const toPreviousTrace = useMemo(
@@ -690,7 +690,7 @@ export function AgentTracesPanel({
           setDialogIsOpen(true);
         },
       }),
-    [displayTraces, selectedTraceId],
+    [buildTraceUrl, displayTraces, navigate, selectedTraceId],
   );
 
   const gridColumns = scorerActive ? GRID_COLUMNS_WITH_SCORE : GRID_COLUMNS;

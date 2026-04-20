@@ -1,5 +1,39 @@
 # @mastra/deployer-netlify
 
+## 1.1.0-alpha.2
+
+### Minor Changes
+
+- Added `target` option to `NetlifyDeployer` for deploying as Netlify Edge Functions. ([#13103](https://github.com/mastra-ai/mastra/pull/13103))
+
+  ```typescript
+  export const mastra = new Mastra({
+    deployer: new NetlifyDeployer({
+      target: 'edge',
+    }),
+  });
+  ```
+
+  Edge functions run on Deno at the network edge, closer to users, with no hard execution timeout (only a CPU time limit). This makes them a better fit for longer-running AI workflows that may exceed the 60s serverless function timeout.
+
+  The default target remains `'serverless'`, so existing usage is unaffected.
+
+## 1.0.28-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`3d83d06`](https://github.com/mastra-ai/mastra/commit/3d83d06f776f00fb5f4163dddd32a030c5c20844), [`7e0e63e`](https://github.com/mastra-ai/mastra/commit/7e0e63e2e485e84442351f4c7a79a424c83539dc), [`9467ea8`](https://github.com/mastra-ai/mastra/commit/9467ea87695749a53dfc041576410ebf9ee7bb67), [`7338d94`](https://github.com/mastra-ai/mastra/commit/7338d949380cf68b095342e8e42610dc51d557c1)]:
+  - @mastra/core@1.26.0-alpha.2
+  - @mastra/deployer@1.26.0-alpha.2
+
+## 1.0.28-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`d63ffdb`](https://github.com/mastra-ai/mastra/commit/d63ffdbb2c11e76fe5ea45faab44bc15460f010c)]:
+  - @mastra/core@1.25.1-alpha.0
+  - @mastra/deployer@1.25.1-alpha.0
+
 ## 1.0.27
 
 ### Patch Changes
