@@ -4,13 +4,13 @@ This document outlines the testing process for browser agents in the Mastra work
 
 ## Agents Under Test
 
-| Agent ID | Type | Provider | Skill/Install Required |
-|----------|------|----------|------------------------|
-| `sdk-stagehand` | SDK | `@mastra/stagehand` | None |
-| `sdk-agent-browser` | SDK | `@mastra/agent-browser` | None |
-| `browser-agent` | CLI | `agent-browser` | `npx skills add vercel-labs/agent-browser --skill agent-browser --yes` |
-| `browser-use-agent` | CLI | `browser-use` | `pip3 install browser-use` + `npx skills add browser-use/browser-use --skill browser-use --yes` |
-| `browse-cli-agent` | CLI | `browse-cli` | `npm install -g @browserbasehq/browse-cli` + `npx skills add browserbase/skills --skill browser --yes` |
+| Agent ID            | Type | Provider                | Skill/Install Required                                                                                 |
+| ------------------- | ---- | ----------------------- | ------------------------------------------------------------------------------------------------------ |
+| `sdk-stagehand`     | SDK  | `@mastra/stagehand`     | None                                                                                                   |
+| `sdk-agent-browser` | SDK  | `@mastra/agent-browser` | None                                                                                                   |
+| `browser-agent`     | CLI  | `agent-browser`         | `npx skills add vercel-labs/agent-browser --skill agent-browser --yes`                                 |
+| `browser-use-agent` | CLI  | `browser-use`           | `pip3 install browser-use` + `npx skills add browser-use/browser-use --skill browser-use --yes`        |
+| `browse-cli-agent`  | CLI  | `browse-cli`            | `npm install -g @browserbasehq/browse-cli` + `npx skills add browserbase/skills --skill browser --yes` |
 
 ## Testing Order
 
@@ -71,22 +71,26 @@ Each test should be run for every agent. Record results in `RESULTS.md`.
 **Applies to:** `browser-agent`, `browser-use-agent`, `browse-cli-agent`
 
 **Prompt:**
+
 ```
 Install your browser skill so you can browse the web. Use the appropriate install command for your CLI tool.
 ```
 
 **Expected:**
+
 - Agent recognizes it needs to install a skill
 - Agent uses `execute_command` to run the install command
 - Installation completes successfully
 - Agent confirms skill is installed
 
 **Install commands by agent:**
+
 - `browser-agent`: `npx skills add vercel-labs/agent-browser --skill agent-browser --yes`
 - `browser-use-agent`: `pip3 install browser-use && npx skills add browser-use/browser-use --skill browser-use --yes`
 - `browse-cli-agent`: `npm install -g @browserbasehq/browse-cli`
 
 **Verify:**
+
 - [ ] Agent attempted installation
 - [ ] Install command executed successfully
 - [ ] No errors in output
@@ -100,16 +104,19 @@ Install your browser skill so you can browse the web. Use the appropriate instal
 **Goal:** Verify the agent can navigate to a URL and the browser opens.
 
 **Prompt:**
+
 ```
 Go to https://www.google.com
 ```
 
 **Expected:**
+
 - Browser window opens (non-headless)
 - Page navigates to Google
 - Agent confirms navigation completed
 
 **Verify:**
+
 - [ ] Browser opened
 - [ ] Correct URL loaded
 - [ ] Agent response acknowledges success
@@ -121,15 +128,18 @@ Go to https://www.google.com
 **Goal:** Verify screencast appears in Studio.
 
 **Prompt:**
+
 ```
 Go to https://news.ycombinator.com
 ```
 
 **Expected:**
+
 - Screencast panel shows live browser view in Studio
 - Screencast updates as page loads
 
 **Verify:**
+
 - [ ] Screencast visible in Studio
 - [ ] Screencast shows correct page content
 - [ ] Screencast updates in real-time
@@ -141,17 +151,20 @@ Go to https://news.ycombinator.com
 **Goal:** Verify the agent can interact with page elements.
 
 **Prompt:**
+
 ```
 Go to https://www.google.com and search for "mastra ai"
 ```
 
 **Expected:**
+
 - Agent navigates to Google
 - Types "mastra ai" in search box
 - Submits search (or clicks search button)
 - Search results page loads
 
 **Verify:**
+
 - [ ] Navigation successful
 - [ ] Text input worked
 - [ ] Search executed
@@ -164,16 +177,19 @@ Go to https://www.google.com and search for "mastra ai"
 **Goal:** Verify the agent can extract information from a page.
 
 **Prompt:**
+
 ```
 Go to https://news.ycombinator.com and tell me the top 3 headlines
 ```
 
 **Expected:**
+
 - Agent navigates to HN
 - Extracts headline text
 - Returns 3 headlines in response
 
 **Verify:**
+
 - [ ] Navigation successful
 - [ ] Headlines extracted correctly
 - [ ] Response contains actual headline text
@@ -187,21 +203,25 @@ Go to https://news.ycombinator.com and tell me the top 3 headlines
 **Setup:** Open two chat threads in Studio for the same agent.
 
 **Thread 1 Prompt:**
+
 ```
 Go to https://www.google.com
 ```
 
 **Thread 2 Prompt:**
+
 ```
 Go to https://github.com
 ```
 
 **Expected:**
+
 - Two separate browser windows open
 - Each shows different URL
 - Actions in one don't affect the other
 
 **Verify:**
+
 - [ ] Two browser windows opened
 - [ ] Thread 1 shows Google
 - [ ] Thread 2 shows GitHub
@@ -214,16 +234,19 @@ Go to https://github.com
 **Goal:** Verify screencast follows active tab when new tabs open.
 
 **Prompt:**
+
 ```
 Go to https://www.google.com, then open a new tab and go to https://github.com
 ```
 
 **Expected:**
+
 - First tab opens Google
 - Second tab opens GitHub
 - Screencast shows the active/focused tab
 
 **Verify:**
+
 - [ ] Both tabs opened
 - [ ] Screencast updated to show new tab
 - [ ] Screencast reflects currently active page
@@ -235,6 +258,7 @@ Go to https://www.google.com, then open a new tab and go to https://github.com
 **Goal:** Verify browser can be closed and reopened cleanly.
 
 **Prompt 1:**
+
 ```
 Go to https://www.google.com
 ```
@@ -242,16 +266,19 @@ Go to https://www.google.com
 **Then close the browser window manually.**
 
 **Prompt 2:**
+
 ```
 Go to https://github.com
 ```
 
 **Expected:**
+
 - First navigation works
 - After manual close, second navigation launches new browser
 - No errors or stale state
 
 **Verify:**
+
 - [ ] First navigation worked
 - [ ] Browser closed cleanly
 - [ ] Second navigation launched new browser
@@ -264,16 +291,19 @@ Go to https://github.com
 **Goal:** Verify the agent can navigate to its own Studio and interact with the UI.
 
 **Prompt:**
+
 ```
 Go to http://localhost:4111, click on any agent in the sidebar, and tell me what agents are available
 ```
 
 **Expected:**
+
 - Agent navigates to Studio
 - Finds and lists available agents from sidebar
 - Can read UI content
 
 **Verify:**
+
 - [ ] Navigated to localhost:4111
 - [ ] Read agent list from sidebar
 - [ ] Response contains agent names
@@ -299,6 +329,7 @@ After running tests, record results in `RESULTS.md` using the template provided 
 ### Debug Logging
 
 Enable debug logs by setting:
+
 ```bash
 DEBUG=mastra:* pnpm dev
 ```
@@ -306,6 +337,7 @@ DEBUG=mastra:* pnpm dev
 ### Check Browser Status
 
 In Studio, the browser context panel should show:
+
 - Current URL
 - Page title
 - Browser running status
