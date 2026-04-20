@@ -1,5 +1,23 @@
 # @mastra/otel-bridge
 
+## 1.0.17-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`8613972`](https://github.com/mastra-ai/mastra/commit/86139723d82536d204f66a79a3a5d30af286a2e7), [`8786a61`](https://github.com/mastra-ai/mastra/commit/8786a61fa54ba265f85eeff9985ca39863d18bb6), [`8fb2405`](https://github.com/mastra-ai/mastra/commit/8fb2405138f2d208b7962ad03f121ca25bcc28c5)]:
+  - @mastra/observability@1.10.0-alpha.2
+  - @mastra/core@1.26.0-alpha.7
+  - @mastra/otel-exporter@1.0.17-alpha.2
+
+## 1.0.17-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`6315317`](https://github.com/mastra-ai/mastra/commit/63153175fe9a7b224e5be7c209bbebc01dd9b0d5), [`9d3b24b`](https://github.com/mastra-ai/mastra/commit/9d3b24b19407ae9c09586cf7766d38dc4dff4a69), [`11d8fb7`](https://github.com/mastra-ai/mastra/commit/11d8fb7056bd56e2e6680109c71c4436e06c0a81)]:
+  - @mastra/core@1.26.0-alpha.6
+  - @mastra/observability@1.9.2-alpha.1
+  - @mastra/otel-exporter@1.0.17-alpha.1
+
 ## 1.0.17-alpha.0
 
 ### Patch Changes

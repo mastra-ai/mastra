@@ -249,9 +249,6 @@
                       "threadId": "test-thread-id",
                       "toolCallId": "call-calc-1",
                       "toolName": "calculator"
-                    },
-                    "output": {
-                      "result": 8
                     }
                   }
                 }
