@@ -62,6 +62,35 @@ It uses background agents for managing memory. When using `observationalMemory: 
 
 :::
 
+## Temporal gap markers
+
+Temporal gap markers insert a short reminder before a new user message when enough time has passed since the previous message in the thread. They help the agent and the UI see that the conversation resumed after a meaningful pause.
+
+Temporal gap markers are off by default. Enable them with `temporalGapMarkers: true` in the `observationalMemory` config:
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
+
+export const agent = new Agent({
+  name: 'my-agent',
+  instructions: 'You are a helpful assistant.',
+  model: 'openai/gpt-5-mini',
+  memory: new Memory({
+    options: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        temporalGapMarkers: true,
+      },
+    },
+  }),
+})
+```
+
+Mastra inserts a temporal gap marker when the gap is at least 15 minutes. The marker is stored in memory and also emitted as a transient reminder event, so clients can render it as a lightweight timeline hint.
+
+See [the API reference](/reference/memory/observational-memory#configuration) for the full configuration shape.
+
 ## Benefits
 
 - **Prompt caching**: OM's context is stable and observations append over time rather than being dynamically retrieved each turn. This keeps the prompt prefix cacheable, which reduces costs.
