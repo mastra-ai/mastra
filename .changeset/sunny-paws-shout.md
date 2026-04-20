@@ -3,4 +3,4 @@
 '@mastra/server': patch
 ---
 
-Improved generated route type usage in the JavaScript client SDK.
+Added server-generated route contract types for the JavaScript client SDK and updated the SDK to use those generated request and response types.
