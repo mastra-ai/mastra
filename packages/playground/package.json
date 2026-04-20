@@ -1,7 +1,7 @@
 {
   "name": "@internal/playground",
   "private": true,
-  "version": "1.6.1-alpha.1",
+  "version": "1.6.1-alpha.9",
   "type": "module",
   "main": "./src/exports.ts",
   "types": "./src/exports.ts",
@@ -98,7 +98,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.2.0",
-    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-hooks": "^7.1.0",
     "eslint-plugin-react-refresh": "^0.5.2",
     "nanoid": "^5.1.7",
     "tailwindcss": "4",

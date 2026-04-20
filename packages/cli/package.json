@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "1.6.1-alpha.1",
+  "version": "1.6.1-alpha.9",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -64,7 +64,7 @@
     "openapi-fetch": "^0.17.0",
     "picocolors": "^1.1.1",
     "posthog-node": "5.17.2",
-    "prettier": "^3.8.1",
+    "prettier": "^3.8.3",
     "semver": "^7.7.4",
     "serve": "^14.2.6",
     "serve-handler": "^6.1.7",

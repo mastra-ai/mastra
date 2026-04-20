@@ -878,6 +878,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       "format": 2,
                       "metadata": {
                         "modelId": "mock-model-id",
+                        "provider": "mock-provider",
                         "structuredOutput": {
                           "content": "Hello, world!",
                         },
@@ -926,6 +927,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "metadata": {
                       "createdAt": 2024-01-01T00:00:00.001Z,
                       "modelId": "mock-model-id",
+                      "provider": "mock-provider",
                       "structuredOutput": {
                         "content": "Hello, world!",
                       },
@@ -981,6 +983,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                           "format": 2,
                           "metadata": {
                             "modelId": "mock-model-id",
+                            "provider": "mock-provider",
                             "structuredOutput": {
                               "content": "Hello, world!",
                             },
@@ -1029,6 +1032,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         "metadata": {
                           "createdAt": 2024-01-01T00:00:00.001Z,
                           "modelId": "mock-model-id",
+                          "provider": "mock-provider",
                           "structuredOutput": {
                             "content": "Hello, world!",
                           },
@@ -1176,6 +1180,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       "format": 2,
                       "metadata": {
                         "modelId": "mock-model-id",
+                        "provider": "mock-provider",
                       },
                       "parts": [
                         {
@@ -1221,6 +1226,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "metadata": {
                       "createdAt": 2024-01-01T00:00:00.001Z,
                       "modelId": "mock-model-id",
+                      "provider": "mock-provider",
                     },
                     "parts": [
                       {
@@ -1269,6 +1275,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                           "format": 2,
                           "metadata": {
                             "modelId": "mock-model-id",
+                            "provider": "mock-provider",
                           },
                           "parts": [
                             {
@@ -1314,6 +1321,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         "metadata": {
                           "createdAt": 2024-01-01T00:00:00.001Z,
                           "modelId": "mock-model-id",
+                          "provider": "mock-provider",
                         },
                         "parts": [
                           {
@@ -1458,6 +1466,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       "format": 2,
                       "metadata": {
                         "modelId": "mock-model-id",
+                        "provider": "mock-provider",
                       },
                       "parts": [
                         {
@@ -1503,6 +1512,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "metadata": {
                       "createdAt": 2024-01-01T00:00:00.001Z,
                       "modelId": "mock-model-id",
+                      "provider": "mock-provider",
                     },
                     "parts": [
                       {
@@ -1551,6 +1561,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                           "format": 2,
                           "metadata": {
                             "modelId": "mock-model-id",
+                            "provider": "mock-provider",
                           },
                           "parts": [
                             {
@@ -1596,6 +1607,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         "metadata": {
                           "createdAt": 2024-01-01T00:00:00.001Z,
                           "modelId": "mock-model-id",
+                          "provider": "mock-provider",
                         },
                         "parts": [
                           {

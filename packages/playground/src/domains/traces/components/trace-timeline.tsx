@@ -14,6 +14,7 @@ type TraceTimelineProps = {
   expandedSpanIds?: string[];
   setExpandedSpanIds?: Dispatch<SetStateAction<string[]>>;
   featuredSpanIds?: string[];
+  chartWidth?: 'wide' | 'default';
 };
 
 export function TraceTimeline({
@@ -25,6 +26,7 @@ export function TraceTimeline({
   expandedSpanIds,
   setExpandedSpanIds,
   featuredSpanIds,
+  chartWidth = 'default',
 }: TraceTimelineProps) {
   const overallLatency = hierarchicalSpans?.[0]?.latency || 0;
   const overallStartTime = hierarchicalSpans?.[0]?.startTime || '';
@@ -90,6 +92,7 @@ export function TraceTimeline({
                 featuredSpanIds={featuredSpanIds}
                 expandedSpanIds={expandedSpanIds}
                 setExpandedSpanIds={setExpandedSpanIds}
+                chartWidth={chartWidth}
               />
             ))}
           </div>

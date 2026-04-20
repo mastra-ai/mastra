@@ -46,17 +46,41 @@ describe('OMMarkerComponent activation rendering', () => {
     expect(activationText).not.toContain('TTL');
   });
 
-  it('renders reflection activation without TTL suffix', () => {
+  it('renders provider-change activation as a separate muted line', () => {
+    const providerChangeMarker = new OMMarkerComponent({
+      type: 'om_activation_provider_change',
+      previousModel: 'openai/gpt-4o',
+      currentModel: 'anthropic/claude-3-7-sonnet',
+    });
+
+    const activationMarker = new OMMarkerComponent({
+      type: 'om_activation',
+      operationType: 'observation',
+      tokensActivated: 7300,
+      observationTokens: 400,
+    });
+
+    const providerChangeText = stripAnsi(providerChangeMarker.render(120).join('\n'));
+    const activationText = stripAnsi(activationMarker.render(120).join('\n'));
+
+    expect(providerChangeText).toContain(
+      'Model changed openai/gpt-4o → anthropic/claude-3-7-sonnet, activating observations',
+    );
+    expect(activationText).toContain('✓ Activated observations: -7.3k msg tokens, +0.4k obs tokens');
+  });
+
+  it('renders reflection activation as obs-pool compression without TTL suffix', () => {
     const activationMarker = new OMMarkerComponent({
       type: 'om_activation',
       operationType: 'reflection',
-      tokensActivated: 2400,
-      observationTokens: 600,
+      tokensActivated: 19340,
+      observationTokens: 17077,
     });
 
     const activationText = stripAnsi(activationMarker.render(120).join('\n'));
 
-    expect(activationText).toContain('✓ Activated reflection: -2.4k msg tokens, +0.6k obs tokens');
+    expect(activationText).toContain('✓ Activated reflection: 19.3k → 17.1k obs tokens (-2.3k)');
+    expect(activationText).not.toContain('msg tokens');
     expect(activationText).not.toContain('TTL');
   });
 });

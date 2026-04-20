@@ -1,4 +1,5 @@
 export * from './components/scores-list';
+export * from './components/no-scores-info';
 export * from './components/score-dialog';
 export * from './components/score-as-item-dialog';
 export * from './components/scores-tools';
