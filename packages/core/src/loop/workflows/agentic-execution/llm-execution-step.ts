@@ -741,8 +741,20 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         )(async (modelConfig, isLastModel) => {
           activeFallbackModelIndex = models.findIndex(candidate => candidate.id === modelConfig.id);
           const model = modelConfig.model;
-          executedStepModel = model.provider && model.modelId ? `${model.provider}/${model.modelId}` : undefined;
           const modelHeaders = modelConfig.headers;
+
+          // Re-stamp MODEL_GENERATION span with the fallback model so that downstream
+          // exporters (Langfuse, etc.) attribute usage and cost to the model that
+          // actually served the request instead of the first model in the list.
+          if (modelSpanTracker && activeFallbackModelIndex > 0) {
+            modelSpanTracker.updateGeneration({
+              name: `llm: '${model.modelId}'`,
+              attributes: {
+                model: model.modelId,
+                provider: model.provider,
+              },
+            });
+          }
           // Reset system messages to original before each step execution
           // This ensures that system message modifications in prepareStep/processInputStep/processors
           // don't persist across steps - each step starts fresh with original system messages
@@ -822,6 +834,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 abortSignal: options?.abortSignal,
               });
               Object.assign(currentStep, processInputStepResult);
+              executedStepModel =
+                currentStep.model.provider && currentStep.model.modelId
+                  ? `${currentStep.model.provider}/${currentStep.model.modelId}`
+                  : undefined;
 
               // Update MODEL_GENERATION span if processor actually changed model or modelSettings
               const modelChanged = processInputStepResult.model && processInputStepResult.model !== model;
@@ -1298,7 +1314,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           };
         });
 
-      if (currentIteration > 1 && executedStepModel) {
+      if (executedStepModel) {
         messageList.enrichLastStepStart(executedStepModel);
       }
 

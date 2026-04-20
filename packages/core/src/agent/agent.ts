@@ -67,6 +67,7 @@ import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
+import { isProviderTool } from '../tools/toolchecks';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
@@ -3089,6 +3090,7 @@ export class Agent<
       this.logger.debug('Adding client tools', { agent: this.name, tools: Object.keys(clientTools || {}), runId });
       for (const [toolName, tool] of clientToolsForInput) {
         const { execute, ...toolRest } = tool;
+        const toolToConvert = isProviderTool(tool) ? tool : toolRest;
         const options: ToolOptions = {
           name: toolName,
           runId,
@@ -3107,7 +3109,7 @@ export class Agent<
           backgroundConfig: (tool as any).background,
         };
         const convertedToCoreTool = makeCoreTool(
-          toolRest,
+          toolToConvert,
           options,
           'client-tool',
           autoResumeSuspendedTools,
@@ -4751,6 +4753,41 @@ export class Agent<
   }
 
   /**
+   * Loads the agentic-loop workflow snapshot for resume, or throws an actionable error.
+   * Used by resumeStream and resumeGenerate to fail fast at the agent boundary.
+   * @internal
+   */
+  async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const existingSnapshot = await workflowsStore?.loadWorkflowSnapshot({
+      workflowName: 'agentic-loop',
+      runId,
+    });
+
+    if (!existingSnapshot) {
+      const hasStorage = !!workflowsStore;
+      throw new MastraError({
+        id: 'AGENT_RESUME_NO_SNAPSHOT_FOUND',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text:
+          `Agent "${this.name}" ${method}() could not find a suspended run for runId "${runId}". ` +
+          (hasStorage
+            ? `The run may have already completed, never suspended, or the runId is invalid. `
+            : `No storage is configured on this Mastra instance, so workflow snapshots cannot be persisted. Register the agent on a Mastra instance with persistent storage (e.g. PostgreSQL, LibSQL). `) +
+          `Ensure you are calling ${method}() only with a runId from a currently-suspended run.`,
+        details: {
+          runId,
+          agentName: this.name,
+          hasStorage,
+        },
+      });
+    }
+
+    return existingSnapshot;
+  }
+
+  /**
    * Executes the agent call, handling tools, memory, and streaming.
    * @internal
    */
@@ -5687,11 +5724,8 @@ export class Agent<
       });
     }
 
-    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const existingSnapshot = await workflowsStore?.loadWorkflowSnapshot({
-      workflowName: 'agentic-loop',
-      runId: streamOptions?.runId ?? '',
-    });
+    const runId = streamOptions?.runId ?? '';
+    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeStream' });
 
     const result = await this.#execute({
       ...mergedStreamOptions,
@@ -5815,11 +5849,8 @@ export class Agent<
       });
     }
 
-    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const existingSnapshot = await workflowsStore?.loadWorkflowSnapshot({
-      workflowName: 'agentic-loop',
-      runId: options?.runId ?? '',
-    });
+    const runId = options?.runId ?? '';
+    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeGenerate' });
 
     const result = await this.#execute({
       ...mergedOptions,

@@ -1,21 +1,21 @@
 ---
 title: "Reference: PrefillErrorHandler | Processors"
-description: "Documentation for the PrefillErrorHandler processor in Mastra, which handles Anthropic assistant message prefill errors by appending a continue message and retrying."
+description: "Documentation for the PrefillErrorHandler processor in Mastra, which handles assistant-response prefill errors by appending a continue message and retrying."
 packages:
   - "@mastra/core"
 ---
 
 # PrefillErrorHandler
 
-The `PrefillErrorHandler` is an **error processor** that handles the Anthropic "assistant message prefill" error. This error occurs when a conversation ends with an assistant message and the model doesn't support prefilling assistant responses.
+The `PrefillErrorHandler` is an **error processor** that handles assistant-response prefill errors. This error occurs when a conversation ends with an assistant message and the model rejects the request because it interprets it as prefilling the assistant response.
 
 When the error is detected, the processor appends a hidden `<system-reminder>continue</system-reminder>` user message to the conversation and signals a retry. The reminder is persisted with `metadata.systemReminder = { type: 'anthropic-prefill-processor-retry' }`, which keeps it available for retry reconstruction and raw history while standard UI-facing message conversions hide it.
 
-Add this processor to `errorProcessors` when you want Mastra to recover from Anthropic assistant message prefill errors.
+Add this processor to `errorProcessors` when you want Mastra to recover from assistant prefill rejections (for example Anthropic's "assistant message prefill" and Qwen/llama.cpp's "assistant response prefill is incompatible with `enable_thinking`" errors).
 
 ## How it works
 
-1. The LLM API call fails with a message containing "assistant message prefill"
+1. The LLM API call fails with a known assistant-prefill rejection message
 1. `PrefillErrorHandler` checks that this is the first retry attempt
 1. It appends a hidden `<system-reminder>continue</system-reminder>` user message to the `messageList`
 1. It returns `{ retry: true }` to signal the LLM call should be retried with the modified messages
@@ -24,7 +24,7 @@ The processor now reacts to the API rejection itself instead of re-checking whet
 
 ## Usage example
 
-Add `PrefillErrorHandler` to `errorProcessors` for any agent that should retry Anthropic prefill failures:
+Add `PrefillErrorHandler` to `errorProcessors` for any agent that should retry assistant-prefill failures:
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -83,7 +83,7 @@ The `PrefillErrorHandler` takes no constructor parameters.
     name: 'processAPIError',
     type: '(args: ProcessAPIErrorArgs) => ProcessAPIErrorResult | void',
     description:
-      'Handles the Anthropic prefill error by appending a hidden system reminder continue message and signaling retry. Only triggers on the first retry attempt.',
+      'Handles known assistant-prefill errors by appending a hidden system reminder continue message and signaling retry. Only triggers on the first retry attempt.',
     isOptional: false,
   },
 ]}

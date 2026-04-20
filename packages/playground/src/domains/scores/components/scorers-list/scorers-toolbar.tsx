@@ -1,6 +1,6 @@
 import { Button, ButtonsGroup, SelectFieldBlock, ListSearch } from '@mastra/playground-ui';
 import { XIcon } from 'lucide-react';
-import { SCORER_SOURCE_OPTIONS } from './scorers-list';
+import { SCORER_SOURCE_OPTIONS } from './constants';
 
 export interface ScorersToolbarProps {
   search: string;
