@@ -4,7 +4,7 @@ export const useHasObservability = () => {
   const { data, isLoading } = useMastraPackages();
 
   const hasObservability =
-    Boolean(data?.hasObservability) || Boolean(data?.packages?.some(pkg => pkg.name === '@mastra/observability'));
+    data?.hasObservability ?? Boolean(data?.packages?.some(pkg => pkg.name === '@mastra/observability'));
 
   return { hasObservability, isLoading };
 };
