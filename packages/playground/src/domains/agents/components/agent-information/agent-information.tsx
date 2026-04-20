@@ -1,7 +1,19 @@
-import { Card, IconButton, Icon, Tabs, Tab, TabContent, TabList, useCollapsiblePanel } from '@mastra/playground-ui';
+/* eslint-disable react-refresh/only-export-components */
+import {
+  Card,
+  IconButton,
+  Icon,
+  Tabs,
+  Tab,
+  TabContent,
+  TabList,
+  Txt,
+  useCollapsiblePanel,
+} from '@mastra/playground-ui';
 import { X } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { useBrowserSession } from '../../context/browser-session-context';
+import { usePanelVisibility } from '../../context/use-panel-visibility';
 import { useAgent } from '../../hooks/use-agent';
 import { AgentMetadata } from '../agent-metadata';
 import { BrowserSidebarTab } from '../browser-view/browser-sidebar-tab';
@@ -18,12 +30,14 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
   const { data: agent } = useAgent(agentId);
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const { hasSession, isInSidebar } = useBrowserSession();
-  const hasMemory = !isMemoryLoading && Boolean(memory?.result);
+  const { visibility } = usePanelVisibility();
 
-  const { selectedTab, handleTabChange } = useAgentInformationTab({
-    isMemoryLoading,
-    hasMemory,
-  });
+  const hasMemory = !isMemoryLoading && Boolean(memory?.result);
+  const hasRequestContext = Boolean(agent?.requestContextSchema);
+
+  const showOverview = visibility.overview;
+  const showMemory = visibility.memory && hasMemory;
+  const hasAnyContent = showOverview || showMemory || hasRequestContext;
 
   return (
     <AgentInformationLayout>
@@ -35,31 +49,37 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
           </div>
         )}
 
-        {/* Normal tabs - always rendered but hidden when browser overlay is active */}
-        <Tabs defaultTab="overview" value={selectedTab} onValueChange={handleTabChange}>
-          <TabList>
-            <Tab value="overview">Overview</Tab>
-            {hasMemory && <Tab value="memory">Memory</Tab>}
-            {agent?.requestContextSchema && <Tab value="request-context">Request Context</Tab>}
-          </TabList>
-          <TabContent value="overview">
-            <AgentMetadata agentId={agentId} />
-          </TabContent>
+        {/* Panel sections - rendered based on toggle visibility */}
+        <div className="flex flex-col overflow-y-auto flex-1">
+          {showOverview && <AgentMetadata agentId={agentId} />}
 
-          {agent?.requestContextSchema && (
-            <TabContent value="request-context">
-              <div className="p-5">
-                <RequestContextSchemaForm requestContextSchema={agent.requestContextSchema} />
-              </div>
-            </TabContent>
+          {showMemory && <AgentMemory agentId={agentId} threadId={threadId} memoryType={memory?.memoryType} />}
+
+          {/* Request Context tab - kept as tab since it's a different interaction pattern */}
+          {hasRequestContext && (
+            <div className="border-t border-border1">
+              <Tabs defaultTab="request-context">
+                <TabList>
+                  <Tab value="request-context">Request Context</Tab>
+                </TabList>
+                <TabContent value="request-context">
+                  <div className="p-5">
+                    <RequestContextSchemaForm requestContextSchema={agent!.requestContextSchema!} />
+                  </div>
+                </TabContent>
+              </Tabs>
+            </div>
           )}
 
-          {hasMemory && (
-            <TabContent value="memory">
-              <AgentMemory agentId={agentId} threadId={threadId} memoryType={memory?.memoryType} />
-            </TabContent>
+          {/* Empty state when no panels visible */}
+          {!hasAnyContent && (
+            <div className="flex items-center justify-center h-full p-4">
+              <Txt variant="ui-sm" className="text-neutral3 text-center">
+                Use toggle buttons in the top bar to show panels
+              </Txt>
+            </div>
           )}
-        </Tabs>
+        </div>
       </div>
     </AgentInformationLayout>
   );
@@ -113,11 +133,7 @@ export const AgentInformationLayout = ({ children }: AgentInformationLayoutProps
   const { collapse } = useCollapsiblePanel();
   return (
     <div className="h-full p-4">
-      <Card
-        elevation="flat"
-        as="aside"
-        className="grid h-full w-full grid-rows-[auto_1fr] overflow-hidden min-w-0"
-      >
+      <Card elevation="flat" as="aside" className="grid h-full w-full grid-rows-[auto_1fr] overflow-hidden min-w-0">
         <div className="flex items-center justify-end border-b border-border1 px-2 py-1.5">
           <IconButton variant="ghost" size="sm" tooltip="Close panel" onClick={collapse}>
             <Icon>

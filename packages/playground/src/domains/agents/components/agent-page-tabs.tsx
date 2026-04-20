@@ -1,6 +1,7 @@
 import { Tooltip, TooltipContent, TooltipTrigger, buttonVariants, cn } from '@mastra/playground-ui';
 import { ExternalLink, EyeIcon, FlaskConical, MessageSquare, ClipboardCheck, GitBranch } from 'lucide-react';
 
+import { PanelToggleButtons } from './panel-toggle-buttons';
 import { useLinkComponent } from '@/lib/framework';
 
 export type AgentPageTab = 'chat' | 'versions' | 'evaluate' | 'review' | 'traces';
@@ -8,6 +9,7 @@ export type AgentPageTab = 'chat' | 'versions' | 'evaluate' | 'review' | 'traces
 interface AgentPageTabsProps {
   agentId: string;
   activeTab: AgentPageTab;
+  hasMemory?: boolean;
   showPlayground?: boolean;
   showObservability?: boolean;
   reviewBadge?: number;
@@ -77,6 +79,7 @@ function TabLink({ href, active, icon, label, badge, disabled, disabledReason }:
 export function AgentPageTabs({
   agentId,
   activeTab,
+  hasMemory = false,
   showPlayground = false,
   showObservability = false,
   reviewBadge,
@@ -136,7 +139,10 @@ export function AgentPageTabs({
         disabled={!showObservability}
         disabledReason={observabilityDisabledReason}
       />
-      {rightSlot && <div className="ml-auto flex items-center gap-2">{rightSlot}</div>}
+      <div className="ml-auto flex items-center gap-2">
+        <PanelToggleButtons hasMemory={hasMemory} />
+        {rightSlot}
+      </div>
     </div>
   );
 }
