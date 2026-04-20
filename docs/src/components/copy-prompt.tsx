@@ -25,7 +25,6 @@ function getNodeText(node: React.ReactNode, parentTag?: string): string {
     const childrenText = getNodeText(node.props.children, tagName)
 
     if (tagName) {
-      console.log(`Processing <${tagName}>: "${childrenText}"`)
       switch (tagName) {
         case 'br':
           return '\n'
@@ -61,6 +60,9 @@ export function CopyPrompt({
 }) {
   const [copied, setCopied] = React.useState<boolean>(false)
   const [open, setOpen] = React.useState<boolean>(false)
+  const contentId = React.useId()
+  const toggleId = React.useId()
+  const statusId = React.useId()
   const promptText = React.useMemo(() => normalizePromptText(getNodeText(children)), [children])
 
   async function handleCopy() {
@@ -77,9 +79,11 @@ export function CopyPrompt({
     <div className="mb-4 rounded-xl border border-gray-300 px-4 py-2 shadow-sm dark:border-gray-700">
       <div className="flex items-center justify-between gap-4">
         <button
+          id={toggleId}
           type="button"
           onClick={() => setOpen((current: boolean) => !current)}
           aria-expanded={open}
+          aria-controls={contentId}
           className="flex min-w-0 flex-1 items-start gap-4 text-left text-gray-600 transition-colors duration-200 hover:cursor-pointer hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-100"
         >
           <span
@@ -92,12 +96,18 @@ export function CopyPrompt({
         <button
           type="button"
           onClick={handleCopy}
+          aria-describedby={statusId}
           className="h-fit shrink-0 self-start rounded-xl bg-black px-3 py-1 font-semibold text-white transition-colors duration-300 hover:cursor-pointer hover:bg-gray-800 hover:text-white dark:bg-white dark:text-black dark:hover:bg-gray-200 dark:hover:text-black"
         >
           {copied ? 'Copied!' : 'Copy prompt'}
         </button>
       </div>
-      {open ? <div className="mt-3">{children}</div> : null}
+      <p id={statusId} className="sr-only" aria-live="polite">
+        {copied ? 'Prompt copied to clipboard.' : ''}
+      </p>
+      <div id={contentId} role="region" aria-labelledby={toggleId} hidden={!open} className="mt-3">
+        {children}
+      </div>
     </div>
   )
 }
