@@ -3,12 +3,13 @@ import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 import type { StorageDomains } from '@mastra/core/storage';
 import Cloudflare from 'cloudflare';
+import { BackgroundTasksStorageD1 } from './domains/background-tasks';
 import { MemoryStorageD1 } from './domains/memory';
 import { ScoresStorageD1 } from './domains/scores';
 import { WorkflowsStorageD1 } from './domains/workflows';
 
 // Export domain classes for direct use with MastraStorage composition
-export { MemoryStorageD1, ScoresStorageD1, WorkflowsStorageD1 };
+export { BackgroundTasksStorageD1, MemoryStorageD1, ScoresStorageD1, WorkflowsStorageD1 };
 export type { D1DomainConfig } from './db';
 
 /**
@@ -162,23 +163,27 @@ export class D1Store extends MastraCompositeStore {
     let scores: ScoresStorageD1;
     let workflows: WorkflowsStorageD1;
     let memory: MemoryStorageD1;
+    let backgroundTasks: BackgroundTasksStorageD1;
 
     if (this.binding) {
       const domainConfig = { binding: this.binding, tablePrefix: this.tablePrefix };
       scores = new ScoresStorageD1(domainConfig);
       workflows = new WorkflowsStorageD1(domainConfig);
       memory = new MemoryStorageD1(domainConfig);
+      backgroundTasks = new BackgroundTasksStorageD1(domainConfig);
     } else {
       const domainConfig = { client: this.client!, tablePrefix: this.tablePrefix };
       scores = new ScoresStorageD1(domainConfig);
       workflows = new WorkflowsStorageD1(domainConfig);
       memory = new MemoryStorageD1(domainConfig);
+      backgroundTasks = new BackgroundTasksStorageD1(domainConfig);
     }
 
     this.stores = {
       scores,
       workflows,
       memory,
+      backgroundTasks,
     };
   }
 

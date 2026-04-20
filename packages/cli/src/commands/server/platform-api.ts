@@ -1,3 +1,4 @@
+import { bestEffortCancel, confirmUploadWithRetry } from '../../utils/deploy-upload.js';
 import { withPollingRetries } from '../../utils/polling.js';
 import { createApiClient, throwApiError } from '../auth/client.js';
 import { getToken } from '../auth/credentials.js';
@@ -88,39 +89,49 @@ export async function uploadServerDeploy(
     throwApiError('Deploy failed', response.status);
   }
 
-  const { id, uploadUrl } = data;
+  const { id, status, uploadUrl } = data;
 
   if (!uploadUrl) {
     throw new Error('No upload URL returned');
   }
 
-  // Step 2: Upload artifact to the signed URL
-  if (uploadUrl.startsWith('file://')) {
-    const { writeFile } = await import('node:fs/promises');
-    const { fileURLToPath } = await import('node:url');
-    await writeFile(fileURLToPath(uploadUrl), Buffer.from(zipBuffer));
-  } else {
-    const uploadResp = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/zip' },
-      body: new Uint8Array(zipBuffer),
+  const cancel = (c: ReturnType<typeof createApiClient>) =>
+    bestEffortCancel({
+      postCancel: c2 => c2.POST('/v1/server/deploys/{id}/cancel', { params: { path: { id } } }),
+      client: c,
+      deployId: id,
     });
-    if (!uploadResp.ok) {
-      throw new Error(`Artifact upload failed: ${uploadResp.status} ${uploadResp.statusText}`);
+
+  // Step 2: Upload artifact to the signed URL
+  try {
+    if (uploadUrl.startsWith('file://')) {
+      const { writeFile } = await import('node:fs/promises');
+      const { fileURLToPath } = await import('node:url');
+      await writeFile(fileURLToPath(uploadUrl), Buffer.from(zipBuffer));
+    } else {
+      const uploadResp = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/zip' },
+        body: new Uint8Array(zipBuffer),
+      });
+      if (!uploadResp.ok) {
+        throw new Error(`Artifact upload failed: ${uploadResp.status} ${uploadResp.statusText}`);
+      }
     }
+  } catch (uploadError) {
+    await cancel(client);
+    throw uploadError;
   }
 
   // Step 3: Notify API that upload is complete → triggers build pipeline
-  const { error: completeError, response: completeResponse } = await client.POST(
-    '/v1/server/deploys/{id}/upload-complete',
-    { params: { path: { id } } },
-  );
+  await confirmUploadWithRetry({
+    postUploadComplete: c => c.POST('/v1/server/deploys/{id}/upload-complete', { params: { path: { id } } }),
+    cancelDeploy: cancel,
+    client,
+    orgId,
+  });
 
-  if (completeError) {
-    throwApiError('Upload confirmation failed', completeResponse.status);
-  }
-
-  return { id, status: 'queued' };
+  return { id, status };
 }
 
 export async function pollServerDeploy(

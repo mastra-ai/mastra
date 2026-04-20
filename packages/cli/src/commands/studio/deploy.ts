@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process';
 import { createWriteStream, readFileSync } from 'node:fs';
 import { mkdir, rm, stat, access, readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
@@ -46,12 +47,14 @@ function getGitBranch(projectDir: string): string | null {
   }
 }
 
-function getMastraVersion(projectDir: string): string | null {
+export function getMastraVersion(projectDir: string): string | null {
   try {
-    const pkgPath = join(projectDir, 'package.json');
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-    return deps['mastra'] ?? null;
+    // Resolve the actual installed version from node_modules rather than the raw
+    // specifier in package.json (which may be "catalog:", "workspace:*", etc.)
+    const req = createRequire(join(projectDir, 'package.json'));
+    const pkgJsonPath = req.resolve('mastra/package.json');
+    const pkgJson = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
+    return pkgJson.version ?? null;
   } catch {
     return null;
   }
