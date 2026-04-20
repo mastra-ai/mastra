@@ -88,7 +88,7 @@ export function CopyPrompt({
         >
           <span
             aria-hidden="true"
-            className="mt-1.5 inline-block h-2.5 w-2.5 shrink-0 border-r-2 border-b-2 border-current transition-transform duration-300"
+            className="mt-2 inline-block h-2.5 w-2.5 shrink-0 origin-center border-r-2 border-b-2 border-current transition-transform duration-300"
             style={{ transform: open ? 'rotate(45deg)' : 'rotate(-45deg)' }}
           />
           <span>{description}</span>
