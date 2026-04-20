@@ -1,5 +1,5 @@
 import { cn, getMainContentContentClassName, Icon, IconButton, PanelSeparator } from '@mastra/playground-ui';
-import { ChevronRight } from 'lucide-react';
+import { PanelLeftOpen } from 'lucide-react';
 
 import { Panel, useDefaultLayout, Group } from 'react-resizable-panels';
 import { RIGHT_PANEL_MAX_PERCENT } from '../context/panel-sizing-context';
@@ -32,7 +32,7 @@ function AgentLayoutInner({ agentId, children, leftSlot, rightSlot, browserOverl
     panelIds,
     storage: localStorage,
   });
-  const { collapsed, expand } = useSidebarCollapse();
+  const { collapsed, toggle } = useSidebarCollapse();
   const { rightPanelRef } = usePanelSizing();
 
   const computedClassName = getMainContentContentClassName({
@@ -46,12 +46,12 @@ function AgentLayoutInner({ agentId, children, leftSlot, rightSlot, browserOverl
   return (
     <div className="group/agent-layout relative h-full w-full overflow-hidden flex pt-1">
       {leftSlot && (
-        <aside className={cn('shrink-0 h-full overflow-hidden pb-4', collapsed ? 'w-[48px]' : 'w-[260px]')}>
+        <aside className={cn('shrink-0 h-full overflow-hidden pb-4 relative', collapsed ? 'w-[48px]' : 'w-[260px]')}>
           {collapsed ? (
-            <div className="flex h-full items-start justify-center pt-3">
-              <IconButton variant="default" size="sm" tooltip="Expand thread list" onClick={expand}>
+            <div className="absolute top-2 left-2 pt-px pl-px z-10">
+              <IconButton variant="ghost" size="sm" tooltip="Expand thread list" onClick={toggle}>
                 <Icon>
-                  <ChevronRight />
+                  <PanelLeftOpen />
                 </Icon>
               </IconButton>
             </div>

@@ -62,7 +62,7 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
           <Threads>
             <ThreadList>
               {threads.length === 0 && (
-                <Txt as="p" variant="ui-sm" className="text-neutral3 py-3 px-5">
+                <Txt as="p" variant="ui-sm" className="text-neutral3 py-3 px-3">
                   Your conversations will appear here once you start chatting!
                 </Txt>
               )}

@@ -153,7 +153,7 @@ export function AgentPageTabs({
         ))}
       </nav>
       <div className="ml-auto flex items-center gap-2">
-        <PanelToggleButtons hasMemory={hasMemory} />
+        {activeTab === 'chat' && <PanelToggleButtons hasMemory={hasMemory} />}
         {rightSlot}
       </div>
     </div>
