@@ -72,6 +72,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     metadata,
     requestContext: globalRequestContext,
     agentVersion,
+    versions,
   } = config;
 
   const startedAt = new Date();
@@ -209,6 +210,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           signal: itemSignal,
           requestContext: mergedRequestContext,
           experimentId,
+          versions,
         });
       };
     } else {
