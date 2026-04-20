@@ -1,5 +1,142 @@
 # @mastra/playground-ui
 
+## 22.2.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`1bd5104`](https://github.com/mastra-ai/mastra/commit/1bd51048b6da93507276d6623e3fd96a9e1a8944)]:
+  - @mastra/core@1.26.0-alpha.8
+  - @mastra/client-js@1.13.5-alpha.8
+  - @mastra/react@0.2.27-alpha.8
+
+## 22.2.0-alpha.7
+
+### Minor Changes
+
+- Added BrandLoader, a branded pulse-wave loader component for brand moments like app boot or agent thinking. Complements Spinner, which remains the inline utility loader. ([#15490](https://github.com/mastra-ai/mastra/pull/15490))
+
+### Patch Changes
+
+- Updated dependencies [[`8786a61`](https://github.com/mastra-ai/mastra/commit/8786a61fa54ba265f85eeff9985ca39863d18bb6), [`8fb2405`](https://github.com/mastra-ai/mastra/commit/8fb2405138f2d208b7962ad03f121ca25bcc28c5)]:
+  - @mastra/core@1.26.0-alpha.7
+  - @mastra/client-js@1.13.5-alpha.7
+  - @mastra/react@0.2.27-alpha.7
+
+## 22.1.3-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`6315317`](https://github.com/mastra-ai/mastra/commit/63153175fe9a7b224e5be7c209bbebc01dd9b0d5), [`9d3b24b`](https://github.com/mastra-ai/mastra/commit/9d3b24b19407ae9c09586cf7766d38dc4dff4a69)]:
+  - @mastra/core@1.26.0-alpha.6
+  - @mastra/client-js@1.13.5-alpha.6
+  - @mastra/react@0.2.27-alpha.6
+
+## 22.1.3-alpha.5
+
+### Patch Changes
+
+- Added a Foundations/Tokens page to the @mastra/playground-ui Storybook so you can browse all typography, color, spacing, radius, shadow, and animation tokens in one place. ([#15475](https://github.com/mastra-ai/mastra/pull/15475))
+
+- Added `ScoresDataList` for rendering lists of score evaluation results. ([#15339](https://github.com/mastra-ai/mastra/pull/15339))
+
+- Updated dependencies [[`92dcf02`](https://github.com/mastra-ai/mastra/commit/92dcf029294210ac91b090900c1a0555a425c57a)]:
+  - @mastra/core@1.26.0-alpha.5
+  - @mastra/client-js@1.13.5-alpha.5
+  - @mastra/react@0.2.27-alpha.5
+
+## 22.1.3-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`0474c2b`](https://github.com/mastra-ai/mastra/commit/0474c2b2e7c7e1ad8691dca031284841391ff1ef), [`f607106`](https://github.com/mastra-ai/mastra/commit/f607106854c6416c4a07d4082604b9f66d047221), [`62919a6`](https://github.com/mastra-ai/mastra/commit/62919a6ee0fbf3779ad21a97b1ec6696515d5104), [`0fd90a2`](https://github.com/mastra-ai/mastra/commit/0fd90a215caf5fca8099c15a67ca03e4427747a3)]:
+  - @mastra/core@1.26.0-alpha.4
+  - @mastra/client-js@1.13.5-alpha.4
+  - @mastra/react@0.2.27-alpha.4
+
+## 22.1.3-alpha.3
+
+### Patch Changes
+
+- Added a dedicated trace details page at `/traces/:traceId`, plus the design-system changes that support it: ([#15392](https://github.com/mastra-ai/mastra/pull/15392))
+  - `Button`: new `link` variant (inline, no padding/background/border).
+  - `DataKeysAndValues`: `numOfCol` now accepts `3`.
+  - `DataPanel.Header`: minimum height so heading-only headers match the height of ones with button actions.
+
+- Fix unhandled `TypeError` in `getFileContentType` when the URL is relative ([#15433](https://github.com/mastra-ai/mastra/pull/15433))
+  or malformed. The `catch` block now falls back to inferring the MIME type
+  from the raw string's file extension and strips query/hash fragments so
+  inputs like `/files/report.pdf`, `https://x.dev/a.pdf?token=1`, and
+  `/files/report.pdf#page=2` all resolve to `application/pdf` instead of
+  rejecting.
+
+  Closes #15432.
+
+- Improved visual consistency across Chip, DropdownMenu, Notification, Popover, and toast components — unified radius and border scale. Deduplicated dropdown menu item classes and added max-height scroll handling for long menus. ([#15440](https://github.com/mastra-ai/mastra/pull/15440))
+
+- Updated dependencies [[`fdd54cf`](https://github.com/mastra-ai/mastra/commit/fdd54cf612a9af876e9fdd85e534454f6e7dd518), [`d647793`](https://github.com/mastra-ai/mastra/commit/d647793010ab4de60bb524769a51cd32d7eba8d3), [`30456b6`](https://github.com/mastra-ai/mastra/commit/30456b6b08c8fd17e109dd093b73d93b65e83bc5), [`9d11a8c`](https://github.com/mastra-ai/mastra/commit/9d11a8c1c8924eb975a245a5884d40ca1b7e0491), [`d246696`](https://github.com/mastra-ai/mastra/commit/d246696139a3144a5b21b042d41c532688e957e1), [`354f9ce`](https://github.com/mastra-ai/mastra/commit/354f9ce1ca6af2074b6a196a23f8ec30012dccca), [`e9837b5`](https://github.com/mastra-ai/mastra/commit/e9837b53699e18711b09e0ca010a4106376f2653)]:
+  - @mastra/core@1.26.0-alpha.3
+  - @mastra/client-js@1.13.5-alpha.3
+  - @mastra/react@0.2.27-alpha.3
+
+## 22.1.3-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`3d83d06`](https://github.com/mastra-ai/mastra/commit/3d83d06f776f00fb5f4163dddd32a030c5c20844), [`7e0e63e`](https://github.com/mastra-ai/mastra/commit/7e0e63e2e485e84442351f4c7a79a424c83539dc), [`9467ea8`](https://github.com/mastra-ai/mastra/commit/9467ea87695749a53dfc041576410ebf9ee7bb67), [`7338d94`](https://github.com/mastra-ai/mastra/commit/7338d949380cf68b095342e8e42610dc51d557c1)]:
+  - @mastra/core@1.26.0-alpha.2
+  - @mastra/client-js@1.13.5-alpha.2
+  - @mastra/react@0.2.27-alpha.2
+
+## 22.1.3-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`7020c06`](https://github.com/mastra-ai/mastra/commit/7020c0690b199d9da337f0e805f16948e557922e)]:
+  - @mastra/core@1.25.1-alpha.1
+  - @mastra/client-js@1.13.5-alpha.1
+  - @mastra/react@0.2.27-alpha.1
+
+## 22.1.3-alpha.0
+
+### Patch Changes
+
+- Refactored DataKeysAndValues.ValueLink to use the standard `as` prop for custom link components, replacing the previous `LinkComponent` prop ([#15391](https://github.com/mastra-ai/mastra/pull/15391))
+
+- Updated PageHeader.Description styling to use text color (neutral2) and simplified top margin ([#15389](https://github.com/mastra-ai/mastra/pull/15389))
+
+- Updated dependencies [[`d63ffdb`](https://github.com/mastra-ai/mastra/commit/d63ffdbb2c11e76fe5ea45faab44bc15460f010c), [`d63ffdb`](https://github.com/mastra-ai/mastra/commit/d63ffdbb2c11e76fe5ea45faab44bc15460f010c)]:
+  - @mastra/client-js@1.13.5-alpha.0
+  - @mastra/core@1.25.1-alpha.0
+  - @mastra/react@0.2.27-alpha.0
+
+## 22.1.2
+
+### Patch Changes
+
+- dependencies updates: ([#15085](https://github.com/mastra-ai/mastra/pull/15085))
+  - Updated dependency [`@assistant-ui/react@^0.12.22` ↗︎](https://www.npmjs.com/package/@assistant-ui/react/v/0.12.22) (from `^0.12.21`, in `dependencies`)
+  - Updated dependency [`@assistant-ui/react-markdown@^0.12.8` ↗︎](https://www.npmjs.com/package/@assistant-ui/react-markdown/v/0.12.8) (from `^0.12.7`, in `dependencies`)
+  - Updated dependency [`@assistant-ui/react-syntax-highlighter@^0.12.8` ↗︎](https://www.npmjs.com/package/@assistant-ui/react-syntax-highlighter/v/0.12.8) (from `^0.12.7`, in `dependencies`)
+
+- Added `PageLayout` and `PageHeader` compound components for consistent page structure across Mastra Studio, plus a `NoDataPageLayout` helper for 401/403/empty/error states. ([#15243](https://github.com/mastra-ai/mastra/pull/15243))
+
+  List components (`AgentsList`, `WorkflowsList`, `ToolsList`, `ProcessorsList`, `McpServersList`, `PromptsList`, `LogsList`, `ObservabilityTracesList`) no longer handle errors or empty states internally — handle those at the page level. If you consume these components directly, move error/empty-state rendering to the parent.
+
+- Fix dataset detail tab badges to use total item and experiment counts instead of currently loaded rows. ([#14994](https://github.com/mastra-ai/mastra/pull/14994))
+
+- Added `EntityList.Pagination` sub-component for server-side pagination of `EntityList` views. Mirrors the existing `ItemList.Pagination` API. ([#15353](https://github.com/mastra-ai/mastra/pull/15353))
+
+- Added ValueLink, ValueWithTooltip, and ValueWithCopyBtn variants to DataKeysAndValues component ([#15208](https://github.com/mastra-ai/mastra/pull/15208))
+
+- Refresh Studio Evaluation pages with an updated UI and flattened top-level URLs (`/scorers`, `/datasets`, `/experiments`; `/evaluation` remains as the overview). `@mastra/playground-ui` removes `EvaluationDashboard` and all `Evaluation*`-prefixed list components, constants, and hooks — use the per-domain replacements (e.g. `ScorersList`) instead. ([#15258](https://github.com/mastra-ai/mastra/pull/15258))
+
+- Fixed DataList to only take as much height as its content needs instead of always stretching to fill available space ([#15291](https://github.com/mastra-ai/mastra/pull/15291))
+
+- Updated dependencies [[`87df955`](https://github.com/mastra-ai/mastra/commit/87df955c028660c075873fd5d74af28233ce32eb), [`8fad147`](https://github.com/mastra-ai/mastra/commit/8fad14759804179c8e080ce4d9dec6ef1a808b31), [`582644c`](https://github.com/mastra-ai/mastra/commit/582644c4a87f83b4f245a84d72b9e8590585012e), [`cbdf3e1`](https://github.com/mastra-ai/mastra/commit/cbdf3e12b3d0c30a6e5347be658e2009648c130a), [`8fe46d3`](https://github.com/mastra-ai/mastra/commit/8fe46d354027f3f0f0846e64219772348de106dd), [`18c67db`](https://github.com/mastra-ai/mastra/commit/18c67dbb9c9ebc26f26f65f7d3ff836e5691ef46), [`4ba3bb1`](https://github.com/mastra-ai/mastra/commit/4ba3bb1e465ad2ddaba3bbf2bc47e0faec32985e), [`5d84914`](https://github.com/mastra-ai/mastra/commit/5d84914e0e520c642a40329b210b413fcd139898), [`8dcc77e`](https://github.com/mastra-ai/mastra/commit/8dcc77e78a5340f5848f74b9e9f1b3da3513c1f5), [`aa67fc5`](https://github.com/mastra-ai/mastra/commit/aa67fc59ee8a5eeff1f23eb05970b8d7a536c8ff), [`fd2f314`](https://github.com/mastra-ai/mastra/commit/fd2f31473d3449b6b97e837ef8641264377f41a7), [`fa8140b`](https://github.com/mastra-ai/mastra/commit/fa8140bcd4251d2e3ac85fdc5547dfc4f372b5be), [`190f452`](https://github.com/mastra-ai/mastra/commit/190f45258b0640e2adfc8219fa3258cdc5b8f071), [`e80fead`](https://github.com/mastra-ai/mastra/commit/e80fead1412cc0d1b2f7d6a1ce5017d9e0098ff7), [`0287b64`](https://github.com/mastra-ai/mastra/commit/0287b644a5c3272755cf3112e71338106664103b), [`7e7bf60`](https://github.com/mastra-ai/mastra/commit/7e7bf606886bf374a6f9d4ca9b09dd83d0533372), [`184907d`](https://github.com/mastra-ai/mastra/commit/184907d775d8609c03c26e78ccaf37315f3aa287), [`075e91a`](https://github.com/mastra-ai/mastra/commit/075e91a4549baf46ad7a42a6a8ac8dfa78cc09e6), [`0c4cd13`](https://github.com/mastra-ai/mastra/commit/0c4cd131931c04ac5405373c932a242dbe88edd6), [`b16a753`](https://github.com/mastra-ai/mastra/commit/b16a753d5748440248d7df82e29bb987a9c8386c)]:
+  - @mastra/core@1.25.0
+  - @mastra/client-js@1.13.4
+  - @mastra/react@0.2.26
+
 ## 22.1.2-alpha.4
 
 ### Patch Changes

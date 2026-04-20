@@ -603,6 +603,9 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    * ```
    */
   delegation?: DelegationConfig;
+
+  /** Whether to disable background tasks for this execution */
+  disableBackgroundTasks?: boolean;
 } & Partial<ObservabilityContext>;
 
 /**

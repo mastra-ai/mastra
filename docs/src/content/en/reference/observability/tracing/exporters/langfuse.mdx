@@ -26,6 +26,8 @@ interface LangfuseExporterConfig extends BaseExporterConfig {
   secretKey?: string
   baseUrl?: string
   realtime?: boolean
+  flushAt?: number
+  flushInterval?: number
   environment?: string
   release?: string
 }
@@ -60,6 +62,19 @@ Extends `BaseExporterConfig`, which includes:
     name: 'realtime',
     type: 'boolean',
     description: 'Enable realtime mode - exports spans immediately instead of batching',
+    required: false,
+  },
+  {
+    name: 'flushAt',
+    type: 'number',
+    description: 'Maximum number of spans per OTEL export batch. Forwarded to the underlying LangfuseSpanProcessor.',
+    required: false,
+  },
+  {
+    name: 'flushInterval',
+    type: 'number',
+    description:
+      'Maximum time in seconds before pending spans are exported. Forwarded to the underlying LangfuseSpanProcessor.',
     required: false,
   },
   {
