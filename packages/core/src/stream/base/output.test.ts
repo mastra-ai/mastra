@@ -262,6 +262,67 @@ describe('MastraModelOutput', () => {
       expect(await output.providerMetadata).toEqual(providerMetadata);
     });
 
+    it('should preserve raw usage field in onFinish callback', async () => {
+      const runId = 'test-run';
+      const rawUsage = {
+        inputTokens: { total: 100, noCache: 20, cacheRead: 70, cacheWrite: 10 },
+        outputTokens: { total: 50, text: 40, reasoning: 10 },
+      };
+      let onFinishPayload: any;
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      messageList.add(
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'hello' }] },
+          createdAt: new Date(),
+        },
+        'response',
+      );
+
+      const finishChunk: ChunkType = {
+        type: 'finish',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: {
+          id: 'finish-1',
+          output: {
+            steps: [],
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, raw: rawUsage },
+          },
+          stepResult: {
+            reason: 'stop',
+            warnings: [],
+            isContinued: false,
+          },
+          metadata: {},
+          messages: { nonUser: [], all: [] },
+        },
+      } as ChunkType;
+
+      const stream = createChunkStream([createStepFinishChunk(runId), finishChunk]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: {
+          runId,
+          onFinish: async payload => {
+            onFinishPayload = payload;
+          },
+        },
+      });
+
+      await output.consumeStream();
+
+      const usage = await output.usage;
+      expect(usage.raw).toEqual(rawUsage);
+      expect(onFinishPayload?.usage?.raw).toEqual(rawUsage);
+    });
+
     it('should propagate arbitrary finish providerMetadata to steps and onFinish', async () => {
       const runId = 'test-run';
       const providerMetadata = {
