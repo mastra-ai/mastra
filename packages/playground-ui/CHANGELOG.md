@@ -1,5 +1,40 @@
 # @mastra/playground-ui
 
+## 22.2.0-alpha.7
+
+### Minor Changes
+
+- Added BrandLoader, a branded pulse-wave loader component for brand moments like app boot or agent thinking. Complements Spinner, which remains the inline utility loader. ([#15490](https://github.com/mastra-ai/mastra/pull/15490))
+
+### Patch Changes
+
+- Updated dependencies [[`8786a61`](https://github.com/mastra-ai/mastra/commit/8786a61fa54ba265f85eeff9985ca39863d18bb6), [`8fb2405`](https://github.com/mastra-ai/mastra/commit/8fb2405138f2d208b7962ad03f121ca25bcc28c5)]:
+  - @mastra/core@1.26.0-alpha.7
+  - @mastra/client-js@1.13.5-alpha.7
+  - @mastra/react@0.2.27-alpha.7
+
+## 22.1.3-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`6315317`](https://github.com/mastra-ai/mastra/commit/63153175fe9a7b224e5be7c209bbebc01dd9b0d5), [`9d3b24b`](https://github.com/mastra-ai/mastra/commit/9d3b24b19407ae9c09586cf7766d38dc4dff4a69)]:
+  - @mastra/core@1.26.0-alpha.6
+  - @mastra/client-js@1.13.5-alpha.6
+  - @mastra/react@0.2.27-alpha.6
+
+## 22.1.3-alpha.5
+
+### Patch Changes
+
+- Added a Foundations/Tokens page to the @mastra/playground-ui Storybook so you can browse all typography, color, spacing, radius, shadow, and animation tokens in one place. ([#15475](https://github.com/mastra-ai/mastra/pull/15475))
+
+- Added `ScoresDataList` for rendering lists of score evaluation results. ([#15339](https://github.com/mastra-ai/mastra/pull/15339))
+
+- Updated dependencies [[`92dcf02`](https://github.com/mastra-ai/mastra/commit/92dcf029294210ac91b090900c1a0555a425c57a)]:
+  - @mastra/core@1.26.0-alpha.5
+  - @mastra/client-js@1.13.5-alpha.5
+  - @mastra/react@0.2.27-alpha.5
+
 ## 22.1.3-alpha.4
 
 ### Patch Changes
