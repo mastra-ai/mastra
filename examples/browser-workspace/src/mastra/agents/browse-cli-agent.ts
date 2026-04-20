@@ -9,6 +9,7 @@
  *
  * Setup:
  *   npm install -g @browserbasehq/browse-cli
+ *   npx skills add browserbase/skills --skill browser --yes
  */
 import { Agent } from '@mastra/core/agent';
 import { Workspace, LocalSandbox, LocalFilesystem } from '@mastra/core/workspace';
@@ -29,6 +30,7 @@ const browseCLIWorkspace = new Workspace({
   sandbox: new LocalSandbox({
     workingDirectory: './workspace-data',
   }),
+  skills: ['.agents/skills/browser'],
   browser: browserViewer,
 });
 
@@ -52,30 +54,9 @@ export const browseCLIAgent = new Agent({
   id: 'browse-cli-agent',
   name: 'Browse-CLI Agent',
   description: 'An agent that uses browse-cli (Stagehand) for AI-powered web automation.',
-  instructions: `You are a web browsing assistant using the browse-cli (powered by Stagehand).
+  instructions: `You are a web browsing assistant with browser automation capabilities.
 
-Use workspace_execute_command to run browse commands. The CLI binary is "browse".
-
-Available commands:
-- browse open <url> - Navigate to a URL
-- browse act "<action description>" - Perform an action using AI (e.g., "click the login button")
-- browse extract "<what to extract>" - Extract data using AI (e.g., "the main headline")
-- browse observe - Get a list of observable/interactive elements
-- browse screenshot - Take a screenshot
-- browse status - Get browser status (running state, CDP URL)
-- browse close - Close the browser
-
-The "act" and "extract" commands use AI to understand the page and perform actions:
-- browse act "click the sign in button"
-- browse act "fill in the search box with 'mastra ai'"
-- browse extract "all product names and prices"
-- browse extract "the author's name from this article"
-
-When interacting with pages:
-1. Use "browse open <url>" to navigate
-2. Use "browse observe" to see what elements are available
-3. Use "browse act" for AI-powered interactions
-4. Use "browse extract" to get structured data
+Use the workspace_execute_command tool to run browser commands. The browser CLI is available for navigation, interaction, and data extraction.
 
 Browser context (current URL, page title) will be provided when available.`,
   model: 'openai/gpt-5.4',

@@ -52,29 +52,9 @@ export const browserUseAgent = new Agent({
   id: 'browser-use-agent',
   name: 'Browser-Use Agent',
   description: 'An agent that uses browser-use (Python) CLI for web automation.',
-  instructions: `You are a web browsing assistant using the browser-use CLI.
+  instructions: `You are a web browsing assistant with browser automation capabilities.
 
-Use workspace_execute_command to run browser-use commands. The CLI binary is "bu" or "browser-use".
-
-Available commands:
-- bu open <url> - Navigate to a URL
-- bu click <index> - Click an element by its index number
-- bu type <text> - Type text into the focused element
-- bu input <index> <text> - Type text into a specific element
-- bu scroll up|down - Scroll the page
-- bu back - Go back in history
-- bu screenshot - Take a screenshot
-- bu state - Get current page state (viewport, scroll position, DOM)
-- bu extract "<prompt>" - Extract data from the page using AI
-- bu get title - Get the page title
-- bu get html - Get the page HTML
-- bu close - Close the browser
-
-When interacting with pages:
-1. First use "bu open <url>" to navigate
-2. Use "bu state" to see the page structure and element indices
-3. Use "bu click <index>" to interact with elements
-4. Use "bu type <text>" to enter text
+Use the workspace_execute_command tool to run browser commands. The browser CLI is available for navigation, interaction, and data extraction.
 
 Browser context (current URL, page title) will be provided when available.`,
   model: 'openai/gpt-5.4',
