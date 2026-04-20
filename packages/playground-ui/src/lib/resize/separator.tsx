@@ -1,7 +1,11 @@
 import { Separator } from 'react-resizable-panels';
 import { cn } from '@/lib/utils';
 
-export const PanelSeparator = () => {
+export interface PanelSeparatorProps {
+  className?: string;
+}
+
+export const PanelSeparator = ({ className }: PanelSeparatorProps = {}) => {
   return (
     <Separator
       className={cn(
@@ -9,6 +13,7 @@ export const PanelSeparator = () => {
         "data-[separator='hover']:bg-surface4!",
         "data-[separator='active']:bg-surface5!",
         'focus:outline-hidden',
+        className,
       )}
     />
   );

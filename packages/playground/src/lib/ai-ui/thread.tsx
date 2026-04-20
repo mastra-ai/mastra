@@ -10,6 +10,8 @@ import { AssistantMessage } from './messages/assistant-message';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { UserMessage } from './messages/user-messages';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
+import { AgentSettingsDialog } from '@/domains/agents/components/agent-settings-dialog';
+import { AgentTracingDialog } from '@/domains/agents/components/agent-tracing-dialog';
 import { ComposerModelSwitcher } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
@@ -170,7 +172,11 @@ const Composer = ({ threadId, agentId, hasModelList, hideModelSwitcher }: Compos
             />
           </ComposerPrimitive.Input>
           <div className="flex items-center justify-between gap-2">
-            {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelSwitcher agentId={agentId} />}
+            <div className="flex items-center gap-1.5">
+              {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelSwitcher agentId={agentId} />}
+              {agentId && <AgentSettingsDialog agentId={agentId} />}
+              {agentId && <AgentTracingDialog />}
+            </div>
             <div className="flex items-center gap-2 ml-auto">
               {canExecuteAgent && <SpeechInput agentId={agentId} />}
               <ComposerAction canExecute={canExecuteAgent} />

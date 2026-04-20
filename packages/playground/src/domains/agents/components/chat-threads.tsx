@@ -1,6 +1,7 @@
 import type { StorageThreadType } from '@mastra/core/memory';
 import {
   AlertDialog,
+  Card,
   Skeleton,
   ThreadDeleteButton,
   ThreadItem,
@@ -8,7 +9,6 @@ import {
   ThreadList,
   Threads,
   Txt,
-  Icon,
 } from '@mastra/playground-ui';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
@@ -40,47 +40,49 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
     resourceType === 'agent' ? paths.agentNewThreadLink(resourceId) : paths.networkNewThreadLink(resourceId);
 
   return (
-    <div className="overflow-y-auto h-full w-full">
-      <Threads>
-        <ThreadList>
-          <ThreadItem>
-            <ThreadLink as={Link} to={newThreadLink}>
-              <span className="text-accent1 flex items-center gap-4">
-                <Icon className="bg-surface4 rounded-lg" size="lg">
-                  <Plus />
-                </Icon>
-                New Chat
-              </span>
-            </ThreadLink>
-          </ThreadItem>
-
-          {threads.length === 0 && (
-            <Txt as="p" variant="ui-sm" className="text-neutral3 py-3 px-5">
-              Your conversations will appear here once you start chatting!
-            </Txt>
-          )}
-
-          {threads.map(thread => {
-            const isActive = thread.id === threadId;
-
-            const threadLink =
-              resourceType === 'agent'
-                ? paths.agentThreadLink(resourceId, thread.id)
-                : paths.networkThreadLink(resourceId, thread.id);
-
-            return (
-              <ThreadItem isActive={isActive} key={thread.id}>
-                <ThreadLink as={Link} to={threadLink}>
-                  <ThreadTitle title={thread.title} id={thread.id} />
-                  <span>{formatDay(thread.createdAt)}</span>
+    <div className="h-full p-4">
+      <Card elevation="flat" as="aside" className="h-full w-full flex flex-col py-2">
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <Threads>
+            <ThreadList>
+              <ThreadItem>
+                <ThreadLink as={Link} to={newThreadLink}>
+                  <span className="flex items-center gap-2 text-neutral5">
+                    <Plus className="h-4 w-4" />
+                    New Chat
+                  </span>
                 </ThreadLink>
-
-                {canDeleteThread && <ThreadDeleteButton onClick={() => setDeleteId(thread.id)} />}
               </ThreadItem>
-            );
-          })}
-        </ThreadList>
-      </Threads>
+
+              {threads.length === 0 && (
+                <Txt as="p" variant="ui-sm" className="text-neutral3 py-3 px-5">
+                  Your conversations will appear here once you start chatting!
+                </Txt>
+              )}
+
+              {threads.map(thread => {
+                const isActive = thread.id === threadId;
+
+                const threadLink =
+                  resourceType === 'agent'
+                    ? paths.agentThreadLink(resourceId, thread.id)
+                    : paths.networkThreadLink(resourceId, thread.id);
+
+                return (
+                  <ThreadItem isActive={isActive} key={thread.id}>
+                    <ThreadLink as={Link} to={threadLink}>
+                      <ThreadTitle title={thread.title} id={thread.id} />
+                      <span>{formatDay(thread.createdAt)}</span>
+                    </ThreadLink>
+
+                    {canDeleteThread && <ThreadDeleteButton onClick={() => setDeleteId(thread.id)} />}
+                  </ThreadItem>
+                );
+              })}
+            </ThreadList>
+          </Threads>
+        </div>
+      </Card>
 
       <DeleteThreadDialog
         open={!!deleteId}

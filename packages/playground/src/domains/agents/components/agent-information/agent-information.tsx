@@ -1,14 +1,11 @@
-import { Tabs, Tab, TabContent, TabList } from '@mastra/playground-ui';
+import { Card, Tabs, Tab, TabContent, TabList } from '@mastra/playground-ui';
 import { useState, useCallback } from 'react';
 import { useBrowserSession } from '../../context/browser-session-context';
 import { useAgent } from '../../hooks/use-agent';
-import { AgentEntityHeader } from '../agent-entity-header';
 import { AgentMetadata } from '../agent-metadata';
-import { AgentSettings } from '../agent-settings';
 import { BrowserSidebarTab } from '../browser-view/browser-sidebar-tab';
 import { AgentMemory } from './agent-memory';
 import { useMemory } from '@/domains/memory/hooks';
-import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
 import { RequestContextSchemaForm } from '@/domains/request-context';
 
 export interface AgentInformationProps {
@@ -29,9 +26,7 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
 
   return (
     <AgentInformationLayout>
-      <AgentEntityHeader agentId={agentId} />
-
-      <div className="flex-1 overflow-hidden border-t border-border1 flex flex-col relative">
+      <div className="flex-1 overflow-hidden flex flex-col relative">
         {/* Browser sidebar overlay - takes over when in sidebar mode */}
         {hasSession && isInSidebar && (
           <div className="absolute inset-0 z-10 bg-surface1">
@@ -43,16 +38,11 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
         <Tabs defaultTab="overview" value={selectedTab} onValueChange={handleTabChange}>
           <TabList>
             <Tab value="overview">Overview</Tab>
-            <Tab value="model-settings">Model Settings</Tab>
             {hasMemory && <Tab value="memory">Memory</Tab>}
             {agent?.requestContextSchema && <Tab value="request-context">Request Context</Tab>}
-            <Tab value="tracing-options">Tracing Options</Tab>
           </TabList>
           <TabContent value="overview">
             <AgentMetadata agentId={agentId} />
-          </TabContent>
-          <TabContent value="model-settings">
-            <AgentSettings agentId={agentId} />
           </TabContent>
 
           {agent?.requestContextSchema && (
@@ -68,10 +58,6 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
               <AgentMemory agentId={agentId} threadId={threadId} memoryType={memory?.memoryType} />
             </TabContent>
           )}
-
-          <TabContent value="tracing-options">
-            <TracingRunOptions />
-          </TabContent>
         </Tabs>
       </div>
     </AgentInformationLayout>
@@ -86,7 +72,7 @@ export interface UseAgentInformationTabArgs {
 }
 
 // Valid tab values that can be persisted
-const VALID_TABS = new Set(['overview', 'model-settings', 'memory', 'request-context', 'tracing-options']);
+const VALID_TABS = new Set(['overview', 'memory', 'request-context']);
 
 export const useAgentInformationTab = ({ isMemoryLoading, hasMemory }: UseAgentInformationTabArgs) => {
   const [selectedTab, setSelectedTab] = useState<string>(() => {
@@ -124,8 +110,10 @@ export interface AgentInformationLayoutProps {
 
 export const AgentInformationLayout = ({ children }: AgentInformationLayoutProps) => {
   return (
-    <div className="grid grid-rows-[auto_1fr] h-full items-start overflow-y-auto overflow-x-hidden min-w-0 w-full">
-      {children}
+    <div className="h-full p-4">
+      <Card elevation="flat" as="aside" className="h-full w-full grid grid-rows-[1fr] items-start overflow-y-auto overflow-x-hidden min-w-0">
+        {children}
+      </Card>
     </div>
   );
 };

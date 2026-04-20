@@ -28,10 +28,11 @@ test('overall layout information', async ({ page }) => {
   await expect(page.locator('button:has-text("weather-agent")')).toBeVisible();
   const overviewPane = await page.locator('button:has-text("Overview")');
   await expect(overviewPane).toHaveAttribute('aria-selected', 'true');
-  const modelSettingsPane = await page.locator('button:has-text("Model Settings")');
-  await expect(modelSettingsPane).toHaveAttribute('aria-selected', 'false');
   const memoryPane = await page.locator('button:has-text("Memory")');
   await expect(memoryPane).toHaveAttribute('aria-selected', 'false');
+
+  // Model settings now live on a composer popover trigger, not a sidebar tab
+  await expect(page.getByRole('button', { name: 'Model settings' })).toBeVisible();
 });
 
 test.describe('agent panels', () => {
@@ -47,12 +48,11 @@ test.describe('agent panels', () => {
   test.describe('model settings', () => {
     test.beforeEach(async ({ page }) => {
       await page.goto('/agents/weather-agent/chat/new');
-      await page.click('text=Model settings');
+      await page.getByRole('button', { name: 'Model settings' }).click();
     });
 
     test('model trigger modes', async ({ page }) => {
       const generateRadio = page.getByLabel('Generate');
-      await page.click('text=Model settings');
 
       await expect(generateRadio).toBeVisible();
       await expect(generateRadio).toHaveAttribute('aria-checked', 'false');
@@ -78,7 +78,7 @@ test.describe('agent panels', () => {
 
       // Act
       await page.reload();
-      await page.click('text=Model settings');
+      await page.getByRole('button', { name: 'Model settings' }).click();
       await page.click('text=Advanced Settings');
 
       // Assert

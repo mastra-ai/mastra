@@ -1,5 +1,5 @@
-import { Txt, Icon, Tooltip, TooltipContent, TooltipTrigger, cn } from '@mastra/playground-ui';
-import { ExternalLink, EyeIcon, FlaskConical, MessageSquare, ClipboardCheck, GitBranch } from 'lucide-react';
+import { Txt, Icon, Tooltip, TooltipContent, TooltipTrigger, cn, IconButton } from '@mastra/playground-ui';
+import { ExternalLink, EyeIcon, FlaskConical, MessageSquare, ClipboardCheck, GitBranch, PanelRight, PanelRightClose } from 'lucide-react';
 
 import { useLinkComponent } from '@/lib/framework';
 
@@ -12,6 +12,8 @@ interface AgentPageTabsProps {
   showObservability?: boolean;
   reviewBadge?: number;
   rightSlot?: React.ReactNode;
+  showAgentInfo?: boolean;
+  onToggleAgentInfo?: () => void;
 }
 
 function DocsLink({ href, children }: { href: string; children: React.ReactNode }) {
@@ -51,7 +53,7 @@ function TabLink({
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="flex items-center gap-1.5 px-3 py-2.5 text-sm border-b-2 border-transparent text-neutral2 cursor-not-allowed opacity-50">
+          <span className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg text-neutral2 cursor-not-allowed opacity-50">
             <Icon size="sm">{icon}</Icon>
             <Txt variant="ui-sm" className="text-inherit">
               {label}
@@ -68,10 +70,10 @@ function TabLink({
       type="button"
       onClick={() => navigate(href)}
       className={cn(
-        'flex items-center gap-1.5 px-3 py-2.5 text-sm transition-colors border-b-2',
+        'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors',
         active
-          ? 'border-black/50 dark:border-white/50 text-neutral5'
-          : 'border-transparent text-neutral3 hover:text-neutral5',
+          ? 'bg-surface4 text-neutral5'
+          : 'bg-transparent text-neutral3 hover:bg-surface3 hover:text-neutral5',
       )}
     >
       <Icon size="sm">{icon}</Icon>
@@ -94,6 +96,8 @@ export function AgentPageTabs({
   showObservability = false,
   reviewBadge,
   rightSlot,
+  showAgentInfo,
+  onToggleAgentInfo,
 }: AgentPageTabsProps) {
   const playgroundDisabledReason = !showPlayground ? (
     <p>
@@ -109,7 +113,7 @@ export function AgentPageTabs({
   ) : undefined;
 
   return (
-    <div className="flex items-center border-b border-border1 px-4 bg-surface2">
+    <div className="flex items-center gap-1 px-4 py-2">
       <TabLink
         href={`/agents/${agentId}/chat/new`}
         active={activeTab === 'chat'}
@@ -149,7 +153,19 @@ export function AgentPageTabs({
         disabled={!showObservability}
         disabledReason={observabilityDisabledReason}
       />
-      {rightSlot && <div className="ml-auto flex items-center gap-2">{rightSlot}</div>}
+      <div className="ml-auto flex items-center gap-2">
+        {rightSlot}
+        {onToggleAgentInfo && (
+          <IconButton
+            tooltip={showAgentInfo ? 'Hide agent info' : 'Show agent info'}
+            onClick={onToggleAgentInfo}
+            variant="ghost"
+            size="sm"
+          >
+            {showAgentInfo ? <PanelRightClose /> : <PanelRight />}
+          </IconButton>
+        )}
+      </div>
     </div>
   );
 }

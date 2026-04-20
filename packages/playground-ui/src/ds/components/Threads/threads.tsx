@@ -1,7 +1,6 @@
 import { X } from 'lucide-react';
-import type { ElementType } from 'react';
-import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons/Icon';
+import type { ElementType, MouseEvent } from 'react';
+import { IconButton } from '@/ds/components/IconButton';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -10,7 +9,7 @@ export interface ThreadsProps {
 }
 
 export const Threads = ({ children }: ThreadsProps) => {
-  return <nav className="bg-surface2 min-h-full overflow-hidden">{children}</nav>;
+  return <nav className="min-h-full overflow-hidden">{children}</nav>;
 };
 
 export interface ThreadLinkProps {
@@ -57,10 +56,10 @@ export const ThreadItem = ({ children, isActive, className }: ThreadItemProps) =
   return (
     <li
       className={cn(
-        'border-b border-border1 group flex h-[54px] items-center justify-between gap-2 px-3 py-2',
+        'group/thread-item flex h-[48px] items-center justify-between gap-2 mx-2 px-3 py-2 rounded-lg',
         transitions.colors,
         'hover:bg-surface3',
-        isActive && 'bg-accent1Dark',
+        isActive && 'bg-surface4',
         className,
       )}
     >
@@ -74,20 +73,30 @@ export interface ThreadDeleteButtonProps {
 }
 
 export const ThreadDeleteButton = ({ onClick }: ThreadDeleteButtonProps) => {
+  const handleClick = (e: MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    e.preventDefault();
+    onClick();
+  };
+
   return (
-    <Button
-      variant="ghost"
+    <span
       className={cn(
-        'shrink-0 opacity-0',
+        'shrink-0 opacity-0 pointer-events-none',
         transitions.all,
-        'group-focus-within:opacity-100 group-hover:opacity-100',
-        'hover:bg-surface4 hover:text-accent2',
+        'group-focus-within/thread-item:opacity-100 group-focus-within/thread-item:pointer-events-auto',
+        'group-hover/thread-item:opacity-100 group-hover/thread-item:pointer-events-auto',
       )}
-      onClick={onClick}
     >
-      <Icon>
-        <X aria-label="delete thread" className="text-neutral3 hover:text-accent2 transition-colors" />
-      </Icon>
-    </Button>
+      <IconButton
+        tooltip="Delete thread"
+        variant="ghost"
+        size="sm"
+        className="hover:text-accent2"
+        onClick={handleClick}
+      >
+        <X aria-label="delete thread" />
+      </IconButton>
+    </span>
   );
 };

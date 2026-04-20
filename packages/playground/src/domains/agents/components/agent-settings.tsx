@@ -107,7 +107,7 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
   }
 
   return (
-    <div className="px-5 text-xs py-2 pb-4">
+    <div className="text-xs">
       <section className="space-y-7 @container">
         <Entry label="Chat Method">
           <RadioGroup

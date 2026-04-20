@@ -9,6 +9,7 @@ import { AgentLayout } from '@/domains/agents/components/agent-layout';
 import { BrowserViewPanel } from '@/domains/agents/components/browser-view';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
+import { useAgentInfoPanel } from '@/domains/agents/context/agent-info-panel-context';
 import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-context';
@@ -28,6 +29,7 @@ function Agent() {
   const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
   const isNewThread = threadId === 'new';
+  const { showAgentInfo } = useAgentInfoPanel();
 
   // Generate a stable thread ID for new threads. Regenerate when threadId
   // changes (e.g., clicking "New Chat" navigates back to /chat/new).
@@ -150,7 +152,7 @@ function Agent() {
                           )
                         }
                         browserOverlay={<BrowserViewPanel />}
-                        rightSlot={<AgentInformation agentId={agentId!} threadId={actualThreadId!} />}
+                        rightSlot={showAgentInfo ? <AgentInformation agentId={agentId!} threadId={actualThreadId!} /> : undefined}
                       >
                         <AgentChat
                           key={actualThreadId!}
