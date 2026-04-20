@@ -10,8 +10,10 @@ export interface AgentLayoutProps {
 }
 
 export const AgentLayout = ({ agentId, children, leftSlot, rightSlot, browserOverlay }: AgentLayoutProps) => {
+  const panelIds = [...(leftSlot ? ['left-slot'] : []), 'main-slot', ...(rightSlot ? ['right-slot'] : [])];
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
     id: `agent-layout-v2-${agentId}`,
+    panelIds,
     storage: localStorage,
   });
 
