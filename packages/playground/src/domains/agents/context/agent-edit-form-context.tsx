@@ -14,6 +14,12 @@ interface AgentEditFormContextValue {
   readOnly?: boolean;
   /** True when editing a code-defined agent (override mode) — limits editable sections */
   isCodeAgentOverride?: boolean;
+  /**
+   * Opt-in simplified section layout. When true the Agent Studio's streamlined
+   * create flow is used (only Identity / Instructions / Tools / Skills /
+   * Variables). Left unset, the full admin CMS section list is shown.
+   */
+  simplifiedSections?: boolean;
 }
 
 const AgentEditFormContext = createContext<AgentEditFormContextValue | null>(null);

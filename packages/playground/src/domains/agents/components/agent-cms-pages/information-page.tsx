@@ -3,17 +3,22 @@ import { Controller } from 'react-hook-form';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { AgentSharingPanel } from '@/domains/agent-studio/components/agent-sharing-panel';
+import { CreateAgentAvatarPicker } from '@/domains/agent-studio/components/create-agent-avatar-picker';
+import { useOptionalPendingAvatar } from '@/domains/agent-studio/components/pending-avatar-context';
 import { SectionHeader } from '@/domains/cms';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
 import { LLMProviders, LLMModels } from '@/domains/llm';
 
 export function InformationPage() {
   const { form, readOnly, mode, agentId } = useAgentEditFormContext();
+  const pendingAvatarCtx = useOptionalPendingAvatar();
   const {
     register,
     control,
     formState: { errors },
+    watch,
   } = form;
+  const nameValue = watch('name') ?? '';
 
   return (
     <ScrollArea className="h-full">
@@ -98,6 +103,16 @@ export function InformationPage() {
         {mode === 'edit' && agentId && !readOnly && (
           <div className="border-t border-border1 pt-8">
             <AgentSharingPanel agentId={agentId} />
+          </div>
+        )}
+
+        {mode === 'create' && !readOnly && pendingAvatarCtx && (
+          <div className="border-t border-border1 pt-8">
+            <CreateAgentAvatarPicker
+              name={nameValue}
+              value={pendingAvatarCtx.pendingAvatar}
+              onChange={pendingAvatarCtx.setPendingAvatar}
+            />
           </div>
         )}
       </SectionRoot>

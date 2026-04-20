@@ -8,10 +8,17 @@ import {
   MainContentLayout,
   Spinner,
 } from '@mastra/playground-ui';
+import { useMastraClient } from '@mastra/react';
 import { Check } from 'lucide-react';
+import { useCallback } from 'react';
 import { Outlet, useLocation } from 'react-router';
+
 import { AgentCmsFormShell } from '@/domains/agents/components/agent-cms-form-shell';
 import { useAgentCmsForm } from '@/domains/agents/hooks/use-agent-cms-form';
+import {
+  PendingAvatarProvider,
+  useOptionalPendingAvatar,
+} from '@/domains/agent-studio/components/pending-avatar-context';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -24,14 +31,36 @@ import { useLinkComponent } from '@/lib/framework';
  *      end-user within the Agent Studio shell.
  */
 export function AgentStudioAgentCreate() {
+  return (
+    <PendingAvatarProvider>
+      <AgentStudioAgentCreateInner />
+    </PendingAvatarProvider>
+  );
+}
+
+function AgentStudioAgentCreateInner() {
   const { navigate } = useLinkComponent();
   const location = useLocation();
   const { data: user } = useCurrentUser();
+  const client = useMastraClient();
+  const pendingAvatarCtx = useOptionalPendingAvatar();
+
+  const onAfterCreate = useCallback(
+    async (agentId: string) => {
+      const pending = pendingAvatarCtx?.pendingAvatar;
+      if (!pending) return;
+      await client
+        .getStoredAgent(agentId)
+        .uploadAvatar({ contentBase64: pending.contentBase64, contentType: pending.contentType });
+    },
+    [client, pendingAvatarCtx?.pendingAvatar],
+  );
 
   const { form, handlePublish, isSubmitting, canPublish } = useAgentCmsForm({
     mode: 'create',
     authorId: user?.id,
     autoPublish: true,
+    onAfterCreate,
     onSuccess: agentId => navigate(`/agent-studio/agents/${agentId}/chat`),
   });
 
@@ -70,6 +99,7 @@ export function AgentStudioAgentCreate() {
         handlePublish={handlePublish}
         basePath="/agent-studio/agents/create"
         currentPath={location.pathname}
+        simplifiedSections
       >
         <Outlet />
       </AgentCmsFormShell>

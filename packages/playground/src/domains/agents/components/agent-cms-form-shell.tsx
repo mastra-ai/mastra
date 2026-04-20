@@ -15,6 +15,11 @@ export interface AgentCmsFormShellProps {
   handleSaveDraft?: (changeMessage?: string) => Promise<void>;
   readOnly?: boolean;
   isCodeAgentOverride?: boolean;
+  /**
+   * Opt-in simplified section layout. Used by the Agent Studio create flow
+   * to hide advanced sections (Agents, Scorers, Workflows, Memory).
+   */
+  simplifiedSections?: boolean;
   basePath: string;
   currentPath: string;
   banner?: ReactNode;
@@ -33,6 +38,7 @@ export function AgentCmsFormShell({
   handleSaveDraft,
   readOnly,
   isCodeAgentOverride,
+  simplifiedSections,
   basePath,
   currentPath,
   banner,
@@ -51,6 +57,7 @@ export function AgentCmsFormShell({
       handleSaveDraft={handleSaveDraft}
       readOnly={readOnly}
       isCodeAgentOverride={isCodeAgentOverride}
+      simplifiedSections={simplifiedSections}
     >
       <AgentsCmsLayout basePath={basePath} currentPath={currentPath} versionId={versionId} rightPanel={rightPanel}>
         {banner}

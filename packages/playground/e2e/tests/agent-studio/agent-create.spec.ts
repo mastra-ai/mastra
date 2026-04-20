@@ -84,4 +84,37 @@ test.describe('Agent Studio agent creation — behavior', () => {
     expect(row).toBeDefined();
     expect(row?.authorId).toBe(authorId);
   });
+
+  test('the Create form hides Agents, Scorers, Workflows, and Memory sections', async ({ page }) => {
+    await setupMockAuth(page, { role: 'member', permissions: END_USER_PERMISSIONS });
+
+    await page.goto('/agent-studio/agents/create');
+
+    // Wait for the create shell to render.
+    await expect(page.getByRole('heading', { name: 'Create an agent' })).toBeVisible();
+
+    const base = '/agent-studio/agents/create';
+
+    // Sections that should remain in the simplified Create flow.
+    await expect(page.locator(`nav a[href="${base}"]`)).toBeVisible();
+    await expect(page.locator(`nav a[href="${base}/instruction-blocks"]`)).toBeVisible();
+    await expect(page.locator(`nav a[href="${base}/tools"]`)).toBeVisible();
+    await expect(page.locator(`nav a[href="${base}/skills"]`)).toBeVisible();
+    await expect(page.locator(`nav a[href="${base}/variables"]`)).toBeVisible();
+
+    // Sections that must NOT appear on Create.
+    await expect(page.locator(`nav a[href="${base}/agents"]`)).toHaveCount(0);
+    await expect(page.locator(`nav a[href="${base}/scorers"]`)).toHaveCount(0);
+    await expect(page.locator(`nav a[href="${base}/workflows"]`)).toHaveCount(0);
+    await expect(page.locator(`nav a[href="${base}/memory"]`)).toHaveCount(0);
+  });
+
+  test('the Create form surfaces an avatar picker on the Identity page', async ({ page }) => {
+    await setupMockAuth(page, { role: 'member', permissions: END_USER_PERMISSIONS });
+
+    await page.goto('/agent-studio/agents/create');
+
+    await expect(page.getByRole('heading', { name: 'Create an agent' })).toBeVisible();
+    await expect(page.getByTestId('agent-avatar-input')).toBeVisible();
+  });
 });

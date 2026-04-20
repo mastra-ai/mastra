@@ -33,6 +33,12 @@ type CreateOptions = {
    * Studio end-user flow uses this so users see their new agent right away.
    */
   autoPublish?: boolean;
+  /**
+   * Runs after the agent is created (and, if `autoPublish` is set, published)
+   * but before `onSuccess` fires. Used to upload deferred resources like a
+   * chosen avatar that couldn't be attached before the agent id existed.
+   */
+  onAfterCreate?: (agentId: string) => Promise<void>;
 };
 
 type EditOptions = {
@@ -388,11 +394,25 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
             if (latestVersion) {
               await client.getStoredAgent(created.id).activateVersion(latestVersion.id);
             }
-            await Promise.all([
-              queryClient.invalidateQueries({ queryKey: ['stored-agents'] }),
-              queryClient.invalidateQueries({ queryKey: ['agents'] }),
-            ]);
           }
+
+          if (options.mode === 'create' && options.onAfterCreate) {
+            try {
+              await options.onAfterCreate(created.id);
+            } catch (error) {
+              // Surface the error but don't block the create — the agent
+              // exists; the user can retry the optional asset (e.g. avatar)
+              // from the edit view.
+              toast.error(
+                `Agent created but post-create step failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              );
+            }
+          }
+
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['stored-agents'] }),
+            queryClient.invalidateQueries({ queryKey: ['agents'] }),
+          ]);
 
           toast.success('Agent created successfully');
           options.onSuccess(created.id);

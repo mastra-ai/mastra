@@ -4,7 +4,7 @@ import type { Control } from 'react-hook-form';
 import type { AgentFormValues } from '../agent-edit-page/utils/form-validation';
 
 import { isActive } from './agent-cms-is-active';
-import { AGENT_CMS_SECTIONS, CODE_AGENT_OVERRIDE_SECTIONS } from './agent-cms-sections';
+import { AGENT_CMS_SECTIONS, CODE_AGENT_OVERRIDE_SECTIONS, CREATE_MODE_SECTIONS } from './agent-cms-sections';
 import { useSidebarDescriptions } from './use-sidebar-descriptions';
 
 interface NavTarget {
@@ -23,9 +23,14 @@ export function useAgentCmsNavigation(
   currentPath: string,
   control: Control<AgentFormValues>,
   isCodeAgentOverride?: boolean,
+  simplifiedSections?: boolean,
 ): AgentCmsNavigation {
   const descriptions = useSidebarDescriptions(control);
-  const sections = isCodeAgentOverride ? CODE_AGENT_OVERRIDE_SECTIONS : AGENT_CMS_SECTIONS;
+  const sections = isCodeAgentOverride
+    ? CODE_AGENT_OVERRIDE_SECTIONS
+    : simplifiedSections
+      ? CREATE_MODE_SECTIONS
+      : AGENT_CMS_SECTIONS;
 
   const currentIndex = useMemo(
     () => sections.findIndex(section => isActive(basePath, currentPath, section.pathSuffix)),

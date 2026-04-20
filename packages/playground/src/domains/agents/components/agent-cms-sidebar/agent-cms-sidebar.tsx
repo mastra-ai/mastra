@@ -3,7 +3,7 @@ import { Check } from 'lucide-react';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { isActive } from './agent-cms-is-active';
-import { AGENT_CMS_SECTIONS, CODE_AGENT_OVERRIDE_SECTIONS } from './agent-cms-sections';
+import { AGENT_CMS_SECTIONS, CODE_AGENT_OVERRIDE_SECTIONS, CREATE_MODE_SECTIONS } from './agent-cms-sections';
 import { useSidebarDescriptions } from './use-sidebar-descriptions';
 import { useAgentStudioConfig } from '@/domains/agent-studio/hooks/use-agent-studio-config';
 import { useLinkComponent } from '@/lib/framework';
@@ -15,11 +15,15 @@ interface AgentCmsSidebarProps {
 }
 
 export function AgentCmsSidebar({ basePath, currentPath, versionId }: AgentCmsSidebarProps) {
-  const { form, isCodeAgentOverride } = useAgentEditFormContext();
+  const { form, isCodeAgentOverride, simplifiedSections } = useAgentEditFormContext();
   const descriptions = useSidebarDescriptions(form.control);
   const { config: agentStudioConfig } = useAgentStudioConfig();
   const hideMemorySection = agentStudioConfig?.hasDefaultMemoryConfig ?? false;
-  const baseSections = isCodeAgentOverride ? CODE_AGENT_OVERRIDE_SECTIONS : AGENT_CMS_SECTIONS;
+  const baseSections = isCodeAgentOverride
+    ? CODE_AGENT_OVERRIDE_SECTIONS
+    : simplifiedSections
+      ? CREATE_MODE_SECTIONS
+      : AGENT_CMS_SECTIONS;
   const sections = hideMemorySection ? baseSections.filter(s => s.name !== 'Memory') : baseSections;
 
   return (

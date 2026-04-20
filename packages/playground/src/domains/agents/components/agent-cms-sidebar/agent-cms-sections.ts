@@ -25,3 +25,16 @@ const CODE_AGENT_OVERRIDE_SECTION_NAMES = new Set(['Instructions', 'Tools', 'Var
 export const CODE_AGENT_OVERRIDE_SECTIONS: AgentCmsSection[] = AGENT_CMS_SECTIONS.filter(s =>
   CODE_AGENT_OVERRIDE_SECTION_NAMES.has(s.name),
 );
+
+/**
+ * Sections shown while creating a new agent. The Create flow is intentionally
+ * simplified — sub-agents, scorers, workflows, and memory are all post-create
+ * concerns (or, in the case of memory, inherited from
+ * `AgentBuilder.defaultMemoryConfig`). Users configure them from the edit
+ * view once the agent exists.
+ */
+const CREATE_MODE_SECTION_NAMES = new Set(['Identity', 'Instructions', 'Tools', 'Skills', 'Variables']);
+
+export const CREATE_MODE_SECTIONS: AgentCmsSection[] = AGENT_CMS_SECTIONS.filter(s =>
+  CREATE_MODE_SECTION_NAMES.has(s.name),
+);
