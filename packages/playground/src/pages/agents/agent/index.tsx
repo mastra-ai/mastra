@@ -13,6 +13,7 @@ import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-obse
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-context';
 import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
+import { usePanelVisibility } from '@/domains/agents/context/use-panel-visibility';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
@@ -35,6 +36,9 @@ function Agent() {
   const newThreadId = useMemo(() => uuid(), [threadId]);
 
   const hasMemory = Boolean(memory?.result);
+  const hasRequestContext = Boolean(agent?.requestContextSchema);
+  const { visibility } = usePanelVisibility();
+  const hasRightPanelContent = visibility.overview || (visibility.memory && hasMemory) || hasRequestContext;
 
   const {
     data: threads,
@@ -150,7 +154,11 @@ function Agent() {
                           )
                         }
                         browserOverlay={<BrowserViewPanel />}
-                        rightSlot={<AgentInformation agentId={agentId!} threadId={actualThreadId!} />}
+                        rightSlot={
+                          hasRightPanelContent ? (
+                            <AgentInformation agentId={agentId!} threadId={actualThreadId!} />
+                          ) : undefined
+                        }
                       >
                         <AgentChat
                           key={actualThreadId!}

@@ -1,15 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import {
-  Card,
-  IconButton,
-  Icon,
-  Tabs,
-  Tab,
-  TabContent,
-  TabList,
-  Txt,
-  useCollapsiblePanel,
-} from '@mastra/playground-ui';
+import { Card, IconButton, Icon, Tabs, Tab, TabContent, TabList, useCollapsiblePanel } from '@mastra/playground-ui';
 import { X } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { useBrowserSession } from '../../context/browser-session-context';
@@ -37,25 +27,21 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
 
   const showOverview = visibility.overview;
   const showMemory = visibility.memory && hasMemory;
-  const hasAnyContent = showOverview || showMemory || hasRequestContext;
 
   return (
     <AgentInformationLayout>
       <div className="flex-1 overflow-hidden flex flex-col relative">
-        {/* Browser sidebar overlay - takes over when in sidebar mode */}
         {hasSession && isInSidebar && (
           <div className="absolute inset-0 z-10 bg-surface1">
             <BrowserSidebarTab />
           </div>
         )}
 
-        {/* Panel sections - rendered based on toggle visibility */}
         <div className="flex flex-col overflow-y-auto flex-1">
           {showOverview && <AgentMetadata agentId={agentId} />}
 
           {showMemory && <AgentMemory agentId={agentId} threadId={threadId} memoryType={memory?.memoryType} />}
 
-          {/* Request Context tab - kept as tab since it's a different interaction pattern */}
           {hasRequestContext && (
             <div className="border-t border-border1">
               <Tabs defaultTab="request-context">
@@ -68,15 +54,6 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
                   </div>
                 </TabContent>
               </Tabs>
-            </div>
-          )}
-
-          {/* Empty state when no panels visible */}
-          {!hasAnyContent && (
-            <div className="flex items-center justify-center h-full p-4">
-              <Txt variant="ui-sm" className="text-neutral3 text-center">
-                Use toggle buttons in the top bar to show panels
-              </Txt>
             </div>
           )}
         </div>
