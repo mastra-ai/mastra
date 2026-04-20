@@ -4829,9 +4829,12 @@ export class Agent<
 
       const browserCtx: BrowserContext = {
         provider: browser.provider,
+        providerType: browser.providerType,
         sessionId: browser.getSessionId(browserThreadId),
         headless: browser.headless,
         currentUrl: isThreadRunning ? ((await browser.getCurrentUrl(browserThreadId)) ?? undefined) : undefined,
+        // For CLI providers, include CDP URL so agent can pass it to CLI commands
+        cdpUrl: browser.providerType === 'cli' ? (browser.getCdpUrl(browserThreadId) ?? undefined) : undefined,
       };
       requestContext.set('browser', browserCtx);
     }

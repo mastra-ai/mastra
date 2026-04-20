@@ -165,7 +165,20 @@ async function killProcessTree(pid: number, subprocess: ResultPromise, signal: N
  */
 export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
-    const cwd = options.cwd ? path.resolve(this.sandbox.workingDirectory, options.cwd) : this.sandbox.workingDirectory;
+    let cwd = this.sandbox.workingDirectory;
+    if (options.cwd) {
+      if (path.isAbsolute(options.cwd)) {
+        cwd = options.cwd;
+      } else {
+        // Prevent duplicate nesting when agent passes cwd that matches workingDirectory
+        const normalizedWorkingDir = path.resolve(this.sandbox.workingDirectory);
+        const normalizedOptionsCwd = path.resolve(options.cwd);
+        // Only resolve relative to workingDirectory if it's actually a subdirectory
+        if (normalizedOptionsCwd !== normalizedWorkingDir) {
+          cwd = path.resolve(this.sandbox.workingDirectory, options.cwd);
+        }
+      }
+    }
     const env = this.sandbox.buildEnv(options.env);
     const wrapped = this.sandbox.wrapCommandForIsolation(command);
 
