@@ -83,6 +83,7 @@ export class Harness<TState = {}> {
     | null = null;
   private pendingApprovalToolName: string | null = null;
   private pendingSuspensionRunId: string | null = null;
+  private pendingSuspensionSettled: Promise<unknown> | null = null;
   private pendingSuspensionToolCallId: string | null = null;
   private pendingQuestions = new Map<string, (answer: HarnessQuestionAnswer) => void>();
   private pendingPlanApprovals = new Map<
@@ -1374,6 +1375,10 @@ export class Harness<TState = {}> {
       );
       const streamResult = await this.processStream(response, requestContext);
 
+      if (streamResult.suspended) {
+        this.pendingSuspensionSettled = response.finishReason;
+      }
+
       if (this.currentOperationId === operationId) {
         const reason = streamResult.suspended ? 'suspended' : this.abortRequested ? 'aborted' : 'complete';
         this.emit({ type: 'agent_end', reason });
@@ -2421,6 +2426,11 @@ export class Harness<TState = {}> {
 
     if (!this.abortController) {
       this.abortController = new AbortController();
+    }
+
+    if (this.pendingSuspensionSettled) {
+      await this.pendingSuspensionSettled;
+      this.pendingSuspensionSettled = null;
     }
 
     const requestContext = await this.buildRequestContext(requestContextInput);
