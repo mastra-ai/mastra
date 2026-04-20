@@ -203,6 +203,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/doubleword',
+          label: 'Doubleword',
+        },
+        {
+          type: 'doc',
           id: 'providers/digitalocean',
           label: 'DigitalOcean',
         },

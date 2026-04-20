@@ -1,0 +1,76 @@
+---
+title: "Doubleword"
+description: "Use Doubleword's AI model gateway with Mastra via the Vercel AI SDK provider."
+---
+
+# Doubleword
+
+[Doubleword](https://doubleword.ai) is an AI model gateway providing unified routing, management, and security for inference across multiple model providers. It exposes an OpenAI-compatible API.
+
+Use the [`@doubleword/vercel-ai`](https://www.npmjs.com/package/@doubleword/vercel-ai) package to integrate with Mastra.
+
+## Setup
+
+Set up your environment variable:
+
+```bash
+export DOUBLEWORD_API_KEY="your-api-key"
+```
+
+## Usage with Mastra
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { createDoubleword } from "@doubleword/vercel-ai";
+
+const doubleword = createDoubleword();
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant.",
+  model: doubleword("Qwen/Qwen3.5-397B-A17B-FP8"),
+});
+
+const result = await agent.generate("Say hello.");
+console.log(result.text);
+```
+
+## Batch processing
+
+For background workloads where latency is not critical, use `createDoublewordBatch` to transparently route requests through the Batch API at reduced cost:
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { createDoublewordBatch } from "@doubleword/vercel-ai";
+
+const doubleword = createDoublewordBatch();
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant.",
+  model: doubleword("Qwen/Qwen3.5-397B-A17B-FP8"),
+});
+
+const result = await agent.generate("Summarize this document.");
+console.log(result.text);
+await doubleword.close();
+```
+
+## Custom base URL
+
+If you're running a self-hosted Doubleword Control Layer, pass a custom base URL:
+
+```typescript
+import { createDoubleword } from "@doubleword/vercel-ai";
+
+const doubleword = createDoubleword({
+  baseURL: "https://your-instance.example.com/ai/v1",
+  apiKey: "your-api-key",
+});
+```
+
+## Links
+
+- [Doubleword documentation](https://docs.doubleword.ai)
+- [Available models](https://docs.doubleword.ai/inference-api/models)
+- [@doubleword/vercel-ai on npm](https://www.npmjs.com/package/@doubleword/vercel-ai)
