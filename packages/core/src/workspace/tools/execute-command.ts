@@ -87,7 +87,8 @@ const CLI_CDP_PATTERNS: Record<
   'browser-use': {
     // browser-use CLI installs as multiple aliases: browser, browseruse, bu
     // The skill docs say "browser-use" but the primary binary is "browser"
-    pattern: /^(?:browser|browser-use|browseruse|bu)\b/,
+    // Order matters: longer matches first to avoid "browser" matching before "browser-use"
+    pattern: /^(?:browser-use|browseruse|browser|bu)\b/,
     flag: '--cdp-url',
     sessionFlag: '--session',
   },
@@ -101,48 +102,95 @@ const CLI_CDP_PATTERNS: Record<
 const warmedUpClis = new Set<string>();
 
 /**
- * Get the CLI name from a command if it matches a browser CLI pattern.
+ * Check if a command is a browser CLI command and return its config.
  */
-function getCliName(command: string): string | null {
+function getBrowserCliConfig(command: string): { name: string; config: (typeof CLI_CDP_PATTERNS)[string] } | null {
   for (const [name, config] of Object.entries(CLI_CDP_PATTERNS)) {
     if (config.pattern.test(command)) {
-      return name;
+      return { name, config };
     }
   }
   return null;
 }
 
 /**
- * Inject CDP URL and session flag into browser CLI commands if not already present.
+ * Inject CDP URL and session flag into a single browser CLI command.
  * Returns the modified command or the original if no injection needed.
  */
-function injectCdpUrl(command: string, cdpUrl: string | null, threadId?: string): string {
-  if (!cdpUrl) return command;
+function injectCdpUrlIntoSingleCommand(
+  command: string,
+  cdpUrl: string,
+  config: (typeof CLI_CDP_PATTERNS)[string],
+  threadId?: string,
+): string {
+  // Check if CDP flag is already present
+  const flagPattern = new RegExp(`${config.flag}\\s+\\S+`);
+  if (flagPattern.test(command)) {
+    return command; // Already has CDP URL, don't override
+  }
 
-  for (const [, config] of Object.entries(CLI_CDP_PATTERNS)) {
-    if (config.pattern.test(command)) {
-      // Check if CDP flag is already present
-      const flagPattern = new RegExp(`${config.flag}\\s+\\S+`);
-      if (flagPattern.test(command)) {
-        return command; // Already has CDP URL, don't override
-      }
-
-      // Build injection: CDP URL + session flag (for thread isolation)
-      let injection = `${config.flag} "${cdpUrl}"`;
-      if (config.sessionFlag && threadId) {
-        // Check if session flag already present
-        const sessionPattern = new RegExp(`${config.sessionFlag}\\s+\\S+`);
-        if (!sessionPattern.test(command)) {
-          injection += ` ${config.sessionFlag} "${threadId}"`;
-        }
-      }
-
-      // Inject flags after the CLI command name
-      return command.replace(config.pattern, `$& ${injection}`);
+  // Build injection: CDP URL + session flag (for thread isolation)
+  let injection = `${config.flag} "${cdpUrl}"`;
+  if (config.sessionFlag && threadId) {
+    // Check if session flag already present
+    const sessionPattern = new RegExp(`${config.sessionFlag}\\s+\\S+`);
+    if (!sessionPattern.test(command)) {
+      injection += ` ${config.sessionFlag} "${threadId}"`;
     }
   }
 
-  return command;
+  // Inject flags after the CLI command name
+  return command.replace(config.pattern, `$& ${injection}`);
+}
+
+/**
+ * Split a command string on shell operators (&&, ||, ;) while preserving
+ * the operators for reassembly. Returns alternating [command, operator, command, ...].
+ */
+function splitShellCommand(command: string): { parts: string[]; operators: string[] } {
+  const parts: string[] = [];
+  const operators: string[] = [];
+
+  // Match && or || or ; as separators
+  const regex = /\s*(&&|\|\||;)\s*/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = regex.exec(command)) !== null) {
+    parts.push(command.slice(lastIndex, match.index));
+    operators.push(match[1]!);
+    lastIndex = regex.lastIndex;
+  }
+
+  // Add the remaining part after the last operator
+  parts.push(command.slice(lastIndex));
+
+  return { parts, operators };
+}
+
+/**
+ * Inject CDP URL and session flag into all browser CLI commands in a potentially
+ * chained command string (commands joined by &&, ||, or ;).
+ */
+function injectCdpUrl(command: string, cdpUrl: string, threadId?: string): string {
+  const { parts, operators } = splitShellCommand(command);
+
+  const modifiedParts = parts.map(part => {
+    const trimmed = part.trim();
+    const cliMatch = getBrowserCliConfig(trimmed);
+    if (cliMatch) {
+      return injectCdpUrlIntoSingleCommand(trimmed, cdpUrl, cliMatch.config, threadId);
+    }
+    return part; // Keep original (preserves whitespace)
+  });
+
+  // Reassemble with operators
+  let result = modifiedParts[0] ?? '';
+  for (let i = 0; i < operators.length; i++) {
+    result += ` ${operators[i]} ${modifiedParts[i + 1] ?? ''}`;
+  }
+
+  return result;
 }
 
 /** Shared execute function used by both foreground-only and background-capable tool variants. */
@@ -163,11 +211,14 @@ async function executeCommand(input: Record<string, any>, context: any) {
   }
 
   // Lazy browser launch and CDP URL injection for browser CLI commands
+  // Check all parts of chained commands (e.g., "cmd1 && cmd2") for browser CLIs
   const browser = workspace.browser;
-  const cliName = getCliName(command);
-  if (browser && cliName) {
-    // Get threadId from context for thread-scoped browsers
-    // threadId lives at context.agent.threadId (set during tool execution)
+  const { parts } = splitShellCommand(command);
+  const browserClis = parts
+    .map(part => getBrowserCliConfig(part.trim()))
+    .filter((match): match is NonNullable<typeof match> => match !== null);
+
+  if (browser && browserClis.length > 0) {
     const threadId = context?.agent?.threadId ?? context?.threadId ?? 'default';
 
     // Launch browser if not already running (for this thread if thread-scoped)
@@ -175,28 +226,29 @@ async function executeCommand(input: Record<string, any>, context: any) {
       await browser.launch(threadId);
     }
 
-    // Get CDP URL for injection
     const cdpUrl = browser.getCdpUrl(threadId);
 
-    // Run warmup command if this CLI requires it and hasn't been warmed up yet
-    const warmupKey = `${cliName}:${threadId}`;
-    const cliConfig = CLI_CDP_PATTERNS[cliName];
-    if (cdpUrl && cliConfig?.warmupCommand && !warmedUpClis.has(warmupKey)) {
-      const warmupCmd = cliConfig.warmupCommand(cdpUrl, threadId);
-      try {
-        // Run warmup command with a timeout - we don't care much about the result,
-        // just that it establishes the connection
-        if (sandbox.executeCommand) {
-          await sandbox.executeCommand(warmupCmd, [], { timeout: 10000 });
+    if (cdpUrl) {
+      // Run warmup commands for CLIs that need them
+      for (const { name: cliName, config: cliConfig } of browserClis) {
+        const warmupKey = `${cliName}:${threadId}`;
+        if (cliConfig.warmupCommand && !warmedUpClis.has(warmupKey)) {
+          const warmupCmd = cliConfig.warmupCommand(cdpUrl, threadId);
+          try {
+            if (sandbox.executeCommand) {
+              await sandbox.executeCommand(warmupCmd, [], { timeout: 10000 });
+            }
+            warmedUpClis.add(warmupKey);
+          } catch {
+            // Still mark as warmed up to avoid retrying every command
+            warmedUpClis.add(warmupKey);
+          }
         }
-        warmedUpClis.add(warmupKey);
-      } catch {
-        // Still mark as warmed up to avoid retrying every command
-        warmedUpClis.add(warmupKey);
       }
-    }
 
-    command = injectCdpUrl(command, cdpUrl, threadId);
+      // Inject CDP URL into all browser CLI commands in the chain
+      command = injectCdpUrl(command, cdpUrl, threadId);
+    }
   }
 
   await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
