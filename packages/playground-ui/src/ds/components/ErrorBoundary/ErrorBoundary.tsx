@@ -111,7 +111,15 @@ type DefaultErrorFallbackProps = ErrorBoundaryFallbackProps & {
   className?: string;
 };
 
-function DefaultErrorFallback({ error, errorInfo, reset, title, description, variant, className }: DefaultErrorFallbackProps) {
+function DefaultErrorFallback({
+  error,
+  errorInfo,
+  reset,
+  title,
+  description,
+  variant,
+  className,
+}: DefaultErrorFallbackProps) {
   const stack = errorInfo?.componentStack ?? error.stack ?? '';
   const isInline = variant === 'inline';
 
