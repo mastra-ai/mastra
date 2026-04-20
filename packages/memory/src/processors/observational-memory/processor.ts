@@ -66,7 +66,24 @@ function getTemporalGapReminderText(gapText: string, timestamp: number): string 
   return `${gapText} — ${formatTemporalTimestamp(new Date(timestamp))}`;
 }
 
-function createTemporalGapMarker(message: MastraDBMessage, gapText: string, timestamp: number): MastraDBMessage {
+function getTemporalGapReminderMetadata(message: MastraDBMessage, gapText: string, gapMs: number, timestamp: number) {
+  return {
+    reminderType: TEMPORAL_GAP_REMINDER_TYPE,
+    gapText,
+    gapMs,
+    timestamp: formatTemporalTimestamp(new Date(timestamp)),
+    precedesMessageId: message.id,
+  };
+}
+
+function createTemporalGapMarker(
+  message: MastraDBMessage,
+  gapText: string,
+  gapMs: number,
+  timestamp: number,
+): MastraDBMessage {
+  const metadata = getTemporalGapReminderMetadata(message, gapText, gapMs, timestamp);
+
   return {
     id: `__temporal_gap_${crypto.randomUUID()}`,
     role: 'user',
@@ -81,6 +98,7 @@ function createTemporalGapMarker(message: MastraDBMessage, gapText: string, time
           text: `<system-reminder type="${TEMPORAL_GAP_REMINDER_TYPE}" precedesMessageId="${message.id}">${getTemporalGapReminderText(gapText, timestamp)}</system-reminder>`,
         },
       ],
+      metadata,
     },
   };
 }
@@ -125,20 +143,18 @@ async function insertTemporalGapMarkers({
     return;
   }
 
+  const reminderMetadata = getTemporalGapReminderMetadata(latestInputMessage, gapText, gapMs, timestamp);
+
   await writer?.custom({
     type: 'data-system-reminder',
     data: {
       message: getTemporalGapReminderText(gapText, timestamp),
-      reminderType: TEMPORAL_GAP_REMINDER_TYPE,
-      gapText,
-      gapMs,
-      timestamp: formatTemporalTimestamp(new Date(timestamp)),
-      precedesMessageId: latestInputMessage.id,
+      ...reminderMetadata,
     },
     transient: true,
   });
 
-  const marker = createTemporalGapMarker(latestInputMessage, gapText, timestamp);
+  const marker = createTemporalGapMarker(latestInputMessage, gapText, gapMs, timestamp);
   const rebuiltMessages = [...allMessages];
   rebuiltMessages.splice(latestInputIndex, 0, marker);
 

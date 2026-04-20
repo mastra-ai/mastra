@@ -1599,6 +1599,7 @@ export class Harness<TState = {}> {
               reminderType: typeof data.reminderType === 'string' ? data.reminderType : undefined,
               path: typeof data.path === 'string' ? data.path : undefined,
               precedesMessageId: typeof data.precedesMessageId === 'string' ? data.precedesMessageId : undefined,
+              gapText: typeof data.gapText === 'string' ? data.gapText : undefined,
               gapMs: typeof data.gapMs === 'number' ? data.gapMs : undefined,
               timestamp: typeof data.timestamp === 'string' ? data.timestamp : undefined,
             });
@@ -2069,6 +2070,7 @@ export class Harness<TState = {}> {
               reminderType: typeof payload?.reminderType === 'string' ? payload.reminderType : undefined,
               path: typeof payload?.path === 'string' ? payload.path : undefined,
               precedesMessageId: typeof payload?.precedesMessageId === 'string' ? payload.precedesMessageId : undefined,
+              gapText: typeof payload?.gapText === 'string' ? payload.gapText : undefined,
               gapMs: typeof payload?.gapMs === 'number' ? payload.gapMs : undefined,
               timestamp: typeof payload?.timestamp === 'string' ? payload.timestamp : undefined,
             });

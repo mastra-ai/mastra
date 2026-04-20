@@ -5,6 +5,7 @@ import { RequestContext } from '@mastra/core/di';
 import { InMemoryDB, InMemoryMemory } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
+import { formatTemporalTimestamp } from '../date-utils';
 import { ObservationalMemory } from '../observational-memory';
 import type { MemoryContextProvider } from '../processor';
 import { ObservationalMemoryProcessor } from '../processor';
@@ -151,6 +152,13 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
       text: expect.stringContaining(
         '<system-reminder type="temporal-gap" precedesMessageId="input-1">30 minutes later —',
       ),
+    });
+    expect(markers[0]!.content.metadata).toEqual({
+      reminderType: 'temporal-gap',
+      gapText: '30 minutes later',
+      gapMs: 30 * 60 * 1000,
+      timestamp: formatTemporalTimestamp(new Date('2025-01-01T08:50:00Z')),
+      precedesMessageId: 'input-1',
     });
     expect(capturedParts.filter(part => part.type === 'data-system-reminder')).toEqual([
       expect.objectContaining({

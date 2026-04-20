@@ -849,6 +849,7 @@ export type HarnessMessageContent =
       reminderType?: string;
       path?: string;
       precedesMessageId?: string;
+      gapText?: string;
       gapMs?: number;
       timestamp?: string;
     }
