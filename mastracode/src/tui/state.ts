@@ -5,7 +5,7 @@
  * MastraTUI class.
  */
 import { Container, TUI, ProcessTerminal } from '@mariozechner/pi-tui';
-import type { CombinedAutocompleteProvider, Text } from '@mariozechner/pi-tui';
+import type { CombinedAutocompleteProvider, Component, Text } from '@mariozechner/pi-tui';
 import type { Harness, HarnessMessage } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
 import type { AuthStorage } from '../auth/storage.js';
@@ -112,6 +112,8 @@ export interface TUIState {
   allSlashCommandComponents: SlashCommandComponent[];
   /** Track inline system reminders for expand/collapse */
   allSystemReminderComponents: SystemReminderComponent[];
+  /** Track rendered message components by message id for anchored inserts */
+  messageComponentsById: Map<string, Component>;
   /** Track shell passthrough components for expand/collapse */
   allShellComponents: ShellStreamComponent[];
   /** Track active subagent tasks */
@@ -236,6 +238,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     allToolComponents: [],
     allSlashCommandComponents: [],
     allSystemReminderComponents: [],
+    messageComponentsById: new Map(),
     allShellComponents: [],
     pendingSubagents: new Map(),
     toolOutputExpanded: false,

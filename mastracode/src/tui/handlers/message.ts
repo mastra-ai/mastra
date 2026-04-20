@@ -9,6 +9,8 @@ import type { HarnessMessage, HarnessMessageContent } from '@mastra/core/harness
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { SystemReminderComponent } from '../components/system-reminder.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
+import { UserMessageComponent } from '../components/user-message.js';
+import { addChildBeforeMessageOrFollowUps } from '../render-messages.js';
 import { getMarkdownTheme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
@@ -42,6 +44,7 @@ type StreamedSystemReminderPart = {
   message?: string;
   reminderType?: string;
   path?: string;
+  precedesMessageId?: string;
 };
 
 function isInlineBoundary(part: HarnessMessageContent): boolean {
@@ -63,6 +66,7 @@ function toStreamedSystemReminderPart(part: HarnessMessageContent): StreamedSyst
     message: typeof reminder.message === 'string' ? reminder.message : undefined,
     reminderType: reminder.reminderType,
     path: reminder.path,
+    precedesMessageId: typeof reminder.precedesMessageId === 'string' ? reminder.precedesMessageId : undefined,
   };
 }
 
@@ -76,7 +80,22 @@ function addInlineReminder(ctx: EventHandlerContext, reminder: StreamedSystemRem
   component.setExpanded(state.toolOutputExpanded);
   state.allSystemReminderComponents.push(component);
 
-  if (state.streamingComponent) {
+  if (reminder.precedesMessageId && !state.messageComponentsById.has(reminder.precedesMessageId)) {
+    const latestUserComponent = [...state.chatContainer.children]
+      .reverse()
+      .find(child => child instanceof UserMessageComponent);
+
+    if (latestUserComponent) {
+      const idx = state.chatContainer.children.indexOf(latestUserComponent as never);
+      if (idx >= 0) {
+        (state.chatContainer.children as unknown[]).splice(idx, 0, component);
+        state.chatContainer.invalidate();
+        return;
+      }
+    }
+  }
+
+  if (state.streamingComponent && !reminder.precedesMessageId) {
     const idx = state.chatContainer.children.indexOf(state.streamingComponent as never);
     if (idx >= 0) {
       (state.chatContainer.children as unknown[]).splice(idx, 0, component);
@@ -85,7 +104,7 @@ function addInlineReminder(ctx: EventHandlerContext, reminder: StreamedSystemRem
     }
   }
 
-  ctx.addChildBeforeFollowUps(component);
+  addChildBeforeMessageOrFollowUps(state, component, reminder.precedesMessageId);
 }
 
 function getContentBeforeToolCall(

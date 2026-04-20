@@ -1598,6 +1598,9 @@ export class Harness<TState = {}> {
               message,
               reminderType: typeof data.reminderType === 'string' ? data.reminderType : undefined,
               path: typeof data.path === 'string' ? data.path : undefined,
+              precedesMessageId: typeof data.precedesMessageId === 'string' ? data.precedesMessageId : undefined,
+              gapMs: typeof data.gapMs === 'number' ? data.gapMs : undefined,
+              timestamp: typeof data.timestamp === 'string' ? data.timestamp : undefined,
             });
           }
           break;
@@ -2065,6 +2068,9 @@ export class Harness<TState = {}> {
               message,
               reminderType: typeof payload?.reminderType === 'string' ? payload.reminderType : undefined,
               path: typeof payload?.path === 'string' ? payload.path : undefined,
+              precedesMessageId: typeof payload?.precedesMessageId === 'string' ? payload.precedesMessageId : undefined,
+              gapMs: typeof payload?.gapMs === 'number' ? payload.gapMs : undefined,
+              timestamp: typeof payload?.timestamp === 'string' ? payload.timestamp : undefined,
             });
             this.emit({ type: 'message_update', message: currentMessage });
           }

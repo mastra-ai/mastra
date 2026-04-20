@@ -1,3 +1,5 @@
+import type { MastraDBMessage } from '@mastra/core/agent';
+
 /**
  * Date/time utility functions for Observational Memory.
  * Pure functions for formatting relative timestamps and annotating observations.
@@ -241,4 +243,58 @@ export function addRelativeTimeToObservations(observations: string, currentDate:
   result += withInlineDates.slice(lastIndex);
 
   return result;
+}
+
+export const MIN_TEMPORAL_GAP_MS = 15 * 60 * 1000;
+
+export function formatTemporalGap(diffMs: number): string | null {
+  if (diffMs < MIN_TEMPORAL_GAP_MS) return null;
+
+  const minutes = Math.floor(diffMs / (1000 * 60));
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  const weeks = Math.floor(days / 7);
+
+  if (weeks >= 2) return `${weeks} weeks later`;
+  if (weeks >= 1) return `1 week later`;
+  if (days >= 3) return `${days} days later`;
+  if (days >= 2) return `2 days later`;
+  if (days >= 1) return `1 day later`;
+  if (hours >= 12) return `12 hours later`;
+  if (hours >= 6) return `6 hours later`;
+  if (hours >= 3) return `3 hours later`;
+  if (hours >= 2) return `2 hours later`;
+  if (hours >= 1) return `1 hour later`;
+  if (minutes >= 30) return `30 minutes later`;
+  return `15 minutes later`;
+}
+
+export function formatTemporalTimestamp(date: Date): string {
+  return date.toLocaleString('en-US', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+  });
+}
+
+export function getMessagePartTimestamp(msg: MastraDBMessage, position: 'first' | 'last'): number {
+  const timestamps = msg.content?.parts
+    ?.map(part => ('createdAt' in part ? part.createdAt : undefined))
+    .filter((timestamp): timestamp is number => typeof timestamp === 'number');
+
+  if (timestamps && timestamps.length > 0) {
+    const index = position === 'first' ? 0 : timestamps.length - 1;
+    const timestamp = timestamps[index];
+    if (timestamp !== undefined) return timestamp;
+  }
+
+  return new Date(msg.createdAt).getTime();
+}
+
+export function isTemporalGapMarker(msg: MastraDBMessage): boolean {
+  return msg.id.startsWith('__temporal_');
 }

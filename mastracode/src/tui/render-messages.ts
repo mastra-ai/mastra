@@ -112,6 +112,26 @@ function addChildBeforeFollowUps(state: TUIState, child: Component): void {
   state.chatContainer.addChild(child);
 }
 
+export function addChildBeforeMessageOrFollowUps(
+  state: TUIState,
+  child: Component,
+  precedesMessageId?: string,
+): void {
+  if (precedesMessageId) {
+    const anchor = state.messageComponentsById.get(precedesMessageId);
+    if (anchor) {
+      const idx = state.chatContainer.children.indexOf(anchor as never);
+      if (idx >= 0) {
+        (state.chatContainer.children as unknown[]).splice(idx, 0, child);
+        state.chatContainer.invalidate();
+        return;
+      }
+    }
+  }
+
+  addChildBeforeFollowUps(state, child);
+}
+
 /**
  * Add a user message to the chat container.
  */
@@ -125,15 +145,19 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
 
   // Strip [image] markers from text since we show count separately
   const displayText = imageCount > 0 ? textContent.replace(/\[image\]\s*/g, '').trim() : textContent.trim();
-  // Check for system reminder tags
-  const systemReminderMatch = displayText.match(
-    /<system-reminder(?<attrs>\s+[^>]*)?>(?<body>[\s\S]*?)<\/system-reminder>/,
+  const exactDisplayText = displayText.trim();
+
+  // Check for persisted system reminder tags. This must match the whole message,
+  // otherwise normal user text that quotes a reminder tag gets swallowed.
+  const systemReminderMatch = exactDisplayText.match(
+    /^<system-reminder(?<attrs>\s+[^>]*)?>(?<body>[\s\S]*?)<\/system-reminder>$/,
   );
   if (systemReminderMatch?.groups?.body) {
     const reminderText = systemReminderMatch.groups.body.trim();
     const attrs = systemReminderMatch.groups.attrs ?? '';
     const reminderType = attrs.match(/\btype="([^"]*)"/)?.[1];
     const path = attrs.match(/\bpath="([^"]*)"/)?.[1];
+    const precedesMessageId = attrs.match(/\bprecedesMessageId="([^"]*)"/)?.[1];
     const reminderComponent = new SystemReminderComponent({
       message: reminderText,
       reminderType,
@@ -142,13 +166,13 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
     reminderComponent.setExpanded(state.toolOutputExpanded);
     state.allSystemReminderComponents.push(reminderComponent);
 
-    addChildBeforeFollowUps(state, reminderComponent);
+    addChildBeforeMessageOrFollowUps(state, reminderComponent, precedesMessageId);
     state.ui.requestRender();
     return;
   }
 
-  // Check for slash command tags
-  const slashCommandMatch = displayText.match(/<slash-command\s+name="([^"]*)">([\s\S]*?)<\/slash-command>/);
+  // Check for persisted slash command tags.
+  const slashCommandMatch = exactDisplayText.match(/^<slash-command\s+name="([^"]*)">([\s\S]*?)<\/slash-command>$/);
   if (slashCommandMatch) {
     const commandName = slashCommandMatch[1]!;
     const commandContent = slashCommandMatch[2]!.trim();
@@ -162,6 +186,8 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
   const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
   if (displayText || prefix) {
     const userComponent = new UserMessageComponent(prefix + displayText);
+
+    state.messageComponentsById.set(message.id, userComponent);
 
     // Always append to end — follow-ups should stay at the bottom
     state.chatContainer.addChild(userComponent);
@@ -192,6 +218,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   state.allToolComponents = [];
   state.allSlashCommandComponents = [];
   state.allSystemReminderComponents = [];
+  state.messageComponentsById.clear();
   state.allShellComponents = [];
 
   // Local accumulator for detecting task clears during history reconstruction
