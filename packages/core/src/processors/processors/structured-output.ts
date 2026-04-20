@@ -236,7 +236,6 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
       return this.agent.stream(messages, {
         model: this.structuringModel,
         requestContext,
-        maxSteps: 1,
         toolChoice: 'none',
         structuredOutput: {
           schema: this.schema,
