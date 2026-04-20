@@ -21,8 +21,7 @@ export const AgentLayout = ({ agentId, children, leftSlot, rightSlot, browserOve
     hasLeftServiceColumn: Boolean(leftSlot),
   });
 
-  const separatorClassName =
-    'bg-transparent! group-hover/agent-layout:bg-surface3! transition-colors duration-normal';
+  const separatorClassName = 'bg-transparent! group-hover/agent-layout:bg-surface3! transition-colors duration-normal';
 
   return (
     <div className="group/agent-layout relative h-full w-full overflow-hidden">
@@ -49,17 +48,9 @@ export const AgentLayout = ({ agentId, children, leftSlot, rightSlot, browserOve
         {rightSlot && (
           <>
             <PanelSeparator className={separatorClassName} />
-            <CollapsiblePanel
-              direction="right"
-              id="right-slot"
-              minSize={300}
-              maxSize={'50%'}
-              defaultSize="30%"
-              collapsedSize={60}
-              collapsible={true}
-            >
+            <Panel id="right-slot" minSize={300} maxSize={'50%'} defaultSize="30%">
               {rightSlot}
-            </CollapsiblePanel>
+            </Panel>
           </>
         )}
       </Group>
