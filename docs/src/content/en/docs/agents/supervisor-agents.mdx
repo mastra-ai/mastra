@@ -130,6 +130,7 @@ Called after a delegation finishes. Use it to inspect results, provide feedback,
 
 - `context.bail()`: Stop the supervisor loop immediately
 - Return `{ feedback: '...' }`: Add feedback that gets saved to the supervisor's memory and is visible to subsequent iterations
+- Return `{ delegationResult: { ... } }`: Override fields of the delegation tool result the supervisor model sees (for example, strip or replace `subAgentToolResults`)
 
 ```typescript title="src/mastra/agents/supervisor.ts"
 const stream = await supervisor.stream('Research AI trends', {
@@ -155,9 +156,61 @@ The `context` object includes:
 | Property | Description |
 | - | - |
 | `primitiveId` | The ID of the subagent that ran |
-| `result` | The subagent's response |
+| `result` | The subagent's response (includes `subAgentToolResults` when the subagent ran tools and they are not stripped — see below) |
 | `error` | Error if the delegation failed |
 | `bail()` | Function to stop the supervisor loop |
+
+### Nested tool results (`subAgentToolResults`)
+
+When the subagent calls tools, the delegation tool output can include a `subAgentToolResults` array (nested tool names, args, and results). That is useful for Studio and tracing, but it can add a lot of tokens to the supervisor's context.
+
+Control what the supervisor receives with `delegation` options:
+
+- **`includeSubAgentToolResults: false`** — Omit the array. The supervisor still receives `text`, `subAgentThreadId`, and `subAgentResourceId`.
+- **`mapSubAgentToolResults`** — Map or filter the array before it is attached. Return `undefined` to omit the field entirely.
+- **`onDelegationComplete`** — Return `delegationResult: { subAgentToolResults: null }` to remove the field from the tool result after the run, or set `delegationResult.subAgentToolResults` to a custom array.
+
+These work independently — use the one that fits (you rarely need more than one at a time).
+
+Omit nested tool results entirely:
+
+```typescript title="src/mastra/agents/supervisor.ts"
+const stream = await supervisor.stream('Research AI trends', {
+  maxSteps: 10,
+  delegation: {
+    includeSubAgentToolResults: false,
+  },
+})
+```
+
+Redact or reshape results before the supervisor sees them:
+
+```typescript title="src/mastra/agents/supervisor.ts"
+const stream = await supervisor.stream('Research AI trends', {
+  maxSteps: 10,
+  delegation: {
+    mapSubAgentToolResults: results =>
+      results.map(r =>
+        Object.assign({}, r, {
+          result: r.toolName === 'safeTool' ? r.result : '[omitted]',
+        }),
+      ),
+  },
+})
+```
+
+Strip nested results after the subagent run (for example when you only want to adjust the final payload in the hook):
+
+```typescript title="src/mastra/agents/supervisor.ts"
+const stream = await supervisor.stream('Research AI trends', {
+  maxSteps: 10,
+  delegation: {
+    onDelegationComplete: async () => ({
+      delegationResult: { subAgentToolResults: null },
+    }),
+  },
+})
+```
 
 ## Message filtering
 

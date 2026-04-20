@@ -90,6 +90,8 @@ import type {
   DelegationConfig,
   DelegationStartContext,
   DelegationCompleteContext,
+  DelegationSubAgentToolResult,
+  DelegationResultPatch,
 } from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
@@ -3116,6 +3118,64 @@ export class Agent<
   }
 
   /**
+   * Applies {@link DelegationConfig.mapSubAgentToolResults} and
+   * {@link DelegationConfig.includeSubAgentToolResults} before the delegation tool output
+   * is returned to the supervisor.
+   * @internal
+   */
+  private finalizeSubAgentToolResultsForDelegation(
+    raw: DelegationSubAgentToolResult[] | undefined,
+    delegation: DelegationConfig | undefined,
+  ): DelegationSubAgentToolResult[] | undefined {
+    let list: DelegationSubAgentToolResult[] | undefined = raw && raw.length > 0 ? raw : undefined;
+
+    if (delegation?.mapSubAgentToolResults) {
+      const mapped = delegation.mapSubAgentToolResults(list ?? []);
+      if (mapped === undefined) {
+        list = undefined;
+      } else {
+        list = mapped;
+      }
+    }
+
+    if (delegation?.includeSubAgentToolResults === false) {
+      return undefined;
+    }
+
+    return list;
+  }
+
+  /**
+   * Applies `delegationResult` overrides from the `onDelegationComplete` hook return value.
+   * @internal
+   */
+  private applyDelegationCompleteResultPatch(
+    result: {
+      text: string;
+      subAgentThreadId?: string;
+      subAgentResourceId?: string;
+      subAgentToolResults?: DelegationSubAgentToolResult[];
+    },
+    patch: DelegationResultPatch,
+  ): {
+    text: string;
+    subAgentThreadId?: string;
+    subAgentResourceId?: string;
+    subAgentToolResults?: DelegationSubAgentToolResult[];
+  } {
+    const next = { ...result };
+    if (patch.text !== undefined) next.text = patch.text;
+    if (patch.subAgentThreadId !== undefined) next.subAgentThreadId = patch.subAgentThreadId;
+    if (patch.subAgentResourceId !== undefined) next.subAgentResourceId = patch.subAgentResourceId;
+    if (patch.subAgentToolResults === null) {
+      delete next.subAgentToolResults;
+    } else if (patch.subAgentToolResults !== undefined) {
+      next.subAgentToolResults = patch.subAgentToolResults;
+    }
+    return next;
+  }
+
+  /**
    * Retrieves and converts agent tools to CoreTool format.
    * @internal
    */
@@ -3507,13 +3567,17 @@ export class Agent<
                     });
 
                 const agentResponseMessages = generateResult.response.dbMessages ?? [];
-                const subAgentToolResults = generateResult.toolResults?.map(toolResult => ({
+                const rawSubAgentToolResults = generateResult.toolResults?.map(toolResult => ({
                   toolName: toolResult.payload.toolName,
                   toolCallId: toolResult.payload.toolCallId,
                   result: toolResult.payload.result,
                   args: toolResult.payload.args,
                   isError: toolResult.payload.isError,
                 }));
+                const subAgentToolResults = this.finalizeSubAgentToolResultsForDelegation(
+                  rawSubAgentToolResults,
+                  delegation,
+                );
                 // Create user message with the original prompt
                 const userMessage: MastraDBMessage = {
                   id: this.#mastra?.generateId() || randomUUID(),
@@ -3569,7 +3633,12 @@ export class Agent<
                   });
                 }
 
-                result = { text: generateResult.text, subAgentThreadId, subAgentResourceId, subAgentToolResults };
+                result = {
+                  text: generateResult.text,
+                  subAgentThreadId,
+                  subAgentResourceId,
+                  ...(subAgentToolResults !== undefined && { subAgentToolResults }),
+                };
               } else if (methodType === 'generate' && modelVersion === 'v1') {
                 const generateResult = await agent.generateLegacy(messagesForSubAgent, {
                   requestContext,
@@ -3655,13 +3724,17 @@ export class Agent<
                   }
                 }
 
-                const subAgentToolResults = (await streamResult.toolResults)?.map(toolResult => ({
+                const rawSubAgentToolResults = (await streamResult.toolResults)?.map(toolResult => ({
                   toolName: toolResult.payload.toolName,
                   toolCallId: toolResult.payload.toolCallId,
                   result: toolResult.payload.result,
                   args: toolResult.payload.args,
                   isError: toolResult.payload.isError,
                 }));
+                const subAgentToolResults = this.finalizeSubAgentToolResultsForDelegation(
+                  rawSubAgentToolResults,
+                  delegation,
+                );
                 const agentResponseMessages = streamResult.messageList.get.response.db();
                 // Create user message with the original prompt
                 const userMessage: MastraDBMessage = {
@@ -3726,7 +3799,7 @@ export class Agent<
                   text: processedText,
                   subAgentThreadId,
                   subAgentResourceId,
-                  subAgentToolResults,
+                  ...(subAgentToolResults !== undefined && { subAgentToolResults }),
                 };
               } else {
                 const streamResult = await agent.streamLegacy(effectivePrompt, {
@@ -3777,6 +3850,10 @@ export class Agent<
                   };
 
                   const completeResult = await delegation.onDelegationComplete(delegationCompleteContext);
+
+                  if (completeResult?.delegationResult) {
+                    result = this.applyDelegationCompleteResultPatch(result, completeResult.delegationResult);
+                  }
 
                   // If bailed, add a marker to the result and signal via requestContext
                   if (bailed) {

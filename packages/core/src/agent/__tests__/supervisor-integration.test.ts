@@ -103,6 +103,36 @@ function makeSupervisorModel(agentKey: string, prompt: string) {
   });
 }
 
+/** Supervisor + subagent that runs one `calculator` tool call (used for subAgentToolResults delegation tests). */
+function makeCalculatorWorkerSupervisor() {
+  const calculator = createTool({
+    id: 'calculator',
+    description: 'Adds numbers',
+    inputSchema: z.object({ expression: z.string() }),
+    execute: async () => ({ result: 2 }),
+  });
+
+  const subAgent = new Agent({
+    id: 'worker',
+    name: 'worker',
+    instructions: 'Use calculator when needed',
+    model: makeSubAgentModelWithTool('calculator', { expression: '1+1' }),
+    tools: { calculator },
+    memory: new MockMemory(),
+  });
+
+  const supervisorAgent = new Agent({
+    id: 'supervisor',
+    name: 'supervisor',
+    instructions: 'Delegate work',
+    model: makeSupervisorModel('worker', 'compute'),
+    agents: { worker: subAgent },
+    memory: new MockMemory(),
+  });
+
+  return { supervisorAgent };
+}
+
 /**
  * Integration tests for the supervisor pattern with delegation hooks.
  * Tests the complete flow of delegation hooks, iteration hooks, and bail mechanism.
@@ -298,6 +328,218 @@ describe('Supervisor Pattern Integration Tests', () => {
           result: expect.objectContaining({ text: 'Here is the final report.' }),
         }),
       );
+    });
+
+    it('omits subAgentToolResults when includeSubAgentToolResults is false', async () => {
+      const { supervisorAgent } = makeCalculatorWorkerSupervisor();
+
+      const result = await supervisorAgent.generate('Go', {
+        maxSteps: 5,
+        delegation: { includeSubAgentToolResults: false },
+      });
+
+      const tr = result.toolResults?.find((tc: any) => tc.payload?.toolName === 'agent-worker');
+      expect(tr).toBeDefined();
+      expect(tr!.payload.result.subAgentToolResults).toBeUndefined();
+      expect(tr!.payload.result.text).toBe('Task completed.');
+    });
+
+    it('maps subAgentToolResults via mapSubAgentToolResults', async () => {
+      const baselineHarness = makeCalculatorWorkerSupervisor();
+      const baseline = await baselineHarness.supervisorAgent.generate('Go', {
+        maxSteps: 5,
+        delegation: {},
+      });
+      const baselineTr = baseline.toolResults?.find((tc: any) => tc.payload?.toolName === 'agent-worker');
+      const baselineNested = baselineTr!.payload.result.subAgentToolResults as Array<{
+        toolName: string;
+        toolCallId: string;
+        result: unknown;
+      }>;
+      expect(baselineNested?.length).toBe(1);
+
+      const mapSubAgentToolResults = vi.fn((rows: typeof baselineNested) =>
+        rows.map(r => ({ ...r, result: '[redacted]' })),
+      );
+
+      const { supervisorAgent } = makeCalculatorWorkerSupervisor();
+      const result = await supervisorAgent.generate('Go', {
+        maxSteps: 5,
+        delegation: { mapSubAgentToolResults },
+      });
+
+      expect(mapSubAgentToolResults).toHaveBeenCalledTimes(1);
+
+      const tr = result.toolResults?.find((tc: any) => tc.payload?.toolName === 'agent-worker');
+      const nested = tr!.payload.result.subAgentToolResults as typeof baselineNested;
+      expect(nested?.length).toBe(baselineNested.length);
+      expect(nested?.[0].toolName).toBe(baselineNested[0].toolName);
+      expect(nested?.[0].toolCallId).toBe(baselineNested[0].toolCallId);
+      expect(nested?.[0].result).toBe('[redacted]');
+    });
+
+    it('strips subAgentToolResults via onDelegationComplete delegationResult', async () => {
+      const { supervisorAgent } = makeCalculatorWorkerSupervisor();
+
+      const result = await supervisorAgent.generate('Go', {
+        maxSteps: 5,
+        delegation: {
+          onDelegationComplete: () => ({
+            delegationResult: { subAgentToolResults: null },
+          }),
+        },
+      });
+
+      const tr = result.toolResults?.find((tc: any) => tc.payload?.toolName === 'agent-worker');
+      expect(tr!.payload.result.subAgentToolResults).toBeUndefined();
+    });
+
+    it('omits subAgentToolResults in stream tool-result chunks when includeSubAgentToolResults is false', async () => {
+      const calculator = createTool({
+        id: 'calculator',
+        description: 'Adds numbers',
+        inputSchema: z.object({ expression: z.string() }),
+        execute: async () => ({ result: 2 }),
+      });
+
+      let subAgentStreamCallCount = 0;
+      const subAgentModel = new MockLanguageModelV2({
+        doStream: async () => {
+          subAgentStreamCallCount++;
+          if (subAgentStreamCallCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'sub-id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'sub-call-1',
+                  toolName: 'calculator',
+                  input: JSON.stringify({ expression: '1+1' }),
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+                },
+              ]),
+            };
+          }
+
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'sub-id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'sub-text-1' },
+              { type: 'text-delta', id: 'sub-text-1', delta: 'Task completed.' },
+              { type: 'text-end', id: 'sub-text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              },
+            ]),
+          };
+        },
+      });
+
+      const subAgent = new Agent({
+        id: 'worker',
+        name: 'worker',
+        instructions: 'Use calculator when needed',
+        model: subAgentModel,
+        tools: { calculator },
+        memory: new MockMemory(),
+      });
+
+      let supervisorStreamCallCount = 0;
+      const supervisorModel = new MockLanguageModelV2({
+        doStream: async () => {
+          supervisorStreamCallCount++;
+          if (supervisorStreamCallCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                {
+                  type: 'response-metadata',
+                  id: 'super-id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'super-call-1',
+                  toolName: 'agent-worker',
+                  input: JSON.stringify({ prompt: 'compute' }),
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+            };
+          }
+
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              {
+                type: 'response-metadata',
+                id: 'super-id-1',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              },
+              { type: 'text-start', id: 'super-text-1' },
+              { type: 'text-delta', id: 'super-text-1', delta: 'Done' },
+              { type: 'text-end', id: 'super-text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+          };
+        },
+      });
+
+      const supervisorAgent = new Agent({
+        id: 'supervisor',
+        name: 'supervisor',
+        instructions: 'Delegate work',
+        model: supervisorModel,
+        agents: { worker: subAgent },
+        memory: new MockMemory(),
+      });
+
+      const stream = await supervisorAgent.stream('Go', {
+        maxSteps: 5,
+        delegation: { includeSubAgentToolResults: false },
+      });
+
+      let sawDelegatedToolOutput = false;
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type !== 'tool-output') continue;
+        if (chunk.payload?.toolName !== 'agent-worker') continue;
+        sawDelegatedToolOutput = true;
+        expect(chunk.payload.output).toBeDefined();
+      }
+
+      const toolResults = await stream.toolResults;
+      const tr = toolResults?.find((tc: any) => tc.payload?.toolName === 'agent-worker');
+      const delegatedToolResult = tr?.payload?.result;
+      expect(sawDelegatedToolOutput).toBe(true);
+      expect(delegatedToolResult).toBeDefined();
+      expect(delegatedToolResult.subAgentToolResults).toBeUndefined();
+      expect(delegatedToolResult.text).toBe('Task completed.');
     });
 
     it('should skip sub-agent when onDelegationStart returns proceed: false', async () => {

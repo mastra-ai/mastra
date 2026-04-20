@@ -18,6 +18,8 @@ export type {
   DelegationCompleteResult,
   OnDelegationCompleteHandler,
   DelegationConfig,
+  DelegationSubAgentToolResult,
+  DelegationResultPatch,
   MessageFilterContext,
   /** @deprecated Use MessageFilterContext instead */
   MessageFilterContext as ContextFilterContext,
