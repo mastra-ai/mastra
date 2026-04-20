@@ -234,9 +234,6 @@
                       "runId": "<runId-1>",
                       "toolCallId": "call-metadata-1",
                       "toolName": "metadataTool"
-                    },
-                    "output": {
-                      "output": "Processed: some data"
                     }
                   }
                 }

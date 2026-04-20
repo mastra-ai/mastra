@@ -2,6 +2,7 @@ import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { prepareToolsAndToolChoice } from '../../stream/aisdk/v5/compat/prepare-tools';
 import type { ModelSpecVersion } from '../../stream/aisdk/v5/compat/prepare-tools';
+import { createTool } from '../../tools/tool';
 import { MastraModelGateway } from './gateways/base';
 import type { ProviderConfig, GatewayLanguageModel } from './gateways/base';
 import { ModelRouterLanguageModel } from './router';
@@ -226,6 +227,50 @@ describe('ModelRouterLanguageModel with V3 gateway and provider tools (#13667)',
 
     expect(passedOptions.tools).toHaveLength(1);
     expect(passedOptions.tools[0].type).toBe('function');
+  });
+
+  it('should preserve strict on function tools when routing v2-prepared tools to a V3 model', async () => {
+    const router = new ModelRouterLanguageModel({ id: 'v3-gateway/openai/gpt-4o' as `${string}/${string}` }, [gateway]);
+
+    const strictTool = createTool({
+      id: 'strict-tool',
+      description: 'A strict tool',
+      strict: true,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string' },
+        },
+        required: ['query'],
+        additionalProperties: false,
+      },
+      execute: async () => ({ ok: true }),
+    });
+
+    const preparedTools = prepareToolsAndToolChoice({
+      tools: {
+        strictTool: strictTool as any,
+      },
+      toolChoice: undefined,
+      activeTools: undefined,
+      targetVersion: 'v2',
+    });
+
+    await router.doStream({
+      inputFormat: 'messages',
+      ...preparedTools,
+      prompt: [{ role: 'user', content: [{ type: 'text', text: 'Use the strict tool' }] }],
+    } as any);
+
+    const doStreamCall = (mockV3Model.doStream as ReturnType<typeof vi.fn>).mock.calls[0];
+    const passedOptions = doStreamCall[0];
+
+    expect(passedOptions.tools).toHaveLength(1);
+    expect(passedOptions.tools[0]).toMatchObject({
+      type: 'function',
+      name: 'strictTool',
+      strict: true,
+    });
   });
 
   it('should handle mixed provider and function tools when routing to V3 model', async () => {
