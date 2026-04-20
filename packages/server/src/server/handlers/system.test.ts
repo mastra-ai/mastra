@@ -1,13 +1,18 @@
 import { writeFileSync, unlinkSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { NoOpObservability } from '@mastra/core/observability';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GET_SYSTEM_PACKAGES_ROUTE } from './system';
 
-const createMockMastra = (hasEditor: boolean) =>
+const createMockMastra = ({
+  hasEditor = false,
+  hasObservability = false,
+}: { hasEditor?: boolean; hasObservability?: boolean } = {}) =>
   ({
     getEditor: () => (hasEditor ? {} : undefined),
     getStorage: () => undefined,
+    observability: hasObservability ? {} : new NoOpObservability(),
   }) as any;
 
 describe('System Handlers', () => {
@@ -40,12 +45,13 @@ describe('System Handlers', () => {
       writeFileSync(tempFilePath, JSON.stringify(packages), 'utf-8');
       process.env.MASTRA_PACKAGES_FILE = tempFilePath;
 
-      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(false) } as any);
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra() } as any);
 
       expect(result).toEqual({
         packages,
         isDev: false,
         cmsEnabled: false,
+        hasObservability: false,
         storageType: undefined,
         observabilityStorageType: undefined,
       });
@@ -54,12 +60,13 @@ describe('System Handlers', () => {
     it('should return empty array when MASTRA_PACKAGES_FILE is not set', async () => {
       delete process.env.MASTRA_PACKAGES_FILE;
 
-      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(false) } as any);
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra() } as any);
 
       expect(result).toEqual({
         packages: [],
         isDev: false,
         cmsEnabled: false,
+        hasObservability: false,
         storageType: undefined,
         observabilityStorageType: undefined,
       });
@@ -69,12 +76,13 @@ describe('System Handlers', () => {
       writeFileSync(tempFilePath, 'not-valid-json', 'utf-8');
       process.env.MASTRA_PACKAGES_FILE = tempFilePath;
 
-      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(false) } as any);
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra() } as any);
 
       expect(result).toEqual({
         packages: [],
         isDev: false,
         cmsEnabled: false,
+        hasObservability: false,
         storageType: undefined,
         observabilityStorageType: undefined,
       });
@@ -83,12 +91,13 @@ describe('System Handlers', () => {
     it('should return empty array when MASTRA_PACKAGES_FILE points to non-existent file', async () => {
       process.env.MASTRA_PACKAGES_FILE = '/non/existent/path/packages.json';
 
-      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(false) } as any);
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra() } as any);
 
       expect(result).toEqual({
         packages: [],
         isDev: false,
         cmsEnabled: false,
+        hasObservability: false,
         storageType: undefined,
         observabilityStorageType: undefined,
       });
@@ -98,12 +107,13 @@ describe('System Handlers', () => {
       process.env.MASTRA_DEV = 'true';
       delete process.env.MASTRA_PACKAGES_FILE;
 
-      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(false) } as any);
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra() } as any);
 
       expect(result).toEqual({
         packages: [],
         isDev: true,
         cmsEnabled: false,
+        hasObservability: false,
         storageType: undefined,
         observabilityStorageType: undefined,
       });
@@ -112,12 +122,13 @@ describe('System Handlers', () => {
     it('should return cmsEnabled true when editor is configured', async () => {
       delete process.env.MASTRA_PACKAGES_FILE;
 
-      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(true) } as any);
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra({ hasEditor: true }) } as any);
 
       expect(result).toEqual({
         packages: [],
         isDev: false,
         cmsEnabled: true,
+        hasObservability: false,
         storageType: undefined,
         observabilityStorageType: undefined,
       });
@@ -126,12 +137,30 @@ describe('System Handlers', () => {
     it('should return cmsEnabled false when editor is not configured', async () => {
       delete process.env.MASTRA_PACKAGES_FILE;
 
-      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(false) } as any);
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra() } as any);
 
       expect(result).toEqual({
         packages: [],
         isDev: false,
         cmsEnabled: false,
+        hasObservability: false,
+        storageType: undefined,
+        observabilityStorageType: undefined,
+      });
+    });
+
+    it('should return hasObservability true when observability is configured', async () => {
+      delete process.env.MASTRA_PACKAGES_FILE;
+
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra({ hasObservability: true }),
+      } as any);
+
+      expect(result).toEqual({
+        packages: [],
+        isDev: false,
+        cmsEnabled: false,
+        hasObservability: true,
         storageType: undefined,
         observabilityStorageType: undefined,
       });

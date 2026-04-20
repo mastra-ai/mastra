@@ -483,7 +483,10 @@ async function resolveTarget(
         if (agentVersion) {
           resolved = await mastra.getAgentById(targetId, { versionId: agentVersion });
         } else {
-          resolved = mastra.getAgentById(targetId);
+          // No pinned version: honor the Editor's current draft so experiments run
+          // against the user's latest unpublished changes rather than the code-defined agent.
+          const editor = mastra.getEditor?.();
+          resolved = editor ? await mastra.getAgentById(targetId, { status: 'draft' }) : mastra.getAgentById(targetId);
         }
       } catch {
         // Try by name if ID lookup fails
@@ -491,7 +494,10 @@ async function resolveTarget(
           if (agentVersion) {
             resolved = await mastra.getAgent(targetId, { versionId: agentVersion });
           } else {
-            resolved = mastra.getAgent(targetId);
+            // No pinned version: honor the Editor's current draft so experiments run
+            // against the user's latest unpublished changes rather than the code-defined agent.
+            const editor = mastra.getEditor?.();
+            resolved = editor ? await mastra.getAgent(targetId, { status: 'draft' }) : mastra.getAgent(targetId);
           }
         } catch {
           // leave null

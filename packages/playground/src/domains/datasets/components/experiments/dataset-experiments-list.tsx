@@ -70,12 +70,17 @@ export function DatasetExperimentsList({
           const createdAtDate = new Date(experiment.createdAt);
 
           return (
-            <EntityList.Row key={experiment.id} onClick={() => onRowClick(experiment.id)} selected={isSelected}>
+            <EntityList.Row
+              key={experiment.id}
+              onClick={() => (isSelectionActive ? onToggleSelection(experiment.id) : onRowClick(experiment.id))}
+              selected={isSelected}
+            >
               {isSelectionActive && (
                 <EntityList.Cell>
                   <Checkbox
                     checked={isSelected}
                     onCheckedChange={() => onToggleSelection(experiment.id)}
+                    onClick={e => e.stopPropagation()}
                     aria-label={`Select experiment ${experiment.id}`}
                   />
                 </EntityList.Cell>

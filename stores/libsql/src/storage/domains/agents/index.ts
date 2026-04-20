@@ -178,8 +178,11 @@ export class AgentsLibSQL extends AgentsStorage {
    */
   async #cleanupStaleDrafts(): Promise<void> {
     try {
+      // Only delete truly orphaned draft rows (no associated versions). Valid draft agents
+      // have an activeVersionId set during create(), but we also guard on version existence
+      // to avoid deleting agents whose activeVersionId was cleared by other code paths.
       await this.#client.execute({
-        sql: `DELETE FROM "${TABLE_AGENTS}" WHERE status = 'draft' AND activeVersionId IS NULL`,
+        sql: `DELETE FROM "${TABLE_AGENTS}" WHERE status = 'draft' AND "activeVersionId" IS NULL AND id NOT IN (SELECT DISTINCT "agentId" FROM "${TABLE_AGENT_VERSIONS}")`,
       });
     } catch {
       // Non-critical cleanup, ignore errors
@@ -358,7 +361,13 @@ export class AgentsLibSQL extends AgentsStorage {
         changeMessage: 'Initial version',
       });
 
-      // 3. Return the thin agent record (activeVersionId remains null, status remains 'draft')
+      // 3. Point the agent record at the newly created version
+      await this.#db.update({
+        tableName: TABLE_AGENTS,
+        keys: { id: agent.id },
+        data: { activeVersionId: versionId, updatedAt: new Date().toISOString() },
+      });
+
       const created = await this.getById(agent.id);
       if (!created) {
         throw new MastraError({
