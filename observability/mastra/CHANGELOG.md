@@ -1,5 +1,34 @@
 # @mastra/observability
 
+## 1.10.0-alpha.2
+
+### Minor Changes
+
+- Changed `MODEL_CHUNK` `tool-result` span `output` handling. ([#15495](https://github.com/mastra-ai/mastra/pull/15495))
+
+  **What changed**
+  - `MODEL_CHUNK` spans for `tool-result` now omit `output` for locally executed tools.
+  - `TOOL_CALL` remains the canonical span for locally executed tool result payloads.
+  - `MODEL_CHUNK` spans for provider-executed `tool-result` chunks still include `output`.
+  - `MODEL_CHUNK` metadata still includes `toolCallId`, `toolName`, and `providerExecuted`.
+
+  **Why**
+  This reduces duplicate tool result payloads in traces without dropping provider-emitted tool results that may not have a matching `TOOL_CALL` span.
+
+### Patch Changes
+
+- Updated dependencies [[`8786a61`](https://github.com/mastra-ai/mastra/commit/8786a61fa54ba265f85eeff9985ca39863d18bb6), [`8fb2405`](https://github.com/mastra-ai/mastra/commit/8fb2405138f2d208b7962ad03f121ca25bcc28c5)]:
+  - @mastra/core@1.26.0-alpha.7
+
+## 1.9.2-alpha.1
+
+### Patch Changes
+
+- Improved tracing overhead when filtering spans. Spans dropped by `excludeSpanTypes` or the internal-span filter (`includeInternalSpans: false`) now skip payload serialization and retention entirely instead of paying the cost and discarding at export time. ([#15487](https://github.com/mastra-ai/mastra/pull/15487))
+
+- Updated dependencies [[`6315317`](https://github.com/mastra-ai/mastra/commit/63153175fe9a7b224e5be7c209bbebc01dd9b0d5), [`9d3b24b`](https://github.com/mastra-ai/mastra/commit/9d3b24b19407ae9c09586cf7766d38dc4dff4a69)]:
+  - @mastra/core@1.26.0-alpha.6
+
 ## 1.9.2-alpha.0
 
 ### Patch Changes
