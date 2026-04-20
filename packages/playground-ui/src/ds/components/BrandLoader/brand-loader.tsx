@@ -34,13 +34,7 @@ function BrandLoader({ className, size = 'md', 'aria-label': ariaLabel = 'Loadin
       className={cn('brand-loader inline-block text-neutral6', sizeClasses[size], className)}
       style={{ ['--brand-loader-stroke' as string]: strokeBySize[size] }}
     >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 34 21"
-        width={2000}
-        height={Math.round((2000 * 21) / 34)}
-        aria-hidden="true"
-      >
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 34 21" aria-hidden="true">
         <defs>
           {/* Gooey merge: blur + sharp alpha threshold fuses overlapping shapes into a single blob. */}
           <filter id={filterId} x="-5%" y="-5%" width="110%" height="110%">

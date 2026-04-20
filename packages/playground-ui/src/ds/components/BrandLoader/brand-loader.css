@@ -1,33 +1,8 @@
-/**
- * Supersample the SVG so the gooey blur filter rasterises at 10× the
- * visible pixel density. feGaussianBlur runs at destination-pixel
- * resolution, which at small sizes (sm/md) is too few pixels and looks
- * pixelated. Using `cqw` (container-query width) forces an explicit
- * pixel size on the SVG — the browser has to rasterise the filter at
- * that resolution; transform + `will-change` caches the bitmap and
- * GPU-scales it down visually without re-rastering.
- */
-.brand-loader {
-  position: relative;
-  display: inline-block;
-  container-type: inline-size;
-  aspect-ratio: 34 / 21;
-  overflow: hidden;
-}
-
 .brand-loader svg {
-  position: absolute;
-  top: 0;
-  left: 0;
   display: block;
-  /* SVG keeps its intrinsic 2000px width/height from HTML attrs — forces the
-     filter raster buffer to be allocated at 2000px resolution. Visible size
-     is controlled by the transform below (container-width / intrinsic-width). */
-  transform: scale(calc(100cqw / 2000px)) translateZ(0);
-  transform-origin: top left;
-  backface-visibility: hidden;
+  width: 100%;
+  height: auto;
   shape-rendering: geometricprecision;
-  will-change: transform;
 }
 
 .brand-loader circle {
