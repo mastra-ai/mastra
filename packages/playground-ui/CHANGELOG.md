@@ -1,5 +1,36 @@
 # @mastra/playground-ui
 
+## 22.2.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`1bd5104`](https://github.com/mastra-ai/mastra/commit/1bd51048b6da93507276d6623e3fd96a9e1a8944)]:
+  - @mastra/core@1.26.0-alpha.8
+  - @mastra/client-js@1.13.5-alpha.8
+  - @mastra/react@0.2.27-alpha.8
+
+## 22.2.0-alpha.7
+
+### Minor Changes
+
+- Added BrandLoader, a branded pulse-wave loader component for brand moments like app boot or agent thinking. Complements Spinner, which remains the inline utility loader. ([#15490](https://github.com/mastra-ai/mastra/pull/15490))
+
+### Patch Changes
+
+- Updated dependencies [[`8786a61`](https://github.com/mastra-ai/mastra/commit/8786a61fa54ba265f85eeff9985ca39863d18bb6), [`8fb2405`](https://github.com/mastra-ai/mastra/commit/8fb2405138f2d208b7962ad03f121ca25bcc28c5)]:
+  - @mastra/core@1.26.0-alpha.7
+  - @mastra/client-js@1.13.5-alpha.7
+  - @mastra/react@0.2.27-alpha.7
+
+## 22.1.3-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`6315317`](https://github.com/mastra-ai/mastra/commit/63153175fe9a7b224e5be7c209bbebc01dd9b0d5), [`9d3b24b`](https://github.com/mastra-ai/mastra/commit/9d3b24b19407ae9c09586cf7766d38dc4dff4a69)]:
+  - @mastra/core@1.26.0-alpha.6
+  - @mastra/client-js@1.13.5-alpha.6
+  - @mastra/react@0.2.27-alpha.6
+
 ## 22.1.3-alpha.5
 
 ### Patch Changes
