@@ -184,13 +184,13 @@ export async function listScores(client: ClickHouseClient, args: ListScoresArgs)
 
   const countResult = await queryJson<{ total?: number }>(
     client,
-    `SELECT count() AS total FROM ${TABLE_SCORE_EVENTS} AS s FINAL ${whereClause}`,
+    `SELECT count() AS total FROM ${TABLE_SCORE_EVENTS} AS s ${whereClause}`,
     filter.params,
   );
 
   const rows = await queryJson<Record<string, any>>(
     client,
-    `SELECT * FROM ${TABLE_SCORE_EVENTS} AS s FINAL ${whereClause} ORDER BY ${orderBy} LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
+    `SELECT * FROM ${TABLE_SCORE_EVENTS} AS s ${whereClause} ORDER BY ${orderBy} LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
     { ...filter.params, limit: pagination.limit, offset: pagination.offset },
   );
 
@@ -221,7 +221,7 @@ export async function getScoreAggregate(
   const combined = mergeFilters(identity, signalFilter);
   const whereClause = toWhereClause(combined);
 
-  const sql = `SELECT ${aggSql} AS value FROM ${TABLE_SCORE_EVENTS} FINAL ${whereClause}`;
+  const sql = `SELECT ${aggSql} AS value FROM ${TABLE_SCORE_EVENTS} ${whereClause}`;
   const result = await queryJson<Record<string, unknown>>(client, sql, combined.params);
   const value = result[0]?.value == null ? null : Number(result[0]?.value);
 
@@ -260,7 +260,7 @@ export async function getScoreAggregate(
 
       const prevResult = await queryJson<Record<string, unknown>>(
         client,
-        `SELECT ${aggSql} AS value FROM ${TABLE_SCORE_EVENTS} FINAL ${prevWhereClause}`,
+        `SELECT ${aggSql} AS value FROM ${TABLE_SCORE_EVENTS} ${prevWhereClause}`,
         prevCombined.params,
       );
       const previousValue = prevResult[0]?.value == null ? null : Number(prevResult[0]?.value);
@@ -288,7 +288,7 @@ export async function getScoreBreakdown(
   const whereClause = toWhereClause(combined);
   const resolved = resolveScoreGroupBy(args.groupBy);
 
-  const sql = `SELECT ${resolved.map(e => e.selectSql).join(', ')}, ${aggSql} AS value FROM ${TABLE_SCORE_EVENTS} FINAL ${whereClause} GROUP BY ${resolved.map(e => e.groupSql).join(', ')} ORDER BY value DESC`;
+  const sql = `SELECT ${resolved.map(e => e.selectSql).join(', ')}, ${aggSql} AS value FROM ${TABLE_SCORE_EVENTS} ${whereClause} GROUP BY ${resolved.map(e => e.groupSql).join(', ')} ORDER BY value DESC`;
   const rows = await queryJson<Record<string, unknown>>(client, sql, combined.params);
 
   return {
@@ -321,7 +321,7 @@ export async function getScoreTimeSeries(
       SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
              ${resolved.map(e => e.selectSql).join(', ')},
              ${aggSql} AS value
-      FROM ${TABLE_SCORE_EVENTS} FINAL ${whereClause}
+      FROM ${TABLE_SCORE_EVENTS} ${whereClause}
       GROUP BY bucket, ${resolved.map(e => e.groupSql).join(', ')}
       ORDER BY bucket
     `;
@@ -346,7 +346,7 @@ export async function getScoreTimeSeries(
   const sql = `
     SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
            ${aggSql} AS value
-    FROM ${TABLE_SCORE_EVENTS} FINAL ${whereClause}
+    FROM ${TABLE_SCORE_EVENTS} ${whereClause}
     GROUP BY bucket
     ORDER BY bucket
   `;
@@ -387,7 +387,7 @@ export async function getScorePercentiles(
     const sql = `
       SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
              quantile(${p})(score) AS pvalue
-      FROM ${TABLE_SCORE_EVENTS} FINAL
+      FROM ${TABLE_SCORE_EVENTS}
       ${whereClause}
       GROUP BY bucket
       ORDER BY bucket

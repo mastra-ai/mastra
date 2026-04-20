@@ -26,7 +26,7 @@ export async function listLogs(client: ClickHouseClient, args: ListLogsArgs): Pr
 
   const countResult = (await (
     await client.query({
-      query: `SELECT count() AS total FROM ${TABLE_LOG_EVENTS} AS l FINAL ${whereClause}`,
+      query: `SELECT count() AS total FROM ${TABLE_LOG_EVENTS} AS l ${whereClause}`,
       query_params: filter.params,
       format: 'JSONEachRow',
       clickhouse_settings: CH_SETTINGS,
@@ -37,7 +37,7 @@ export async function listLogs(client: ClickHouseClient, args: ListLogsArgs): Pr
     await client.query({
       query: `
         SELECT *
-        FROM ${TABLE_LOG_EVENTS} AS l FINAL
+        FROM ${TABLE_LOG_EVENTS} AS l
         ${whereClause}
         ORDER BY ${orderBy}
         LIMIT {limit:UInt32} OFFSET {offset:UInt32}

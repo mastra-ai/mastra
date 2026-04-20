@@ -258,7 +258,7 @@ describe('migrateSignalTables (ClickHouse v-next)', () => {
 
     const deduped = (await (
       await client.query({
-        query: `SELECT message FROM ${TABLE_LOG_EVENTS} FINAL WHERE logId = {logId:String}`,
+        query: `SELECT message FROM ${TABLE_LOG_EVENTS} WHERE logId = {logId:String}`,
         query_params: { logId },
         format: 'JSONEachRow',
       })

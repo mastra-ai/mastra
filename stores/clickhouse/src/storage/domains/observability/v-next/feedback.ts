@@ -189,13 +189,13 @@ export async function listFeedback(client: ClickHouseClient, args: ListFeedbackA
 
   const countResult = await queryJson<{ total?: number }>(
     client,
-    `SELECT count() AS total FROM ${TABLE_FEEDBACK_EVENTS} AS f FINAL ${whereClause}`,
+    `SELECT count() AS total FROM ${TABLE_FEEDBACK_EVENTS} AS f ${whereClause}`,
     filter.params,
   );
 
   const rows = await queryJson<Record<string, any>>(
     client,
-    `SELECT * FROM ${TABLE_FEEDBACK_EVENTS} AS f FINAL ${whereClause} ORDER BY ${orderBy} LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
+    `SELECT * FROM ${TABLE_FEEDBACK_EVENTS} AS f ${whereClause} ORDER BY ${orderBy} LIMIT {limit:UInt32} OFFSET {offset:UInt32}`,
     { ...filter.params, limit: pagination.limit, offset: pagination.offset },
   );
 
@@ -226,7 +226,7 @@ export async function getFeedbackAggregate(
   const combined = mergeFilters(identity, signalFilter);
   const whereClause = toWhereClause(combined);
 
-  const sql = `SELECT ${aggSql} AS value FROM ${TABLE_FEEDBACK_EVENTS} FINAL ${whereClause}`;
+  const sql = `SELECT ${aggSql} AS value FROM ${TABLE_FEEDBACK_EVENTS} ${whereClause}`;
   const result = await queryJson<Record<string, unknown>>(client, sql, combined.params);
   const value = result[0]?.value == null ? null : Number(result[0]?.value);
 
@@ -265,7 +265,7 @@ export async function getFeedbackAggregate(
 
       const prevResult = await queryJson<Record<string, unknown>>(
         client,
-        `SELECT ${aggSql} AS value FROM ${TABLE_FEEDBACK_EVENTS} FINAL ${prevWhereClause}`,
+        `SELECT ${aggSql} AS value FROM ${TABLE_FEEDBACK_EVENTS} ${prevWhereClause}`,
         prevCombined.params,
       );
       const previousValue = prevResult[0]?.value == null ? null : Number(prevResult[0]?.value);
@@ -293,7 +293,7 @@ export async function getFeedbackBreakdown(
   const whereClause = toWhereClause(combined);
   const resolved = resolveFeedbackGroupBy(args.groupBy);
 
-  const sql = `SELECT ${resolved.map(e => e.selectSql).join(', ')}, ${aggSql} AS value FROM ${TABLE_FEEDBACK_EVENTS} FINAL ${whereClause} GROUP BY ${resolved.map(e => e.groupSql).join(', ')} ORDER BY value DESC`;
+  const sql = `SELECT ${resolved.map(e => e.selectSql).join(', ')}, ${aggSql} AS value FROM ${TABLE_FEEDBACK_EVENTS} ${whereClause} GROUP BY ${resolved.map(e => e.groupSql).join(', ')} ORDER BY value DESC`;
   const rows = await queryJson<Record<string, unknown>>(client, sql, combined.params);
 
   return {
@@ -326,7 +326,7 @@ export async function getFeedbackTimeSeries(
       SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
              ${resolved.map(e => e.selectSql).join(', ')},
              ${aggSql} AS value
-      FROM ${TABLE_FEEDBACK_EVENTS} FINAL ${whereClause}
+      FROM ${TABLE_FEEDBACK_EVENTS} ${whereClause}
       GROUP BY bucket, ${resolved.map(e => e.groupSql).join(', ')}
       ORDER BY bucket
     `;
@@ -351,7 +351,7 @@ export async function getFeedbackTimeSeries(
   const sql = `
     SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
            ${aggSql} AS value
-    FROM ${TABLE_FEEDBACK_EVENTS} FINAL ${whereClause}
+    FROM ${TABLE_FEEDBACK_EVENTS} ${whereClause}
     GROUP BY bucket
     ORDER BY bucket
   `;
@@ -392,7 +392,7 @@ export async function getFeedbackPercentiles(
     const sql = `
       SELECT toStartOfInterval(timestamp, ${intervalSql}) AS bucket,
              quantile(${p})(valueNumber) AS pvalue
-      FROM ${TABLE_FEEDBACK_EVENTS} FINAL
+      FROM ${TABLE_FEEDBACK_EVENTS}
       ${whereClause}
       GROUP BY bucket
       ORDER BY bucket
