@@ -174,12 +174,16 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
   /** Memory instance for loading context. */
   private readonly memory: MemoryContextProvider;
 
+  /** Whether temporal-gap reminder markers should be inserted. */
+  private readonly temporalGapMarkers: boolean;
+
   /** Active turn — created on first processInputStep, ended on processOutputResult. */
   private turn?: ObservationTurn;
 
-  constructor(engine: ObservationalMemory, memory: MemoryContextProvider) {
+  constructor(engine: ObservationalMemory, memory: MemoryContextProvider, options?: { temporalGapMarkers?: boolean }) {
     this.engine = engine;
     this.memory = memory;
+    this.temporalGapMarkers = options?.temporalGapMarkers ?? false;
   }
 
   // ─── Processor lifecycle hooks ──────────────────────────────────────────
@@ -267,7 +271,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         this.turn.writer = writer;
         this.turn.requestContext = requestContext;
         await this.turn.start(this.memory);
-        if (stepNumber === 0) {
+        if (stepNumber === 0 && this.temporalGapMarkers) {
           await insertTemporalGapMarkers({ messageList, writer });
         }
         state.__omTurn = this.turn;

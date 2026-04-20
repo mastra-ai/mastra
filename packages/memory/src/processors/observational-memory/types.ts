@@ -837,6 +837,14 @@ export interface ObservationalMemoryConfig {
   shareTokenBudget?: boolean;
 
   /**
+   * When true, inserts temporal-gap reminder markers before new user messages after
+   * significant inactivity.
+   *
+   * @default false
+   */
+  temporalGapMarkers?: boolean;
+
+  /**
    * Time before buffered observations or buffered reflections are force-activated after inactivity.
    * Accepts milliseconds as a number or a duration string like `"5m"` or `"1hr"`.
    * When the gap between the current time and the last assistant message part's `createdAt`

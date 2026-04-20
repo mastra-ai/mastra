@@ -752,6 +752,15 @@ export interface ObservationalMemoryOptions {
   shareTokenBudget?: boolean;
 
   /**
+   * When true, inserts temporal-gap reminder markers before new user messages after
+   * significant inactivity. These markers are persisted in memory and also emitted
+   * as inline reminder events for clients that want to render them specially.
+   *
+   * @default false
+   */
+  temporalGapMarkers?: boolean;
+
+  /**
    * **Experimental.** Enable retrieval-mode observation groups as durable pointers
    * to raw message history. When enabled, observation groups keep `_range`
    * metadata visible in context and a `recall` tool is registered so the actor
