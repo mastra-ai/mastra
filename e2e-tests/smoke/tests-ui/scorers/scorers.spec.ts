@@ -33,21 +33,16 @@ test.describe('Scorers', () => {
       expect(body.scores?.some((s: { runId: string }) => s.runId === runId)).toBeTruthy();
     }).toPass({ timeout: 10_000, intervals: [500] });
 
-    await page.goto('/scorers/Completeness%20Scorer');
+    // URL segment is the scorer ID, not the human-readable name
+    await page.goto('/scorers/completeness');
 
     // Heading and description
     await expect(page.getByRole('heading', { name: 'Completeness Scorer', level: 1 })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('Checks whether the output contains non-empty content')).toBeVisible();
 
-    // The scored-workflow link should be visible in the page
-    await expect(page.getByRole('link', { name: 'scored-workflow' })).toBeVisible();
-
-    // NOTE: The scorer detail page sometimes does not display scores in the UI
-    // despite them being persisted via API. The API test validates persistence.
-    // The scored-workflow link confirms the scorer is associated with the workflow.
-    // await expect(page.getByText('No scores for this scorer yet')).not.toBeVisible();
-    // const scoreRow = page.getByRole('button', { name: /scored-workflow/ }).first();
-    // await expect(scoreRow).toBeVisible();
+    // A score row referencing the scored workflow should be visible
+    const scoreRow = page.getByRole('button').filter({ hasText: 'scored-workflow' }).first();
+    await expect(scoreRow).toBeVisible({ timeout: 10_000 });
 
     // Scorer combobox shows current scorer and can switch to another
     const scorerCombobox = page.getByRole('combobox').filter({ hasText: 'Completeness Scorer' });
@@ -55,9 +50,9 @@ test.describe('Scorers', () => {
     await expect(page.getByRole('option', { name: 'Length Check Scorer' })).toBeVisible();
     await page.getByRole('option', { name: 'Length Check Scorer' }).click();
 
-    // Page navigates to the other scorer (URL uses scorer id or name depending on version)
+    // Page navigates to the other scorer (URL uses scorer id)
     await expect(page).toHaveURL(/\/scorers\//, { timeout: 5_000 });
     await expect(page.getByRole('heading', { name: 'Length Check Scorer', level: 1 })).toBeVisible();
-    await expect(page.getByText('No scores for this scorer yet')).toBeVisible();
+    await expect(page.getByText('No scores yet')).toBeVisible();
   });
 });
