@@ -131,11 +131,8 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     if (this.isStructuringAgentStreamStarted) return;
     this.isStructuringAgentStreamStarted = true;
     try {
-      const structuringPrompt = this.useAgent ? '' : this.buildStructuringPrompt(streamParts);
-      const prompt = `Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details. Rely on the provided text and conversation history.\n\n${structuringPrompt}`;
-
       const structuringAgentStream = await this.getStructuringStream(
-        prompt,
+        streamParts,
         requestContext,
         messageList,
         observabilityContext,
@@ -197,7 +194,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
    * read-only memory when request context provides thread info, falling back to the bare internal agent.
    */
   private async getStructuringStream(
-    prompt: string,
+    streamParts: ChunkType[],
     requestContext?: RequestContext,
     messageList?: ProcessOutputStreamArgs['messageList'],
     observabilityContext?: ObservabilityContext,
@@ -224,7 +221,12 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     if (this.useAgent && this.agent && threadId) {
       const promptMessage: MessageInput = {
         role: 'user',
-        content: [{ type: 'text', text: prompt }],
+        content: [
+          {
+            type: 'text',
+            text: `Extract and structure information from the conversation so far. keep the original meaning and details. Rely on the provided text and conversation history`,
+          },
+        ],
       };
 
       const messages: MessageListInput = [
@@ -236,6 +238,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
       return this.agent.stream(messages, {
         model: this.structuringModel,
         requestContext,
+        maxSteps: 1,
         toolChoice: 'none',
         structuredOutput: {
           schema: this.schema,
@@ -252,14 +255,17 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     }
 
     // Fallback: use the bare internal structuring agent (no conversation context)
-    return this.structuringAgent.stream(prompt, {
-      structuredOutput: {
-        schema: this.schema,
-        jsonPromptInjection: this.jsonPromptInjection,
+    return this.structuringAgent.stream(
+      `Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details. Rely on the provided text and conversation history.\n\n${this.buildStructuringPrompt(streamParts)}`,
+      {
+        structuredOutput: {
+          schema: this.schema,
+          jsonPromptInjection: this.jsonPromptInjection,
+        },
+        providerOptions: this.providerOptions,
+        ...observabilityContext,
       },
-      providerOptions: this.providerOptions,
-      ...observabilityContext,
-    });
+    );
   }
 
   /**

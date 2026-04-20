@@ -263,7 +263,7 @@ describe('StructuredOutputProcessor', () => {
             content: expect.arrayContaining([
               expect.objectContaining({
                 type: 'text',
-                text: expect.stringContaining('Rely on the provided text and conversation history.'),
+                text: expect.stringContaining('Extract and structure information from the conversation so far.'),
               }),
             ]),
           }),
@@ -350,7 +350,7 @@ describe('StructuredOutputProcessor', () => {
             content: expect.arrayContaining([
               expect.objectContaining({
                 type: 'text',
-                text: expect.stringContaining('Rely on the provided text and conversation history.'),
+                text: expect.stringContaining('Extract and structure information from the conversation so far.'),
               }),
             ]),
           }),
@@ -445,7 +445,7 @@ describe('StructuredOutputProcessor', () => {
             content: expect.arrayContaining([
               expect.objectContaining({
                 type: 'text',
-                text: expect.stringContaining('Rely on the provided text and conversation history.'),
+                text: expect.stringContaining('Extract and structure information from the conversation so far.'),
               }),
             ]),
           }),
@@ -565,7 +565,7 @@ describe('StructuredOutputProcessor', () => {
             content: [
               expect.objectContaining({
                 type: 'text',
-                text: expect.stringContaining('Rely on the provided text and conversation history.'),
+                text: expect.stringContaining('Extract and structure information from the conversation so far.'),
               }),
             ],
           },
