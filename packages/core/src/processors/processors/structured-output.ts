@@ -1,5 +1,6 @@
 import type { TransformStreamDefaultController } from 'node:stream/web';
 import { Agent } from '../../agent';
+import type { MessageInput } from '../../agent/message-list';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { ProviderOptions } from '../../llm/model/provider-options';
@@ -221,7 +222,13 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     // use that agent with a model override and read-only memory.
     // This gives the structuring model full conversation context.
     if (this.useAgent && this.agent && threadId) {
-      return this.agent.stream(prompt, {
+      const messages: MessageInput[] = [
+        ...(messageList?.get?.input?.db() || []),
+        ...(messageList?.get?.response?.db() || []),
+        { role: 'user', content: prompt },
+      ];
+
+      return this.agent.stream(messages, {
         model: this.structuringModel,
         instructions: this.structuringInstructions,
         requestContext,

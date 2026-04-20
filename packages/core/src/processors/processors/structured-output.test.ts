@@ -257,7 +257,7 @@ describe('StructuredOutputProcessor', () => {
       });
 
       expect(agent.stream).toHaveBeenCalledWith(
-        expect.stringContaining('# Assistant Response'),
+        [{ role: 'user', content: expect.stringContaining('# Assistant Response') }],
         expect.objectContaining({
           model: mockModel,
           instructions: expect.any(String),
@@ -335,7 +335,7 @@ describe('StructuredOutputProcessor', () => {
       });
 
       expect(agent.stream).toHaveBeenCalledWith(
-        expect.stringContaining('# Assistant Response'),
+        [{ role: 'user', content: expect.stringContaining('# Assistant Response') }],
         expect.objectContaining({
           model: mockModel,
           instructions: expect.any(String),
@@ -421,7 +421,7 @@ describe('StructuredOutputProcessor', () => {
       });
 
       expect(agent.stream).toHaveBeenCalledWith(
-        expect.stringContaining('# Assistant Response'),
+        [{ role: 'user', content: expect.stringContaining('# Assistant Response') }],
         expect.objectContaining({
           model: mockModel,
           instructions: expect.any(String),
@@ -439,6 +439,115 @@ describe('StructuredOutputProcessor', () => {
         }),
       );
       expect(fallbackStreamSpy).not.toHaveBeenCalled();
+    });
+
+    it('should include unsaved current-run messages when reusing the explicit agent', async () => {
+      const { controller } = createMockController();
+      const abort = createMockAbort();
+      const agent = {
+        stream: vi.fn().mockResolvedValue({
+          fullStream: convertArrayToReadableStream([
+            {
+              runId: 'test-run',
+              from: ChunkFrom.AGENT,
+              type: 'object-result',
+              object: { color: 'violet', intensity: 'deep' },
+            },
+          ]),
+        }),
+      } as unknown as Agent;
+
+      processor = new StructuredOutputProcessor({
+        schema: testSchema,
+        model: mockModel,
+        errorStrategy: 'strict',
+        useAgent: true,
+      });
+      processor.setAgent(agent);
+
+      const finishChunk: ChunkType = {
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        type: 'finish' as const,
+        payload: {
+          stepResult: { reason: 'stop' as const },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
+          messages: { all: [], user: [], nonUser: [] },
+        },
+      };
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_THREAD_ID_KEY, 'thread-123');
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'resource-456');
+
+      const unsavedInputMessage = {
+        id: 'input-1',
+        role: 'user' as const,
+        content: {
+          format: 2 as const,
+          parts: [{ type: 'text' as const, text: 'My favorite color is violet.' }],
+        },
+        createdAt: new Date(0),
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      };
+      const unsavedResponseMessage = {
+        id: 'response-1',
+        role: 'assistant' as const,
+        content: {
+          format: 2 as const,
+          parts: [{ type: 'text' as const, text: 'Acknowledged.' }],
+        },
+        createdAt: new Date(0),
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      };
+
+      await processor.processOutputStream({
+        part: finishChunk,
+        streamParts: [
+          {
+            runId: 'test-run',
+            from: ChunkFrom.AGENT,
+            type: 'text-delta',
+            payload: { id: 'text-1', text: 'Return a profile summary.' },
+          },
+        ],
+        state: { controller },
+        abort,
+        retryCount: 0,
+        requestContext,
+        messageList: {
+          get: {
+            input: { db: () => [unsavedInputMessage] },
+            response: { db: () => [unsavedResponseMessage] },
+          },
+          serialize: () => ({
+            memoryInfo: { threadId: 'thread-123', resourceId: 'resource-456' },
+          }),
+        } as any,
+      });
+
+      expect(agent.stream).toHaveBeenCalledWith(
+        [
+          unsavedInputMessage,
+          unsavedResponseMessage,
+          { role: 'user', content: expect.stringContaining('# Assistant Response') },
+        ],
+        expect.objectContaining({
+          model: mockModel,
+          instructions: expect.any(String),
+          requestContext,
+          maxSteps: 1,
+          toolChoice: 'none',
+          memory: {
+            thread: 'thread-123',
+            resource: 'resource-456',
+            options: { readOnly: true },
+          },
+        }),
+      );
     });
 
     it('should surface plain object error messages', async () => {
