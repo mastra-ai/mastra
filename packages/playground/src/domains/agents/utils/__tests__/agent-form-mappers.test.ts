@@ -11,6 +11,7 @@ import {
   mapScorersToApi,
   buildObservationalMemoryForApi,
   parseObservationalMemoryFromApi,
+  normalizeSkillsFromApi,
 } from '../agent-form-mappers';
 
 // ---------------------------------------------------------------------------
@@ -527,5 +528,43 @@ describe('observational memory round-trip', () => {
     expect(api).toBe(true);
     const parsed = parseObservationalMemoryFromApi(api as any)!;
     expect(parsed.enabled).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// normalizeSkillsFromApi
+// ---------------------------------------------------------------------------
+describe('normalizeSkillsFromApi', () => {
+  it('returns empty record for undefined', () => {
+    expect(normalizeSkillsFromApi(undefined)).toEqual({});
+  });
+
+  it('normalizes a static record of stored skill configs', () => {
+    const input = {
+      docs: { description: 'docs skill', instructions: 'use me', pin: true, strategy: 'always' as const },
+    };
+    expect(normalizeSkillsFromApi(input as any)).toEqual(input);
+  });
+
+  it('merges conditional variants', () => {
+    const input = [
+      { condition: { any: [] }, value: { a: { description: 'A' } } },
+      { condition: { any: [] }, value: { b: { description: 'B' } } },
+    ];
+    expect(normalizeSkillsFromApi(input as any)).toEqual({
+      a: { description: 'A', instructions: undefined, pin: undefined, strategy: undefined },
+      b: { description: 'B', instructions: undefined, pin: undefined, strategy: undefined },
+    });
+  });
+
+  it('does not crash on a SkillMetadata[] (code-agent shape) – returns empty record', () => {
+    // Workspace skills from GET /agents/:id come through as SkillMetadata[].
+    // They do not have `.value`, so the mapper must skip them rather than throw.
+    const skillMetadataArray = [
+      { name: 'docs', description: 'docs skill', path: '/skills/docs' },
+      { name: 'search', description: 'search skill', path: '/skills/search' },
+    ];
+    expect(() => normalizeSkillsFromApi(skillMetadataArray as any)).not.toThrow();
+    expect(normalizeSkillsFromApi(skillMetadataArray as any)).toEqual({});
   });
 });

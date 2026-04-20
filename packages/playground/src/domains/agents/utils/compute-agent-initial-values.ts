@@ -42,7 +42,11 @@ export function mapAgentResponseToDataSource(agent: GetAgentResponse): AgentData
     tools: agent.tools,
     workflows: agent.workflows,
     agents: agent.agents,
-    skills: agent.skills as AgentDataSource['skills'],
+    // GetAgentResponse.skills is a SkillMetadata[] (activated skills metadata),
+    // not the stored-agent ConditionalField<Record<string, StoredAgentSkillConfig>>.
+    // The edit form only consumes the stored shape, so leave this undefined for
+    // code-agent data sources and let the form initialize skills as empty.
+    skills: undefined,
     workspace: agent.workspaceId ? ({ workspaceId: agent.workspaceId } as AgentDataSource['workspace']) : undefined,
     requestContextSchema,
   };

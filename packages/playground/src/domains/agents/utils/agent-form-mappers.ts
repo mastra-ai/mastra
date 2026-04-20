@@ -112,6 +112,11 @@ export const normalizeSkillsFromApi = (
   if (Array.isArray(skills)) {
     const result: Record<string, SkillConfig> = {};
     for (const variant of skills) {
+      // Guard against non-variant entries (e.g. a code agent's SkillMetadata[]
+      // accidentally making it into this mapper). Variants must have `.value`.
+      if (!variant || typeof variant !== 'object' || !('value' in variant) || !variant.value) {
+        continue;
+      }
       for (const [key, value] of Object.entries(variant.value)) {
         result[key] = {
           description: value.description,
