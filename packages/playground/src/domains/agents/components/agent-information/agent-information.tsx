@@ -26,31 +26,39 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
   const showMemory = visibility.memory && hasMemory;
 
   return (
-    <div className="h-full overflow-y-auto relative">
+    <div className="h-full relative flex flex-col p-4 gap-4 min-h-0">
       {hasSession && isInSidebar && (
         <div className="absolute inset-0 z-10 bg-surface1">
           <BrowserSidebarTab />
         </div>
       )}
 
-      <div className="flex flex-col gap-4 p-4">
-        {showOverview && <OverviewCardSection agentId={agentId} />}
+      <div className="flex flex-row gap-4 flex-1 min-h-0">
+        {showOverview && (
+          <div className="flex-1 min-w-0 h-full">
+            <OverviewCardSection agentId={agentId} />
+          </div>
+        )}
 
-        {showMemory && <MemoryCardSection agentId={agentId} threadId={threadId} memoryType={memory?.memoryType} />}
-
-        {hasRequestContext && (
-          <Tabs defaultTab="request-context">
-            <TabList>
-              <Tab value="request-context">Request Context</Tab>
-            </TabList>
-            <TabContent value="request-context">
-              <div className="p-5">
-                <RequestContextSchemaForm requestContextSchema={agent!.requestContextSchema!} />
-              </div>
-            </TabContent>
-          </Tabs>
+        {showMemory && (
+          <div className="flex-1 min-w-0 h-full">
+            <MemoryCardSection agentId={agentId} threadId={threadId} memoryType={memory?.memoryType} />
+          </div>
         )}
       </div>
+
+      {hasRequestContext && (
+        <Tabs defaultTab="request-context">
+          <TabList>
+            <Tab value="request-context">Request Context</Tab>
+          </TabList>
+          <TabContent value="request-context">
+            <div className="p-5">
+              <RequestContextSchemaForm requestContextSchema={agent!.requestContextSchema!} />
+            </div>
+          </TabContent>
+        </Tabs>
+      )}
     </div>
   );
 }

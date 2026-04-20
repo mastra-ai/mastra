@@ -11,8 +11,8 @@ export function OverviewCardSection({ agentId }: OverviewCardSectionProps) {
   const { toggleOverview } = usePanelVisibility();
 
   return (
-    <Card elevation="flat" as="section">
-      <div className="flex items-center justify-between border-b border-border1 px-3 py-2">
+    <Card elevation="flat" as="section" className="flex flex-col h-full min-h-0 overflow-hidden">
+      <div className="flex items-center justify-between border-b border-border1 px-3 py-2 shrink-0">
         <Txt variant="ui-sm" className="text-neutral5 font-medium">
           Overview
         </Txt>
@@ -22,7 +22,9 @@ export function OverviewCardSection({ agentId }: OverviewCardSectionProps) {
           </Icon>
         </IconButton>
       </div>
-      <AgentMetadata agentId={agentId} />
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <AgentMetadata agentId={agentId} />
+      </div>
     </Card>
   );
 }
