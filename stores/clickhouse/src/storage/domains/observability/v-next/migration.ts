@@ -96,8 +96,9 @@ export async function checkSignalTablesMigrationStatus(client: ClickHouseClient)
 
 /**
  * Migrate signal tables from MergeTree to ReplacingMergeTree without dropping data.
- * Copy-and-swap: create temp → INSERT…SELECT (generating IDs) → rename old to backup
- * and temp to live → drop backup. The live table is only touched in the final swap step.
+ * Copy-and-swap: create temp → INSERT…SELECT (generating IDs) → EXCHANGE temp with live
+ * → drop old data. EXCHANGE swaps the two table names atomically, so concurrent
+ * writers never observe a missing table.
  */
 export async function migrateSignalTables(client: ClickHouseClient, logger?: IMastraLogger): Promise<void> {
   for (const { table, createDDL, idColumn } of SIGNAL_MIGRATIONS) {
@@ -107,7 +108,6 @@ export async function migrateSignalTables(client: ClickHouseClient, logger?: IMa
     logger?.info?.(`Migrating ${table} from ${engine} to ReplacingMergeTree with ${idColumn} column`);
 
     const temp = `${table}_migrating_${Date.now()}`;
-    const backup = `${table}_backup_${Date.now()}`;
 
     try {
       await client.command({ query: buildTemporaryTableDDL(createDDL, table, temp) });
@@ -131,15 +131,8 @@ export async function migrateSignalTables(client: ClickHouseClient, logger?: IMa
         query: `INSERT INTO ${temp} (${columnList}) SELECT ${selectExprs} FROM ${table}`,
       });
 
-      await client.command({ query: `RENAME TABLE ${table} TO ${backup}, ${temp} TO ${table}` });
-
-      try {
-        await client.command({ query: `DROP TABLE ${backup}` });
-      } catch (cleanupError) {
-        logger?.warn?.(
-          `Migration of ${table} completed, but failed to drop backup ${backup}: ${(cleanupError as Error).message}`,
-        );
-      }
+      await client.command({ query: `EXCHANGE TABLES ${temp} AND ${table}` });
+      await client.command({ query: `DROP TABLE ${temp}` });
 
       logger?.info?.(`Successfully migrated ${table}`);
     } catch (error) {

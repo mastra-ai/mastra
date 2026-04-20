@@ -59,7 +59,7 @@ async function dropAll(client: ClickHouseClient): Promise<void> {
     await client.command({ query: `DROP TABLE IF EXISTS ${table}` });
   }
   const leftovers = await client.query({
-    query: `SELECT name FROM system.tables WHERE database = currentDatabase() AND name LIKE '%_backup_%'`,
+    query: `SELECT name FROM system.tables WHERE database = currentDatabase() AND name LIKE '%_migrating_%'`,
     format: 'JSONEachRow',
   });
   for (const row of (await leftovers.json()) as Array<{ name: string }>) {
@@ -135,11 +135,11 @@ describe('migrateSignalTables (ClickHouse v-next)', () => {
     expect(rows[1]!.logId).toMatch(UUID_RE);
     expect(rows[0]!.logId).not.toBe(rows[1]!.logId);
 
-    const backups = await client.query({
-      query: `SELECT name FROM system.tables WHERE database = currentDatabase() AND name LIKE '${TABLE_LOG_EVENTS}_backup_%'`,
+    const leftovers = await client.query({
+      query: `SELECT name FROM system.tables WHERE database = currentDatabase() AND name LIKE '${TABLE_LOG_EVENTS}_migrating_%'`,
       format: 'JSONEachRow',
     });
-    expect((await backups.json()) as unknown[]).toHaveLength(0);
+    expect((await leftovers.json()) as unknown[]).toHaveLength(0);
   });
 
   it('preserves existing non-empty IDs and backfills empty ones', async () => {
@@ -289,13 +289,13 @@ describe('migrateSignalTables (ClickHouse v-next)', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.message).toBe('keep-me');
 
-    // No orphaned backup tables.
-    const backups = (await (
+    // No orphaned temp tables.
+    const leftovers = (await (
       await client.query({
-        query: `SELECT name FROM system.tables WHERE database = currentDatabase() AND name LIKE '${TABLE_LOG_EVENTS}_backup_%'`,
+        query: `SELECT name FROM system.tables WHERE database = currentDatabase() AND name LIKE '${TABLE_LOG_EVENTS}_migrating_%'`,
         format: 'JSONEachRow',
       })
     ).json()) as unknown[];
-    expect(backups).toHaveLength(0);
+    expect(leftovers).toHaveLength(0);
   });
 });
