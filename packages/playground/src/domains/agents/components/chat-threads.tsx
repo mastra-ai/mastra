@@ -12,8 +12,9 @@ import {
   Threads,
   Txt,
 } from '@mastra/playground-ui';
-import { Plus } from 'lucide-react';
+import { PanelLeftClose, Plus } from 'lucide-react';
 import { useState } from 'react';
+import { useSidebarCollapse } from '../context/use-sidebar-collapse';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -30,6 +31,7 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
   const { Link, paths } = useLinkComponent();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const { canDelete } = usePermissions();
+  const { collapse } = useSidebarCollapse();
 
   // Check if user can delete threads (memory:delete permission)
   const canDeleteThread = canDelete('memory');
@@ -44,7 +46,12 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
   return (
     <div className="h-full p-4">
       <Card elevation="flat" as="aside" className="h-full w-full flex flex-col py-2">
-        <div className="flex items-center justify-end px-2 pb-1">
+        <div className="flex items-center justify-between px-2 pb-1">
+          <IconButton variant="ghost" size="sm" tooltip="Collapse thread list" onClick={collapse}>
+            <Icon>
+              <PanelLeftClose />
+            </Icon>
+          </IconButton>
           <IconButton as={Link} to={newThreadLink} variant="ghost" size="sm" tooltip="New chat">
             <Icon>
               <Plus />
