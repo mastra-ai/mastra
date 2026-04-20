@@ -567,6 +567,12 @@ export async function dev({
 
     devLogger.shutdown();
 
+    if (currentServerProcess) {
+      currentServerProcess.kill();
+      await waitForProcessExit(currentServerProcess);
+      currentServerProcess = undefined;
+    }
+
     const analytics = getAnalytics();
     if (analytics && serverStartTime) {
       const durationMs = Date.now() - serverStartTime;
@@ -577,12 +583,6 @@ export async function dev({
     }
     if (analytics) {
       await analytics.shutdown();
-    }
-
-    if (currentServerProcess) {
-      currentServerProcess.kill();
-      await waitForProcessExit(currentServerProcess);
-      currentServerProcess = undefined;
     }
 
     watcher
