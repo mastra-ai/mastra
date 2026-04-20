@@ -11,7 +11,7 @@ The `PrefillErrorHandler` is an **error processor** that handles assistant-respo
 
 When the error is detected, the processor appends a hidden `<system-reminder>continue</system-reminder>` user message to the conversation and signals a retry. The reminder is persisted with `metadata.systemReminder = { type: 'anthropic-prefill-processor-retry' }`, which keeps it available for retry reconstruction and raw history while standard UI-facing message conversions hide it.
 
-Add this processor to `errorProcessors` when you want Mastra to recover from assistant prefill rejections (for example Anthropic's "assistant message prefill" and Qwen/llama.cpp's "`enable_thinking` incompatible with assistant response prefill" errors).
+Add this processor to `errorProcessors` when you want Mastra to recover from assistant prefill rejections (for example Anthropic's "assistant message prefill" and Qwen/llama.cpp's "assistant response prefill is incompatible with `enable_thinking`" errors).
 
 ## How it works
 
