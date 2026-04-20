@@ -85,7 +85,9 @@ const CLI_CDP_PATTERNS: Record<
     warmupCommand: (cdpUrl: string, threadId: string) => `agent-browser --session "${threadId}" connect "${cdpUrl}"`,
   },
   'browser-use': {
-    pattern: /^(?:browser-use|browseruse|bu)\b/,
+    // browser-use CLI installs as multiple aliases: browser, browseruse, bu
+    // The skill docs say "browser-use" but the primary binary is "browser"
+    pattern: /^(?:browser|browser-use|browseruse|bu)\b/,
     flag: '--cdp-url',
     sessionFlag: '--session',
   },
