@@ -12,8 +12,15 @@ export type BrandLoaderProps = {
 
 const sizeClasses = {
   sm: 'w-6',
-  md: 'w-10',
-  lg: 'w-16',
+  md: 'w-8',
+  lg: 'w-10',
+};
+
+/** Thinner strokes on small sizes so ridges don't visually dominate the disks. */
+const strokeBySize = {
+  sm: 2.2,
+  md: 2.5,
+  lg: 2.9,
 };
 
 function BrandLoader({ className, size = 'md', 'aria-label': ariaLabel = 'Loading' }: BrandLoaderProps) {
@@ -25,28 +32,36 @@ function BrandLoader({ className, size = 'md', 'aria-label': ariaLabel = 'Loadin
       role="status"
       aria-label={ariaLabel}
       className={cn('brand-loader inline-block text-neutral6', sizeClasses[size], className)}
+      style={{ ['--brand-loader-stroke' as string]: strokeBySize[size] }}
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 34 21"
-        className="block w-full h-auto overflow-visible"
+        width={2000}
+        height={Math.round((2000 * 21) / 34)}
         aria-hidden="true"
       >
         <defs>
-          <filter id={filterId}>
-            <feGaussianBlur in="SourceGraphic" stdDeviation="0.55" />
-            <feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" />
+          {/* Gooey merge: blur + sharp alpha threshold fuses overlapping shapes into a single blob. */}
+          <filter id={filterId} x="-5%" y="-5%" width="110%" height="110%">
+            {/* stdDeviation: blur radius. Larger = bigger fillet/roundness at line↔disk junction. */}
+            <feGaussianBlur in="SourceGraphic" stdDeviation="0.9" />
+            {/*
+             * outAlpha = M·α − K. Opaque where α ≥ K/M. Transition band = 1/M.
+             * M=11, K=4.3 → cutoff 0.391, band 0.091 (soft, rounded edge, big fillet).
+             */}
+            <feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 11 -4.3" />
           </filter>
         </defs>
         <g filter={`url(#${filterId})`}>
-          <line className="brand-loader-ln23" x1="10.4" y1="4.5" x2="16.8" y2="16.2" />
-          <line className="brand-loader-ln34" x1="16.8" y1="16.2" x2="23.2" y2="4.5" />
-          <line className="brand-loader-ln45" x1="23.2" y1="4.5" x2="29.5" y2="16.2" />
-          <circle className="brand-loader-b1" cx="4.5" cy="16.2" r="4.5" />
-          <circle className="brand-loader-b2" cx="10.4" cy="4.5" r="4.5" />
-          <circle className="brand-loader-b3" cx="16.8" cy="16.2" r="4.5" />
-          <circle className="brand-loader-b4" cx="23.2" cy="4.5" r="4.5" />
-          <circle className="brand-loader-b5" cx="29.5" cy="16.2" r="4.5" />
+          <line className="brand-loader-ln23" x1="10.387" y1="4.498" x2="16.899" y2="16.192" />
+          <line className="brand-loader-ln34" x1="16.899" y1="16.192" x2="22.815" y2="4.56" />
+          <line className="brand-loader-ln45" x1="22.815" y1="4.56" x2="28.57" y2="16.192" />
+          <circle className="brand-loader-b1" cx="4.498" cy="16.192" r="4.498" />
+          <circle className="brand-loader-b2" cx="10.387" cy="4.498" r="4.498" />
+          <circle className="brand-loader-b3" cx="16.899" cy="16.192" r="4.498" />
+          <circle className="brand-loader-b4" cx="22.815" cy="4.56" r="4.498" />
+          <circle className="brand-loader-b5" cx="28.57" cy="16.192" r="4.498" />
         </g>
       </svg>
     </div>
