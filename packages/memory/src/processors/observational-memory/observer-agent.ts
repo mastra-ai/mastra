@@ -890,11 +890,26 @@ export function buildObserverHistoryMessage(messages: MastraDBMessage[], options
   } as CoreMessage;
 }
 
+/**
+ * Slice a string without splitting a UTF-16 surrogate pair.
+ * If the cut lands on a high surrogate (U+D800–U+DBFF), back off by one
+ * so the resulting string never contains an unpaired surrogate.
+ */
+function surrogateSafeSlice(str: string, end: number): string {
+  if (end <= 0) return '';
+  if (end >= str.length) return str;
+  const code = str.charCodeAt(end - 1);
+  if (code >= 0xd800 && code <= 0xdbff) {
+    return str.slice(0, end - 1);
+  }
+  return str.slice(0, end);
+}
+
 /** Truncate a string to maxLen characters, appending a note if truncated. */
 function maybeTruncate(str: string, maxLen?: number): string {
   if (!maxLen || str.length <= maxLen) return str;
-  const truncated = str.slice(0, maxLen);
-  const remaining = str.length - maxLen;
+  const truncated = surrogateSafeSlice(str, maxLen);
+  const remaining = str.length - truncated.length;
   return `${truncated}\n... [truncated ${remaining} characters]`;
 }
 
@@ -1341,7 +1356,7 @@ export function sanitizeObservationLines(observations: string): string {
   let changed = false;
   for (let i = 0; i < lines.length; i++) {
     if (lines[i]!.length > MAX_OBSERVATION_LINE_CHARS) {
-      lines[i] = lines[i]!.slice(0, MAX_OBSERVATION_LINE_CHARS) + ' … [truncated]';
+      lines[i] = surrogateSafeSlice(lines[i]!, MAX_OBSERVATION_LINE_CHARS) + ' … [truncated]';
       changed = true;
     }
   }

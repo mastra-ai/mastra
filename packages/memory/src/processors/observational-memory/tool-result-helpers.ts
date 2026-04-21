@@ -80,6 +80,22 @@ export function resolveToolResultValue(
   };
 }
 
+/**
+ * Slice a string without splitting a UTF-16 surrogate pair.
+ * If the cut lands on a high surrogate (U+D800–U+DBFF), back off by one
+ * so the resulting string never contains an unpaired surrogate.
+ */
+function surrogateSafeSlice(str: string, end: number): string {
+  if (end <= 0) return '';
+  if (end >= str.length) return str;
+  const code = str.charCodeAt(end - 1);
+  // High surrogate range: 0xD800–0xDBFF
+  if (code >= 0xd800 && code <= 0xdbff) {
+    return str.slice(0, end - 1);
+  }
+  return str.slice(0, end);
+}
+
 export function truncateStringByTokens(text: string, maxTokens: number): string {
   if (!text || maxTokens <= 0) {
     return '';
@@ -91,7 +107,7 @@ export function truncateStringByTokens(text: string, maxTokens: number): string 
   }
 
   const buildCandidate = (sliceEnd: number) => {
-    const visible = text.slice(0, sliceEnd);
+    const visible = surrogateSafeSlice(text, sliceEnd);
     return `${visible}\n... [truncated ~${totalTokens - estimateTokenCount(visible)} tokens]`;
   };
 
