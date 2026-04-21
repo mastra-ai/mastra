@@ -366,7 +366,9 @@ export class StoreMemoryRedis extends MemoryStorage {
 
     try {
       const batchSize = 1000;
-      const existingThreadIds = await this.client.mGet(messagesWithIndex.map(message => getMessageIndexKey(message.id)));
+      const existingThreadIds = await this.client.mGet(
+        messagesWithIndex.map(message => getMessageIndexKey(message.id)),
+      );
 
       for (let i = 0; i < messagesWithIndex.length; i += batchSize) {
         const batch = messagesWithIndex.slice(i, i + batchSize);
@@ -617,10 +619,54 @@ export class StoreMemoryRedis extends MemoryStorage {
         );
       }
 
+      const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
+
+      const getFieldValue = (msg: MastraDBMessage): number => {
+        if (field === 'createdAt') {
+          return new Date(msg.createdAt).getTime();
+        }
+
+        const value = (msg as Record<string, unknown>)[field];
+        if (typeof value === 'number') {
+          return value;
+        }
+        if (value instanceof Date) {
+          return value.getTime();
+        }
+        return 0;
+      };
+
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return {
+          messages: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
       let includedMessages: MastraDBMessage[] = [];
       if (include && include.length > 0) {
         const included = (await this.getIncludedMessages(include)) as MastraDBMessage[];
         includedMessages = included.map(this.parseStoredMessage);
+      }
+
+      if (perPage === 0 && include && include.length > 0) {
+        const list = new MessageList().add(includedMessages, 'memory');
+        const messages = list.get.all.db().sort((a, b) => {
+          const aValue = getFieldValue(a);
+          const bValue = getFieldValue(b);
+          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+        });
+
+        return {
+          messages,
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
       }
 
       const allMessageIdsWithThreads: { threadId: string; messageId: string }[] = [];
@@ -659,23 +705,6 @@ export class StoreMemoryRedis extends MemoryStorage {
         (msg: MastraDBMessage) => new Date(msg.createdAt),
         filter?.dateRange,
       );
-
-      const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
-
-      const getFieldValue = (msg: MastraDBMessage): number => {
-        if (field === 'createdAt') {
-          return new Date(msg.createdAt).getTime();
-        }
-
-        const value = (msg as Record<string, unknown>)[field];
-        if (typeof value === 'number') {
-          return value;
-        }
-        if (value instanceof Date) {
-          return value.getTime();
-        }
-        return 0;
-      };
 
       messagesData.sort((a, b) => {
         const aValue = getFieldValue(a);

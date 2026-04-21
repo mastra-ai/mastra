@@ -49,6 +49,10 @@ export class WorkflowsRedis extends WorkflowsStorage {
     this.db = new RedisDB({ client: config.client });
   }
 
+  public supportsConcurrentUpdates(): boolean {
+    return false;
+  }
+
   public async dangerouslyClearAll(): Promise<void> {
     await this.db.deleteData({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
