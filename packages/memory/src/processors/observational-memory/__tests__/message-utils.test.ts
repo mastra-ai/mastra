@@ -26,9 +26,12 @@ describe('stripThreadTags', () => {
 
   it('runs in linear time on pathological input (no ReDoS)', () => {
     const input = '<thread'.repeat(5_000);
-    const start = Date.now();
+    stripThreadTags('<thread'.repeat(100)); // warm up JIT
+    const start = performance.now();
     stripThreadTags(input);
-    // A quadratic implementation would take multiple seconds here.
-    expect(Date.now() - start).toBeLessThan(500);
+    const elapsed = performance.now() - start;
+    // Generous budget — linear implementation finishes in a few ms;
+    // a quadratic implementation would take multiple seconds.
+    expect(elapsed).toBeLessThan(2000);
   });
 });

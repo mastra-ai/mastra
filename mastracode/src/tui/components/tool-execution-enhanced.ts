@@ -1537,9 +1537,11 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       error = content;
 
       // Try to create an Error object with better structure.
-      // Bounded quantifiers avoid polynomial backtracking on
-      // attacker-controlled input like 'AAAA...Error:'.
-      const errorMatch = content.match(/^([A-Z][A-Za-z]{0,64}Error):[ \t]*(.+)$/m);
+      // Bounded quantifiers avoid polynomial backtracking. The message
+      // group requires a non-space leading char so it cannot overlap
+      // with the `[ \t]*` separator (previously flagged by CodeQL on
+      // inputs like `AError:\t\t\t...`).
+      const errorMatch = content.match(/^([A-Z][A-Za-z]{0,64}Error):[ \t]*(\S[^\n]{0,2048})$/m);
       if (errorMatch) {
         const err = new Error(errorMatch[2]!);
         err.name = errorMatch[1]!;

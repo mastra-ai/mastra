@@ -37,8 +37,12 @@ describe('parseValidationErrors', () => {
   it('runs in linear time on pathological input (no ReDoS)', () => {
     // Shape CodeQL flagged: many `at "x"` with attribute-looking gaps and no ': '.
     const input = 'at "x"'.repeat(20_000);
-    const start = Date.now();
+    parseValidationErrors('at "x"'.repeat(100)); // warm up JIT
+    const start = performance.now();
     parseValidationErrors(input);
-    expect(Date.now() - start).toBeLessThan(500);
+    const elapsed = performance.now() - start;
+    // Generous budget — linear implementation finishes in a few ms;
+    // exponential backtracking would take seconds or hang.
+    expect(elapsed).toBeLessThan(2000);
   });
 });

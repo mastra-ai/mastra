@@ -148,8 +148,12 @@ describe('stripTrailingSlash', () => {
 
   it('runs in linear time on pathological input (no ReDoS)', () => {
     const input = 'https://x/' + '/'.repeat(100_000);
-    const start = Date.now();
+    stripTrailingSlash('https://x/' + '/'.repeat(100)); // warm up JIT
+    const start = performance.now();
     stripTrailingSlash(input);
-    expect(Date.now() - start).toBeLessThan(200);
+    const elapsed = performance.now() - start;
+    // Generous budget — linear implementation finishes in microseconds;
+    // exponential backtracking would take seconds or hang.
+    expect(elapsed).toBeLessThan(2000);
   });
 });

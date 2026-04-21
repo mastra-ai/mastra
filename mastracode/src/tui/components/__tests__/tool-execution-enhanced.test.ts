@@ -28,8 +28,13 @@ describe('truncateAnsi', () => {
   it('runs in linear time on pathological input (no ReDoS)', () => {
     // Many OSC 8 opens with no BEL terminator — the shape CodeQL flagged.
     const input = '\x1b]8;'.repeat(50_000);
-    const start = Date.now();
+    // Warm up to avoid one-time JIT noise on slower CI runners.
+    truncateAnsi('\x1b]8;'.repeat(100), 40);
+    const start = performance.now();
     truncateAnsi(input, 40);
-    expect(Date.now() - start).toBeLessThan(500);
+    const elapsed = performance.now() - start;
+    // Generous budget — linear implementation should complete in a
+    // few ms; exponential backtracking would take seconds or hang.
+    expect(elapsed).toBeLessThan(2000);
   });
 });

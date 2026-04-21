@@ -8,4 +8,4 @@
 "mastracode": patch
 ---
 
-Replace 14 regexes flagged by CodeQL (`js/polynomial-redos`) with bounded or procedural alternatives across observability exporters, core workspace-skills, memory processors, rag transformers, and mastracode TUI components. No runtime behavior changes for well-formed input; worst-case time on pathological input is now linear.
+Fixed a security issue where several parsing and tracing paths could slow down on malformed or attacker-crafted input. Normal behavior is unchanged, and these packages now handle pathological input in linear time.
