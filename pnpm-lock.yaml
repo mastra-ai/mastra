@@ -5552,8 +5552,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@types/mssql':
-        specifier: ^9.1.9
-        version: 9.1.9
+        specifier: ^9.1.11
+        version: 9.1.11
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -15260,8 +15260,8 @@ packages:
   '@types/ms@2.1.0':
     resolution: {integrity: sha512-GsCCIZDE/p3i96vtEqx+7dBUGXrc7zeSK3wwPHIaRThS+9OhWIXRqzs4d6k1SVU8g91DrNRWxWUGhp5KXQb2VA==}
 
-  '@types/mssql@9.1.9':
-    resolution: {integrity: sha512-P0nCgw6vzY23UxZMnbI4N7fnLGANt4LI4yvxze1paPj+LuN28cFv5EI+QidP8udnId/BKhkcRhm/BleNsjK65A==}
+  '@types/mssql@9.1.11':
+    resolution: {integrity: sha512-vcujgrDbDezCxNDO4KY6gjwduLYOKfrexpRUwhoysRvcXZ3+IgZ/PMYFDgh8c3cQIxZ6skAwYo+H6ibMrBWPjQ==}
 
   '@types/mysql@2.15.27':
     resolution: {integrity: sha512-YfWiV16IY0OeBfBCk8+hXKmdTKrKlwKN1MNKAPBu5JYxLwBEZl7QzeEpGnlZb3VMGJrrGmB84gXiH+ofs/TezA==}
@@ -36437,7 +36437,7 @@ snapshots:
 
   '@types/ms@2.1.0': {}
 
-  '@types/mssql@9.1.9':
+  '@types/mssql@9.1.11':
     dependencies:
       '@types/node': 22.19.15
       tarn: 3.0.2
