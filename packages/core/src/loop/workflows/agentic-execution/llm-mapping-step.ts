@@ -1,7 +1,7 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
 import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
-import { createObservabilityContext } from '../../../observability';
+import { createObservabilityContext, EntityType, SpanType } from '../../../observability';
 import type { ProcessorState } from '../../../processors';
 import { ProcessorRunner } from '../../../processors/runner';
 import type { ChunkType, ProviderMetadata } from '../../../stream/types';
@@ -103,16 +103,38 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
       const initialResult = getStepResult(llmExecutionStep);
 
       // Compute toModelOutput for a successful tool call and return providerMetadata
-      // with the result stored at mastra.modelOutput
+      // with the result stored at mastra.modelOutput. When toModelOutput is defined,
+      // the transform runs under a MAPPING child span so traces can distinguish
+      // "never invoked" from "ran no-op" from "ran transforming."
       async function getProviderMetadataWithModelOutput(toolCall: {
         toolName: string;
+        toolCallId?: string;
         result?: unknown;
         providerMetadata?: Record<string, unknown>;
       }) {
         const tool = rest.tools?.[toolCall.toolName] as { toModelOutput?: (output: unknown) => unknown } | undefined;
         let modelOutput: unknown;
         if (tool?.toModelOutput && toolCall.result != null) {
-          modelOutput = await tool.toModelOutput(toolCall.result);
+          const parentSpan = observabilityContext?.tracingContext?.currentSpan;
+          const mappingSpan = parentSpan?.createChildSpan({
+            type: SpanType.MAPPING,
+            name: `tool output mapping: '${toolCall.toolName}'`,
+            entityType: EntityType.TOOL,
+            entityId: toolCall.toolName,
+            entityName: toolCall.toolName,
+            input: toolCall.result,
+            attributes: {
+              mappingType: 'toModelOutput',
+              toolCallId: toolCall.toolCallId,
+            },
+          });
+          try {
+            modelOutput = await tool.toModelOutput(toolCall.result);
+            mappingSpan?.end({ output: modelOutput });
+          } catch (err) {
+            mappingSpan?.error({ error: err as Error, endSpan: true });
+            throw err;
+          }
         }
 
         const existingMastra = (toolCall.providerMetadata as any)?.mastra;
