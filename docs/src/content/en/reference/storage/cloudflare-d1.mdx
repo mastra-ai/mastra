@@ -83,22 +83,6 @@ In the `Env` type definition, `D1Database: D1Database` serves two purposes:
 At runtime, Cloudflare Workers provides the actual D1 database instance via `env.D1Database`. You can't use `D1Database` directly outside of the worker's context.
 :::
 
-:::warning[Using `import { env } from 'cloudflare:workers'`]
-If you use the `cloudflare:workers` env import, initialize `D1Store` inline inside `new Mastra({...})`. Extracting it to a variable outside runs at module load before `env` is populated.
-
-```typescript
-// ✅ Works
-export const mastra = new Mastra({
-  storage: new D1Store({ binding: env.DB }),
-})
-
-// ❌ Breaks — env.DB is undefined at module load
-const storage = new D1Store({ binding: env.DB })
-export const mastra = new Mastra({ storage })
-```
-
-:::
-
 ### Using with REST API
 
 For non-Workers environments (Node.js, serverless functions, etc.), use the REST API approach:
