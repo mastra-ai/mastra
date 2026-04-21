@@ -137,6 +137,12 @@ async function processOutputStream<OUTPUT = undefined>({
       continue;
     }
 
+    // Stop processing outward-facing chunks once the abort signal has fired.
+    // Some LLM providers continue streaming data after abort (e.g. due to buffering),
+    // so we check the signal on each iteration to avoid accumulating the full
+    // response into the messageList after the caller has disconnected.
+    // We still absorb already-buffered metadata/text into runState so onAbort can
+    // report partial text that was generated before cancellation.
     if (options?.abortSignal?.aborted) {
       switch (chunk.type) {
         case 'response-metadata':
