@@ -1672,8 +1672,9 @@ function highlightCode(content: string, path: string, startLine?: number): strin
 }
 /** Truncate a string with ANSI codes to a visible width.
  *  Handles both SGR sequences (\x1b[...m) and OSC 8 hyperlinks (\x1b]8;...;\x07).
+ *  Exported for unit testing.
  */
-function truncateAnsi(str: string, maxWidth: number): string {
+export function truncateAnsi(str: string, maxWidth: number): string {
   // The OSC 8 hyperlink body is terminated by BEL (\x07). We also
   // break on a new ESC (\x1b) so a missing terminator cannot scan
   // unbounded input and amplify polynomial backtracking.
