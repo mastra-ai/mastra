@@ -29,6 +29,9 @@ import { buildSelectColumns } from '../../db/utils';
 
 /**
  * Config fields that live on version rows (from StorageSkillSnapshotType).
+ * `metadata` is deliberately excluded: it is a thin-record field (visibility,
+ * stars, etc. for Agent Studio) and is persisted on the skills table, not on
+ * the version snapshot.
  */
 const SNAPSHOT_FIELDS = [
   'name',
@@ -40,7 +43,6 @@ const SNAPSHOT_FIELDS = [
   'references',
   'scripts',
   'assets',
-  'metadata',
   'tree',
 ] as const;
 
@@ -103,7 +105,7 @@ export class SkillsLibSQL extends SkillsStorage {
     try {
       const now = new Date();
 
-      // Insert thin skill record (no metadata on entity table)
+      // Insert thin skill record (metadata lives here, not on versions)
       await this.#db.insert({
         tableName: TABLE_SKILLS,
         record: {
@@ -111,13 +113,14 @@ export class SkillsLibSQL extends SkillsStorage {
           status: 'draft',
           activeVersionId: null,
           authorId: skill.authorId ?? null,
+          metadata: skill.metadata ?? null,
           createdAt: now.toISOString(),
           updatedAt: now.toISOString(),
         },
       });
 
-      // Extract config fields for version 1
-      const { id: _id, authorId: _authorId, ...snapshotConfig } = skill;
+      // Extract config fields for version 1 (metadata is intentionally excluded)
+      const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = skill;
       const versionId = crypto.randomUUID();
       try {
         await this.createVersion({
@@ -139,6 +142,7 @@ export class SkillsLibSQL extends SkillsStorage {
         status: 'draft',
         activeVersionId: undefined,
         authorId: skill.authorId,
+        metadata: skill.metadata,
         createdAt: now,
         updatedAt: now,
       };
@@ -169,12 +173,21 @@ export class SkillsLibSQL extends SkillsStorage {
         });
       }
 
-      const { authorId, activeVersionId, status, ...configFields } = updates;
+      // `metadata` is a thin-record field (visibility/star data for Agent Studio)
+      // and is not part of the version snapshot; pull it out alongside the other
+      // record-level fields so it doesn't trigger a new version.
+      const { authorId, activeVersionId, status, metadata, ...configFields } = updates;
 
       const configFieldNames = SNAPSHOT_FIELDS as readonly string[];
-      const hasConfigUpdate = configFieldNames.some(field => field in configFields);
+      // Only treat a config field as updated when it was explicitly provided (not
+      // merely present-but-undefined). HTTP handlers tend to spread every field,
+      // which leaves keys in the body object with undefined values; treating
+      // those as updates would overwrite latest-version columns with undefined.
+      const hasConfigUpdate = configFieldNames.some(
+        field => configFields[field as keyof typeof configFields] !== undefined,
+      );
 
-      // Build update data for the skill record (no metadata on entity table)
+      // Build update data for the skill record
       const updateData: Record<string, unknown> = {
         updatedAt: new Date().toISOString(),
       };
@@ -187,6 +200,9 @@ export class SkillsLibSQL extends SkillsStorage {
         }
       }
       if (status !== undefined) updateData.status = status;
+      if (metadata !== undefined) {
+        updateData.metadata = { ...(existing.metadata ?? {}), ...metadata };
+      }
 
       await this.#db.update({
         tableName: TABLE_SKILLS,
@@ -217,11 +233,19 @@ export class SkillsLibSQL extends SkillsStorage {
           ...latestConfig
         } = latestVersion;
 
-        const newConfig = { ...latestConfig, ...configFields };
+        // Only merge fields that were explicitly provided, so undefined values
+        // from the HTTP body don't overwrite latestConfig columns.
+        const providedConfigFields: Record<string, unknown> = {};
+        for (const field of configFieldNames) {
+          const value = configFields[field as keyof typeof configFields];
+          if (value !== undefined) providedConfigFields[field] = value;
+        }
+
+        const newConfig = { ...latestConfig, ...providedConfigFields };
         const changedFields = configFieldNames.filter(
           field =>
-            field in configFields &&
-            JSON.stringify(configFields[field as keyof typeof configFields]) !==
+            field in providedConfigFields &&
+            JSON.stringify(providedConfigFields[field]) !==
               JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
         );
 
@@ -285,7 +309,7 @@ export class SkillsLibSQL extends SkillsStorage {
 
   async list(args?: StorageListSkillsInput): Promise<StorageListSkillsOutput> {
     try {
-      const { page = 0, perPage: perPageInput, orderBy, authorId } = args || {};
+      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
 
       const conditions: string[] = [];
@@ -296,10 +320,35 @@ export class SkillsLibSQL extends SkillsStorage {
         queryParams.push(authorId);
       }
 
-      // Note: metadata filter is ignored for skills since the entity table doesn't have a metadata column.
-      // Metadata lives on the version table.
+      const hasMetadataFilter = metadata && Object.keys(metadata).length > 0;
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      // When metadata filter is present, we can't easily filter in SQL across
+      // providers, so we fetch matching (authorId) rows and filter in JS.
+      if (hasMetadataFilter) {
+        const result = await this.#client.execute({
+          sql: `SELECT ${buildSelectColumns(TABLE_SKILLS)} FROM "${TABLE_SKILLS}" ${whereClause} ORDER BY ${field} ${direction}`,
+          args: queryParams,
+        });
+        const entries = Object.entries(metadata);
+        const allSkills = (result.rows ?? []).map(row => this.#parseSkillRow(row));
+        const filtered = allSkills.filter(skill => {
+          if (!skill.metadata) return false;
+          return entries.every(([key, value]) => skill.metadata![key] === value);
+        });
+        const total = filtered.length;
+        const perPage = normalizePerPage(perPageInput, 100);
+        const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+        const end = perPageInput === false ? total : start + perPage;
+        return {
+          skills: perPageInput === false ? filtered : filtered.slice(start, start + perPage),
+          total,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
+        };
+      }
 
       // Get total count
       const countResult = await this.#client.execute({
@@ -583,11 +632,26 @@ export class SkillsLibSQL extends SkillsStorage {
   // ==========================================================================
 
   #parseSkillRow(row: Record<string, unknown>): StorageSkillType {
+    const rawMetadata = row.metadata;
+    let metadata: Record<string, unknown> | undefined;
+    if (rawMetadata !== null && rawMetadata !== undefined) {
+      if (typeof rawMetadata === 'string') {
+        try {
+          metadata = JSON.parse(rawMetadata) as Record<string, unknown>;
+        } catch {
+          metadata = undefined;
+        }
+      } else {
+        metadata = rawMetadata as Record<string, unknown>;
+      }
+    }
+
     return {
       id: row.id as string,
       status: (row.status as StorageSkillType['status']) ?? 'draft',
       activeVersionId: (row.activeVersionId as string) ?? undefined,
       authorId: (row.authorId as string) ?? undefined,
+      metadata,
       createdAt: new Date(row.createdAt as string),
       updatedAt: new Date(row.updatedAt as string),
     };

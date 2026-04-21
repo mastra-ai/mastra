@@ -20,7 +20,15 @@ export class FilesystemSkillsStorage extends SkillsStorage {
       entitiesFile: 'skills.json',
       parentIdField: 'skillId',
       name: 'FilesystemSkillsStorage',
-      versionMetadataFields: ['id', 'skillId', 'versionNumber', 'changedFields', 'changeMessage', 'createdAt'],
+      versionMetadataFields: [
+        'id',
+        'skillId',
+        'versionNumber',
+        'changedFields',
+        'changeMessage',
+        'createdAt',
+        'metadata',
+      ],
     });
   }
 

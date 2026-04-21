@@ -75,6 +75,9 @@ export abstract class SkillsStorage extends VersionedStorageDomain<
   StorageListSkillsResolvedOutput
 > {
   protected readonly listKey = 'skills';
+  // `metadata` is listed here so it is stripped from the version snapshot during
+  // resolution. Metadata (visibility, stars, etc.) is a thin-record field that
+  // lives on the skills entity, not on the version.
   protected readonly versionMetadataFields = [
     'id',
     'skillId',
@@ -82,6 +85,7 @@ export abstract class SkillsStorage extends VersionedStorageDomain<
     'changedFields',
     'changeMessage',
     'createdAt',
+    'metadata',
   ] satisfies (keyof SkillVersion)[];
 
   constructor() {
