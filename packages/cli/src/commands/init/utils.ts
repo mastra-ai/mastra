@@ -627,6 +627,31 @@ export const writeAPIKey = async ({ provider, apiKey }: { provider: LLMProvider;
   const escapedApiKey = shellQuote.quote([apiKey ? apiKey : 'your-api-key']);
   await exec(`echo ${escapedKey}=${escapedApiKey} >> ${envFileName}`);
 };
+
+/**
+ * Append a Mastra Observe `MASTRA_CLOUD_ACCESS_TOKEN` entry to the project's
+ * `.env` file.
+ *
+ * The generated `src/mastra/index.ts` template already registers a
+ * `CloudExporter` which no-ops unless `MASTRA_CLOUD_ACCESS_TOKEN` is set, so
+ * enabling Observe is a pure env-var concern from the scaffolder's side.
+ *
+ * TODO(PLTFRM-861/862): Once the create-project and mint-token APIs are
+ * available, sign the user in, create a project, and write the real token
+ * here instead of a placeholder.
+ */
+export const writeObserveEnv = async ({ token }: { token?: string } = {}) => {
+  const envFilePath = path.join(process.cwd(), '.env');
+  const lines = [
+    '',
+    '# Mastra Observe — https://cloud.mastra.ai',
+    '# Create a project and paste your access token below to send traces to',
+    '# the hosted Mastra Studio.',
+    `MASTRA_CLOUD_ACCESS_TOKEN=${token ?? ''}`,
+    '',
+  ];
+  await fs.appendFile(envFilePath, lines.join('\n'));
+};
 export const createMastraDir = async (directory: string): Promise<{ ok: true; dirPath: string } | { ok: false }> => {
   let dir = directory
     .trim()
@@ -679,6 +704,7 @@ interface InteractivePromptArgs {
     gitInit?: boolean;
     skills?: boolean;
     mcpServer?: boolean;
+    observe?: boolean;
   };
 }
 
@@ -729,6 +755,21 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
           });
         }
         return undefined;
+      },
+      observe: async () => {
+        if (skip?.observe) return undefined;
+
+        const choice = await p.select({
+          message: 'Enable Mastra Observe? (observability for your agents, workflows, and tools — free tier available)',
+          options: [
+            { value: 'yes', label: 'Yes, enable Mastra Observe', hint: 'recommended' },
+            { value: 'no', label: 'No thanks' },
+          ],
+          initialValue: 'yes',
+        });
+
+        if (p.isCancel(choice)) return undefined;
+        return choice === 'yes';
       },
       configureMastraToolingForAgents: async () => {
         if (skip?.skills && skip?.mcpServer) return { skills: undefined, mcpServer: undefined };

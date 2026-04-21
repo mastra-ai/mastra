@@ -16,6 +16,7 @@ import {
   writeClaudeMarkdown,
   writeCodeSample,
   writeIndexFile,
+  writeObserveEnv,
 } from './utils';
 import type { Component, LLMProvider } from './utils';
 
@@ -31,6 +32,7 @@ export const init = async ({
   mcpServer,
   versionTag,
   initGit = false,
+  observe,
 }: {
   directory?: string;
   components: Component[];
@@ -41,6 +43,7 @@ export const init = async ({
   mcpServer?: Editor;
   versionTag?: string;
   initGit?: boolean;
+  observe?: boolean;
 }) => {
   s.start('Initializing Mastra');
   const packageVersionTag = versionTag ? `@${versionTag}` : '';
@@ -178,6 +181,27 @@ export const init = async ({
         s.stop('Git repository initialized');
       } catch {
         s.stop();
+      }
+    }
+
+    // TODO(PLTFRM-861/862): Once the create-project and mint-token APIs ship,
+    // sign the user in, create a project, and pass the real token here instead
+    // of writing a placeholder.
+    if (observe) {
+      try {
+        await writeObserveEnv();
+        p.note(
+          `${color.green('Mastra Observe enabled.')}
+
+  1. Visit ${color.cyan('https://cloud.mastra.ai')} to create a project and mint an access token.
+  2. Paste the token into ${color.cyan('MASTRA_CLOUD_ACCESS_TOKEN')} in your ${color.cyan('.env')} file.`,
+        );
+      } catch (error) {
+        console.warn(
+          color.yellow(
+            `\nWarning: Failed to write Mastra Observe env entry: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          ),
+        );
       }
     }
 
