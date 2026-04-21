@@ -11,7 +11,7 @@ import type {
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
 import type { CoreMessage } from '@mastra/core/llm';
-import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
+import type { LogLevel } from '@mastra/core/logger';
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
 import type {
   AiMessageType,
@@ -28,7 +28,6 @@ import type {
   PaginationInfo,
   WorkflowRuns,
   StorageListMessagesInput,
-  ObservationalMemoryRecord,
   Rule,
   RuleGroup,
   StorageConditionalVariant,
@@ -50,7 +49,42 @@ import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4 } from 'zod/v4';
 
+import type { Body, QueryParams, RouteKey, RouteResponse, Simplify } from './route-types.generated.js';
+
 export type ZodSchema = ZodSchemaV3 | ZodTypeV4;
+
+type OptionalizeUndefined<T> = T extends Date
+  ? Date
+  : T extends (...args: any[]) => any
+    ? T
+    : T extends readonly (infer U)[]
+      ? OptionalizeUndefined<U>[]
+      : T extends object
+        ? Simplify<
+            {
+              [K in keyof T as undefined extends T[K] ? never : K]: OptionalizeUndefined<T[K]>;
+            } & {
+              [K in keyof T as undefined extends T[K] ? K : never]?: OptionalizeUndefined<Exclude<T[K], undefined>>;
+            }
+          >
+        : T;
+
+type Serialized<T> = T extends Date
+  ? string
+  : T extends readonly (infer U)[]
+    ? Serialized<U>[]
+    : T extends object
+      ? {
+          [K in keyof T]: Serialized<T[K]>;
+        }
+      : T;
+
+type RequestContextOptions = {
+  requestContext?: RequestContext | Record<string, any>;
+};
+
+type GeneratedRequest<T> = OptionalizeUndefined<T>;
+type GeneratedResponse<T extends RouteKey> = Serialized<RouteResponse<T>>;
 
 export interface ClientOptions {
   /** Base URL for API requests */
@@ -522,17 +556,8 @@ export interface GetWorkflowResponse {
 }
 
 export type WorkflowRunResult = WorkflowResult<any, any, any, any>;
-export interface UpsertVectorParams {
-  indexName: string;
-  vectors: number[][];
-  metadata?: Record<string, any>[];
-  ids?: string[];
-}
-export interface CreateIndexParams {
-  indexName: string;
-  dimension: number;
-  metric?: 'cosine' | 'euclidean' | 'dotproduct';
-}
+export type UpsertVectorParams = GeneratedRequest<Body<'POST /vector/:vectorName/upsert'>>;
+export type CreateIndexParams = GeneratedRequest<Body<'POST /vector/:vectorName/create-index'>>;
 
 export interface QueryVectorParams {
   indexName: string;
@@ -546,11 +571,7 @@ export interface QueryVectorResponse {
   results: QueryResult[];
 }
 
-export interface GetVectorIndexResponse {
-  dimension: number;
-  metric: 'cosine' | 'euclidean' | 'dotproduct';
-  count: number;
-}
+export type GetVectorIndexResponse = GeneratedResponse<'GET /vector/:vectorName/indexes/:indexName'>;
 
 export interface SaveMessageToMemoryParams {
   messages: (MastraMessageV1 | MastraDBMessage)[];
@@ -567,16 +588,12 @@ export type SaveMessageToMemoryResponse = {
   messages: (MastraMessageV1 | MastraDBMessage)[];
 };
 
-export interface CreateMemoryThreadParams {
-  title?: string;
-  metadata?: Record<string, any>;
-  resourceId: string;
-  threadId?: string;
-  agentId: string;
-  requestContext?: RequestContext | Record<string, any>;
-}
+export type CreateMemoryThreadParams = GeneratedRequest<
+  Body<'POST /memory/threads'> & QueryParams<'POST /memory/threads'>
+> &
+  RequestContextOptions;
 
-export type CreateMemoryThreadResponse = StorageThreadType;
+export type CreateMemoryThreadResponse = GeneratedResponse<'POST /memory/threads'>;
 
 export interface ListMemoryThreadsParams {
   /**
@@ -599,16 +616,11 @@ export interface ListMemoryThreadsParams {
   requestContext?: RequestContext | Record<string, any>;
 }
 
-export type ListMemoryThreadsResponse = PaginationInfo & {
-  threads: StorageThreadType[];
-};
+export type ListMemoryThreadsResponse = GeneratedResponse<'GET /memory/threads'>;
 
-export interface GetMemoryConfigParams {
-  agentId: string;
-  requestContext?: RequestContext | Record<string, any>;
-}
+export type GetMemoryConfigParams = GeneratedRequest<QueryParams<'GET /memory/config'>> & RequestContextOptions;
 
-export type GetMemoryConfigResponse = { config: MemoryConfig };
+export type GetMemoryConfigResponse = GeneratedResponse<'GET /memory/config'>;
 
 export interface UpdateMemoryThreadParams {
   title: string;
@@ -646,15 +658,7 @@ export type CloneMemoryThreadResponse = {
   clonedMessages: MastraDBMessage[];
 };
 
-export interface GetLogsParams {
-  transportId: string;
-  fromDate?: Date;
-  toDate?: Date;
-  logLevel?: LogLevel;
-  filters?: Record<string, string>;
-  page?: number;
-  perPage?: number;
-}
+export type GetLogsParams = GeneratedRequest<QueryParams<'GET /logs'>>;
 
 export interface GetLogParams {
   runId: string;
@@ -667,13 +671,7 @@ export interface GetLogParams {
   perPage?: number;
 }
 
-export type GetLogsResponse = {
-  logs: BaseLogMessage[];
-  total: number;
-  page: number;
-  perPage: number;
-  hasMore: boolean;
-};
+export type GetLogsResponse = GeneratedResponse<'GET /logs'>;
 
 export type RequestFunction = (path: string, options?: RequestOptions) => Promise<any>;
 export interface GetVNextNetworkResponse {
@@ -1594,9 +1592,7 @@ export interface CompareScorerVersionsResponse {
   diffs: VersionDiff[];
 }
 
-export interface ListAgentsModelProvidersResponse {
-  providers: Provider[];
-}
+export type ListAgentsModelProvidersResponse = GeneratedResponse<'GET /agents/providers'>;
 
 export interface Provider {
   id: string;
@@ -1616,13 +1612,7 @@ export interface MastraPackage {
   version: string;
 }
 
-export interface GetSystemPackagesResponse {
-  packages: MastraPackage[];
-  isDev: boolean;
-  cmsEnabled: boolean;
-  storageType?: string;
-  observabilityStorageType?: string;
-}
+export type GetSystemPackagesResponse = GeneratedResponse<'GET /system/packages'>;
 
 // ============================================================================
 // Workspace Types
@@ -1650,14 +1640,7 @@ export interface WorkspaceSafety {
 /**
  * Response for getting workspace info
  */
-export interface WorkspaceInfoResponse {
-  isWorkspaceConfigured: boolean;
-  id?: string;
-  name?: string;
-  status?: string;
-  capabilities?: WorkspaceCapabilities;
-  safety?: WorkspaceSafety;
-}
+export type WorkspaceInfoResponse = GeneratedResponse<'GET /workspaces/:workspaceId'>;
 
 /**
  * Workspace item in list response
@@ -1676,9 +1659,7 @@ export interface WorkspaceItem {
 /**
  * Response for listing all workspaces
  */
-export interface ListWorkspacesResponse {
-  workspaces: WorkspaceItem[];
-}
+export type ListWorkspacesResponse = GeneratedResponse<'GET /workspaces'>;
 
 /**
  * File entry in directory listing
@@ -1692,57 +1673,32 @@ export interface WorkspaceFileEntry {
 /**
  * Response for reading a file
  */
-export interface WorkspaceFsReadResponse {
-  path: string;
-  content: string;
-  type: 'file' | 'directory';
-  size?: number;
-  mimeType?: string;
-}
+export type WorkspaceFsReadResponse = GeneratedResponse<'GET /workspaces/:workspaceId/fs/read'>;
 
 /**
  * Response for writing a file
  */
-export interface WorkspaceFsWriteResponse {
-  success: boolean;
-  path: string;
-}
+export type WorkspaceFsWriteResponse = GeneratedResponse<'POST /workspaces/:workspaceId/fs/write'>;
 
 /**
  * Response for listing files
  */
-export interface WorkspaceFsListResponse {
-  path: string;
-  entries: WorkspaceFileEntry[];
-}
+export type WorkspaceFsListResponse = GeneratedResponse<'GET /workspaces/:workspaceId/fs/list'>;
 
 /**
  * Response for deleting a file
  */
-export interface WorkspaceFsDeleteResponse {
-  success: boolean;
-  path: string;
-}
+export type WorkspaceFsDeleteResponse = GeneratedResponse<'DELETE /workspaces/:workspaceId/fs/delete'>;
 
 /**
  * Response for creating a directory
  */
-export interface WorkspaceFsMkdirResponse {
-  success: boolean;
-  path: string;
-}
+export type WorkspaceFsMkdirResponse = GeneratedResponse<'POST /workspaces/:workspaceId/fs/mkdir'>;
 
 /**
  * Response for getting file stats
  */
-export interface WorkspaceFsStatResponse {
-  path: string;
-  type: 'file' | 'directory';
-  size?: number;
-  createdAt?: string;
-  modifiedAt?: string;
-  mimeType?: string;
-}
+export type WorkspaceFsStatResponse = GeneratedResponse<'GET /workspaces/:workspaceId/fs/stat'>;
 
 /**
  * Workspace search result
@@ -1765,38 +1721,22 @@ export interface WorkspaceSearchResult {
 /**
  * Parameters for searching workspace content
  */
-export interface WorkspaceSearchParams {
-  query: string;
-  topK?: number;
-  mode?: 'bm25' | 'vector' | 'hybrid';
-  minScore?: number;
-}
+export type WorkspaceSearchParams = GeneratedRequest<QueryParams<'GET /workspaces/:workspaceId/search'>>;
 
 /**
  * Response for searching workspace
  */
-export interface WorkspaceSearchResponse {
-  results: WorkspaceSearchResult[];
-  query: string;
-  mode: 'bm25' | 'vector' | 'hybrid';
-}
+export type WorkspaceSearchResponse = GeneratedResponse<'GET /workspaces/:workspaceId/search'>;
 
 /**
  * Parameters for indexing content
  */
-export interface WorkspaceIndexParams {
-  path: string;
-  content: string;
-  metadata?: Record<string, unknown>;
-}
+export type WorkspaceIndexParams = GeneratedRequest<Body<'POST /workspaces/:workspaceId/index'>>;
 
 /**
  * Response for indexing content
  */
-export interface WorkspaceIndexResponse {
-  success: boolean;
-  path: string;
-}
+export type WorkspaceIndexResponse = GeneratedResponse<'POST /workspaces/:workspaceId/index'>;
 
 // ============================================================================
 // Skills Types
@@ -2069,59 +2009,34 @@ export interface ExecuteProcessorResponse {
 /**
  * Parameters for getting observational memory
  */
-export interface GetObservationalMemoryParams {
-  agentId: string;
-  resourceId?: string;
-  threadId?: string;
+export type GetObservationalMemoryParams = Omit<
+  GeneratedRequest<QueryParams<'GET /memory/observational-memory'>>,
+  'from' | 'to'
+> & {
   from?: Date | string;
   to?: Date | string;
-  offset?: number;
-  limit?: number;
-  requestContext?: RequestContext | Record<string, any>;
-}
+} & RequestContextOptions;
 
 /**
  * Response for observational memory endpoint
  */
-export interface GetObservationalMemoryResponse {
-  record: ObservationalMemoryRecord | null;
-  history?: ObservationalMemoryRecord[];
-}
+export type GetObservationalMemoryResponse = GeneratedResponse<'GET /memory/observational-memory'>;
 
 /**
  * Parameters for awaiting buffer status
  */
-export interface AwaitBufferStatusParams {
-  agentId: string;
-  resourceId?: string;
-  threadId?: string;
-  requestContext?: RequestContext;
-}
+export type AwaitBufferStatusParams = GeneratedRequest<Body<'POST /memory/observational-memory/buffer-status'>> &
+  RequestContextOptions;
 
 /**
  * Response for buffer status endpoint
  */
-export interface AwaitBufferStatusResponse {
-  record: ObservationalMemoryRecord | null;
-}
+export type AwaitBufferStatusResponse = GeneratedResponse<'POST /memory/observational-memory/buffer-status'>;
 
 /**
  * Extended memory status response with OM info
  */
-export interface GetMemoryStatusResponse {
-  result: boolean;
-  memoryType?: 'local' | 'gateway';
-  observationalMemory?: {
-    enabled: boolean;
-    hasRecord?: boolean;
-    originType?: string;
-    lastObservedAt?: Date | null;
-    tokenCount?: number;
-    observationTokenCount?: number;
-    isObserving?: boolean;
-    isReflecting?: boolean;
-  };
-}
+export type GetMemoryStatusResponse = GeneratedResponse<'GET /memory/status'>;
 
 /**
  * Extended memory config response with OM config
@@ -2147,27 +2062,12 @@ export interface GetMemoryConfigResponseExtended {
 /**
  * Response for listing available vector stores
  */
-export interface ListVectorsResponse {
-  vectors: Array<{
-    name: string;
-    id: string;
-    type: string;
-  }>;
-}
+export type ListVectorsResponse = GeneratedResponse<'GET /vectors'>;
 
 /**
  * Response for listing available embedding models
  */
-export interface ListEmbeddersResponse {
-  embedders: Array<{
-    id: string;
-    provider: string;
-    name: string;
-    description: string;
-    dimensions: number;
-    maxInputTokens: number;
-  }>;
-}
+export type ListEmbeddersResponse = GeneratedResponse<'GET /embedders'>;
 
 // ============================================================================
 // Tool Provider Types
@@ -2666,52 +2566,13 @@ export type BackgroundTaskStatus = 'pending' | 'running' | 'completed' | 'failed
 
 export type BackgroundTaskDateColumn = 'createdAt' | 'startedAt' | 'completedAt';
 
-export interface BackgroundTaskResponse {
-  id: string;
-  status: BackgroundTaskStatus;
-  toolName: string;
-  toolCallId: string;
-  args: Record<string, unknown>;
-  agentId: string;
-  threadId?: string;
-  resourceId?: string;
-  runId: string;
-  result?: unknown;
-  error?: { message: string; stack?: string };
-  createdAt: string;
-  startedAt?: string;
-  completedAt?: string;
-  retryCount: number;
-  maxRetries: number;
-  timeoutMs: number;
-}
+export type BackgroundTaskResponse = GeneratedResponse<'GET /background-tasks'>['tasks'][number];
 
-export interface ListBackgroundTasksParams {
-  agentId?: string;
-  status?: BackgroundTaskStatus;
-  runId?: string;
-  threadId?: string;
-  resourceId?: string;
-  fromDate?: Date;
-  toDate?: Date;
-  dateFilterBy?: BackgroundTaskDateColumn;
-  orderBy?: BackgroundTaskDateColumn;
-  orderDirection?: 'asc' | 'desc';
-  page?: number;
-  perPage?: number;
-}
+export type ListBackgroundTasksParams = GeneratedRequest<QueryParams<'GET /background-tasks'>>;
 
-export interface ListBackgroundTasksResponse {
-  tasks: BackgroundTaskResponse[];
-  total: number;
-}
+export type ListBackgroundTasksResponse = GeneratedResponse<'GET /background-tasks'>;
 
-export interface StreamBackgroundTasksParams {
-  agentId?: string;
-  runId?: string;
-  threadId?: string;
-  resourceId?: string;
-}
+export type StreamBackgroundTasksParams = GeneratedRequest<QueryParams<'GET /background-tasks/stream'>>;
 
 export interface ExperimentReviewCounts {
   experimentId: string;
