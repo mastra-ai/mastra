@@ -4,6 +4,7 @@ description: Documentation for the Cloudflare D1 SQL storage implementation in M
 packages:
   - "@mastra/cloudflare-d1"
   - "@mastra/core"
+  - "@mastra/deployer-cloudflare"
 ---
 
 # Cloudflare D1 storage
@@ -54,7 +55,7 @@ export const mastra = new Mastra({
 ```
 
 :::note
-`D1Store` must be initialized inline inside `new Mastra({...})`. See [CloudflareDeployer reference](/reference/deployer/cloudflare#cloudflare-bindings) for details.
+When using `import { env } from 'cloudflare:workers'`, `D1Store` must be initialized inline inside `new Mastra({...})` — not extracted to a module-level variable. Alternatively, initialize `D1Store` inside the `fetch` handler after `env` is available. See [CloudflareDeployer reference](/reference/deployer/cloudflare#cloudflare-bindings) for details.
 :::
 
 ### Using in a Cloudflare Worker without HTTP routes
@@ -66,13 +67,13 @@ import { D1Store } from '@mastra/cloudflare-d1'
 import { Mastra } from '@mastra/core'
 
 type Env = {
-  D1Database: D1Database
+  DB: D1Database
 }
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const mastra = new Mastra({
-      storage: new D1Store({ binding: env.D1Database }),
+      storage: new D1Store({ binding: env.DB }),
     })
 
     const agent = mastra.getAgent('my-agent')
@@ -104,7 +105,7 @@ Add the D1 database binding to your `wrangler.toml`:
 
 ```toml
 [[d1_databases]]
-binding = "D1Database"  # Must match the property name in your Env type
+binding = "DB"
 database_name = "your-database-name"
 database_id = "your-database-id"
 ```
@@ -115,7 +116,7 @@ Or in `wrangler.jsonc`:
 {
   "d1_databases": [
     {
-      "binding": "D1Database",
+      "binding": "DB",
       "database_name": "your-database-name",
       "database_id": "your-database-id",
     },
@@ -179,14 +180,14 @@ import { Mastra } from '@mastra/core'
 import { D1Store } from '@mastra/cloudflare-d1'
 
 type Env = {
-  D1Database: D1Database
+  DB: D1Database
 }
 
 // In a Cloudflare Worker
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const storage = new D1Store({
-      binding: env.D1Database, // ✅ Use env.D1Database
+      binding: env.DB,
     })
 
     const mastra = new Mastra({
@@ -205,7 +206,7 @@ If you're using storage directly without Mastra, you must call `init()` explicit
 import { D1Store } from '@mastra/cloudflare-d1'
 
 type Env = {
-  D1Database: D1Database
+  DB: D1Database
 }
 
 // In a Cloudflare Worker
@@ -213,7 +214,7 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const storage = new D1Store({
       id: 'd1-storage',
-      binding: env.D1Database, // ✅ Use env.D1Database
+      binding: env.DB,
     })
 
     // Required when using storage directly
