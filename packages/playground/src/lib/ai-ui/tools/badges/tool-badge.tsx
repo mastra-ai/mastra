@@ -13,6 +13,7 @@ export interface ToolBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCall
   toolOutput: Array<{ toolId: string }>;
   suspendPayload?: any;
   toolCalled?: boolean;
+  withoutArgs?: boolean;
 }
 
 export const ToolBadge = ({
@@ -26,11 +27,12 @@ export const ToolBadge = ({
   suspendPayload,
   isNetwork,
   toolCalled: toolCalledProp,
+  withoutArgs,
 }: ToolBadgeProps) => {
   let argSlot = null;
 
   try {
-    const { __mastraMetadata: _, ...formattedArgs } = typeof args === 'object' ? args : JSON.parse(args);
+    const { __mastraMetadata: _, _background, ...formattedArgs } = typeof args === 'object' ? args : JSON.parse(args);
     argSlot = <CodeEditor data={formattedArgs} data-testid="tool-args" />;
   } catch {
     argSlot = <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{args as string}</pre>;
@@ -71,10 +73,12 @@ export const ToolBadge = ({
       initialCollapsed={!!!(toolApprovalMetadata ?? suspendPayload)}
     >
       <div className="space-y-4">
-        <div>
-          <p className="font-medium pb-2">Tool arguments</p>
-          {argSlot}
-        </div>
+        {withoutArgs ? null : (
+          <div>
+            <p className="font-medium pb-2">Tool arguments</p>
+            {argSlot}
+          </div>
+        )}
 
         {suspendPayloadSlot !== undefined && suspendPayload && (
           <div>

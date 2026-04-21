@@ -25,9 +25,13 @@ vi.mock('../studio/project-config.js', () => ({
 }));
 
 const mockReadFile = vi.fn();
+const mockWriteFile = vi.fn().mockResolvedValue(undefined);
+const mockChmod = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('node:fs/promises', () => ({
   readFile: mockReadFile,
+  writeFile: mockWriteFile,
+  chmod: mockChmod,
 }));
 
 beforeEach(() => {
@@ -200,6 +204,91 @@ describe('envImportAction', () => {
       NEW: '1',
     });
     expect(spy.mock.calls.some(c => String(c[0]).includes('Imported 1 variable'))).toBe(true);
+    spy.mockRestore();
+  });
+});
+
+describe('envPullAction', () => {
+  beforeEach(() => {
+    process.env.MASTRA_PROJECT_ID = 'proj-x';
+    mockWriteFile.mockResolvedValue(undefined);
+    mockChmod.mockResolvedValue(undefined);
+  });
+
+  it('writes empty env file when no vars exist', async () => {
+    mockGetServerProjectEnv.mockResolvedValue({});
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { envPullAction } = await import('./env.js');
+    await envPullAction(undefined, {});
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
+    const [, content] = mockWriteFile.mock.calls[0]!;
+    expect(content).toContain('# Pulled from Mastra Server');
+    expect(content).not.toMatch(/^\w+=.+$/m);
+    expect(mockChmod).toHaveBeenCalled();
+    expect(spy.mock.calls.some(c => String(c[0]).includes('Wrote empty'))).toBe(true);
+    spy.mockRestore();
+  });
+
+  it('writes env vars to default .env file with restrictive permissions', async () => {
+    mockGetServerProjectEnv.mockResolvedValue({ DB_URL: 'postgres://localhost', API_KEY: 'secret' });
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { envPullAction } = await import('./env.js');
+    await envPullAction(undefined, {});
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
+    const [filePath, content, options] = mockWriteFile.mock.calls[0]!;
+    expect(filePath).toContain('.env');
+    expect(content).toContain('# Pulled from Mastra Server');
+    expect(content).toContain('API_KEY="secret"');
+    expect(content).toContain('DB_URL="postgres://localhost"');
+    expect(options).toEqual({ encoding: 'utf-8', mode: 0o600 });
+    expect(mockChmod).toHaveBeenCalledWith(filePath, 0o600);
+    expect(spy.mock.calls.some(c => String(c[0]).includes('Pulled 2 variable(s)'))).toBe(true);
+    spy.mockRestore();
+  });
+
+  it('writes to a custom file when specified', async () => {
+    mockGetServerProjectEnv.mockResolvedValue({ FOO: 'bar' });
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { envPullAction } = await import('./env.js');
+    await envPullAction('.env.production', {});
+    const [filePath, content] = mockWriteFile.mock.calls[0]!;
+    expect(filePath).toContain('.env.production');
+    expect(content).toContain('FOO="bar"');
+    expect(spy.mock.calls.some(c => String(c[0]).includes('.env.production'))).toBe(true);
+    spy.mockRestore();
+  });
+
+  it('quotes values containing special characters', async () => {
+    mockGetServerProjectEnv.mockResolvedValue({ SECRET: 'has spaces and "quotes"' });
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { envPullAction } = await import('./env.js');
+    await envPullAction(undefined, {});
+    const [, content] = mockWriteFile.mock.calls[0]!;
+    expect(content).toContain('SECRET="has spaces and \\"quotes\\""');
+    spy.mockRestore();
+  });
+
+  it('escapes dollar signs, backticks, and control characters', async () => {
+    mockGetServerProjectEnv.mockResolvedValue({ TOKEN: 'price=$100`cmd`\nline2' });
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { envPullAction } = await import('./env.js');
+    await envPullAction(undefined, {});
+    const [, content] = mockWriteFile.mock.calls[0]!;
+    expect(content).toContain('TOKEN="price=\\$100\\`cmd\\`\\nline2"');
+    spy.mockRestore();
+  });
+
+  it('skips keys that are not valid shell identifiers', async () => {
+    mockGetServerProjectEnv.mockResolvedValue({ GOOD_KEY: 'ok', 'bad-key': 'nope', 'also bad': 'no' });
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { envPullAction } = await import('./env.js');
+    await envPullAction(undefined, {});
+    const [, content] = mockWriteFile.mock.calls[0]!;
+    expect(content).toContain('GOOD_KEY="ok"');
+    expect(content).not.toContain('bad-key=');
+    expect(content).not.toContain('also bad=');
+    expect(content).toContain('# Skipped unsafe key');
+    expect(spy.mock.calls.some(c => String(c[0]).includes('Skipped 2 unsafe key(s)'))).toBe(true);
     spy.mockRestore();
   });
 });

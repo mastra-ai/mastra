@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
-import { createOpenAI } from '@ai-sdk/openai-v5';
+import { createOpenAI } from '@ai-sdk/openai-v6';
 import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 import type { StreamTransport } from '../../stream/types';
@@ -242,6 +242,26 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
   /** @internal */
   _getStreamTransport(): StreamTransport | undefined {
     return this.#lastStreamTransport;
+  }
+
+  /**
+   * Custom serialization for tracing/observability spans.
+   * Excludes `config` (holds apiKey, headers, url) and `gateway`
+   * (may hold proxy credentials or cached tokens) so they cannot leak
+   * into telemetry backends.
+   */
+  serializeForSpan(): {
+    specificationVersion: 'v2';
+    modelId: string;
+    provider: string;
+    gatewayId: string;
+  } {
+    return {
+      specificationVersion: this.specificationVersion,
+      modelId: this.modelId,
+      provider: this.provider,
+      gatewayId: this.gatewayId,
+    };
   }
 
   private setStreamTransport({

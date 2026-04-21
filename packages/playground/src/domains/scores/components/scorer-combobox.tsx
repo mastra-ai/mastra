@@ -59,6 +59,7 @@ export function ScorerCombobox({
       className={className}
       disabled={disabled || isLoading || isError}
       variant={variant}
+      size={'md'}
     />
   );
 }
