@@ -270,8 +270,7 @@ describe('StructuredOutputProcessor', () => {
         ]),
         expect.objectContaining({
           model: mockModel,
-          requestContext,
-          maxSteps: 1,
+          requestContext: expect.any(RequestContext),
           toolChoice: 'none',
           structuredOutput: {
             schema: testSchema,
@@ -284,6 +283,9 @@ describe('StructuredOutputProcessor', () => {
           },
         }),
       );
+      const [, options] = vi.mocked(agent.stream).mock.calls[0]!;
+      expect(options.requestContext).not.toBe(requestContext);
+      expect(Array.from(options.requestContext?.entries() ?? [])).toEqual(Array.from(requestContext.entries()));
       expect(fallbackStreamSpy).not.toHaveBeenCalled();
     });
 
@@ -357,8 +359,7 @@ describe('StructuredOutputProcessor', () => {
         ]),
         expect.objectContaining({
           model: mockModel,
-          requestContext,
-          maxSteps: 1,
+          requestContext: expect.any(RequestContext),
           toolChoice: 'none',
           structuredOutput: {
             schema: testSchema,
@@ -370,6 +371,9 @@ describe('StructuredOutputProcessor', () => {
           },
         }),
       );
+      const [, options] = vi.mocked(agent.stream).mock.calls[0]!;
+      expect(options.requestContext).not.toBe(requestContext);
+      expect(Array.from(options.requestContext?.entries() ?? [])).toEqual(Array.from(requestContext.entries()));
       expect(agent.stream).not.toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({
@@ -452,7 +456,6 @@ describe('StructuredOutputProcessor', () => {
         ]),
         expect.objectContaining({
           model: mockModel,
-          maxSteps: 1,
           toolChoice: 'none',
           structuredOutput: {
             schema: testSchema,
@@ -572,8 +575,7 @@ describe('StructuredOutputProcessor', () => {
         ],
         expect.objectContaining({
           model: mockModel,
-          requestContext,
-          maxSteps: 1,
+          requestContext: expect.any(RequestContext),
           toolChoice: 'none',
           structuredOutput: {
             schema: testSchema,
@@ -586,6 +588,9 @@ describe('StructuredOutputProcessor', () => {
           },
         }),
       );
+      const [, options] = vi.mocked(agent.stream).mock.calls[0]!;
+      expect(options.requestContext).not.toBe(requestContext);
+      expect(Array.from(options.requestContext?.entries() ?? [])).toEqual(Array.from(requestContext.entries()));
     });
 
     it('should surface plain object error messages', async () => {

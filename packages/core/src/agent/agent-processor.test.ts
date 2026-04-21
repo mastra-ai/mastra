@@ -1170,8 +1170,8 @@ describe('Input and Output Processors', () => {
       expect(processedChunks.length).toBeGreaterThan(0);
       expect(processedChunks.join('')).toContain('Barack');
 
-      // Check that streaming content was modified
-      expect(streamedContent).toContain('OBAMA');
+      // Structured output object streams no longer expose the intermediate JSON text deltas.
+      expect(streamedContent).toBe('');
 
       // Check that final object processing occurred
       expect(finalProcessedObject).toEqual({
