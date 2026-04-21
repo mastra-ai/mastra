@@ -74,6 +74,8 @@ const CLI_CDP_PATTERNS: Record<
     flag: string;
     sessionFlag?: string; // Flag to pass threadId as session name for isolation
     warmupCommand?: (cdpUrl: string, threadId: string) => string;
+    externalCdpPattern?: RegExp; // Pattern to detect agent-provided external CDP
+    externalCdpExtractor?: RegExp; // Pattern to extract the CDP URL from command (with capture group)
   }
 > = {
   'agent-browser': {
@@ -83,6 +85,12 @@ const CLI_CDP_PATTERNS: Record<
     // agent-browser daemon needs explicit connect command to establish CDP connection
     // Must include session flag to isolate threads
     warmupCommand: (cdpUrl: string, threadId: string) => `agent-browser --session "${threadId}" connect "${cdpUrl}"`,
+    // agent-browser external CDP detection:
+    // - "connect <url>" subcommand for external CDP
+    // - "--cdp <url>" with full wss:// URL (not just port) also indicates external CDP
+    externalCdpPattern: /(?:\bconnect\s+["']?wss?:\/\/|--cdp\s+["']?wss?:\/\/)/,
+    // Extract URL from: connect "wss://..." or --cdp "wss://..."
+    externalCdpExtractor: /(?:\bconnect|--cdp)\s+["']?(wss?:\/\/[^\s"']+)["']?/,
   },
   'browser-use': {
     // browser-use CLI installs as multiple aliases: browser, browseruse, bu
@@ -91,8 +99,19 @@ const CLI_CDP_PATTERNS: Record<
     pattern: /^(?:browser-use|browseruse|browser|bu)\b/,
     flag: '--cdp-url',
     sessionFlag: '--session',
+    // browser-use uses --cdp-url for external CDP
+    externalCdpPattern: /--cdp-url\s+["']?\S+/,
+    // Extract URL from: --cdp-url "wss://..." or --cdp-url 'wss://...' or --cdp-url wss://...
+    externalCdpExtractor: /--cdp-url\s+["']?(wss?:\/\/[^\s"']+)["']?/,
   },
-  browse: { pattern: /^browse\b/, flag: '--ws' },
+  browse: {
+    pattern: /^browse\b/,
+    flag: '--ws',
+    // browse uses --ws for external CDP
+    externalCdpPattern: /--ws\s+["']?\S+/,
+    // Extract URL from: --ws "wss://..." or --ws 'wss://...' or --ws wss://...
+    externalCdpExtractor: /--ws\s+["']?(wss?:\/\/[^\s"']+)["']?/,
+  },
 };
 
 /**
@@ -102,12 +121,59 @@ const CLI_CDP_PATTERNS: Record<
 const warmedUpClis = new Set<string>();
 
 /**
+ * Track cleanup callbacks for warmed up CLIs to avoid duplicate registrations.
+ * Key format: `${cliName}:${threadId}`
+ */
+const warmupCleanups = new Map<string, () => void>();
+
+/**
  * Check if a command is a browser CLI command and return its config.
  */
 function getBrowserCliConfig(command: string): { name: string; config: (typeof CLI_CDP_PATTERNS)[string] } | null {
   for (const [name, config] of Object.entries(CLI_CDP_PATTERNS)) {
     if (config.pattern.test(command)) {
       return { name, config };
+    }
+  }
+  return null;
+}
+
+/**
+ * Check if any browser CLI command already has a CDP flag specified.
+ * If so, the agent is managing their own CDP connection and we should skip injection.
+ */
+function hasExternalCdpFlag(parts: string[]): boolean {
+  for (const part of parts) {
+    const match = getBrowserCliConfig(part.trim());
+    if (match) {
+      // Use provider-specific pattern if available, otherwise fall back to flag pattern
+      if (match.config.externalCdpPattern) {
+        if (match.config.externalCdpPattern.test(part)) {
+          return true;
+        }
+      } else {
+        const flagPattern = new RegExp(`${match.config.flag}\\s+\\S+`);
+        if (flagPattern.test(part)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Extract external CDP URL from command parts.
+ * Returns the first CDP URL found, or null if none.
+ */
+function extractExternalCdpUrl(parts: string[]): string | null {
+  for (const part of parts) {
+    const match = getBrowserCliConfig(part.trim());
+    if (match?.config.externalCdpExtractor) {
+      const urlMatch = part.match(match.config.externalCdpExtractor);
+      if (urlMatch?.[1]) {
+        return urlMatch[1];
+      }
     }
   }
   return null;
@@ -218,7 +284,10 @@ async function executeCommand(input: Record<string, any>, context: any) {
     .map(part => getBrowserCliConfig(part.trim()))
     .filter((match): match is NonNullable<typeof match> => match !== null);
 
-  if (browser && browserClis.length > 0) {
+  // Skip browser launch/injection if agent already has CDP flags (using external browser)
+  const usingExternalCdp = hasExternalCdpFlag(parts);
+
+  if (browser && browserClis.length > 0 && !usingExternalCdp) {
     const threadId = context?.agent?.threadId ?? context?.threadId ?? 'default';
 
     // Launch browser if not already running (for this thread if thread-scoped)
@@ -243,11 +312,32 @@ async function executeCommand(input: Record<string, any>, context: any) {
             // Still mark as warmed up to avoid retrying every command
             warmedUpClis.add(warmupKey);
           }
+
+          // Register cleanup when browser closes (if not already registered)
+          if (!warmupCleanups.has(warmupKey)) {
+            const cleanup = browser.onBrowserClosed(() => {
+              warmedUpClis.delete(warmupKey);
+              warmupCleanups.delete(warmupKey);
+            }, threadId);
+            warmupCleanups.set(warmupKey, cleanup);
+          }
         }
       }
 
       // Inject CDP URL into all browser CLI commands in the chain
       command = injectCdpUrl(command, cdpUrl, threadId);
+    }
+  } else if (browser && browserClis.length > 0 && usingExternalCdp) {
+    // Agent is using their own external CDP - connect BrowserViewer to it for screencast
+    const externalCdpUrl = extractExternalCdpUrl(parts);
+
+    if (externalCdpUrl) {
+      const threadId = context?.agent?.threadId ?? context?.threadId ?? 'default';
+      try {
+        await browser.connectToExternalCdp(externalCdpUrl, threadId);
+      } catch {
+        // Non-fatal - agent can still use the external CDP, just no screencast
+      }
     }
   }
 

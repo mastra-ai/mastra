@@ -218,6 +218,23 @@ export class BrowserViewer extends MastraBrowser {
     super.handleBrowserDisconnected();
   }
 
+  /**
+   * Connect to an external browser via CDP URL for screencast.
+   *
+   * Use this when an agent is using their own external CDP (e.g., browser-use cloud).
+   * Connects Playwright to the external browser to enable screencast without launching
+   * our own browser.
+   *
+   * @param cdpUrl - The external CDP WebSocket URL (wss://... or ws://...)
+   * @param threadId - Thread ID to associate the session with
+   */
+  override async connectToExternalCdp(cdpUrl: string, threadId?: string): Promise<void> {
+    const effectiveThreadId = threadId ?? this.getCurrentThread();
+    await this.threadManager.connectToExternalCdp(cdpUrl, effectiveThreadId);
+    // Mark as ready
+    this.status = 'ready';
+  }
+
   // ---------------------------------------------------------------------------
   // Browser State (implements MastraBrowser abstract methods)
   // ---------------------------------------------------------------------------

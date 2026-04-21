@@ -321,6 +321,75 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
   }
 
   /**
+   * Connect to an external browser via CDP URL for screencast.
+   *
+   * This is used when an agent is using their own external CDP (e.g., browser-use cloud).
+   * We connect Playwright to the external browser to enable screencast without launching
+   * our own browser.
+   *
+   * @param cdpUrl - The external CDP WebSocket URL (wss://... or ws://...)
+   * @param threadId - Thread ID to associate the session with
+   */
+  async connectToExternalCdp(cdpUrl: string, threadId: string): Promise<BrowserViewerSession> {
+    this.logger?.debug?.(`Connecting to external CDP for thread ${threadId}: ${cdpUrl}`);
+
+    try {
+      // Connect to external browser via CDP
+      const browser = await chromium.connectOverCDP(cdpUrl);
+
+      // Get the default context (external browsers typically have one)
+      const contexts = browser.contexts();
+      const context = contexts[0] ?? (await browser.newContext());
+
+      // Get the active page
+      const pages = context.pages();
+      let page = pages[0];
+
+      // If no pages, wait a moment for the external browser to create one
+      if (!page) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const updatedPages = context.pages();
+        page = updatedPages[0];
+      }
+
+      // Set up CDP session for the active page
+      const cdpSession = page ? await context.newCDPSession(page) : null;
+
+      // Set up disconnection handler
+      browser.on('disconnected', () => {
+        this.handleBrowserDisconnected(threadId);
+      });
+
+      // Create session without browserServer (we don't own the browser process)
+      const session: BrowserViewerSession = {
+        threadId,
+        createdAt: Date.now(),
+        browserServer: null as unknown as BrowserServer, // We don't own the server
+        browser,
+        context,
+        cdpSession,
+        cdpUrl,
+      };
+
+      // Store in session maps
+      this.threadSessions.set(threadId, session);
+      this.sessions.set(threadId, session);
+      this.threadManagers.set(threadId, browser);
+
+      this.logger?.debug?.(`Connected to external CDP for thread ${threadId}`);
+
+      // Notify callback (triggers screencast start)
+      this.onBrowserCreated?.(browser, threadId, cdpUrl);
+      this.onSessionCreated?.(session);
+
+      return session;
+    } catch (error) {
+      this.logger?.warn?.(`Failed to connect to external CDP: ${error}`);
+      throw error;
+    }
+  }
+
+  /**
    * Close a specific thread's browser.
    */
   async closeThreadBrowser(threadId: string): Promise<void> {
