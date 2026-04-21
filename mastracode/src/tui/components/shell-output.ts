@@ -5,7 +5,7 @@
 
 import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import { getTermWidth, theme } from '../theme.js';
-import { truncateAnsi } from './tool-execution-enhanced.js';
+import { truncateAnsi } from './ansi.js';
 
 const MAX_LINES = 200;
 const COLLAPSED_LINES = 20;
