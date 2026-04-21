@@ -117,7 +117,7 @@ export async function getTraceLight(
       SELECT traceId, spanId, parentSpanId, name,
         entityType, entityId, entityName,
         spanType, error, isEvent,
-        startedAt, endedAt, createdAt, updatedAt
+        startedAt, endedAt
       FROM (
         SELECT *
         FROM ${TABLE_SPAN_EVENTS}
