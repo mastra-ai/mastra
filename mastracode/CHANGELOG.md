@@ -1,5 +1,19 @@
 # mastracode
 
+## 0.15.0-alpha.10
+
+### Minor Changes
+
+- Added `--output-format` flag to headless mode, accepting `text`, `json`, and `stream-json` for automation and CI use cases. Coexists with all existing headless flags. ([#15423](https://github.com/mastra-ai/mastra/pull/15423))
+
+### Patch Changes
+
+- Fixed a security issue where several parsing and tracing paths could slow down on malformed or attacker-crafted input. Normal behavior is unchanged, and these packages now handle pathological input in linear time. ([#15566](https://github.com/mastra-ai/mastra/pull/15566))
+
+- Updated dependencies [[`aba393e`](https://github.com/mastra-ai/mastra/commit/aba393e2da7390c69b80e516a4f153cda6f09376), [`0a5fa1d`](https://github.com/mastra-ai/mastra/commit/0a5fa1d3cb0583889d06687155f26fd7d2edc76c), [`ea43e64`](https://github.com/mastra-ai/mastra/commit/ea43e646dd95d507694b6112b0bf1df22ad552b2), [`00d1b16`](https://github.com/mastra-ai/mastra/commit/00d1b16b401199cb294fa23f43336547db4dca9b), [`af8a57e`](https://github.com/mastra-ai/mastra/commit/af8a57ed9ba9685ad8601d5b71ae3706da6222f9)]:
+  - @mastra/core@1.26.0-alpha.10
+  - @mastra/memory@1.16.0-alpha.3
+
 ## 0.15.0-alpha.9
 
 ### Patch Changes
