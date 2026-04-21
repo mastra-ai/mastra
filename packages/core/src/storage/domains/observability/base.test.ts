@@ -91,6 +91,13 @@ describe('ObservabilityStorage base class', () => {
       expectedMessage: 'does not support tag discovery',
     },
 
+    // Traces
+    {
+      name: 'getTraceLight',
+      callThunk: () => storage.getTraceLight({ traceId: 'test' }),
+      expectedMessage: 'does not support getting lightweight traces',
+    },
+
     // Scores
     {
       name: 'createScore',

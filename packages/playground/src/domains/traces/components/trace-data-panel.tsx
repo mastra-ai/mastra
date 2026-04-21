@@ -1,9 +1,8 @@
-import type { SpanRecord } from '@mastra/core/storage';
 import { Button, ButtonWithTooltip, DataPanel, Icon, ButtonsGroup, truncateString } from '@mastra/playground-ui';
 import { CircleGaugeIcon, ChevronsDownUpIcon, ChevronsUpDownIcon, Link2Icon, SaveIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
-import { useTraceSpans } from '../hooks/use-trace-spans';
+import { useTraceLightSpans } from '../hooks/use-trace-light-spans';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
 import { TraceKeysAndValues } from './trace-keys-and-values';
 import { TraceTimeline } from './trace-timeline';
@@ -15,7 +14,7 @@ export type TraceDataPanelPlacement = 'traces-list' | 'trace-page';
 export interface TraceDataPanelProps {
   traceId: string;
   onClose: () => void;
-  onSpanSelect?: (span: SpanRecord | undefined) => void;
+  onSpanSelect?: (spanId: string | undefined) => void;
   onEvaluateTrace?: () => void;
   initialSpanId?: string | null;
   onPrevious?: () => void;
@@ -45,7 +44,8 @@ export function TraceDataPanel({
   const setCollapsed = onCollapsedChange ?? setInternalCollapsed;
 
   const contentRef = useRef<HTMLDivElement>(null);
-  const { data: traceData, isLoading } = useTraceSpans(traceId);
+  const { data: traceLight, isLoading } = useTraceLightSpans(traceId);
+  const spans = traceLight?.spans;
   const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(initialSpanId ?? undefined);
 
   // Sync selected span when initialSpanId or trace data changes
@@ -58,18 +58,18 @@ export function TraceDataPanel({
     }
     // Span requested: wait for trace data before deciding so an in-flight
     // fetch doesn't wipe a URL-provided selection.
-    if (!traceData?.spans) return;
+    if (!spans) return;
 
-    const span = traceData.spans.find(s => s.spanId === initialSpanId);
-    if (span) {
+    const found = spans.find(s => s.spanId === initialSpanId);
+    if (found) {
       setSelectedSpanId(initialSpanId);
-      onSpanSelect?.(span);
+      onSpanSelect?.(initialSpanId);
     } else {
       setSelectedSpanId(undefined);
       onSpanSelect?.(undefined);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialSpanId, traceData?.spans]);
+  }, [initialSpanId, spans]);
 
   // Scroll the selected span into view within the timeline
   useEffect(() => {
@@ -78,7 +78,7 @@ export function TraceDataPanel({
     el?.scrollIntoView({ block: 'nearest' });
   }, [selectedSpanId]);
 
-  const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(traceData?.spans ?? []), [traceData?.spans]);
+  const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(spans ?? []), [spans]);
 
   const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>([]);
 
@@ -88,14 +88,13 @@ export function TraceDataPanel({
     }
   }, [hierarchicalSpans]);
 
-  const rootSpan = useMemo(() => traceData?.spans?.find(s => s.parentSpanId == null), [traceData?.spans]);
+  const rootSpan = useMemo(() => spans?.find(s => s.parentSpanId == null), [spans]);
   const [datasetDialogOpen, setDatasetDialogOpen] = useState(false);
 
   const handleSpanClick = (id: string) => {
     const newId = selectedSpanId === id ? undefined : id;
     setSelectedSpanId(newId);
-    const span = newId ? traceData?.spans?.find(s => s.spanId === newId) : undefined;
-    onSpanSelect?.(span);
+    onSpanSelect?.(newId);
   };
 
   return (
@@ -183,7 +182,7 @@ export function TraceDataPanel({
       </DataPanel>
 
       <TraceAsItemDialog
-        traceDetails={rootSpan}
+        rootSpanId={rootSpan?.spanId}
         traceId={traceId}
         isOpen={datasetDialogOpen}
         onClose={() => setDatasetDialogOpen(false)}

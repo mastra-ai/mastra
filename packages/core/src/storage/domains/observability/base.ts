@@ -71,6 +71,7 @@ import type {
   GetSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
+  GetTraceLightResponse,
   ListTracesArgs,
   ListTracesResponse,
   UpdateSpanArgs,
@@ -194,6 +195,19 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support getting traces',
+    });
+  }
+
+  /**
+   * Retrieves a lightweight trace with only the fields needed for timeline rendering.
+   * Excludes heavy fields: input, output, attributes, metadata, tags, links.
+   */
+  async getTraceLight(_args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_TRACE_LIGHT_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support getting lightweight traces',
     });
   }
 

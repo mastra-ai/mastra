@@ -21,6 +21,7 @@ import type {
   GetSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
+  GetTraceLightResponse,
   ListTracesArgs,
   ListTracesResponse,
   BatchCreateLogsArgs,
@@ -354,6 +355,23 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'GET_TRACE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { traceId: args.traceId },
+        },
+        error,
+      );
+    }
+  }
+
+  override async getTraceLight(args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
+    try {
+      return await tracingOps.getTraceLight(this.#client, args);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'GET_TRACE_LIGHT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { traceId: args.traceId },
