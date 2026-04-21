@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
+import type { PropertyFilterField, PropertyFilterToken } from './property-filter';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Input } from '@/ds/components/Input';
 import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
 import { Spinner } from '@/ds/components/Spinner/spinner';
-import type { PropertyFilterField, PropertyFilterToken } from './property-filter';
 
 type PickMultiField = Extract<PropertyFilterField, { kind: 'pick-multi' }>;
 
