@@ -1,0 +1,45 @@
+{
+  "name": "examples-agent-builder",
+  "type": "module",
+  "private": true,
+  "description": "Minimal example wiring the Mastra Agent Builder (Agent Studio) into a Mastra project. Ships with no pre-built agents or workflows — end users build them from the Studio UI.",
+  "main": "index.js",
+  "version": "0.0.1",
+  "dependencies": {
+    "@mastra/auth-studio": "latest",
+    "@mastra/auth-workos": "latest",
+    "@mastra/client-js": "latest",
+    "@mastra/core": "latest",
+    "@mastra/editor": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/studio-agent-builder": "latest",
+    "mastra": "latest",
+    "typescript": "^5.9.3",
+    "zod": "^4.3.6"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/auth-studio": "link:../../auth/studio",
+      "@mastra/auth-workos": "link:../../auth/workos",
+      "@mastra/client-js": "link:../../client-sdks/client-js",
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/editor": "link:../../packages/editor",
+      "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/loggers": "link:../../packages/loggers",
+      "@mastra/studio-agent-builder": "link:../../packages/studio-agent-builder",
+      "mastra": "link:../../packages/cli"
+    }
+  },
+  "scripts": {
+    "mastra:dev": "mastra dev",
+    "mastra:build": "mastra build -s",
+    "mastra:start": "mastra start",
+    "mastra:studio": "mastra studio",
+    "dev:ui": "mastra dev & pnpm --dir ../.. dev:playground & wait"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.29.3+sha512.498e1fb4cca5aa06c1dcf2611e6fafc50972ffe7189998c409e90de74566444298ffe43e6cd2acdc775ba1aa7cc5e092a8b7054c811ba8c5770f84693d33d2dc"
+}

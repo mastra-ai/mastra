@@ -1,0 +1,70 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+overrides:
+  '@mastra/auth-studio': link:../../auth/studio
+  '@mastra/auth-workos': link:../../auth/workos
+  '@mastra/client-js': link:../../client-sdks/client-js
+  '@mastra/core': link:../../packages/core
+  '@mastra/editor': link:../../packages/editor
+  '@mastra/libsql': link:../../stores/libsql
+  '@mastra/loggers': link:../../packages/loggers
+  '@mastra/studio-agent-builder': link:../../packages/studio-agent-builder
+  mastra: link:../../packages/cli
+
+importers:
+
+  .:
+    dependencies:
+      '@mastra/auth-studio':
+        specifier: link:../../auth/studio
+        version: link:../../auth/studio
+      '@mastra/auth-workos':
+        specifier: link:../../auth/workos
+        version: link:../../auth/workos
+      '@mastra/client-js':
+        specifier: link:../../client-sdks/client-js
+        version: link:../../client-sdks/client-js
+      '@mastra/core':
+        specifier: link:../../packages/core
+        version: link:../../packages/core
+      '@mastra/editor':
+        specifier: link:../../packages/editor
+        version: link:../../packages/editor
+      '@mastra/libsql':
+        specifier: link:../../stores/libsql
+        version: link:../../stores/libsql
+      '@mastra/loggers':
+        specifier: link:../../packages/loggers
+        version: link:../../packages/loggers
+      '@mastra/studio-agent-builder':
+        specifier: link:../../packages/studio-agent-builder
+        version: link:../../packages/studio-agent-builder
+      mastra:
+        specifier: link:../../packages/cli
+        version: link:../../packages/cli
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
+
+packages:
+
+  typescript@5.9.3:
+    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
+  zod@4.3.6:
+    resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
+
+snapshots:
+
+  typescript@5.9.3: {}
+
+  zod@4.3.6: {}
