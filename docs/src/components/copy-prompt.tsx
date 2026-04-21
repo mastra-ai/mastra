@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { track } from '@vercel/analytics'
 
 function normalizePromptText(text: string): string {
   return text
@@ -53,9 +54,11 @@ function getNodeText(node: React.ReactNode, parentTag?: string): string {
 
 export function CopyPrompt({
   children,
+  identifier,
   description = 'Use this pre-built prompt to get started faster.',
 }: {
   children: React.ReactNode
+  identifier: string
   description?: string
 }) {
   const [copied, setCopied] = React.useState<boolean>(false)
@@ -70,6 +73,7 @@ export function CopyPrompt({
       await navigator.clipboard.writeText(promptText)
       setCopied(true)
       setTimeout(setCopied, 2000, false)
+      track('docs-copy_prompt', { identifier })
     } catch {
       // silently fail
     }
@@ -105,7 +109,13 @@ export function CopyPrompt({
       <p id={statusId} className="sr-only" aria-live="polite">
         {copied ? 'Prompt copied to clipboard.' : ''}
       </p>
-      <div id={contentId} role="region" aria-labelledby={toggleId} hidden={!open} className="mt-3">
+      <div
+        id={contentId}
+        role="region"
+        aria-labelledby={toggleId}
+        hidden={!open}
+        className="mt-3 [&>p:last-child]:mb-0!"
+      >
         {children}
       </div>
     </div>
