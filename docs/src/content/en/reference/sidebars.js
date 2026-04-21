@@ -433,6 +433,7 @@ const sidebars = {
           label: 'MastraServer',
         },
         { type: 'doc', id: 'server/nestjs-adapter', label: 'NestJS Adapter' },
+        { type: 'doc', id: 'server/loopback-adapter', label: 'LoopBack Adapter' },
         { type: 'doc', id: 'server/register-api-route', label: 'registerApiRoute()' },
         { type: 'doc', id: 'server/routes', label: 'Server Routes' },
       ],
