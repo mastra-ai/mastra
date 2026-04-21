@@ -194,6 +194,7 @@ const storage = new RedisStore({
 ### Redis Cluster (via custom client)
 
 ```typescript
+import { RedisStore } from '@mastra/redis';
 import { createCluster } from 'redis';
 
 const cluster = createCluster({
@@ -201,7 +202,10 @@ const cluster = createCluster({
 });
 await cluster.connect();
 
-// Note: Cluster support may require additional configuration
+const storage = new RedisStore({
+  id: 'cluster',
+  client: cluster,
+});
 ```
 
 ## Closing Connections
