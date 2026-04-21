@@ -50,13 +50,24 @@ const viewer = new BrowserViewer({
 });
 ```
 
-### With Workspace (coming soon)
+### With Workspace
 
-The CDP URL will be automatically injected into CLI commands when used with workspace tools.
+The CDP URL is automatically injected into CLI commands when used with workspace tools.
 
 ```typescript
-// Agent runs: agent-browser open https://google.com
-// Mastra injects: agent-browser open https://google.com --cdp-url ws://...
+import { Workspace, LocalSandbox } from '@mastra/core';
+import { BrowserViewer } from '@mastra/browser-viewer';
+
+const workspace = new Workspace({
+  sandbox: new LocalSandbox({ cwd: './workspace' }),
+  browser: new BrowserViewer({
+    cli: 'agent-browser',
+    headless: false,
+  }),
+});
+
+// When agent runs: agent-browser open https://google.com
+// Mastra auto-injects the CDP connection so CLI uses Mastra's browser
 ```
 
 ## Configuration
@@ -81,9 +92,9 @@ The CDP URL will be automatically injected into CLI commands when used with work
 
 ## Supported CLIs
 
-- **agent-browser** — Vercel's browser automation CLI
-- **browser-use** — Python-based browser automation
-- **browse-cli** — Browserbase's Stagehand CLI
+- **agent-browser** — Vercel's browser automation CLI (`--cdp <port>`)
+- **browser-use** — Python-based browser automation (`--cdp-url <url>`)
+- **browse-cli** — Browserbase's Stagehand CLI (`--ws <url>`)
 
 ## License
 

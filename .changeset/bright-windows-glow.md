@@ -12,6 +12,7 @@ import { BrowserViewer } from '@mastra/browser-viewer';
 const workspace = new Workspace({
   sandbox: new LocalSandbox({ cwd: './workspace' }),
   browser: new BrowserViewer({
+    cli: 'agent-browser',
     headless: false,
   }),
 });
