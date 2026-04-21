@@ -422,8 +422,9 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
 
       this.logger?.debug?.(`Shared Chrome launched, CDP URL: ${cdpUrl}`);
 
-      // Notify callback
+      // Notify callbacks
       this.onBrowserCreated?.(browser, DEFAULT_THREAD_ID, cdpUrl);
+      this.onSessionCreated?.(this.sharedSession);
     } catch (error) {
       // Clean up partially initialized resources
       this.logger?.warn?.(`Failed to create shared session: ${error}`);
@@ -506,9 +507,13 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
         this.handleBrowserDisconnected(threadId);
       });
 
+      // Check if this should use the shared slot
+      const sharedSlot = this.usesSharedSlot(threadId);
+      const effectiveThreadId = sharedSlot ? DEFAULT_THREAD_ID : threadId;
+
       // Create session without browserServer (we don't own the browser process)
       const session: BrowserViewerSession = {
-        threadId,
+        threadId: effectiveThreadId,
         createdAt: Date.now(),
         browserServer: null, // We don't own the server for external CDP connections
         browser,
@@ -517,15 +522,21 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
         cdpUrl,
       };
 
-      // Store in session maps
-      this.threadSessions.set(threadId, session);
-      this.sessions.set(threadId, session);
-      this.threadManagers.set(threadId, browser);
+      // Store in the correct slot based on scope
+      if (sharedSlot) {
+        this.sharedSession = session;
+        this.sessions.set(DEFAULT_THREAD_ID, session);
+        this.setSharedManager(browser);
+      } else {
+        this.threadSessions.set(threadId, session);
+        this.sessions.set(threadId, session);
+        this.threadManagers.set(threadId, browser);
+      }
 
-      this.logger?.debug?.(`Connected to external CDP for thread ${threadId}`);
+      this.logger?.debug?.(`Connected to external CDP for thread ${effectiveThreadId}`);
 
       // Notify callback (triggers screencast start)
-      this.onBrowserCreated?.(browser, threadId, cdpUrl);
+      this.onBrowserCreated?.(browser, effectiveThreadId, cdpUrl);
       this.onSessionCreated?.(session);
 
       return session;
@@ -664,6 +675,11 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       return;
     }
 
+    // Clear state BEFORE async operations to prevent double-fire from disconnect handler
+    this.threadSessions.delete(session.threadId);
+    this.threadManagers.delete(session.threadId);
+    this.sessions.delete(session.threadId);
+
     // Detach CDP session
     if (viewerSession.cdpSession) {
       try {
@@ -689,7 +705,6 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       }
     }
 
-    this.threadSessions.delete(session.threadId);
     this.onBrowserClosed?.(session.threadId);
   }
 
