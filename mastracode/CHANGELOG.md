@@ -1,5 +1,14 @@
 # mastracode
 
+## 0.15.0-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [[`20f59b8`](https://github.com/mastra-ai/mastra/commit/20f59b876cf91199efbc49a0e36b391240708f08), [`e2687a7`](https://github.com/mastra-ai/mastra/commit/e2687a7408790c384563816a9a28ed06735684c9), [`ad0d3e8`](https://github.com/mastra-ai/mastra/commit/ad0d3e80db7472a73e26d3516c04df0513c2c189), [`8f1b280`](https://github.com/mastra-ai/mastra/commit/8f1b280b7fe6999ec654f160cb69c1a8719e7a57), [`12df98c`](https://github.com/mastra-ai/mastra/commit/12df98c4904643d9481f5c78f3bed443725b4c96)]:
+  - @mastra/core@1.26.0-alpha.11
+  - @mastra/libsql@1.9.0-alpha.2
+  - @mastra/pg@1.9.2-alpha.1
+
 ## 0.15.0-alpha.10
 
 ### Minor Changes

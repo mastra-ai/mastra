@@ -557,7 +557,22 @@ export async function dev({
     }
   });
 
+  let isShuttingDown = false;
   const handleShutdown = async () => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+
+    const forceExit = setTimeout(() => process.exit(0), 3000);
+    forceExit.unref();
+
+    devLogger.shutdown();
+
+    if (currentServerProcess) {
+      currentServerProcess.kill();
+      await waitForProcessExit(currentServerProcess);
+      currentServerProcess = undefined;
+    }
+
     const analytics = getAnalytics();
     if (analytics && serverStartTime) {
       const durationMs = Date.now() - serverStartTime;
@@ -570,18 +585,13 @@ export async function dev({
       await analytics.shutdown();
     }
 
-    devLogger.shutdown();
-
-    if (currentServerProcess) {
-      currentServerProcess.kill();
-      await waitForProcessExit(currentServerProcess);
-      currentServerProcess = undefined;
-    }
-
     watcher
       .close()
       .catch(() => {})
-      .finally(() => process.exit(0));
+      .finally(() => {
+        clearTimeout(forceExit);
+        process.exit(0);
+      });
   };
 
   const onSignal = () => {

@@ -1,5 +1,22 @@
 # @mastra/server
 
+## 1.26.0-alpha.11
+
+### Minor Changes
+
+- You can now tag spans and redact sensitive input or output per request by passing `tags`, `hideInput`, or `hideOutput` in `tracingOptions` when calling an agent or workflow. ([#15512](https://github.com/mastra-ai/mastra/pull/15512))
+
+  Added a lightweight trace endpoint (`GET /observability/traces/:traceId/light`) that returns only timeline-relevant span fields, dramatically reducing payload size when rendering trace timelines. Also added a dedicated span endpoint (`GET /observability/traces/:traceId/spans/:spanId`) to fetch full span details on demand.
+
+### Patch Changes
+
+- Added unique IDs (`logId`, `metricId`, `scoreId`, `feedbackId`) to all observability signals, generated automatically at emission time for de-duplication across the framework pipeline and cross-system correlation. User-facing APIs (`logger.info()`, `metrics.emit()`, `addScore()`, `addFeedback()`) are unchanged. ([#15242](https://github.com/mastra-ai/mastra/pull/15242))
+
+  For existing ClickHouse and DuckDB observability signal tables, run `npx mastra migrate` before initializing the store so the new signal-ID schema is applied.
+
+- Updated dependencies [[`20f59b8`](https://github.com/mastra-ai/mastra/commit/20f59b876cf91199efbc49a0e36b391240708f08), [`e2687a7`](https://github.com/mastra-ai/mastra/commit/e2687a7408790c384563816a9a28ed06735684c9), [`8f1b280`](https://github.com/mastra-ai/mastra/commit/8f1b280b7fe6999ec654f160cb69c1a8719e7a57), [`12df98c`](https://github.com/mastra-ai/mastra/commit/12df98c4904643d9481f5c78f3bed443725b4c96)]:
+  - @mastra/core@1.26.0-alpha.11
+
 ## 1.26.0-alpha.10
 
 ### Minor Changes

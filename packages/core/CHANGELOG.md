@@ -1,5 +1,26 @@
 # @mastra/core
 
+## 1.26.0-alpha.11
+
+### Minor Changes
+
+- RAG ingestion runs now appear in observability traces, next to your agents, workflows, and scorers. ([#15512](https://github.com/mastra-ai/mastra/pull/15512))
+
+  You can now filter traces by `traceId` when listing them.
+
+  Added lightweight span and trace schemas (`LightSpanRecord`, `GetTraceLightResponse`) that exclude heavy fields like `input`, `output`, `attributes`, and `metadata` — reducing per-span payload by ~97% for timeline rendering.
+
+- Added unique IDs (`logId`, `metricId`, `scoreId`, `feedbackId`) to all observability signals, generated automatically at emission time for de-duplication across the framework pipeline and cross-system correlation. User-facing APIs (`logger.info()`, `metrics.emit()`, `addScore()`, `addFeedback()`) are unchanged. ([#15242](https://github.com/mastra-ai/mastra/pull/15242))
+
+  For existing ClickHouse and DuckDB observability signal tables, run `npx mastra migrate` before initializing the store so the new signal-ID schema is applied.
+
+### Patch Changes
+
+- dependencies updates: ([#15538](https://github.com/mastra-ai/mastra/pull/15538))
+  - Updated dependency [`ws@^8.20.0` ↗︎](https://www.npmjs.com/package/ws/v/8.20.0) (from `^8.19.0`, in `dependencies`)
+
+- Fixed message serialization to preserve millisecond precision in createdAt timestamps. ([#15500](https://github.com/mastra-ai/mastra/pull/15500))
+
 ## 1.26.0-alpha.10
 
 ### Minor Changes
