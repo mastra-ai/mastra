@@ -58,6 +58,125 @@ export function buildMessageRange(messages: MastraDBMessage[]): string {
   return `${first.id}:${last.id}`;
 }
 
+/**
+ * Returns the unix-ms timestamp of the last non-data part in the last assistant
+ * message, representing when the last visible LLM response completed. Used as the
+ * last activity time for activateAfterIdle checks.
+ */
+export function getLastActivityFromMessages(messages?: MastraDBMessage[]): number | undefined {
+  if (!messages) return undefined;
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (!message || message.role !== 'assistant') {
+      continue;
+    }
+
+    if (!message.content || typeof message.content === 'string') {
+      return message.createdAt ? new Date(message.createdAt).getTime() : undefined;
+    }
+
+    for (let j = message.content.parts.length - 1; j >= 0; j--) {
+      const part = message.content.parts[j];
+      if (!part || part.type?.startsWith('data-')) {
+        continue;
+      }
+
+      if (part.createdAt !== undefined) {
+        return part.createdAt;
+      }
+    }
+
+    return message.createdAt ? new Date(message.createdAt).getTime() : undefined;
+  }
+
+  return undefined;
+}
+
+function formatModelContext(provider?: string, modelId?: string): string | undefined {
+  if (provider && modelId) {
+    return `${provider}/${modelId}`;
+  }
+
+  return modelId;
+}
+
+export function getLastModelFromMessages(messages?: MastraDBMessage[]): string | undefined {
+  if (!messages) return undefined;
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (!message || message.role !== 'assistant' || !message.content || typeof message.content === 'string') {
+      continue;
+    }
+
+    for (let j = message.content.parts.length - 1; j >= 0; j--) {
+      const part = message.content.parts[j];
+      if (part?.type === 'step-start' && typeof part.model === 'string' && part.model.length > 0) {
+        return part.model;
+      }
+    }
+
+    const metadata = message.content.metadata as { provider?: string; modelId?: string } | undefined;
+    const model = formatModelContext(metadata?.provider, metadata?.modelId);
+    if (model) {
+      return model;
+    }
+  }
+
+  return undefined;
+}
+
+export function getCurrentModel(model?: { provider?: string; modelId?: string }): string | undefined {
+  return formatModelContext(model?.provider, model?.modelId);
+}
+
+export { didProviderChange } from './model-context';
+
+function parseActivationTTL(value: number | string | undefined, fieldPath: string): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || value < 0) {
+      throw new Error(`${fieldPath} must be a non-negative number of milliseconds or a duration string like "5m".`);
+    }
+    return value;
+  }
+
+  const trimmed = value.trim();
+  const match = trimmed.match(
+    /^(\d+(?:\.\d+)?)\s*(ms|msec|msecs|millisecond|milliseconds|s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours)$/i,
+  );
+
+  if (!match) {
+    throw new Error(
+      `${fieldPath} must be a non-negative number of milliseconds or a duration string like "5m" or "1hr".`,
+    );
+  }
+
+  const rawAmount = match[1]!;
+  const rawUnit = match[2]!;
+  const amount = Number(rawAmount);
+  const unit = rawUnit.toLowerCase();
+
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new Error(`${fieldPath} must be a non-negative number of milliseconds or a duration string like "5m".`);
+  }
+
+  const multiplier =
+    unit === 'ms' || unit === 'msec' || unit === 'msecs' || unit === 'millisecond' || unit === 'milliseconds'
+      ? 1
+      : unit === 's' || unit === 'sec' || unit === 'secs' || unit === 'second' || unit === 'seconds'
+        ? 1_000
+        : unit === 'm' || unit === 'min' || unit === 'mins' || unit === 'minute' || unit === 'minutes'
+          ? 60_000
+          : 3_600_000;
+
+  return amount * multiplier;
+}
+
 import { addRelativeTimeToObservations } from './date-utils';
 import { omDebug, omError } from './debug';
 import { createBufferingStartMarker, createActivationMarker } from './markers';
@@ -68,6 +187,7 @@ import {
   stripThreadTags,
 } from './message-utils';
 import { ModelByInputTokens } from './model-by-input-tokens';
+import { didProviderChange as hasProviderChanged } from './model-context';
 import { renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
 import { ObservationStrategy } from './observation-strategies/index';
 import { ObservationTurn } from './observation-turn/index';
@@ -99,6 +219,7 @@ import type {
   ResolvedReflectionConfig,
   ThresholdRange,
   ObservationMarkerConfig,
+  ObservationModelContext,
 } from './types';
 
 /**
@@ -357,6 +478,8 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config.observation?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferActivation),
+      activateAfterIdle: parseActivationTTL(config.activateAfterIdle, 'activateAfterIdle'),
+      activateOnProviderChange: config.activateOnProviderChange ?? false,
       blockAfter: asyncBufferingDisabled
         ? undefined
         : resolveBlockAfter(
@@ -388,6 +511,8 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config?.reflection?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferActivation),
+      activateAfterIdle: parseActivationTTL(config.activateAfterIdle, 'activateAfterIdle'),
+      activateOnProviderChange: config.activateOnProviderChange ?? false,
       blockAfter: asyncBufferingDisabled
         ? undefined
         : resolveBlockAfter(
@@ -935,6 +1060,7 @@ export class ObservationalMemory {
       messageTokens: getMaxThreshold(this.observationConfig.messageTokens),
       observationTokens: getMaxThreshold(this.reflectionConfig.observationTokens),
       scope: this.scope,
+      activateAfterIdle: this.observationConfig.activateAfterIdle,
     };
   }
 
@@ -2636,7 +2762,7 @@ ${formattedMessages}
     // Activate any remaining buffered chunks
     const preStatus = await this.getStatus({ threadId, resourceId, messages });
     if (preStatus.canActivate) {
-      const actResult = await this.activate({ threadId, resourceId });
+      const actResult = await this.activate({ threadId, resourceId, messages });
       activated = actResult.activated;
     }
 
@@ -2959,6 +3085,8 @@ ${formattedMessages}
     checkThreshold?: boolean;
     /** Messages to use for threshold check (in-memory). If omitted, loads from storage. */
     messages?: MastraDBMessage[];
+    /** Current actor model for provider-change activation checks. */
+    currentModel?: ObservationModelContext;
     /** Stream writer for emitting activation markers to the UI. */
     writer?: ProcessorStreamWriter;
     /** MessageList for persisting activation markers on the last assistant message. */
@@ -2998,11 +3126,46 @@ ${formattedMessages}
       return { activated: false, record };
     }
 
+    let activationTriggeredBy: 'threshold' | 'ttl' | 'provider_change' = 'threshold';
+    let activationLastActivityAt: number | undefined;
+    let activateAfterIdleExpiredMs: number | undefined;
+    let previousModel: string | undefined;
+    let currentModel: string | undefined;
+
     // Optional threshold guard — skip activation if pending tokens are below threshold
     if (opts.checkThreshold) {
-      const status = await this.getStatus({ threadId, resourceId, messages: opts.messages });
-      if (status.pendingTokens < status.threshold) {
-        return { activated: false, record };
+      const thresholdMessages =
+        opts.messages ??
+        (await this.loadMessagesFromStorage(
+          threadId,
+          resourceId,
+          record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
+        ));
+
+      const activateAfterIdle = this.observationConfig.activateAfterIdle;
+      const lastActivityAt = getLastActivityFromMessages(thresholdMessages);
+      const ttlExpiredMs =
+        activateAfterIdle !== undefined && lastActivityAt !== undefined ? Date.now() - lastActivityAt : undefined;
+      const ttlExpired =
+        ttlExpiredMs !== undefined && activateAfterIdle !== undefined && ttlExpiredMs >= activateAfterIdle;
+      const actorModel = getCurrentModel(opts.currentModel);
+      const lastModel = getLastModelFromMessages(thresholdMessages);
+      const providerChanged =
+        this.observationConfig.activateOnProviderChange === true && hasProviderChanged(actorModel, lastModel);
+
+      if (providerChanged) {
+        activationTriggeredBy = 'provider_change';
+        previousModel = lastModel;
+        currentModel = actorModel;
+      } else if (ttlExpired) {
+        activationTriggeredBy = 'ttl';
+        activationLastActivityAt = lastActivityAt;
+        activateAfterIdleExpiredMs = ttlExpiredMs;
+      } else {
+        const status = await this.getStatus({ threadId, resourceId, messages: thresholdMessages });
+        if (status.pendingTokens < status.threshold) {
+          return { activated: false, record };
+        }
       }
     }
 
@@ -3082,6 +3245,11 @@ ${formattedMessages}
           threadId: postSwapRecord.threadId ?? record.threadId ?? '',
           generationCount: postSwapRecord.generationCount ?? 0,
           observations: chunkData?.observations ?? activationResult.observations,
+          triggeredBy: activationTriggeredBy,
+          lastActivityAt: activationLastActivityAt,
+          ttlExpiredMs: activateAfterIdleExpiredMs,
+          previousModel,
+          currentModel,
           config: this.getObservationMarkerConfig(),
         });
         void opts.writer.custom(activationMarker).catch(() => {});

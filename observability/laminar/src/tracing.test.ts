@@ -1,7 +1,7 @@
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import type { AnyExportedSpan } from '@mastra/core/observability';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { LaminarExporter, otelSpanIdToUUID, otelTraceIdToUUID } from './tracing';
+import { LaminarExporter, otelSpanIdToUUID, otelTraceIdToUUID, stripTrailingSlash } from './tracing';
 
 // Mock OTLP exporter so tests never hit the network.
 vi.mock('@opentelemetry/exporter-trace-otlp-proto', () => ({
@@ -132,5 +132,28 @@ describe('LaminarExporter', () => {
 
     const body2 = JSON.parse(fetchSpy.mock.calls[1][1]!.body as string);
     expect(body2.spanId).toBe(otelSpanIdToUUID('0000000000000002'));
+  });
+});
+
+describe('stripTrailingSlash', () => {
+  it('removes trailing slashes', () => {
+    expect(stripTrailingSlash('https://example.com/')).toBe('https://example.com');
+    expect(stripTrailingSlash('https://example.com///')).toBe('https://example.com');
+  });
+
+  it('returns the input unchanged when there is no trailing slash', () => {
+    const url = 'https://example.com/path';
+    expect(stripTrailingSlash(url)).toBe(url);
+  });
+
+  it('runs in linear time on pathological input (no ReDoS)', () => {
+    const input = 'https://x/' + '/'.repeat(100_000);
+    stripTrailingSlash('https://x/' + '/'.repeat(100)); // warm up JIT
+    const start = performance.now();
+    stripTrailingSlash(input);
+    const elapsed = performance.now() - start;
+    // Generous budget — linear implementation finishes in microseconds;
+    // exponential backtracking would take seconds or hang.
+    expect(elapsed).toBeLessThan(2000);
   });
 });

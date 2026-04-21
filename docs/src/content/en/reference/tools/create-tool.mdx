@@ -34,6 +34,34 @@ export const tool = createTool({
 })
 ```
 
+## Example with strict tool inputs
+
+Set `strict: true` when you want Mastra to ask supported model providers to generate tool arguments that exactly match the tool schema.
+
+```typescript title="src/mastra/tools/weather-tool.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const weatherTool = createTool({
+  id: 'get-weather',
+  description: 'Get weather for a city',
+  strict: true,
+  inputSchema: z.object({
+    city: z.string(),
+    units: z.enum(['metric', 'imperial']),
+  }),
+  execute: async ({ city, units }) => {
+    return {
+      city,
+      units,
+      forecast: 'sunny',
+    }
+  },
+})
+```
+
+Mastra forwards `strict: true` to model adapters that support strict tool calling. On adapters that do not support strict tool calling, Mastra ignores this option.
+
 ## Example with `toModelOutput`
 
 Use `toModelOutput` when your tool should return rich internal data to your app, but the model should receive either a simplified value or multimodal content.
@@ -143,6 +171,13 @@ export const weatherTool = createTool({
     name: 'outputSchema',
     type: 'Zod schema',
     description: "A Zod schema defining the expected output structure of the tool's `execute` function.",
+    isOptional: true,
+  },
+  {
+    name: 'strict',
+    type: 'boolean',
+    description:
+      'When true, Mastra enables strict tool input generation on model adapters that support it. This helps supported providers return arguments that match the tool schema more closely.',
     isOptional: true,
   },
   {

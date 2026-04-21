@@ -66,14 +66,19 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
       return;
     }
     this.endTime = new Date();
+    // Metadata is always updated (read by correlation/logger/metrics contexts).
+    if (options?.metadata) {
+      this.metadata = { ...this.metadata, ...deepClean(options.metadata, this.deepCleanOptions) };
+    }
+    if (this.isExcluded) {
+      // Span is filtered before export; skip attaching heavy fields.
+      return;
+    }
     if (options?.output !== undefined) {
       this.output = deepClean(options.output, this.deepCleanOptions);
     }
     if (options?.attributes) {
       this.attributes = { ...this.attributes, ...deepClean(options.attributes, this.deepCleanOptions) };
-    }
-    if (options?.metadata) {
-      this.metadata = { ...this.metadata, ...deepClean(options.metadata, this.deepCleanOptions) };
     }
     // Tracing events automatically handled by base class
   }
@@ -85,31 +90,36 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
 
     const { error, endSpan = true, attributes, metadata } = options;
 
-    this.errorInfo = deepClean(
-      error instanceof MastraError
-        ? {
-            id: error.id,
-            details: error.details,
-            category: error.category,
-            domain: error.domain,
-            message: error.message,
-            name: error.name,
-            stack: error.stack,
-          }
-        : {
-            message: error.message,
-            name: error.name,
-            stack: error.stack,
-          },
-      this.deepCleanOptions,
-    );
-
-    // Update attributes if provided
-    if (attributes) {
-      this.attributes = { ...this.attributes, ...deepClean(attributes, this.deepCleanOptions) };
-    }
     if (metadata) {
       this.metadata = { ...this.metadata, ...deepClean(metadata, this.deepCleanOptions) };
+    }
+
+    if (!this.isExcluded) {
+      this.errorInfo = deepClean(
+        error instanceof MastraError
+          ? {
+              id: error.id,
+              details: error.details,
+              category: error.category,
+              domain: error.domain,
+              message: error.message,
+              name: error.name,
+              // Prefer the original cause's stack when available. MastraError wraps
+              // thrown errors, so its own stack points to the wrapping site rather
+              // than where the underlying error was thrown.
+              stack: (error.cause instanceof Error && error.cause.stack) || error.stack,
+            }
+          : {
+              message: error.message,
+              name: error.name,
+              stack: error.stack,
+            },
+        this.deepCleanOptions,
+      );
+
+      if (attributes) {
+        this.attributes = { ...this.attributes, ...deepClean(attributes, this.deepCleanOptions) };
+      }
     }
 
     if (endSpan) {
@@ -128,6 +138,13 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     if (options.name !== undefined) {
       this.name = options.name;
     }
+    // Metadata is always updated (read by correlation/logger/metrics contexts).
+    if (options.metadata) {
+      this.metadata = { ...this.metadata, ...deepClean(options.metadata, this.deepCleanOptions) };
+    }
+    if (this.isExcluded) {
+      return;
+    }
     if (options.input !== undefined) {
       this.input = deepClean(options.input, this.deepCleanOptions);
     }
@@ -136,9 +153,6 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     }
     if (options.attributes) {
       this.attributes = { ...this.attributes, ...deepClean(options.attributes, this.deepCleanOptions) };
-    }
-    if (options.metadata) {
-      this.metadata = { ...this.metadata, ...deepClean(options.metadata, this.deepCleanOptions) };
     }
     // Tracing events automatically handled by base class
   }

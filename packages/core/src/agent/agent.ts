@@ -6,6 +6,7 @@ import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
+import type { AgentBackgroundConfig, ToolBackgroundConfig } from '../background-tasks';
 import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
 import type { BrowserContext } from '../browser/processor';
@@ -29,11 +30,14 @@ import type {
   StreamTextResult,
 } from '../llm/model/base.types';
 import { MastraLLMVNext } from '../llm/model/model.loop';
+import type { ProviderOptions } from '../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
+import type { VersionOverrides } from '../mastra/types';
+import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfigInternal } from '../memory/types';
 import type { DefinitionSource, TracingProperties, ObservabilityContext } from '../observability';
@@ -46,6 +50,7 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import type {
+  ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
   ProcessorWorkflow,
@@ -56,7 +61,7 @@ import { SkillsProcessor } from '../processors/processors/skills';
 import { WorkspaceInstructionsProcessor } from '../processors/processors/workspace-instructions';
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
-import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
+import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, MASTRA_VERSIONS_KEY } from '../request-context';
 import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import { ChunkFrom } from '../stream';
@@ -64,6 +69,7 @@ import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
+import { isProviderTool } from '../tools/toolchecks';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
@@ -104,6 +110,7 @@ import type {
   AgentMethodType,
   StructuredOutputOptions,
   PublicStructuredOutputOptions,
+  ModelFallbackSettings,
   ModelWithRetries,
   ZodSchema,
 } from './types';
@@ -118,6 +125,9 @@ type ModelFallbacks = {
   model: DynamicArgument<MastraModelConfig>;
   maxRetries: number;
   enabled: boolean;
+  modelSettings?: DynamicArgument<ModelFallbackSettings>;
+  providerOptions?: DynamicArgument<ProviderOptions>;
+  headers?: DynamicArgument<Record<string, string>>;
 }[];
 
 type ResolvedModelSelection = MastraModelConfig | ModelFallbacks;
@@ -182,10 +192,13 @@ export class Agent<
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[], TRequestContext>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[], TRequestContext>;
   #maxProcessorRetries?: number;
+  #errorProcessors?: DynamicArgument<ErrorProcessorOrWorkflow[], TRequestContext>;
   #browser?: MastraBrowser;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
+  #backgroundTasks?: AgentBackgroundConfig;
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
+  #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>;
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
@@ -211,6 +224,8 @@ export class Agent<
    */
   constructor(config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>) {
     super({ component: RegisteredLogger.AGENT, rawConfig: config.rawConfig });
+
+    this.#config = config;
 
     this.name = config.name;
     this.id = config.id ?? config.name;
@@ -248,12 +263,7 @@ export class Agent<
         this.logger.trackException(mastraError);
         throw mastraError;
       }
-      this.model = config.model.map(mdl => ({
-        id: mdl.id ?? randomUUID(),
-        model: mdl.model,
-        maxRetries: mdl.maxRetries ?? config?.maxRetries ?? 0,
-        enabled: mdl.enabled ?? true,
-      })) as ModelFallbacks;
+      this.model = config.model.map(mdl => Agent.toFallbackEntry(mdl, config?.maxRetries ?? 0)) as ModelFallbacks;
       this.#originalModel = [...this.model];
     } else {
       this.model = config.model;
@@ -336,8 +346,16 @@ export class Agent<
       this.#maxProcessorRetries = config.maxProcessorRetries;
     }
 
+    if (config.errorProcessors) {
+      this.#errorProcessors = config.errorProcessors;
+    }
+
     if (config.requestContextSchema) {
       this.#requestContextSchema = toStandardSchema(config.requestContextSchema);
+    }
+
+    if (config.backgroundTasks) {
+      this.#backgroundTasks = config.backgroundTasks;
     }
 
     // @ts-expect-error Flag for agent network messages
@@ -346,6 +364,82 @@ export class Agent<
 
   getMastraInstance() {
     return this.#mastra;
+  }
+
+  /**
+   * Returns the background tasks configuration for this agent.
+   */
+  getBackgroundTasksConfig(): AgentBackgroundConfig | undefined {
+    return this.#backgroundTasks;
+  }
+
+  /**
+   * Disables background task dispatch for this agent. Every tool call will run
+   * synchronously in the agentic loop, regardless of the agent's or tools'
+   * background configuration.
+   *
+   * Useful when this agent is invoked as a sub-agent and the parent has wrapped
+   * the entire sub-agent invocation as a background task — you don't want the
+   * sub-agent's own tools to also dispatch separate background tasks inside it.
+   */
+  disableBackgroundTasks(): void {
+    this.#backgroundTasks = { ...(this.#backgroundTasks ?? {}), disabled: true };
+  }
+
+  /**
+   * Re-enables background task dispatch after it has been disabled.
+   */
+  enableBackgroundTasks(): void {
+    if (this.#backgroundTasks) {
+      this.#backgroundTasks = { ...this.#backgroundTasks, disabled: false };
+    }
+  }
+
+  /**
+   * Inspects a sub-agent (a child agent invoked as a tool) and derives a
+   * ToolBackgroundConfig if any of its tools are background-eligible OR if the
+   * sub-agent itself has a background tasks config that enables tools.
+   *
+   * Returns undefined when no background dispatch is warranted, so the parent
+   * runs the sub-agent synchronously.
+   *
+   * @internal
+   */
+  private async deriveSubAgentBackgroundConfig(
+    subAgent: Agent<any, any, any, any>,
+    requestContext: RequestContext,
+  ): Promise<ToolBackgroundConfig | undefined> {
+    try {
+      const subAgentBgConfig = subAgent.getBackgroundTasksConfig?.();
+
+      // 1. Sub-agent has its own backgroundTasks config that enables tools
+      if (subAgentBgConfig?.disabled !== true && subAgentBgConfig?.tools) {
+        if (subAgentBgConfig.tools === 'all') {
+          return { enabled: true, waitTimeoutMs: subAgentBgConfig.waitTimeoutMs };
+        }
+        const hasEnabledTool = Object.values(subAgentBgConfig.tools).some(t => {
+          if (typeof t === 'boolean') return t;
+          return t?.enabled === true;
+        });
+        if (hasEnabledTool) {
+          return { enabled: true, waitTimeoutMs: subAgentBgConfig.waitTimeoutMs };
+        }
+      }
+
+      // 2. Any of the sub-agent's tools has background.enabled === true
+      const subAgentTools = await subAgent.convertTools({ requestContext, methodType: 'generate' });
+      if (subAgentTools && typeof subAgentTools === 'object') {
+        for (const tool of Object.values(subAgentTools)) {
+          const bg = (tool as any)?.background as ToolBackgroundConfig | undefined;
+          if (bg?.enabled === true) {
+            return { enabled: true, waitTimeoutMs: subAgentBgConfig?.waitTimeoutMs };
+          }
+        }
+      }
+    } catch {
+      // If anything fails (e.g., dynamic tools throw), skip background derivation
+    }
+    return undefined;
   }
 
   /**
@@ -516,20 +610,30 @@ export class Agent<
     requestContext,
     inputProcessorOverrides,
     outputProcessorOverrides,
+    errorProcessorOverrides,
     processorStates,
   }: {
     requestContext: RequestContext;
     inputProcessorOverrides?: InputProcessorOrWorkflow[];
     outputProcessorOverrides?: OutputProcessorOrWorkflow[];
+    errorProcessorOverrides?: ErrorProcessorOrWorkflow[];
     processorStates?: Map<string, ProcessorState>;
   }): Promise<ProcessorRunner> {
     // Resolve processors - overrides replace user-configured but auto-derived (memory, skills) are kept
     const inputProcessors = await this.listResolvedInputProcessors(requestContext, inputProcessorOverrides);
     const outputProcessors = await this.listResolvedOutputProcessors(requestContext, outputProcessorOverrides);
+    const errorProcessors =
+      errorProcessorOverrides ??
+      (this.#errorProcessors
+        ? typeof this.#errorProcessors === 'function'
+          ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
+          : this.#errorProcessors
+        : []);
 
     return new ProcessorRunner({
       inputProcessors,
       outputProcessors,
+      errorProcessors,
       logger: this.logger,
       agentName: this.name,
       processorStates,
@@ -821,13 +925,13 @@ export class Agent<
   }
 
   /**
-   * Returns the IDs of the raw configured input and output processors,
+   * Returns the IDs of the raw configured input, output, and error processors,
    * without combining them into workflows. Used by the editor to clone
    * agent processor configuration to storage.
    */
   public async getConfiguredProcessorIds(
     requestContext?: RequestContext,
-  ): Promise<{ inputProcessorIds: string[]; outputProcessorIds: string[] }> {
+  ): Promise<{ inputProcessorIds: string[]; outputProcessorIds: string[]; errorProcessorIds: string[] }> {
     const ctx = requestContext || new RequestContext();
 
     let inputProcessorIds: string[] = [];
@@ -848,7 +952,16 @@ export class Agent<
       outputProcessorIds = processors.map(p => p.id).filter(Boolean);
     }
 
-    return { inputProcessorIds, outputProcessorIds };
+    let errorProcessorIds: string[] = [];
+    if (this.#errorProcessors) {
+      const processors =
+        typeof this.#errorProcessors === 'function'
+          ? await this.#errorProcessors({ requestContext: ctx as RequestContext<TRequestContext> })
+          : this.#errorProcessors;
+      errorProcessorIds = processors.map(p => p.id).filter(Boolean);
+    }
+
+    return { inputProcessorIds, outputProcessorIds, errorProcessorIds };
   }
 
   /**
@@ -1515,10 +1628,16 @@ export class Agent<
       return resolveMaybePromise(resolvedModel, modelInfo => {
         let llm: MastraLLM | Promise<MastraLLM>;
         if (isSupportedLanguageModel(modelInfo)) {
-          llm = this.prepareModels(requestContext, modelSelection).then(models => {
-            const enabledModels = models.filter(model => model.enabled);
+          // Filter disabled entries before prepareModels so their model factories and
+          // dynamic resolvers are never invoked on the streaming path. A disabled
+          // entry's throwing/side-effecting factory must not break the request.
+          const enabledSelection = Array.isArray(modelSelection)
+            ? (modelSelection.filter(m => m.enabled) as typeof modelSelection)
+            : modelSelection;
+
+          llm = this.prepareModels(requestContext, enabledSelection).then(models => {
             return new MastraLLMVNext({
-              models: enabledModels,
+              models,
               mastra: this.#mastra,
               options: { tracingPolicy: this.#options?.tracingPolicy },
             });
@@ -1598,12 +1717,24 @@ export class Agent<
       return models;
     }
 
-    return models.map(m => ({
-      id: m.id ?? randomUUID(),
-      model: m.model as DynamicArgument<MastraModelConfig>,
-      maxRetries: m.maxRetries ?? this.maxRetries,
-      enabled: m.enabled ?? true,
-    })) as ModelFallbacks;
+    return models.map(m => Agent.toFallbackEntry(m, this.maxRetries ?? 0)) as ModelFallbacks;
+  }
+
+  /**
+   * Builds a single normalized fallback entry from a user-supplied `ModelWithRetries`.
+   * Shared by the constructor and `normalizeModelFallbacks` to keep the mapping in one place.
+   * @internal
+   */
+  private static toFallbackEntry(mdl: ModelWithRetries, defaultMaxRetries: number): ModelFallbacks[number] {
+    return {
+      id: mdl.id ?? randomUUID(),
+      model: mdl.model as DynamicArgument<MastraModelConfig>,
+      maxRetries: mdl.maxRetries ?? defaultMaxRetries,
+      enabled: mdl.enabled ?? true,
+      modelSettings: mdl.modelSettings,
+      providerOptions: mdl.providerOptions,
+      headers: mdl.headers,
+    };
   }
 
   /**
@@ -1947,6 +2078,35 @@ export class Agent<
     this.#tools = tools as DynamicArgument<TTools, TRequestContext>;
   }
 
+  /**
+   * Create a lightweight clone of this agent that can be independently mutated
+   * without affecting the original instance. Used by the editor to apply
+   * version overrides without mutating the singleton agent.
+   * @internal
+   */
+  __fork(): Agent<TAgentId, TTools, TOutput, TRequestContext> {
+    const fork = new Agent<TAgentId, TTools, TOutput, TRequestContext>({
+      ...this.#config,
+      rawConfig: this.toRawConfig(),
+    });
+
+    // Preserve runtime state that may have been set after construction
+    // (e.g. when Mastra registers agents via __registerMastra / __registerPrimitives).
+    // Assign fields directly to avoid re-triggering tool/processor registration
+    // side effects that __registerMastra would cause.
+    if (this.#mastra && !this.#config.mastra) {
+      fork.#mastra = this.#mastra;
+    }
+    if (this.#primitives) {
+      fork.#primitives = this.#primitives;
+    }
+
+    fork.source = this.source;
+    fork._agentNetworkAppend = this._agentNetworkAppend;
+
+    return fork;
+  }
+
   async generateTitleFromUserMessage({
     message,
     requestContext = new RequestContext(),
@@ -2106,6 +2266,7 @@ export class Agent<
     mastraProxy,
     memoryConfig,
     autoResumeSuspendedTools,
+    backgroundTaskEnabled,
     ...rest
   }: {
     runId?: string;
@@ -2115,6 +2276,7 @@ export class Agent<
     mastraProxy?: MastraUnion;
     memoryConfig?: MemoryConfigInternal;
     autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedMemoryTools: Record<string, CoreTool> = {};
@@ -2153,8 +2315,15 @@ export class Agent<
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
+          backgroundConfig: (toolObj as any).background,
         };
-        const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
+        const convertedToCoreTool = makeCoreTool(
+          toolObj,
+          options,
+          undefined,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+        );
         convertedMemoryTools[toolName] = convertedToCoreTool;
       }
     }
@@ -2173,6 +2342,7 @@ export class Agent<
     requestContext,
     mastraProxy,
     autoResumeSuspendedTools,
+    backgroundTaskEnabled,
     ...rest
   }: {
     runId?: string;
@@ -2181,6 +2351,7 @@ export class Agent<
     requestContext: RequestContext;
     mastraProxy?: MastraUnion;
     autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedWorkspaceTools: Record<string, CoreTool> = {};
@@ -2221,9 +2392,16 @@ export class Agent<
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
+          backgroundConfig: (toolObj as any).background,
           workspace,
         };
-        const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
+        const convertedToCoreTool = makeCoreTool(
+          toolObj,
+          options,
+          undefined,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+        );
         convertedWorkspaceTools[toolName] = convertedToCoreTool;
       }
     }
@@ -2242,6 +2420,7 @@ export class Agent<
     requestContext,
     mastraProxy,
     autoResumeSuspendedTools,
+    backgroundTaskEnabled,
     ...rest
   }: {
     runId?: string;
@@ -2250,6 +2429,7 @@ export class Agent<
     requestContext: RequestContext;
     mastraProxy?: MastraUnion;
     autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     const convertedChannelTools: Record<string, CoreTool> = {};
@@ -2282,6 +2462,7 @@ export class Agent<
           options,
           undefined,
           autoResumeSuspendedTools,
+          backgroundTaskEnabled,
         );
       }
     }
@@ -2303,6 +2484,7 @@ export class Agent<
     requestContext,
     mastraProxy,
     autoResumeSuspendedTools,
+    backgroundTaskEnabled,
     ...rest
   }: {
     runId?: string;
@@ -2311,6 +2493,7 @@ export class Agent<
     requestContext: RequestContext;
     mastraProxy?: MastraUnion;
     autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedSkillTools: Record<string, CoreTool> = {};
@@ -2345,9 +2528,16 @@ export class Agent<
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: false, // Skill tools never require approval
+          backgroundConfig: (toolObj as any).background,
           workspace,
         };
-        const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
+        const convertedToCoreTool = makeCoreTool(
+          toolObj,
+          options,
+          undefined,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+        );
         convertedSkillTools[toolName] = convertedToCoreTool;
       }
     }
@@ -2365,6 +2555,7 @@ export class Agent<
     threadId,
     requestContext,
     autoResumeSuspendedTools,
+    backgroundTaskEnabled,
     ...rest
   }: {
     runId?: string;
@@ -2372,6 +2563,7 @@ export class Agent<
     threadId?: string;
     requestContext: RequestContext;
     autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let convertedBrowserTools: Record<string, CoreTool> = {};
@@ -2409,8 +2601,15 @@ export class Agent<
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
+          backgroundConfig: (toolObj as any).background,
         };
-        const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
+        const convertedToCoreTool = makeCoreTool(
+          toolObj,
+          options,
+          undefined,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+        );
         convertedBrowserTools[toolName] = convertedToCoreTool;
       }
     }
@@ -2684,6 +2883,7 @@ export class Agent<
     mastraProxy,
     outputWriter,
     autoResumeSuspendedTools,
+    backgroundTaskEnabled,
     ...rest
   }: {
     runId?: string;
@@ -2693,6 +2893,7 @@ export class Agent<
     mastraProxy?: MastraUnion;
     outputWriter?: OutputWriter;
     autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
@@ -2726,8 +2927,9 @@ export class Agent<
           outputWriter,
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
+          backgroundConfig: (tool as any).background,
         };
-        return [k, makeCoreTool(tool, options, undefined, autoResumeSuspendedTools)];
+        return [k, makeCoreTool(tool, options, undefined, autoResumeSuspendedTools, backgroundTaskEnabled)];
       }),
     );
 
@@ -2754,6 +2956,7 @@ export class Agent<
     requestContext,
     mastraProxy,
     autoResumeSuspendedTools,
+    backgroundTaskEnabled,
     ...rest
   }: {
     runId?: string;
@@ -2763,6 +2966,7 @@ export class Agent<
     requestContext: RequestContext;
     mastraProxy?: MastraUnion;
     autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
@@ -2794,8 +2998,15 @@ export class Agent<
             model: await this.getModel({ requestContext }),
             tracingPolicy: this.#options?.tracingPolicy,
             requireApproval: (toolObj as any).requireApproval,
+            backgroundConfig: (toolObj as any).background,
           };
-          const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset', autoResumeSuspendedTools);
+          const convertedToCoreTool = makeCoreTool(
+            toolObj,
+            options,
+            'toolset',
+            autoResumeSuspendedTools,
+            backgroundTaskEnabled,
+          );
           toolsForRequest[toolName] = convertedToCoreTool;
         }
       }
@@ -2816,6 +3027,7 @@ export class Agent<
     mastraProxy,
     clientTools,
     autoResumeSuspendedTools,
+    backgroundTaskEnabled,
     ...rest
   }: {
     runId?: string;
@@ -2825,6 +3037,7 @@ export class Agent<
     mastraProxy?: MastraUnion;
     clientTools?: ToolsInput;
     autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
@@ -2835,6 +3048,7 @@ export class Agent<
       this.logger.debug('Adding client tools', { agent: this.name, tools: Object.keys(clientTools || {}), runId });
       for (const [toolName, tool] of clientToolsForInput) {
         const { execute, ...toolRest } = tool;
+        const toolToConvert = isProviderTool(tool) ? tool : toolRest;
         const options: ToolOptions = {
           name: toolName,
           runId,
@@ -2850,8 +3064,15 @@ export class Agent<
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
+          backgroundConfig: (tool as any).background,
         };
-        const convertedToCoreTool = makeCoreTool(toolRest, options, 'client-tool', autoResumeSuspendedTools);
+        const convertedToCoreTool = makeCoreTool(
+          toolToConvert,
+          options,
+          'client-tool',
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+        );
         toolsForRequest[toolName] = convertedToCoreTool;
       }
     }
@@ -2908,6 +3129,7 @@ export class Agent<
     methodType,
     autoResumeSuspendedTools,
     delegation,
+    backgroundTaskEnabled,
     ...rest
   }: {
     runId?: string;
@@ -2917,6 +3139,7 @@ export class Agent<
     methodType: AgentMethodType;
     autoResumeSuspendedTools?: boolean;
     delegation?: DelegationConfig;
+    backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     const convertedAgentTools: Record<string, CoreTool> = {};
@@ -2957,8 +3180,6 @@ export class Agent<
             .describe("The results from the agent's tool calls")
             .optional(),
         });
-
-        const modelVersion = (await agent.getModel({ requestContext })).specificationVersion;
 
         const toolObj = createTool({
           id: `agent-${agentName}`,
@@ -3025,9 +3246,6 @@ export class Agent<
                   entityId: agentName,
                 }) || `${slugify.default(this.id)}-${agentName}`;
 
-            const subAgentDefaultOptions = await agent.getDefaultOptions?.({ requestContext });
-            const subAgentHasOwnMemoryConfig = subAgentDefaultOptions?.memory !== undefined;
-
             // Save the parent agent's MastraMemory before the sub-agent runs.
             // The sub-agent's prepare-memory-step will overwrite this key with
             // its own thread/resource identity. We restore it after the sub-agent
@@ -3048,15 +3266,44 @@ export class Agent<
               requestContext.delete(MASTRA_RESOURCE_ID_KEY);
             }
 
+            // Resolve versioned sub-agent if a version override exists on requestContext.
+            // This must happen before onDelegationStart so the rejection branch can
+            // use the correct model version and memory config from the resolved agent.
+            let resolvedAgent = agent;
+            const versionOverrides = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+            const agentVersionSelector = versionOverrides?.agents?.[agent.id];
+            if (agentVersionSelector && this.#mastra) {
+              try {
+                resolvedAgent = await this.#mastra.resolveVersionedAgent(agent, agentVersionSelector);
+              } catch (versionError) {
+                this.logger.warn('Failed to resolve versioned sub-agent, using code-defined default', {
+                  agent: this.name,
+                  targetAgent: agentName,
+                  targetAgentId: agent.id,
+                  versionSelector: agentVersionSelector,
+                  error: versionError,
+                });
+              }
+            }
+
+            // Recompute derived values from the resolved agent (may differ from
+            // code-defined agent if a stored version changed the model or defaults)
+            const resolvedModelVersion = (await resolvedAgent.getModel({ requestContext })).specificationVersion;
+            const resolvedDefaultOptions = await resolvedAgent.getDefaultOptions?.({ requestContext });
+            const resolvedHasOwnMemoryConfig = resolvedDefaultOptions?.memory !== undefined;
+
+            // Propagate parent memory to the resolved agent if it doesn't have its own.
+            // This must happen before onDelegationStart so the rejection path can
+            // save messages via resolvedAgent.getMemory().
             if (
               (methodType === 'generate' ||
                 methodType === 'generateLegacy' ||
                 methodType === 'stream' ||
                 methodType === 'streamLegacy') &&
-              supportedLanguageModelSpecifications.includes(modelVersion)
+              supportedLanguageModelSpecifications.includes(resolvedModelVersion)
             ) {
-              if (!agent.hasOwnMemory() && this.#memory) {
-                agent.__setMemory(this.#memory as DynamicArgument<MastraMemory>);
+              if (!resolvedAgent.hasOwnMemory() && this.#memory) {
+                resolvedAgent.__setMemory(this.#memory as DynamicArgument<MastraMemory>);
               }
             }
 
@@ -3080,7 +3327,7 @@ export class Agent<
 
                     if (
                       (methodType === 'stream' || methodType === 'streamLegacy') &&
-                      supportedLanguageModelSpecifications.includes(modelVersion)
+                      supportedLanguageModelSpecifications.includes(resolvedModelVersion)
                     ) {
                       await context.writer?.write({
                         type: 'text-delta',
@@ -3094,7 +3341,7 @@ export class Agent<
                     }
 
                     // Save rejection messages to sub-agent's memory so the UI can display them
-                    const memory = await agent.getMemory({ requestContext });
+                    const memory = await resolvedAgent.getMemory({ requestContext });
                     if (memory) {
                       try {
                         // Create user message with the original prompt
@@ -3191,7 +3438,7 @@ export class Agent<
 
             // Append LLM-provided instructions to the sub-agent's own instructions
             if (effectiveInstructions) {
-              const agentOwnInstructions = await agent.getInstructions({ requestContext });
+              const agentOwnInstructions = await resolvedAgent.getInstructions({ requestContext });
               if (agentOwnInstructions) {
                 const ownStr = this.#convertInstructionsToString(agentOwnInstructions);
                 if (ownStr) {
@@ -3246,17 +3493,17 @@ export class Agent<
 
               if (
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
-                supportedLanguageModelSpecifications.includes(modelVersion)
+                supportedLanguageModelSpecifications.includes(resolvedModelVersion)
               ) {
                 const generateResult = resumeData
-                  ? await agent.resumeGenerate(resumeData, {
+                  ? await resolvedAgent.resumeGenerate(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       context: filteredContextMessages as unknown as ModelMessage[],
-                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
+                      ...(resourceId && threadId && !resolvedHasOwnMemoryConfig
                         ? {
                             memory: {
                               resource: subAgentResourceId,
@@ -3265,14 +3512,15 @@ export class Agent<
                             },
                           }
                         : {}),
+                      disableBackgroundTasks: true,
                     })
-                  : await agent.generate(messagesForSubAgent, {
+                  : await resolvedAgent.generate(messagesForSubAgent, {
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       context: filteredContextMessages as unknown as ModelMessage[],
-                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
+                      ...(resourceId && threadId && !resolvedHasOwnMemoryConfig
                         ? {
                             memory: {
                               resource: subAgentResourceId,
@@ -3281,6 +3529,7 @@ export class Agent<
                             },
                           }
                         : {}),
+                      disableBackgroundTasks: true,
                     });
 
                 const agentResponseMessages = generateResult.response.dbMessages ?? [];
@@ -3313,7 +3562,7 @@ export class Agent<
                 fullSubAgentMessages = [userMessage, ...agentResponseMessages];
 
                 // Save response messages to sub-agent's memory so the UI can display them
-                const memory = await agent.getMemory({ requestContext });
+                const memory = await resolvedAgent.getMemory({ requestContext });
                 if (memory) {
                   try {
                     await memory.createThread({
@@ -3347,8 +3596,8 @@ export class Agent<
                 }
 
                 result = { text: generateResult.text, subAgentThreadId, subAgentResourceId, subAgentToolResults };
-              } else if (methodType === 'generate' && modelVersion === 'v1') {
-                const generateResult = await agent.generateLegacy(messagesForSubAgent, {
+              } else if (methodType === 'generate' && resolvedModelVersion === 'v1') {
+                const generateResult = await resolvedAgent.generateLegacy(messagesForSubAgent, {
                   requestContext,
                   ...resolveObservabilityContext(context ?? {}),
                   context: filteredContextMessages as unknown as CoreMessage[],
@@ -3356,17 +3605,17 @@ export class Agent<
                 result = { text: generateResult.text };
               } else if (
                 (methodType === 'stream' || methodType === 'streamLegacy') &&
-                supportedLanguageModelSpecifications.includes(modelVersion)
+                supportedLanguageModelSpecifications.includes(resolvedModelVersion)
               ) {
                 const streamResult = resumeData
-                  ? await agent.resumeStream(resumeData, {
+                  ? await resolvedAgent.resumeStream(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       context: filteredContextMessages as unknown as ModelMessage[],
-                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
+                      ...(resourceId && threadId && !resolvedHasOwnMemoryConfig
                         ? {
                             memory: {
                               resource: subAgentResourceId,
@@ -3377,14 +3626,15 @@ export class Agent<
                             },
                           }
                         : {}),
+                      disableBackgroundTasks: true,
                     })
-                  : await agent.stream(messagesForSubAgent, {
+                  : await resolvedAgent.stream(messagesForSubAgent, {
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       context: filteredContextMessages as unknown as ModelMessage[],
-                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
+                      ...(resourceId && threadId && !resolvedHasOwnMemoryConfig
                         ? {
                             memory: {
                               resource: subAgentResourceId,
@@ -3395,6 +3645,7 @@ export class Agent<
                             },
                           }
                         : {}),
+                      disableBackgroundTasks: true,
                     });
 
                 let requireToolApproval;
@@ -3460,15 +3711,15 @@ export class Agent<
                 fullSubAgentMessages = [userMessage, ...agentResponseMessages];
 
                 // Save response messages to sub-agent's memory so the UI can display them
-                const memory = await agent.getMemory({ requestContext });
-                if (memory) {
+                const streamMemory = await resolvedAgent.getMemory({ requestContext });
+                if (streamMemory) {
                   try {
-                    await memory.createThread({
+                    await streamMemory.createThread({
                       resourceId: subAgentResourceId,
                       threadId: subAgentThreadId,
                     });
 
-                    await memory.saveMessages({
+                    await streamMemory.saveMessages({
                       messages: fullSubAgentMessages,
                     });
                   } catch (memoryError) {
@@ -3504,7 +3755,7 @@ export class Agent<
                   subAgentToolResults,
                 };
               } else {
-                const streamResult = await agent.streamLegacy(effectivePrompt, {
+                const streamResult = await resolvedAgent.streamLegacy(effectivePrompt, {
                   requestContext,
                   ...resolveObservabilityContext(context ?? {}),
                 });
@@ -3713,6 +3964,11 @@ export class Agent<
           },
         });
 
+        // Derive a ToolBackgroundConfig from the sub-agent's tools/config so the
+        // parent can dispatch the entire sub-agent invocation as a background task
+        // when appropriate.
+        const subAgentBackgroundConfig = await this.deriveSubAgentBackgroundConfig(agent, requestContext);
+
         const options: ToolOptions = {
           name: `agent-${agentName}`,
           runId,
@@ -3727,7 +3983,13 @@ export class Agent<
           model: await this.getModel({ requestContext }),
           ...observabilityContext,
           tracingPolicy: this.#options?.tracingPolicy,
+          backgroundConfig: subAgentBackgroundConfig,
         };
+
+        // Mark the wrapper tool so tool-call-step picks up the background config
+        if (subAgentBackgroundConfig) {
+          (toolObj as any).backgroundConfig = subAgentBackgroundConfig;
+        }
 
         // TODO; fix recursion type
         convertedAgentTools[`agent-${agentName}`] = makeCoreTool(
@@ -3735,6 +3997,7 @@ export class Agent<
           options,
           undefined,
           autoResumeSuspendedTools,
+          backgroundTaskEnabled,
         );
       }
     }
@@ -3753,6 +4016,7 @@ export class Agent<
     requestContext,
     methodType,
     autoResumeSuspendedTools,
+    backgroundTaskEnabled,
     ...rest
   }: {
     runId?: string;
@@ -3761,6 +4025,7 @@ export class Agent<
     requestContext: RequestContext;
     methodType: AgentMethodType;
     autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     const convertedWorkflowTools: Record<string, CoreTool> = {};
@@ -3999,6 +4264,7 @@ export class Agent<
           options,
           undefined,
           autoResumeSuspendedTools,
+          backgroundTaskEnabled,
         );
       }
     }
@@ -4022,6 +4288,7 @@ export class Agent<
     memoryConfig,
     autoResumeSuspendedTools,
     delegation,
+    backgroundTaskEnabled,
     ...rest
   }: {
     toolsets?: ToolsetsInput;
@@ -4035,6 +4302,7 @@ export class Agent<
     memoryConfig?: MemoryConfigInternal;
     autoResumeSuspendedTools?: boolean;
     delegation?: DelegationConfig;
+    backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>): Promise<Record<string, CoreTool>> {
     const observabilityContext = resolveObservabilityContext(rest);
     let mastraProxy = undefined;
@@ -4053,6 +4321,7 @@ export class Agent<
       mastraProxy,
       outputWriter,
       autoResumeSuspendedTools,
+      backgroundTaskEnabled,
     });
 
     const memoryTools = await this.listMemoryTools({
@@ -4064,6 +4333,7 @@ export class Agent<
       mastraProxy,
       memoryConfig,
       autoResumeSuspendedTools,
+      backgroundTaskEnabled,
     });
 
     const toolsetTools = await this.listToolsets({
@@ -4075,6 +4345,7 @@ export class Agent<
       mastraProxy,
       toolsets: toolsets!,
       autoResumeSuspendedTools,
+      backgroundTaskEnabled,
     });
 
     const clientSideTools = await this.listClientTools({
@@ -4086,6 +4357,7 @@ export class Agent<
       mastraProxy,
       clientTools: clientTools!,
       autoResumeSuspendedTools,
+      backgroundTaskEnabled,
     });
 
     const agentTools = await this.listAgentTools({
@@ -4117,6 +4389,7 @@ export class Agent<
       ...observabilityContext,
       mastraProxy,
       autoResumeSuspendedTools,
+      backgroundTaskEnabled,
     });
 
     const skillTools = await this.listSkillTools({
@@ -4127,6 +4400,7 @@ export class Agent<
       ...observabilityContext,
       mastraProxy,
       autoResumeSuspendedTools,
+      backgroundTaskEnabled,
     });
 
     const channelTools = await this.listChannelTools({
@@ -4137,6 +4411,7 @@ export class Agent<
       ...observabilityContext,
       mastraProxy,
       autoResumeSuspendedTools,
+      backgroundTaskEnabled,
     });
 
     const browserTools = await this.listBrowserTools({
@@ -4146,6 +4421,7 @@ export class Agent<
       requestContext,
       ...observabilityContext,
       autoResumeSuspendedTools,
+      backgroundTaskEnabled,
     });
 
     const allTools = {
@@ -4406,22 +4682,91 @@ export class Agent<
         }
 
         // Extract headers from ModelRouterLanguageModel if available
-        let headers: Record<string, string> | undefined;
+        let routerHeaders: Record<string, string> | undefined;
         if (model instanceof ModelRouterLanguageModel) {
-          headers = (model as any).config?.headers;
+          routerHeaders = (model as any).config?.headers;
         }
+
+        // Disabled entries are filtered out in getLLM(); skip resolving their dynamic
+        // fields so a throwing or side-effecting resolver on an unused entry can't
+        // break the whole fallback array.
+        const isEnabled = modelConfig.enabled ?? true;
+        const [resolvedModelSettings, resolvedProviderOptions, resolvedUserHeaders] = isEnabled
+          ? await Promise.all([
+              this.resolveFallbackDynamic(modelConfig.modelSettings, requestContext),
+              this.resolveFallbackDynamic(modelConfig.providerOptions, requestContext),
+              this.resolveFallbackDynamic(modelConfig.headers, requestContext),
+            ])
+          : [undefined, undefined, undefined];
+
+        const mergedHeaders =
+          routerHeaders || resolvedUserHeaders
+            ? { ...(routerHeaders ?? {}), ...(resolvedUserHeaders ?? {}) }
+            : undefined;
 
         return {
           id: modelId,
           model: model,
           maxRetries: modelConfig.maxRetries ?? 0,
-          enabled: modelConfig.enabled ?? true,
-          headers,
+          enabled: isEnabled,
+          headers: mergedHeaders,
+          modelSettings: resolvedModelSettings,
+          providerOptions: resolvedProviderOptions,
         };
       }),
     );
 
     return models;
+  }
+
+  /** @internal */
+  private async resolveFallbackDynamic<T>(
+    value: DynamicArgument<T> | undefined,
+    requestContext: RequestContext,
+  ): Promise<T | undefined> {
+    if (value === undefined) return undefined;
+    if (typeof value === 'function') {
+      return await (value as (args: { requestContext: RequestContext; mastra?: Mastra }) => Promise<T> | T)({
+        requestContext,
+        mastra: this.#mastra,
+      });
+    }
+    return value;
+  }
+
+  /**
+   * Loads the agentic-loop workflow snapshot for resume, or throws an actionable error.
+   * Used by resumeStream and resumeGenerate to fail fast at the agent boundary.
+   * @internal
+   */
+  async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const existingSnapshot = await workflowsStore?.loadWorkflowSnapshot({
+      workflowName: 'agentic-loop',
+      runId,
+    });
+
+    if (!existingSnapshot) {
+      const hasStorage = !!workflowsStore;
+      throw new MastraError({
+        id: 'AGENT_RESUME_NO_SNAPSHOT_FOUND',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text:
+          `Agent "${this.name}" ${method}() could not find a suspended run for runId "${runId}". ` +
+          (hasStorage
+            ? `The run may have already completed, never suspended, or the runId is invalid. `
+            : `No storage is configured on this Mastra instance, so workflow snapshots cannot be persisted. Register the agent on a Mastra instance with persistent storage (e.g. PostgreSQL, LibSQL). `) +
+          `Ensure you are calling ${method}() only with a runId from a currently-suspended run.`,
+        details: {
+          runId,
+          agentName: this.name,
+          hasStorage,
+        },
+      });
+    }
+
+    return existingSnapshot;
   }
 
   /**
@@ -4441,6 +4786,19 @@ export class Agent<
       }
     }
     const requestContext = options.requestContext || new RequestContext();
+
+    // Build version overrides by merging: Mastra defaults < requestContext < call-site
+    const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+    let mergedVersions = mergeVersionOverrides(this.#mastra?.getVersionOverrides(), requestVersions);
+
+    // Merge call-site version overrides on top (call-site wins over request + Mastra defaults)
+    if (options.versions) {
+      mergedVersions = mergeVersionOverrides(mergedVersions, options.versions);
+    }
+
+    if (mergedVersions) {
+      requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
+    }
 
     // Inject browser context for BrowserContextProcessor
     if (this.#browser && !requestContext.has('browser')) {
@@ -4463,8 +4821,7 @@ export class Agent<
         provider: this.#browser.provider,
         sessionId: this.#browser.getSessionId(browserThreadId),
         headless: this.#browser.headless,
-        currentUrl: (await this.#browser.getCurrentUrl(browserThreadId)) ?? undefined,
-        isRunning: isThreadRunning,
+        currentUrl: isThreadRunning ? ((await this.#browser.getCurrentUrl(browserThreadId)) ?? undefined) : undefined,
       };
       requestContext.set('browser', browserCtx);
     }
@@ -4548,6 +4905,8 @@ export class Agent<
       attributes: {
         conversationId: threadFromArgs?.id,
         instructions: this.#convertInstructionsToString(instructions),
+        // @deprecated — use entityVersionId (top-level span context field) instead.
+        // Kept for backward compatibility during migration.
         ...(this.toRawConfig()?.resolvedVersionId
           ? { resolvedVersionId: this.toRawConfig()!.resolvedVersionId as string }
           : {}),
@@ -4556,6 +4915,9 @@ export class Agent<
         runId,
         resourceId,
         threadId: threadFromArgs?.id,
+        ...(this.toRawConfig()?.resolvedVersionId
+          ? { entityVersionId: this.toRawConfig()!.resolvedVersionId as string }
+          : {}),
       },
       tracingPolicy: this.#options?.tracingPolicy,
       tracingOptions: options.tracingOptions,
@@ -4603,6 +4965,19 @@ export class Agent<
         requestContext: RequestContext;
         overrides?: OutputProcessorOrWorkflow[];
       }) => this.listResolvedOutputProcessors(requestContext, overrides),
+      errorProcessors: async ({
+        requestContext,
+        overrides,
+      }: {
+        requestContext: RequestContext;
+        overrides?: ErrorProcessorOrWorkflow[];
+      }) =>
+        overrides ??
+        (this.#errorProcessors
+          ? typeof this.#errorProcessors === 'function'
+            ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
+            : this.#errorProcessors
+          : []),
       llm,
     };
 
@@ -4628,6 +5003,12 @@ export class Agent<
       agentName: this.name,
       toolCallId: options.toolCallId,
       workspace,
+      ...(options.disableBackgroundTasks
+        ? {}
+        : {
+            backgroundTaskManager: this.#mastra?.backgroundTaskManager,
+            agentBackgroundConfig: this.#backgroundTasks,
+          }),
     });
 
     const run = await executionWorkflow.createRun();
@@ -5333,11 +5714,8 @@ export class Agent<
       });
     }
 
-    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const existingSnapshot = await workflowsStore?.loadWorkflowSnapshot({
-      workflowName: 'agentic-loop',
-      runId: streamOptions?.runId ?? '',
-    });
+    const runId = streamOptions?.runId ?? '';
+    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeStream' });
 
     const result = await this.#execute({
       ...mergedStreamOptions,
@@ -5353,6 +5731,8 @@ export class Agent<
         snapshot: existingSnapshot,
       },
       methodType: 'stream',
+      // Use agent's maxProcessorRetries as default, allow options to override
+      maxProcessorRetries: mergedStreamOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
     } as unknown as InnerAgentExecutionOptions<OUTPUT>);
 
     if (result.status !== 'success') {
@@ -5459,11 +5839,8 @@ export class Agent<
       });
     }
 
-    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const existingSnapshot = await workflowsStore?.loadWorkflowSnapshot({
-      workflowName: 'agentic-loop',
-      runId: options?.runId ?? '',
-    });
+    const runId = options?.runId ?? '';
+    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeGenerate' });
 
     const result = await this.#execute({
       ...mergedOptions,

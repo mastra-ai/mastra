@@ -53,6 +53,13 @@ if (result.status === 'suspended') {
     isOptional: true,
   },
   {
+    name: 'forEachIndex',
+    type: 'number',
+    description:
+      'Target a specific iteration of a suspended `.foreach()` step. Pass the zero-based index of the iteration you want to resume; other iterations remain suspended. Omit this field to resume all suspended iterations of the step with the same `resumeData`.',
+    isOptional: true,
+  },
+  {
     name: 'tracingContext',
     type: 'TracingContext',
     isOptional: true,
@@ -197,6 +204,28 @@ if (result.status === 'suspended') {
 When exactly one step is suspended, you can omit the `step` parameter and the workflow will automatically resume that step. For workflows with multiple suspended steps, you must explicitly specify which step to resume.
 
 :::
+
+### Resuming a single [`.foreach()`](../workflow-methods/foreach) iteration
+
+When a [`.foreach()`](../workflow-methods/foreach) step suspends across multiple iterations, use `forEachIndex` (zero-based) to resume one iteration at a time with different `resumeData`. Iterations not targeted by `forEachIndex` remain suspended until resumed.
+
+```typescript
+// Resume only the second iteration (index 1) with its own data
+await run.resume({
+  step: 'approve',
+  resumeData: { ok: true },
+  forEachIndex: 1,
+})
+
+// Later, resume the first iteration with different data
+await run.resume({
+  step: 'approve',
+  resumeData: { ok: false },
+  forEachIndex: 0,
+})
+```
+
+If `forEachIndex` is omitted, every suspended iteration of the step is resumed with the same `resumeData`.
 
 ## Related
 

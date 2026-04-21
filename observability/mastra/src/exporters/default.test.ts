@@ -947,6 +947,7 @@ describe('DefaultExporter', () => {
         const event: MetricEvent = {
           type: 'metric',
           metric: {
+            metricId: 'metric-default-test-1',
             timestamp: new Date('2026-01-01T00:00:00Z'),
             traceId: 'trace-1',
             spanId: 'span-1',
@@ -994,6 +995,7 @@ describe('DefaultExporter', () => {
         const storedMetric = mockObservabilityStore.batchCreateMetrics.mock.calls[0][0].metrics[0];
         expect(storedMetric).toEqual(
           expect.objectContaining({
+            metricId: 'metric-default-test-1',
             name: 'mastra_agent_duration_ms',
             value: 1,
             entityType: EntityType.AGENT,
@@ -1038,6 +1040,7 @@ describe('DefaultExporter', () => {
         const event: MetricEvent = {
           type: 'metric',
           metric: {
+            metricId: 'metric-default-test-2',
             timestamp: new Date(),
             name: 'mastra_custom_metric',
             value: 42,
@@ -1051,6 +1054,7 @@ describe('DefaultExporter', () => {
         expect(mockObservabilityStore.batchCreateMetrics).toHaveBeenCalledWith({
           metrics: [
             expect.objectContaining({
+              metricId: 'metric-default-test-2',
               entityType: null,
               entityName: null,
               parentEntityType: null,
@@ -1083,6 +1087,7 @@ describe('DefaultExporter', () => {
         const event: ScoreEvent = {
           type: 'score',
           score: {
+            scoreId: 'score-default-test',
             timestamp: new Date('2026-01-01T00:00:00Z'),
             traceId: 'trace-1',
             scorerId: 'relevance',
@@ -1097,6 +1102,7 @@ describe('DefaultExporter', () => {
         expect(mockObservabilityStore.batchCreateScores).toHaveBeenCalledWith({
           scores: [
             expect.objectContaining({
+              scoreId: 'score-default-test',
               traceId: 'trace-1',
               scorerId: 'relevance',
               score: 0.85,
@@ -1116,6 +1122,7 @@ describe('DefaultExporter', () => {
         const event: FeedbackEvent = {
           type: 'feedback',
           feedback: {
+            feedbackId: 'feedback-default-test',
             timestamp: new Date('2026-01-01T00:00:00Z'),
             traceId: 'trace-1',
             source: 'user',
@@ -1130,6 +1137,7 @@ describe('DefaultExporter', () => {
         expect(mockObservabilityStore.batchCreateFeedback).toHaveBeenCalledWith({
           feedbacks: [
             expect.objectContaining({
+              feedbackId: 'feedback-default-test',
               traceId: 'trace-1',
               feedbackSource: 'user',
               feedbackType: 'thumbs',
@@ -1149,6 +1157,7 @@ describe('DefaultExporter', () => {
         const event: LogEvent = {
           type: 'log',
           log: {
+            logId: 'log-default-test',
             timestamp: new Date('2026-01-01T00:00:00Z'),
             traceId: 'trace-1',
             level: 'info',
@@ -1172,6 +1181,7 @@ describe('DefaultExporter', () => {
         expect(mockObservabilityStore.batchCreateLogs).toHaveBeenCalledWith({
           logs: [
             expect.objectContaining({
+              logId: 'log-default-test',
               level: 'info',
               message: 'Agent started',
               entityType: EntityType.AGENT,
@@ -1190,7 +1200,7 @@ describe('DefaultExporter', () => {
 
         const metricEvent: MetricEvent = {
           type: 'metric',
-          metric: { timestamp: new Date(), name: 'test', value: 1, labels: {} },
+          metric: { metricId: 'metric-default-noop', timestamp: new Date(), name: 'test', value: 1, labels: {} },
         };
 
         // Should not throw

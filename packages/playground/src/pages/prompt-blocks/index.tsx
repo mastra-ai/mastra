@@ -1,24 +1,22 @@
 import {
   Button,
   ButtonWithTooltip,
-  useLinkComponent,
-  useIsCmsAvailable,
-  useStoredPromptBlocks,
-  PromptsList,
-  NoPromptBlocksInfo,
+  ErrorState,
   ListSearch,
   NoDataPageLayout,
-  PageLayout,
   PageHeader,
+  PageLayout,
   PermissionDenied,
   SessionExpired,
-  ErrorState,
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { BookIcon, FileTextIcon, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
+import { useStoredPromptBlocks, PromptsList, NoPromptBlocksInfo } from '@/domains/prompt-blocks';
+import { useLinkComponent } from '@/lib/framework';
 
 export default function PromptBlocks() {
   const { paths } = useLinkComponent();
