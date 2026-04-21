@@ -202,6 +202,78 @@ describe('RedisStore connection options', () => {
   });
 });
 
+describe('saveMessages uses msg-idx index instead of scanning', () => {
+  it('uses index lookups instead of scan when moving a message between threads', async () => {
+    const client = await createTestClient();
+    const memoryDomain = new StoreMemoryRedis({ client });
+
+    try {
+      const sourceThread = createThread();
+      const targetThread = createThread({ resourceId: sourceThread.resourceId });
+      await memoryDomain.saveThread({ thread: sourceThread });
+      await memoryDomain.saveThread({ thread: targetThread });
+
+      const originalMessage = createMessage({
+        threadId: sourceThread.id,
+        resourceId: sourceThread.resourceId,
+        createdAt: new Date(),
+        content: 'source',
+      });
+      await memoryDomain.saveMessages({ messages: [originalMessage] });
+
+      const scanSpy = vi.spyOn(client, 'scan');
+      const movedMessage = {
+        ...createMessage({
+          threadId: targetThread.id,
+          resourceId: targetThread.resourceId,
+          createdAt: new Date(),
+          content: 'moved',
+        }),
+        id: originalMessage.id,
+      };
+
+      await memoryDomain.saveMessages({ messages: [movedMessage] });
+
+      expect(scanSpy).not.toHaveBeenCalled();
+
+      const { messages: sourceMessages } = await memoryDomain.listMessages({ threadId: sourceThread.id });
+      const { messages: targetMessages } = await memoryDomain.listMessages({ threadId: targetThread.id });
+
+      expect(sourceMessages.find(message => message.id === originalMessage.id)).toBeUndefined();
+      expect(targetMessages.find(message => message.id === originalMessage.id)?.threadId).toBe(targetThread.id);
+    } finally {
+      await client.quit();
+    }
+  });
+
+  it('does not scan for new messages without an index entry', async () => {
+    const client = await createTestClient();
+    const memoryDomain = new StoreMemoryRedis({ client });
+
+    try {
+      const thread = createThread();
+      await memoryDomain.saveThread({ thread });
+
+      const scanSpy = vi.spyOn(client, 'scan');
+      const message = createMessage({
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+        createdAt: new Date(),
+        content: 'new',
+      });
+
+      await memoryDomain.saveMessages({ messages: [message] });
+
+      expect(scanSpy).not.toHaveBeenCalled();
+
+      const { messages } = await memoryDomain.listMessages({ threadId: thread.id });
+      expect(messages.find(storedMessage => storedMessage.id === message.id)?.threadId).toBe(thread.id);
+    } finally {
+      await client.quit();
+    }
+  });
+});
+
 describe('Redis ordering regression tests', () => {
   let storage: RedisStore;
   let memory: MemoryStorage;

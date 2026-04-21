@@ -366,15 +366,18 @@ export class StoreMemoryRedis extends MemoryStorage {
 
     try {
       const batchSize = 1000;
+      const existingThreadIds = await this.client.mGet(messagesWithIndex.map(message => getMessageIndexKey(message.id)));
+
       for (let i = 0; i < messagesWithIndex.length; i += batchSize) {
         const batch = messagesWithIndex.slice(i, i + batchSize);
+        const batchExistingThreadIds = existingThreadIds.slice(i, i + batch.length);
         const multi = this.client.multi();
 
-        for (const message of batch) {
+        for (const [batchIndex, message] of batch.entries()) {
           const key = getMessageKey(message.threadId!, message.id);
           const score = getMessageScore(message);
+          const existingThreadId = batchExistingThreadIds[batchIndex];
 
-          const existingThreadId = await this.getThreadIdForMessage(message.id);
           if (existingThreadId && existingThreadId !== message.threadId) {
             const existingMessageKey = getMessageKey(existingThreadId, message.id);
             multi.del(existingMessageKey);
