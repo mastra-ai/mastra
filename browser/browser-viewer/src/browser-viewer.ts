@@ -51,7 +51,7 @@ export class BrowserViewer extends MastraBrowser {
   override readonly id: string;
   override readonly name = 'BrowserViewer';
   override readonly provider = 'browser-viewer';
-  override readonly providerType = 'cli' as const;
+  readonly providerType = 'cli' as const;
 
   /** Which CLI the agent uses */
   readonly cli: CLIProvider;

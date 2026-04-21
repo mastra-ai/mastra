@@ -44,7 +44,6 @@ export class AgentBrowser extends MastraBrowser {
   override readonly id: string;
   override readonly name = 'AgentBrowser';
   override readonly provider = 'vercel-labs/agent-browser';
-  override readonly providerType = 'sdk' as const;
 
   /** Shared browser manager instance (for 'shared' scope) - narrowed type from base class */
   declare protected sharedManager: BrowserManager | null;

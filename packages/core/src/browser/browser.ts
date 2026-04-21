@@ -409,8 +409,9 @@ export abstract class MastraBrowser extends MastraBase {
    * Provider type for runtime enforcement.
    * - 'sdk': SDK providers (AgentBrowser, StagehandBrowser) — use with Agent.browser
    * - 'cli': CLI providers (BrowserViewer) — use with Workspace.browser
+   * Defaults to 'sdk' for backward compatibility with existing providers.
    */
-  abstract readonly providerType: 'sdk' | 'cli';
+  readonly providerType: 'sdk' | 'cli' = 'sdk';
 
   // ---------------------------------------------------------------------------
   // State

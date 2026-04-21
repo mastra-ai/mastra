@@ -43,7 +43,6 @@ export class StagehandBrowser extends MastraBrowser {
   override readonly id: string;
   override readonly name = 'StagehandBrowser';
   override readonly provider = 'browserbase/stagehand';
-  override readonly providerType = 'sdk' as const;
 
   /** Shared Stagehand instance (for 'shared' scope) - narrowed type from base class */
   declare protected sharedManager: Stagehand | null;
