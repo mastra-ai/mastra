@@ -123,6 +123,14 @@ export class AIV5Adapter {
             input: invocation.args,
             output: invocation.result,
           });
+        } else if (invocation.state === 'output-error') {
+          parts.push({
+            type: `tool-${invocation.toolName}`,
+            toolCallId: invocation.toolCallId,
+            state: 'output-error',
+            input: invocation.args,
+            errorText: invocation.errorText || '',
+          });
         } else {
           parts.push({
             type: `tool-${invocation.toolName}`,
@@ -174,6 +182,16 @@ export class AIV5Adapter {
               input: inv.args,
               output: inv.result,
               state: 'output-available',
+              callProviderMetadata: mergeMastraCreatedAt(part.providerMetadata, part.createdAt),
+              providerExecuted: (part as { providerExecuted?: boolean }).providerExecuted,
+            } satisfies AIV5Type.ToolUIPart);
+          } else if (inv.state === 'output-error') {
+            parts.push({
+              type: `tool-${inv.toolName}`,
+              toolCallId: inv.toolCallId,
+              input: inv.args,
+              state: 'output-error',
+              errorText: inv.errorText || '',
               callProviderMetadata: mergeMastraCreatedAt(part.providerMetadata, part.createdAt),
               providerExecuted: (part as { providerExecuted?: boolean }).providerExecuted,
             } satisfies AIV5Type.ToolUIPart);
@@ -361,6 +379,15 @@ export class AIV5Adapter {
             state: 'result',
           } satisfies NonNullable<MastraDBMessage['content']['toolInvocations']>[0];
         }
+        if (p.state === 'output-error') {
+          return {
+            args: p.input,
+            toolCallId: p.toolCallId,
+            toolName,
+            state: 'output-error',
+            errorText: p.errorText || '',
+          } satisfies NonNullable<MastraDBMessage['content']['toolInvocations']>[0];
+        }
         return {
           args: p.input,
           toolCallId: p.toolCallId,
@@ -409,6 +436,20 @@ export class AIV5Adapter {
                     ? (p.output as { value: unknown }).value
                     : p.output,
                 state: 'result' as const,
+              },
+              providerMetadata: callProviderMetadata,
+              createdAt: getMastraCreatedAt(callProviderMetadata),
+            } satisfies ToolInvocationUIPart & { providerMetadata?: AIV5Type.ProviderMetadata; createdAt?: number };
+          }
+          if (p.state === 'output-error') {
+            return {
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                toolCallId: p.toolCallId,
+                toolName,
+                args: p.input,
+                state: 'output-error' as const,
+                errorText: p.errorText || '',
               },
               providerMetadata: callProviderMetadata,
               createdAt: getMastraCreatedAt(callProviderMetadata),
@@ -623,11 +664,16 @@ export class AIV5Adapter {
         );
 
         const updateMatchingCallInvocationResult = (toolResultPart: AIV5Type.ToolResultPart, matchingCall: any) => {
-          matchingCall.state = 'result';
-          matchingCall.result =
-            typeof toolResultPart.output === 'object' && toolResultPart.output && 'value' in toolResultPart.output
-              ? toolResultPart.output.value
-              : toolResultPart.output;
+          if (toolResultPart.isError === true) {
+            matchingCall.state = 'output-error';
+            matchingCall.errorText = String(toolResultPart.output);
+          } else {
+            matchingCall.state = 'result';
+            matchingCall.result =
+              typeof toolResultPart.output === 'object' && toolResultPart.output && 'value' in toolResultPart.output
+                ? toolResultPart.output.value
+                : toolResultPart.output;
+          }
         };
 
         if (matchingCall) {
