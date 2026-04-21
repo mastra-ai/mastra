@@ -35,7 +35,7 @@
   "devDependencies": {
     "@commander-js/extra-typings": "^14.0.0",
     "@internal/lint": "workspace:*",
-    "@types/debug": "^4.1.12",
+    "@types/debug": "^4.1.13",
     "@types/jscodeshift": "^17.3.0",
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",

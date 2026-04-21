@@ -1,6 +1,6 @@
 {
   "name": "@mastra/arize",
-  "version": "1.0.18-alpha.2",
+  "version": "1.0.18-alpha.3",
   "description": "Arize observability provider for Mastra - includes tracing and future observability features",
   "type": "module",
   "main": "dist/index.js",
@@ -34,10 +34,10 @@
     "@arizeai/openinference-genai": "0.1.7",
     "@arizeai/openinference-semantic-conventions": "^2.1.7",
     "@mastra/otel-exporter": "workspace:*",
-    "@opentelemetry/core": "^2.6.0",
-    "@opentelemetry/exporter-trace-otlp-proto": "^0.205.0",
-    "@opentelemetry/resources": "^2.6.0",
-    "@opentelemetry/sdk-trace-base": "^2.6.0",
+    "@opentelemetry/core": "^2.7.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.215.0",
+    "@opentelemetry/resources": "^2.7.0",
+    "@opentelemetry/sdk-trace-base": "^2.7.0",
     "@opentelemetry/semantic-conventions": "^1.40.0"
   },
   "devDependencies": {

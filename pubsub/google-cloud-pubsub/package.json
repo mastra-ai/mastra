@@ -1,6 +1,6 @@
 {
   "name": "@mastra/google-cloud-pubsub",
-  "version": "1.0.3-alpha.0",
+  "version": "1.0.3-alpha.1",
   "description": "Mastra Google Cloud PubSub integration",
   "type": "module",
   "main": "dist/index.js",
@@ -31,7 +31,7 @@
   "dependencies": {
     "@google-cloud/pubsub": "^5.3.0",
     "@inngest/realtime": "^0.4.6",
-    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/api": "^1.9.1",
     "inngest": "^3.52.6",
     "zod": "catalog:"
   },
