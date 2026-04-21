@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS metric_events (
   timestamp TIMESTAMP NOT NULL,
 
   -- IDs
+  metricId VARCHAR NOT NULL PRIMARY KEY,
   traceId VARCHAR,
   spanId VARCHAR,
   experimentId VARCHAR,
@@ -120,6 +121,7 @@ CREATE TABLE IF NOT EXISTS log_events (
   timestamp TIMESTAMP NOT NULL,
 
   -- IDs
+  logId VARCHAR NOT NULL PRIMARY KEY,
   traceId VARCHAR,
   spanId VARCHAR,
   experimentId VARCHAR,
@@ -168,6 +170,7 @@ CREATE TABLE IF NOT EXISTS score_events (
   timestamp TIMESTAMP NOT NULL,
 
   -- IDs
+  scoreId VARCHAR NOT NULL PRIMARY KEY,
   traceId VARCHAR,
   spanId VARCHAR,
   experimentId VARCHAR,
@@ -220,6 +223,7 @@ CREATE TABLE IF NOT EXISTS feedback_events (
   timestamp TIMESTAMP NOT NULL,
 
   -- IDs
+  feedbackId VARCHAR NOT NULL PRIMARY KEY,
   traceId VARCHAR,
   spanId VARCHAR,
   experimentId VARCHAR,

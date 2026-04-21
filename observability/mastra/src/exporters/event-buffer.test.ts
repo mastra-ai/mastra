@@ -38,28 +38,35 @@ function createTracingEvent(
 function createMetricEvent(): MetricEvent {
   return {
     type: 'metric',
-    metric: { timestamp: new Date(), name: 'test', value: 1, labels: {} },
+    metric: { metricId: 'metric-test', timestamp: new Date(), name: 'test', value: 1, labels: {} },
   };
 }
 
 function createLogEvent(): LogEvent {
   return {
     type: 'log',
-    log: { timestamp: new Date(), level: 'info', message: 'test' },
+    log: { logId: 'log-test', timestamp: new Date(), level: 'info', message: 'test' },
   };
 }
 
 function createScoreEvent(): ScoreEvent {
   return {
     type: 'score',
-    score: { timestamp: new Date(), traceId: 'trace-1', scorerId: 'test', score: 0.5 },
+    score: { scoreId: 'score-test', timestamp: new Date(), traceId: 'trace-1', scorerId: 'test', score: 0.5 },
   };
 }
 
 function createFeedbackEvent(): FeedbackEvent {
   return {
     type: 'feedback',
-    feedback: { timestamp: new Date(), traceId: 'trace-1', source: 'user', feedbackType: 'thumbs', value: 1 },
+    feedback: {
+      feedbackId: 'feedback-test',
+      timestamp: new Date(),
+      traceId: 'trace-1',
+      source: 'user',
+      feedbackType: 'thumbs',
+      value: 1,
+    },
   };
 }
 

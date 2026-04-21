@@ -12,6 +12,9 @@ import {
   scoreTracesResponseSchema,
   getTraceArgsSchema,
   getTraceResponseSchema,
+  getTraceLightResponseSchema,
+  getSpanArgsSchema,
+  getSpanResponseSchema,
   dateRangeSchema,
 } from '@mastra/core/storage';
 import { z } from 'zod/v4';
@@ -149,6 +152,61 @@ export const GET_TRACE_ROUTE = createRoute({
       return trace;
     } catch (error) {
       return handleError(error, 'Error getting trace');
+    }
+  },
+});
+
+/** Route: GET /observability/traces/:traceId/light - lightweight trace for timeline rendering. */
+export const GET_TRACE_LIGHT_ROUTE = createRoute({
+  method: 'GET',
+  path: '/observability/traces/:traceId/light',
+  responseType: 'json',
+  pathParamSchema: getTraceArgsSchema,
+  responseSchema: getTraceLightResponseSchema,
+  summary: 'Get lightweight AI trace by ID',
+  description:
+    'Returns a trace with lightweight span data (timeline fields only, excludes input/output/attributes/metadata/tags/links)',
+  tags: ['Observability'],
+  requiresAuth: true,
+  handler: async ({ mastra, traceId }) => {
+    try {
+      const observabilityStore = await getObservabilityStore(mastra);
+      const trace = await observabilityStore.getTraceLight({ traceId });
+
+      if (!trace) {
+        throw new HTTPException(404, { message: `Trace with ID '${traceId}' not found` });
+      }
+
+      return trace;
+    } catch (error) {
+      return handleError(error, 'Error getting lightweight trace');
+    }
+  },
+});
+
+/** Route: GET /observability/traces/:traceId/spans/:spanId - get a single span with full details. */
+export const GET_SPAN_ROUTE = createRoute({
+  method: 'GET',
+  path: '/observability/traces/:traceId/spans/:spanId',
+  responseType: 'json',
+  pathParamSchema: getSpanArgsSchema,
+  responseSchema: getSpanResponseSchema,
+  summary: 'Get a single span by ID',
+  description: 'Returns a complete span record with all details by trace ID and span ID',
+  tags: ['Observability'],
+  requiresAuth: true,
+  handler: async ({ mastra, traceId, spanId }) => {
+    try {
+      const observabilityStore = await getObservabilityStore(mastra);
+      const span = await observabilityStore.getSpan({ traceId, spanId });
+
+      if (!span) {
+        throw new HTTPException(404, { message: `Span not found` });
+      }
+
+      return span;
+    } catch (error) {
+      return handleError(error, 'Error getting span');
     }
   },
 });

@@ -522,7 +522,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     if (observability) {
       await observability.createSpan({
         span: {
-          spanId: 'test-span-1',
+          spanId: 'test-span',
           traceId: 'test-trace',
           name: 'test-span',
           spanType: SpanType.GENERIC,

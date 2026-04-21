@@ -1,5 +1,44 @@
 # @mastra/core
 
+## 1.26.0-alpha.11
+
+### Minor Changes
+
+- RAG ingestion runs now appear in observability traces, next to your agents, workflows, and scorers. ([#15512](https://github.com/mastra-ai/mastra/pull/15512))
+
+  You can now filter traces by `traceId` when listing them.
+
+  Added lightweight span and trace schemas (`LightSpanRecord`, `GetTraceLightResponse`) that exclude heavy fields like `input`, `output`, `attributes`, and `metadata` — reducing per-span payload by ~97% for timeline rendering.
+
+- Added unique IDs (`logId`, `metricId`, `scoreId`, `feedbackId`) to all observability signals, generated automatically at emission time for de-duplication across the framework pipeline and cross-system correlation. User-facing APIs (`logger.info()`, `metrics.emit()`, `addScore()`, `addFeedback()`) are unchanged. ([#15242](https://github.com/mastra-ai/mastra/pull/15242))
+
+  For existing ClickHouse and DuckDB observability signal tables, run `npx mastra migrate` before initializing the store so the new signal-ID schema is applied.
+
+### Patch Changes
+
+- dependencies updates: ([#15538](https://github.com/mastra-ai/mastra/pull/15538))
+  - Updated dependency [`ws@^8.20.0` ↗︎](https://www.npmjs.com/package/ws/v/8.20.0) (from `^8.19.0`, in `dependencies`)
+
+- Fixed message serialization to preserve millisecond precision in createdAt timestamps. ([#15500](https://github.com/mastra-ai/mastra/pull/15500))
+
+## 1.26.0-alpha.10
+
+### Minor Changes
+
+- Added support for sub-agent version overrides in core execution. Global defaults can be set on the Mastra instance and overridden per `generate()`/`stream()` call, with cascading propagation via requestContext. ([#15373](https://github.com/mastra-ai/mastra/pull/15373))
+
+### Patch Changes
+
+- Fixed `CompositeAuth` types so typed auth providers, such as `SimpleAuth<MyUser>` or `MastraAuthClerk`, can be combined without casts. ([#15556](https://github.com/mastra-ai/mastra/pull/15556))
+
+- Fixed a security issue where several parsing and tracing paths could slow down on malformed or attacker-crafted input. Normal behavior is unchanged, and these packages now handle pathological input in linear time. ([#15566](https://github.com/mastra-ai/mastra/pull/15566))
+
+- Fix prototype pollution in `setNestedValue` (`@mastra/core/utils`) and `generateOpenAPIDocument` (`@mastra/server`). ([#15565](https://github.com/mastra-ai/mastra/pull/15565))
+
+  `setNestedValue` now rejects dot-path segments named `__proto__`, `constructor`, or `prototype`, preventing attacker-controlled field paths passed to `selectFields` from polluting `Object.prototype`. `generateOpenAPIDocument` builds its `paths` map with `Object.create(null)` so a route path of `__proto__` cannot poison the prototype chain.
+
+- Fixed PrefillErrorHandler to recover from Qwen/llama.cpp prefill rejections with enable_thinking, so agents retry with a continue reminder instead of failing after skill/tool turns. ([#15518](https://github.com/mastra-ai/mastra/pull/15518))
+
 ## 1.26.0-alpha.9
 
 ### Patch Changes
