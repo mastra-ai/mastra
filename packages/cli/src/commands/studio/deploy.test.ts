@@ -64,6 +64,14 @@ describe('getMastraVersion', () => {
 });
 
 // Mock all external dependencies
+vi.mock('node:child_process', async importOriginal => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    execSync: vi.fn().mockReturnValue('my-app'),
+  };
+});
+
 vi.mock('@clack/prompts', () => ({
   intro: vi.fn(),
   log: { step: vi.fn(), info: vi.fn(), success: vi.fn(), warn: vi.fn() },
@@ -413,5 +421,114 @@ describe('deployAction', () => {
     await expect(deployAction(undefined, {})).rejects.toThrow(
       'MASTRA_ORG_ID and MASTRA_PROJECT_ID are required when MASTRA_API_TOKEN is set',
     );
+  });
+});
+
+describe('resolveProject (studio)', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+
+    const cp = await import('node:child_process');
+    vi.mocked(cp.execSync).mockReturnValue('my-app');
+
+    const credentials = await import('../auth/credentials.js');
+    vi.mocked(credentials.getToken).mockResolvedValue('test-token');
+    vi.mocked(credentials.getCurrentOrgId).mockResolvedValue('org-1');
+
+    const api = await import('../auth/api.js');
+    vi.mocked(api.fetchOrgs).mockResolvedValue([
+      { id: 'org-1', name: 'Test Org', role: 'admin', isCurrent: true } as unknown as Awaited<
+        ReturnType<typeof api.fetchOrgs>
+      >[number],
+    ]);
+
+    const projectConfig = await import('./project-config.js');
+    vi.mocked(projectConfig.loadProjectConfig).mockResolvedValue(null);
+    vi.mocked(projectConfig.saveProjectConfig).mockResolvedValue(undefined);
+
+    const prompts = await import('@clack/prompts');
+    vi.mocked(prompts.isCancel).mockReturnValue(false);
+    vi.mocked(prompts.confirm).mockResolvedValue(false as never);
+  });
+
+  it('prompts the user with a selector when existing projects are found', async () => {
+    const platform = await import('./platform-api.js');
+    vi.mocked(platform.fetchProjects).mockResolvedValue([
+      { id: 'proj-a', name: 'Daniel', slug: 'daniel' } as never,
+      { id: 'proj-b', name: 'Other', slug: 'other' } as never,
+    ]);
+
+    const prompts = await import('@clack/prompts');
+    // User picks an existing project — then cancels the confirm step so the test stops before build
+    vi.mocked(prompts.select).mockResolvedValueOnce('proj-a' as never);
+    vi.mocked(prompts.confirm).mockResolvedValueOnce(false as never);
+
+    const { deployAction } = await import('./deploy.js');
+    // Confirm=false triggers process.exit(0), so guard it
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('__exit__');
+    });
+
+    await expect(deployAction(undefined, {})).rejects.toThrow();
+
+    expect(prompts.select).toHaveBeenCalledTimes(1);
+    const selectArgs = vi.mocked(prompts.select).mock.calls[0]![0] as {
+      options: Array<{ value: string; label: string }>;
+      initialValue?: string;
+    };
+    expect(selectArgs.options.map(o => o.value)).toEqual(['proj-a', 'proj-b', '__create_new__']);
+
+    exitSpy.mockRestore();
+  });
+
+  it('--project <slug> bypasses the selector when it matches an existing project', async () => {
+    const platform = await import('./platform-api.js');
+    vi.mocked(platform.fetchProjects).mockResolvedValue([
+      { id: 'proj-a', name: 'Daniel', slug: 'daniel' } as never,
+      { id: 'proj-b', name: 'Other', slug: 'other' } as never,
+    ]);
+
+    const prompts = await import('@clack/prompts');
+    vi.mocked(prompts.confirm).mockResolvedValueOnce(false as never);
+
+    const { deployAction } = await import('./deploy.js');
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('__exit__');
+    });
+
+    await expect(deployAction(undefined, { project: 'daniel' })).rejects.toThrow();
+
+    expect(prompts.select).not.toHaveBeenCalled();
+
+    exitSpy.mockRestore();
+  });
+
+  it('auto-accept with multiple projects and no name match throws a helpful error', async () => {
+    const platform = await import('./platform-api.js');
+    vi.mocked(platform.fetchProjects).mockResolvedValue([
+      { id: 'proj-a', name: 'Daniel', slug: 'daniel' } as never,
+      { id: 'proj-b', name: 'Other', slug: 'other' } as never,
+    ]);
+
+    const { deployAction } = await import('./deploy.js');
+
+    await expect(deployAction(undefined, { yes: true })).rejects.toThrow(/Pass --project .* to select one/);
+  });
+
+  it('auto-accept with exactly one name match picks that project without prompting', async () => {
+    const platform = await import('./platform-api.js');
+    vi.mocked(platform.fetchProjects).mockResolvedValue([
+      { id: 'proj-a', name: 'my-app', slug: 'my-app' } as never,
+      { id: 'proj-b', name: 'Other', slug: 'other' } as never,
+    ]);
+
+    const prompts = await import('@clack/prompts');
+
+    const { deployAction } = await import('./deploy.js');
+
+    // Will eventually fail when it reaches build; we just care it doesn't hit the "Pass --project" error
+    await expect(deployAction(undefined, { yes: true })).rejects.not.toThrow(/Pass --project/);
+
+    expect(prompts.select).not.toHaveBeenCalled();
   });
 });

@@ -372,6 +372,86 @@ describe('serverDeployAction', () => {
     await expect(serverDeployAction(undefined, {})).resolves.toBeUndefined();
   });
 
+  it('prompts the user with a selector when existing projects are found', async () => {
+    vi.resetModules();
+
+    const { loadProjectConfig } = await import('../studio/project-config.js');
+    vi.mocked(loadProjectConfig).mockResolvedValue(null);
+
+    const platform = await import('./platform-api.js');
+    vi.mocked(platform.fetchServerProjects).mockResolvedValue([
+      { id: 'proj-a', name: 'Daniel', slug: 'daniel', organizationId: 'org-1' } as never,
+      { id: 'proj-b', name: 'Other', slug: 'other', organizationId: 'org-1' } as never,
+    ]);
+
+    const prompts = await import('@clack/prompts');
+    vi.mocked(prompts.select).mockResolvedValueOnce('proj-a' as never);
+    vi.mocked(prompts.confirm).mockResolvedValueOnce(false as never);
+
+    const { serverDeployAction } = await import('./deploy.js');
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('__exit__');
+    });
+
+    await expect(serverDeployAction(undefined, {})).rejects.toThrow();
+
+    expect(prompts.select).toHaveBeenCalledTimes(1);
+    const selectArgs = vi.mocked(prompts.select).mock.calls[0]![0] as {
+      options: Array<{ value: string; label: string }>;
+    };
+    expect(selectArgs.options.map(o => o.value)).toEqual(['proj-a', 'proj-b', '__create_new__']);
+    expect(platform.createServerProject).not.toHaveBeenCalled();
+
+    exitSpy.mockRestore();
+  });
+
+  it('--project <slug> bypasses the selector when it matches an existing project', async () => {
+    vi.resetModules();
+
+    const { loadProjectConfig } = await import('../studio/project-config.js');
+    vi.mocked(loadProjectConfig).mockResolvedValue(null);
+
+    const platform = await import('./platform-api.js');
+    vi.mocked(platform.fetchServerProjects).mockResolvedValue([
+      { id: 'proj-a', name: 'Daniel', slug: 'daniel', organizationId: 'org-1' } as never,
+      { id: 'proj-b', name: 'Other', slug: 'other', organizationId: 'org-1' } as never,
+    ]);
+
+    const prompts = await import('@clack/prompts');
+    vi.mocked(prompts.confirm).mockResolvedValueOnce(false as never);
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('__exit__');
+    });
+
+    const { serverDeployAction } = await import('./deploy.js');
+    await expect(serverDeployAction(undefined, { project: 'daniel' })).rejects.toThrow();
+
+    expect(prompts.select).not.toHaveBeenCalled();
+    expect(platform.createServerProject).not.toHaveBeenCalled();
+
+    exitSpy.mockRestore();
+  });
+
+  it('auto-accept with multiple projects and no name match throws a helpful error', async () => {
+    vi.resetModules();
+
+    const { loadProjectConfig } = await import('../studio/project-config.js');
+    vi.mocked(loadProjectConfig).mockResolvedValue(null);
+
+    const platform = await import('./platform-api.js');
+    vi.mocked(platform.fetchServerProjects).mockResolvedValue([
+      { id: 'proj-a', name: 'Daniel', slug: 'daniel', organizationId: 'org-1' } as never,
+      { id: 'proj-b', name: 'Other', slug: 'other', organizationId: 'org-1' } as never,
+    ]);
+
+    const { serverDeployAction } = await import('./deploy.js');
+
+    await expect(serverDeployAction(undefined, { yes: true })).rejects.toThrow(/Pass --project/);
+    expect(platform.createServerProject).not.toHaveBeenCalled();
+  });
+
   it('uses project config in headless mode without fetching orgs', async () => {
     process.env.MASTRA_API_TOKEN = 'headless-token';
     vi.resetModules();
