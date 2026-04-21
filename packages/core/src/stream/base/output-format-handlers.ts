@@ -624,8 +624,6 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
 
           controller.enqueue(chunkData as ChunkType<OUTPUT>);
         }
-
-        return;
       }
 
       // Validate and resolve object when text generation completes

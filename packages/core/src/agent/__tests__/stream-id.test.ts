@@ -527,7 +527,7 @@ describe('Stream ID Consistency', () => {
   });
 
   describe('onFinish callback with structured output', () => {
-    it('should not synthesize persisted assistant text when structured output returns only an object', async () => {
+    it('should persist assistant JSON text when structured output returns an object', async () => {
       const memory = new MockMemory();
       const agent = new Agent({
         id: 'test-structured-output-persisted-text',
@@ -593,7 +593,7 @@ describe('Stream ID Consistency', () => {
             .map(part => part.text)
             .join('') ?? '';
 
-        expect(assistantText).toBe('');
+        expect(assistantText).toBe('{"name":"John","age":30}');
       });
     });
 
