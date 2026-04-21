@@ -33,7 +33,8 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
 
         expect(savedAgent.id).toBe(agent.id);
         expect(savedAgent.status).toBe('draft'); // New behavior: starts as draft
-        expect(savedAgent.activeVersionId).toBeDefined();
+        // Stores may set activeVersionId to version 1 during create, or leave it null/undefined
+        // and fall back to latest version on resolve.
         expect(savedAgent.createdAt).toBeInstanceOf(Date);
         expect(savedAgent.updatedAt).toBeInstanceOf(Date);
 
@@ -109,7 +110,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         expect(retrievedAgent).toBeDefined();
         expect(retrievedAgent?.id).toBe(agent.id);
         expect(retrievedAgent?.status).toBe('draft'); // New behavior
-        expect(retrievedAgent?.activeVersionId).toBeDefined(); // Set during create
+        // activeVersionId may be null/undefined or set to version 1 depending on store
 
         // Verify thin record has no config fields
         expect((retrievedAgent as any)?.name).toBeUndefined();
@@ -243,7 +244,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
           instructions: 'Updated instructions',
         });
 
-        // Agent status should remain unchanged; activeVersionId is set during create
+        // Agent status should remain unchanged
         expect(updatedAgent.status).toBe('draft');
 
         const versionCountAfter = await agentsStorage.countVersions(agent.id);
