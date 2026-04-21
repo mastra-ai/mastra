@@ -226,6 +226,34 @@ async function processOutputStream<OUTPUT = undefined>({
         });
         break;
 
+      case 'tool-result': {
+        // Patch deferred provider-executed tool results inline.
+        // When a provider tool is deferred (e.g., Anthropic web_search called alongside
+        // a client tool), the tool-call arrives in step N and is added to messageList as
+        // state:'call' by buildMessagesFromChunks. The tool-result arrives in step N+1's
+        // stream. We patch the existing call part to state:'result' with real data here
+        // so the messageList is up-to-date as early as possible.
+        // For same-stream results (call + result in one step), no matching part exists yet
+        // so updateToolInvocation returns false — buildMessagesFromChunks handles the merge.
+        if (chunk.payload.result != null) {
+          const resultToolDef =
+            tools?.[chunk.payload.toolName] || findProviderToolByName(tools, chunk.payload.toolName);
+          messageList.updateToolInvocation({
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: chunk.payload.toolCallId,
+              toolName: chunk.payload.toolName,
+              args: chunk.payload.args,
+              result: chunk.payload.result,
+            },
+            providerMetadata: chunk.payload.providerMetadata,
+            providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef),
+          });
+        }
+        safeEnqueue(controller, chunk);
+        break;
+      }
 
       default:
         safeEnqueue(controller, chunk);
@@ -834,32 +862,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             });
             for (const msg of builtMessages) {
               messageList.add(msg, 'response');
-            }
-
-            // Patch deferred provider-executed tool results.
-            // When a provider tool is deferred (e.g., Anthropic web_search), the tool-call
-            // arrives in stream N and is added to messageList as state:'call'. The tool-result
-            // arrives in a later stream (N+1). We call updateToolInvocation to patch the
-            // existing call part to state:'result' with real data.
-            // Same-stream results are already merged by buildMessagesFromChunks above.
-            for (const chunk of collectedChunks) {
-              if (chunk.type === 'tool-result' && chunk.payload.result != null) {
-                const resultToolDef =
-                  currentStep.tools?.[chunk.payload.toolName] ||
-                  findProviderToolByName(currentStep.tools, chunk.payload.toolName);
-                messageList.updateToolInvocation({
-                  type: 'tool-invocation',
-                  toolInvocation: {
-                    state: 'result',
-                    toolCallId: chunk.payload.toolCallId,
-                    toolName: chunk.payload.toolName,
-                    args: chunk.payload.args,
-                    result: chunk.payload.result,
-                  },
-                  providerMetadata: chunk.payload.providerMetadata,
-                  providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef),
-                });
-              }
             }
 
             // Apply structuredOutput metadata to the assistant message.
