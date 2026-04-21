@@ -3366,8 +3366,8 @@ importers:
         specifier: ^0.2.16
         version: 0.2.16
       typescript-paths:
-        specifier: ^1.5.1
-        version: 1.5.1(typescript@5.9.3)
+        specifier: ^1.5.2
+        version: 1.5.2(typescript@5.9.3)
       ws:
         specifier: ^8.20.0
         version: 8.20.0(bufferutil@4.1.0)
@@ -24543,8 +24543,8 @@ packages:
     engines: {node: '>=20'}
     hasBin: true
 
-  typescript-paths@1.5.1:
-    resolution: {integrity: sha512-lYErSLCON2MSplVV5V/LBgD4UNjMgY3guATdFCZY2q1Nr6OZEu4q6zX/rYMsG1TaWqqQSszg6C9EU7AGWMDrIw==}
+  typescript-paths@1.5.2:
+    resolution: {integrity: sha512-s5iiRIWOSw80dBgPACm0asPQZHHQcbPz69f26eRq01dStusuD11idZ0NDcAbkj6WuUGcRwJediPOsrArIS92eg==}
     peerDependencies:
       typescript: ^5.9.3
 
@@ -47958,7 +47958,7 @@ snapshots:
       vscode-jsonrpc: 5.0.1
       vscode-languageserver-protocol: 3.17.5
 
-  typescript-paths@1.5.1(typescript@5.9.3):
+  typescript-paths@1.5.2(typescript@5.9.3):
     dependencies:
       typescript: 5.9.3
 
