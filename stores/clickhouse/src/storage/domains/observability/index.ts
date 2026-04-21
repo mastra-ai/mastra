@@ -375,7 +375,7 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
             startedAt, endedAt, createdAt, updatedAt
           FROM ${TABLE_SPANS} ${engine.startsWith('ReplacingMergeTree') ? 'FINAL' : ''}
           WHERE traceId = {traceId:String}
-          ORDER BY startedAt DESC
+          ORDER BY startedAt ASC
         `,
         query_params: { traceId },
         format: 'JSONEachRow',
