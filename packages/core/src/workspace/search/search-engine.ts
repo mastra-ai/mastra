@@ -5,6 +5,8 @@
  * semantic (vector), and combined hybrid search across indexed content.
  */
 
+import pMap from 'p-map';
+
 import type { MastraVector, VectorFilter } from '../../vector';
 import type { LineRange } from '../line-utils';
 
@@ -103,6 +105,24 @@ export interface SearchOptions {
   /** Filter for vector search */
   filter?: Record<string, unknown>;
 }
+
+/** Options for batch indexing */
+export interface IndexManyOptions {
+  /**
+   * Maximum number of documents to index concurrently (embedder + vector upsert).
+   * Must be a safe integer ≥ 1 (same rule as `p-map`).
+   * @default 8
+   */
+  concurrency?: number;
+  /**
+   * When `true` (default), the first rejected `index` rejects the whole `indexMany` call.
+   * When `false`, all documents are processed; if any failed, the promise rejects with an `AggregateError`.
+   */
+  stopOnError?: boolean;
+}
+
+/** Default `indexMany` / lazy-vector flush concurrency (embedder + upsert). */
+const DEFAULT_INDEX_MANY_CONCURRENCY = 8;
 
 /**
  * Configuration for SearchEngine
@@ -209,12 +229,15 @@ export class SearchEngine {
   }
 
   /**
-   * Index multiple documents
+   * Index multiple documents (up to `concurrency` at a time when async vector work runs).
+   *
+   * @param docs - Documents to index
+   * @param options - `p-map` options; `concurrency` defaults to 8
    */
-  async indexMany(docs: IndexDocument[]): Promise<void> {
-    for (const doc of docs) {
-      await this.index(doc);
-    }
+  async indexMany(docs: IndexDocument[], options?: IndexManyOptions): Promise<void> {
+    const stopOnError = options?.stopOnError;
+    const concurrency = options?.concurrency ?? DEFAULT_INDEX_MANY_CONCURRENCY;
+    await pMap(docs, doc => this.index(doc), { stopOnError, concurrency });
   }
 
   /**
@@ -364,18 +387,49 @@ export class SearchEngine {
   }
 
   /**
-   * Ensure vector index is built (for lazy mode)
+   * Collapse duplicate document ids so a single deterministic upsert runs per id (last queue entry wins).
+   */
+  #dedupePendingVectorDocsLastWins(docs: readonly IndexDocument[]): IndexDocument[] {
+    const byId = new Map<string, IndexDocument>();
+    for (const doc of docs) {
+      byId.set(doc.id, doc);
+    }
+    return [...byId.values()];
+  }
+
+  /**
+   * Ensure vector index is built (for lazy mode).
+   *
+   * Drains the pending queue into a local batch before awaiting upserts so concurrent `index()` calls
+   * append to a fresh queue and are not wiped by a blanket clear. Loops until the queue is empty so
+   * documents added mid-flush are indexed before search runs. Re-queues the batch on flush failure.
    */
   async #ensureVectorIndex(): Promise<void> {
-    if (!this.#lazyVectorIndex || this.#vectorIndexBuilt || this.#pendingVectorDocs.length === 0) {
+    if (!this.#lazyVectorIndex) {
       return;
     }
 
-    for (const doc of this.#pendingVectorDocs) {
-      await this.#indexVector(doc);
+    if (this.#pendingVectorDocs.length === 0) {
+      this.#vectorIndexBuilt = true;
+      return;
     }
 
-    this.#pendingVectorDocs = [];
+    while (this.#pendingVectorDocs.length > 0) {
+      const batch = this.#pendingVectorDocs;
+      this.#pendingVectorDocs = [];
+
+      const uniqueDocs = this.#dedupePendingVectorDocsLastWins(batch);
+
+      try {
+        await pMap(uniqueDocs, doc => this.#indexVector(doc), {
+          concurrency: DEFAULT_INDEX_MANY_CONCURRENCY,
+        });
+      } catch (error) {
+        this.#pendingVectorDocs = [...uniqueDocs, ...this.#pendingVectorDocs];
+        throw error;
+      }
+    }
+
     this.#vectorIndexBuilt = true;
   }
 
