@@ -1,5 +1,23 @@
 # @mastra/core
 
+## 1.26.0-alpha.10
+
+### Minor Changes
+
+- Added support for sub-agent version overrides in core execution. Global defaults can be set on the Mastra instance and overridden per `generate()`/`stream()` call, with cascading propagation via requestContext. ([#15373](https://github.com/mastra-ai/mastra/pull/15373))
+
+### Patch Changes
+
+- Fixed `CompositeAuth` types so typed auth providers, such as `SimpleAuth<MyUser>` or `MastraAuthClerk`, can be combined without casts. ([#15556](https://github.com/mastra-ai/mastra/pull/15556))
+
+- Fixed a security issue where several parsing and tracing paths could slow down on malformed or attacker-crafted input. Normal behavior is unchanged, and these packages now handle pathological input in linear time. ([#15566](https://github.com/mastra-ai/mastra/pull/15566))
+
+- Fix prototype pollution in `setNestedValue` (`@mastra/core/utils`) and `generateOpenAPIDocument` (`@mastra/server`). ([#15565](https://github.com/mastra-ai/mastra/pull/15565))
+
+  `setNestedValue` now rejects dot-path segments named `__proto__`, `constructor`, or `prototype`, preventing attacker-controlled field paths passed to `selectFields` from polluting `Object.prototype`. `generateOpenAPIDocument` builds its `paths` map with `Object.create(null)` so a route path of `__proto__` cannot poison the prototype chain.
+
+- Fixed PrefillErrorHandler to recover from Qwen/llama.cpp prefill rejections with enable_thinking, so agents retry with a continue reminder instead of failing after skill/tool turns. ([#15518](https://github.com/mastra-ai/mastra/pull/15518))
+
 ## 1.26.0-alpha.9
 
 ### Patch Changes

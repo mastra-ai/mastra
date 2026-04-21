@@ -4,7 +4,7 @@
 import { existsSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 
-import type { Harness, HarnessEvent } from '@mastra/core/harness';
+import type { Harness, HarnessEvent, HarnessMessage } from '@mastra/core/harness';
 
 import { setupDebugLogging } from './utils/debug-log.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
@@ -17,6 +17,7 @@ export interface HeadlessArgs {
   prompt?: string;
   timeout?: number;
   format: 'default' | 'json';
+  outputFormat?: 'text' | 'json' | 'stream-json';
   continue_: boolean;
   model?: string;
   mode?: 'build' | 'plan' | 'fast';
@@ -42,6 +43,7 @@ const headlessOptions = {
   'resource-id': { type: 'string' },
   timeout: { type: 'string' }, // parsed to number after validation
   format: { type: 'string', default: 'default' },
+  'output-format': { type: 'string' },
   model: { type: 'string', short: 'm' },
   mode: { type: 'string' },
   'thinking-level': { type: 'string' },
@@ -49,7 +51,7 @@ const headlessOptions = {
   help: { type: 'boolean', short: 'h', default: false },
 } as const;
 
-/** Parse CLI arguments for headless mode (--prompt, --timeout, --format, --continue, --model, --mode, --thinking-level, --settings). */
+/** Parse CLI arguments for headless mode (--prompt, --timeout, --format, --output-format, --continue, --model, --mode, --thinking-level, --settings). */
 export function parseHeadlessArgs(argv: string[]): HeadlessArgs {
   const { values, positionals } = parseArgs({
     args: argv.slice(2),
@@ -94,6 +96,15 @@ export function parseHeadlessArgs(argv: string[]): HeadlessArgs {
     thinkingLevel = raw as HeadlessArgs['thinkingLevel'];
   }
 
+  let outputFormat: HeadlessArgs['outputFormat'];
+  if (values['output-format'] !== undefined) {
+    const raw = String(values['output-format']);
+    if (raw !== 'text' && raw !== 'json' && raw !== 'stream-json') {
+      throw new Error('--output-format must be one of: text, json, stream-json');
+    }
+    outputFormat = raw;
+  }
+
   const settings = typeof values.settings === 'string' ? values.settings : undefined;
   const thread = typeof values.thread === 'string' ? values.thread : undefined;
   const title = typeof values.title === 'string' ? values.title : undefined;
@@ -108,6 +119,7 @@ export function parseHeadlessArgs(argv: string[]): HeadlessArgs {
     prompt,
     timeout,
     format: format as 'default' | 'json',
+    outputFormat,
     continue_: Boolean(values.continue),
     model,
     mode,
@@ -138,6 +150,7 @@ Headless (non-interactive) mode options:
   --resource-id <id>            Set the resource ID for thread scoping
   --timeout <seconds>           Exit with code 2 if not complete within timeout
   --format <type>               Output format: "default" or "json" (default: "default")
+  --output-format <type>        Automation output: "text", "json", or "stream-json"
   --model, -m <id>              Model override (e.g., "anthropic/claude-sonnet-4-5")
   --mode {build|plan|fast}      Execution mode — defaults to "build" if omitted
   --thinking-level <level>      Thinking level: off, low, medium, high, xhigh
@@ -168,6 +181,8 @@ Examples:
   mastracode --thread abc123 --clone-thread --prompt "Try a different approach"
   mastracode --prompt "Refactor utils" --title "utils-refactor"
   mastracode --prompt "Refactor utils" --format json
+  mastracode --prompt "Run tests and summarize pass/fail counts" --output-format json
+  mastracode --prompt "Find all TODO comments" --output-format stream-json
   mastracode --resource-id my-project --prompt "Fix the bug"
   echo "task description" | mastracode --prompt -
 
@@ -253,6 +268,73 @@ function formatDefault(event: HarnessEvent, ctx: { lastTextLength: number }): vo
   }
 }
 
+interface HeadlessSummary {
+  text: string;
+  finishReason?: string;
+  usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+  toolCalls: Array<{ id: string; name: string; args: unknown }>;
+  toolResults: Array<{ id: string; name: string; result: unknown; isError: boolean }>;
+  error?: { name: string; message: string; stack?: string };
+  threadId?: string;
+}
+
+function createEmptySummary(): HeadlessSummary {
+  return { text: '', toolCalls: [], toolResults: [] };
+}
+
+function extractAssistantText(message: HarnessMessage): string {
+  return message.content
+    .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
+    .map(c => c.text)
+    .join('');
+}
+
+function aggregateIntoSummary(event: HarnessEvent, summary: HeadlessSummary): void {
+  switch (event.type) {
+    case 'message_end':
+      if (event.message.role === 'assistant') {
+        summary.text += extractAssistantText(event.message);
+      }
+      break;
+    case 'tool_start':
+      summary.toolCalls.push({ id: event.toolCallId, name: event.toolName, args: event.args });
+      break;
+    case 'tool_end': {
+      const matching = summary.toolCalls.find(c => c.id === event.toolCallId);
+      summary.toolResults.push({
+        id: event.toolCallId,
+        name: matching?.name ?? '',
+        result: event.result,
+        isError: event.isError,
+      });
+      break;
+    }
+    case 'usage_update':
+      summary.usage = {
+        inputTokens: event.usage.promptTokens,
+        outputTokens: event.usage.completionTokens,
+        totalTokens: event.usage.totalTokens,
+      };
+      break;
+    case 'error':
+      summary.error = {
+        name: event.error.name,
+        message: event.error.message,
+        stack: event.error.stack,
+      };
+      break;
+  }
+}
+
+function finalizeSummary<TState extends Record<string, unknown>>(
+  summary: HeadlessSummary,
+  endEvent: Extract<HarnessEvent, { type: 'agent_end' }>,
+  harness: Harness<TState>,
+): void {
+  summary.finishReason = endEvent.reason;
+  summary.threadId = harness.getCurrentThreadId() ?? undefined;
+}
+
 /** Resolve a thread by ID or title. Tries exact ID match first, then title. */
 async function resolveThread(
   harness: Harness,
@@ -282,10 +364,13 @@ export async function runHeadless<TState extends Record<string, unknown>>(
   args: HeadlessArgs & { prompt: string },
   effectiveDefaults?: Record<string, string>,
 ): Promise<number> {
+  const outputFormat = args.outputFormat;
   const emit =
-    args.format === 'json'
+    outputFormat === 'stream-json' || (!outputFormat && args.format === 'json')
       ? (data: Record<string, unknown>) => process.stdout.write(JSON.stringify(data) + '\n')
       : null;
+  const summary = outputFormat === 'json' ? createEmptySummary() : null;
+  let textBuffer: string | null = outputFormat === 'text' ? '' : null;
 
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   let timedOut = false;
@@ -372,19 +457,33 @@ export async function runHeadless<TState extends Record<string, unknown>>(
       const result = autoResolve(harness, event);
       if (result.resolved) {
         if (emit) emit(result.json);
-        else process.stderr.write(result.label + '\n');
+        else if (!outputFormat) process.stderr.write(result.label + '\n');
         return;
       }
 
+      // Aggregate into accumulators for text / json modes
+      if (summary) aggregateIntoSummary(event, summary);
+      if (textBuffer !== null && event.type === 'message_end' && event.message.role === 'assistant') {
+        textBuffer += extractAssistantText(event.message);
+      }
+
       if (event.type === 'agent_end') {
-        if (emit) emit({ ...event });
+        if (summary) {
+          finalizeSummary(summary, event, harness);
+          process.stdout.write(JSON.stringify(summary) + '\n');
+        } else if (textBuffer !== null) {
+          process.stdout.write(textBuffer);
+          if (!textBuffer.endsWith('\n')) process.stdout.write('\n');
+        } else if (emit) {
+          emit({ ...event });
+        }
         resolve(resolveExitCode(event.reason));
         return;
       }
 
       if (emit) {
         emit({ ...event });
-      } else {
+      } else if (!outputFormat) {
         formatDefault(event, streamCtx);
       }
     });

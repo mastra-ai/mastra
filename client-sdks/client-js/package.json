@@ -1,6 +1,6 @@
 {
   "name": "@mastra/client-js",
-  "version": "1.13.5-alpha.9",
+  "version": "1.14.0-alpha.10",
   "description": "The official TypeScript library for the Mastra Client API",
   "author": "",
   "type": "module",
@@ -60,7 +60,7 @@
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.39.4",
+    "eslint": "^10.2.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
