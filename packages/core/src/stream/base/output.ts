@@ -785,7 +785,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 response = {
                   ...otherMetadata,
                   messages: messageList.get.response.aiV5.model(),
-                  uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
+                  // Use getPersisted so that uiMessages includes all steps,
+                  // even when savePerStep drains newResponseMessages mid-execution.
+                  uiMessages:
+                    messageList.getPersisted.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                 };
               }
 
@@ -861,7 +864,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     response = {
                       ...otherMetadata,
                       messages: messageList.get.response.aiV5.model(),
-                      uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
+                      // Use getPersisted so that uiMessages includes all steps,
+                      // even when savePerStep drains newResponseMessages mid-execution.
+                      uiMessages:
+                        messageList.getPersisted.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                     };
                   }
 
