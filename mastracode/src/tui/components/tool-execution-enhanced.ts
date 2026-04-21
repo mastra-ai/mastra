@@ -1677,5 +1677,3 @@ export function parseErrorFromContent(content: string): Error | null {
   }
   return err;
 }
-
-

@@ -38,11 +38,7 @@ describe('parseErrorFromContent', () => {
   });
 
   it('extracts stack frames when present', () => {
-    const content = [
-      'TypeError: boom',
-      '    at foo (file.ts:10:5)',
-      '    at bar (file.ts:20:5)',
-    ].join('\n');
+    const content = ['TypeError: boom', '    at foo (file.ts:10:5)', '    at bar (file.ts:20:5)'].join('\n');
     const err = parseErrorFromContent(content);
     expect(err?.stack).toContain('at foo (file.ts:10:5)');
     expect(err?.stack).toContain('at bar (file.ts:20:5)');
