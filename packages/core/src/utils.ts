@@ -782,30 +782,32 @@ export function getNestedValue(obj: any, path: string): any {
 export function setNestedValue(obj: any, path: string, value: any): void {
   const keys = path.split('.');
   const lastKey = keys.pop();
-  if (!lastKey || isUnsafeKey(lastKey)) {
-    return;
+  if (!lastKey) return;
+
+  // Validate every segment up-front so we never walk or assign through
+  // a prototype-mutating key like "__proto__", "constructor", or "prototype".
+  for (const key of keys) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      return;
+    }
   }
-  if (keys.some(isUnsafeKey)) {
+  if (lastKey === '__proto__' || lastKey === 'constructor' || lastKey === 'prototype') {
     return;
   }
 
   let current = obj;
   for (const key of keys) {
-    if (
-      !Object.prototype.hasOwnProperty.call(current, key) ||
-      typeof current[key] !== 'object' ||
-      current[key] === null
-    ) {
-      current[key] = {};
+    const existing = Object.prototype.hasOwnProperty.call(current, key) ? current[key] : undefined;
+    if (existing === null || typeof existing !== 'object') {
+      // Use a null-prototype object so intermediate containers cannot be
+      // used as a prototype-pollution sink even if a sanitizer check is
+      // bypassed upstream.
+      current[key] = Object.create(null);
     }
     current = current[key];
   }
 
   current[lastKey] = value;
-}
-
-function isUnsafeKey(key: string): boolean {
-  return key === '__proto__' || key === 'constructor' || key === 'prototype';
 }
 
 export const removeUndefinedValues = (obj: Record<string, any>) => {
