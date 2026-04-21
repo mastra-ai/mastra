@@ -297,6 +297,9 @@ export const tracesFilterSchema = z
     // Span type filter
     spanType: spanTypeField.optional(),
 
+    // Identifier filter (matches the root span's trace identifier)
+    traceId: traceIdField.optional().describe('Filter by trace ID (matches root span)'),
+
     // Shared fields
     ...sharedFields,
 
