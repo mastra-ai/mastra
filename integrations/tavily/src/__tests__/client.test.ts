@@ -1,4 +1,6 @@
+import { tavily } from '@tavily/core';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { getTavilyClient } from '../client.js';
 
 vi.mock('@tavily/core', () => ({
   tavily: vi.fn(() => ({
@@ -8,9 +10,6 @@ vi.mock('@tavily/core', () => ({
     map: vi.fn(),
   })),
 }));
-
-import { getTavilyClient } from '../client.js';
-import { tavily } from '@tavily/core';
 
 describe('getTavilyClient', () => {
   const originalEnv = process.env.TAVILY_API_KEY;

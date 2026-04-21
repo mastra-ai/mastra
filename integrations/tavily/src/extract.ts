@@ -1,7 +1,8 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { getTavilyClient, type TavilyClient, type TavilyClientOptions } from './client.js';
+import { getTavilyClient } from './client.js';
+import type { TavilyClient, TavilyClientOptions } from './client.js';
 
 const inputSchema = z.object({
   urls: z.array(z.string()).min(1).max(20).describe('URLs to extract content from (1-20)'),

@@ -1,4 +1,5 @@
-import { tavily, type TavilyClientOptions } from '@tavily/core';
+import { tavily } from '@tavily/core';
+import type { TavilyClientOptions } from '@tavily/core';
 
 export type { TavilyClientOptions };
 
