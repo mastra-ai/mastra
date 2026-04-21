@@ -15,6 +15,23 @@ Converts Mastra streams (agent, network, or workflow) to AI SDK-compatible strea
 
 This is useful when building custom streaming endpoints outside Mastra's provided route helpers such as [`chatRoute()`](/reference/ai-sdk/chat-route) or [`workflowRoute()`](/reference/ai-sdk/workflow-route).
 
+`toAISdkStream()` keeps the existing AI SDK v5/default behavior. If your app is typed against AI SDK v6, pass `version: 'v6'` in the options object.
+
+## Structured output in UI streams
+
+When the source agent stream includes a final structured output object, `toAISdkStream()` emits it as a custom AI SDK UI data part:
+
+```json
+{
+  "type": "data-structured-output",
+  "data": {
+    "object": {}
+  }
+}
+```
+
+The `object` field contains your full structured output value. This maps Mastra's final structured output chunk into the AI SDK UI stream. Partial structured output chunks are not emitted.
+
 ## Usage example
 
 Next.js App Router example:
@@ -62,6 +79,14 @@ The second parameter is an options object:
 
 <PropertiesTable
   content={[
+  {
+    name: 'version',
+    type: "'v5' | 'v6'",
+    description:
+      "Selects the AI SDK stream contract to emit. Omit it or pass `'v5'` for the existing default behavior. Pass `'v6'` when your app is typed against AI SDK v6 response helpers.",
+    isOptional: true,
+    defaultValue: "'v5'",
+  },
   {
     name: 'from',
     type: "'agent' | 'network' | 'workflow'",
@@ -205,6 +230,36 @@ export async function POST(req: Request) {
       for await (const part of toAISdkStream(stream, {
         from: 'agent',
         sendReasoning: true,
+      })) {
+        await writer.write(part)
+      }
+    },
+  })
+
+  return createUIMessageStreamResponse({
+    stream: uiMessageStream,
+  })
+}
+```
+
+### Converting an agent stream for AI SDK v6
+
+```typescript title="app/api/chat-v6/route.ts" {14-18}
+import { mastra } from '../../mastra'
+import { createUIMessageStream, createUIMessageStreamResponse } from 'ai'
+import { toAISdkStream } from '@mastra/ai-sdk'
+
+export async function POST(req: Request) {
+  const { messages } = await req.json()
+  const myAgent = mastra.getAgent('weatherAgent')
+  const stream = await myAgent.stream(messages)
+
+  const uiMessageStream = createUIMessageStream({
+    originalMessages: messages,
+    execute: async ({ writer }) => {
+      for await (const part of toAISdkStream(stream, {
+        from: 'agent',
+        version: 'v6',
       })) {
         await writer.write(part)
       }

@@ -4,6 +4,7 @@ import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { IMastraLogger } from '../../logger';
+import type { Mastra } from '../../mastra';
 import type { ObservabilityContext } from '../../observability';
 import { resolveObservabilityContext } from '../../observability';
 import type { StandardSchemaWithJSON } from '../../schema';
@@ -74,6 +75,10 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     });
   }
 
+  __registerMastra(mastra: Mastra) {
+    this.structuringAgent.__registerMastra(mastra);
+  }
+
   async processOutputStream(
     args: {
       part: ChunkType;
@@ -141,7 +146,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
           continue;
         }
         if (chunk.type === 'error') {
-          this.handleError('Structuring failed', 'Internal agent did not generate structured output', abort);
+          this.handleError('Structuring failed', chunk.payload.error, abort);
 
           if (this.errorStrategy === 'warn') {
             // avoid enqueuing the error chunk to the main agent stream
@@ -172,11 +177,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         controller.enqueue(newChunk);
       }
     } catch (error) {
-      this.handleError(
-        'Structured output processing failed',
-        error instanceof Error ? error.message : 'Unknown error',
-        abort,
-      );
+      this.handleError('Structured output processing failed', error, abort);
     }
   }
 
@@ -266,20 +267,38 @@ The input text may be in any format (sentences, bullet points, paragraphs, etc.)
   /**
    * Handle errors based on the configured strategy
    */
-  private handleError(context: string, error: string, abort: (reason?: string) => never): void {
-    const message = `[StructuredOutputProcessor] ${context}: ${error}`;
+  private handleError(context: string, error: unknown, abort: (reason?: string) => never): void {
+    const errorMessage = this.getErrorMessage(error);
+    const message = `[StructuredOutputProcessor] ${context}: ${errorMessage}`;
 
     switch (this.errorStrategy) {
       case 'strict':
-        this.logger?.error(message);
+        this.logger?.error(message, error);
         abort(message);
         break;
       case 'warn':
-        this.logger?.warn(message);
+        this.logger?.warn(message, error);
         break;
       case 'fallback':
-        this.logger?.info(`${message} (using fallback)`);
+        this.logger?.info(`${message} (using fallback)`, error);
         break;
     }
+  }
+
+  private getErrorMessage(error: unknown): string {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'message' in error &&
+      typeof (error as { message?: unknown }).message === 'string'
+    ) {
+      return (error as { message: string }).message;
+    }
+
+    if (error instanceof Error) {
+      return error.message;
+    }
+
+    return String(error);
   }
 }

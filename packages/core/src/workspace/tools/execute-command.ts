@@ -4,6 +4,7 @@ import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
 import { emitWorkspaceMetadata, requireSandbox } from './helpers';
 import { DEFAULT_TAIL_LINES, truncateOutput, sandboxToModelOutput } from './output-helpers';
+import { startWorkspaceSpan } from './tracing';
 
 /**
  * Base input schema for execute_command (no background param).
@@ -79,10 +80,19 @@ async function executeCommand(input: Record<string, any>, context: any) {
   const tokenLimit = toolConfig?.maxOutputTokens;
   const tokenFrom = 'sandwich' as const;
 
+  const span = startWorkspaceSpan(context, workspace, {
+    category: 'sandbox',
+    operation: background ? 'spawnProcess' : 'executeCommand',
+    input: { command, cwd, timeout: input.timeout, background },
+    attributes: { sandboxProvider: sandbox.provider },
+  });
+
   // Background mode: spawn via process manager and return immediately
   if (background) {
     if (!sandbox.processes) {
-      throw new SandboxFeatureNotSupportedError('processes');
+      const err = new SandboxFeatureNotSupportedError('processes');
+      span.error(err);
+      throw err;
     }
 
     const bgConfig = toolConfig?.backgroundProcesses;
@@ -119,12 +129,15 @@ async function executeCommand(input: Record<string, any>, context: any) {
       });
     }
 
+    span.end({ success: true }, { pid: Number(handle.pid) || undefined });
     return `Started background process (PID: ${handle.pid})`;
   }
 
   // Foreground mode: execute and wait for completion
   if (!sandbox.executeCommand) {
-    throw new SandboxFeatureNotSupportedError('executeCommand');
+    const err = new SandboxFeatureNotSupportedError('executeCommand');
+    span.error(err);
+    throw err;
   }
 
   const startedAt = Date.now();
@@ -163,6 +176,8 @@ async function executeCommand(input: Record<string, any>, context: any) {
       },
     });
 
+    span.end({ success: result.success }, { exitCode: result.exitCode });
+
     if (!result.success) {
       const parts = [
         await truncateOutput(result.stdout, tail, tokenLimit, tokenFrom),
@@ -183,6 +198,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
         toolCallId,
       },
     });
+    span.end({ success: false }, { exitCode: -1 });
     const parts = [
       await truncateOutput(stdout, tail, tokenLimit, tokenFrom),
       await truncateOutput(stderr, tail, tokenLimit, tokenFrom),

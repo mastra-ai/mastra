@@ -11,6 +11,8 @@ import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/proto
 import type { ElicitRequest, ElicitResult } from '@modelcontextprotocol/sdk/types.js';
 
 import type { MastraUnion } from '../action';
+import type { ToolBackgroundConfig } from '../background-tasks';
+import type { MastraBrowser } from '../browser/browser';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
@@ -31,6 +33,7 @@ export type ToolInvocationOptions = ToolExecutionOptions | ToolCallOptions;
 // Agent tool execution context - properties specific when tools are executed by agents
 export interface AgentToolExecutionContext<TSuspend, TResume> {
   // Always present when called from agent context
+  agentId: string;
   toolCallId: string;
   messages: any[];
   suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
@@ -203,6 +206,10 @@ export type CoreTool = {
   outputSchema?: FlexibleSchema<any> | Schema;
   execute?: (params: any, options: MastraToolInvocationOptions) => Promise<any>;
   /**
+   * Enables strict tool input generation for providers that support it.
+   */
+  strict?: boolean;
+  /**
    * Provider-specific options passed to the model when this tool is used.
    */
   providerOptions?: Record<string, Record<string, unknown>>;
@@ -230,6 +237,8 @@ export type CoreTool = {
   onOutput?: (
     options: { output: any; toolName: string } & Omit<ToolCallOptions, 'messages'>,
   ) => void | PromiseLike<void>;
+  /** Background task configuration for this tool. */
+  background?: ToolBackgroundConfig;
 } & (
   | {
       type?: 'function' | undefined;
@@ -254,6 +263,10 @@ export type InternalCoreTool = {
   outputSchema?: Schema;
   execute?: (params: any, options: MastraToolInvocationOptions) => Promise<any>;
   /**
+   * Enables strict tool input generation for providers that support it.
+   */
+  strict?: boolean;
+  /**
    * Provider-specific options passed to the model when this tool is used.
    */
   providerOptions?: Record<string, Record<string, unknown>>;
@@ -281,6 +294,8 @@ export type InternalCoreTool = {
   onOutput?: (
     options: { output: any; toolName: string } & Omit<ToolCallOptions, 'messages'>,
   ) => void | PromiseLike<void>;
+  /** Background task configuration for this tool. */
+  background?: ToolBackgroundConfig;
 } & (
   | {
       type?: 'function' | undefined;
@@ -312,6 +327,14 @@ export interface ToolExecutionContext<
    * This allows tools to work with the agent's configured workspace.
    */
   workspace?: Workspace;
+
+  /**
+   * Browser available for tool execution. When provided, tools can access
+   * browser capabilities for web automation, screenshots, and data extraction.
+   *
+   * The browser is lazily initialized - it will be launched on first use.
+   */
+  browser?: MastraBrowser;
 
   // Writer is created by Mastra for ALL contexts (agent, workflow, direct execution)
   // Wraps chunks with metadata (toolCallId, toolName, runId) before passing to underlying stream
@@ -372,6 +395,12 @@ export interface ToolAction<
   mastra?: Mastra;
   requireApproval?: boolean;
   /**
+   * Enables strict tool input generation for providers that support it.
+   * When enabled, supported providers will attempt to generate arguments
+   * that exactly match the tool schema.
+   */
+  strict?: boolean;
+  /**
    * Provider-specific options passed to the model when this tool is used.
    * Keys are provider names (e.g., 'anthropic', 'openai'), values are provider-specific configs.
    * @example
@@ -414,4 +443,9 @@ export interface ToolAction<
       toolName: string;
     } & Omit<ToolCallOptions, 'messages'>,
   ) => void | PromiseLike<void>;
+  /**
+   * Background task configuration for this tool.
+   * When enabled, the tool can be executed in the background while the agent conversation continues.
+   */
+  background?: ToolBackgroundConfig;
 }

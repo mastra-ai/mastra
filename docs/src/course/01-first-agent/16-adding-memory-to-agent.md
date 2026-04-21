@@ -19,7 +19,7 @@ export const financialAgent = new Agent({
   instructions: `ROLE DEFINITION
   // ... existing instructions ...
   `,
-  model: 'openai/gpt-4.1-mini',
+  model: 'openai/gpt-5.4',
   tools: { getTransactionsTool },
   memory: new Memory({
     storage: new LibSQLStore({

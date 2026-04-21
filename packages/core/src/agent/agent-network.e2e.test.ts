@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai-v5';
 import { createGatewayMock } from '@internal/test-utils';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { MastraError } from '../error';
 import { Mastra } from '../mastra';
 import { MockMemory } from '../memory/mock';

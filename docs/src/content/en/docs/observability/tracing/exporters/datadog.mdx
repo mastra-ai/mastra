@@ -2,7 +2,6 @@
 title: "Datadog exporter | Tracing | Observability"
 description: "Send traces to Datadog for LLM observability and analytics"
 packages:
-  - "@mastra/core"
   - "@mastra/observability"
 ---
 
@@ -133,6 +132,118 @@ Mastra span types are automatically mapped to Datadog LLMObs span kinds:
 
 Other/future Mastra span types will default to 'task' when mapped unless specified.
 
+## Application Performance Monitoring
+
+The sections above cover Mastra's [LLM Observability](https://docs.datadoghq.com/llm_observability/) integration. To trace your Mastra HTTP server routes (request latency, error tracking, service maps), use `dd-trace` directly for Datadog Application Performance Monitoring (APM).
+
+### Prerequisites
+
+1. **Datadog Agent**: Install a [Datadog Agent](https://docs.datadoghq.com/agent/) on the same host or accessible via network. The agent receives traces from `dd-trace` on `localhost:8126` and forwards them to Datadog. Follow the [agent installation guide](https://docs.datadoghq.com/agent/) to set it up.
+1. **dd-trace package**: Install the tracing library in your project:
+
+   ```bash npm2yarn
+   npm install dd-trace
+   ```
+
+:::note
+APM traces always route through the Datadog Agent. This is different from LLM Observability, which supports agentless mode (direct HTTPS to Datadog).
+:::
+
+### APM only
+
+Import and initialize `dd-trace` at the top of your entry file, before any other imports:
+
+```typescript title="src/mastra/index.ts"
+import tracer from 'dd-trace'
+
+tracer.init({
+  service: process.env.DD_SERVICE || 'my-mastra-app',
+  env: process.env.DD_ENV || 'production',
+  version: process.env.DD_VERSION,
+})
+
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  bundler: {
+    externals: [
+      'dd-trace',
+      '@datadog/native-metrics',
+      '@datadog/native-appsec',
+      '@datadog/native-iast-taint-tracking',
+      '@datadog/pprof',
+    ],
+  },
+})
+```
+
+Set the tracer metadata environment variables:
+
+```bash title=".env"
+DD_SERVICE=my-mastra-app
+DD_ENV=production
+DD_VERSION=1.0.0
+```
+
+`dd-trace` auto-instruments popular HTTP frameworks, including those supported by Mastra's [server adapters](/docs/server/server-adapters). Inbound requests, outbound HTTP calls, and database queries appear as APM traces in Datadog.
+
+### APM and LLM Observability
+
+Import and initialize `dd-trace` before creating the Mastra instance. The `DatadogExporter` detects the existing tracer and skips re-initialization, adding LLM Observability on top of your APM setup:
+
+```typescript title="src/mastra/index.ts"
+import tracer from 'dd-trace'
+
+tracer.init({
+  service: process.env.DD_SERVICE || 'my-mastra-app',
+  env: process.env.DD_ENV || 'production',
+  version: process.env.DD_VERSION,
+})
+
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { DatadogExporter } from '@mastra/datadog'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      datadog: {
+        serviceName: 'my-mastra-app',
+        exporters: [
+          new DatadogExporter({
+            mlApp: process.env.DD_LLMOBS_ML_APP!,
+            apiKey: process.env.DD_API_KEY!,
+          }),
+        ],
+      },
+    },
+  }),
+  bundler: {
+    externals: [
+      'dd-trace',
+      '@datadog/native-metrics',
+      '@datadog/native-appsec',
+      '@datadog/native-iast-taint-tracking',
+      '@datadog/pprof',
+    ],
+  },
+})
+```
+
+```bash title=".env"
+DD_SERVICE=my-mastra-app
+DD_ENV=production
+DD_VERSION=1.0.0
+DD_API_KEY=your-datadog-api-key
+DD_LLMOBS_ML_APP=my-llm-app
+```
+
+Server routes appear as APM traces and LLM calls appear as LLM Observability spans, all under the same service in Datadog.
+
+:::note
+Import and initialize `dd-trace` before all other modules. This allows its auto-instrumentation to patch HTTP, database, and framework libraries at load time.
+:::
+
 ## Troubleshooting
 
 ### Native module ABI mismatch
@@ -171,5 +282,6 @@ export const mastra = new Mastra({
 
 ## Related
 
-- [Tracing Overview](/docs/observability/tracing/overview)
-- [Datadog LLM Observability Documentation](https://docs.datadoghq.com/llm_observability/)
+- [Tracing overview](/docs/observability/tracing/overview)
+- [Datadog LLM Observability documentation](https://docs.datadoghq.com/llm_observability/)
+- [Datadog APM documentation](https://docs.datadoghq.com/tracing/)

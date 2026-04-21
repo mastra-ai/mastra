@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '../Button';
+import { cn } from '@/lib/utils';
 
 export type MultiColumnProps = {
   children?: React.ReactNode;

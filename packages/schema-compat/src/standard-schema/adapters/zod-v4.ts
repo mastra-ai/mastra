@@ -1,4 +1,5 @@
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
+import { toJSONSchema } from 'zod/v4';
 import type { StandardSchemaWithJSON, StandardSchemaWithJSONProps } from '../standard-schema.types';
 
 /**
@@ -6,6 +7,16 @@ import type { StandardSchemaWithJSON, StandardSchemaWithJSONProps } from '../sta
  * Works with both real Zod v4 and Zod 3.25's v4 compat layer.
  */
 const SUPPORTED_TARGETS = new Set(['draft-07', 'draft-04', 'draft-2020-12']);
+
+/**
+ * Maps Mastra's target names to Zod v4's expected format.
+ * Zod v4's z.toJSONSchema() expects "draft-7" instead of "draft-07",
+ * and "draft-4" instead of "draft-04".
+ */
+const ZOD_V4_TARGET_MAP: Record<string, string> = {
+  'draft-07': 'draft-7',
+  'draft-04': 'draft-4',
+};
 
 /**
  * Options for the Zod v4 adapter's JSON Schema conversion.
@@ -27,15 +38,10 @@ function convertToJsonSchema(
   options: StandardJSONSchemaV1.Options,
   adapterOptions: ZodV4AdapterOptions,
 ): Record<string, unknown> {
-  const toJSONSchema = getToJSONSchema();
-  if (!toJSONSchema) {
-    throw new Error('z.toJSONSchema is not available. Ensure zod >= 3.25.0 is installed.');
-  }
-
   const target = SUPPORTED_TARGETS.has(options.target) ? options.target : 'draft-07';
 
   const jsonSchemaOptions: Record<string, unknown> = {
-    target,
+    target: ZOD_V4_TARGET_MAP[target] ?? target,
   };
 
   if (adapterOptions.unrepresentable) {
@@ -47,27 +53,7 @@ function convertToJsonSchema(
     jsonSchemaOptions.override = adapterOptions.override;
   }
 
-  return toJSONSchema(zodSchema, jsonSchemaOptions) as Record<string, unknown>;
-}
-
-/**
- * Cached reference to z.toJSONSchema from zod/v4.
- */
-let _toJSONSchema: ((schema: unknown, options?: unknown) => unknown) | null = null;
-let _toJSONSchemaResolved = false;
-
-function getToJSONSchema(): ((schema: unknown, options?: unknown) => unknown) | null {
-  if (_toJSONSchemaResolved) {
-    return _toJSONSchema;
-  }
-  try {
-    const zv4 = require('zod/v4');
-    _toJSONSchema = typeof zv4.toJSONSchema === 'function' ? zv4.toJSONSchema : null;
-  } catch {
-    _toJSONSchema = null;
-  }
-  _toJSONSchemaResolved = true;
-  return _toJSONSchema;
+  return toJSONSchema(zodSchema as Parameters<typeof toJSONSchema>[0], jsonSchemaOptions) as Record<string, unknown>;
 }
 
 /**

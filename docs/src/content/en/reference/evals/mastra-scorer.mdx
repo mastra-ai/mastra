@@ -138,10 +138,10 @@ const result = await scorer.run({
 
 When you call `.run()`, the MastraScorer executes the defined steps in this order:
 
-1. **preprocess** (optional) - Extracts or transforms data
-1. **analyze** (optional) - Processes the input/output and preprocessed data
-1. **generateScore** (required) - Computes the numerical score
-1. **generateReason** (optional) - Provides explanation for the score
+1. **preprocess** (optional): Extracts or transforms data
+1. **analyze** (optional): Processes the input/output and preprocessed data
+1. **generateScore** (required): Computes the numerical score
+1. **generateReason** (optional): Provides explanation for the score
 
 Each step receives the results from previous steps, allowing you to build complex evaluation pipelines.
 

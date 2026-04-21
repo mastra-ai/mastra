@@ -49,6 +49,8 @@ export const create = async (args: {
   const needsInteractive =
     args.components === undefined || args.llmProvider === undefined || args.addExample === undefined;
 
+  const directory = args.directory || 'src/';
+
   const { projectName, result } = await createMastraProject({
     projectName: args?.projectName,
     createVersionTag: args?.createVersionTag,
@@ -59,7 +61,6 @@ export const create = async (args: {
     mcpServer: args?.mcpServer,
     needsInteractive,
   });
-  const directory = args.directory || 'src/';
 
   if (needsInteractive && result) {
     // Track model provider selection from interactive prompt

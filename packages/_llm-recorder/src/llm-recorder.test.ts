@@ -190,6 +190,83 @@ describe('recording file format', () => {
   const originalMode = process.env.LLM_TEST_MODE;
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-recorder-format-'));
 
+  it('replays exactMatch requests when ISO date strings only differ by milliseconds', async () => {
+    const name = 'iso-date-millisecond-normalization';
+    const filePath = path.join(tempDir, `${name}.json`);
+    const requestBodyWithoutMilliseconds = {
+      model: 'gpt-4o',
+      input: {
+        actualData: '2024-05-15T12:00:00Z',
+        date: '2024-05-15T12:00:00Z',
+        dateAfter: '2025-01-02T12:00:00Z',
+        dateBefore: '2023-12-31T12:00:00Z',
+      },
+    };
+
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify(
+        {
+          meta: {
+            name,
+            testFile: '/tmp/iso-date.test.ts',
+            provider: 'openai',
+            model: 'gpt-4o',
+            createdAt: '2026-03-26T00:00:00.000Z',
+          },
+          recordings: [
+            {
+              hash: '974ca75b0f8ba432',
+              request: {
+                url: 'https://api.openai.com/v1/responses',
+                method: 'POST',
+                body: requestBodyWithoutMilliseconds,
+                timestamp: 1,
+              },
+              response: {
+                status: 200,
+                statusText: 'OK',
+                headers: { 'content-type': 'application/json' },
+                body: { id: 'normalized-match', output: [] },
+                isStreaming: false,
+              },
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    process.env.LLM_TEST_MODE = 'replay';
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const recorder = setupLLMRecording({ name, recordingsDir: tempDir, exactMatch: true, debug: true });
+    recorder.start();
+
+    try {
+      const response = await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          input: {
+            actualData: '2024-05-15T12:00:00.000Z',
+            date: '2024-05-15T12:00:00.000Z',
+            dateAfter: '2025-01-02T12:00:00.000Z',
+            dateBefore: '2023-12-31T12:00:00.000Z',
+          },
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ id: 'normalized-match', output: [] });
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('No exact match for hash'));
+    } finally {
+      recorder.stop();
+    }
+  });
+
   afterEach(() => {
     if (originalMode === undefined) {
       delete process.env.LLM_TEST_MODE;
@@ -201,6 +278,65 @@ describe('recording file format', () => {
 
   afterAll(() => {
     fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('records and replays binary responses via artifact files', async () => {
+    const name = 'binary-response-artifact';
+    const filePath = path.join(tempDir, `${name}.json`);
+    const payload = new Uint8Array([82, 73, 70, 70, 0, 1, 2, 3]);
+
+    process.env.LLM_TEST_MODE = 'record';
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(payload, {
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'audio/wav' },
+      }),
+    );
+
+    const recorder = setupLLMRecording({
+      name,
+      recordingsDir: tempDir,
+      metaContext: { testFile: '/tmp/binary-response.test.ts', provider: 'openai', model: 'gpt-4o' },
+    });
+
+    recorder.start();
+    const liveResponse = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'gpt-4o', input: 'return audio bytes' }),
+    });
+    await recorder.save();
+    recorder.stop();
+
+    expect(fetchSpy).toHaveBeenCalled();
+    expect(new Uint8Array(await liveResponse.arrayBuffer())).toEqual(payload);
+
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(parsed.recordings[0].response.binaryArtifact).toBeDefined();
+    expect(parsed.recordings[0].response.body).toMatchObject({
+      __binary: true,
+      contentType: 'audio/wav',
+      size: payload.length,
+    });
+    const artifactPath = path.join(tempDir, parsed.recordings[0].response.binaryArtifact.path);
+    expect(fs.existsSync(artifactPath)).toBe(true);
+
+    process.env.LLM_TEST_MODE = 'replay';
+
+    const replayRecorder = setupLLMRecording({ name, recordingsDir: tempDir });
+    replayRecorder.start();
+    const replayResponse = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'gpt-4o', input: 'return audio bytes' }),
+    });
+    const replayBytes = new Uint8Array(await replayResponse.arrayBuffer());
+    replayRecorder.stop();
+
+    expect(replayResponse.headers.get('content-type')).toContain('audio/wav');
+    expect(replayBytes).toEqual(payload);
   });
 
   it('loads legacy array recording format in replay mode', () => {

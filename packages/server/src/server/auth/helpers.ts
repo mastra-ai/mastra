@@ -1,7 +1,9 @@
 import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraAuthConfig } from '@mastra/core/server';
+import type { HonoRequest } from 'hono';
 
+import { MASTRA_RESOURCE_ID_KEY } from '../constants';
 import { defaultAuthConfig } from './defaults';
 import { parse } from './path-pattern';
 
@@ -239,6 +241,30 @@ export type AuthResult = { action: 'next' } | { action: 'error'; status: number;
 
 const pass: AuthResult = { action: 'next' };
 
+export interface GetAuthenticatedUserOptions {
+  mastra: Mastra;
+  token: string;
+  request: Request | HonoRequest;
+}
+
+export const getAuthenticatedUser = async <TUser = unknown>({
+  mastra,
+  token,
+  request,
+}: GetAuthenticatedUserOptions): Promise<TUser | null> => {
+  const normalizedToken = token.replace(/^Bearer\s+/i, '').trim();
+  if (!normalizedToken) {
+    return null;
+  }
+
+  const authConfig = mastra.getServer()?.auth;
+  if (!authConfig || typeof authConfig.authenticateToken !== 'function') {
+    return null;
+  }
+
+  return (await authConfig.authenticateToken(normalizedToken, request as any)) as TUser | null;
+};
+
 /**
  * Single auth middleware: authenticate → authorize.
  * Skip checks (dev playground, unprotected path, public path) are evaluated once.
@@ -280,6 +306,20 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     }
 
     requestContext.set('user', user);
+
+    if (typeof authConfig.mapUserToResourceId === 'function') {
+      try {
+        const resourceId = authConfig.mapUserToResourceId(user);
+        if (resourceId) {
+          requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+        }
+      } catch (mapError) {
+        mastra.getLogger()?.error('mapUserToResourceId failed', {
+          error: mapError instanceof Error ? { message: mapError.message, stack: mapError.stack } : mapError,
+        });
+        return { action: 'error', status: 500, body: { error: 'Failed to map authenticated user to a resource ID' } };
+      }
+    }
 
     try {
       const serverConfig = mastra.getServer();

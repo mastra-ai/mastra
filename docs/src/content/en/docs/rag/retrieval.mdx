@@ -297,7 +297,7 @@ When implementing filtering, these prompts are required in the agent's instructi
     export const ragAgent = new Agent({
       id: 'rag-agent',
       name: 'RAG Agent',
-      model: 'openai/gpt-5.1',
+      model: 'openai/gpt-5.4',
       instructions: `
       Process queries using the provided context. Structure responses to be concise and relevant.
       ${PGVECTOR_PROMPT}
@@ -314,7 +314,7 @@ When implementing filtering, these prompts are required in the agent's instructi
     export const ragAgent = new Agent({
       id: 'rag-agent',
       name: 'RAG Agent',
-      model: 'openai/gpt-5.1',
+      model: 'openai/gpt-5.4',
       instructions: `
       Process queries using the provided context. Structure responses to be concise and relevant.
       ${PINECONE_PROMPT}
@@ -331,7 +331,7 @@ When implementing filtering, these prompts are required in the agent's instructi
     export const ragAgent = new Agent({
       id: 'rag-agent',
       name: 'RAG Agent',
-      model: 'openai/gpt-5.1',
+      model: 'openai/gpt-5.4',
       instructions: `
       Process queries using the provided context. Structure responses to be concise and relevant.
       ${QDRANT_PROMPT}
@@ -348,7 +348,7 @@ When implementing filtering, these prompts are required in the agent's instructi
     export const ragAgent = new Agent({
       id: 'rag-agent',
       name: 'RAG Agent',
-      model: 'openai/gpt-5.1',
+      model: 'openai/gpt-5.4',
       instructions: `
       Process queries using the provided context. Structure responses to be concise and relevant.
       ${CHROMA_PROMPT}
@@ -365,7 +365,7 @@ When implementing filtering, these prompts are required in the agent's instructi
     export const ragAgent = new Agent({
       id: 'rag-agent',
       name: 'RAG Agent',
-      model: 'openai/gpt-5.1',
+      model: 'openai/gpt-5.4',
       instructions: `
       Process queries using the provided context. Structure responses to be concise and relevant.
       ${ASTRA_PROMPT}
@@ -382,7 +382,7 @@ When implementing filtering, these prompts are required in the agent's instructi
     export const ragAgent = new Agent({
       id: 'rag-agent',
       name: 'RAG Agent',
-      model: 'openai/gpt-5.1',
+      model: 'openai/gpt-5.4',
       instructions: `
       Process queries using the provided context. Structure responses to be concise and relevant.
       ${LIBSQL_PROMPT}
@@ -399,7 +399,7 @@ When implementing filtering, these prompts are required in the agent's instructi
     export const ragAgent = new Agent({
       id: 'rag-agent',
       name: 'RAG Agent',
-      model: 'openai/gpt-5.1',
+      model: 'openai/gpt-5.4',
       instructions: `
       Process queries using the provided context. Structure responses to be concise and relevant.
       ${UPSTASH_PROMPT}
@@ -416,7 +416,7 @@ When implementing filtering, these prompts are required in the agent's instructi
     export const ragAgent = new Agent({
       id: 'rag-agent',
       name: 'RAG Agent',
-      model: 'openai/gpt-5.1',
+      model: 'openai/gpt-5.4',
       instructions: `
       Process queries using the provided context. Structure responses to be concise and relevant.
       ${VECTORIZE_PROMPT}
@@ -433,7 +433,7 @@ When implementing filtering, these prompts are required in the agent's instructi
     export const ragAgent = new Agent({
       id: 'rag-agent',
       name: 'RAG Agent',
-      model: 'openai/gpt-5.1',
+      model: 'openai/gpt-5.4',
       instructions: `
       Process queries using the provided context. Structure responses to be concise and relevant.
       ${MONGODB_PROMPT}
@@ -450,7 +450,7 @@ When implementing filtering, these prompts are required in the agent's instructi
     export const ragAgent = new Agent({
       id: 'rag-agent',
       name: 'RAG Agent',
-      model: 'openai/gpt-5.1',
+      model: 'openai/gpt-5.4',
       instructions: `
       Process queries using the provided context. Structure responses to be concise and relevant.
       ${OPENSEARCH_PROMPT}
@@ -467,7 +467,7 @@ When implementing filtering, these prompts are required in the agent's instructi
     export const ragAgent = new Agent({
       id: 'rag-agent',
       name: 'RAG Agent',
-      model: 'openai/gpt-5.1',
+      model: 'openai/gpt-5.4',
       instructions: `
       Process queries using the provided context. Structure responses to be concise and relevant.
       ${S3VECTORS_PROMPT}
@@ -499,7 +499,7 @@ const initialResults = await pgVector.query({
 })
 
 // Create a relevance scorer
-const relevanceProvider = new MastraAgentRelevanceScorer('relevance-scorer', 'openai/gpt-5.1')
+const relevanceProvider = new MastraAgentRelevanceScorer('relevance-scorer', 'openai/gpt-5.4')
 
 // Re-rank the results
 const rerankedResults = await rerank({

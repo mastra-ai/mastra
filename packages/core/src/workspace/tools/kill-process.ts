@@ -1,9 +1,10 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
 import { emitWorkspaceMetadata, requireSandbox } from './helpers';
 import { truncateOutput, sandboxToModelOutput } from './output-helpers';
+import { startWorkspaceSpan } from './tracing';
 
 const KILL_TAIL_LINES = 50;
 
@@ -18,55 +19,72 @@ Use this to stop a long-running background process that was started with execute
   }),
   execute: async ({ pid }, context) => {
     const { workspace, sandbox } = requireSandbox(context);
-
-    if (!sandbox.processes) {
-      throw new SandboxFeatureNotSupportedError('processes');
-    }
-
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS);
-    const toolCallId = context?.agent?.toolCallId;
 
-    // Snapshot output before kill
-    const handle = await sandbox.processes.get(pid);
-
-    // Emit command info so the UI can display the original command
-    if (handle?.command) {
-      await context?.writer?.custom({
-        type: 'data-sandbox-command',
-        data: { command: handle.command, pid, toolCallId },
-      });
-    }
-
-    const killed = await sandbox.processes.kill(pid);
-
-    if (!killed) {
-      await context?.writer?.custom({
-        type: 'data-sandbox-exit',
-        data: { exitCode: handle?.exitCode ?? -1, success: false, killed: false, toolCallId },
-      });
-      return `Process ${pid} was not found or had already exited.`;
-    }
-
-    await context?.writer?.custom({
-      type: 'data-sandbox-exit',
-      data: { exitCode: handle?.exitCode ?? 137, success: false, killed: true, toolCallId },
+    const span = startWorkspaceSpan(context, workspace, {
+      category: 'sandbox',
+      operation: 'killProcess',
+      input: { pid },
+      attributes: { sandboxProvider: sandbox.provider },
     });
 
-    const parts: string[] = [`Process ${pid} has been killed.`];
+    const toolCallId = context?.agent?.toolCallId;
 
-    if (handle) {
-      const tokenLimit = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS]?.maxOutputTokens;
-      const stdout = handle.stdout ? await truncateOutput(handle.stdout, KILL_TAIL_LINES, tokenLimit, 'sandwich') : '';
-      const stderr = handle.stderr ? await truncateOutput(handle.stderr, KILL_TAIL_LINES, tokenLimit, 'sandwich') : '';
+    try {
+      if (!sandbox.processes) {
+        throw new SandboxFeatureNotSupportedError('processes');
+      }
+      // Snapshot output before kill
+      const handle = await sandbox.processes.get(pid);
 
-      if (stdout) {
-        parts.push('', '--- stdout (last output) ---', stdout);
+      // Emit command info so the UI can display the original command
+      if (handle?.command) {
+        await context?.writer?.custom({
+          type: 'data-sandbox-command',
+          data: { command: handle.command, pid, toolCallId },
+        });
       }
-      if (stderr) {
-        parts.push('', '--- stderr (last output) ---', stderr);
+
+      const killed = await sandbox.processes.kill(pid);
+
+      if (!killed) {
+        await context?.writer?.custom({
+          type: 'data-sandbox-exit',
+          data: { exitCode: handle?.exitCode ?? -1, success: false, killed: false, toolCallId },
+        });
+        span.end({ success: false });
+        return `Process ${pid} was not found or had already exited.`;
       }
+
+      await context?.writer?.custom({
+        type: 'data-sandbox-exit',
+        data: { exitCode: handle?.exitCode ?? 137, success: false, killed: true, toolCallId },
+      });
+
+      const parts: string[] = [`Process ${pid} has been killed.`];
+
+      if (handle) {
+        const tokenLimit = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS]?.maxOutputTokens;
+        const stdout = handle.stdout
+          ? await truncateOutput(handle.stdout, KILL_TAIL_LINES, tokenLimit, 'sandwich')
+          : '';
+        const stderr = handle.stderr
+          ? await truncateOutput(handle.stderr, KILL_TAIL_LINES, tokenLimit, 'sandwich')
+          : '';
+
+        if (stdout) {
+          parts.push('', '--- stdout (last output) ---', stdout);
+        }
+        if (stderr) {
+          parts.push('', '--- stderr (last output) ---', stderr);
+        }
+      }
+
+      span.end({ success: true }, { exitCode: handle?.exitCode ?? 137 });
+      return parts.join('\n');
+    } catch (err) {
+      span.error(err);
+      throw err;
     }
-
-    return parts.join('\n');
   },
 });

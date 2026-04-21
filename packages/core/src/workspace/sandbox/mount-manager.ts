@@ -162,7 +162,7 @@ export class MountManager {
    */
   add(mounts: Record<string, WorkspaceFilesystem>): void {
     const paths = Object.keys(mounts);
-    this.logger.debug(`Adding ${paths.length} pending mount(s)`, { paths });
+    this.logger.debug('Adding pending mounts', { count: paths.length, paths });
 
     for (const [path, filesystem] of Object.entries(mounts)) {
       this._entries.set(path, {
@@ -206,7 +206,7 @@ export class MountManager {
         error: updates.error,
       });
     } else {
-      this.logger.debug(`set() called for unknown path "${path}" without filesystem — no entry created`);
+      this.logger.debug('set() called for unknown path without filesystem', { path });
     }
   }
 
@@ -238,7 +238,7 @@ export class MountManager {
       return;
     }
 
-    this.logger.debug(`Processing ${pendingCount} pending mount(s)`);
+    this.logger.debug('Processing pending mounts', { count: pendingCount });
 
     for (const [path, entry] of this._entries) {
       if (entry.state !== 'pending') {
@@ -265,7 +265,7 @@ export class MountManager {
           if (hookResult === false) {
             entry.state = 'unsupported';
             entry.error = 'Skipped by onMount hook';
-            this.logger.debug(`Mount skipped by onMount hook`, { path, provider: fsProvider });
+            this.logger.debug('Mount skipped by onMount hook', { path, provider: fsProvider });
             continue;
           }
 
@@ -275,11 +275,11 @@ export class MountManager {
               entry.state = 'mounted';
               entry.config = config;
               entry.configHash = config ? this.hashConfig(config) : undefined;
-              this.logger.info(`Mount handled by onMount hook`, { path, provider: fsProvider });
+              this.logger.info('Mount handled by onMount hook', { path, provider: fsProvider });
             } else {
               entry.state = 'error';
               entry.error = hookResult.error ?? 'Mount hook failed';
-              this.logger.error(`Mount hook failed`, { path, provider: fsProvider, error: entry.error });
+              this.logger.error('Mount hook failed', { path, provider: fsProvider, error: entry.error });
             }
             continue;
           }
@@ -288,7 +288,7 @@ export class MountManager {
         } catch (err) {
           entry.state = 'error';
           entry.error = `Mount hook error: ${String(err)}`;
-          this.logger.error(`Mount hook threw error`, { path, provider: fsProvider, error: entry.error });
+          this.logger.error('Mount hook threw error', { path, provider: fsProvider, error: entry.error });
           continue;
         }
       }
@@ -297,7 +297,7 @@ export class MountManager {
       if (!config) {
         entry.state = 'unsupported';
         entry.error = 'Filesystem does not support mounting';
-        this.logger.debug(`Filesystem does not support mounting`, { path, provider: fsProvider });
+        this.logger.debug('Filesystem does not support mounting', { path, provider: fsProvider });
         continue;
       }
 
@@ -306,32 +306,32 @@ export class MountManager {
       entry.configHash = this.hashConfig(config);
       entry.state = 'mounting';
 
-      this.logger.debug(`Mounting filesystem`, { path, provider: fsProvider, type: config.type });
+      this.logger.debug('Mounting filesystem', { path, provider: fsProvider, type: config.type });
 
       // Call the sandbox's mount implementation
       try {
         const result = await this._mountFn(entry.filesystem, path);
         if (result.success) {
           entry.state = 'mounted';
-          this.logger.info(`Mount successful`, { path, provider: fsProvider });
+          this.logger.info('Mount successful', { path, provider: fsProvider });
         } else if (result.unavailable) {
           entry.state = 'unavailable';
           entry.error = result.error ?? 'FUSE tool not installed';
-          this.logger.warn(`FUSE mount unavailable`, { path, provider: fsProvider, error: entry.error });
+          this.logger.warn('FUSE mount unavailable', { path, provider: fsProvider, error: entry.error });
         } else {
           entry.state = 'error';
           entry.error = result.error ?? 'Mount failed';
-          this.logger.error(`Mount failed`, { path, provider: fsProvider, error: entry.error });
+          this.logger.error('Mount failed', { path, provider: fsProvider, error: entry.error });
         }
       } catch (err) {
         if (err instanceof MountToolNotFoundError) {
           entry.state = 'unavailable';
           entry.error = String(err);
-          this.logger.warn(`FUSE mount unavailable`, { path, provider: fsProvider, error: entry.error });
+          this.logger.warn('FUSE mount unavailable', { path, provider: fsProvider, error: entry.error });
         } else {
           entry.state = 'error';
           entry.error = String(err);
-          this.logger.error(`Mount threw error`, { path, provider: fsProvider, error: entry.error });
+          this.logger.error('Mount threw error', { path, provider: fsProvider, error: entry.error });
         }
       }
     }

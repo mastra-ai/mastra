@@ -16,14 +16,14 @@ export const VideoPlayer = ({ src }: VideoPlayerProps) => {
   }
 
   return (
-    <div className="relative mb-6 h-full min-h-[400px] w-full">
+    <div className="relative mb-6 w-full" style={{ paddingBottom: '56.25%' }}>
       {showPlayButton ? (
         <button
           onClick={handlePlay}
           style={{
             background: 'linear-gradient(243deg,hsla(0,0%,100%,.3),hsla(0,0%,100%,0))',
           }}
-          className="group absolute top-1/2 left-1/2 z-20 -translate-x-1/2 -translate-y-1/2 transform cursor-pointer rounded-[12px] px-8 py-4 backdrop-blur transition-transform hover:scale-110 hover:!bg-white"
+          className="group absolute top-1/2 left-1/2 z-20 -translate-x-1/2 -translate-y-1/2 transform cursor-pointer rounded-xl px-8 py-4 backdrop-blur transition-transform hover:scale-110 hover:bg-white!"
           aria-label="Play video"
         >
           <div className="text-white transition-colors group-hover:text-black">
@@ -45,7 +45,7 @@ export const VideoPlayer = ({ src }: VideoPlayerProps) => {
       ) : null}
       <video
         ref={videoRef}
-        className="relative z-10 h-full w-full rounded-xl"
+        className="absolute inset-0 z-10 h-full w-full rounded-xl"
         src={src}
         playsInline
         preload="metadata"

@@ -128,7 +128,7 @@ import { runEvals } from '@mastra/core/evals'
 import { createToxicityScorer } from '@mastra/evals/scorers/prebuilt'
 import { myAgent } from './agent'
 
-const scorer = createToxicityScorer({ model: 'openai/gpt-4o' })
+const scorer = createToxicityScorer({ model: 'openai/gpt-5.4' })
 
 const result = await runEvals({
   data: [

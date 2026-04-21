@@ -1,10 +1,31 @@
-import z from 'zod';
+import { z } from 'zod/v4';
 import { tracingOptionsSchema, coreMessageSchema, messageResponseSchema } from './common';
 import { defaultOptionsSchema } from './default-options';
 
 // Path parameter schemas
 export const agentIdPathParams = z.object({
   agentId: z.string().describe('Unique identifier for the agent'),
+});
+
+/**
+ * Query params for GET /agents/:agentId — controls which stored config version is used for overrides.
+ * Use either `status` or `versionId`, not both.
+ * - `status` — 'draft' (latest version, default) or 'published' (active published version).
+ * - `versionId` — Resolve with a specific version ID.
+ */
+export const agentVersionQuerySchema = z.object({
+  status: z
+    .enum(['draft', 'published'])
+    .optional()
+    .describe(
+      'Which stored config version to resolve: draft (latest, default) or published (active version). Mutually exclusive with versionId.',
+    ),
+  versionId: z
+    .string()
+    .optional()
+    .describe(
+      'Specific version ID to resolve. Mutually exclusive with status — if both are provided, versionId takes precedence.',
+    ),
 });
 
 export const toolIdPathParams = z.object({
@@ -201,6 +222,18 @@ export const agentExecutionBodySchema = z
 
     // Request Context (handler-specific field - merged with server's requestContext)
     requestContext: z.record(z.string(), z.any()).optional(),
+
+    // Version overrides for sub-agents (and future primitives)
+    versions: z
+      .object({
+        agents: z
+          .record(
+            z.string(),
+            z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
+          )
+          .optional(),
+      })
+      .optional(),
 
     // Execution Control
     maxSteps: z.number().optional(),

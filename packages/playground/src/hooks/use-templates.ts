@@ -187,6 +187,21 @@ export const useGetTemplateInstallRun = () => {
   });
 };
 
+const normalizeError = (error: unknown): string => {
+  if (typeof error === 'string') return error;
+  if (error == null) return 'Unknown error';
+  if (error instanceof Error)
+    return typeof error.message === 'string' && error.message.length > 0 ? error.message : 'Unknown error';
+  if (typeof error === 'object') {
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
+};
+
 // Helper function to process template installation records (like workflows' sanitizeWorkflowWatchResult)
 const processTemplateInstallRecord = (
   record: { type: string; payload: any; runId?: string; eventTimestamp?: string },
@@ -312,14 +327,15 @@ const processTemplateInstallRecord = (
 
     // If this step failed, also set workflow-level error state
     if (status === 'failed' && hasError) {
+      const errorString = normalizeError(hasError);
       newState = {
         ...newState,
         status: 'failed',
-        error: hasError,
+        error: errorString,
         phase: 'error',
         failedStep: {
           id: stepId,
-          error: hasError,
+          error: errorString,
           description: record.payload.description || stepId,
         },
         payload: {
@@ -374,10 +390,11 @@ const processTemplateInstallRecord = (
   }
 
   if (record.type === 'error') {
+    const errorStr = normalizeError(record.payload.error);
     newState = {
       ...newState,
       status: 'failed',
-      error: record.payload.error,
+      error: errorStr,
       phase: 'error',
       payload: {
         ...newState.payload,

@@ -1,11 +1,17 @@
+import { Agent } from '@mastra/core/agent';
 import { MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
+import { resolveModelConfig } from '@mastra/core/llm';
+import { RequestContext } from '@mastra/core/request-context';
+import type { DatasetItemSource, TargetType } from '@mastra/core/storage';
+import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import type { StatusCode } from '../http-exception';
 import { successResponseSchema } from '../schemas/common';
 import {
   datasetIdPathParams,
   datasetAndExperimentIdPathParams,
+  experimentResultIdPathParams,
   datasetAndItemIdPathParams,
   datasetItemVersionPathParams,
   paginationQuerySchema,
@@ -18,9 +24,14 @@ import {
   compareExperimentsBodySchema,
   batchInsertItemsBodySchema,
   batchDeleteItemsBodySchema,
+  generateItemsBodySchema,
+  generateItemsResponseSchema,
+  clusterFailuresBodySchema,
+  clusterFailuresResponseSchema,
   datasetResponseSchema,
   datasetItemResponseSchema,
   experimentResponseSchema,
+  experimentResultResponseSchema,
   experimentSummaryResponseSchema,
   comparisonResponseSchema,
   listDatasetsResponseSchema,
@@ -31,6 +42,8 @@ import {
   listItemVersionsResponseSchema,
   batchInsertItemsResponseSchema,
   batchDeleteItemsResponseSchema,
+  updateExperimentResultBodySchema,
+  reviewSummaryResponseSchema,
 } from '../schemas/datasets';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
@@ -128,13 +141,26 @@ export const CREATE_DATASET_ROUTE = createRoute({
   handler: async ({ mastra, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { name, description, metadata, inputSchema, groundTruthSchema, requestContextSchema } = params as {
+      const {
+        name,
+        description,
+        metadata,
+        inputSchema,
+        groundTruthSchema,
+        requestContextSchema,
+        targetType,
+        targetIds,
+        scorerIds,
+      } = params as {
         name: string;
         description?: string;
         metadata?: Record<string, unknown>;
         inputSchema?: Record<string, unknown> | null;
         groundTruthSchema?: Record<string, unknown> | null;
         requestContextSchema?: Record<string, unknown> | null;
+        targetType?: TargetType;
+        targetIds?: string[];
+        scorerIds?: string[];
       };
       const ds = await mastra.datasets.create({
         name,
@@ -143,6 +169,9 @@ export const CREATE_DATASET_ROUTE = createRoute({
         inputSchema,
         groundTruthSchema,
         requestContextSchema,
+        targetType,
+        targetIds,
+        scorerIds,
       });
       const details = await ds.getDetails();
       return details as any;
@@ -193,13 +222,28 @@ export const UPDATE_DATASET_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { name, description, metadata, inputSchema, groundTruthSchema, requestContextSchema } = params as {
+      const {
+        name,
+        description,
+        metadata,
+        inputSchema,
+        groundTruthSchema,
+        requestContextSchema,
+        tags,
+        targetType,
+        targetIds,
+        scorerIds,
+      } = params as {
         name?: string;
         description?: string;
         metadata?: Record<string, unknown>;
         inputSchema?: Record<string, unknown> | null;
         groundTruthSchema?: Record<string, unknown> | null;
         requestContextSchema?: Record<string, unknown> | null;
+        tags?: string[];
+        targetType?: TargetType;
+        targetIds?: string[];
+        scorerIds?: string[] | null;
       };
       const ds = await mastra.datasets.get({ id: datasetId });
       const result = await ds.update({
@@ -209,6 +253,10 @@ export const UPDATE_DATASET_ROUTE = createRoute({
         inputSchema,
         groundTruthSchema,
         requestContextSchema,
+        tags,
+        targetType,
+        targetIds,
+        scorerIds,
       });
       return result as any;
     } catch (error) {
@@ -311,14 +359,16 @@ export const ADD_ITEM_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { input, groundTruth, requestContext, metadata } = params as {
+      const { input, groundTruth, requestContext, metadata, source, expectedTrajectory } = params as {
         input: unknown;
         groundTruth?: unknown;
         requestContext?: Record<string, unknown>;
         metadata?: Record<string, unknown>;
+        source?: DatasetItemSource;
+        expectedTrajectory?: unknown;
       };
       const ds = await mastra.datasets.get({ id: datasetId });
-      return await ds.addItem({ input, groundTruth, requestContext, metadata });
+      return await ds.addItem({ input, groundTruth, requestContext, metadata, source, expectedTrajectory });
     } catch (error) {
       if (isSchemaValidationError(error)) {
         throw new HTTPException(400, {
@@ -376,11 +426,12 @@ export const UPDATE_ITEM_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, itemId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { input, groundTruth, requestContext, metadata } = params as {
+      const { input, groundTruth, requestContext, metadata, expectedTrajectory } = params as {
         input?: unknown;
         groundTruth?: unknown;
         requestContext?: Record<string, unknown>;
         metadata?: Record<string, unknown>;
+        expectedTrajectory?: unknown;
       };
       const ds = await mastra.datasets.get({ id: datasetId });
       // Check if item exists and belongs to dataset
@@ -388,7 +439,7 @@ export const UPDATE_ITEM_ROUTE = createRoute({
       if (!existing || (existing as any).datasetId !== datasetId) {
         throw new HTTPException(404, { message: `Item not found: ${itemId}` });
       }
-      return await ds.updateItem({ itemId, input, groundTruth, requestContext, metadata });
+      return await ds.updateItem({ itemId, input, groundTruth, requestContext, metadata, expectedTrajectory });
     } catch (error) {
       if (isSchemaValidationError(error)) {
         throw new HTTPException(400, {
@@ -434,8 +485,74 @@ export const DELETE_ITEM_ROUTE = createRoute({
 });
 
 // ============================================================================
-// Experiment Operations Routes (nested under datasets)
+// Experiment Operations Routes
 // ============================================================================
+
+export const LIST_ALL_EXPERIMENTS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/experiments',
+  responseType: 'json',
+  queryParamSchema: paginationQuerySchema,
+  responseSchema: listExperimentsResponseSchema,
+  summary: 'List all experiments',
+  description: 'Returns a paginated list of all experiments across all datasets',
+  tags: ['Experiments'],
+  requiresAuth: true,
+  handler: async ({ mastra, ...params }) => {
+    assertDatasetsAvailable();
+    try {
+      const { page, perPage } = params;
+      const storage = mastra.getStorage();
+      if (!storage) {
+        throw new HTTPException(500, { message: 'Storage not configured' });
+      }
+      const experimentsStore = await storage.getStore('experiments');
+      if (!experimentsStore) {
+        throw new HTTPException(500, { message: 'Experiments storage not available' });
+      }
+      const result = await experimentsStore.listExperiments({
+        pagination: { page: page ?? 0, perPage: perPage ?? 20 },
+      });
+      return { experiments: result.experiments, pagination: result.pagination };
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error listing experiments');
+    }
+  },
+});
+
+export const EXPERIMENT_REVIEW_SUMMARY_ROUTE = createRoute({
+  method: 'GET',
+  path: '/experiments/review-summary',
+  responseType: 'json',
+  responseSchema: reviewSummaryResponseSchema,
+  summary: 'Get review summary for all experiments',
+  description: 'Returns review status counts (needs-review, reviewed, complete) aggregated per experiment',
+  tags: ['Experiments'],
+  requiresAuth: true,
+  handler: async ({ mastra }) => {
+    assertDatasetsAvailable();
+    try {
+      const storage = mastra.getStorage();
+      if (!storage) {
+        throw new HTTPException(500, { message: 'Storage not configured' });
+      }
+      const experimentsStore = await storage.getStore('experiments');
+      if (!experimentsStore) {
+        throw new HTTPException(500, { message: 'Experiments storage not available' });
+      }
+      const counts = await experimentsStore.getReviewSummary();
+      return { counts };
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error getting review summary');
+    }
+  },
+});
 
 export const LIST_EXPERIMENTS_ROUTE = createRoute({
   method: 'GET',
@@ -479,22 +596,38 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { targetType, targetId, scorerIds, version, maxConcurrency, requestContext } = params as {
+      const {
+        targetType,
+        targetId,
+        scorerIds,
+        version,
+        agentVersion,
+        maxConcurrency,
+        requestContext: rawRequestContext,
+        versions,
+      } = params as {
         targetType: 'agent' | 'workflow' | 'scorer';
         targetId: string;
         scorerIds?: string[];
         version?: number;
+        agentVersion?: string;
         maxConcurrency?: number;
-        requestContext?: Record<string, unknown>;
+        requestContext?: Record<string, unknown> | RequestContext;
+        versions?: { agents?: Record<string, { versionId: string } | { status: 'draft' | 'published' }> };
       };
+      // The adapter middleware merges body + query requestContext into a RequestContext instance.
+      // startExperimentAsync expects a plain Record, so convert it.
+      const requestContext = rawRequestContext instanceof RequestContext ? rawRequestContext.all : rawRequestContext;
       const ds = await mastra.datasets.get({ id: datasetId });
       const result = await ds.startExperimentAsync({
         targetType,
         targetId,
         scorers: scorerIds,
         version,
+        agentVersion,
         maxConcurrency,
         requestContext,
+        versions,
       });
       // Return shape matching experimentSummaryResponseSchema
       return {
@@ -575,6 +708,46 @@ export const LIST_EXPERIMENT_RESULTS_ROUTE = createRoute({
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
       }
       return handleError(error, 'Error listing experiment results');
+    }
+  },
+});
+
+export const UPDATE_EXPERIMENT_RESULT_ROUTE = createRoute({
+  method: 'PATCH',
+  path: '/datasets/:datasetId/experiments/:experimentId/results/:resultId',
+  responseType: 'json',
+  pathParamSchema: experimentResultIdPathParams,
+  bodySchema: updateExperimentResultBodySchema,
+  responseSchema: experimentResultResponseSchema,
+  summary: 'Update an experiment result',
+  description: 'Updates the status and/or tags on an experiment result',
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async ({ mastra, resultId, experimentId, ...params }) => {
+    assertDatasetsAvailable();
+    try {
+      const storage = mastra.getStorage();
+      if (!storage) {
+        throw new HTTPException(500, { message: 'Storage not configured' });
+      }
+      const experimentsStore = await storage.getStore('experiments');
+      if (!experimentsStore) {
+        throw new HTTPException(500, { message: 'Experiments storage not available' });
+      }
+
+      const result = await experimentsStore.updateExperimentResult({
+        id: resultId,
+        experimentId,
+        status: params.status,
+        tags: params.tags,
+      });
+
+      return result;
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error updating experiment result');
     }
   },
 });
@@ -727,7 +900,13 @@ export const BATCH_INSERT_ITEMS_ROUTE = createRoute({
     assertDatasetsAvailable();
     try {
       const { items } = params as {
-        items: Array<{ input: unknown; groundTruth?: unknown; metadata?: Record<string, unknown> }>;
+        items: Array<{
+          input: unknown;
+          groundTruth?: unknown;
+          expectedTrajectory?: unknown;
+          metadata?: Record<string, unknown>;
+          source?: DatasetItemSource;
+        }>;
       };
       const ds = await mastra.datasets.get({ id: datasetId });
       const addedItems = await ds.addItems({ items });
@@ -770,6 +949,244 @@ export const BATCH_DELETE_ITEMS_ROUTE = createRoute({
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
       }
       return handleError(error, 'Error bulk deleting items');
+    }
+  },
+});
+
+// ============================================================================
+// AI Generation
+// ============================================================================
+
+const GENERATE_ITEMS_SYSTEM_PROMPT = `You are a test data generation expert. Your job is to generate realistic, diverse test data items for an AI agent evaluation dataset.
+
+You will be given context about the agent being tested — its purpose, system prompt, and available tools. Use this to generate inputs that thoroughly exercise the agent's capabilities.
+
+Generate test items that:
+1. Are realistic and diverse — cover edge cases, different complexities, and various scenarios
+2. Match the provided schemas exactly
+3. Include ground truth values when a ground truth schema is provided
+4. Vary in difficulty (easy, medium, hard cases)
+5. Include potential edge cases and tricky inputs
+6. Test different aspects of the agent's capabilities based on its tools and instructions
+
+Return the items as a JSON array.`;
+
+export const GENERATE_ITEMS_ROUTE = createRoute({
+  method: 'POST',
+  path: '/datasets/:datasetId/generate-items',
+  responseType: 'json',
+  pathParamSchema: datasetIdPathParams,
+  bodySchema: generateItemsBodySchema,
+  responseSchema: generateItemsResponseSchema,
+  summary: 'Generate dataset items using AI',
+  description:
+    'Uses an LLM to generate synthetic dataset items based on the dataset schema and a user prompt. Returns generated items for review — they are NOT automatically added to the dataset.',
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async ({ mastra, datasetId, modelId, prompt, count, agentContext }) => {
+    assertDatasetsAvailable();
+    try {
+      const ds = await mastra.datasets.get({ id: datasetId });
+      const dataset = await ds.getDetails();
+
+      // Resolve the model from the "provider/model" string
+      const model = await resolveModelConfig(modelId, undefined, mastra);
+
+      // Build context about the dataset schema for the generator
+      const schemaContext = [
+        dataset.inputSchema ? `Input schema:\n${JSON.stringify(dataset.inputSchema, null, 2)}` : null,
+        dataset.groundTruthSchema
+          ? `Ground truth schema:\n${JSON.stringify(dataset.groundTruthSchema, null, 2)}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+
+      const generatorAgent = new Agent({
+        id: 'dataset-item-generator',
+        name: 'dataset-item-generator',
+        instructions: GENERATE_ITEMS_SYSTEM_PROMPT,
+        model,
+      });
+
+      // Build the structured output schema dynamically based on count
+      // Use z.string() for input/groundTruth since OpenAI structured output requires concrete types.
+      // The generator will produce JSON strings that we parse back into objects if needed.
+      const itemSchema = z.object({
+        input: z
+          .string()
+          .describe('The input data as a JSON string matching the input schema, or a plain text string if no schema'),
+        groundTruth: z
+          .string()
+          .optional()
+          .describe('The expected output as a JSON string matching the ground truth schema'),
+      });
+      const outputSchema = z.object({
+        items: z.array(itemSchema).min(1).max(count),
+      });
+
+      // Build agent context section
+      const agentContextParts = [];
+      if (agentContext?.description) {
+        agentContextParts.push(`Agent description: ${agentContext.description}`);
+      }
+      if (agentContext?.instructions) {
+        agentContextParts.push(`Agent system prompt:\n${agentContext.instructions}`);
+      }
+      if (agentContext?.tools?.length) {
+        agentContextParts.push(`Agent tools: ${agentContext.tools.join(', ')}`);
+      }
+      const agentContextSection = agentContextParts.length > 0 ? agentContextParts.join('\n\n') : null;
+
+      const userMessage = [
+        `Generate exactly ${count} test items for a dataset named "${dataset.name}".`,
+        dataset.description ? `Dataset description: ${dataset.description}` : null,
+        agentContextSection ? `--- AGENT CONTEXT ---\n${agentContextSection}` : null,
+        schemaContext || null,
+        `User's request: ${prompt}`,
+        `Return exactly ${count} items.`,
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+
+      const result = await generatorAgent.generate(userMessage, {
+        structuredOutput: { schema: outputSchema },
+      });
+
+      const generated = await result.object;
+
+      // Parse JSON strings back to objects where possible
+      const items = generated.items.map(item => {
+        let input: unknown = item.input;
+        try {
+          input = JSON.parse(item.input);
+        } catch {
+          // Keep as string if not valid JSON
+        }
+        let groundTruth: unknown = item.groundTruth;
+        if (item.groundTruth) {
+          try {
+            groundTruth = JSON.parse(item.groundTruth);
+          } catch {
+            // Keep as string if not valid JSON
+          }
+        }
+        return { input, groundTruth };
+      });
+
+      return { items };
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error generating dataset items');
+    }
+  },
+});
+
+// ============================================================================
+// Failure Clustering
+// ============================================================================
+
+const CLUSTER_FAILURES_SYSTEM_PROMPT = `You are an AI evaluation expert specializing in failure analysis. Given a set of failure items from an AI agent experiment, identify common failure patterns and assign descriptive tags to each item.
+
+For each cluster you identify, provide:
+- A short, descriptive tag label (2-5 words, lowercase, hyphenated, e.g., "no-tool-usage", "hallucination")
+- A description explaining the common failure pattern
+- The IDs of items that belong to this cluster
+
+Also return a "proposedTags" array mapping each item ID to the tags you recommend, along with a brief "reason" explaining WHY those tags apply to that specific item. The reason should reference concrete evidence from the item's input/output/error.
+
+Guidelines:
+- Create between 1 and 8 clusters depending on the diversity of failures
+- Every item must be assigned to at least one cluster unless there is no clear pattern of failure
+- Focus on the root cause of failures, not surface-level symptoms
+- If items have scores, use low scores as signals for the failure type
+- Be specific about what went wrong
+- IMPORTANT: If existing tags are provided, PREFER reusing them over creating new ones. Only create new tags when no existing tag fits.
+- Items may already have tags — consider those when assigning new ones and avoid duplicating existing tags on an item.
+- The "reason" field should be 1-2 sentences explaining the specific evidence for each tag assignment.`;
+
+export const CLUSTER_FAILURES_ROUTE = createRoute({
+  method: 'POST',
+  path: '/datasets/cluster-failures',
+  responseType: 'json',
+  bodySchema: clusterFailuresBodySchema,
+  responseSchema: clusterFailuresResponseSchema,
+  summary: 'Cluster experiment failures using AI',
+  description:
+    'Uses an LLM to analyze failure items from an experiment and group them into meaningful failure pattern clusters.',
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async ({ mastra, modelId, items, availableTags, prompt }) => {
+    assertDatasetsAvailable();
+    try {
+      const model = await resolveModelConfig(modelId, undefined, mastra);
+
+      const clusterAgent = new Agent({
+        id: 'failure-cluster-analyzer',
+        name: 'failure-cluster-analyzer',
+        instructions: CLUSTER_FAILURES_SYSTEM_PROMPT,
+        model,
+      });
+
+      const outputSchema = z.object({
+        clusters: z.array(
+          z.object({
+            id: z.string(),
+            label: z.string(),
+            description: z.string(),
+            itemIds: z.array(z.string()),
+          }),
+        ),
+        proposedTags: z.array(
+          z.object({
+            itemId: z.string(),
+            tags: z.array(z.string()),
+            reason: z.string().describe('Brief explanation of why these tags were assigned'),
+          }),
+        ),
+      });
+
+      const itemSummaries = items.map((item, i) => {
+        const parts = [`Item ${i + 1} (id: ${item.id}):`];
+        if (item.input !== undefined && item.input !== null) parts.push(`  Input: ${JSON.stringify(item.input)}`);
+        if (item.output !== undefined && item.output !== null) parts.push(`  Output: ${JSON.stringify(item.output)}`);
+        if (item.error !== undefined && item.error !== null) {
+          parts.push(`  Error: ${typeof item.error === 'string' ? item.error : JSON.stringify(item.error)}`);
+        }
+        if (item.scores !== undefined && item.scores !== null) {
+          parts.push(`  Scores: ${JSON.stringify(item.scores)}`);
+        }
+        if (item.existingTags && item.existingTags.length > 0) {
+          parts.push(`  Existing tags: ${item.existingTags.join(', ')}`);
+        }
+        return parts.join('\n');
+      });
+
+      let userMessage = `Analyze these ${items.length} failure items and group them into clusters of common failure patterns:\n\n${itemSummaries.join('\n\n')}`;
+
+      if (availableTags && availableTags.length > 0) {
+        userMessage += `\n\nExisting tag vocabulary (prefer reusing these): ${availableTags.join(', ')}`;
+      }
+
+      if (prompt) {
+        userMessage += `\n\nAdditional instructions from the reviewer: ${prompt}`;
+      }
+
+      userMessage += `\n\nReturn both "clusters" (grouping items by pattern) and "proposedTags" (a list mapping each item ID to the tag labels you recommend, with a "reason" explaining why). For proposedTags, only include NEW tags to add — do not repeat tags the item already has.`;
+
+      const result = await clusterAgent.generate(userMessage, {
+        structuredOutput: { schema: outputSchema },
+      });
+
+      const generated = await result.object;
+      return { clusters: generated.clusters, proposedTags: generated.proposedTags ?? [] };
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error clustering failures');
     }
   },
 });

@@ -1,12 +1,11 @@
-import * as React from 'react';
 import { Hash, ToggleLeft, Type } from 'lucide-react';
+import * as React from 'react';
 
+import type { RuleValueInputProps } from './types';
 import { Input } from '@/ds/components/Input/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select/select';
 import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
-
-import type { RuleValueInputProps } from './types';
 
 /**
  * Parses a string value to the appropriate type

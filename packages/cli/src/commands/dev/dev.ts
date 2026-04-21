@@ -25,6 +25,31 @@ let serverStartTime: number | undefined;
 let requestContextPresetsJson: string | undefined;
 const ON_ERROR_MAX_RESTARTS = 3;
 
+function waitForProcessExit(child: ChildProcess, timeoutMs = 2000): Promise<void> {
+  if (child.exitCode !== null) {
+    return Promise.resolve();
+  }
+  return new Promise(resolve => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const done = () => {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+      resolve();
+    };
+    child.once('exit', done);
+    if (child.exitCode !== null) {
+      child.removeListener('exit', done);
+      done();
+      return;
+    }
+    timer = setTimeout(() => {
+      child.kill('SIGKILL');
+    }, timeoutMs);
+  });
+}
+
 interface HTTPSOptions {
   key: Buffer;
   cert: Buffer;
@@ -43,6 +68,7 @@ type ProcessOptions = {
   port: number;
   host: string;
   studioBasePath: string;
+  apiPrefix: string;
   publicDir: string;
 };
 
@@ -67,7 +93,7 @@ const restartAllActiveWorkflowRuns = async ({ host, port }: { host: string; port
 
 const startServer = async (
   dotMastraPath: string,
-  { port, host, studioBasePath, publicDir }: ProcessOptions,
+  { port, host, studioBasePath, apiPrefix, publicDir }: ProcessOptions,
   env: Map<string, string>,
   startOptions: StartOptions = {},
   errorRestartCount = 0,
@@ -185,7 +211,7 @@ const startServer = async (
     currentServerProcess.on('message', async (message: any) => {
       if (message?.type === 'server-ready') {
         serverIsReady = true;
-        devLogger.ready(host, port, studioBasePath, serverStartTime, startOptions.https);
+        devLogger.ready(host, port, studioBasePath, apiPrefix, serverStartTime, startOptions.https);
         devLogger.watching();
 
         await restartAllActiveWorkflowRuns({ host, port });
@@ -250,6 +276,7 @@ const startServer = async (
             port,
             host,
             studioBasePath,
+            apiPrefix,
             publicDir,
           },
           env,
@@ -263,7 +290,7 @@ const startServer = async (
 
 async function checkAndRestart(
   dotMastraPath: string,
-  { port, host, studioBasePath, publicDir }: ProcessOptions,
+  { port, host, studioBasePath, apiPrefix, publicDir }: ProcessOptions,
   bundler: DevBundler,
   startOptions: StartOptions = {},
 ) {
@@ -288,12 +315,12 @@ async function checkAndRestart(
 
   // Proceed with restart
   devLogger.info('[Mastra Dev] - ✅ Restarting server...');
-  await rebundleAndRestart(dotMastraPath, { port, host, studioBasePath, publicDir }, bundler, startOptions);
+  await rebundleAndRestart(dotMastraPath, { port, host, studioBasePath, apiPrefix, publicDir }, bundler, startOptions);
 }
 
 async function rebundleAndRestart(
   dotMastraPath: string,
-  { port, host, studioBasePath, publicDir }: ProcessOptions,
+  { port, host, studioBasePath, apiPrefix, publicDir }: ProcessOptions,
   bundler: DevBundler,
   startOptions: StartOptions = {},
 ) {
@@ -307,7 +334,48 @@ async function rebundleAndRestart(
     if (currentServerProcess) {
       devLogger.restarting();
       devLogger.debug('Stopping current server...');
-      currentServerProcess.kill('SIGINT');
+      const serverProcess = currentServerProcess;
+      // Wait for the process to exit before starting a new one
+      await new Promise<void>(resolve => {
+        if (serverProcess.exitCode !== null || serverProcess.signalCode !== null) {
+          resolve();
+          return;
+        }
+
+        let timeout: NodeJS.Timeout | undefined;
+        const handleExit = () => {
+          if (timeout) {
+            clearTimeout(timeout);
+          }
+          resolve();
+        };
+
+        serverProcess.once('exit', handleExit);
+
+        try {
+          serverProcess.kill('SIGINT');
+        } catch {
+          if (serverProcess.exitCode !== null || serverProcess.signalCode !== null) {
+            serverProcess.off('exit', handleExit);
+            resolve();
+          }
+          return;
+        }
+
+        timeout = setTimeout(() => {
+          try {
+            serverProcess.kill('SIGKILL');
+          } catch {
+            if (serverProcess.exitCode !== null || serverProcess.signalCode !== null) {
+              serverProcess.off('exit', handleExit);
+              resolve();
+            }
+          }
+        }, 5000);
+      });
+      if (currentServerProcess === serverProcess) {
+        currentServerProcess = undefined;
+      }
     }
 
     const env = await bundler.loadEnvVars();
@@ -328,6 +396,7 @@ async function rebundleAndRestart(
         port,
         host,
         studioBasePath,
+        apiPrefix,
         publicDir,
       },
       env,
@@ -402,6 +471,7 @@ export async function dev({
   let portToUse = serverOptions?.port ?? process.env.PORT;
   let hostToUse = serverOptions?.host ?? process.env.HOST ?? 'localhost';
   const studioBasePathToUse = normalizeStudioBase(serverOptions?.studioBase ?? '/');
+  const apiPrefixToUse = serverOptions?.apiPrefix ?? '/api';
 
   if (!portToUse || isNaN(Number(portToUse))) {
     const portList = Array.from({ length: 21 }, (_, i) => 4111 + i);
@@ -457,6 +527,7 @@ export async function dev({
       port: Number(portToUse),
       host: hostToUse,
       studioBasePath: studioBasePathToUse,
+      apiPrefix: apiPrefixToUse,
       publicDir: join(mastraDir, 'public'),
     },
     loadedEnv,
@@ -477,6 +548,7 @@ export async function dev({
           port: Number(portToUse),
           host: hostToUse,
           studioBasePath: studioBasePathToUse,
+          apiPrefix: apiPrefixToUse,
           publicDir: join(mastraDir, 'public'),
         },
         bundler,
@@ -485,7 +557,22 @@ export async function dev({
     }
   });
 
+  let isShuttingDown = false;
   const handleShutdown = async () => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+
+    const forceExit = setTimeout(() => process.exit(0), 3000);
+    forceExit.unref();
+
+    devLogger.shutdown();
+
+    if (currentServerProcess) {
+      currentServerProcess.kill();
+      await waitForProcessExit(currentServerProcess);
+      currentServerProcess = undefined;
+    }
+
     const analytics = getAnalytics();
     if (analytics && serverStartTime) {
       const durationMs = Date.now() - serverStartTime;
@@ -498,23 +585,20 @@ export async function dev({
       await analytics.shutdown();
     }
 
-    devLogger.shutdown();
-
-    if (currentServerProcess) {
-      currentServerProcess.kill();
-    }
-
     watcher
       .close()
       .catch(() => {})
-      .finally(() => process.exit(0));
+      .finally(() => {
+        clearTimeout(forceExit);
+        process.exit(0);
+      });
   };
 
-  process.on('SIGINT', () => {
+  const onSignal = () => {
     handleShutdown().catch(() => process.exit(0));
-  });
+  };
 
-  process.on('SIGTERM', () => {
-    handleShutdown().catch(() => process.exit(0));
-  });
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
+  process.on('SIGHUP', onSignal);
 }

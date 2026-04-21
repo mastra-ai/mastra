@@ -16,6 +16,9 @@ export type {
   HarnessMessageContent,
   HarnessMode,
   HarnessOMConfig,
+  HarnessQuestionAnswer,
+  HarnessQuestionOption,
+  HarnessQuestionSelectionMode,
   HarnessRequestContext,
   HarnessSession,
   HarnessStateSchema,
@@ -32,5 +35,6 @@ export type {
   PermissionPolicy,
   PermissionRules,
   ToolCategory,
+  BuiltinToolId,
   TokenUsage,
 } from './types';

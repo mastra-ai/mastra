@@ -19,6 +19,7 @@ const processor = new LanguageDetector({
   targetLanguages: ['English', 'en'],
   threshold: 0.8,
   strategy: 'translate',
+  lastMessageOnly: true,
 })
 ```
 
@@ -79,6 +80,14 @@ const processor = new LanguageDetector({
             description: 'Custom detection instructions for the agent. If not provided, uses default instructions',
             isOptional: true,
             default: 'undefined',
+          },
+          {
+            name: 'lastMessageOnly',
+            type: 'boolean',
+            description:
+              'Whether to detect language only for the most recent message in the batch instead of checking every message. Use this to keep LLM calls flat as conversation history grows.',
+            isOptional: true,
+            default: 'false',
           },
           {
             name: 'minTextLength',
@@ -153,7 +162,7 @@ export const agent = new Agent({
   id: 'multilingual-agent',
   name: 'multilingual-agent',
   instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   inputProcessors: [
     new LanguageDetector({
       model: 'openrouter/openai/gpt-oss-safeguard-20b',

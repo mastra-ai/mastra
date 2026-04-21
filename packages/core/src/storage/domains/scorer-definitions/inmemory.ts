@@ -38,14 +38,12 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
   // ==========================================================================
 
   async getById(id: string): Promise<StorageScorerDefinitionType | null> {
-    this.logger.debug(`InMemoryScorerDefinitionsStorage: getById called for ${id}`);
     const scorer = this.db.scorerDefinitions.get(id);
     return scorer ? this.deepCopyScorer(scorer) : null;
   }
 
   async create(input: { scorerDefinition: StorageCreateScorerDefinitionInput }): Promise<StorageScorerDefinitionType> {
     const { scorerDefinition } = input;
-    this.logger.debug(`InMemoryScorerDefinitionsStorage: create called for ${scorerDefinition.id}`);
 
     if (this.db.scorerDefinitions.has(scorerDefinition.id)) {
       throw new Error(`Scorer definition with id ${scorerDefinition.id} already exists`);
@@ -84,7 +82,6 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
 
   async update(input: StorageUpdateScorerDefinitionInput): Promise<StorageScorerDefinitionType> {
     const { id, ...updates } = input;
-    this.logger.debug(`InMemoryScorerDefinitionsStorage: update called for ${id}`);
 
     const existingScorer = this.db.scorerDefinitions.get(id);
     if (!existingScorer) {
@@ -112,7 +109,6 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
   }
 
   async delete(id: string): Promise<void> {
-    this.logger.debug(`InMemoryScorerDefinitionsStorage: delete called for ${id}`);
     // Idempotent delete
     this.db.scorerDefinitions.delete(id);
     // Also delete all versions for this scorer definition
@@ -122,8 +118,6 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
   async list(args?: StorageListScorerDefinitionsInput): Promise<StorageListScorerDefinitionsOutput> {
     const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
-
-    this.logger.debug(`InMemoryScorerDefinitionsStorage: list called`);
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 100)
     const perPage = normalizePerPage(perPageInput, 100);
@@ -181,10 +175,6 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
   // ==========================================================================
 
   async createVersion(input: CreateScorerDefinitionVersionInput): Promise<ScorerDefinitionVersion> {
-    this.logger.debug(
-      `InMemoryScorerDefinitionsStorage: createVersion called for scorer definition ${input.scorerDefinitionId}`,
-    );
-
     // Check if version with this ID already exists
     if (this.db.scorerDefinitionVersions.has(input.id)) {
       throw new Error(`Version with id ${input.id} already exists`);
@@ -210,16 +200,11 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
   }
 
   async getVersion(id: string): Promise<ScorerDefinitionVersion | null> {
-    this.logger.debug(`InMemoryScorerDefinitionsStorage: getVersion called for ${id}`);
     const version = this.db.scorerDefinitionVersions.get(id);
     return version ? this.deepCopyVersion(version) : null;
   }
 
   async getVersionByNumber(scorerDefinitionId: string, versionNumber: number): Promise<ScorerDefinitionVersion | null> {
-    this.logger.debug(
-      `InMemoryScorerDefinitionsStorage: getVersionByNumber called for scorer definition ${scorerDefinitionId}, v${versionNumber}`,
-    );
-
     for (const version of this.db.scorerDefinitionVersions.values()) {
       if (version.scorerDefinitionId === scorerDefinitionId && version.versionNumber === versionNumber) {
         return this.deepCopyVersion(version);
@@ -229,10 +214,6 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
   }
 
   async getLatestVersion(scorerDefinitionId: string): Promise<ScorerDefinitionVersion | null> {
-    this.logger.debug(
-      `InMemoryScorerDefinitionsStorage: getLatestVersion called for scorer definition ${scorerDefinitionId}`,
-    );
-
     let latest: ScorerDefinitionVersion | null = null;
     for (const version of this.db.scorerDefinitionVersions.values()) {
       if (version.scorerDefinitionId === scorerDefinitionId) {
@@ -247,10 +228,6 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
   async listVersions(input: ListScorerDefinitionVersionsInput): Promise<ListScorerDefinitionVersionsOutput> {
     const { scorerDefinitionId, page = 0, perPage: perPageInput, orderBy } = input;
     const { field, direction } = this.parseVersionOrderBy(orderBy);
-
-    this.logger.debug(
-      `InMemoryScorerDefinitionsStorage: listVersions called for scorer definition ${scorerDefinitionId}`,
-    );
 
     // Normalize perPage (false -> MAX_SAFE_INTEGER, 0 -> 0, undefined -> 20)
     const perPage = normalizePerPage(perPageInput, 20);
@@ -289,15 +266,10 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
   }
 
   async deleteVersion(id: string): Promise<void> {
-    this.logger.debug(`InMemoryScorerDefinitionsStorage: deleteVersion called for ${id}`);
     this.db.scorerDefinitionVersions.delete(id);
   }
 
   async deleteVersionsByParentId(entityId: string): Promise<void> {
-    this.logger.debug(
-      `InMemoryScorerDefinitionsStorage: deleteVersionsByParentId called for scorer definition ${entityId}`,
-    );
-
     const idsToDelete: string[] = [];
     for (const [id, version] of this.db.scorerDefinitionVersions.entries()) {
       if (version.scorerDefinitionId === entityId) {
@@ -311,10 +283,6 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
   }
 
   async countVersions(scorerDefinitionId: string): Promise<number> {
-    this.logger.debug(
-      `InMemoryScorerDefinitionsStorage: countVersions called for scorer definition ${scorerDefinitionId}`,
-    );
-
     let count = 0;
     for (const version of this.db.scorerDefinitionVersions.values()) {
       if (version.scorerDefinitionId === scorerDefinitionId) {

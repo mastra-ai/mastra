@@ -203,6 +203,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/digitalocean',
+          label: 'DigitalOcean',
+        },
+        {
+          type: 'doc',
+          id: 'providers/dinference',
+          label: 'DInference',
+        },
+        {
+          type: 'doc',
           id: 'providers/evroc',
           label: 'evroc',
         },
@@ -240,6 +250,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/helicone',
           label: 'Helicone',
+        },
+        {
+          type: 'doc',
+          id: 'providers/hpc-ai',
+          label: 'HPC-AI',
         },
         {
           type: 'doc',
@@ -293,6 +308,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/llmgateway',
+          label: 'LLM Gateway',
+        },
+        {
+          type: 'doc',
           id: 'providers/lmstudio',
           label: 'LMStudio',
         },
@@ -325,6 +345,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/minimax-cn-coding-plan',
           label: 'MiniMax Coding Plan (minimaxi.com)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/mixlayer',
+          label: 'Mixlayer',
         },
         {
           type: 'doc',
@@ -473,6 +498,26 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/tencent-coding-plan',
+          label: 'Tencent Coding Plan (China)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/tencent-token-plan',
+          label: 'Tencent Token Plan',
+        },
+        {
+          type: 'doc',
+          id: 'providers/tencent-tokenhub',
+          label: 'Tencent TokenHub',
+        },
+        {
+          type: 'doc',
+          id: 'providers/the-grid-ai',
+          label: 'The Grid AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/togetherai',
           label: 'Together AI',
         },
@@ -493,6 +538,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/wafer.ai',
+          label: 'Wafer',
+        },
+        {
+          type: 'doc',
           id: 'providers/wandb',
           label: 'Weights & Biases',
         },
@@ -500,6 +550,21 @@ const sidebars = {
           type: 'doc',
           id: 'providers/xiaomi',
           label: 'Xiaomi',
+        },
+        {
+          type: 'doc',
+          id: 'providers/xiaomi-token-plan-cn',
+          label: 'Xiaomi Token Plan (China)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/xiaomi-token-plan-ams',
+          label: 'Xiaomi Token Plan (Europe)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/xiaomi-token-plan-sgp',
+          label: 'Xiaomi Token Plan (Singapore)',
         },
         {
           type: 'doc',

@@ -197,7 +197,7 @@ const workspace = new Workspace({
 
 The config object has two parts:
 
-- **Global defaults** (`enabled`, `requireApproval`) - Apply to all tools unless overridden
+- **Global defaults** (`enabled`, `requireApproval`): Apply to all tools unless overridden
 - **Per-tool overrides** - Use `WORKSPACE_TOOLS` constants as keys to configure individual tools
 
 See [workspace overview](/docs/workspace/overview#tool-configuration) for more examples.
@@ -499,3 +499,15 @@ Added when BM25 or vector search is configured:
 | `mastra_workspace_index` | Index content for search. Associates content with a path for later retrieval. |
 
 The `index` tool is excluded when the filesystem is in read-only mode.
+
+### Skill tools
+
+Added when skills are configured:
+
+| Tool | Description |
+| - | - |
+| `skill` | Activate a skill by name or path. Returns the skill's full instructions, references, scripts, and assets. |
+| `skill_search` | Search across skill content. Accepts an optional list of skill names to filter and a `topK` parameter. |
+| `skill_read` | Read a specific file (reference, script, or asset) from a skill directory. |
+
+When multiple skills share the same name, `list()` returns all of them. `get()` with a name applies tie-breaking (local > managed > external). If two skills share the same name _and_ source type, `get()` throws an error. Pass a skill's full path to `get()` to bypass tie-breaking. See [Same-named skills](/docs/workspace/skills#same-named-skills) for details.
