@@ -5,18 +5,14 @@
  * 1. Creates real dd-trace APM spans eagerly when Mastra spans are created
  * 2. Activates spans in dd-trace's scope so auto-instrumented operations
  *    (HTTP requests, database queries, etc.) have correct parent spans
- * 3. Emits LLMObs data retroactively when spans end, using dd-trace's
- *    own LLMObs pipeline for annotation and export
+ * 3. Registers those same spans with Datadog LLMObs and annotates them
+ *    before finish, avoiding a second synthetic APM span tree
  *
- * This solves the core problem with the DatadogExporter: because the exporter
+ * This fixes the core problem with the DatadogExporter: because the exporter
  * creates LLMObs spans retroactively (after execution completes), there is no
  * active dd-trace span in scope when tools and processors make outbound calls.
  * dd-trace's auto-instrumentation can't find the correct parent, so APM spans
  * fall back to the nearest active span (typically the request handler).
- *
- * The bridge uses two different dd-trace APIs for their respective strengths:
- * - tracer.startSpan() for eager APM spans (long-lived, manual finish)
- * - tracer.llmobs.trace() for retroactive LLMObs annotation (callback-scoped)
  */
 
 import type {
@@ -35,68 +31,57 @@ import { BaseExporter, getExternalParentId } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import tracer from 'dd-trace';
 import { formatUsageMetrics } from './metrics';
-import { ensureTracer, kindFor, toDate, formatInput, formatOutput } from './utils';
+import { ensureTracer, formatInput, formatOutput, kindFor, toDate } from './utils';
 import type { DatadogSpanKind } from './utils';
 
-/**
- * LLMObs span options passed to dd-trace's llmobs.trace().
- */
-interface LLMObsSpanOptions {
-  kind: DatadogSpanKind;
-  name: string;
-  sessionId?: string;
-  userId?: string;
-  mlApp?: string;
-  modelName?: string;
-  modelProvider?: string;
-  startTime?: Date;
-}
-
-/**
- * Minimal per-trace context for user/session tagging.
- */
-interface TraceContext {
-  userId?: string;
-  sessionId?: string;
-}
-
-type TraceState = {
-  buffer: Map<string, AnyExportedSpan>;
-  contexts: Map<
-    string,
-    {
-      ddSpan: any;
-      exported?: { traceId: string; spanId: string };
-      // Effective model/provider to pass DOWN to this span's children. Used so
-      // late-arriving descendants can inherit MODEL_GENERATION attrs the same
-      // way they would during recursive tree emission.
-      childInheritedModelAttrs?: { model?: string; provider?: string };
-    }
-  >;
-  rootEnded: boolean;
-  treeEmitted: boolean;
-  createdAt: number;
-  cleanupTimer?: ReturnType<typeof setTimeout>;
-  maxLifetimeTimer?: ReturnType<typeof setTimeout>;
+type LLMObsTagger = {
+  registerLLMObsSpan: (
+    span: any,
+    options: {
+      parent?: any;
+      kind: DatadogSpanKind;
+      name: string;
+      sessionId?: string;
+      modelName?: string;
+      modelProvider?: string;
+    },
+  ) => void;
 };
 
-/**
- * Tree node representing a span and its children for recursive emission.
- */
-interface SpanNode {
-  span: AnyExportedSpan;
-  children: SpanNode[];
+type LifecycleLogger = Pick<DatadogBridge['logger'], 'debug' | 'info' | 'warn' | 'error'>;
+
+let spanLifecycleLogger: LifecycleLogger | undefined;
+let spanLifecyclePatchInstalled = false;
+const lifecycleWrappedSpans = new WeakSet<object>();
+
+function flushApmExporter(): Promise<void> {
+  const exporterFlush = (tracer as any)?._tracer?._exporter?.flush;
+  if (typeof exporterFlush !== 'function') {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+
+    const done = (error?: unknown) => {
+      if (settled) return;
+      settled = true;
+
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    };
+
+    try {
+      exporterFlush.call((tracer as any)._tracer._exporter, done);
+    } catch (error) {
+      reject(error);
+    }
+  });
 }
-
-/**
- * Maximum lifetime for a trace state entry (30 minutes).
- */
-const MAX_TRACE_LIFETIME_MS = 30 * 60 * 1000;
-
-/**
- * Regular cleanup interval for trace state entries (1 minute).
- */
-const REGULAR_CLEANUP_INTERVAL_MS = 1 * 60 * 1000;
 
 /**
  * Configuration options for the Datadog Bridge.
@@ -156,48 +141,33 @@ export interface DatadogBridgeConfig extends BaseExporterConfig {
   /**
    * Keys from the request context that should be promoted to flat Datadog
    * LLM Observability tags instead of being nested in annotations.metadata.
-   *
-   * @example
-   * ```typescript
-   * new DatadogBridge({
-   *   mlApp: 'my-app',
-   *   requestContextKeys: ['tenantId', 'agentId'],
-   * })
-   * ```
    */
   requestContextKeys?: string[];
+
+  /**
+   * Enable verbose dd-trace span lifecycle logging for troubleshooting.
+   *
+   * When enabled, the bridge wraps `tracer.startSpan()` and logs each dd span
+   * open/finish event it can observe, including ids and parent ids.
+   *
+   * This is intentionally noisy and should only be used for debugging.
+   * Falls back to `MASTRA_DATADOG_BRIDGE_SPAN_DEBUG`.
+   */
+  spanLifecycleDebug?: boolean;
 }
 
 /**
  * Datadog Bridge for Mastra Observability.
  *
- * Creates native dd-trace spans in real-time during execution for proper
- * APM context propagation, and emits LLMObs annotation data retroactively
- * through dd-trace's own pipeline.
- *
- * @example
- * ```typescript
- * import { DatadogBridge } from '@mastra/datadog';
- *
- * const mastra = new Mastra({
- *   observability: {
- *     configs: {
- *       default: {
- *         serviceName: 'my-service',
- *         bridge: new DatadogBridge({ mlApp: 'my-app' }),
- *       }
- *     }
- *   }
- * });
- * ```
+ * Creates native dd-trace spans in real time during execution for proper APM
+ * context propagation, and uses the same live dd span for Datadog LLMObs
+ * tagging and annotations.
  */
 export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
   name = 'datadog-bridge';
 
   private config: Required<Pick<DatadogBridgeConfig, 'mlApp' | 'site'>> & DatadogBridgeConfig;
   private ddSpanMap = new Map<string, any>();
-  private traceContext = new Map<string, TraceContext>();
-  private traceState = new Map<string, TraceState>();
 
   constructor(config: DatadogBridgeConfig = {}) {
     super(config);
@@ -211,6 +181,7 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
     // present (required for the APM auto-instrumentation the bridge enables)
     const envAgentless = process.env.DD_LLMOBS_AGENTLESS_ENABLED?.toLowerCase();
     const agentless = config.agentless ?? (envAgentless === 'true' || envAgentless === '1' ? true : false);
+    const spanLifecycleDebug = config.spanLifecycleDebug ?? isTruthyEnv(process.env.MASTRA_DATADOG_BRIDGE_SPAN_DEBUG);
 
     if (!mlApp) {
       this.setDisabled(`Missing required mlApp. Set DD_LLMOBS_ML_APP environment variable or pass mlApp in config.`);
@@ -226,7 +197,7 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
       return;
     }
 
-    this.config = { ...config, mlApp, site, apiKey, agentless, env };
+    this.config = { ...config, mlApp, site, apiKey, agentless, env, spanLifecycleDebug };
 
     ensureTracer({
       mlApp,
@@ -235,61 +206,106 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
       agentless,
       service: config.service,
       env,
-      // Default to true — the bridge is designed for APM integration
       integrationsEnabled: config.integrationsEnabled ?? true,
+    });
+
+    if (spanLifecycleDebug) {
+      spanLifecycleLogger = this.logger;
+      installSpanLifecycleDebugPatch();
+      this.logger.info('[DatadogBridge] Enabled dd-trace span lifecycle debug logging');
+    }
+
+    this.logger.debug('[DatadogBridge] Tracer ready', {
+      mlApp,
+      service: config.service ?? mlApp,
+      env,
+      agentless,
+      tracerStarted: Boolean((tracer as any)._tracer?.started),
+      llmobsAvailable: Boolean((tracer as any).llmobs),
+      activeScopeSpan: Boolean(tracer.scope().active()),
     });
 
     this.logger.info('Datadog bridge initialized', { mlApp, site, agentless });
   }
 
-  // ---------------------------------------------------------------------------
-  // ObservabilityBridge interface
-  // ---------------------------------------------------------------------------
+  override __setLogger(logger: any): void {
+    super.__setLogger(logger);
+    if (this.config?.spanLifecycleDebug) {
+      spanLifecycleLogger = this.logger;
+    }
+  }
 
   /**
-   * Create a dd-trace APM span eagerly when a Mastra span is constructed.
-   *
-   * This is the core of the fix: the APM span is active in dd-trace's scope
-   * during execution, so auto-instrumented calls (HTTP, DB, etc.) made by
-   * tools and processors are parented correctly.
+   * Create a dd-trace span eagerly when a Mastra span is constructed.
    */
   createSpan(options: CreateSpanOptions<SpanType>): SpanIds | undefined {
     if (this.isDisabled) return undefined;
 
     try {
-      // Determine parent dd-trace span
       let parentDdSpan: any = undefined;
+      let parentSource: 'external-parent' | 'active-scope' | 'none' = 'none';
 
       const externalParentId = getExternalParentId(options);
       if (externalParentId) {
         parentDdSpan = this.ddSpanMap.get(externalParentId);
+        if (parentDdSpan) {
+          parentSource = 'external-parent';
+        } else {
+          this.logger.warn('[DatadogBridge.createSpan] External parent span not found in bridge map', {
+            spanName: options.name,
+            spanType: options.type,
+            externalParentId,
+            hasMastraParent: Boolean(options.parent),
+          });
+        }
       }
 
-      // Fall back to whatever is currently active in dd-trace scope
-      // (e.g., an incoming request span from framework instrumentation)
-      if (!parentDdSpan) {
+      if (!parentDdSpan && !externalParentId) {
         parentDdSpan = tracer.scope().active() ?? undefined;
+        if (parentDdSpan) {
+          parentSource = 'active-scope';
+        } else {
+          this.logger.debug('[DatadogBridge.createSpan] No active dd-trace scope for new root span', {
+            spanName: options.name,
+            spanType: options.type,
+            mapSize: this.ddSpanMap.size,
+          });
+        }
       }
 
-      // Create the APM span eagerly
       const ddSpan = tracer.startSpan(options.name, {
         ...(parentDdSpan ? { childOf: parentDdSpan } : {}),
+        ...(options.startTime ? { startTime: toDate(options.startTime).getTime() } : {}),
       });
 
-      // Generate Mastra-compatible hex IDs
-      const spanId = generateSpanId();
-      const traceId = externalParentId
-        ? // Inherit parent's trace ID by looking up what Mastra assigned to the parent
-          (options.parent?.traceId ?? generateTraceId())
-        : generateTraceId();
-      const parentSpanId = externalParentId;
+      const ddContext = ddSpan.context?.() as
+        | {
+            toSpanId?: (hex?: boolean) => string;
+            toTraceId?: (hex?: boolean) => string;
+          }
+        | undefined;
+      const spanId = ddContext?.toSpanId?.(true) ?? generateSpanId();
+      const traceId =
+        ddContext?.toTraceId?.(true) ??
+        (externalParentId ? (options.parent?.traceId ?? generateTraceId()) : generateTraceId());
+      const parentContext = parentDdSpan?.context?.() as { toSpanId?: (hex?: boolean) => string } | undefined;
+      const parentSpanId = parentContext?.toSpanId?.(true) ?? externalParentId;
 
-      // Store the dd-trace span keyed by Mastra span ID
       this.ddSpanMap.set(spanId, ddSpan);
+      this.registerLlmObsSpan(ddSpan, options, parentDdSpan);
 
       this.logger.debug(
         `[DatadogBridge.createSpan] Created APM span [spanId=${spanId}] [traceId=${traceId}] ` +
-          `[parentSpanId=${parentSpanId}] [type=${options.type}] [mapSize=${this.ddSpanMap.size}]`,
+          `[parentSpanId=${parentSpanId}] [type=${options.type}] [mapSize=${this.ddSpanMap.size}] ` +
+          `[parentSource=${parentSource}] [externalParentId=${externalParentId ?? 'none'}]`,
+        {
+          ...(this.config.spanLifecycleDebug
+            ? {
+                ddTraceState: getTraceDebugState(ddSpan),
+                parentDdTraceState: parentDdSpan ? getTraceDebugState(parentDdSpan) : undefined,
+              }
+            : {}),
+        },
       );
 
       return { spanId, traceId, parentSpanId };
@@ -301,7 +317,6 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
 
   /**
    * Execute an async function within the dd-trace context of a Mastra span.
-   * Auto-instrumented operations inside fn will be parented under this span.
    */
   executeInContext<T>(spanId: string, fn: () => Promise<T>): Promise<T> {
     return this.executeWithSpanContext(spanId, fn);
@@ -322,46 +337,54 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
     if (ddSpan) {
       return tracer.scope().activate(ddSpan, fn);
     }
+
+    this.logger.debug(
+      '[DatadogBridge.executeWithSpanContext] Falling back to raw execution because dd span is missing',
+      {
+        spanId,
+        mapSize: this.ddSpanMap.size,
+        openSpanIds: this.previewOpenSpanIds(),
+        ...(this.config.spanLifecycleDebug ? { callStack: captureCallStack('executeWithSpanContext') } : {}),
+      },
+    );
+
     return fn();
   }
 
-  // ---------------------------------------------------------------------------
-  // BaseExporter override — tracing events from the bus
-  // ---------------------------------------------------------------------------
-
   /**
    * Handle tracing events from the observability bus.
-   *
-   * - SPAN_STARTED: Capture trace context (userId/sessionId)
-   * - SPAN_ENDED: Finish APM span + enqueue for LLMObs emission
    */
   protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
-    if (this.isDisabled || !(tracer as any).llmobs) return;
+    if (this.isDisabled) return;
 
     try {
       const span = event.exportedSpan;
 
-      // Handle event spans (zero-duration)
       if (span.isEvent) {
-        if (event.type === 'span_started') {
-          this.captureTraceContext(span);
-          this.finishApmSpan(span);
-          this.enqueueSpan(span);
+        if (event.type === 'span_started' || event.type === 'span_ended') {
+          this.annotateAndFinishSpan(span);
+        } else {
+          this.logger.debug('[DatadogBridge] Ignoring event span tracing event', {
+            eventType: event.type,
+            spanId: span.id,
+            spanName: span.name,
+          });
         }
         return;
       }
 
       switch (event.type) {
         case 'span_started':
-          this.captureTraceContext(span);
-          return;
-
         case 'span_updated':
+          this.logger.debug('[DatadogBridge] Observed non-terminal tracing event', {
+            eventType: event.type,
+            spanId: span.id,
+            spanName: span.name,
+            spanType: span.type,
+          });
           return;
-
         case 'span_ended':
-          this.finishApmSpan(span);
-          this.enqueueSpan(span);
+          this.annotateAndFinishSpan(span);
           return;
       }
     } catch (error) {
@@ -374,306 +397,152 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // APM span management
-  // ---------------------------------------------------------------------------
+  private registerLlmObsSpan(ddSpan: any, options: CreateSpanOptions<SpanType>, parentDdSpan?: any): void {
+    const tagger = this.getLlmObsTagger();
+    if (!tagger) {
+      this.logger.debug('[DatadogBridge] Skipping LLMObs registration because no tagger is available', {
+        spanName: options.name,
+        spanType: options.type,
+      });
+      return;
+    }
+
+    try {
+      const kind = kindFor(options.type);
+      const ownAttrs = options.attributes as ModelGenerationAttributes | undefined;
+      const inheritedModelAttrs =
+        options.parent?.type === SpanTypeEnum.MODEL_GENERATION
+          ? (options.parent.attributes as ModelGenerationAttributes | undefined)
+          : undefined;
+      const sessionId =
+        typeof options.metadata?.sessionId === 'string'
+          ? options.metadata.sessionId
+          : typeof options.parent?.metadata?.sessionId === 'string'
+            ? options.parent.metadata.sessionId
+            : undefined;
+
+      tagger.registerLLMObsSpan(ddSpan, {
+        parent: parentDdSpan,
+        kind,
+        name: options.name,
+        sessionId,
+        ...(kind === 'llm' && (ownAttrs?.model ?? inheritedModelAttrs?.model)
+          ? { modelName: ownAttrs?.model ?? inheritedModelAttrs?.model }
+          : {}),
+        ...(kind === 'llm' && (ownAttrs?.provider ?? inheritedModelAttrs?.provider)
+          ? { modelProvider: ownAttrs?.provider ?? inheritedModelAttrs?.provider }
+          : {}),
+      });
+      this.logger.debug('[DatadogBridge] Registered LLMObs span', {
+        spanName: options.name,
+        spanType: options.type,
+        kind,
+        hasParent: Boolean(parentDdSpan),
+        sessionId,
+      });
+    } catch (error) {
+      this.logger.warn('[DatadogBridge] Failed to register LLMObs span', {
+        error,
+        spanName: options.name,
+        spanType: options.type,
+      });
+    }
+  }
+
+  private getLlmObsTagger(): LLMObsTagger | undefined {
+    const tagger = (tracer as any).llmobs?._tagger;
+    if (tagger && typeof tagger.registerLLMObsSpan === 'function') {
+      return tagger as LLMObsTagger;
+    }
+    return undefined;
+  }
 
   /**
-   * Finish the eagerly-created APM span and remove it from the map.
+   * Annotate the eagerly-created dd span and finish it using the final Mastra
+   * span state.
    */
-  private finishApmSpan(span: AnyExportedSpan): void {
+  private annotateAndFinishSpan(span: AnyExportedSpan): void {
     const ddSpan = this.ddSpanMap.get(span.id);
-    if (!ddSpan) return;
+    if (!ddSpan) {
+      this.logger.warn('[DatadogBridge] No dd span found when finalizing Mastra span', {
+        spanId: span.id,
+        spanName: span.name,
+        spanType: span.type,
+        mapSize: this.ddSpanMap.size,
+        openSpanIds: this.previewOpenSpanIds(),
+      });
+      return;
+    }
 
     const endTime = span.endTime ? toDate(span.endTime) : span.isEvent ? toDate(span.startTime) : new Date();
+
+    const annotations = this.buildAnnotations(span);
+
+    try {
+      if (Object.keys(annotations).length > 0 && tracer.llmobs?.annotate) {
+        tracer.llmobs.annotate(ddSpan, annotations);
+        this.logger.debug('[DatadogBridge] Annotated dd span before finish', {
+          spanId: span.id,
+          spanName: span.name,
+          annotationKeys: Object.keys(annotations),
+        });
+      } else {
+        this.logger.debug('[DatadogBridge] Skipping LLMObs annotation before finish', {
+          spanId: span.id,
+          spanName: span.name,
+          hasAnnotations: Object.keys(annotations).length > 0,
+          llmobsAvailable: Boolean(tracer.llmobs),
+        });
+      }
+    } catch (error) {
+      this.logger.error('[DatadogBridge] Failed to annotate span before finish', {
+        error,
+        spanId: span.id,
+        spanName: span.name,
+      });
+    }
+
+    try {
+      if (span.errorInfo) {
+        this.setErrorTags(ddSpan, span.errorInfo);
+      }
+    } catch (error) {
+      this.logger.error('[DatadogBridge] Failed to set error tags on dd span', {
+        error,
+        spanId: span.id,
+        spanName: span.name,
+      });
+    }
 
     try {
       if (typeof ddSpan.finish === 'function') {
         ddSpan.finish(endTime.getTime());
+        this.logger.debug('[DatadogBridge] Finished dd span', {
+          spanId: span.id,
+          spanName: span.name,
+          endTimeMs: endTime.getTime(),
+          ...(this.config.spanLifecycleDebug ? { ddTraceState: getTraceDebugState(ddSpan) } : {}),
+        });
       }
     } catch (error) {
-      this.logger.error('[DatadogBridge] Failed to finish APM span', {
+      this.logger.error('[DatadogBridge] Failed to finish dd span', {
         error,
         spanId: span.id,
+        spanName: span.name,
       });
-    }
-
-    this.ddSpanMap.delete(span.id);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Trace context capture
-  // ---------------------------------------------------------------------------
-
-  private captureTraceContext(span: AnyExportedSpan): void {
-    if (span.isRootSpan && !this.traceContext.has(span.traceId)) {
-      this.traceContext.set(span.traceId, {
-        userId: span.metadata?.userId,
-        sessionId: span.metadata?.sessionId,
+    } finally {
+      this.ddSpanMap.delete(span.id);
+      this.logger.debug('[DatadogBridge] Removed dd span from bridge map', {
+        spanId: span.id,
+        spanName: span.name,
+        remainingMapSize: this.ddSpanMap.size,
+        remainingOpenSpanIds: this.previewOpenSpanIds(),
       });
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // LLMObs emission (retroactive, using dd-trace's LLMObs pipeline)
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Queue span for LLMObs emission. Same buffering strategy as DatadogExporter.
-   */
-  private enqueueSpan(span: AnyExportedSpan): void {
-    const state = this.getOrCreateTraceState(span.traceId);
-    if (span.isRootSpan) {
-      state.rootEnded = true;
-    }
-
-    state.buffer.set(span.id, span);
-    this.tryEmitReadySpans(span.traceId);
-  }
-
-  private tryEmitReadySpans(traceId: string): void {
-    const state = this.traceState.get(traceId);
-    if (!state) return;
-
-    // Phase 1: emit the initial tree once the root span ends. Any spans
-    // whose parent wasn't in the buffer at this point (e.g., child ended
-    // before its parent did and the root ended in between) stay buffered
-    // and may be emitted via the late-arrival path below once their parent
-    // shows up in state.contexts.
-    if (!state.treeEmitted) {
-      if (!state.rootEnded) return;
-
-      const tree = this.buildSpanTree(state.buffer);
-      if (tree) {
-        this.emitSpanTree(tree, state);
-      }
-
-      // Remove only spans that were actually emitted (those now in
-      // state.contexts). Unresolved spans stay buffered.
-      for (const spanId of Array.from(state.buffer.keys())) {
-        if (state.contexts.has(spanId)) {
-          state.buffer.delete(spanId);
-        }
-      }
-
-      state.treeEmitted = true;
-    }
-
-    // Phase 2: emit late-arriving / previously-unresolved spans whose parent
-    // context now exists. Iterate to a fixed point so a chain of late spans
-    // (parent emits, then child can emit) all flush.
-    let emitted = false;
-    do {
-      emitted = false;
-      for (const [spanId, span] of state.buffer) {
-        const parentCtx = span.parentSpanId ? state.contexts.get(span.parentSpanId) : undefined;
-        if (span.parentSpanId && !parentCtx) {
-          continue;
-        }
-
-        this.emitSingleSpan(span, state, parentCtx?.ddSpan, parentCtx?.childInheritedModelAttrs);
-        state.buffer.delete(spanId);
-        emitted = true;
-      }
-    } while (emitted);
-
-    // Schedule cleanup if root has ended and buffer is empty
-    if (state.rootEnded && state.buffer.size === 0 && !state.cleanupTimer) {
-      const timer = setTimeout(() => {
-        const currentState = this.traceState.get(traceId);
-        if (currentState) {
-          if (currentState.buffer.size > 0) {
-            this.logger.warn('Discarding orphaned spans during cleanup', {
-              traceId,
-              orphanedCount: currentState.buffer.size,
-              spanIds: Array.from(currentState.buffer.keys()),
-            });
-          }
-          if (currentState.maxLifetimeTimer) {
-            clearTimeout(currentState.maxLifetimeTimer);
-          }
-        }
-        this.traceState.delete(traceId);
-        this.traceContext.delete(traceId);
-      }, REGULAR_CLEANUP_INTERVAL_MS);
-      (timer as any).unref?.();
-      state.cleanupTimer = timer;
-    }
-  }
-
-  private buildSpanTree(buffer: Map<string, AnyExportedSpan>): SpanNode | undefined {
-    const nodes = new Map<string, SpanNode>();
-    let rootNode: SpanNode | undefined;
-
-    for (const span of buffer.values()) {
-      nodes.set(span.id, { span, children: [] });
-    }
-
-    for (const node of nodes.values()) {
-      if (node.span.isRootSpan) {
-        rootNode = node;
-      } else if (node.span.parentSpanId) {
-        const parentNode = nodes.get(node.span.parentSpanId);
-        if (parentNode) {
-          parentNode.children.push(node);
-        } else {
-          this.logger.warn('Orphaned span detected during tree build', {
-            spanId: node.span.id,
-            parentSpanId: node.span.parentSpanId,
-            traceId: node.span.traceId,
-          });
-        }
-      }
-    }
-
-    // Sort children by start time for consistent ordering
-    for (const node of nodes.values()) {
-      node.children.sort((a, b) => {
-        const aTime =
-          a.span.startTime instanceof Date ? a.span.startTime.getTime() : new Date(a.span.startTime).getTime();
-        const bTime =
-          b.span.startTime instanceof Date ? b.span.startTime.getTime() : new Date(b.span.startTime).getTime();
-        return aTime - bTime;
-      });
-    }
-
-    return rootNode;
-  }
-
-  /**
-   * Recursively emits a span tree using nested llmobs.trace() calls.
-   * This ensures parent-child relationships are properly established in
-   * Datadog's LLM Observability product.
-   */
-  private emitSpanTree(
-    node: SpanNode,
-    state: TraceState,
-    inheritedModelAttrs?: { model?: string; provider?: string },
-  ): void {
-    const span = node.span;
-    const { traceOptions, endTimeMs } = this.buildSpanOptions(span, inheritedModelAttrs);
-
-    const childInheritedModelAttrs =
-      span.type === SpanTypeEnum.MODEL_GENERATION
-        ? {
-            model: (span.attributes as ModelGenerationAttributes | undefined)?.model,
-            provider: (span.attributes as ModelGenerationAttributes | undefined)?.provider,
-          }
-        : inheritedModelAttrs;
-
-    tracer.llmobs.trace(traceOptions as any, (ddSpan: any) => {
-      const annotations = this.buildAnnotations(span);
-      if (Object.keys(annotations).length > 0) {
-        tracer.llmobs.annotate(ddSpan, annotations);
-      }
-
-      if (span.errorInfo) {
-        this.setErrorTags(ddSpan, span.errorInfo);
-      }
-
-      const exported = tracer.llmobs.exportSpan ? tracer.llmobs.exportSpan(ddSpan) : undefined;
-      // Store childInheritedModelAttrs so any late-arriving descendants of this
-      // span (emitted via emitSingleSpan) can inherit the same model/provider
-      // attrs that recursive tree emission would have propagated.
-      state.contexts.set(span.id, { ddSpan, exported, childInheritedModelAttrs });
-
-      for (const child of node.children) {
-        this.emitSpanTree(child, state, childInheritedModelAttrs);
-      }
-
-      if (typeof ddSpan.finish === 'function') {
-        ddSpan.finish(endTimeMs);
-      }
-    });
-  }
-
-  /**
-   * Emit a single span with the proper Datadog parent context.
-   * Used for late-arriving spans after the main tree has been emitted.
-   *
-   * Receives `inheritedModelAttrs` from the parent's stored context so that
-   * MODEL_STEP children of MODEL_GENERATION parents get model/provider names
-   * even when they arrive after the initial tree was emitted.
-   */
-  private emitSingleSpan(
-    span: AnyExportedSpan,
-    state: TraceState,
-    parent?: any,
-    inheritedModelAttrs?: { model?: string; provider?: string },
-  ) {
-    const { traceOptions, endTimeMs } = this.buildSpanOptions(span, inheritedModelAttrs);
-
-    // Compute what THIS span's own descendants should inherit, mirroring the
-    // logic in emitSpanTree.
-    const childInheritedModelAttrs =
-      span.type === SpanTypeEnum.MODEL_GENERATION
-        ? {
-            model: (span.attributes as ModelGenerationAttributes | undefined)?.model,
-            provider: (span.attributes as ModelGenerationAttributes | undefined)?.provider,
-          }
-        : inheritedModelAttrs;
-
-    const runTrace = () =>
-      tracer.llmobs.trace(traceOptions as any, (ddSpan: any) => {
-        const annotations = this.buildAnnotations(span);
-        if (Object.keys(annotations).length > 0) {
-          tracer.llmobs.annotate(ddSpan, annotations);
-        }
-
-        if (span.errorInfo) {
-          this.setErrorTags(ddSpan, span.errorInfo);
-        }
-
-        const exported = tracer.llmobs.exportSpan ? tracer.llmobs.exportSpan(ddSpan) : undefined;
-        state.contexts.set(span.id, { ddSpan, exported, childInheritedModelAttrs });
-
-        if (typeof ddSpan.finish === 'function') {
-          ddSpan.finish(endTimeMs);
-        }
-      });
-
-    if (parent) {
-      tracer.scope().activate(parent, runTrace);
-    } else {
-      runTrace();
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // LLMObs span options and annotations
-  // ---------------------------------------------------------------------------
-
-  private buildSpanOptions(
-    span: AnyExportedSpan,
-    inheritedModelAttrs?: { model?: string; provider?: string },
-  ): { traceOptions: LLMObsSpanOptions; endTimeMs: number } {
-    const traceCtx = this.traceContext.get(span.traceId) || {
-      userId: span.metadata?.userId,
-      sessionId: span.metadata?.sessionId,
-    };
-
-    const kind = kindFor(span.type);
-    const ownAttrs = span.attributes as ModelGenerationAttributes | undefined;
-    const attrs = {
-      model: ownAttrs?.model ?? inheritedModelAttrs?.model,
-      provider: ownAttrs?.provider ?? inheritedModelAttrs?.provider,
-    };
-
-    const startTime = toDate(span.startTime);
-    const endTime = span.endTime ? toDate(span.endTime) : span.isEvent ? startTime : new Date();
-
-    return {
-      traceOptions: {
-        kind,
-        name: span.name,
-        sessionId: traceCtx.sessionId,
-        userId: traceCtx.userId,
-        startTime,
-        ...(kind === 'llm' && attrs?.model ? { modelName: attrs.model } : {}),
-        ...(kind === 'llm' && attrs?.provider ? { modelProvider: attrs.provider } : {}),
-      },
-      endTimeMs: endTime.getTime(),
-    };
+  private previewOpenSpanIds(limit = 8): string[] {
+    return Array.from(this.ddSpanMap.keys()).slice(0, limit);
   }
 
   private buildAnnotations(span: AnyExportedSpan): Record<string, any> {
@@ -776,61 +645,8 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Trace state management
-  // ---------------------------------------------------------------------------
-
-  private getOrCreateTraceState(traceId: string): TraceState {
-    const existing = this.traceState.get(traceId);
-    if (existing) {
-      if (existing.cleanupTimer) {
-        clearTimeout(existing.cleanupTimer);
-        existing.cleanupTimer = undefined;
-      }
-      return existing;
-    }
-
-    const created: TraceState = {
-      buffer: new Map<string, AnyExportedSpan>(),
-      contexts: new Map<string, { ddSpan: any; exported?: { traceId: string; spanId: string } }>(),
-      rootEnded: false,
-      treeEmitted: false,
-      createdAt: Date.now(),
-      cleanupTimer: undefined,
-      maxLifetimeTimer: undefined,
-    };
-
-    const maxLifetimeTimer = setTimeout(() => {
-      const state = this.traceState.get(traceId);
-      if (state) {
-        if (state.buffer.size > 0 || state.contexts.size > 0) {
-          this.logger.warn('Discarding trace due to max lifetime exceeded', {
-            traceId,
-            bufferedSpans: state.buffer.size,
-            emittedSpans: state.contexts.size,
-            lifetimeMs: Date.now() - state.createdAt,
-          });
-        }
-        if (state.cleanupTimer) {
-          clearTimeout(state.cleanupTimer);
-        }
-        this.traceState.delete(traceId);
-        this.traceContext.delete(traceId);
-      }
-    }, MAX_TRACE_LIFETIME_MS);
-    (maxLifetimeTimer as any).unref?.();
-    created.maxLifetimeTimer = maxLifetimeTimer;
-
-    this.traceState.set(traceId, created);
-    return created;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Lifecycle
-  // ---------------------------------------------------------------------------
-
   async flush(): Promise<void> {
-    if (this.isDisabled || !(tracer as any).llmobs) return;
+    if (this.isDisabled) return;
 
     if (tracer.llmobs?.flush) {
       try {
@@ -839,36 +655,17 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
       } catch (e) {
         this.logger.error('Error flushing llmobs', { error: e });
       }
-    } else if ((tracer as any).flush) {
-      try {
-        await (tracer as any).flush();
-        this.logger.debug('Datadog tracer flushed');
-      } catch (e) {
-        this.logger.error('Error flushing tracer', { error: e });
-      }
+    }
+
+    try {
+      await flushApmExporter();
+      this.logger.debug('Datadog APM exporter flushed');
+    } catch (e) {
+      this.logger.error('Error flushing Datadog APM exporter', { error: e });
     }
   }
 
   async shutdown(): Promise<void> {
-    // Cancel all pending cleanup timers and clear state
-    for (const [traceId, state] of this.traceState) {
-      if (state.cleanupTimer) {
-        clearTimeout(state.cleanupTimer);
-      }
-      if (state.maxLifetimeTimer) {
-        clearTimeout(state.maxLifetimeTimer);
-      }
-      if (state.buffer.size > 0) {
-        this.logger.warn('Shutdown with pending spans', {
-          traceId,
-          pendingCount: state.buffer.size,
-          spanIds: Array.from(state.buffer.keys()),
-        });
-      }
-    }
-    this.traceState.clear();
-
-    // Force-finish any remaining APM spans
     for (const [spanId, ddSpan] of this.ddSpanMap) {
       this.logger.warn(`[DatadogBridge] Force-finishing APM span that was not properly closed [id=${spanId}]`);
       try {
@@ -891,15 +688,9 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
       }
     }
 
-    this.traceContext.clear();
-
     await super.shutdown();
   }
 }
-
-// ---------------------------------------------------------------------------
-// ID generation helpers (same format as DefaultSpan)
-// ---------------------------------------------------------------------------
 
 function fillRandomBytes(bytes: Uint8Array): void {
   try {
@@ -926,4 +717,124 @@ function generateTraceId(): string {
   const bytes = new Uint8Array(16);
   fillRandomBytes(bytes);
   return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function isTruthyEnv(value: string | undefined): boolean {
+  if (!value) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+}
+
+function captureCallStack(marker?: string, maxFrames = 8): string | undefined {
+  const stack = new Error(marker ? `[DatadogBridge] ${marker}` : undefined).stack;
+  if (!stack) return undefined;
+
+  const lines = stack
+    .split('\n')
+    .slice(1)
+    .filter(line => !line.includes('captureCallStack'))
+    .slice(0, maxFrames)
+    .map(line => line.trim());
+
+  return lines.length > 0 ? lines.join('\n') : undefined;
+}
+
+function getTraceDebugState(ddSpan: any):
+  | {
+      traceRecord?: boolean;
+      traceIsRecording?: boolean;
+      startedCount?: number;
+      finishedCount?: number;
+      openSpans?: string[];
+    }
+  | undefined {
+  const trace = ddSpan?.context?.()?._trace;
+  if (!trace) return undefined;
+
+  const openSpans = Array.isArray(trace.started)
+    ? trace.started
+        .filter((span: any) => span?._duration === undefined)
+        .slice(0, 12)
+        .map((span: any) => {
+          const context = span?.context?.();
+          const name = context?._name ?? span?._name ?? 'unknown';
+          const resource = context?._tags?.['resource.name'];
+          return resource ? `${name}:${resource}` : name;
+        })
+    : undefined;
+
+  return {
+    traceRecord: trace.record,
+    traceIsRecording: trace.isRecording,
+    startedCount: Array.isArray(trace.started) ? trace.started.length : undefined,
+    finishedCount: Array.isArray(trace.finished) ? trace.finished.length : undefined,
+    openSpans: openSpans && openSpans.length > 0 ? openSpans : undefined,
+  };
+}
+
+function installSpanLifecycleDebugPatch(): void {
+  if (spanLifecyclePatchInstalled) return;
+
+  const originalStartSpan = tracer.startSpan.bind(tracer);
+
+  (tracer as any).startSpan = function patchedStartSpan(name: string, options?: Record<string, unknown>) {
+    const span = originalStartSpan(name, options);
+    logSpanLifecycleOpen(name, span, options);
+    wrapSpanFinishForLifecycleDebug(span, name);
+    return span;
+  };
+
+  spanLifecyclePatchInstalled = true;
+}
+
+function wrapSpanFinishForLifecycleDebug(span: any, name: string): void {
+  if (!span || typeof span !== 'object' || typeof span.finish !== 'function') return;
+  if (lifecycleWrappedSpans.has(span)) return;
+
+  const originalFinish = span.finish;
+
+  // Preserve mocked finish functions in tests to avoid altering matcher behavior.
+  if ((originalFinish as any).mock) return;
+
+  span.finish = function patchedFinish(this: any, ...args: any[]) {
+    logSpanLifecycleFinish(name, span, args);
+    return originalFinish.apply(this, args);
+  };
+
+  lifecycleWrappedSpans.add(span);
+}
+
+function logSpanLifecycleOpen(name: string, span: any, options?: Record<string, unknown>): void {
+  const ids = getDdSpanIds(span);
+  const parentIds = getDdSpanIds((options?.childOf as any) ?? undefined);
+  const message =
+    `[DatadogBridge.span.open] name=${name} traceId=${ids.traceId ?? 'unknown'} ` +
+    `spanId=${ids.spanId ?? 'unknown'} parentSpanId=${parentIds.spanId ?? 'none'} ` +
+    `hasChildOf=${Boolean(options?.childOf)}`;
+
+  spanLifecycleLogger?.debug(message);
+  console.error(message);
+}
+
+function logSpanLifecycleFinish(name: string, span: any, finishArgs: unknown[]): void {
+  const ids = getDdSpanIds(span);
+  const finishTime = finishArgs[0];
+  const message =
+    `[DatadogBridge.span.finish] name=${name} traceId=${ids.traceId ?? 'unknown'} ` +
+    `spanId=${ids.spanId ?? 'unknown'} finishArg=${String(finishTime ?? 'none')}`;
+
+  spanLifecycleLogger?.debug(message);
+  console.error(message);
+}
+
+function getDdSpanIds(span: any): { spanId?: string; traceId?: string } {
+  try {
+    const context = span?.context?.();
+    return {
+      spanId: context?.toSpanId?.(true),
+      traceId: context?.toTraceId?.(true),
+    };
+  } catch {
+    return {};
+  }
 }
