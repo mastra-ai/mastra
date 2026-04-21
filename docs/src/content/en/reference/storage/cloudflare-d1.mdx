@@ -57,48 +57,6 @@ export const mastra = new Mastra({
 `D1Store` must be initialized inline inside `new Mastra({...})`. See [CloudflareDeployer reference](/reference/deployer/cloudflare#cloudflare-bindings) for details.
 :::
 
-### Using with Cloudflare Workers directly
-
-If you're writing a raw Cloudflare Worker without `CloudflareDeployer`, access the D1 binding from the worker's `env` parameter inside the `fetch` handler.
-
-```typescript
-import { D1Store } from '@mastra/cloudflare-d1'
-import { Mastra } from '@mastra/core'
-
-type Env = {
-  D1Database: D1Database // TypeScript type definition
-}
-
-// Factory function to create Mastra with D1 binding
-function createMastra(env: Env) {
-  return new Mastra({
-    storage: new D1Store({
-      binding: env.D1Database, // ✅ Access the actual binding from env
-      tablePrefix: 'dev_', // Optional: isolate tables per environment
-    }),
-  })
-}
-
-// Cloudflare Worker export
-export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
-    const mastra = createMastra(env)
-
-    // Your handler logic here
-    return new Response('Hello from Mastra with D1!')
-  },
-}
-```
-
-:::tip[Important: Understanding D1 Bindings]
-In the `Env` type definition, `D1Database: D1Database` serves two purposes:
-
-- The **property name** (`D1Database`) must match the `binding` name in your `wrangler.toml`
-- The **type** (`: D1Database`) is from `@cloudflare/workers-types` for TypeScript type checking
-
-At runtime, Cloudflare Workers provides the actual D1 database instance via `env.D1Database`. You can't use `D1Database` directly outside of the worker's context.
-:::
-
 ### Using with REST API
 
 For non-Workers environments (Node.js, serverless functions, etc.), use the REST API approach:
