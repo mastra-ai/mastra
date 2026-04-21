@@ -2,8 +2,8 @@
 
 import { Button, Column, MainHeader, PrevNextNav, getShortId } from '@mastra/playground-ui';
 import { BracesIcon, XIcon } from 'lucide-react';
-import { useExperimentTrace } from '../hooks/use-experiment-trace';
 import { ExperimentTraceSpanDetails } from './experiment-trace-span-details';
+import { useSpanDetail } from '@/domains/traces/hooks/use-span-detail';
 
 export type ExperimentResultSpanPaneProps = {
   traceId: string;
@@ -20,8 +20,8 @@ export function ExperimentResultSpanPane({
   onPrevious,
   onClose,
 }: ExperimentResultSpanPaneProps) {
-  const { data: traceData } = useExperimentTrace(traceId);
-  const span = traceData?.spans?.find(s => s.spanId === spanId);
+  const { data: spanDetail } = useSpanDetail(traceId, spanId);
+  const span = spanDetail?.span;
 
   return (
     <>

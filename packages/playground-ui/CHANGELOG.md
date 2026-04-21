@@ -1,5 +1,16 @@
 # @mastra/playground-ui
 
+## 23.0.0-alpha.11
+
+### Patch Changes
+
+- New filter UX on the studio's **Traces** and **Logs** pages. Click **+ Add Filter** to pick a property and narrow by value; active filters render as editable pills. Filter state lives in the URL so filtered views survive reloads and can be shared by link. **Save filters for next time** remembers a default; **Clear** and **Remove all filters** are one click away. ([#15512](https://github.com/mastra-ai/mastra/pull/15512))
+
+- Updated dependencies [[`20f59b8`](https://github.com/mastra-ai/mastra/commit/20f59b876cf91199efbc49a0e36b391240708f08), [`e2687a7`](https://github.com/mastra-ai/mastra/commit/e2687a7408790c384563816a9a28ed06735684c9), [`e2687a7`](https://github.com/mastra-ai/mastra/commit/e2687a7408790c384563816a9a28ed06735684c9), [`8f1b280`](https://github.com/mastra-ai/mastra/commit/8f1b280b7fe6999ec654f160cb69c1a8719e7a57), [`12df98c`](https://github.com/mastra-ai/mastra/commit/12df98c4904643d9481f5c78f3bed443725b4c96)]:
+  - @mastra/core@1.26.0-alpha.11
+  - @mastra/client-js@1.14.0-alpha.11
+  - @mastra/react@0.2.27-alpha.11
+
 ## 23.0.0-alpha.10
 
 ### Minor Changes
