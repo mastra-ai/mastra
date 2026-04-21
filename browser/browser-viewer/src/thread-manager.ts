@@ -29,8 +29,8 @@ interface BrowserViewerSession extends ThreadSession {
   context: BrowserContext;
   /** CDP session for the active page */
   cdpSession: CDPSession | null;
-  /** CDP WebSocket URL */
-  cdpUrl: string;
+  /** CDP WebSocket URL (null if discovery failed) */
+  cdpUrl: string | null;
 }
 
 /**
@@ -40,7 +40,7 @@ export interface BrowserViewerThreadManagerConfig extends ThreadManagerConfig {
   /** Browser configuration */
   browserConfig: BrowserViewerConfig;
   /** Callback when a browser is created for a thread */
-  onBrowserCreated?: (browser: Browser, threadId: string, cdpUrl: string) => void;
+  onBrowserCreated?: (browser: Browser, threadId: string, cdpUrl: string | null) => void;
   /** Callback when a browser is closed for a thread */
   onBrowserClosed?: (threadId: string) => void;
 }
@@ -54,7 +54,7 @@ export interface BrowserViewerThreadManagerConfig extends ThreadManagerConfig {
  */
 export class BrowserViewerThreadManager extends ThreadManager<Browser> {
   private readonly browserConfig: BrowserViewerConfig;
-  private readonly onBrowserCreated?: (browser: Browser, threadId: string, cdpUrl: string) => void;
+  private readonly onBrowserCreated?: (browser: Browser, threadId: string, cdpUrl: string | null) => void;
   private readonly onBrowserClosed?: (threadId: string) => void;
 
   /** Map of thread ID to session info (for 'thread' scope) */
@@ -94,8 +94,16 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       return null;
     }
 
-    const pages = session.context.pages();
-    return pages[0] ?? null;
+    return this.resolveActivePage(session.context);
+  }
+
+  /**
+   * Resolve the active page from a browser context.
+   * Uses last page (most recently opened) with fallback to first page.
+   */
+  private resolveActivePage(context: BrowserContext): Page | null {
+    const pages = context.pages();
+    return pages[pages.length - 1] ?? pages[0] ?? null;
   }
 
   /**
@@ -112,9 +120,7 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       return null;
     }
 
-    // Get the currently active page (last one in the list, or first if only one)
-    const pages = session.context.pages();
-    const activePage = pages[pages.length - 1] ?? pages[0];
+    const activePage = this.resolveActivePage(session.context);
 
     if (!activePage) {
       return null;
@@ -221,21 +227,22 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
    *   Line 2: The browser WebSocket path (e.g., /devtools/browser/<guid>)
    *
    * This gives us the real CDP URL that external tools like agent-browser can connect to.
+   * Returns null if discovery fails - callers should handle this case.
    */
-  private discoverCdpUrl(browserServer: BrowserServer): string {
+  private discoverCdpUrl(browserServer: BrowserServer): string | null {
     // Access Playwright's internal user data directory
     const userDataDir = (browserServer as BrowserServer & { _userDataDirForTest?: string })._userDataDirForTest;
 
     if (!userDataDir) {
-      this.logger?.warn?.('Could not access browser user data directory, falling back to Playwright wsEndpoint');
-      return browserServer.wsEndpoint();
+      this.logger?.warn?.('Could not access browser user data directory');
+      return null;
     }
 
     const portFilePath = join(userDataDir, 'DevToolsActivePort');
 
     if (!existsSync(portFilePath)) {
-      this.logger?.warn?.('DevToolsActivePort file not found, falling back to Playwright wsEndpoint');
-      return browserServer.wsEndpoint();
+      this.logger?.warn?.('DevToolsActivePort file not found');
+      return null;
     }
 
     try {
@@ -244,8 +251,8 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       const browserPath = content[1];
 
       if (!port || !browserPath) {
-        this.logger?.warn?.('Invalid DevToolsActivePort content, falling back to Playwright wsEndpoint');
-        return browserServer.wsEndpoint();
+        this.logger?.warn?.('Invalid DevToolsActivePort content');
+        return null;
       }
 
       const cdpUrl = `ws://127.0.0.1:${port}${browserPath}`;
@@ -253,7 +260,7 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       return cdpUrl;
     } catch (error) {
       this.logger?.warn?.('Failed to read DevToolsActivePort file:', error);
-      return browserServer.wsEndpoint();
+      return null;
     }
   }
 
@@ -307,7 +314,8 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
 
     this.logger?.debug?.(`Connected to existing browser, CDP URL: ${cdpUrl}`);
 
-    // Notify callback
+    // Notify callbacks
+    this.onBrowserCreated?.(browser, DEFAULT_THREAD_ID, cdpUrl);
     this.onSessionCreated?.(this.sharedSession);
   }
 
@@ -386,10 +394,14 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
     this.logger?.debug?.(`Browser disconnected for thread ${threadId}`);
 
     if (this.scope === 'shared') {
+      // Guard against already-closed session (browser.close() triggers 'disconnected')
+      if (!this.sharedSession) return;
       this.sharedSession = null;
       this.clearSharedManager();
       this.sessions.delete(DEFAULT_THREAD_ID);
     } else {
+      // Guard against already-closed session
+      if (!this.threadSessions.has(threadId)) return;
       this.threadSessions.delete(threadId);
       this.threadManagers.delete(threadId);
       this.sessions.delete(threadId);
@@ -548,6 +560,7 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
 
     this.sharedSession = null;
     this.clearSharedManager();
+    this.sessions.delete(DEFAULT_THREAD_ID);
 
     this.onBrowserClosed?.(DEFAULT_THREAD_ID);
   }
