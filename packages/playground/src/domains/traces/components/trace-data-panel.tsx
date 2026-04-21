@@ -1,5 +1,5 @@
 import type { SpanRecord } from '@mastra/core/storage';
-import { Button, ButtonWithTooltip, DataPanel, Icon, ButtonsGroup } from '@mastra/playground-ui';
+import { Button, ButtonWithTooltip, DataPanel, Icon, ButtonsGroup, truncateString } from '@mastra/playground-ui';
 import { CircleGaugeIcon, ChevronsDownUpIcon, ChevronsUpDownIcon, Link2Icon, SaveIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
@@ -107,7 +107,7 @@ export function TraceDataPanel({
           ) : (
             <>
               <DataPanel.Heading>
-                Trace <b># {traceId}</b>
+                Trace <b># {truncateString(traceId, 12)}</b>
               </DataPanel.Heading>
               <ButtonsGroup className="ml-auto shrink-0">
                 {onCollapsedChange && (
@@ -130,8 +130,8 @@ export function TraceDataPanel({
                     as={Link}
                     href={`/traces/${traceId}`}
                     size="md"
-                    tooltipContent="Open trace details page"
-                    aria-label="Open trace details page"
+                    tooltipContent="Open trace page"
+                    aria-label="Open trace page"
                   >
                     <Link2Icon />
                   </ButtonWithTooltip>
@@ -149,7 +149,7 @@ export function TraceDataPanel({
             <DataPanel.NoData>No spans found for this trace.</DataPanel.NoData>
           ) : (
             <DataPanel.Content ref={contentRef}>
-              {!isOnTracePage && rootSpan && <TraceKeysAndValues rootSpan={rootSpan} numOfCol={2} className="mb-6" />}
+              {!isOnTracePage && rootSpan && <TraceKeysAndValues rootSpan={rootSpan} className="mb-6" />}
 
               {!isOnTracePage && (
                 <div className="mb-6 flex justify-between items-center gap-4">
