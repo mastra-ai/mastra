@@ -170,7 +170,7 @@ export function DateTimeRangePicker({
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger asChild>
-        <Button disabled={disabled}>
+        <Button size={size} disabled={disabled}>
           <CalendarIcon />
           {datePresetLabel}
         </Button>

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { PropertyFilterField, PropertyFilterToken } from './property-filter';
+import type { PropertyFilterField, PropertyFilterToken } from './types';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Input } from '@/ds/components/Input';
 import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';

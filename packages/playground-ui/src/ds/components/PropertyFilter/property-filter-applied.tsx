@@ -2,7 +2,7 @@ import { XIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '../Button';
 import { PickMultiPanel } from './pick-multi-panel';
-import type { PropertyFilterField, PropertyFilterToken } from './property-filter';
+import type { PropertyFilterField, PropertyFilterToken } from './types';
 import { Input } from '@/ds/components/Input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
 import { formElementSizes } from '@/ds/primitives/form-element';

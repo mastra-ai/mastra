@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PickMultiPanel } from './pick-multi-panel';
-import type { PropertyFilterField, PropertyFilterToken } from './property-filter';
+import type { PropertyFilterField, PropertyFilterToken } from './types';
 import { Button } from '@/ds/components/Button/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
 import { MultiCombobox } from '@/ds/components/Combobox/multi-combobox';

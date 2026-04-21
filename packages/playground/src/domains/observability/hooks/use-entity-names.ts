@@ -11,8 +11,15 @@ type UseEntityNamesOptions = {
 export const useEntityNames = ({ entityType, rootOnly = false }: UseEntityNamesOptions = {}) => {
   const client = useMastraClient();
 
+  // Mirror the queryFn branches so the cache key reflects what the server
+  // actually returns. rootOnly only matters when entityType is not set; when
+  // entityType is set, the query ignores rootOnly entirely.
+  const queryKey = entityType
+    ? ['observability-entity-names', 'by-type', entityType]
+    : ['observability-entity-names', 'all', rootOnly ? 'root-only' : 'all-types'];
+
   return useQuery({
-    queryKey: ['observability-entity-names', rootOnly ? 'root-only' : 'all', entityType ?? 'all-entity-types'],
+    queryKey,
     queryFn: async () => {
       try {
         if (entityType) {
