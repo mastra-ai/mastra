@@ -1,6 +1,5 @@
-import type { SpanRecord } from '@mastra/core/storage';
 import { LogsDataList, LogsDataListSkeleton, cn } from '@mastra/playground-ui';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { LogRecord } from '../types';
 import { LogDetails } from './log-details';
 import { SpanDetails } from './span-details';
@@ -81,16 +80,7 @@ export function LogsList({
     [onFeaturedChange, featuredLogId, featuredTraceId, featuredSpanId],
   );
 
-  // SpanRecord cached from TraceDetails callback (needed for SpanDetails rendering)
-  const [featuredSpanRecord, setFeaturedSpanRecord] = useState<SpanRecord | undefined>();
   const [logDetailsCollapsed, setLogDetailsCollapsed] = useState(false);
-
-  // Clear cached span when controlled spanId is removed or changed
-  useEffect(() => {
-    if (!featuredSpanId || (featuredSpanRecord && featuredSpanRecord.spanId !== featuredSpanId)) {
-      setFeaturedSpanRecord(undefined);
-    }
-  }, [featuredSpanId, featuredSpanRecord]);
 
   const logIdMap = useMemo(() => getLogIds(logs), [logs]);
   const idToLog = useMemo(() => {
@@ -113,7 +103,6 @@ export function LogsList({
           const id = logIdMap.get(prevLog)!;
           if (featuredTraceId) {
             updateFeatured({ logId: id, traceId: prevLog.traceId ?? null, spanId: null });
-            setFeaturedSpanRecord(undefined);
           } else {
             updateFeatured({ logId: id });
           }
@@ -127,7 +116,6 @@ export function LogsList({
           const id = logIdMap.get(nextLog)!;
           if (featuredTraceId) {
             updateFeatured({ logId: id, traceId: nextLog.traceId ?? null, spanId: null });
-            setFeaturedSpanRecord(undefined);
           } else {
             updateFeatured({ logId: id });
           }
@@ -144,7 +132,6 @@ export function LogsList({
       if (featuredTraceId) {
         // Sync trace panel to new log's trace, or close it
         updateFeatured({ logId: id, traceId: log.traceId ?? null, spanId: null });
-        setFeaturedSpanRecord(undefined);
       } else {
         updateFeatured({ logId: id });
       }
@@ -155,7 +142,6 @@ export function LogsList({
   const handleTraceClick = useCallback(
     (traceId: string) => {
       updateFeatured({ traceId, spanId: null });
-      setFeaturedSpanRecord(undefined);
     },
     [updateFeatured],
   );
@@ -170,20 +156,17 @@ export function LogsList({
   const handleTraceClose = useCallback(() => {
     updateFeatured({ traceId: null, spanId: null });
     setLogDetailsCollapsed(false);
-    setFeaturedSpanRecord(undefined);
   }, [updateFeatured]);
 
   const handleSpanSelect = useCallback(
-    (span: SpanRecord | undefined) => {
-      updateFeatured({ spanId: span?.spanId ?? null });
-      setFeaturedSpanRecord(span);
+    (spanId: string | undefined) => {
+      updateFeatured({ spanId: spanId ?? null });
     },
     [updateFeatured],
   );
 
   const handleSpanClose = useCallback(() => {
     updateFeatured({ spanId: null });
-    setFeaturedSpanRecord(undefined);
   }, [updateFeatured]);
 
   const handleLogClose = useCallback(() => {
@@ -244,11 +227,11 @@ export function LogsList({
         <div
           className={cn(
             'grid gap-4 h-full overflow-auto ',
-            logDetailsCollapsed && featuredTraceId && featuredSpanRecord
+            logDetailsCollapsed && featuredTraceId && featuredSpanId
               ? 'grid-rows-[auto_1fr_1fr]'
               : logDetailsCollapsed && featuredTraceId
                 ? 'grid-rows-[auto_1fr]'
-                : featuredTraceId && featuredSpanRecord
+                : featuredTraceId && featuredSpanId
                   ? 'grid-rows-[1fr_1fr_1fr]'
                   : featuredTraceId
                     ? 'grid-rows-[1fr_1fr]'
@@ -276,7 +259,9 @@ export function LogsList({
               initialSpanId={featuredSpanId}
             />
           )}
-          {featuredSpanRecord && <SpanDetails span={featuredSpanRecord} onClose={handleSpanClose} />}
+          {featuredTraceId && featuredSpanId && (
+            <SpanDetails traceId={featuredTraceId} spanId={featuredSpanId} onClose={handleSpanClose} />
+          )}
         </div>
       )}
     </div>
