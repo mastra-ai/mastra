@@ -836,6 +836,32 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               messageList.add(msg, 'response');
             }
 
+            // Patch deferred provider-executed tool results.
+            // When a provider tool is deferred (e.g., Anthropic web_search), the tool-call
+            // arrives in stream N and is added to messageList as state:'call'. The tool-result
+            // arrives in a later stream (N+1). We call updateToolInvocation to patch the
+            // existing call part to state:'result' with real data.
+            // Same-stream results are already merged by buildMessagesFromChunks above.
+            for (const chunk of collectedChunks) {
+              if (chunk.type === 'tool-result' && chunk.payload.result != null) {
+                const resultToolDef =
+                  currentStep.tools?.[chunk.payload.toolName] ||
+                  findProviderToolByName(currentStep.tools, chunk.payload.toolName);
+                messageList.updateToolInvocation({
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    state: 'result',
+                    toolCallId: chunk.payload.toolCallId,
+                    toolName: chunk.payload.toolName,
+                    args: chunk.payload.args,
+                    result: chunk.payload.result,
+                  },
+                  providerMetadata: chunk.payload.providerMetadata,
+                  providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef),
+                });
+              }
+            }
+
             // Apply structuredOutput metadata to the assistant message.
             // MastraModelOutput's finish handler runs during the stream before messages
             // are added to messageList, so it can't find the message. We apply it here.
