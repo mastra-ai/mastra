@@ -51,7 +51,6 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   messageList: MessageList;
   outputStream: MastraModelOutput<OUTPUT>;
   runState: AgenticRunState;
-  model?: { provider?: string };
   options?: LoopConfig<OUTPUT>;
   controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
   responseFromModel: {
@@ -82,14 +81,12 @@ function buildResponseModelMetadata(
   return Object.keys(metadata).length > 0 ? { metadata } : undefined;
 }
 
-
 async function processOutputStream<OUTPUT = undefined>({
   tools,
   messageId,
   messageList,
   outputStream,
   runState,
-  model,
   options,
   controller,
   responseFromModel,
@@ -183,7 +180,6 @@ async function processOutputStream<OUTPUT = undefined>({
         safeEnqueue(controller, chunk);
         break;
       }
-
 
       case 'finish':
         runState.setState({
@@ -838,7 +834,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               messageId: currentStep.messageId,
               messageList,
               runState,
-              model: currentStep.model,
               options,
               controller,
               responseFromModel: {
@@ -857,7 +852,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             const builtMessages = buildMessagesFromChunks({
               chunks: collectedChunks,
               messageId: currentStep.messageId,
-              responseModelMetadata: buildResponseModelMetadata(runState),
+              responseModelMetadata: buildResponseModelMetadata(runState, currentStep.model),
               tools: currentStep.tools,
             });
             for (const msg of builtMessages) {
