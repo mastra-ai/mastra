@@ -72,7 +72,7 @@
     "@vitejs/plugin-react": "^5.2.0",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.39.4",
+    "eslint": "^10.2.1",
     "eslint-plugin-storybook": "^10.3.5",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
