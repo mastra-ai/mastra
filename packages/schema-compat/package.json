@@ -100,7 +100,7 @@
   "dependencies": {
     "json-schema-to-zod": "^2.7.0",
     "zod-from-json-schema": "^0.5.2",
-    "zod-from-json-schema-v3": "npm:zod-from-json-schema@^0.0.5",
+    "zod-from-json-schema-v3": "npm:zod-from-json-schema@^0.5.2",
     "zod-to-json-schema": "^3.25.1"
   },
   "peerDependencies": {
