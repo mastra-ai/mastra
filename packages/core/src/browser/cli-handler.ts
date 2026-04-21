@@ -1,3 +1,4 @@
+import { shellQuote, splitShellCommand, reassembleShellCommand } from '../workspace/sandbox/utils';
 import type { MastraBrowser } from './browser';
 
 /**
@@ -35,7 +36,8 @@ const CLI_CDP_PATTERNS: Record<string, BrowserCliConfig> = {
     sessionFlag: '--session',
     // agent-browser daemon needs explicit connect command to establish CDP connection
     // Must include session flag to isolate threads
-    warmupCommand: (cdpUrl: string, threadId: string) => `agent-browser --session "${threadId}" connect "${cdpUrl}"`,
+    warmupCommand: (cdpUrl: string, threadId: string) =>
+      `agent-browser --session ${shellQuote(threadId)} connect ${shellQuote(cdpUrl)}`,
     // agent-browser external CDP detection:
     // - "connect <url>" subcommand for external CDP
     // - "--cdp <url>" with full wss:// URL (not just port) also indicates external CDP
@@ -85,16 +87,24 @@ export interface BrowserCliProcessResult {
  */
 export class BrowserCliHandler {
   /**
-   * Track which CLI providers have been warmed up per thread.
-   * Key format: `${cliName}:${threadId}`
+   * Track which CLI providers have been warmed up per browser instance and thread.
+   * Key format: `${browserId}:${cliName}:${threadId}`
+   * Browser ID scopes warmup state so different agents/workspaces don't share state.
    */
   private warmedUpClis = new Set<string>();
 
   /**
    * Track cleanup callbacks for warmed up CLIs to avoid duplicate registrations.
-   * Key format: `${cliName}:${threadId}`
+   * Key format: `${browserId}:${cliName}:${threadId}`
    */
   private warmupCleanups = new Map<string, () => void>();
+
+  /**
+   * Build a warmup key scoped to browser instance.
+   */
+  private makeWarmupKey(browserId: string, cliName: string, threadId: string): string {
+    return `${browserId}:${cliName}:${threadId}`;
+  }
 
   /**
    * Check if a command is a browser CLI command and return its config.
@@ -106,36 +116,6 @@ export class BrowserCliHandler {
       }
     }
     return null;
-  }
-
-  /**
-   * Split a command string on shell operators (&&, ||, ;) while preserving
-   * the operators for reassembly.
-   *
-   * NOTE: This is a simple regex-based splitter that doesn't respect quotes.
-   * Commands like `bash -c 'agent-browser ... && echo done'` will be incorrectly
-   * split inside the quoted string. For agent-generated commands, this is typically
-   * fine since browser CLIs are usually invoked directly, not wrapped in subshells.
-   */
-  splitShellCommand(command: string): { parts: string[]; operators: string[] } {
-    const parts: string[] = [];
-    const operators: string[] = [];
-
-    // Match && or || or ; as separators (doesn't handle quotes - see note above)
-    const regex = /\s*(&&|\|\||;)\s*/g;
-    let lastIndex = 0;
-    let match;
-
-    while ((match = regex.exec(command)) !== null) {
-      parts.push(command.slice(lastIndex, match.index));
-      operators.push(match[1]!);
-      lastIndex = regex.lastIndex;
-    }
-
-    // Add the remaining part after the last operator
-    parts.push(command.slice(lastIndex));
-
-    return { parts, operators };
   }
 
   /**
@@ -196,12 +176,13 @@ export class BrowserCliHandler {
     }
 
     // Build injection: CDP URL + session flag (for thread isolation)
-    let injection = `${config.flag} "${cdpUrl}"`;
+    // Use shell escaping to prevent command injection from crafted values
+    let injection = `${config.flag} ${shellQuote(cdpUrl)}`;
     if (config.sessionFlag && threadId) {
       // Check if session flag already present
       const sessionPattern = new RegExp(`${config.sessionFlag}\\s+\\S+`);
       if (!sessionPattern.test(command)) {
-        injection += ` ${config.sessionFlag} "${threadId}"`;
+        injection += ` ${config.sessionFlag} ${shellQuote(threadId)}`;
       }
     }
 
@@ -214,9 +195,9 @@ export class BrowserCliHandler {
    * chained command string (commands joined by &&, ||, or ;).
    */
   injectCdpUrl(command: string, cdpUrl: string, threadId?: string): string {
-    const { parts, operators } = this.splitShellCommand(command);
+    const { parts, operators } = splitShellCommand(command);
 
-    const modifiedParts = parts.map(part => {
+    const modifiedParts = parts.map((part: string) => {
       const trimmed = part.trim();
       const cliMatch = this.getBrowserCliConfig(trimmed);
       if (cliMatch) {
@@ -225,35 +206,29 @@ export class BrowserCliHandler {
       return part; // Keep original (preserves whitespace)
     });
 
-    // Reassemble with operators
-    let result = modifiedParts[0] ?? '';
-    for (let i = 0; i < operators.length; i++) {
-      result += ` ${operators[i]} ${modifiedParts[i + 1] ?? ''}`;
-    }
-
-    return result;
+    return reassembleShellCommand(modifiedParts, operators);
   }
 
   /**
-   * Check if a warmup has been completed for a CLI/thread combination.
+   * Check if a warmup has been completed for a browser/CLI/thread combination.
    */
-  isWarmedUp(cliName: string, threadId: string): boolean {
-    return this.warmedUpClis.has(`${cliName}:${threadId}`);
+  isWarmedUp(browserId: string, cliName: string, threadId: string): boolean {
+    return this.warmedUpClis.has(this.makeWarmupKey(browserId, cliName, threadId));
   }
 
   /**
-   * Mark a CLI/thread combination as warmed up.
+   * Mark a browser/CLI/thread combination as warmed up.
    */
-  markWarmedUp(cliName: string, threadId: string): void {
-    this.warmedUpClis.add(`${cliName}:${threadId}`);
+  markWarmedUp(browserId: string, cliName: string, threadId: string): void {
+    this.warmedUpClis.add(this.makeWarmupKey(browserId, cliName, threadId));
   }
 
   /**
    * Register a cleanup callback for when a browser closes.
-   * The cleanup will remove the warmup state for the given CLI/thread.
+   * The cleanup will remove the warmup state for the given browser/CLI/thread.
    */
-  registerWarmupCleanup(cliName: string, threadId: string, browser: MastraBrowser): void {
-    const warmupKey = `${cliName}:${threadId}`;
+  registerWarmupCleanup(browserId: string, cliName: string, threadId: string, browser: MastraBrowser): void {
+    const warmupKey = this.makeWarmupKey(browserId, cliName, threadId);
     if (!this.warmupCleanups.has(warmupKey)) {
       const cleanup = browser.onBrowserClosed(() => {
         this.warmedUpClis.delete(warmupKey);
@@ -267,14 +242,20 @@ export class BrowserCliHandler {
    * Get warmup commands that need to be run for the detected browser CLIs.
    */
   getWarmupCommands(
+    browserId: string,
     browserClis: Array<{ name: string; config: BrowserCliConfig }>,
     cdpUrl: string,
     threadId: string,
   ): Array<{ cliName: string; command: string }> {
     const warmups: Array<{ cliName: string; command: string }> = [];
+    const seen = new Set<string>();
 
     for (const { name: cliName, config: cliConfig } of browserClis) {
-      if (cliConfig.warmupCommand && !this.isWarmedUp(cliName, threadId)) {
+      // Deduplicate: if same CLI appears multiple times in chained command, only warmup once
+      if (seen.has(cliName)) continue;
+      seen.add(cliName);
+
+      if (cliConfig.warmupCommand && !this.isWarmedUp(browserId, cliName, threadId)) {
         warmups.push({
           cliName,
           command: cliConfig.warmupCommand(cdpUrl, threadId),
@@ -301,10 +282,10 @@ export class BrowserCliHandler {
     /** External CDP URL if detected */
     externalCdpUrl: string | null;
   } {
-    const { parts } = this.splitShellCommand(command);
+    const { parts } = splitShellCommand(command);
 
     const browserClis = parts
-      .map(part => this.getBrowserCliConfig(part.trim()))
+      .map((part: string) => this.getBrowserCliConfig(part.trim()))
       .filter((match): match is NonNullable<typeof match> => match !== null);
 
     const usingExternalCdp = this.hasExternalCdpFlag(parts);

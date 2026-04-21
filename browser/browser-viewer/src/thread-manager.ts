@@ -18,8 +18,11 @@ import type { BrowserViewerConfig } from './types';
  * Extended session info for BrowserViewer.
  */
 interface BrowserViewerSession extends ThreadSession {
-  /** Playwright browser server (owns the Chrome process) */
-  browserServer: BrowserServer;
+  /**
+   * Playwright browser server (owns the Chrome process).
+   * Null for external CDP connections where we don't own the browser process.
+   */
+  browserServer: BrowserServer | null;
   /** Playwright browser instance (connected to server) */
   browser: Browser;
   /** Browser context */
@@ -289,7 +292,7 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
     this.sharedSession = {
       threadId: DEFAULT_THREAD_ID,
       createdAt: Date.now(),
-      browserServer: null as unknown as BrowserServer, // We don't own the server
+      browserServer: null, // We don't own the server for external CDP connections
       browser,
       context,
       cdpSession,
@@ -444,7 +447,7 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       const session: BrowserViewerSession = {
         threadId,
         createdAt: Date.now(),
-        browserServer: null as unknown as BrowserServer, // We don't own the server
+        browserServer: null, // We don't own the server for external CDP connections
         browser,
         context,
         cdpSession,
@@ -494,11 +497,13 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       // Ignore
     }
 
-    // Close browser server (kills the Chrome process)
-    try {
-      await session.browserServer.close();
-    } catch {
-      // Ignore
+    // Close browser server (kills the Chrome process) - only if we own it
+    if (session.browserServer) {
+      try {
+        await session.browserServer.close();
+      } catch {
+        // Ignore
+      }
     }
 
     this.threadSessions.delete(threadId);
@@ -532,11 +537,13 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       // Ignore
     }
 
-    // Close browser server (kills the Chrome process)
-    try {
-      await this.sharedSession.browserServer.close();
-    } catch {
-      // Ignore
+    // Close browser server (kills the Chrome process) - only if we own it
+    if (this.sharedSession.browserServer) {
+      try {
+        await this.sharedSession.browserServer.close();
+      } catch {
+        // Ignore
+      }
     }
 
     this.sharedSession = null;
@@ -603,11 +610,13 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       // Ignore
     }
 
-    // Close browser server (kills the Chrome process)
-    try {
-      await viewerSession.browserServer.close();
-    } catch {
-      // Ignore
+    // Close browser server (kills the Chrome process) - only if we own it
+    if (viewerSession.browserServer) {
+      try {
+        await viewerSession.browserServer.close();
+      } catch {
+        // Ignore
+      }
     }
 
     this.threadSessions.delete(session.threadId);

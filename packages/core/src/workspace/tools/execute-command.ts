@@ -88,19 +88,20 @@ async function executeCommand(input: Record<string, any>, context: any) {
     }
 
     const cdpUrl = browser.getCdpUrl(threadId);
+    const browserId = browser.id;
 
     if (cdpUrl) {
       // Run warmup commands for CLIs that need them
-      const warmups = browserCliHandler.getWarmupCommands(browserClis, cdpUrl, threadId);
+      const warmups = browserCliHandler.getWarmupCommands(browserId, browserClis, cdpUrl, threadId);
       for (const { cliName, command: warmupCmd } of warmups) {
         try {
           if (sandbox.executeCommand) {
             await sandbox.executeCommand(warmupCmd, [], { timeout: 10000 });
           }
           // Only mark as warmed up after successful warmup
-          browserCliHandler.markWarmedUp(cliName, threadId);
+          browserCliHandler.markWarmedUp(browserId, cliName, threadId);
           // Register cleanup when browser closes
-          browserCliHandler.registerWarmupCleanup(cliName, threadId, browser);
+          browserCliHandler.registerWarmupCleanup(browserId, cliName, threadId, browser);
         } catch {
           // Don't mark as warmed up - will retry on next command
           // This allows recovery if the CLI daemon wasn't ready

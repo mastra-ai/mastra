@@ -2,10 +2,9 @@
   "extends": "../../tsconfig.node.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./src",
     "moduleResolution": "bundler",
     "types": ["node"]
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "tsup.config.ts"],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]
 }
