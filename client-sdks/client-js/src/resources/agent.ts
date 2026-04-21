@@ -1991,7 +1991,9 @@ export class Agent extends BaseResource {
             }
 
             // Clone the last message once — all tool results are patched into this single copy
-            const lastMessage: UIMessage = JSON.parse(JSON.stringify(messages[messages.length - 1]));
+            const lastMessageRaw = messages[messages.length - 1];
+            const lastMessage: UIMessage | undefined =
+              lastMessageRaw != null ? JSON.parse(JSON.stringify(lastMessageRaw)) : undefined;
             let shouldExecuteClientTool = false;
 
             // Execute all pending client tools and patch results into lastMessage
@@ -2063,7 +2065,8 @@ export class Agent extends BaseResource {
               // Build updated messages for the recursive call
               // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
               // When no threadId (stateless), include full conversation history for context
-              const newMessages = [...messages.filter(m => m.id !== lastMessage.id), lastMessage];
+              const newMessages =
+                lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
               const updatedMessages = threadId
                 ? newMessages
                 : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
