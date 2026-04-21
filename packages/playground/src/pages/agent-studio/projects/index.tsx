@@ -17,12 +17,14 @@ import {
 import { Plus, Users } from 'lucide-react';
 import { useProjects } from '@/domains/agent-studio/hooks/use-projects';
 import { useCanCreateAgent } from '@/domains/agents/hooks/use-can-create-agent';
+import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { useLinkComponent } from '@/lib/framework';
 
 export function AgentStudioProjects() {
   const { Link: FrameworkLink } = useLinkComponent();
   const { canCreateAgent } = useCanCreateAgent();
   const { data, isLoading, error } = useProjects();
+  const { data: user } = useCurrentUser();
 
   const createPath = '/agent-studio/projects/create';
 
@@ -50,7 +52,10 @@ export function AgentStudioProjects() {
     );
   }
 
-  const projects = data?.projects ?? [];
+  const allProjects = data?.projects ?? [];
+  // Defense-in-depth: when the user is known, only show projects they authored.
+  // Legacy projects without an authorId remain visible so existing data keeps working.
+  const projects = user?.id ? allProjects.filter(p => !p.authorId || p.authorId === user.id) : allProjects;
 
   return (
     <PageLayout>

@@ -50,8 +50,39 @@ test.describe('Agent Studio Projects — behavior', () => {
     // Chat URL is /agent-studio/projects/:id/chat — wait for the route to settle.
     await expect(page).toHaveURL(/\/agent-studio\/projects\/[^/]+\/chat/, { timeout: 15000 });
 
-    // The tasks pane is present.
-    await expect(page.getByTestId('project-tasks-panel')).toBeVisible();
+    // The right-side project panel (Team + Tasks) is present.
+    await expect(page.getByTestId('project-side-panel')).toBeVisible();
+    await expect(page.getByTestId('project-team-panel')).toBeVisible();
+    await expect(page.getByTestId('project-tasks-section')).toBeVisible();
+  });
+
+  test('project chat has no thread sidebar and uses a single fixed conversation', async ({ page }) => {
+    await setupMockAuth(page, { role: 'member', permissions: END_USER_PERMISSIONS });
+
+    const createResponse = await page.request.post('/api/projects', {
+      data: {
+        name: 'Single Thread Project',
+        instructions: 'Coordinate the team.',
+        model: { provider: 'openai', name: 'gpt-4o' },
+      },
+    });
+    expect(createResponse.ok()).toBeTruthy();
+    const project = (await createResponse.json()) as { id: string };
+
+    await page.goto(`/agent-studio/projects/${project.id}/chat`);
+
+    // URL stays at /chat — there is no /chat/:threadId segment to navigate to.
+    await expect(page).toHaveURL(new RegExp(`/agent-studio/projects/${project.id}/chat$`));
+
+    // Right-side project panel renders Team above Tasks.
+    const sidePanel = page.getByTestId('project-side-panel');
+    await expect(sidePanel).toBeVisible();
+    await expect(sidePanel.getByTestId('project-team-panel')).toBeVisible();
+    await expect(sidePanel.getByTestId('project-tasks-section')).toBeVisible();
+
+    // Legacy /chat/:threadId URLs redirect back to /chat.
+    await page.goto(`/agent-studio/projects/${project.id}/chat/old-thread-abc`);
+    await expect(page).toHaveURL(new RegExp(`/agent-studio/projects/${project.id}/chat$`));
   });
 
   test('task CRUD (add → toggle done → delete) persists via the server', async ({ page }) => {
@@ -69,7 +100,7 @@ test.describe('Agent Studio Projects — behavior', () => {
     const project = (await createResponse.json()) as { id: string };
 
     await page.goto(`/agent-studio/projects/${project.id}/chat`);
-    await expect(page.getByTestId('project-tasks-panel')).toBeVisible();
+    await expect(page.getByTestId('project-tasks-section')).toBeVisible();
 
     // Add a task.
     const taskTitle = `Write spec ${Date.now().toString(36)}`;

@@ -378,7 +378,8 @@ const routes = [
       },
       {
         path: '/agent-studio/projects/:projectId/chat/:threadId',
-        element: <AgentStudioProjectChat />,
+        loader: ({ params }: { params: { projectId: string } }) =>
+          redirect(`/agent-studio/projects/${params.projectId}/chat`),
       },
       {
         path: '/agent-studio/library',

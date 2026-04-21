@@ -19,6 +19,14 @@ const statusLabels: Record<ProjectTaskResponse['status'], string> = {
 };
 
 export function ProjectTasksPanel({ project }: ProjectTasksPanelProps) {
+  return (
+    <aside className="flex flex-col gap-3 p-3 h-full" data-testid="project-tasks-panel">
+      <ProjectTasksSection project={project} />
+    </aside>
+  );
+}
+
+export function ProjectTasksSection({ project }: ProjectTasksPanelProps) {
   const { addTask, updateTask, deleteTask } = useProjectMutations(project.id);
   const [newTitle, setNewTitle] = useState('');
 
@@ -61,7 +69,7 @@ export function ProjectTasksPanel({ project }: ProjectTasksPanelProps) {
   };
 
   return (
-    <aside className="flex flex-col gap-3 p-3 h-full" data-testid="project-tasks-panel">
+    <div className="flex flex-col gap-3" data-testid="project-tasks-section">
       <div className="flex items-center justify-between">
         <Txt variant="ui-md">Tasks</Txt>
         <Txt variant="ui-sm" className="text-icon3">
@@ -128,6 +136,6 @@ export function ProjectTasksPanel({ project }: ProjectTasksPanelProps) {
           })}
         </ul>
       )}
-    </aside>
+    </div>
   );
 }

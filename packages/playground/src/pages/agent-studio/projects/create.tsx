@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { useProjectMutations } from '@/domains/agent-studio/hooks/use-projects';
 import { useStudioAgents } from '@/domains/agent-studio/hooks/use-studio-agents';
+import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { useLinkComponent } from '@/lib/framework';
 
 export function AgentStudioProjectCreate() {
@@ -12,6 +13,7 @@ export function AgentStudioProjectCreate() {
   const { Link } = useLinkComponent();
   const { createProject } = useProjectMutations();
   const { agents: candidateAgents } = useStudioAgents({ scope: 'all' });
+  const { data: user } = useCurrentUser();
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -42,6 +44,7 @@ export function AgentStudioProjectCreate() {
         instructions: instructions.trim(),
         model: { provider: provider.trim(), name: modelName.trim() },
         invitedAgentIds,
+        ...(user?.id ? { authorId: user.id } : {}),
       });
       toast.success('Project created');
       void navigate(`/agent-studio/projects/${project.id}/chat`);

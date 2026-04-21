@@ -1,11 +1,17 @@
-import { v4 as uuid } from '@lukeed/uuid';
-import { Button, Header, HeaderAction, HeaderTitle, Icon, MainContentLayout } from '@mastra/playground-ui';
+import {
+  Button,
+  Header,
+  HeaderAction,
+  HeaderTitle,
+  Icon,
+  MainContentLayout,
+  is403ForbiddenError,
+} from '@mastra/playground-ui';
 import { Pencil } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router';
-import { ProjectTasksPanel } from '@/domains/agent-studio/components/project-tasks-panel';
+import { ProjectSidePanel } from '@/domains/agent-studio/components/project-side-panel';
 import { useProject } from '@/domains/agent-studio/hooks/use-projects';
-import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
 import { AgentLayout } from '@/domains/agents/components/agent-layout';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
@@ -17,7 +23,7 @@ import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
-import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
+import { useMemory } from '@/domains/memory/hooks/use-memory';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import { useLinkComponent } from '@/lib/framework';
@@ -25,42 +31,22 @@ import { useLinkComponent } from '@/lib/framework';
 import type { AgentSettingsType } from '@/types';
 
 /**
- * Project chat surface. The project is persisted as a supervisor stored agent,
- * so we chat with it through the normal agent chat stack. The left slot holds
- * the memory thread list; the right slot holds the live task panel.
+ * Project chat surface. A project has a single fixed thread — its own
+ * projectId doubles as the thread id — so there is no thread sidebar and
+ * no "new thread" concept. The right slot shows the Team + Tasks panel.
  */
 export function AgentStudioProjectChat() {
-  const { projectId, threadId } = useParams<{ projectId: string; threadId?: string }>();
+  const { projectId } = useParams<{ projectId: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { Link } = useLinkComponent();
   const { canEdit } = usePermissions();
 
-  const { data: project, isLoading: isProjectLoading } = useProject(projectId);
+  const { data: project, isLoading: isProjectLoading, error: projectError } = useProject(projectId);
   const { data: agent, isLoading: isAgentLoading } = useAgent(projectId!);
   const { data: memory } = useMemory(projectId!);
 
-  const isNewThread = threadId === 'new';
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- threadId is intentional: we need a new UUID per thread
-  const newThreadId = useMemo(() => uuid(), [threadId]);
-
   const hasMemory = Boolean(memory?.result);
-
-  const {
-    data: threads,
-    isLoading: isThreadsLoading,
-    refetch: refreshThreads,
-  } = useThreads({
-    resourceId: projectId!,
-    agentId: projectId!,
-    isMemoryEnabled: hasMemory,
-  });
-
-  useEffect(() => {
-    if (!hasMemory) return;
-    if (threadId) return;
-    void navigate(`/agent-studio/projects/${projectId}/chat/new`);
-  }, [hasMemory, threadId, projectId, navigate]);
 
   const messageId = searchParams.get('messageId') ?? undefined;
 
@@ -94,6 +80,17 @@ export function AgentStudioProjectChat() {
     };
   }, [agent]);
 
+  // If the project isn't accessible (403/404), send the user back to the list.
+  useEffect(() => {
+    if (!projectError) return;
+    const status =
+      (projectError as { status?: number; statusCode?: number } | null)?.status ??
+      (projectError as { statusCode?: number } | null)?.statusCode;
+    if (is403ForbiddenError(projectError) || status === 404) {
+      void navigate('/agent-studio/projects', { replace: true });
+    }
+  }, [projectError, navigate]);
+
   if (!projectId) {
     return <Navigate to="/agent-studio/projects" replace />;
   }
@@ -106,22 +103,14 @@ export function AgentStudioProjectChat() {
     return <div className="text-center py-4">Project not found</div>;
   }
 
-  // useAgent may 404 if the project isn't yet surfaced in the runtime — the
-  // chat still works via the agent routes keyed by stored-agent id.
   void isAgentLoading;
 
-  const actualThreadId = isNewThread ? newThreadId : (threadId ?? newThreadId);
+  // One project, one thread. The projectId IS the thread id.
+  const actualThreadId = projectId;
 
-  const handleRefreshThreadList = async () => {
-    await refreshThreads();
-    if (isNewThread) {
-      void navigate(`/agent-studio/projects/${projectId}/chat/${newThreadId}`);
-    }
-  };
+  const refreshThreadList = async () => {};
 
   const canEditProject = canEdit('stored-agents');
-  const newThreadUrl = `/agent-studio/projects/${projectId}/chat/new`;
-  const threadUrl = (tid: string) => `/agent-studio/projects/${projectId}/chat/${tid}`;
   const teamSize = project.project?.invitedAgentIds?.length ?? 0;
 
   return (
@@ -166,19 +155,7 @@ export function AgentStudioProjectChat() {
 
                         <AgentLayout
                           agentId={projectId}
-                          leftSlot={
-                            hasMemory && (
-                              <AgentSidebar
-                                agentId={projectId}
-                                threadId={actualThreadId}
-                                threads={threads || []}
-                                isLoading={isThreadsLoading}
-                                newThreadUrl={newThreadUrl}
-                                threadUrl={threadUrl}
-                              />
-                            )
-                          }
-                          rightSlot={<ProjectTasksPanel project={project} />}
+                          rightSlot={<ProjectSidePanel project={project} canEdit={canEditProject} />}
                         >
                           <AgentChat
                             key={actualThreadId}
@@ -187,10 +164,9 @@ export function AgentStudioProjectChat() {
                             modelVersion={agent?.modelVersion}
                             threadId={actualThreadId}
                             memory={hasMemory}
-                            refreshThreadList={handleRefreshThreadList}
+                            refreshThreadList={refreshThreadList}
                             modelList={agent?.modelList}
                             messageId={messageId}
-                            isNewThread={isNewThread}
                             hideModelSwitcher
                           />
                         </AgentLayout>
