@@ -84,7 +84,6 @@ export function ObservabilityTracesList({
   useEffect(() => {
     setFeaturedTraceId(selectedTraceId ?? null);
     if (!selectedTraceId) {
-      setFeaturedSpanRecord(undefined);
       setFeaturedSpanId(null);
       setFeaturedScore(undefined);
       setSpanTab('details');
