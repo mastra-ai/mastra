@@ -4,6 +4,7 @@
  */
 import fs from 'node:fs';
 
+import { createMastraCodeAnalytics } from './analytics.js';
 import { isStreamDestroyedError } from './error-classification.js';
 import { hasHeadlessFlag, headlessMain } from './headless.js';
 import { createBrowserFromSettings, loadSettings } from './onboarding/settings.js';
@@ -19,6 +20,7 @@ let harness: Awaited<ReturnType<typeof createMastraCode>>['harness'];
 let mcpManager: Awaited<ReturnType<typeof createMastraCode>>['mcpManager'];
 let hookManager: Awaited<ReturnType<typeof createMastraCode>>['hookManager'];
 let authStorage: Awaited<ReturnType<typeof createMastraCode>>['authStorage'];
+let analytics = createMastraCodeAnalytics({ version: getCurrentVersion() });
 
 // Global safety nets — catch any uncaught errors from storage init, etc.
 process.on('uncaughtException', error => {
@@ -82,9 +84,18 @@ async function tuiMain() {
   }
   applyThemeMode(themeMode, detectedBgHex);
 
+  analytics.capture('mastracode_session_started', {
+    mode: harness.getCurrentModeId(),
+    resourceId: harness.getResourceId(),
+    hasAuthStorage: Boolean(authStorage),
+    hasMcp: Boolean(mcpManager),
+    theme: themeMode,
+  });
+
   const tui = new MastraTUI({
     harness,
     hookManager,
+    analytics,
     authStorage,
     mcpManager,
     appName: 'Mastra Code',
@@ -99,7 +110,7 @@ async function tuiMain() {
 
 const asyncCleanup = async () => {
   releaseAllThreadLocks();
-  await Promise.allSettled([mcpManager?.disconnect(), harness?.stopHeartbeats()]);
+  await Promise.allSettled([mcpManager?.disconnect(), harness?.stopHeartbeats(), analytics.shutdown()]);
 };
 
 process.on('beforeExit', () => {

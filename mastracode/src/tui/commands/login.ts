@@ -87,6 +87,14 @@ export async function handleLoginCommand(ctx: SlashCommandContext, mode: 'login'
 
   const action = mode === 'login' ? 'Log in to' : 'Log out from';
 
+  if (mode === 'login') {
+    ctx.analytics?.trackInteractivePrompt('login_provider_selector', {
+      threadId: ctx.state.harness.getCurrentThreadId(),
+      resourceId: ctx.state.harness.getResourceId(),
+      mode: ctx.state.harness.getCurrentModeId(),
+    });
+  }
+
   return new Promise<void>(resolve => {
     const questionComponent = new AskQuestionInlineComponent(
       {

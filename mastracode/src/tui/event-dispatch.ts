@@ -44,6 +44,10 @@ import type { TUIState } from './state.js';
 /**
  * Dispatch a HarnessEvent to the appropriate handler.
  */
+function trackInteractivePrompt(ectx: EventHandlerContext, promptType: string, properties?: Record<string, unknown>): void {
+  ectx.analytics?.trackInteractivePrompt(promptType, properties);
+}
+
 export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerContext, state: TUIState): Promise<void> {
   switch (event.type) {
     case 'agent_start':
@@ -77,6 +81,11 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       break;
 
     case 'tool_approval_required':
+      trackInteractivePrompt(ectx, 'tool_approval_required', {
+        toolName: event.toolName,
+        threadId: state.harness.getCurrentThreadId(),
+        resourceId: state.harness.getResourceId(),
+      });
       handleToolApprovalRequired(ectx, event.toolCallId, event.toolName, event.args);
       break;
 
@@ -89,6 +98,13 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       break;
 
     case 'tool_input_start':
+      if (event.toolName === 'ask_user' || event.toolName === 'request_access' || event.toolName === 'submit_plan') {
+        trackInteractivePrompt(ectx, event.toolName, {
+          toolName: event.toolName,
+          threadId: state.harness.getCurrentThreadId(),
+          resourceId: state.harness.getResourceId(),
+        });
+      }
       handleToolInputStart(ectx, event.toolCallId, event.toolName);
       break;
 

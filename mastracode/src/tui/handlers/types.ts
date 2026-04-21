@@ -5,6 +5,7 @@
 import type { Component } from '@mariozechner/pi-tui';
 import type { HarnessMessage, TaskItem } from '@mastra/core/harness';
 
+import type { MastraCodeAnalytics } from '../../analytics.js';
 import type { NotificationReason } from '../notify.js';
 import type { TUIState } from '../state.js';
 
@@ -17,6 +18,7 @@ export interface EventHandlerContext {
   ) => void;
   updateStatusLine: () => void;
   notify: (reason: NotificationReason, message?: string) => void;
+  analytics?: MastraCodeAnalytics;
   handleSlashCommand: (input: string) => Promise<boolean>;
   addUserMessage: (message: HarnessMessage) => void;
   addChildBeforeFollowUps: (child: Component) => void;

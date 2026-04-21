@@ -11,6 +11,12 @@ export function showThreadLockPrompt(
   ownerPid: number,
   lockedThreadId?: string,
 ): void {
+  ctx.analytics?.trackInteractivePrompt('thread_lock_prompt', {
+    threadId: lockedThreadId ?? ctx.state.harness.getCurrentThreadId(),
+    resourceId: ctx.state.harness.getResourceId(),
+    mode: ctx.state.harness.getCurrentModeId(),
+  });
+
   const questionComponent = new AskQuestionInlineComponent(
     {
       question: `Thread "${threadTitle}" is locked by pid ${ownerPid}. What would you like to do?`,

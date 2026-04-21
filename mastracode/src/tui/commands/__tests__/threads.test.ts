@@ -1,6 +1,6 @@
 import type { HarnessMessage, HarnessThread } from '@mastra/core/harness';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { handleThreadsCommand } from '../threads.js';
+import { handleThreadsCommand, showThreadLockPrompt } from '../threads.js';
 import type { SlashCommandContext } from '../types.js';
 
 const selectorInstances: Array<any> = [];
@@ -56,6 +56,7 @@ function createMessage(id: string, text: string): HarnessMessage {
 
 function createContext(threads: HarnessThread[]) {
   const showOverlay = vi.fn();
+  const trackInteractivePrompt = vi.fn();
   const state = {
     pendingNewThread: false,
     projectInfo: { rootPath: '/repo', gitBranch: 'main' },
@@ -66,13 +67,14 @@ function createContext(threads: HarnessThread[]) {
       hideOverlay: vi.fn(),
       requestRender: vi.fn(),
     },
-    chatContainer: { clear: vi.fn() },
+    chatContainer: { clear: vi.fn(), addChild: vi.fn(), invalidate: vi.fn() },
     allToolComponents: [] as any[],
     pendingTools: new Map(),
     harness: {
       listThreads: vi.fn(async () => threads),
       getCurrentThreadId: vi.fn(() => null),
       getResourceId: vi.fn(() => 'resource-1'),
+      getCurrentModeId: vi.fn(() => 'build'),
       getFirstUserMessagesForThreads: vi.fn(async () => new Map()),
       setResourceId: vi.fn(),
       switchThread: vi.fn(),
@@ -82,12 +84,13 @@ function createContext(threads: HarnessThread[]) {
 
   const ctx = {
     state,
+    analytics: { trackInteractivePrompt },
     showInfo: vi.fn(),
     showError: vi.fn(),
     renderExistingMessages: vi.fn(),
   } as unknown as SlashCommandContext;
 
-  return { ctx, state, showOverlay };
+  return { ctx, state, showOverlay, trackInteractivePrompt };
 }
 
 describe('handleThreadsCommand thread listing', () => {
@@ -170,5 +173,17 @@ describe('handleThreadsCommand thread listing', () => {
 
     selector.options.onCancel();
     await commandPromise;
+  });
+
+  it('tracks the thread lock prompt when shown', () => {
+    const { ctx, trackInteractivePrompt } = createContext([]);
+
+    showThreadLockPrompt(ctx, 'Locked Thread', 1234, 'thread-locked');
+
+    expect(trackInteractivePrompt).toHaveBeenCalledWith('thread_lock_prompt', {
+      threadId: 'thread-locked',
+      resourceId: 'resource-1',
+      mode: 'build',
+    });
   });
 });
