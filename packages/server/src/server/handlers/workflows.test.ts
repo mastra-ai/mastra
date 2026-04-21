@@ -1,10 +1,12 @@
 import { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
 import { MockStore } from '@mastra/core/storage';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Workflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
+import { checkRouteFGA } from '../server-adapter';
 import { getWorkflowInfo } from '../utils';
 import { createTestServerContext } from './test-utils';
 import {
@@ -235,6 +237,23 @@ describe('vNext Workflow Handlers', () => {
   });
 
   describe('GET_WORKFLOW_BY_ID_ROUTE', () => {
+    it('should declare FGA for workflow reads', async () => {
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+      const check = vi.fn().mockResolvedValue(true);
+      vi.spyOn(mockMastra, 'getServer').mockReturnValue({ fga: { check } } as any);
+
+      const result = await checkRouteFGA(mockMastra, GET_WORKFLOW_BY_ID_ROUTE as any, requestContext as any, {
+        workflowId: 'test-workflow',
+      });
+
+      expect(result).toBeNull();
+      expect(check).toHaveBeenCalledWith(
+        { id: 'user-1' },
+        { resource: { type: 'workflow', id: 'test-workflow' }, permission: 'workflows:read' },
+      );
+    });
+
     it('should throw error when workflowId is not provided', async () => {
       await expect(
         GET_WORKFLOW_BY_ID_ROUTE.handler({

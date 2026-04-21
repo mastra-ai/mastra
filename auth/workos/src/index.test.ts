@@ -239,6 +239,65 @@ describe('MastraAuthWorkos', () => {
     });
   });
 
+  describe('getCurrentUser', () => {
+    it('should not fetch memberships when fetchMemberships is disabled', async () => {
+      mockWithAuth.mockResolvedValueOnce({
+        auth: {
+          user: { id: 'user123', email: 'test@example.com' },
+          organizationId: undefined,
+        },
+      });
+
+      const auth = new MastraAuthWorkos({
+        apiKey: mockApiKey,
+        clientId: mockClientId,
+        redirectUri: mockRedirectUri,
+        session: { cookiePassword: mockCookiePassword },
+      });
+
+      const user = await auth.getCurrentUser(new Request('https://example.com'));
+
+      expect(user).toMatchObject({
+        id: 'user123',
+        workosId: 'user123',
+      });
+      expect(mockListOrganizationMemberships).not.toHaveBeenCalled();
+    });
+
+    it('should cache memberships across repeated requests when fetchMemberships is enabled', async () => {
+      mockWithAuth.mockResolvedValue({
+        auth: {
+          user: { id: 'user123', email: 'test@example.com' },
+          organizationId: undefined,
+        },
+      });
+      mockListOrganizationMemberships.mockResolvedValue({
+        data: [{ id: 'om-1', organizationId: 'org-1', role: { slug: 'admin' } }],
+      });
+
+      const auth = new MastraAuthWorkos({
+        apiKey: mockApiKey,
+        clientId: mockClientId,
+        redirectUri: mockRedirectUri,
+        session: { cookiePassword: mockCookiePassword },
+        fetchMemberships: true,
+      });
+
+      const firstUser = await auth.getCurrentUser(new Request('https://example.com/one'));
+      const secondUser = await auth.getCurrentUser(new Request('https://example.com/two'));
+
+      expect(firstUser).toMatchObject({
+        organizationId: 'org-1',
+        memberships: [{ id: 'om-1', organizationId: 'org-1' }],
+      });
+      expect(secondUser).toMatchObject({
+        organizationId: 'org-1',
+        memberships: [{ id: 'om-1', organizationId: 'org-1' }],
+      });
+      expect(mockListOrganizationMemberships).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('can be overridden with custom authorization logic', async () => {
     const workos = new MastraAuthWorkos({
       apiKey: mockApiKey,

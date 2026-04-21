@@ -42,7 +42,7 @@ import type {
   ThreadExecutionContext,
   UsageLike,
 } from './responses.storage';
-import { getEffectiveResourceId, getEffectiveThreadId, validateThreadOwnership } from './utils';
+import { enforceThreadAccess, getEffectiveResourceId, getEffectiveThreadId } from './utils';
 
 type AgentExecutionInput = Parameters<Agent['generate']>[0];
 type ResolvedAgentModel = Awaited<ReturnType<Agent['getModel']>>;
@@ -215,7 +215,13 @@ async function resolveThreadExecutionContext({
       throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
     }
 
-    await validateThreadOwnership(existingThread, effectiveResourceId);
+    await enforceThreadAccess({
+      mastra: agent.getMastraInstance(),
+      requestContext,
+      threadId: conversationId,
+      thread: existingThread,
+      effectiveResourceId,
+    });
     return {
       threadId: existingThread.id,
       resourceId: effectiveResourceId ?? existingThread.resourceId,
@@ -242,7 +248,13 @@ async function resolveThreadExecutionContext({
   const threadId = effectiveThreadId;
   const existingThread = await memory.getThreadById({ threadId });
   if (existingThread) {
-    await validateThreadOwnership(existingThread, effectiveResourceId);
+    await enforceThreadAccess({
+      mastra: agent.getMastraInstance(),
+      requestContext,
+      threadId,
+      thread: existingThread,
+      effectiveResourceId,
+    });
     return {
       threadId: existingThread.id,
       resourceId: effectiveResourceId ?? existingThread.resourceId,

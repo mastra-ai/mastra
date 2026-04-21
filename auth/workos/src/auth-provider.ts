@@ -20,7 +20,9 @@ import { MastraAuthProvider } from '@mastra/core/server';
 import { AuthService, sessionEncryption } from '@workos/authkit-session';
 import type { AuthKitConfig } from '@workos/authkit-session';
 import { WorkOS } from '@workos-inc/node';
+import type { OrganizationMembership } from '@workos-inc/node';
 import type { HonoRequest } from 'hono';
+import { LRUCache } from 'lru-cache';
 
 import { WebSessionStorage } from './session-storage.js';
 import type { WorkOSUser, MastraAuthWorkosOptions } from './types.js';
@@ -31,6 +33,8 @@ import { mapWorkOSUserToEEUser } from './types.js';
  * Generated once per process to ensure consistency during dev.
  */
 const DEV_COOKIE_PASSWORD = crypto.randomUUID() + crypto.randomUUID(); // 72 chars
+const MEMBERSHIP_CACHE_TTL_MS = 60 * 1000;
+const MEMBERSHIP_CACHE_MAX_SIZE = 1000;
 
 /**
  * Mastra authentication provider for WorkOS.
@@ -60,6 +64,8 @@ export class MastraAuthWorkos
   protected ssoConfig: MastraAuthWorkosOptions['sso'];
   protected authService: AuthService<Request, Response>;
   protected config: AuthKitConfig;
+  protected fetchMemberships: boolean;
+  protected membershipCache: LRUCache<string, Promise<OrganizationMembership[]>>;
 
   constructor(options?: MastraAuthWorkosOptions) {
     super({ name: options?.name ?? 'workos' });
@@ -94,6 +100,11 @@ export class MastraAuthWorkos
     this.clientId = clientId;
     this.redirectUri = redirectUri;
     this.ssoConfig = options?.sso;
+    this.fetchMemberships = options?.fetchMemberships ?? false;
+    this.membershipCache = new LRUCache<string, Promise<OrganizationMembership[]>>({
+      max: MEMBERSHIP_CACHE_MAX_SIZE,
+      ttl: MEMBERSHIP_CACHE_TTL_MS,
+    });
 
     // Create WorkOS client
     this.workos = new WorkOS(apiKey, { clientId });
@@ -113,7 +124,9 @@ export class MastraAuthWorkos
 
     // Create session storage and auth service
     const storage = new WebSessionStorage(this.config);
-    this.authService = new AuthService(this.config, storage, this.workos, sessionEncryption);
+    // Cast needed: @workos/authkit-session pins @workos-inc/node@8.0.0 but we use 8.8.0.
+    // The runtime API is compatible; only private HttpClient types differ.
+    this.authService = new AuthService(this.config, storage, this.workos as any, sessionEncryption);
 
     this.registerOptions(options as MastraAuthProviderOptions<WorkOSUser>);
 
@@ -145,11 +158,23 @@ export class MastraAuthWorkos
       const { auth } = await this.authService.withAuth(rawRequest);
 
       if (auth.user) {
+        // Fetch memberships only when FGA is configured (fetchMemberships: true).
+        // Skipping this call avoids an extra network round-trip on every
+        // authenticated request when FGA is not in use.
+        let memberships: OrganizationMembership[] | undefined;
+        if (this.fetchMemberships) {
+          try {
+            memberships = await this.getMemberships(auth.user.id);
+          } catch {
+            // Ignore membership fetch errors — FGA will gracefully degrade
+          }
+        }
+
         return {
           ...mapWorkOSUserToEEUser(auth.user),
           workosId: auth.user.id,
           organizationId: auth.organizationId,
-          // Note: memberships not available from session, fetch if needed
+          memberships,
         };
       }
 
@@ -160,15 +185,22 @@ export class MastraAuthWorkos
 
         if (payload?.sub) {
           const user = await this.workos.userManagement.getUser(payload.sub);
-          const memberships = await this.workos.userManagement.listOrganizationMemberships({
-            userId: user.id,
-          });
+
+          // Fetch memberships only when FGA is configured (fetchMemberships: true).
+          if (this.fetchMemberships) {
+            const memberships = await this.getMemberships(user.id);
+
+            return {
+              ...mapWorkOSUserToEEUser(user),
+              workosId: user.id,
+              organizationId: memberships[0]?.organizationId,
+              memberships,
+            };
+          }
 
           return {
             ...mapWorkOSUserToEEUser(user),
             workosId: user.id,
-            organizationId: memberships.data[0]?.organizationId,
-            memberships: memberships.data,
           };
         }
       }
@@ -201,14 +233,15 @@ export class MastraAuthWorkos
         return null;
       }
 
-      // Get organizationId from JWT claims, or fall back to fetching from memberships
+      // Get organizationId from JWT claims, or fall back to fetching from memberships.
+      // The fallback fetch is skipped when fetchMemberships is false (FGA not configured)
+      // to avoid an extra network call on every authenticated request.
       let organizationId = auth.organizationId;
-      if (!organizationId) {
+      let memberships: OrganizationMembership[] | undefined;
+      if (this.fetchMemberships) {
         try {
-          const memberships = await this.workos.userManagement.listOrganizationMemberships({
-            userId: auth.user.id,
-          });
-          organizationId = memberships.data[0]?.organizationId;
+          memberships = await this.getMemberships(auth.user.id);
+          organizationId ??= memberships[0]?.organizationId;
         } catch {
           // Ignore membership fetch errors
         }
@@ -219,6 +252,7 @@ export class MastraAuthWorkos
         ...mapWorkOSUserToEEUser(auth.user),
         workosId: auth.user.id,
         organizationId,
+        memberships,
       };
 
       // If session was refreshed, attach to user object for caller to save
@@ -252,6 +286,26 @@ export class MastraAuthWorkos
    */
   getUserProfileUrl(user: EEUser): string {
     return `/profile/${user.id}`;
+  }
+
+  private async getMemberships(userId: string): Promise<OrganizationMembership[]> {
+    const cached = this.membershipCache.get(userId);
+    if (cached) {
+      return cached;
+    }
+
+    const membershipsPromise = this.workos.userManagement
+      .listOrganizationMemberships({
+        userId,
+      })
+      .then(result => result.data)
+      .catch(error => {
+        this.membershipCache.delete(userId);
+        throw error;
+      });
+
+    this.membershipCache.set(userId, membershipsPromise);
+    return membershipsPromise;
   }
 
   // ============================================================================

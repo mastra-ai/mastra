@@ -172,6 +172,15 @@ interface RouteConfig<
    * Uses the format: `resource:action` or `resource:action:resourceId`
    */
   requiresPermission?: string;
+  /**
+   * FGA authorization config for this route (EE feature).
+   * If set, the user must have the specified permission on the resource.
+   */
+  fga?: {
+    resourceType: string;
+    resourceIdParam?: string;
+    permission?: string;
+  };
   onValidationError?: ValidationErrorHook;
 }
 

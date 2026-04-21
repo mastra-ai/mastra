@@ -1,4 +1,5 @@
 import type { RequestContext } from '@mastra/core/di';
+import { MastraMemory } from '@mastra/core/memory';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 
@@ -99,6 +100,42 @@ export async function validateThreadOwnership(
   if (thread && effectiveResourceId && thread.resourceId && thread.resourceId !== effectiveResourceId) {
     throw new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' });
   }
+}
+
+/**
+ * Validates both coarse resource ownership and fine-grained thread access.
+ * FGA enforcement is a no-op when either auth user or FGA provider is absent.
+ */
+export async function enforceThreadAccess({
+  mastra,
+  requestContext,
+  threadId,
+  thread,
+  effectiveResourceId,
+  permission = 'memory:read',
+}: {
+  mastra: any;
+  requestContext?: RequestContext;
+  threadId: string;
+  thread?: { resourceId?: string | null } | null;
+  effectiveResourceId?: string;
+  permission?: string;
+}): Promise<void> {
+  await validateThreadOwnership(thread, effectiveResourceId);
+
+  const user = requestContext?.get('user');
+  if (!user || typeof user !== 'object' || typeof (user as { id?: unknown }).id !== 'string') {
+    return;
+  }
+
+  await MastraMemory.checkThreadFGA({
+    mastra,
+    user: user as { id: string; [key: string]: unknown },
+    threadId,
+    resourceId: thread?.resourceId ?? effectiveResourceId,
+    requestContext,
+    permission,
+  });
 }
 
 /**

@@ -5,6 +5,7 @@ import { MastraBase } from '../base';
 import { MastraError } from '../error';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { RequestContext } from '../request-context';
 import type { InternalCoreTool, MCPToolType } from '../tools';
 import type {
   MCPServerConfig,
@@ -283,6 +284,6 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
   public abstract executeTool(
     toolId: string,
     args: any,
-    executionContext?: { messages?: any[]; toolCallId?: string },
+    executionContext?: { messages?: any[]; toolCallId?: string; requestContext?: RequestContext },
   ): Promise<any>;
 }

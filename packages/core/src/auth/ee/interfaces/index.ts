@@ -26,3 +26,19 @@ export {
 
 // ACL
 export type { ResourceIdentifier, ACLGrant, IACLProvider, IACLManager } from './acl';
+
+// FGA
+export type {
+  FGACheckContext,
+  FGACheckParams,
+  FGAResource,
+  FGACreateResourceParams,
+  FGAUpdateResourceParams,
+  FGADeleteResourceParams,
+  FGARoleAssignment,
+  FGARoleParams,
+  FGAListRoleAssignmentsOptions,
+  FGAListResourcesOptions,
+  IFGAProvider,
+  IFGAManager,
+} from './fga';

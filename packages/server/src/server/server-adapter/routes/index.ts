@@ -136,6 +136,18 @@ export type ServerRoute<
    * requiresPermission: 'workflows:execute'
    */
   requiresPermission?: string;
+  /**
+   * FGA authorization config for this route (EE feature).
+   * If set, the user must have the specified permission on the resource.
+   *
+   * @example
+   * fga: { resourceType: 'agent', resourceIdParam: 'agentId', permission: 'agents:execute' }
+   */
+  fga?: {
+    resourceType: string;
+    resourceIdParam?: string;
+    permission?: string;
+  };
   onValidationError?: ValidationErrorHook;
   /** @internal Phantom type — not present at runtime. Used for type-level schema inference. */
   readonly __schemas?: TSchemas;

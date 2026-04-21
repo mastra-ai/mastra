@@ -3,6 +3,7 @@
  */
 
 import type { EEUser, RoleMapping } from '@mastra/core/auth/ee';
+import type { RequestContext } from '@mastra/core/di';
 import type { User, OrganizationMembership } from '@workos-inc/node';
 
 // ============================================================================
@@ -19,6 +20,8 @@ export interface WorkOSUser extends EEUser {
   organizationId?: string;
   /** Organization memberships with roles */
   memberships?: OrganizationMembership[];
+  /** Pre-resolved organization membership ID (if available) */
+  organizationMembershipId?: string;
 }
 
 /**
@@ -92,6 +95,16 @@ export interface MastraAuthWorkosOptions {
   session?: WorkOSSessionConfig;
   /** Custom provider name (default: 'workos') */
   name?: string;
+  /**
+   * Whether to fetch organization memberships during authentication.
+   *
+   * Memberships are required for FGA (Fine-Grained Authorization) checks.
+   * When FGA is not configured, set this to `false` to skip the extra
+   * network call to `listOrganizationMemberships` on every authenticated request.
+   *
+   * Defaults to `false`. Set to `true` when using `MastraFGAWorkos`.
+   */
+  fetchMemberships?: boolean;
 }
 
 // ============================================================================
@@ -140,6 +153,71 @@ export interface MastraRBACWorkosOptions {
 
   /** Permission cache configuration */
   cache?: PermissionCacheOptions;
+}
+
+// ============================================================================
+// FGA Types
+// ============================================================================
+
+/**
+ * Configuration for mapping Mastra resource types to FGA resource types.
+ *
+ * @example
+ * ```typescript
+ * {
+ *   agents: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
+ *   workflows: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
+ *   memory: { fgaResourceType: 'user', deriveId: (ctx) => ctx.user.userId },
+ * }
+ * ```
+ */
+export interface FGAResourceMappingEntry {
+  /** The FGA resource type slug in WorkOS */
+  fgaResourceType: string;
+  /**
+   * Derive the FGA resource ID from request/user context.
+   * Return `undefined` to fall back to the raw Mastra resource ID.
+   */
+  deriveId?: (ctx: { user: any; resourceId?: string; requestContext?: RequestContext }) => string | undefined;
+}
+
+/**
+ * Options for MastraFGAWorkos provider.
+ *
+ * @example
+ * ```typescript
+ * new MastraFGAWorkos({
+ *   resourceMapping: {
+ *     agents: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
+ *   },
+ *   permissionMapping: {
+ *     'agents:execute': 'manage-workflows',
+ *   },
+ * });
+ * ```
+ */
+export interface MastraFGAWorkosOptions {
+  /** WorkOS API key (defaults to WORKOS_API_KEY env var) */
+  apiKey?: string;
+  /** WorkOS Client ID (defaults to WORKOS_CLIENT_ID env var) */
+  clientId?: string;
+  /**
+   * Organization ID to scope FGA checks to.
+   * When a user has multiple organization memberships, this determines
+   * which membership to use for authorization checks.
+   * If not provided, uses the first membership found on the user object.
+   */
+  organizationId?: string;
+  /**
+   * Map Mastra resource types to WorkOS FGA resource types.
+   * Keys are Mastra resource types (e.g., 'agent', 'workflow', 'memory').
+   */
+  resourceMapping?: Record<string, FGAResourceMappingEntry>;
+  /**
+   * Map Mastra permission strings to WorkOS permission slugs.
+   * Keys are Mastra permissions (e.g., 'agents:execute'), values are WorkOS permission slugs.
+   */
+  permissionMapping?: Record<string, string>;
 }
 
 // ============================================================================

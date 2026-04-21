@@ -2422,6 +2422,21 @@ export class Workflow<
     const observabilityContext = resolveObservabilityContext(rest);
     this.__registerMastra(mastra);
 
+    // FGA authorization check
+    const fgaProvider = mastra?.getServer()?.fga;
+    if (fgaProvider) {
+      const user = requestContext?.get('user' as any);
+      if (user) {
+        const { checkFGA } = await import('../auth/ee/fga-check');
+        await checkFGA({
+          fgaProvider,
+          user,
+          resource: { type: 'workflow', id: this.id },
+          permission: 'workflows:execute',
+        });
+      }
+    }
+
     const effectiveValidateInputs = validateInputs ?? this.#options.validateInputs ?? true;
 
     this.#options = {

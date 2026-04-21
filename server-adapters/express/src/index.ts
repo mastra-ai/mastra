@@ -3,11 +3,12 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { isProtectedCustomRoute } from '@mastra/server/auth';
+import { findMatchingCustomRoute, isProtectedCustomRoute } from '@mastra/server/auth';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
+  checkRouteFGA,
   normalizeQueryParams,
   redactStreamChunk,
 } from '@mastra/server/server-adapter';
@@ -543,6 +544,15 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           }
         }
 
+        // Check FGA authorization (EE feature)
+        const fgaError = await checkRouteFGA(this.mastra, route, res.locals.requestContext, {
+          ...params.urlParams,
+          ...params.queryParams,
+        });
+        if (fgaError) {
+          return res.status(fgaError.status).json({ error: fgaError.error, message: fgaError.message });
+        }
+
         try {
           const result = await route.handler(handlerParams);
           await this.sendResponse(route, res, result, req, prefix);
@@ -584,11 +594,19 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       const method = String(req.method || 'GET');
 
       if (isProtectedCustomRoute(path, method, this.customRouteAuthConfig)) {
-        const serverRoute: ServerRoute = {
-          method: method as any,
+        const matchedRoute = findMatchingCustomRoute(
           path,
+          method,
+          this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes,
+        );
+        const serverRoute: ServerRoute = {
+          method: (matchedRoute?.route.method ?? method) as any,
+          path: matchedRoute?.route.path ?? path,
           responseType: 'json',
           handler: async () => {},
+          requiresAuth: matchedRoute?.route.requiresAuth,
+          requiresPermission: matchedRoute?.route.requiresPermission,
+          fga: matchedRoute?.route.fga,
         };
 
         const authError = await this.checkRouteAuth(serverRoute, {
@@ -625,6 +643,15 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
               });
             }
           }
+        }
+
+        // Check FGA authorization (EE feature)
+        const fgaError = await checkRouteFGA(this.mastra, serverRoute, res.locals.requestContext, {
+          ...(matchedRoute?.params ?? {}),
+          ...(req.query as Record<string, string>),
+        });
+        if (fgaError) {
+          return res.status(fgaError.status).json({ error: fgaError.error, message: fgaError.message });
         }
       }
 

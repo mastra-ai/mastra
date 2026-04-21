@@ -2,10 +2,17 @@ import type { Handler, MiddlewareHandler, HonoRequest, Context } from 'hono';
 import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
 import type { ZodError } from 'zod/v4';
+import type { IFGAProvider } from '../auth/ee/interfaces/fga';
 import type { IRBACProvider } from '../auth/ee/interfaces/rbac';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { MastraAuthProvider } from './auth';
+
+type RouteFGAConfig = {
+  resourceType: string;
+  resourceIdParam?: string;
+  permission?: string;
+};
 
 export type Methods = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL';
 
@@ -17,6 +24,8 @@ export type ApiRoute =
       middleware?: MiddlewareHandler | MiddlewareHandler[];
       openapi?: DescribeRouteOptions;
       requiresAuth?: boolean;
+      requiresPermission?: string;
+      fga?: RouteFGAConfig;
     }
   | {
       path: string;
@@ -25,6 +34,8 @@ export type ApiRoute =
       middleware?: MiddlewareHandler | MiddlewareHandler[];
       openapi?: DescribeRouteOptions;
       requiresAuth?: boolean;
+      requiresPermission?: string;
+      fga?: RouteFGAConfig;
     };
 
 export type Middleware = MiddlewareHandler | { path: string; handler: MiddlewareHandler };
@@ -302,6 +313,15 @@ export type ServerConfig = {
    * ```
    */
   rbac?: IRBACProvider<any>;
+
+  /**
+   * FGA provider for fine-grained authorization (EE feature).
+   *
+   * While `rbac` handles role-based access (WHAT the user can do),
+   * `fga` handles relationship-based access (can this user do this action
+   * on THIS specific resource).
+   */
+  fga?: IFGAProvider<any>;
 
   /**
    * If you want to run `mastra dev` with HTTPS, you can run it with the `--https` flag and provide the key and cert files here.

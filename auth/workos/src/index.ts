@@ -40,6 +40,9 @@ export { MastraAuthWorkos } from './auth-provider';
 // RBAC provider for role mapping
 export { MastraRBACWorkos } from './rbac-provider';
 
+// FGA provider for fine-grained authorization
+export { MastraFGAWorkos, WorkOSFGAMembershipResolutionError } from './fga-provider';
+
 // Directory Sync (SCIM) webhook handler
 export { WorkOSDirectorySync } from './directory-sync';
 
@@ -62,6 +65,9 @@ export type {
   // RBAC options
   MastraRBACWorkosOptions,
   PermissionCacheOptions,
+
+  // FGA options
+  MastraFGAWorkosOptions,
 
   // Directory Sync types
   DirectorySyncHandlers,
