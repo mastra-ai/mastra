@@ -5,6 +5,7 @@ Read STYLEGUIDE.md first.
 Use this file for quickstarts.
 
 Goal:
+
 - get the reader to a working result fast
 - focus on one setup or integration
 - produce something the reader can run or interact with
@@ -82,6 +83,7 @@ From here, extend the project:
 ````
 
 Rules:
+
 - frontmatter title must be `$TECHNOLOGY | $CATEGORY`
 - do not add a `packages` field
 - H1 must be action-oriented, not just a technology name

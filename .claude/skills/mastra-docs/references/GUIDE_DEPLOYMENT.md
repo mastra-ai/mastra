@@ -5,6 +5,7 @@ Read STYLEGUIDE.md first.
 Use this file for deployment guides.
 
 Goal:
+
 - assume the reader already has a working Mastra app
 - show how to deploy it to one platform
 - cover install, config, deploy, and platform-specific concerns
@@ -17,8 +18,8 @@ title: 'Deploy Mastra to $PLATFORM | Deployment'
 description: 'Learn how to deploy a Mastra application to $PLATFORM'
 ---
 
-import Steps from '@site/src/components/Steps'
-import StepItem from '@site/src/components/StepItem'
+import Steps from '@site/src/components/Steps';
+import StepItem from '@site/src/components/StepItem';
 
 # Deploy Mastra to $PLATFORM
 
@@ -45,12 +46,12 @@ npm install @mastra/deployer-$PLATFORM@latest
 Import the deployer and set it in the Mastra config:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { $PlatformDeployer } from '@mastra/deployer-$PLATFORM'
+import { Mastra } from '@mastra/core';
+import { $PlatformDeployer } from '@mastra/deployer-$PLATFORM';
 
 export const mastra = new Mastra({
   deployer: new $PlatformDeployer(),
-})
+});
 ```
 
 ## Deploy
@@ -101,6 +102,7 @@ Explain the limitation and link to alternatives when needed.
 ````
 
 Rules:
+
 - frontmatter title must be `Deploy Mastra to $PLATFORM | Deployment`
 - H1 must match the title without the category suffix
 - add the note after the intro when the guide covers only one deployment path and alternatives exist

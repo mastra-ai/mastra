@@ -5,6 +5,7 @@ Read STYLEGUIDE.md first.
 Use this file for integration guides.
 
 Goal:
+
 - document how to use Mastra with one external library or ecosystem
 - organize by feature area, not by step order
 - make each section self-contained so the reader can jump to it
@@ -17,8 +18,8 @@ title: 'Using $LIBRARY | $CATEGORY'
 description: 'Learn how Mastra integrates with $LIBRARY and how to use it in your project'
 ---
 
-import Tabs from '@theme/Tabs'
-import TabItem from '@theme/TabItem'
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 # Using $LIBRARY
 
@@ -181,6 +182,7 @@ For a complete implementation, see the [example-name example](https://link-to-ex
 ````
 
 Rules:
+
 - frontmatter title must be `Using $LIBRARY | $CATEGORY`
 - H1 must be `Using $LIBRARY`
 - after the intro, use `note` for migration or version notes and `tip` for live examples or related quickstarts when needed

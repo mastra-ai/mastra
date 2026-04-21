@@ -5,6 +5,7 @@ Read STYLEGUIDE.md first.
 Use this file for reference/API pages.
 
 Goal:
+
 - document one class or function completely
 - optimize for lookup, not concept teaching
 - link to doc pages when a concept needs explanation
@@ -33,7 +34,7 @@ Link to alternatives when they exist.
 Brief sentence on the scenario.
 
 ```typescript title="src/mastra/index.ts"
-import { $Name } from '@mastra/<package>'
+import { $Name } from '@mastra/<package>';
 
 // Minimal working example
 ```
@@ -77,7 +78,7 @@ One sentence on what the method does.
 ```typescript
 const result = await instance.$methodName('value', {
   option: true,
-})
+});
 ```
 
 ## $DOMAIN_SPECIFIC_SECTION
@@ -90,6 +91,7 @@ Add advanced usage patterns that go beyond the basic parameters.
 ````
 
 Rules:
+
 - frontmatter title must be `Reference: $NAME | $CATEGORY`
 - for functions, include parentheses in `$NAME` in frontmatter and H1
 - for classes, use the class name in frontmatter and H1

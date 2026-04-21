@@ -5,6 +5,7 @@ Read STYLEGUIDE.md first.
 Use this file for tutorials.
 
 Goal:
+
 - teach the reader how to build one specific thing with Mastra
 - go deeper than a quickstart
 - assume the reader already has a Mastra project
@@ -33,20 +34,20 @@ In this guide, you'll build a $THING that $WHAT_IT_DOES. You'll learn how to $CO
 Context on what this step does and why. Link to relevant reference docs.
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
+import { Mastra } from '@mastra/core';
 // highlight-next-line
-import { NewThing } from '@mastra/core/new-thing'
+import { NewThing } from '@mastra/core/new-thing';
 
 // highlight-start
 const thing = new NewThing({
   // configuration
-})
+});
 // highlight-end
 
 export const mastra = new Mastra({
   // highlight-next-line
   thing,
-})
+});
 ```
 
 Explain what changed. If the reader must create files or folders manually, say so after the code block.
@@ -70,20 +71,20 @@ Context.
 When updating a file shown earlier, show the full file again and highlight the changed lines:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { NewThing } from '@mastra/core/new-thing'
+import { Mastra } from '@mastra/core';
+import { NewThing } from '@mastra/core/new-thing';
 // highlight-next-line
-import { myAgent } from './agents/my-agent'
+import { myAgent } from './agents/my-agent';
 
 const thing = new NewThing({
   // configuration
-})
+});
 
 export const mastra = new Mastra({
   thing,
   // highlight-next-line
   agents: { myAgent },
-})
+});
 ```
 
 ## Test the $THING
@@ -123,6 +124,7 @@ Learn more:
 ````
 
 Rules:
+
 - frontmatter title must be `Guide: Building a $THING`
 - H1 must be `Building a $THING`
 - start the intro with `In this guide, you'll build...`

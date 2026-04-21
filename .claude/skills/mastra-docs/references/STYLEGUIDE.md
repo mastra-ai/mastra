@@ -109,6 +109,7 @@ Use this file as the default writing guide for Mastra's documentation.
 ## Quick checks
 
 Before finishing a doc page, check that it:
+
 - stays focused on Mastra
 - uses direct, factual language
 - avoids repeated reference links

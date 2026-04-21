@@ -9,6 +9,7 @@ Use this file for general docs pages. There are two page types.
 Use for category landing pages like agents/overview.mdx or memory/overview.mdx.
 
 What to do:
+
 - introduce the category
 - list the main sub-topics
 - link to the standard pages in the category
@@ -55,6 +56,7 @@ Add short H2 sections only for category-wide topics like storage, debugging, or 
 ```
 
 Rules:
+
 - title must be $CATEGORY overview
 - opening paragraph must be one or two sentences
 - every standard page in the category should be linked from the page
@@ -66,6 +68,7 @@ Rules:
 Use for every non-overview page in the category.
 
 What to do:
+
 - teach one concept
 - give enough context to use it
 - show working code
@@ -95,12 +98,12 @@ Include this when the reader may need help choosing this feature.
 Show the shortest working example.
 
 ```typescript title="src/mastra/<path>.ts"
-import { Thing } from '@mastra/core/<module>'
+import { Thing } from '@mastra/core/<module>';
 
 const thing = new Thing({
   id: 'my-thing',
   // minimal config
-})
+});
 ```
 
 ## Core sections
@@ -127,6 +130,7 @@ Visit [ClassName reference](/reference/$CATEGORY/<class>) for the full config.
 ````
 
 Rules:
+
 - title must be $FEATURE | $CATEGORY
 - opening paragraph must be one or two sentences
 - quickstart should be the shortest copy-pasteable working example
