@@ -31,7 +31,9 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
 
       const storage = mastra.getStorage();
       const storageType = storage?.name;
-      const observabilityStorageType = storage?.stores?.observability?.constructor.name;
+      const observabilityStorage = storage?.stores?.observability;
+      const observabilityStorageType = observabilityStorage?.constructor.name;
+      const observabilityRuntimeStrategy = observabilityStorage?.runtimeTracingStrategy;
 
       return {
         packages,
@@ -39,6 +41,7 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
         cmsEnabled: !!mastra.getEditor(),
         storageType,
         observabilityStorageType,
+        observabilityRuntimeStrategy,
       };
     } catch (error) {
       return handleError(error, 'Error getting system packages');

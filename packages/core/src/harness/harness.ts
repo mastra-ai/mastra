@@ -1666,6 +1666,7 @@ export class Harness<TState = {}> {
       createdAt: new Date(),
     };
 
+    let isSuspended = false;
     const textContentById = new Map<string, { index: number; text: string }>();
     const thinkingContentById = new Map<string, { index: number; text: string }>();
     const abortForOmFailure = ({
@@ -1858,7 +1859,11 @@ export class Harness<TState = {}> {
           this.pendingSuspensionRunId = this.currentRunId;
           this.pendingSuspensionToolCallId = suspToolCallId;
 
-          return { message: currentMessage, suspended: true };
+          // Don't return immediately — continue draining the stream so the
+          // workflow engine has a chance to persist the snapshot before the
+          // caller tries to resume.
+          isSuspended = true;
+          break;
         }
 
         case 'error': {
@@ -2129,7 +2134,7 @@ export class Harness<TState = {}> {
     }
 
     this.emit({ type: 'message_end', message: currentMessage });
-    return { message: currentMessage };
+    return { message: currentMessage, suspended: isSuspended || undefined };
   }
 
   // ===========================================================================

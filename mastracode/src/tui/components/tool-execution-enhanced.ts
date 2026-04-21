@@ -11,6 +11,7 @@ import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
 import { MC_TOOLS } from '../../tool-names.js';
 import { BOX_INDENT, getTermWidth, theme, mastra } from '../theme.js';
+import { truncateAnsi } from './ansi.js';
 import { ErrorDisplayComponent } from './error-display.js';
 import type { IToolExecutionComponent, ToolResult } from './tool-execution-interface.js';
 import { ToolValidationErrorComponent, parseValidationErrors } from './tool-validation-error.js';
@@ -1535,19 +1536,8 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     try {
       const { content } = extractContent(errorText);
       error = content;
-
-      // Try to create an Error object with better structure
-      const errorMatch = content.match(/^([A-Z][a-zA-Z]*Error):\s*(.+)$/m);
-      if (errorMatch) {
-        const err = new Error(errorMatch[2]!);
-        err.name = errorMatch[1]!;
-        // Try to extract stack trace
-        const stackMatch = content.match(/\n\s+at\s+.+/g);
-        if (stackMatch) {
-          err.stack = `${err.name}: ${err.message}\n${stackMatch.join('\n')}`;
-        }
-        error = err;
-      }
+      const parsed = parseErrorFromContent(content);
+      if (parsed) error = parsed;
     } catch {
       // Keep as string
     }
@@ -1667,42 +1657,23 @@ function highlightCode(content: string, path: string, startLine?: number): strin
     return codeLines.join('\n');
   }
 }
-/** Truncate a string with ANSI codes to a visible width.
- *  Handles both SGR sequences (\x1b[...m) and OSC 8 hyperlinks (\x1b]8;...;\x07).
+/** Parse a `Name: message\n  at ...` error string into an Error object.
+ *  Returns null if the content does not look like a JavaScript Error.
+ *  Preserves the behaviour of the original `/^([A-Z][a-zA-Z]*Error):\s*(.+)$/m`
+ *  pattern (same captures for well-formed inputs) while using bounded
+ *  quantifiers and `[ \t]` separators to avoid the polynomial backtracking
+ *  CodeQL flagged on pathological inputs.
+ *  Exported for unit testing.
  */
-function truncateAnsi(str: string, maxWidth: number): string {
-  const ansiRegex = /\x1b\[[0-9;]*m|\x1b\]8;[^\x07]*\x07/g;
-  let visibleLength = 0;
-  let result = '';
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = ansiRegex.exec(str)) !== null) {
-    // Add text before this ANSI code
-    const textBefore = str.slice(lastIndex, match.index);
-    const remaining = maxWidth - visibleLength;
-    if (textBefore.length <= remaining) {
-      result += textBefore;
-      visibleLength += textBefore.length;
-    } else {
-      result += textBefore.slice(0, remaining - 1) + '…';
-      result += '\x1b]8;;\x07\x1b[0m'; // Close any open hyperlink + reset styles
-      return result;
-    }
-    // Add the ANSI code (doesn't count toward visible length)
-    result += match[0];
-    lastIndex = match.index + match[0].length;
+export function parseErrorFromContent(content: string): Error | null {
+  const errorMatch = content.match(/^([A-Z][A-Za-z]{0,64}Error):[ \t]*(.{1,8192})$/m);
+  if (!errorMatch) return null;
+  const err = new Error(errorMatch[2]!);
+  err.name = errorMatch[1]!;
+  // Stack frames are always space/tab-indented — never vertical whitespace.
+  const stackMatch = content.match(/\n[ \t]+at[ \t]+.+/g);
+  if (stackMatch) {
+    err.stack = `${err.name}: ${err.message}\n${stackMatch.join('\n')}`;
   }
-
-  // Add remaining text after last ANSI code
-  const remaining = str.slice(lastIndex);
-  const spaceLeft = maxWidth - visibleLength;
-  if (remaining.length <= spaceLeft) {
-    result += remaining;
-  } else {
-    result += remaining.slice(0, spaceLeft - 1) + '…';
-    result += '\x1b]8;;\x07\x1b[0m'; // Close hyperlink + reset
-  }
-
-  return result;
+  return err;
 }

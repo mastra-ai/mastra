@@ -82,18 +82,20 @@ export function ObservabilityTracesList({
     page: spanScoresPage,
   });
 
-  // Sync with external selectedTraceId
+  // Sync with external selectedTraceId (including clears from URL when filters change)
   useEffect(() => {
-    if (selectedTraceId !== undefined) {
-      setFeaturedTraceId(selectedTraceId ?? null);
+    setFeaturedTraceId(selectedTraceId ?? null);
+    if (!selectedTraceId) {
+      setFeaturedSpanRecord(undefined);
+      setFeaturedSpanId(null);
+      setFeaturedScore(undefined);
+      setSpanTab('details');
     }
   }, [selectedTraceId]);
 
   // Sync with external initialSpanId
   useEffect(() => {
-    if (initialSpanId !== undefined) {
-      setFeaturedSpanId(initialSpanId ?? null);
-    }
+    setFeaturedSpanId(initialSpanId ?? null);
   }, [initialSpanId]);
 
   // Sync with external initialSpanTab

@@ -1,5 +1,18 @@
 # @mastra/libsql
 
+## 1.9.0-alpha.1
+
+### Minor Changes
+
+- Use DiskANN vector_top_k() index for faster vector queries when available ([#14913](https://github.com/mastra-ai/mastra/pull/14913))
+
+  LibSQLVector.query() now automatically uses the existing DiskANN index for approximate nearest neighbor search instead of brute-force full table scans, providing 10-25x query speedups on larger datasets. Falls back to brute-force when no index exists.
+
+### Patch Changes
+
+- Updated dependencies [[`16e34ca`](https://github.com/mastra-ai/mastra/commit/16e34caa98b9a114b17a6125e4e3fd87f169d0d0)]:
+  - @mastra/core@1.26.0-alpha.9
+
 ## 1.8.2-alpha.0
 
 ### Patch Changes
