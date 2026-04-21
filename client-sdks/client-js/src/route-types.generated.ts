@@ -4543,6 +4543,21 @@ export type PostAgentsAgentIdGenerate_Body = {
         [key: string]: any;
       }
     | undefined;
+  versions?:
+    | {
+        agents?:
+          | {
+              [key: string]:
+                | {
+                    versionId: string;
+                  }
+                | {
+                    status: 'draft' | 'published';
+                  };
+            }
+          | undefined;
+      }
+    | undefined;
   maxSteps?: number | undefined;
   stopWhen?: any | undefined;
   providerOptions?:
@@ -4689,6 +4704,21 @@ export type PostAgentsAgentIdGenerateVnext_Body = {
   requestContext?:
     | {
         [key: string]: any;
+      }
+    | undefined;
+  versions?:
+    | {
+        agents?:
+          | {
+              [key: string]:
+                | {
+                    versionId: string;
+                  }
+                | {
+                    status: 'draft' | 'published';
+                  };
+            }
+          | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -4841,6 +4871,21 @@ export type PostAgentsAgentIdStream_Body = {
         [key: string]: any;
       }
     | undefined;
+  versions?:
+    | {
+        agents?:
+          | {
+              [key: string]:
+                | {
+                    versionId: string;
+                  }
+                | {
+                    status: 'draft' | 'published';
+                  };
+            }
+          | undefined;
+      }
+    | undefined;
   maxSteps?: number | undefined;
   stopWhen?: any | undefined;
   providerOptions?:
@@ -4989,6 +5034,21 @@ export type PostAgentsAgentIdStreamVnext_Body = {
   requestContext?:
     | {
         [key: string]: any;
+      }
+    | undefined;
+  versions?:
+    | {
+        agents?:
+          | {
+              [key: string]:
+                | {
+                    versionId: string;
+                  }
+                | {
+                    status: 'draft' | 'published';
+                  };
+            }
+          | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -5436,6 +5496,21 @@ export type PostAgentsAgentIdNetwork_Body = {
   requestContext?:
     | {
         [key: string]: any;
+      }
+    | undefined;
+  versions?:
+    | {
+        agents?:
+          | {
+              [key: string]:
+                | {
+                    versionId: string;
+                  }
+                | {
+                    status: 'draft' | 'published';
+                  };
+            }
+          | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -6052,6 +6127,21 @@ export type PostAgentsAgentIdStreamVNext_Body = {
         [key: string]: any;
       }
     | undefined;
+  versions?:
+    | {
+        agents?:
+          | {
+              [key: string]:
+                | {
+                    versionId: string;
+                  }
+                | {
+                    status: 'draft' | 'published';
+                  };
+            }
+          | undefined;
+      }
+    | undefined;
   maxSteps?: number | undefined;
   stopWhen?: any | undefined;
   providerOptions?:
@@ -6203,6 +6293,21 @@ export type PostAgentsAgentIdStreamVnextUi_Body = {
   requestContext?:
     | {
         [key: string]: any;
+      }
+    | undefined;
+  versions?:
+    | {
+        agents?:
+          | {
+              [key: string]:
+                | {
+                    versionId: string;
+                  }
+                | {
+                    status: 'draft' | 'published';
+                  };
+            }
+          | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -6358,6 +6463,21 @@ export type PostAgentsAgentIdStreamUi_Body = {
   requestContext?:
     | {
         [key: string]: any;
+      }
+    | undefined;
+  versions?:
+    | {
+        agents?:
+          | {
+              [key: string]:
+                | {
+                    versionId: string;
+                  }
+                | {
+                    status: 'draft' | 'published';
+                  };
+            }
+          | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -7184,6 +7304,7 @@ export type PostWorkflowsWorkflowIdResumeStream_Body = {
       }
     | undefined;
   perStep?: boolean | undefined;
+  forEachIndex?: number | undefined;
 };
 
 export type PostWorkflowsWorkflowIdResumeStream_Response = any;
@@ -7444,6 +7565,7 @@ export type PostWorkflowsWorkflowIdResumeAsync_Body = {
       }
     | undefined;
   perStep?: boolean | undefined;
+  forEachIndex?: number | undefined;
 };
 
 export type PostWorkflowsWorkflowIdResumeAsync_Response = {
@@ -7541,6 +7663,7 @@ export type PostWorkflowsWorkflowIdResume_Body = {
       }
     | undefined;
   perStep?: boolean | undefined;
+  forEachIndex?: number | undefined;
 };
 
 export type PostWorkflowsWorkflowIdResume_Response = {
@@ -15363,6 +15486,7 @@ export type PostAgentBuilderActionIdResumeAsync_Body = {
       }
     | undefined;
   perStep?: boolean | undefined;
+  forEachIndex?: number | undefined;
 };
 
 export type PostAgentBuilderActionIdResumeAsync_Response = {
@@ -15460,6 +15584,7 @@ export type PostAgentBuilderActionIdResume_Body = {
       }
     | undefined;
   perStep?: boolean | undefined;
+  forEachIndex?: number | undefined;
 };
 
 export type PostAgentBuilderActionIdResume_Response = {
@@ -15525,6 +15650,7 @@ export type PostAgentBuilderActionIdResumeStream_Body = {
       }
     | undefined;
   perStep?: boolean | undefined;
+  forEachIndex?: number | undefined;
 };
 
 export type PostAgentBuilderActionIdResumeStream_Response = any;
@@ -16668,6 +16794,21 @@ export type PostAgentsAgentIdGenerateLegacy_Body = {
         [key: string]: any;
       }
     | undefined;
+  versions?:
+    | {
+        agents?:
+          | {
+              [key: string]:
+                | {
+                    versionId: string;
+                  }
+                | {
+                    status: 'draft' | 'published';
+                  };
+            }
+          | undefined;
+      }
+    | undefined;
   maxSteps?: number | undefined;
   stopWhen?: any | undefined;
   providerOptions?:
@@ -16819,6 +16960,21 @@ export type PostAgentsAgentIdStreamLegacy_Body = {
   requestContext?:
     | {
         [key: string]: any;
+      }
+    | undefined;
+  versions?:
+    | {
+        agents?:
+          | {
+              [key: string]:
+                | {
+                    versionId: string;
+                  }
+                | {
+                    status: 'draft' | 'published';
+                  };
+            }
+          | undefined;
       }
     | undefined;
   maxSteps?: number | undefined;
@@ -71785,6 +71941,22 @@ export type PostDatasetsDatasetIdExperiments_Body = {
   requestContext?:
     | {
         [key: string]: unknown;
+      }
+    | undefined;
+  /** Version overrides for sub-agent delegation during experiment execution */
+  versions?:
+    | {
+        agents?:
+          | {
+              [key: string]:
+                | {
+                    versionId: string;
+                  }
+                | {
+                    status: 'draft' | 'published';
+                  };
+            }
+          | undefined;
       }
     | undefined;
 };
