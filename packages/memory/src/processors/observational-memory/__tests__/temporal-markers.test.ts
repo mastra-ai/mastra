@@ -5,7 +5,7 @@ import { RequestContext } from '@mastra/core/di';
 import { InMemoryDB, InMemoryMemory } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
-import { formatTemporalTimestamp } from '../date-utils';
+import { formatTemporalGap, formatTemporalTimestamp } from '../date-utils';
 import { ObservationalMemory } from '../observational-memory';
 import type { MemoryContextProvider } from '../processor';
 import { ObservationalMemoryProcessor } from '../processor';
@@ -49,6 +49,12 @@ function createMemoryProvider(messages: MastraDBMessage[]): MemoryContextProvide
 }
 
 describe('ObservationalMemoryProcessor temporal markers', () => {
+  it('formats 10 minutes as the minimum temporal gap', () => {
+    expect(formatTemporalGap(10 * 60 * 1000 - 1)).toBeNull();
+    expect(formatTemporalGap(10 * 60 * 1000)).toBe('5 minutes later');
+    expect(formatTemporalGap(15 * 60 * 1000)).toBe('15 minutes later');
+  });
+
   it('inserts temporal gap markers after history loads on step 0', async () => {
     const threadId = 'temporal-markers-thread';
     const resourceId = 'temporal-markers-resource';

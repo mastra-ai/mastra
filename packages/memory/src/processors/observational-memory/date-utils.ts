@@ -245,7 +245,7 @@ export function addRelativeTimeToObservations(observations: string, currentDate:
   return result;
 }
 
-export const MIN_TEMPORAL_GAP_MS = 15 * 60 * 1000;
+export const MIN_TEMPORAL_GAP_MS = 10 * 60 * 1000;
 
 export function formatTemporalGap(diffMs: number): string | null {
   if (diffMs < MIN_TEMPORAL_GAP_MS) return null;
@@ -266,7 +266,9 @@ export function formatTemporalGap(diffMs: number): string | null {
   if (hours >= 2) return `2 hours later`;
   if (hours >= 1) return `1 hour later`;
   if (minutes >= 30) return `30 minutes later`;
-  return `15 minutes later`;
+  if (minutes >= 15) return `15 minutes later`;
+  if (minutes >= 5) return `5 minutes later`;
+  return `1 minute later`;
 }
 
 export function formatTemporalTimestamp(date: Date): string {
