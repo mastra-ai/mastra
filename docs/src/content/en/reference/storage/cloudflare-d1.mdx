@@ -57,6 +57,32 @@ export const mastra = new Mastra({
 `D1Store` must be initialized inline inside `new Mastra({...})`. See [CloudflareDeployer reference](/reference/deployer/cloudflare#cloudflare-bindings) for details.
 :::
 
+### Using in a Cloudflare Worker without HTTP routes
+
+If you want to call Mastra directly in a Worker — for example, to run an agent or trigger a workflow — without serving HTTP routes, you don't need `CloudflareDeployer`. Access the D1 binding from the worker's `env` parameter and call Mastra programmatically.
+
+```typescript
+import { D1Store } from '@mastra/cloudflare-d1'
+import { Mastra } from '@mastra/core'
+
+type Env = {
+  D1Database: D1Database
+}
+
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    const mastra = new Mastra({
+      storage: new D1Store({ binding: env.D1Database }),
+    })
+
+    const agent = mastra.getAgent('my-agent')
+    const result = await agent.generate('Hello')
+
+    return Response.json({ text: result.text })
+  },
+}
+```
+
 ### Using with REST API
 
 For non-Workers environments (Node.js, serverless functions, etc.), use the REST API approach:
