@@ -1,6 +1,6 @@
 # Documentation styleguide
 
-Use this file as the default writing guide for Mastra' documentation.
+Use this file as the default writing guide for Mastra's documentation.
 
 ## Core rules
 
