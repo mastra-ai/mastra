@@ -16,6 +16,7 @@ interface InitArgs {
   llmApiKey?: string;
   example?: boolean;
   mcp?: Editor;
+  observe?: boolean;
 }
 
 export const initProject = async (args: InitArgs) => {
@@ -41,6 +42,7 @@ export const initProject = async (args: InitArgs) => {
           skills: result?.skills,
           mcpServer: result?.mcpServer,
           versionTag,
+          observe: result?.observe,
         });
         return;
       }
@@ -53,6 +55,7 @@ export const initProject = async (args: InitArgs) => {
           addExample: args.example === false ? false : true,
           mcpServer: args.mcp,
           versionTag,
+          observe: args.observe,
         });
         return;
       }
@@ -65,6 +68,7 @@ export const initProject = async (args: InitArgs) => {
         llmApiKey: args.llmApiKey,
         mcpServer: args.mcp,
         versionTag,
+        observe: args.observe,
       });
       return;
     },

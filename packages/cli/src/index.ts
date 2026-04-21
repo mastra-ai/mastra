@@ -97,6 +97,8 @@ program
     '--template [template-name]',
     'Create project from a template (use template name, public GitHub URL, or leave blank to select from list)',
   )
+  .option('--observe', 'Enable Mastra Observe (writes MASTRA_CLOUD_ACCESS_TOKEN placeholder to .env)')
+  .option('--no-observe', 'Do not enable Mastra Observe')
   .action(createProject);
 
 program
@@ -118,6 +120,8 @@ program
     'MCP Server for code editor (cursor, cursor-global, windsurf, vscode, antigravity)',
     parseMcp,
   )
+  .option('--observe', 'Enable Mastra Observe (writes MASTRA_CLOUD_ACCESS_TOKEN placeholder to .env)')
+  .option('--no-observe', 'Do not enable Mastra Observe')
   .action(initProject);
 
 program
