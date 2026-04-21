@@ -1,5 +1,7 @@
+import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { MastraBase } from '../../base';
+import { ChunkFrom } from '../types';
 import type { ChunkType, CreateStream, OnResult } from '../types';
 
 /**
@@ -78,6 +80,17 @@ export abstract class MastraModelInput extends MastraBase {
 
           safeClose(controller);
         } catch (error) {
+          if (isAbortError(error)) {
+            safeEnqueue(controller, {
+              type: 'error',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: { error },
+            } as ChunkType);
+            safeClose(controller);
+            return;
+          }
+
           safeError(controller, error);
         }
       },
