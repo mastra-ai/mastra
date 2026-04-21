@@ -343,8 +343,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 );
                 // Only create the state if the processor actually exists in the list
                 if (processorIndex !== -1) {
+                  const structuredOutputProcessor = processorRunner.outputProcessors[processorIndex];
                   const structuredOutputProcessorState = new ProcessorState<OUTPUT>({
-                    processorName: STRUCTURED_OUTPUT_PROCESSOR_NAME,
+                    processorName: structuredOutputProcessor?.name ?? STRUCTURED_OUTPUT_PROCESSOR_NAME,
                     tracingContext: options.tracingContext,
                     processorIndex,
                     createSpan: true,
