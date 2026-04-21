@@ -150,13 +150,13 @@ describe('ModelSpanTracker', () => {
       const toolOutputSpans = testExporter.getSpansByName("chunk: 'tool-output'");
       expect(toolOutputSpans).toHaveLength(0);
 
-      // The span should be an event span with the result
+      // The span should be an event span keyed by metadata only
       const span = toolResultSpans[0]!;
       expect(span.isEvent).toBe(true);
       // toolCallId and toolName are in metadata (tool-result specific fields)
       expect(span.metadata).toMatchObject({ toolCallId, toolName });
-      // output contains only the result
-      expect(span.output).toEqual({ text: 'Hello world!' });
+      // output is omitted; TOOL_CALL captures the full result payload
+      expect(span.output).toBeUndefined();
     });
 
     it('should pass through tool-output chunks without creating spans', async () => {
@@ -288,8 +288,8 @@ describe('ModelSpanTracker', () => {
       expect(span.isEvent).toBe(true);
       // toolCallId and toolName are in metadata
       expect(span.metadata).toMatchObject({ toolCallId, toolName });
-      // output contains only the result
-      expect(span.output).toEqual({ output: 'Workflow result', status: 'success' });
+      // output is omitted; TOOL_CALL captures the full result payload
+      expect(span.output).toBeUndefined();
     });
   });
 
@@ -350,18 +350,18 @@ describe('ModelSpanTracker', () => {
       const toolResultSpans = testExporter.getSpansByName("chunk: 'tool-result'");
       expect(toolResultSpans).toHaveLength(1);
 
-      // The span should be an event span with the result (args stripped)
+      // The span should be an event span keyed by metadata only
       const span = toolResultSpans[0]!;
       expect(span.isEvent).toBe(true);
       // toolCallId and toolName are in metadata
       expect(span.metadata).toMatchObject({ toolCallId, toolName });
-      // output contains only the result
-      expect(span.output).toEqual({ text: 'Streamed content' });
+      // output is omitted; TOOL_CALL captures the full result payload
+      expect(span.output).toBeUndefined();
     });
   });
 
-  describe('tool-result args removal', () => {
-    it('should remove args from tool-result output for non-streaming tools', async () => {
+  describe('tool-result payload policy', () => {
+    it('should omit tool-result output for locally executed tools', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -396,13 +396,53 @@ describe('ModelSpanTracker', () => {
       expect(toolResultSpans).toHaveLength(1);
 
       const span = toolResultSpans[0]!;
-      // args should not be in the output or metadata
-      expect(span.output).not.toHaveProperty('args');
+      // args should not be in metadata and output is omitted entirely
       expect(span.metadata).not.toHaveProperty('args');
       // toolCallId and toolName should be in metadata
       expect(span.metadata).toMatchObject({ toolCallId, toolName });
-      // output contains only the result
-      expect(span.output).toEqual({ output: 'tool result' });
+      // output is omitted; TOOL_CALL captures the full result payload
+      expect(span.output).toBeUndefined();
+    });
+
+    it('should keep tool-result output for provider-executed tools', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const toolCallId = 'call_provider123';
+      const toolName = 'web_search';
+      const result = { output: 'provider result' };
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        {
+          type: 'tool-result',
+          payload: {
+            args: { query: 'mastra' },
+            toolCallId,
+            toolName,
+            providerExecuted: true,
+            result,
+          },
+        },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+
+      modelSpan.end();
+
+      const toolResultSpans = testExporter.getSpansByName("chunk: 'tool-result'");
+      expect(toolResultSpans).toHaveLength(1);
+
+      const span = toolResultSpans[0]!;
+      expect(span.metadata).not.toHaveProperty('args');
+      expect(span.metadata).toMatchObject({ toolCallId, toolName, providerExecuted: true });
+      expect(span.output).toEqual(result);
     });
   });
 
@@ -488,15 +528,15 @@ describe('ModelSpanTracker', () => {
         toolCallId: 'call_agent1',
         toolName: 'agent-first',
       });
-      // output contains only the result
-      expect(agent1Span!.output).toEqual({ text: 'Agent1: Hello' });
+      // output is omitted; TOOL_CALL captures the full result payload
+      expect(agent1Span!.output).toBeUndefined();
 
       expect(agent2Span).toBeDefined();
       expect(agent2Span!.metadata).toMatchObject({
         toolCallId: 'call_agent2',
         toolName: 'agent-second',
       });
-      expect(agent2Span!.output).toEqual({ text: 'Agent2: World' });
+      expect(agent2Span!.output).toBeUndefined();
     });
   });
 
@@ -721,7 +761,7 @@ describe('ModelSpanTracker', () => {
   });
 
   describe('MODEL_STEP span input extraction', () => {
-    it('should extract messages array from OpenAI-format request body', async () => {
+    it('should extract a shallow message preview from OpenAI-format request body', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -760,11 +800,10 @@ describe('ModelSpanTracker', () => {
 
       const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
       expect(stepSpans).toHaveLength(1);
-      // Should contain only the messages array, not the entire request
       expect(stepSpans[0]!.input).toEqual(messages);
     });
 
-    it('should extract contents array from Google/Gemini-format request body', async () => {
+    it('should extract a shallow message preview from Google/Gemini-format request body', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -799,7 +838,7 @@ describe('ModelSpanTracker', () => {
 
       const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
       expect(stepSpans).toHaveLength(1);
-      expect(stepSpans[0]!.input).toEqual(contents);
+      expect(stepSpans[0]!.input).toEqual([{ role: 'user', content: 'Hello' }]);
     });
 
     it('should handle undefined request body gracefully', async () => {
@@ -902,6 +941,220 @@ describe('ModelSpanTracker', () => {
       expect(stepSpans[0]!.input).toEqual(messages);
     });
 
+    it('should collapse nested structured message content to a shallow preview', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            request: {
+              body: JSON.stringify({
+                model: 'gpt-4o',
+                messages: [
+                  {
+                    role: 'user',
+                    content: [
+                      { type: 'text', text: 'Describe this image. ' },
+                      { type: 'image', image: 'base64-image' },
+                    ],
+                  },
+                  {
+                    role: 'assistant',
+                    content: [
+                      {
+                        type: 'tool-call',
+                        toolName: 'analyze_image',
+                        args: {
+                          nested: {
+                            deeper: {
+                              value: 'png',
+                            },
+                          },
+                        },
+                      },
+                    ],
+                  },
+                ],
+              }),
+            },
+          },
+        },
+        { type: 'text-delta', payload: { text: 'Hi!' } },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      expect(stepSpans[0]!.input).toEqual([
+        { role: 'user', content: 'Describe this image. [image]' },
+        { role: 'assistant', content: '[tool: analyze_image]' },
+      ]);
+    });
+
+    it('should preserve OpenAI tool call names in shallow previews', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            request: {
+              body: JSON.stringify({
+                model: 'gpt-4o',
+                messages: [
+                  {
+                    role: 'assistant',
+                    content: null,
+                    tool_calls: [
+                      {
+                        id: 'call_123',
+                        type: 'function',
+                        function: {
+                          name: 'get_weather',
+                          arguments: '{"city":"Austin"}',
+                        },
+                      },
+                    ],
+                  },
+                ],
+              }),
+            },
+          },
+        },
+        { type: 'text-delta', payload: { text: 'Hi!' } },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      expect(stepSpans[0]!.input).toEqual([{ role: 'assistant', content: '[tool: get_weather]' }]);
+    });
+
+    it('should not append object placeholders when optional function call fields are absent', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            request: {
+              body: JSON.stringify({
+                model: 'gpt-4o',
+                messages: [
+                  {
+                    role: 'assistant',
+                    content: null,
+                    tool_calls: [
+                      {
+                        id: 'call_123',
+                        type: 'function',
+                        function: {
+                          name: 'get_weather',
+                          arguments: '{"city":"Austin"}',
+                        },
+                      },
+                    ],
+                  },
+                  {
+                    role: 'assistant',
+                    content: 'Plain response',
+                  },
+                ],
+              }),
+            },
+          },
+        },
+        { type: 'text-delta', payload: { text: 'Hi!' } },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      expect(stepSpans[0]!.input).toEqual([
+        { role: 'assistant', content: '[tool: get_weather]' },
+        { role: 'assistant', content: 'Plain response' },
+      ]);
+    });
+
+    it('should summarize unrecognized request bodies instead of storing the full parsed object', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            request: {
+              body: JSON.stringify({
+                model: 'gpt-4o',
+                prompt: {
+                  nested: {
+                    data: {
+                      value: 'hello',
+                    },
+                  },
+                },
+                temperature: 0.7,
+              }),
+            },
+          },
+        },
+        { type: 'text-delta', payload: { text: 'Hi!' } },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      expect(stepSpans[0]!.input).toEqual({
+        model: 'gpt-4o',
+        keys: ['model', 'prompt', 'temperature'],
+      });
+    });
+
     it('should update step input when step-start arrives after startStep()', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
@@ -936,8 +1189,65 @@ describe('ModelSpanTracker', () => {
 
       const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
       expect(stepSpans).toHaveLength(1);
-      // updateStep should also extract messages
       expect(stepSpans[0]!.input).toEqual(messages);
+    });
+
+    it('should extract messages from AI SDK v5 body.input instead of body.messages', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      // AI SDK v5 uses body.input with {type, text} content parts
+      const input = [
+        { role: 'system', content: 'You are helpful.' },
+        { role: 'user', content: [{ type: 'input_text', text: 'What is the weather?' }] },
+      ];
+
+      tracker.startStep();
+
+      const chunks = [
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            request: {
+              body: {
+                model: 'gpt-4o-mini',
+                input,
+                tools: [
+                  {
+                    type: 'function',
+                    name: 'weatherTool',
+                    parameters: { type: 'object', properties: { location: { type: 'string' } } },
+                  },
+                ],
+                tool_choice: 'auto',
+              },
+            },
+          },
+        },
+        { type: 'text-delta', payload: { text: 'Let me check.' } },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      // Should extract messages from body.input, not show keys summary
+      expect(stepSpans[0]!.input).toEqual([
+        { role: 'system', content: 'You are helpful.' },
+        { role: 'user', content: 'What is the weather?' },
+      ]);
+      // Should NOT contain tool definitions or fallback keys summary
+      expect(stepSpans[0]!.input).not.toHaveProperty('tools');
+      expect(Array.isArray(stepSpans[0]!.input)).toBe(true);
     });
   });
 });

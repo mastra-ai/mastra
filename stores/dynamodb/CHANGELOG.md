@@ -1,5 +1,24 @@
 # @mastra/dynamodb
 
+## 1.0.4-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#15529](https://github.com/mastra-ai/mastra/pull/15529))
+  - Updated dependency [`@aws-sdk/client-dynamodb@^3.1032.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-dynamodb/v/3.1032.0) (from `^3.1009.0`, in `dependencies`)
+  - Updated dependency [`@aws-sdk/lib-dynamodb@^3.1032.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/lib-dynamodb/v/3.1032.0) (from `^3.1009.0`, in `dependencies`)
+- Updated dependencies [[`20f59b8`](https://github.com/mastra-ai/mastra/commit/20f59b876cf91199efbc49a0e36b391240708f08), [`e2687a7`](https://github.com/mastra-ai/mastra/commit/e2687a7408790c384563816a9a28ed06735684c9), [`8f1b280`](https://github.com/mastra-ai/mastra/commit/8f1b280b7fe6999ec654f160cb69c1a8719e7a57), [`12df98c`](https://github.com/mastra-ai/mastra/commit/12df98c4904643d9481f5c78f3bed443725b4c96)]:
+  - @mastra/core@1.26.0-alpha.11
+
+## 1.0.4-alpha.0
+
+### Patch Changes
+
+- Add `BackgroundTasksStorage` domain implementation so `@mastra/core` background task execution works with any storage adapter. ([#15307](https://github.com/mastra-ai/mastra/pull/15307))
+
+- Updated dependencies [[`d63ffdb`](https://github.com/mastra-ai/mastra/commit/d63ffdbb2c11e76fe5ea45faab44bc15460f010c)]:
+  - @mastra/core@1.25.1-alpha.0
+
 ## 1.0.3
 
 ### Patch Changes

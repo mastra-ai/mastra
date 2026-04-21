@@ -1,11 +1,13 @@
 import { execSync } from 'node:child_process';
 import { createWriteStream, readFileSync } from 'node:fs';
 import { mkdir, rm, stat, access, readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
 import archiver from 'archiver';
 import { loadAndValidatePresets } from '../../utils/validate-presets.js';
+import { runBuild } from '../../utils/run-build.js';
 import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_STUDIO_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
@@ -46,31 +48,18 @@ function getGitBranch(projectDir: string): string | null {
   }
 }
 
-function getMastraVersion(projectDir: string): string | null {
+export function getMastraVersion(projectDir: string): string | null {
   try {
-    const pkgPath = join(projectDir, 'package.json');
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-    return deps['mastra'] ?? null;
+    // Resolve the actual installed version from node_modules rather than the raw
+    // specifier in package.json (which may be "catalog:", "workspace:*", etc.)
+    const req = createRequire(join(projectDir, 'package.json'));
+    const pkgJsonPath = req.resolve('mastra/package.json');
+    const pkgJson = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
+    return pkgJson.version ?? null;
   } catch {
     return null;
   }
 }
-function runBuild(projectDir: string): void {
-  const localMastra = join(projectDir, 'node_modules', '.bin', 'mastra');
-  p.log.step('Running mastra build...');
-  try {
-    execSync(`"${localMastra}" build`, {
-      cwd: projectDir,
-      stdio: 'inherit',
-      env: { ...process.env, NODE_ENV: 'production' },
-    });
-  } catch {
-    throw new Error('mastra build failed');
-  }
-  console.info('');
-}
-
 async function zipOutput(projectDir: string): Promise<string> {
   const outputDir = join(projectDir, '.mastra', 'output');
   const tmpDir = join(tmpdir(), 'mastra-deploy');
@@ -270,7 +259,7 @@ async function resolveProject(
 
 export async function deployAction(
   dir: string | undefined,
-  opts: { org?: string; project?: string; yes?: boolean; config?: string; skipBuild?: boolean },
+  opts: { org?: string; project?: string; yes?: boolean; config?: string; skipBuild?: boolean; debug?: boolean },
 ) {
   const targetDir = resolve(dir || process.cwd());
   const isHeadless = Boolean(process.env.MASTRA_API_TOKEN);
@@ -393,7 +382,7 @@ export async function deployAction(
     p.log.step('Skipping build (--skip-build)');
   } else {
     t = performance.now();
-    runBuild(targetDir);
+    await runBuild(targetDir, { debug: opts.debug });
     p.log.step(`Build completed (${elapsed(performance.now() - t)})`);
   }
 

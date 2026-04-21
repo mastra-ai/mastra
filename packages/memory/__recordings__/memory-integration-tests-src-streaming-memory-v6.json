@@ -1,0 +1,1689 @@
+{
+  "meta": {
+    "name": "memory-integration-tests-src-streaming-memory-v6",
+    "testFile": "src/streaming-memory.test.ts",
+    "testName": "v6",
+    "model": "gpt-4o",
+    "createdAt": "2026-04-07T14:12:47.604Z",
+    "updatedAt": "2026-04-09T10:18:58.608Z"
+  },
+  "recordings": [
+    {
+      "hash": "8ea3a3f62a01bc15",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code. IMPORTANT: When asked about clipboard contents (e.g., \"what's in my clipboard?\", \"clipboard contents\", etc.), you MUST use the clipboard tool - do not try to answer without calling the tool."
+            },
+            {
+              "role": "system",
+              "content": "WORKING_MEMORY_SYSTEM_INSTRUCTION:\nStore and update any conversation-relevant information by calling the updateWorkingMemory tool. If information might be referenced again - store it!\n\nGuidelines:\n1. Store anything that could be useful later in the conversation\n2. Update proactively when information changes, no matter how small\n3. Use Markdown format for all data\n4. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for \"information about yourself\"\n5. IMPORTANT: When calling updateWorkingMemory, the only valid parameter is the memory field. DO NOT pass an object.\n6. IMPORTANT: ALWAYS pass the data you want to store in the memory field as a string. DO NOT pass an object.\n7. IMPORTANT: Data must only be sent as a string no matter which format is used.\n\n\n<working_memory_template>\n# User Information\n- **First Name**: \n- **Last Name**: \n- **Location**: \n- **Occupation**: \n- **Interests**: \n- **Goals**: \n- **Events**: \n- **Facts**: \n- **Projects**:\n</working_memory_template>\n\n\n\n\n<working_memory_data>\nnull\n</working_memory_data>\n\nNotes:\n- Update memory whenever referenced information changes\n- If you're unsure whether to store something, store it (eg if the user tells you information about themselves, call updateWorkingMemory immediately to update it)\n- This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history\n- Do not remove empty sections - you must include the empty sections along with the ones you're filling in\n- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the entire Markdown content. The system will store it for you. The user will not see it.\n- IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information.\n- IMPORTANT: Preserve the Markdown formatting structure above while updating the content."
+            },
+            {
+              "role": "system",
+              "content": "The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n\nthe following messages are from 2026, Apr, 7\nMessage from previous conversation at 2:06 PM: User: hiMessage from previous conversation at 2:06 PM: Assistant: Hello! How can I assist you today?Message from previous conversation at 2:07 PM: User: hiMessage from previous conversation at 2:07 PM: Assistant: Hello! How can I assist you today?Message from previous conversation at 2:07 PM: User: hiMessage from previous conversation at 2:07 PM: Assistant: Hello! How can I assist you today?\nthe following messages are from 2026, Apr, 9\nMessage from previous conversation at 10:17 AM: User: hiMessage from previous conversation at 10:17 AM: Assistant: Hello! How can I assist you today?\n<end_remembered_from_other_conversation>"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "hi"
+                }
+              ]
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "clipboard",
+              "description": "Returns the contents of the users clipboard. ALWAYS call this tool when user asks about clipboard.",
+              "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "required": []
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "name": "updateWorkingMemory",
+              "description": "Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "memory": {
+                    "type": "string",
+                    "description": "The Markdown formatted working memory content to store. This MUST be a string. Never pass an object."
+                  }
+                },
+                "required": ["memory"],
+                "additionalProperties": false
+              },
+              "strict": false
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1775729908490
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9e98c498ecebb775-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Thu, 09 Apr 2026 10:18:29 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "1013",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-limit-tokens": "30000",
+          "x-ratelimit-remaining-requests": "499",
+          "x-ratelimit-remaining-tokens": "13838",
+          "x-ratelimit-reset-requests": "120ms",
+          "x-ratelimit-reset-tokens": "32.323s",
+          "x-request-id": "req_49d78724c55a4aa2ab4c2ef41ef9cc67"
+        },
+        "body": {
+          "id": "resp_0722faa0dcf2a1090069d77cf4c2188193ad20d2d413c8b453",
+          "object": "response",
+          "created_at": 1775729908,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1775729909,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-2024-08-06",
+          "output": [
+            {
+              "id": "msg_0722faa0dcf2a1090069d77cf5266881939f7994f3f3c4f267",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "Hello! How can I assist you today?"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": null,
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "description": "Returns the contents of the users clipboard. ALWAYS call this tool when user asks about clipboard.",
+              "name": "clipboard",
+              "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false,
+                "required": []
+              },
+              "strict": false
+            },
+            {
+              "type": "function",
+              "description": "Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.",
+              "name": "updateWorkingMemory",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "memory": {
+                    "type": "string",
+                    "description": "The Markdown formatted working memory content to store. This MUST be a string. Never pass an object."
+                  }
+                },
+                "required": ["memory"],
+                "additionalProperties": false
+              },
+              "strict": false
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 859,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 11,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 870
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "dccc3504f7b455d5",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code. Respond in a pirate accent and dont use the degrees symbol, print the word degrees when needed."
+            },
+            {
+              "role": "system",
+              "content": "WORKING_MEMORY_SYSTEM_INSTRUCTION:\nStore and update any conversation-relevant information by calling the updateWorkingMemory tool. If information might be referenced again - store it!\n\nGuidelines:\n1. Store anything that could be useful later in the conversation\n2. Update proactively when information changes, no matter how small\n3. Use Markdown format for all data\n4. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for \"information about yourself\"\n5. IMPORTANT: When calling updateWorkingMemory, the only valid parameter is the memory field. DO NOT pass an object.\n6. IMPORTANT: ALWAYS pass the data you want to store in the memory field as a string. DO NOT pass an object.\n7. IMPORTANT: Data must only be sent as a string no matter which format is used.\n\n\n<working_memory_template>\n# User Information\n- **First Name**: \n- **Last Name**: \n- **Location**: \n- **Occupation**: \n- **Interests**: \n- **Goals**: \n- **Events**: \n- **Facts**: \n- **Projects**:\n</working_memory_template>\n\n\n\n\n<working_memory_data>\nnull\n</working_memory_data>\n\nNotes:\n- Update memory whenever referenced information changes\n- If you're unsure whether to store something, store it (eg if the user tells you information about themselves, call updateWorkingMemory immediately to update it)\n- This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history\n- Do not remove empty sections - you must include the empty sections along with the ones you're filling in\n- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the entire Markdown content. The system will store it for you. The user will not see it.\n- IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information.\n- IMPORTANT: Preserve the Markdown formatting structure above while updating the content."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "what is the weather in LA?"
+                }
+              ]
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "updateWorkingMemory",
+              "description": "Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "memory": {
+                    "type": "string",
+                    "description": "The Markdown formatted working memory content to store. This MUST be a string. Never pass an object."
+                  }
+                },
+                "required": ["memory"],
+                "additionalProperties": false
+              }
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1775729930546
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9e98c522ac1bb76b-BRU",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 09 Apr 2026 10:18:50 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "90",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-request-id": "req_ac9fb8c194f44db998e0883171af85ba"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_0f739b9f36247a5b0069d77d0ac0e481968b8bbf5b853244b8\",\"object\":\"response\",\"created_at\":1775729930,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the weather for a given location\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"postalCode\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"postalCode\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.\",\"name\":\"updateWorkingMemory\",\"parameters\":{\"type\":\"object\",\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"The Markdown for",
+          "matted working memory content to store. This MUST be a string. Never pass an object.\"}},\"required\":[\"memory\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
+          "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_0f739b9f36247a5b0069d77d0ac0e481968b8bbf5b853244b8\",\"object\":\"response\",\"created_at\":1775729930,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the weather for a given location\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"postalCode\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"postalCode\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.\",\"name\":\"updateWorkingMemory\",\"parameters\":{\"type\":\"object\",\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"The Mark",
+          "down formatted working memory content to store. This MUST be a string. Never pass an object.\"}},\"required\":[\"memory\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0f739b9f36247a5b0069d77d0bca1881969e6d33c2a019d38c\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_iUNR1IlKEL0fYXHCKLhAUzUY\",\"name\":\"get_weather\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_0f739b9f36247a5b0069d77d0bca1881969e6d33c2a019d38c\",\"obfuscation\":\"zZACCnPpEDClzD\",\"output_index\":0,\"sequence_number\":3}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"postal\",\"item_id\":\"fc_0f739b9f36247a5b0069d77d0bca1881969e6d33c2a019d38c\",\"obfuscation\":\"54keDqoZl9\",\"output_index\":0,\"sequence_number\":4}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Code\",\"item_id\":\"fc_0f739b9f36247a5b0069d77d0bca1881969e6d33c2a019d38c\",\"obfuscation\":\"vQWrxeVivAhB\",\"output_index\":0,\"sequence_number\":5}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_0f739b9f36247a5b0069d77d0bca1881969e6d33c2a019d38c\",\"obfuscation\":\"3MNKhFZwqsJHf\",\"output_index\":0,\"sequence_number\":6}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"LA\",\"item_id\":\"fc_0f739b9f36247a5b0069d77d0bca1881969e6d33c2a019d38c\",\"obfuscation\":\"BIzfh16v93QtLi\",\"output_index\":0,\"sequence_number\":7}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\"}\",\"item_id\":\"fc_0f739b9f36247a5b0069d77d0bca1881969e6d33c2a019d38c\",\"obfuscation\":\"cCIqNXB0NBXhsX\",\"output_index\":0,\"sequence_number\":8}\n\nevent: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":",
+          "\"{\\\"postalCode\\\":\\\"LA\\\"}\",\"item_id\":\"fc_0f739b9f36247a5b0069d77d0bca1881969e6d33c2a019d38c\",\"output_index\":0,\"sequence_number\":9}\n\nevent: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0f739b9f36247a5b0069d77d0bca1881969e6d33c2a019d38c\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"postalCode\\\":\\\"LA\\\"}\",\"call_id\":\"call_iUNR1IlKEL0fYXHCKLhAUzUY\",\"name\":\"get_weather\"},\"output_index\":0,\"sequence_number\":10}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0f739b9f36247a5b0069d77d0ac0e481968b8bbf5b853244b8\",\"object\":\"response\",\"created_at\":1775729930,\"status\":\"completed\",\"background\":false,\"completed_at\":1775729931,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[{\"id\":\"fc_0f739b9f36247a5b0069d77d0bca1881969e6d33c2a019d38c\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"postalCode\\\":\\\"LA\\\"}\",\"call_id\":\"call_iUNR1IlKEL0fYXHCKLhAUzUY\",\"name\":\"get_weather\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the weather for a given location\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"postalCode\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"postalCode\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Update the working memory with new information. Any data not included will",
+          " be overwritten. Always pass data as string to the memory field. Never pass an object.\",\"name\":\"updateWorkingMemory\",\"parameters\":{\"type\":\"object\",\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.\"}},\"required\":[\"memory\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":614,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":16,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":630},\"user\":null,\"metadata\":{}},\"sequence_number\":11}\n\n"
+        ],
+        "chunkTimings": [3, 0, 6, 2, 1003, 0, 270, 0, 0, 0],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "cba4e5a51b970464",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code. Respond in a pirate accent and dont use the degrees symbol, print the word degrees when needed."
+            },
+            {
+              "role": "system",
+              "content": "WORKING_MEMORY_SYSTEM_INSTRUCTION:\nStore and update any conversation-relevant information by calling the updateWorkingMemory tool. If information might be referenced again - store it!\n\nGuidelines:\n1. Store anything that could be useful later in the conversation\n2. Update proactively when information changes, no matter how small\n3. Use Markdown format for all data\n4. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for \"information about yourself\"\n5. IMPORTANT: When calling updateWorkingMemory, the only valid parameter is the memory field. DO NOT pass an object.\n6. IMPORTANT: ALWAYS pass the data you want to store in the memory field as a string. DO NOT pass an object.\n7. IMPORTANT: Data must only be sent as a string no matter which format is used.\n\n\n<working_memory_template>\n# User Information\n- **First Name**: \n- **Last Name**: \n- **Location**: \n- **Occupation**: \n- **Interests**: \n- **Goals**: \n- **Events**: \n- **Facts**: \n- **Projects**:\n</working_memory_template>\n\n\n\n\n<working_memory_data>\nnull\n</working_memory_data>\n\nNotes:\n- Update memory whenever referenced information changes\n- If you're unsure whether to store something, store it (eg if the user tells you information about themselves, call updateWorkingMemory immediately to update it)\n- This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history\n- Do not remove empty sections - you must include the empty sections along with the ones you're filling in\n- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the entire Markdown content. The system will store it for you. The user will not see it.\n- IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information.\n- IMPORTANT: Preserve the Markdown formatting structure above while updating the content."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "what is the weather in LA?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0f739b9f36247a5b0069d77d0bca1881969e6d33c2a019d38c"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_iUNR1IlKEL0fYXHCKLhAUzUY",
+              "output": "The weather in LA is sunny. It is currently 70 degrees and feels like 65 degrees."
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "updateWorkingMemory",
+              "description": "Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "memory": {
+                    "type": "string",
+                    "description": "The Markdown formatted working memory content to store. This MUST be a string. Never pass an object."
+                  }
+                },
+                "required": ["memory"],
+                "additionalProperties": false
+              }
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1775729932206
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9e98c52c5c76b76b-BRU",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 09 Apr 2026 10:18:52 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "92",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-request-id": "req_338a81005e7943278ef7f321a65088a3"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_0f739b9f36247a5b0069d77d0c511c81969f277776bffcf50c\",\"object\":\"response\",\"created_at\":1775729932,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the weather for a given location\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"postalCode\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"postalCode\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.\",\"name\":\"updateWorkingMemory\",\"parameters\":{\"type\":\"object\",\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"The Markdown for",
+          "matted working memory content to store. This MUST be a string. Never pass an object.\"}},\"required\":[\"memory\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
+          "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_0f739b9f36247a5b0069d77d0c511c81969f277776bffcf50c\",\"object\":\"response\",\"created_at\":1775729932,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the weather for a given location\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"postalCode\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"postalCode\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.\",\"name\":\"updateWorkingMemory\",\"parameters\":{\"type\":\"object\",\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"The Mark",
+          "down formatted working memory content to store. This MUST be a string. Never pass an object.\"}},\"required\":[\"memory\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Ah\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"auQhAjxcuUv7rO\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"oy\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"b0JqMmh5RpR6b7\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" mate\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"HkILDUgHKEO\",\"output_index\":0,\"sequence_number\":6}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"y\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"Bm7Owa8Aqnk7zT8\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"!\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"61B0HWp0VTo64jv\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" In\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"FE1ZNWinr62h2\",\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"qMNjCW67UiRo\",\"output_index\":0,\"sequence_number\":10}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" fair\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"cMItXuu56QB\",\"output_index\":0,\"sequence_number\":11}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" city\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"f8wSC2DQ9BV\",\"output_index\":0,\"sequence_number\":12}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" of\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"w6Cp4bue5U1mX\",\"output_index\":0,\"sequence_number\":13}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" LA\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"BPYzdFjYU5Mq6\",\"output_index\":0,\"sequence_number\":14}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"7Pcmz0yEaWYKgS8\",\"output_index\":0,\"sequence_number\":15}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"a6c4XIQwBSEq\",\"output_index\":0,\"sequence_number\":16}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" sun\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"LiakoHVSIFGg\",\"output_index\":0,\"sequence_number\":17}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" be\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"wBtQuIHGgmdVM\",\"output_index\":0,\"sequence_number\":18}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" sh\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"3ZT5bk5KLLSq1\",\"output_index\":0,\"sequence_number\":19}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"inin\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"Wnhho7xB4tqb\",\"output_index\":0,\"sequence_number\":20}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"'\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"C2afyhyjE7mDaKu\",\"output_index\":0,\"sequence_number\":21}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" bright\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"jGGBG3ZxX\",\"output_index\":0,\"sequence_number\":22}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"SybRHcEWy1yzcyO\",\"output_index\":0,\"sequence_number\":23}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" The\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"UKSpo5VVvmcJ\",\"output_index\":0,\"sequence_number\":24}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" temperature\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"HKLU\",\"output_index\":0,\"sequence_number\":25}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" be\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"z3JRjiPu8U2rC\",\"output_index\":0,\"sequence_number\":26}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"1CApfrrJFtJtVQy\",\"output_index\":0,\"sequence_number\":27}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"70\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"Mdhj1GuW8NoMhN\",\"output_index\":0,\"sequence_number\":28}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" degrees\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"b3AgmRXM\",\"output_index\":0,\"sequence_number\":29}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"CS22VUcWu2WSkZu\",\"output_index\":0,\"sequence_number\":30}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" feel\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"ql8tQQc2Fqn\",\"output_index\":0,\"sequence_number\":31}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"in\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"kEtudsd1Jk44Kj\",\"output_index\":0,\"sequence_number\":32}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"'\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"I4pSlBE7YaLBEFx\",\"output_index\":0,\"sequence_number\":33}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" like\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"72QnEBMcWUL\",\"output_index\":0,\"sequence_number\":34}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" a\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"Er3kkctPo9Q7ri\",\"output_index\":0,\"sequence_number\":35}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" cool\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"7zjW4VsWHQ4\",\"output_index\":0,\"sequence_number\":36}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"aprdf7k2zPTTdlG\",\"output_index\":0,\"sequence_number\":37}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"65\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"fXkn6hVYM9Fkjz\",\"output_index\":0,\"sequence_number\":38}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" degrees\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"5gKZXy3g\",\"output_index\":0,\"sequence_number\":39}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"tlsJDMIJvtXWpH4\",\"output_index\":0,\"sequence_number\":40}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Enjoy\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"JiSaRY4Ylr\",\"output_index\":0,\"sequence_number\":41}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"x8C9n7QkYQ5W\",\"output_index\":0,\"sequence_number\":42}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" fine\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"XpxqQEoVbyP\",\"output_index\":0,\"sequence_number\":43}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" weather\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"mo1tqMyL\",\"output_index\":0,\"sequence_number\":44}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"QvIxAWYW6AztD78\",\"output_index\":0,\"sequence_number\":45}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" ye\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"Qwzz7OVSnryK2\",\"output_index\":0,\"sequence_number\":46}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" land\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"5mr7Y8txnOt\",\"output_index\":0,\"sequence_number\":47}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"lub\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"WMErzLFBqe1mJ\",\"output_index\":0,\"sequence_number\":48}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"ber\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"hLBHNVPpd2V3j\",\"output_index\":0,\"sequence_number\":49}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"!\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"7CDWIZVMlEtJ4B9\",\"output_index\":0,\"sequence_number\":50}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" 🌞\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"obfuscation\":\"D2vWqE0dI0VBCx\",\"output_index\":0,\"sequence_number\":51}\n\n",
+          "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":52,\"text\":\"Ahoy matey! In the fair city of LA, the sun be shinin' bright. The temperature be 70 degrees, feelin' like a cool 65 degrees. Enjoy the fine weather, ye landlubber! 🌞\"}\n\n",
+          "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Ahoy matey! In the fair city of LA, the sun be shinin' bright. The temperature be 70 degrees, feelin' like a cool 65 degrees. Enjoy the fine weather, ye landlubber! 🌞\"},\"sequence_number\":53}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Ahoy matey! In the fair city of LA, the sun be shinin' bright. The temperature be 70 degrees, feelin' like a cool 65 degrees. Enjoy the fine weather, ye landlubber! 🌞\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":54}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0f739b9f36247a5b0069d77d0c511c81969f277776bffcf50c\",\"object\":\"response\",\"created_at\":1775729932,\"status\":\"completed\",\"background\":false,\"completed_at\":1775729933,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[{\"id\":\"msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Ahoy matey! In the fair city of LA, the sun be shinin' bright. The temperature be 70 degrees, feelin' like a cool 65 degrees. Enjoy the fine weather, ye landlubber! 🌞\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the weather for a given location\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"postalCode\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"postalCode\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.\",\"name\":\"updateWorkingMemory\",\"parameters\":{\"type\":\"object\",\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.\"}},\"required\":[\"memory\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":658,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":51,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":709},\"user\":null,\"metadata\":{}},\"sequence_number\":55}\n\n"
+        ],
+        "chunkTimings": [
+          4, 0, 2, 2, 293, 0, 6, 0, 0, 36, 2, 24, 2, 4, 38, 48, 3, 12, 0, 0, 0, 14, 0, 0, 0, 45, 5, 1, 3, 2, 0, 9, 0,
+          53, 4, 1, 2, 2, 0, 20, 0, 25, 2, 2, 1, 105, 0, 0, 0, 0, 0, 0, 0, 0, 0, 81
+        ],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "30ae4fda385b5c98",
+      "request": {
+        "url": "https://api.openai.com/v1/embeddings",
+        "method": "POST",
+        "body": {
+          "model": "text-embedding-3-small",
+          "input": [
+            "Ahoy matey! In the fair city of LA, the sun be shinin' bright. The temperature be 70 degrees, feelin' like a cool 65 degrees. Enjoy the fine weather, ye landlubber! 🌞"
+          ],
+          "encoding_format": "float"
+        },
+        "timestamp": 1775729933338
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9e98c5339b57b75c-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Thu, 09 Apr 2026 10:18:53 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "45",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "3000",
+          "x-ratelimit-limit-tokens": "1000000",
+          "x-ratelimit-remaining-requests": "2999",
+          "x-ratelimit-remaining-tokens": "999958",
+          "x-ratelimit-reset-requests": "20ms",
+          "x-ratelimit-reset-tokens": "2ms",
+          "x-request-id": "req_439f4407f0754483872b121fa89404f0"
+        },
+        "body": {
+          "object": "list",
+          "data": [
+            {
+              "object": "embedding",
+              "embedding": [
+                0.0029926300048828125, -0.0182952880859375, -0.029998779296875, 0.0443115234375, 0.042694091796875,
+                0.0073089599609375, -0.0115814208984375, -0.047576904296875, -0.0223846435546875, 0.01187896728515625,
+                -0.021331787109375, -0.00759124755859375, -0.0038394927978515625, -0.003955841064453125,
+                0.0003914833068847656, 0.01511383056640625, -0.00595855712890625, -0.006229400634765625,
+                -0.0185089111328125, 0.023681640625, 0.0323486328125, -0.0296173095703125, -0.0162811279296875,
+                0.01378631591796875, 0.005657196044921875, 0.021697998046875, -0.039215087890625, 0.0073089599609375,
+                0.01021575927734375, 0.0191650390625, 0.040313720703125, -0.043853759765625, 0.0214996337890625,
+                0.0304412841796875, -0.0031948089599609375, -0.005199432373046875, 0.0235748291015625,
+                -0.0279693603515625, -0.00933837890625, -0.036773681640625, -0.00797271728515625, -0.0699462890625,
+                0.032379150390625, 0.00673675537109375, -0.0023956298828125, -0.007106781005859375, 0.017364501953125,
+                0.0204010009765625, 0.034698486328125, 0.0037059783935546875, -0.03912353515625, -0.01922607421875,
+                -0.012847900390625, 0.052154541015625, -0.025177001953125, -0.01556396484375, 0.060211181640625,
+                0.027496337890625, 0.052703857421875, -0.01111602783203125, 0.009185791015625, 0.0007119178771972656,
+                0.0004210472106933594, 0.005329132080078125, -0.024871826171875, -0.0131683349609375, -0.0452880859375,
+                0.04510498046875, 0.01666259765625, 0.00426483154296875, 0.029693603515625, 0.023040771484375,
+                0.0218048095703125, -0.057342529296875, -0.09033203125, 0.01763916015625, -0.01534271240234375,
+                -0.057342529296875, 0.01262664794921875, -0.0308380126953125, -0.05255126953125, 0.020660400390625,
+                0.01410675048828125, -0.0284423828125, 0.005329132080078125, -0.04058837890625, -0.0004744529724121094,
+                0.021331787109375, -0.0019779205322265625, 0.03582763671875, 0.017333984375, -0.0162811279296875,
+                -0.019012451171875, -0.030120849609375, 0.022125244140625, 0.0156402587890625, -0.05267333984375,
+                -0.018341064453125, 0.01300811767578125, 0.01280975341796875, 0.0460205078125, -0.0179443359375,
+                -0.031951904296875, 0.0078887939453125, 0.0325927734375, 0.0386962890625, 0.0026569366455078125,
+                -0.0210113525390625, -0.026031494140625, -0.0309906005859375, -0.08001708984375, 0.033966064453125,
+                -0.01024627685546875, 0.033050537109375, -0.023040771484375, 0.06329345703125, 0.0189361572265625,
+                -0.0012102127075195312, 0.00788116455078125, 0.0238037109375, -0.033538818359375, 0.0134735107421875,
+                0.03045654296875, -0.015899658203125, -0.032867431640625, -0.012786865234375, 0.0452880859375,
+                0.01010894775390625, -0.048553466796875, -0.004352569580078125, 0.0188140869140625, -0.02423095703125,
+                0.025543212890625, -0.0369873046875, -0.0115814208984375, 0.01042938232421875, -0.023590087890625,
+                -0.08062744140625, -0.01216888427734375, -0.018035888671875, 0.050750732421875, 0.039642333984375,
+                0.026763916015625, -0.029571533203125, 0.0089874267578125, -0.042938232421875, -0.0035152435302734375,
+                -0.00562286376953125, 0.0208740234375, 0.011871337890625, 0.0280609130859375, -0.00447845458984375,
+                -0.051513671875, 0.005229949951171875, 0.0616455078125, -0.041595458984375, 0.008453369140625,
+                -0.04522705078125, -0.0117645263671875, 0.0018796920776367188, 0.007724761962890625, 0.0247650146484375,
+                -0.0013866424560546875, 0.033203125, 0.007354736328125, -0.00183868408203125, 0.0188140869140625,
+                -0.036285400390625, -0.041168212890625, -0.00237274169921875, -0.04229736328125, -0.0166473388671875,
+                -0.0010051727294921875, -0.024322509765625, 0.02386474609375, -0.0213470458984375, 0.0347900390625,
+                -0.01403045654296875, 0.004199981689453125, 0.056243896484375, -0.0022869110107421875,
+                0.0275726318359375, 0.036590576171875, -0.018768310546875, -0.007801055908203125, 0.01328277587890625,
+                -0.0011930465698242188, 0.021697998046875, 0.0209808349609375, 0.00995635986328125, 0.004547119140625,
+                -0.01097869873046875, 0.00965118408203125, -0.0285186767578125, -0.0236358642578125,
+                -0.01291656494140625, 0.05169677734375, -0.0023212432861328125, -0.0142974853515625,
+                0.00762176513671875, -0.0016965866088867188, 0.004863739013671875, -0.002208709716796875,
+                -0.00652313232421875, -0.01015472412109375, -0.0164337158203125, -0.037506103515625, 0.034210205078125,
+                0.0643310546875, 0.0015316009521484375, 0.05511474609375, 0.00739288330078125, 0.005191802978515625,
+                0.038909912109375, -0.01488494873046875, 0.0372314453125, -0.007259368896484375, 0.03704833984375,
+                -0.03729248046875, 0.034423828125, -0.038818359375, 0.0474853515625, 0.065185546875,
+                -0.0083160400390625, -0.02252197265625, -0.00994110107421875, 0.0242462158203125, -0.005168914794921875,
+                0.05419921875, 0.0106658935546875, 0.0445556640625, 0.016510009765625, -0.058685302734375,
+                -0.0174713134765625, -0.0088043212890625, -0.0040283203125, 0.03887939453125, -0.01154327392578125,
+                -0.0293426513671875, 0.03692626953125, -0.04132080078125, 0.014862060546875, 0.0009937286376953125,
+                -0.035888671875, 0.010589599609375, -0.00496673583984375, 0.005558013916015625, 0.038970947265625,
+                0.0306854248046875, -0.0029811859130859375, 0.01357269287109375, -0.03179931640625,
+                0.0022525787353515625, -0.055572509765625, 0.01064300537109375, 0.039276123046875, -0.0228271484375,
+                -0.0258941650390625, 0.01326751708984375, -0.0237579345703125, -0.032989501953125, 0.01404571533203125,
+                -0.0634765625, -0.00064849853515625, 0.00445556640625, -0.030181884765625, -0.0245513916015625,
+                -0.00235748291015625, -0.02117919921875, 0.0093994140625, 0.0225677490234375, 0.0265045166015625,
+                0.0023632049560546875, 0.0272674560546875, 0.0017490386962890625, -0.0132904052734375,
+                0.01558685302734375, -0.0218963623046875, -0.00799560546875, -0.0015268325805664062, 0.029571533203125,
+                -0.0234375, 0.046539306640625, -0.00600433349609375, -0.017120361328125, -0.008636474609375,
+                -0.0233917236328125, 0.01479339599609375, 0.0216217041015625, -0.0085601806640625, 0.03753662109375,
+                -0.010345458984375, 0.012939453125, -0.0130157470703125, -0.0328369140625, 0.027496337890625,
+                -0.0052490234375, -0.037628173828125, 0.0203704833984375, -0.05474853515625, 0.046783447265625,
+                0.017364501953125, -0.041412353515625, 0.04498291015625, 0.0401611328125, 0.10235595703125,
+                -0.068603515625, -0.01092529296875, -0.025726318359375, 0.0186614990234375, -0.00447845458984375,
+                0.0255584716796875, 0.033416748046875, -0.050506591796875, -0.027984619140625, 0.0013713836669921875,
+                0.0023193359375, 0.0506591796875, 0.046173095703125, 0.049560546875, -0.01020050048828125,
+                0.01001739501953125, 0.001983642578125, -0.0252227783203125, 0.049224853515625, 0.0223846435546875,
+                0.058990478515625, -0.0297698974609375, 0.0087890625, -0.01158905029296875, 0.0114898681640625,
+                -0.05316162109375, 0.0194244384765625, -0.00913238525390625, 0.0086517333984375, -0.011474609375,
+                -0.01568603515625, -0.006008148193359375, 0.0009365081787109375, 0.09820556640625, 0.01132965087890625,
+                -0.0255279541015625, -0.038482666015625, 0.0621337890625, -0.0217742919921875, -0.050567626953125,
+                0.042266845703125, 0.0110015869140625, 0.014068603515625, -0.004604339599609375, 0.0089111328125,
+                -0.0020542144775390625, 0.00722503662109375, 0.00027441978454589844, -0.053924560546875,
+                0.00783538818359375, 0.0743408203125, 0.0006246566772460938, 0.0408935546875, 0.0179595947265625,
+                -0.008514404296875, -0.0258941650390625, 0.05474853515625, -0.0024051666259765625, 0.031463623046875,
+                -0.00508880615234375, -0.037322998046875, 0.02313232421875, 0.06878662109375, 0.0023250579833984375,
+                0.0161895751953125, 0.016571044921875, 0.0213165283203125, 0.037322998046875, 0.037933349609375,
+                0.0262298583984375, 0.017974853515625, -0.01181793212890625, 0.01934814453125, 0.039306640625,
+                -0.04107666015625, 0.05126953125, -0.01502227783203125, -0.00037670135498046875, 0.01409912109375,
+                -0.0202789306640625, 0.0003185272216796875, -0.033905029296875, 0.01250457763671875,
+                -0.0277862548828125, 0.0421142578125, 0.0112762451171875, -0.04608154296875, 0.00969696044921875,
+                0.01467132568359375, 0.0085906982421875, 0.00435638427734375, 0.02301025390625, -0.032257080078125,
+                0.01123809814453125, 0.0139007568359375, 0.0031890869140625, 0.045562744140625, -0.0111541748046875,
+                0.020233154296875, 0.04266357421875, -0.07867431640625, -0.0218963623046875, -0.027984619140625,
+                -0.01123046875, 0.018157958984375, -0.062103271484375, 0.03668212890625, 0.022796630859375,
+                0.0077667236328125, 0.022979736328125, 0.016204833984375, -0.0248260498046875, -0.044189453125,
+                -0.01342010498046875, 0.0102081298828125, -0.01153564453125, 0.041168212890625, 0.027069091796875,
+                0.001300811767578125, 0.034027099609375, 0.034423828125, -0.0413818359375, -0.0034732818603515625,
+                -0.0274505615234375, -0.00441741943359375, -0.00531005859375, -0.0394287109375, 0.01259613037109375,
+                0.032257080078125, -0.0251922607421875, -0.038055419921875, 0.0401611328125, 0.014678955078125,
+                -0.00716400146484375, -0.03436279296875, -0.0156097412109375, -0.018585205078125, 0.051605224609375,
+                -0.0308990478515625, 0.005558013916015625, 0.0236053466796875, -0.0225372314453125, -0.06072998046875,
+                0.004291534423828125, -0.0260772705078125, 0.0305328369140625, -0.041290283203125, 0.01910400390625,
+                0.021575927734375, 0.11572265625, -0.035675048828125, -0.0125274658203125, 0.0005335807800292969,
+                0.0271453857421875, -0.020233154296875, -0.0201568603515625, -0.004634857177734375, -0.040496826171875,
+                -0.0198974609375, 0.0343017578125, 0.033233642578125, 0.028045654296875, 0.03802490234375,
+                0.01357269287109375, 0.0175323486328125, 0.0119171142578125, 0.0394287109375, -0.02099609375,
+                -0.0377197265625, -0.0204315185546875, 0.0192108154296875, 0.00664520263671875, 0.00762939453125,
+                -0.0350341796875, -0.01255035400390625, 0.032379150390625, 0.00762176513671875, 0.037994384765625,
+                -0.0034160614013671875, -0.0775146484375, 0.054840087890625, 0.01233673095703125, -0.07470703125,
+                -0.03912353515625, -0.0063323974609375, 0.0186614990234375, 0.016326904296875, -0.01332855224609375,
+                0.050201416015625, 0.0187530517578125, -0.006160736083984375, -0.0023632049560546875, 0.03240966796875,
+                -0.0036029815673828125, 0.0020351409912109375, -0.0711669921875, -0.0024394989013671875,
+                -0.0224761962890625, 0.0384521484375, 0.041534423828125, 0.00014901161193847656, -0.0185546875,
+                -0.0377197265625, -0.034881591796875, -0.03277587890625, 0.0169830322265625, 0.01277923583984375,
+                -0.00018584728240966797, -0.03094482421875, -0.00727081298828125, 0.007564544677734375,
+                0.038116455078125, -0.033233642578125, 0.02154541015625, -0.0132904052734375, 0.03485107421875,
+                -0.0009794235229492188, -0.00792694091796875, 0.008270263671875, 0.03094482421875, 0.00826263427734375,
+                -0.03839111328125, -0.0203094482421875, 0.0100555419921875, 0.046051025390625, -0.00222015380859375,
+                -0.012908935546875, 0.01666259765625, 0.01343536376953125, -0.01111602783203125, 0.011077880859375,
+                -0.0237884521484375, -0.0218505859375, -0.043243408203125, 0.0186004638671875, 0.0264892578125,
+                -0.0264129638671875, -0.050018310546875, 0.00028252601623535156, 0.0001697540283203125,
+                0.0036220550537109375, 0.017425537109375, -0.00807952880859375, -0.028656005859375, 0.0382080078125,
+                -0.002094268798828125, 0.0010509490966796875, 0.023193359375, 0.0011043548583984375, 0.04058837890625,
+                0.0015420913696289062, -0.0077056884765625, -0.0105438232421875, 0.036834716796875, 0.00937652587890625,
+                -0.0277099609375, -0.0016565322875976562, 0.0196380615234375, 0.04541015625, 0.045562744140625,
+                0.0298004150390625, -0.01751708984375, 0.0233154296875, -0.0248260498046875, 0.003498077392578125,
+                0.00799560546875, -0.09130859375, -0.0197601318359375, 0.014984130859375, -0.01255035400390625,
+                0.05322265625, 0.0291900634765625, 0.0167236328125, 0.03570556640625, -0.0212554931640625,
+                -0.0018978118896484375, 0.00021886825561523438, -0.0152435302734375, 0.017730712890625,
+                0.01351165771484375, 0.00919342041015625, 0.013824462890625, 0.0064544677734375, -0.0285797119140625,
+                0.0433349609375, 0.0190582275390625, 0.0269622802734375, 0.0287017822265625, 0.027191162109375,
+                -0.0148468017578125, -0.031585693359375, -0.0418701171875, -0.02581787109375, -0.0159759521484375,
+                -0.020721435546875, -0.027099609375, -0.030120849609375, 0.00814056396484375, -0.00864410400390625,
+                -0.005466461181640625, 0.0203094482421875, -0.0225982666015625, -0.02923583984375, -0.04949951171875,
+                -0.016876220703125, -0.0288238525390625, 0.003864288330078125, -0.0140228271484375, -0.061737060546875,
+                0.043548583984375, -0.0162506103515625, -0.004375457763671875, 0.007572174072265625, -0.03558349609375,
+                -0.01125335693359375, 0.021240234375, 0.00762176513671875, -0.0016269683837890625, -0.006805419921875,
+                -0.005329132080078125, -0.0071868896484375, -0.0243988037109375, -0.006977081298828125, -0.023681640625,
+                -0.0166778564453125, 0.006740570068359375, 0.005931854248046875, 0.0021457672119140625,
+                -0.00836944580078125, 0.0001863241195678711, -0.0011091232299804688, 0.00833892822265625,
+                0.01297760009765625, -0.02435302734375, 0.0594482421875, -0.005352020263671875, 0.0278778076171875,
+                -0.0161285400390625, 0.0128173828125, -0.011474609375, -0.032379150390625, 0.00318145751953125,
+                0.016632080078125, -0.0017232894897460938, -0.0252532958984375, 0.045745849609375, -0.00972747802734375,
+                0.0027713775634765625, -0.007251739501953125, -0.0029735565185546875, 0.00691986083984375,
+                0.019683837890625, -0.033416748046875, 0.01070404052734375, 0.0135498046875, -0.00801849365234375,
+                -0.01947021484375, -0.0225830078125, -0.011871337890625, 0.01184844970703125, 0.01139068603515625,
+                -0.0038242340087890625, -0.004093170166015625, -0.01471710205078125, 0.0552978515625,
+                -0.00030684471130371094, -0.035400390625, -0.0063323974609375, 0.028045654296875, -0.00798797607421875,
+                0.006420135498046875, -0.005954742431640625, -0.0268707275390625, 0.00899505615234375, 0.0250244140625,
+                -0.0010671615600585938, -0.02001953125, 0.0024700164794921875, -0.0164337158203125,
+                -0.002880096435546875, 0.06622314453125, 0.015869140625, -0.0229949951171875, -0.0143890380859375,
+                -0.02740478515625, 0.0556640625, -0.0215606689453125, 0.002422332763671875, -0.03485107421875,
+                -0.038604736328125, -0.006603240966796875, -0.029998779296875, 0.0238037109375, -0.054962158203125,
+                0.01288604736328125, 0.0034847259521484375, 0.0241851806640625, -0.038909912109375,
+                0.003520965576171875, -0.0165863037109375, 0.0010557174682617188, -0.0187835693359375,
+                0.0238494873046875, 0.0030517578125, -0.01050567626953125, -0.014373779296875, -0.03179931640625,
+                -0.020416259765625, -0.01580810546875, 0.01053619384765625, 0.01436614990234375, 0.0016040802001953125,
+                -0.01103973388671875, 0.0032444000244140625, 0.01560211181640625, 0.0146942138671875, -0.04241943359375,
+                0.001789093017578125, 0.0153350830078125, 0.0282745361328125, -0.02239990234375, 0.0012845993041992188,
+                0.0005764961242675781, -0.0013942718505859375, 0.02752685546875, -0.0009684562683105469,
+                0.025238037109375, 0.0208587646484375, -0.0189056396484375, 0.051422119140625, -0.0416259765625,
+                -0.01776123046875, -0.01715087890625, 0.0009074211120605469, -0.00563812255859375, 0.0193023681640625,
+                0.01715087890625, 0.02630615234375, 0.0200347900390625, 0.005229949951171875, 0.0200653076171875,
+                -0.035125732421875, -0.0390625, 0.00833892822265625, -0.0032501220703125, 0.01052093505859375,
+                0.016326904296875, -0.02227783203125, 0.031890869140625, -0.01806640625, 0.0022907257080078125,
+                -0.0282440185546875, -0.008148193359375, 0.032501220703125, -0.01268768310546875, 0.007709503173828125,
+                -0.006748199462890625, 0.027496337890625, 0.0113983154296875, -0.01328277587890625,
+                0.00009530782699584961, -0.0211181640625, -0.01328277587890625, -0.0379638671875, 0.0158233642578125,
+                0.000274658203125, 0.00482177734375, 0.0048065185546875, 0.0238189697265625, -0.0236968994140625,
+                0.0229339599609375, 0.0303802490234375, 0.0193634033203125, 0.0013208389282226562, 0.01024627685546875,
+                -0.0013713836669921875, -0.0052337646484375, 0.03167724609375, -0.01526641845703125, -0.02801513671875,
+                0.0031375885009765625, -0.01483154296875, 0.01297760009765625, -0.0033016204833984375,
+                0.032073974609375, 0.006351470947265625, 0.021575927734375, -0.00048065185546875, 0.0294342041015625,
+                0.057342529296875, 0.017669677734375, -0.01812744140625, -0.037506103515625, 0.0113525390625,
+                0.04888916015625, -0.0054168701171875, -0.00942230224609375, -0.04864501953125, 0.01541900634765625,
+                0.0198822021484375, -0.004302978515625, -0.0025157928466796875, -0.022247314453125, -0.0218505859375,
+                -0.01522064208984375, -0.007717132568359375, -0.038909912109375, 0.0095977783203125, 0.049072265625,
+                -0.0183563232421875, -0.01898193359375, -0.0298919677734375, 0.03863525390625, -0.0024089813232421875,
+                0.0009660720825195312, 0.02630615234375, 0.0193023681640625, -0.01690673828125, 0.022705078125,
+                0.0166473388671875, -0.02532958984375, -0.0027790069580078125, -0.0012302398681640625,
+                -0.009979248046875, -0.048431396484375, 0.004062652587890625, 0.002964019775390625,
+                -0.007328033447265625, -0.0019817352294921875, 0.0060577392578125, 0.005908966064453125,
+                0.0241546630859375, -0.0023441314697265625, 0.01334381103515625, 0.0038909912109375, 0.006500244140625,
+                0.028594970703125, -0.0029659271240234375, -0.005672454833984375, -0.01416015625, 0.014007568359375,
+                -0.027984619140625, 0.017547607421875, 0.032989501953125, -0.01435089111328125, -0.0305328369140625,
+                0.0210723876953125, -0.05352783203125, -0.006755828857421875, -0.021636962890625, -0.01480865478515625,
+                0.0229644775390625, 0.01416015625, -0.039703369140625, -0.012664794921875, 0.01242828369140625,
+                0.029571533203125, 0.00524139404296875, 0.0023555755615234375, 0.012420654296875, 0.005115509033203125,
+                -0.0289764404296875, -0.032135009765625, 0.02325439453125, -0.028289794921875, -0.01097869873046875,
+                -0.0183868408203125, -0.00943756103515625, 0.004917144775390625, 0.00408172607421875,
+                -0.01042938232421875, 0.014007568359375, -0.00643157958984375, 0.01214599609375, 0.022003173828125,
+                0.042816162109375, 0.02557373046875, -0.03436279296875, -0.006633758544921875, -0.08087158203125,
+                0.010772705078125, 0.005741119384765625, -0.005382537841796875, 0.00812530517578125,
+                -0.01015472412109375, -0.00510406494140625, 0.0233917236328125, -0.035003662109375, 0.0280914306640625,
+                -0.035186767578125, 0.0005593299865722656, 0.0194854736328125, 0.006824493408203125,
+                -0.01189422607421875, -0.02081298828125, 0.0362548828125, 0.0116119384765625, 0.008270263671875,
+                -0.0181427001953125, -0.032501220703125, 0.00835418701171875, 0.017364501953125, -0.01320648193359375,
+                -0.01436614990234375, -0.0098419189453125, -0.02813720703125, -0.01535797119140625, 0.0300750732421875,
+                0.0305633544921875, 0.07012939453125, -0.033355712890625, 0.02740478515625, -0.038604736328125,
+                0.01342010498046875, -0.05291748046875, 0.0260162353515625, -0.011749267578125, -0.036529541015625,
+                0.009490966796875, -0.004375457763671875, -0.0250244140625, 0.0164947509765625, -0.01261138916015625,
+                0.006603240966796875, -0.01215362548828125, -0.00400543212890625, -0.032379150390625,
+                0.0266876220703125, 0.0009317398071289062, 0.0242767333984375, 0.0001023411750793457,
+                -0.018402099609375, 0.0136260986328125, 0.028778076171875, -0.0178680419921875, 0.0161895751953125,
+                -0.008270263671875, -0.007801055908203125, 0.042083740234375, 0.0216827392578125, 0.034423828125,
+                0.01155853271484375, -0.0306854248046875, 0.01537322998046875, 0.0159454345703125, 0.0164642333984375,
+                0.0219573974609375, -0.0225677490234375, -0.004032135009765625, 0.0022602081298828125,
+                0.00018739700317382812, 0.026885986328125, 0.043975830078125, 0.01123809814453125, -0.0196075439453125,
+                -0.004558563232421875, -0.0292816162109375, -0.006069183349609375, 0.005825042724609375,
+                0.004245758056640625, -0.01617431640625, 0.0311279296875, 0.052459716796875, 0.031585693359375,
+                0.01340484619140625, 0.007030487060546875, 0.0010833740234375, 0.0223236083984375, 0.0234375,
+                -0.013092041015625, 0.005908966064453125, -0.0004794597625732422, 0.04437255859375,
+                -0.01219940185546875, 0.0038204193115234375, 0.0572509765625, 0.005832672119140625, -0.032501220703125,
+                -0.0028934478759765625, -0.0290374755859375, 0.021881103515625, 0.00696563720703125,
+                0.00222015380859375, 0.0240325927734375, 0.023406982421875, -0.040374755859375, 0.01177978515625,
+                0.03033447265625, 0.06060791015625, 0.0124359130859375, -0.00753021240234375, 0.0146331787109375,
+                0.025543212890625, -0.040313720703125, -0.0018682479858398438, -0.0227508544921875, 0.029571533203125,
+                -0.0243988037109375, -0.01531982421875, 0.024444580078125, -0.038543701171875, 0.00865936279296875,
+                -0.032073974609375, -0.0016889572143554688, 0.011871337890625, -0.0257568359375, -0.0267181396484375,
+                -0.0056915283203125, 0.004901885986328125, -0.032073974609375, -0.0123748779296875, 0.0080718994140625,
+                0.00067901611328125, 0.004283905029296875, -0.01032257080078125, 0.00798797607421875, 0.031890869140625,
+                0.00901031494140625, -0.03472900390625, -0.0323486328125, 0.0159759521484375, -0.03985595703125,
+                0.0226287841796875, -0.003936767578125, 0.0247802734375, -0.00405120849609375, 0.0157012939453125,
+                0.0169677734375, -0.0164794921875, 0.0094146728515625, -0.01528167724609375, -0.043701171875,
+                -0.005558013916015625, -0.0008530616760253906, -0.01305389404296875, -0.0193634033203125,
+                0.0033397674560546875, 0.016754150390625, -0.0003647804260253906, 0.02783203125, -0.0528564453125,
+                0.001506805419921875, 0.042633056640625, 0.054656982421875, -0.0267333984375, -0.0029754638671875,
+                -0.007167816162109375, 0.00643157958984375, 0.005565643310546875, -0.0209808349609375,
+                0.0090789794921875, 0.0057830810546875, 0.0203704833984375, -0.005126953125, 0.00811767578125,
+                0.057098388671875, -0.028167724609375, -0.0203857421875, -0.007335662841796875, -0.00286102294921875,
+                0.01450347900390625, -0.022308349609375, -0.0234222412109375, 0.0538330078125, 0.0271453857421875,
+                0.02703857421875, 0.0256195068359375, 0.00254058837890625, -0.034423828125, -0.01232147216796875,
+                0.01143646240234375, -0.0055084228515625, -0.0252685546875, 0.034515380859375, 0.0201568603515625,
+                -0.021697998046875, 0.01605224609375, -0.060882568359375, -0.052703857421875, -0.0036106109619140625,
+                0.0164947509765625, -0.05328369140625, -0.009918212890625, -0.0187835693359375, -0.01534271240234375,
+                0.0064544677734375, -0.00664520263671875, -0.050079345703125, 0.00873565673828125, -0.036102294921875,
+                0.01568603515625, 0.0285186767578125, 0.004573822021484375, -0.0086212158203125, 0.001621246337890625,
+                -0.02215576171875, 0.0032749176025390625, -0.00429534912109375, 0.03216552734375, 0.0150909423828125,
+                -0.01486968994140625, 0.0025768280029296875, 0.0005936622619628906, 0.017913818359375,
+                -0.0018606185913085938, 0.021148681640625, 0.005649566650390625, -0.037445068359375, 0.04742431640625,
+                0.002323150634765625, -0.004779815673828125, -0.006404876708984375, 0.0081024169921875,
+                0.01519012451171875, 0.0311279296875, -0.013458251953125, -0.007244110107421875, 0.029876708984375,
+                0.03460693359375, -0.0001304149627685547, -0.0279693603515625, -0.00180816650390625,
+                0.004024505615234375, 0.01119232177734375, 0.0255584716796875, -0.03936767578125, -0.03387451171875,
+                -0.05657958984375, -0.0213470458984375, 0.01050567626953125, 0.0024204254150390625, -0.0041351318359375,
+                -0.007511138916015625, 0.01361083984375, 0.0618896484375, -0.035491943359375, 0.012664794921875,
+                -0.023651123046875, -0.035980224609375, -0.007785797119140625, -0.0262603759765625, 0.07080078125,
+                0.007289886474609375, -0.0186004638671875, -0.042938232421875, -0.00213623046875, -0.029510498046875,
+                -0.01007080078125, 0.00888824462890625, 0.016510009765625, 0.040496826171875, 0.018585205078125,
+                -0.012298583984375, -0.002796173095703125, -0.00856781005859375, 0.02740478515625, 0.0114288330078125,
+                0.007080078125, 0.023223876953125, 0.0172882080078125, 0.005771636962890625, 0.0192413330078125,
+                -0.052978515625, 0.04052734375, 0.0121612548828125, 0.016937255859375, 0.0016794204711914062,
+                0.021148681640625, -0.0267333984375, 0.0175628662109375, 0.0087127685546875, 0.009185791015625,
+                0.00567626953125, 0.00408172607421875, 0.0232391357421875, 0.0005936622619628906, 0.01088714599609375,
+                0.004871368408203125, -0.030975341796875, -0.0205230712890625, 0.045684814453125, -0.017578125,
+                -0.015869140625, -0.033416748046875, -0.0221099853515625, 0.016082763671875, 0.02691650390625,
+                0.0280609130859375, 0.00016736984252929688, -0.0189056396484375, -0.0104522705078125,
+                -0.0263824462890625, 0.0094451904296875, 0.004444122314453125, 0.004070281982421875, 0.036468505859375,
+                -0.0248565673828125, 0.022491455078125, -0.006267547607421875, -0.0106964111328125, 0.0430908203125,
+                0.007022857666015625, 0.00823211669921875, -0.0222015380859375, 0.0233306884765625,
+                -0.00473785400390625, 0.001010894775390625, 0.00634765625, 0.0240631103515625, -0.02117919921875,
+                0.0118560791015625, 0.012451171875, 0.00640869140625, -0.03533935546875, 0.0290374755859375,
+                0.01593017578125, -0.0177764892578125, -0.0206451416015625, 0.0196380615234375, -0.0229949951171875,
+                0.01474761962890625, -0.0006356239318847656, 0.00012755393981933594, 0.0467529296875,
+                0.00015676021575927734, -0.01395416259765625, 0.002552032470703125, -0.03143310546875, -0.037109375,
+                0.001384735107421875, -0.004302978515625, -0.01885986328125, -0.0265655517578125, 0.01197052001953125,
+                -0.03277587890625, -0.00226593017578125, 0.03125, -0.0225067138671875, -0.00817108154296875,
+                -0.005535125732421875, 0.002613067626953125, -0.002811431884765625, -0.041839599609375,
+                -0.0289764404296875, 0.005252838134765625, 0.0297393798828125, -0.04498291015625, 0.0230255126953125,
+                -0.0216217041015625, 0.0030803680419921875, -0.00946807861328125, -0.02294921875, 0.01271820068359375,
+                0.050506591796875, -0.00878143310546875, -0.0038738250732421875, -0.02294921875, 0.00890350341796875,
+                -0.0304412841796875, 0.0203094482421875, -0.016204833984375, -0.0227813720703125, 0.03436279296875,
+                0.02239990234375, -0.0287017822265625, 0.050048828125, 0.0204620361328125, -0.0013723373413085938,
+                0.0154876708984375, 0.00136566162109375, -0.00824737548828125, 0.004039764404296875,
+                -0.0200653076171875, 0.0200958251953125, -0.00864410400390625, 0.01084136962890625, 0.0198974609375,
+                0.003795623779296875, -0.0165863037109375, 0.022308349609375, 0.01381683349609375, -0.055419921875,
+                0.0013895034790039062, 0.038116455078125, -0.005069732666015625, -0.0163421630859375,
+                -0.0222625732421875, 0.00963592529296875, -0.00981903076171875, -0.054229736328125,
+                0.0002892017364501953, -0.0025691986083984375, 0.0009608268737792969, -0.0149078369140625,
+                0.01134490966796875, 0.024688720703125, 0.0183563232421875, -0.019622802734375, -0.0083770751953125,
+                -0.00566864013671875, -0.003322601318359375, -0.015167236328125, -0.01788330078125, -0.02801513671875,
+                -0.00557708740234375, 0.0070343017578125, -0.01385498046875, -0.0033321380615234375, 0.025665283203125,
+                0.001079559326171875, 0.0149078369140625, 0.0281219482421875, -0.00971221923828125, -0.0138397216796875,
+                -0.00009310245513916016, 0.0018129348754882812, 0.03045654296875, 0.002838134765625,
+                -0.0082855224609375, -0.0119476318359375, -0.0198822021484375, -0.0186767578125, 0.0225067138671875,
+                -0.0032024383544921875, 0.011962890625, -0.006778717041015625, 0.035797119140625, 0.005733489990234375,
+                -0.016754150390625, 0.006420135498046875, -0.00618743896484375, 0.01357269287109375, 0.017364501953125,
+                -0.0200653076171875, -0.020904541015625, 0.01526641845703125, -0.01200103759765625,
+                0.0028667449951171875, -0.0081024169921875, 0.01255035400390625, -0.0242919921875,
+                0.0034961700439453125, 0.0252838134765625, 0.002246856689453125, 0.010284423828125, -0.0111083984375,
+                0.00966644287109375, 0.00859832763671875, 0.0038299560546875, 0.0095367431640625, 0.0246429443359375,
+                0.00656890869140625, -0.0019741058349609375, 0.00890350341796875, -0.01209259033203125,
+                0.001987457275390625, 0.0169677734375, -0.01395416259765625, 0.0179901123046875, 0.042449951171875,
+                -0.006023406982421875, -0.00009942054748535156, 0.0250396728515625, 0.024169921875,
+                -0.01091766357421875, -0.01171875, 0.03179931640625, 0.006702423095703125, 0.0013990402221679688,
+                -0.0215301513671875, 0.006603240966796875, 0.06072998046875, 0.030120849609375, -0.023406982421875,
+                -0.0023365020751953125, -0.0109405517578125, 0.006389617919921875, 0.0207366943359375,
+                -0.0174407958984375, 0.0030803680419921875, 0.0280914306640625, 0.005481719970703125,
+                -0.0182952880859375, -0.009307861328125, -0.001018524169921875, -0.02099609375, 0.02398681640625,
+                -0.0188751220703125, -0.004364013671875, -0.0020351409912109375, 0.00568389892578125,
+                0.00815582275390625, -0.0238494873046875, 0.00872039794921875, -0.048858642578125, 0.00995635986328125,
+                0.005748748779296875, -0.0010442733764648438, -0.00653076171875, 0.005035400390625, 0.00966644287109375,
+                0.0197296142578125, 0.0236358642578125, 0.00469207763671875, -0.0030841827392578125,
+                -0.0017251968383789062, 0.016357421875, 0.01148223876953125, -0.0190582275390625, -0.015625,
+                0.0125274658203125, -0.00269317626953125, 0.0382080078125, 0.02752685546875, 0.022613525390625,
+                -0.01038360595703125, -0.0089569091796875, -0.017730712890625, 0.0186004638671875, 0.0125885009765625,
+                -0.035858154296875, -0.0467529296875, 0.0316162109375, 0.0120849609375, 0.0115966796875,
+                -0.041107177734375, 0.0164337158203125, 0.0125885009765625, 0.019805908203125, -0.01611328125,
+                0.051361083984375, -0.0024814605712890625, -0.017822265625, -0.01007080078125, 0.002777099609375,
+                0.032867431640625, 0.0285186767578125, 0.0026760101318359375, -0.0267333984375, 0.002574920654296875,
+                0.0196075439453125, 0.00688934326171875, -0.0285491943359375, -0.0122833251953125, 0.048980712890625,
+                -0.0196990966796875, 0.0160980224609375, 0.00626373291015625, 0.01806640625, -0.0251007080078125,
+                -0.0205078125, 0.030120849609375, -0.004718780517578125, -0.0308380126953125, 0.039520263671875,
+                0.01091766357421875, -0.02044677734375, 0.007633209228515625, -0.02984619140625,
+                -0.00010889768600463867, 0.0216064453125, -0.0191802978515625, -0.01355743408203125,
+                -0.0070343017578125, -0.01270294189453125, 0.003692626953125, -0.021514892578125, 0.0149383544921875,
+                0.0131378173828125, 0.009246826171875, 0.01480865478515625, -0.0235595703125, 0.0208587646484375,
+                0.017822265625, 0.046722412109375, 0.00920867919921875, -0.00861358642578125, 0.01262664794921875,
+                0.0162353515625, 0.025543212890625, -0.025482177734375, 0.003021240234375, 0.004100799560546875,
+                -0.047515869140625, -0.025146484375, -0.04534912109375, 0.01544952392578125, 0.002529144287109375,
+                -0.0175018310546875, 0.024566650390625, 0.018402099609375, 0.0110321044921875, 0.0020904541015625,
+                0.032012939453125, -0.0291290283203125, -0.047882080078125, 0.01274871826171875, 0.0262298583984375,
+                -0.005718231201171875, 0.023406982421875, 0.00868988037109375, 0.0228118896484375, -0.06298828125,
+                0.04278564453125, 0.00925445556640625, -0.01134490966796875, -0.01171875, -0.00653076171875,
+                -0.00525665283203125, -0.01068878173828125, 0.0308990478515625, 0.010711669921875,
+                -0.005016326904296875, 0.0218505859375, -0.016876220703125, 0.013092041015625, -0.0133056640625,
+                -0.0014200210571289062, -0.00090789794921875, -0.038055419921875, -0.0035877227783203125,
+                -0.01812744140625, 0.007061004638671875, 0.00591278076171875, 0.006381988525390625, 0.02081298828125,
+                0.005859375, -0.006061553955078125, 0.044708251953125, 0.0114288330078125
+              ],
+              "index": 0
+            }
+          ],
+          "model": "text-embedding-3-small",
+          "usage": {
+            "prompt_tokens": 50,
+            "total_tokens": 50
+          }
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "42d8a77645dce2ef",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code. Respond in a pirate accent and dont use the degrees symbol, print the word degrees when needed."
+            },
+            {
+              "role": "system",
+              "content": "WORKING_MEMORY_SYSTEM_INSTRUCTION:\nStore and update any conversation-relevant information by calling the updateWorkingMemory tool. If information might be referenced again - store it!\n\nGuidelines:\n1. Store anything that could be useful later in the conversation\n2. Update proactively when information changes, no matter how small\n3. Use Markdown format for all data\n4. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for \"information about yourself\"\n5. IMPORTANT: When calling updateWorkingMemory, the only valid parameter is the memory field. DO NOT pass an object.\n6. IMPORTANT: ALWAYS pass the data you want to store in the memory field as a string. DO NOT pass an object.\n7. IMPORTANT: Data must only be sent as a string no matter which format is used.\n\n\n<working_memory_template>\n# User Information\n- **First Name**: \n- **Last Name**: \n- **Location**: \n- **Occupation**: \n- **Interests**: \n- **Goals**: \n- **Events**: \n- **Facts**: \n- **Projects**:\n</working_memory_template>\n\n\n\n\n<working_memory_data>\nnull\n</working_memory_data>\n\nNotes:\n- Update memory whenever referenced information changes\n- If you're unsure whether to store something, store it (eg if the user tells you information about themselves, call updateWorkingMemory immediately to update it)\n- This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history\n- Do not remove empty sections - you must include the empty sections along with the ones you're filling in\n- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the entire Markdown content. The system will store it for you. The user will not see it.\n- IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information.\n- IMPORTANT: Preserve the Markdown formatting structure above while updating the content."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "what is the weather in LA?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0f739b9f36247a5b0069d77d0bca1881969e6d33c2a019d38c"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_iUNR1IlKEL0fYXHCKLhAUzUY",
+              "output": "The weather in LA is sunny. It is currently 70 degrees and feels like 65 degrees."
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "what is the weather in Seattle?"
+                }
+              ]
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "updateWorkingMemory",
+              "description": "Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "memory": {
+                    "type": "string",
+                    "description": "The Markdown formatted working memory content to store. This MUST be a string. Never pass an object."
+                  }
+                },
+                "required": ["memory"],
+                "additionalProperties": false
+              }
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1775729933633
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9e98c5354bc2b76b-BRU",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 09 Apr 2026 10:18:54 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "255",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-request-id": "req_173365fcd0604a3da5d63ecd268ff5ac"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_0f739b9f36247a5b0069d77d0dbb388196abbc44cdfa09711a\",\"object\":\"response\",\"created_at\":1775729933,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the weather for a given location\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"postalCode\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"postalCode\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.\",\"name\":\"updateWorkingMemory\",\"parameters\":{\"type\":\"object\",\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.\"}},\"required\":[\"memory\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
+          "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_0f739b9f36247a5b0069d77d0dbb388196abbc44cdfa09711a\",\"object\":\"response\",\"created_at\":1775729933,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the weather for a given location\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"postalCode\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"postalCode\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.\",\"name\":\"updateWorkingMemory\",\"parameters\":{\"type\":\"object\",\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.\"}},\"required\":[\"memory\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0f739b9f36247a5b0069d77d0ed9a08196958740f74c77e803\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_NVdJZK0wlKFbtbRje40UolaV\",\"name\":\"get_weather\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_0f739b9f36247a5b0069d77d0ed9a08196958740f74c77e803\",\"obfuscation\":\"YC1thVLp0xhXez\",\"output_index\":0,\"sequence_number\":3}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"postal\",\"item_id\":\"fc_0f739b9f36247a5b0069d77d0ed9a08196958740f74c77e803\",\"obfuscation\":\"hKAcEUiJBq\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Code\",\"item_id\":\"fc_0f739b9f36247a5b0069d77d0ed9a08196958740f74c77e803\",\"obfuscation\":\"3LrmFBCE0GXD\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_0f739b9f36247a5b0069d77d0ed9a08196958740f74c77e803\",\"obfuscation\":\"eI3ZViD88X1Hd\",\"output_index\":0,\"sequence_number\":6}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Seattle\",\"item_id\":\"fc_0f739b9f36247a5b0069d77d0ed9a08196958740f74c77e803\",\"obfuscation\":\"Zel6Ywyg5\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\"}\",\"item_id\":\"fc_0f739b9f36247a5b0069d77d0ed9a08196958740f74c77e803\",\"obfuscation\":\"9EoERKMCgLCZw8\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          "event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"postalCode\\\":\\\"Seattle\\\"}\",\"item_id\":\"fc_0f739b9f36247a5b0069d77d0ed9a08196958740f74c77e803\",\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0f739b9f36247a5b0069d77d0ed9a08196958740f74c77e803\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"postalCode\\\":\\\"Seattle\\\"}\",\"call_id\":\"call_NVdJZK0wlKFbtbRje40UolaV\",\"name\":\"get_weather\"},\"output_index\":0,\"sequence_number\":10}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0f739b9f36247a5b0069d77d0dbb388196abbc44cdfa09711a\",\"object\":\"response\",\"created_at\":1775729933,\"status\":\"completed\",\"background\":false,\"completed_at\":1775729934,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[{\"id\":\"fc_0f739b9f36247a5b0069d77d0ed9a08196958740f74c77e803\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"postalCode\\\":\\\"Seattle\\\"}\",\"call_id\":\"call_NVdJZK0wlKFbtbRje40UolaV\",\"name\":\"get_weather\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the weather for a given location\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"postalCode\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"postalCode\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.\",\"name\":\"updateWorkingMemory\",\"parameters\":{\"type\":\"object\",\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.\"}},\"required\":[\"memory\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":722,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":16,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":738},\"user\":null,\"metadata\":{}},\"sequence_number\":11}\n\n"
+        ],
+        "chunkTimings": [5, 15, 848, 8, 3, 3, 4, 9, 6, 22, 1, 120],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "e404fb2dddcc00f1",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code. Respond in a pirate accent and dont use the degrees symbol, print the word degrees when needed."
+            },
+            {
+              "role": "system",
+              "content": "WORKING_MEMORY_SYSTEM_INSTRUCTION:\nStore and update any conversation-relevant information by calling the updateWorkingMemory tool. If information might be referenced again - store it!\n\nGuidelines:\n1. Store anything that could be useful later in the conversation\n2. Update proactively when information changes, no matter how small\n3. Use Markdown format for all data\n4. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for \"information about yourself\"\n5. IMPORTANT: When calling updateWorkingMemory, the only valid parameter is the memory field. DO NOT pass an object.\n6. IMPORTANT: ALWAYS pass the data you want to store in the memory field as a string. DO NOT pass an object.\n7. IMPORTANT: Data must only be sent as a string no matter which format is used.\n\n\n<working_memory_template>\n# User Information\n- **First Name**: \n- **Last Name**: \n- **Location**: \n- **Occupation**: \n- **Interests**: \n- **Goals**: \n- **Events**: \n- **Facts**: \n- **Projects**:\n</working_memory_template>\n\n\n\n\n<working_memory_data>\nnull\n</working_memory_data>\n\nNotes:\n- Update memory whenever referenced information changes\n- If you're unsure whether to store something, store it (eg if the user tells you information about themselves, call updateWorkingMemory immediately to update it)\n- This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history\n- Do not remove empty sections - you must include the empty sections along with the ones you're filling in\n- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the entire Markdown content. The system will store it for you. The user will not see it.\n- IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information.\n- IMPORTANT: Preserve the Markdown formatting structure above while updating the content."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "what is the weather in LA?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0f739b9f36247a5b0069d77d0bca1881969e6d33c2a019d38c"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_iUNR1IlKEL0fYXHCKLhAUzUY",
+              "output": "The weather in LA is sunny. It is currently 70 degrees and feels like 65 degrees."
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_0f739b9f36247a5b0069d77d0cb2088196975b246d687229b2"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "what is the weather in Seattle?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0f739b9f36247a5b0069d77d0ed9a08196958740f74c77e803"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_NVdJZK0wlKFbtbRje40UolaV",
+              "output": "The weather in Seattle is sunny. It is currently 70 degrees and feels like 65 degrees."
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            },
+            {
+              "type": "function",
+              "name": "updateWorkingMemory",
+              "description": "Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "memory": {
+                    "type": "string",
+                    "description": "The Markdown formatted working memory content to store. This MUST be a string. Never pass an object."
+                  }
+                },
+                "required": ["memory"],
+                "additionalProperties": false
+              }
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1775729935116
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9e98c53e8c76b76b-BRU",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 09 Apr 2026 10:18:56 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "768",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-request-id": "req_e4900ac19bf54a0b8c382d5127bb7697"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_0f739b9f36247a5b0069d77d0f39908196bab65ada8eec7a5a\",\"object\":\"response\",\"created_at\":1775729935,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the weather for a given location\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"postalCode\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"postalCode\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.\",\"name\":\"updateWorkingMemory\",\"parameters\":{\"type\":\"object\",\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.\"}},\"required\":[\"memory\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
+          "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_0f739b9f36247a5b0069d77d0f39908196bab65ada8eec7a5a\",\"object\":\"response\",\"created_at\":1775729935,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the weather for a given location\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"postalCode\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"postalCode\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.\",\"name\":\"updateWorkingMemory\",\"parameters\":{\"type\":\"object\",\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.\"}},\"required\":[\"memory\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Arr\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"ICROcMD5XuY6j\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"r\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"u02WvnQ9W9Sxqi5\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"oJ5HLYY88MHqbUz\",\"output_index\":0,\"sequence_number\":6}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" in\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"W0NpKSL0RDSQD\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Seattle\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"J4G5OyHb\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"JhVJIhaFnF7uZvX\",\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"87U1vANq0oaz\",\"output_index\":0,\"sequence_number\":10}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" sun\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"2zGqDBPoT9un\",\"output_index\":0,\"sequence_number\":11}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" be\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"kWlPozSOCo9BI\",\"output_index\":0,\"sequence_number\":12}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" sh\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"timQEmobaL6dz\",\"output_index\":0,\"sequence_number\":13}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"inin\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"HQNbBFnBFOgR\",\"output_index\":0,\"sequence_number\":14}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"'\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"bb2evRygm6exbSt\",\"output_index\":0,\"sequence_number\":15}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" as\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"nXU08NjYCAWGu\",\"output_index\":0,\"sequence_number\":16}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" well\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"HQi6kt1ffXt\",\"output_index\":0,\"sequence_number\":17}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"!\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"umuadWeW6oelD4U\",\"output_index\":0,\"sequence_number\":18}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" The\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"TzJierz2chTT\",\"output_index\":0,\"sequence_number\":19}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" temperature\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"u1VA\",\"output_index\":0,\"sequence_number\":20}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" be\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"K7DmErvLzGHuI\",\"output_index\":0,\"sequence_number\":21}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"FVGqwDNWAgSvn1b\",\"output_index\":0,\"sequence_number\":22}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"70\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"tDqNJY4XPDvO03\",\"output_index\":0,\"sequence_number\":23}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" degrees\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"Imhx4VvQ\",\"output_index\":0,\"sequence_number\":24}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"L7U0n9L9rPTJJvD\",\"output_index\":0,\"sequence_number\":25}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" feel\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"tPDSDAi7p8w\",\"output_index\":0,\"sequence_number\":26}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"in\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"sQ8PWcBJUax5TE\",\"output_index\":0,\"sequence_number\":27}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"'\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"5CqTJsD4TufGL63\",\"output_index\":0,\"sequence_number\":28}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" like\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"yE4h8Hab6DF\",\"output_index\":0,\"sequence_number\":29}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" a\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"tRb5yK6nU76lct\",\"output_index\":0,\"sequence_number\":30}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" brisk\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"rB2e3wUMVY\",\"output_index\":0,\"sequence_number\":31}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"7I7F1T65QVVJzhw\",\"output_index\":0,\"sequence_number\":32}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"65\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"7fN2FBaNEUciza\",\"output_index\":0,\"sequence_number\":33}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" degrees\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"roVNNlHD\",\"output_index\":0,\"sequence_number\":34}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"jLOC4NXnDMHs3jF\",\"output_index\":0,\"sequence_number\":35}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" A\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"VMAGo0bDEPthMx\",\"output_index\":0,\"sequence_number\":36}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" fine\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"MUxbuKG6ng5\",\"output_index\":0,\"sequence_number\":37}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" day\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"p62OCbjR1o2f\",\"output_index\":0,\"sequence_number\":38}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" for\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"NtD8SD51QbPb\",\"output_index\":0,\"sequence_number\":39}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" sail\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"9AgurCspgBP\",\"output_index\":0,\"sequence_number\":40}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"in\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"JL5FQOFhLTdVrE\",\"output_index\":0,\"sequence_number\":41}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"'\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"OnZTJSjdxYXDc6Q\",\"output_index\":0,\"sequence_number\":42}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"jMZ55YRJ8UQw\",\"output_index\":0,\"sequence_number\":43}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" seas\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"vOe5LUBN8Ua\",\"output_index\":0,\"sequence_number\":44}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" or\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"USZvh6TMdK59t\",\"output_index\":0,\"sequence_number\":45}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" stroll\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"iWtaIqlym\",\"output_index\":0,\"sequence_number\":46}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"in\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"b4kJYhEpd246CJ\",\"output_index\":0,\"sequence_number\":47}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"'\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"Xklsq7sqeZmnoKs\",\"output_index\":0,\"sequence_number\":48}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"ukJmewTQC5B9\",\"output_index\":0,\"sequence_number\":49}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" streets\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"jnr88ZPX\",\"output_index\":0,\"sequence_number\":50}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"!\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"4HlQJQSL6OMqLrQ\",\"output_index\":0,\"sequence_number\":51}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" 🌞\",\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"obfuscation\":\"2dtgpfMBTr2vV9\",\"output_index\":0,\"sequence_number\":52}\n\n",
+          "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":53,\"text\":\"Arrr, in Seattle, the sun be shinin' as well! The temperature be 70 degrees, feelin' like a brisk 65 degrees. A fine day for sailin' the seas or strollin' the streets! 🌞\"}\n\n",
+          "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Arrr, in Seattle, the sun be shinin' as well! The temperature be 70 degrees, feelin' like a brisk 65 degrees. A fine day for sailin' the seas or strollin' the streets! 🌞\"},\"sequence_number\":54}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Arrr, in Seattle, the sun be shinin' as well! The temperature be 70 degrees, feelin' like a brisk 65 degrees. A fine day for sailin' the seas or strollin' the streets! 🌞\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":55}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0f739b9f36247a5b0069d77d0f39908196bab65ada8eec7a5a\",\"object\":\"response\",\"created_at\":1775729935,\"status\":\"completed\",\"background\":false,\"completed_at\":1775729937,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[{\"id\":\"msg_0f739b9f36247a5b0069d77d10dd408196aa929bc748eb17f7\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Arrr, in Seattle, the sun be shinin' as well! The temperature be 70 degrees, feelin' like a brisk 65 degrees. A fine day for sailin' the seas or strollin' the streets! 🌞\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"Get the weather for a given location\",\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"postalCode\":{\"type\":\"string\",\"description\":\"The location to get the weather for\"}},\"required\":[\"postalCode\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.\",\"name\":\"updateWorkingMemory\",\"parameters\":{\"type\":\"object\",\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.\"}},\"required\":[\"memory\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":766,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":52,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":818},\"user\":null,\"metadata\":{}},\"sequence_number\":56}\n\n"
+        ],
+        "chunkTimings": [
+          7, 0, 884, 0, 38, 0, 0, 0, 43, 0, 5, 31, 26, 7, 18, 2, 3, 3, 1, 41, 3, 2, 0, 53, 4, 3, 1, 2, 0, 1, 15, 0, 11,
+          2, 14, 0, 0, 6, 0, 38, 1, 0, 119
+        ],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "5fbc74cde9406fd5",
+      "request": {
+        "url": "https://api.openai.com/v1/embeddings",
+        "method": "POST",
+        "body": {
+          "model": "text-embedding-3-small",
+          "input": [
+            "Arrr, in Seattle, the sun be shinin' as well! The temperature be 70 degrees, feelin' like a brisk 65 degrees. A fine day for sailin' the seas or strollin' the streets! 🌞"
+          ],
+          "encoding_format": "float"
+        },
+        "timestamp": 1775729937458
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9e98c54d2db2b75c-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Thu, 09 Apr 2026 10:18:57 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "193",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "3000",
+          "x-ratelimit-limit-tokens": "1000000",
+          "x-ratelimit-remaining-requests": "2999",
+          "x-ratelimit-remaining-tokens": "999957",
+          "x-ratelimit-reset-requests": "20ms",
+          "x-ratelimit-reset-tokens": "2ms",
+          "x-request-id": "req_9774405ee8c14a958c3e6175772e3d73"
+        },
+        "body": {
+          "object": "list",
+          "data": [
+            {
+              "object": "embedding",
+              "embedding": [
+                -0.006267547607421875, -0.0245513916015625, -0.0021572113037109375, 0.0660400390625, 0.0504150390625,
+                0.0269775390625, -0.0265960693359375, -0.036163330078125, -0.016815185546875, 0.010955810546875,
+                -0.0087738037109375, -0.005741119384765625, -0.01145172119140625, 0.01285552978515625,
+                0.0091705322265625, 0.03729248046875, -0.0209808349609375, -0.032958984375, 0.0026683807373046875,
+                0.034515380859375, 0.05413818359375, -0.042938232421875, -0.021759033203125, 0.0211944580078125,
+                -0.00670623779296875, 0.0670166015625, -0.01355743408203125, 0.0275115966796875, 0.01546478271484375,
+                0.00860595703125, 0.0264739990234375, -0.0439453125, 0.0310821533203125, 0.00402069091796875,
+                0.00893402099609375, -0.006103515625, 0.0092926025390625, -0.01666259765625, -0.006145477294921875,
+                -0.064208984375, -0.0167694091796875, -0.044677734375, 0.055419921875, 0.0004734992980957031,
+                0.03656005859375, -0.044097900390625, -0.0115814208984375, -0.0027637481689453125, 0.0709228515625,
+                -0.004482269287109375, 0.00033736228942871094, -0.0026607513427734375, -0.00836181640625,
+                0.053985595703125, -0.0288543701171875, 0.006519317626953125, 0.0038051605224609375,
+                -0.0030918121337890625, 0.06585693359375, -0.015625, 0.006359100341796875, 0.00026607513427734375,
+                -0.02520751953125, 0.01739501953125, -0.0645751953125, 0.0052337646484375, 0.01568603515625,
+                0.031005859375, -0.0221710205078125, -0.00888824462890625, 0.0364990234375, 0.0252532958984375,
+                0.038726806640625, -0.0609130859375, -0.043426513671875, 0.000213623046875, -0.00879669189453125,
+                -0.053253173828125, 0.0157928466796875, -0.0306243896484375, -0.06170654296875, 0.01467132568359375,
+                -0.002658843994140625, -0.046112060546875, -0.04974365234375, -0.048309326171875, 0.007205963134765625,
+                0.02508544921875, 0.01065826416015625, 0.0439453125, 0.0174560546875, -0.0130157470703125,
+                -0.002536773681640625, -0.05499267578125, 0.0299835205078125, 0.0199737548828125, -0.036895751953125,
+                -0.0230255126953125, 0.0231475830078125, -0.0240631103515625, 0.050201416015625, -0.0296630859375,
+                -0.025421142578125, 0.0091552734375, 0.04376220703125, 0.016265869140625, -0.0088348388671875,
+                0.0038127899169921875, -0.02777099609375, -0.041412353515625, -0.054046630859375, 0.0147247314453125,
+                0.005523681640625, 0.0421142578125, -0.012420654296875, 0.05657958984375, 0.00485992431640625,
+                -0.00461578369140625, 0.00024068355560302734, 0.0268707275390625, -0.0251007080078125,
+                0.014984130859375, 0.01468658447265625, 0.00519561767578125, -0.0216522216796875, 0.002117156982421875,
+                -0.0187835693359375, -0.00623321533203125, -0.0323486328125, 0.04449462890625, 0.014984130859375,
+                -0.0266265869140625, 0.0029392242431640625, -0.072265625, 0.004222869873046875, -0.0143280029296875,
+                -0.01617431640625, -0.06195068359375, -0.0201568603515625, -0.017669677734375, 0.052215576171875,
+                0.046539306640625, 0.042083740234375, -0.033782958984375, 0.0004756450653076172, -0.0289459228515625,
+                0.00028777122497558594, 0.05316162109375, -0.0025653839111328125, 0.00809478759765625,
+                0.005657196044921875, -0.0145263671875, -0.01062774658203125, 0.044586181640625, 0.044586181640625,
+                -0.024871826171875, 0.0113677978515625, -0.029205322265625, -0.03240966796875, -0.005413055419921875,
+                0.0039005279541015625, 0.0169525146484375, -0.04168701171875, 0.0133514404296875, -0.00415802001953125,
+                -0.01073455810546875, -0.01317596435546875, -0.020111083984375, -0.048248291015625, 0.036651611328125,
+                -0.01641845703125, -0.034759521484375, -0.005084991455078125, -0.01078033447265625,
+                0.005168914794921875, -0.03533935546875, 0.06329345703125, -0.01493072509765625, 0.01410675048828125,
+                0.07281494140625, -0.00679779052734375, 0.000308990478515625, -0.007541656494140625, -0.049041748046875,
+                0.03662109375, 0.027252197265625, -0.014984130859375, 0.01702880859375, 0.034088134765625,
+                0.02685546875, 0.01512908935546875, -0.0012149810791015625, 0.0305328369140625, -0.02691650390625,
+                -0.0116729736328125, 0.004184722900390625, 0.0231475830078125, 0.01922607421875, -0.02685546875,
+                0.004985809326171875, -0.003170013427734375, -0.0261077880859375, -0.00412750244140625,
+                0.0179595947265625, -0.0297698974609375, -0.01026153564453125, -0.0567626953125, 0.019500732421875,
+                0.042724609375, -0.0179290771484375, 0.021575927734375, 0.047149658203125, -0.01235198974609375,
+                0.01898193359375, -0.016082763671875, 0.00919342041015625, 0.0277862548828125, 0.0163726806640625,
+                -0.0220184326171875, 0.0201568603515625, -0.041290283203125, 0.0160675048828125, 0.055938720703125,
+                -0.01129150390625, 0.0009565353393554688, 0.0024089813232421875, 0.030487060546875, -0.00970458984375,
+                0.03472900390625, -0.0017461776733398438, 0.0293731689453125, -0.011932373046875, -0.040740966796875,
+                0.0286712646484375, -0.02197265625, 0.0045166015625, 0.0223236083984375, 0.01076507568359375,
+                -0.035186767578125, -0.024200439453125, -0.061370849609375, 0.00728607177734375, 0.031982421875,
+                -0.020477294921875, -0.0160369873046875, 0.0146636962890625, -0.0113677978515625, 0.032745361328125,
+                -0.0007605552673339844, -0.00969696044921875, 0.0211944580078125, -0.0097808837890625,
+                -0.002445220947265625, -0.0278167724609375, -0.021697998046875, 0.0006504058837890625, -0.0313720703125,
+                0.0074615478515625, 0.015625, -0.0360107421875, -0.03314208984375, -0.0127410888671875,
+                -0.06829833984375, -0.0169525146484375, -0.00008147954940795898, -0.0311279296875, -0.00067138671875,
+                -0.0166473388671875, -0.00270843505859375, -0.0253448486328125, -0.00563812255859375,
+                0.002086639404296875, -0.01496124267578125, 0.030303955078125, 0.023529052734375, -0.0200347900390625,
+                -0.004627227783203125, -0.01279449462890625, 0.00565338134765625, -0.0275726318359375,
+                0.0303802490234375, -0.036468505859375, 0.0263824462890625, 0.0006270408630371094, -0.0242156982421875,
+                0.0028362274169921875, -0.0074462890625, 0.0147857666015625, -0.0005412101745605469,
+                0.00441741943359375, 0.022613525390625, 0.0153656005859375, -0.0015201568603515625, 0.014892578125,
+                -0.0277099609375, 0.02001953125, 0.004154205322265625, -0.03033447265625, -0.01049041748046875,
+                -0.032135009765625, 0.061859130859375, -0.011627197265625, -0.0261993408203125, 0.025390625,
+                0.04833984375, 0.07147216796875, -0.054229736328125, -0.01398468017578125, -0.00634765625,
+                0.050567626953125, -0.0008516311645507812, -0.001461029052734375, -0.0111541748046875,
+                -0.058258056640625, 0.023651123046875, -0.0015840530395507812, -0.0220489501953125, 0.04583740234375,
+                0.0478515625, 0.0225372314453125, 0.0097808837890625, 0.047454833984375, 0.019500732421875,
+                0.017730712890625, 0.01390838623046875, 0.0435791015625, 0.03533935546875, -0.01068878173828125,
+                0.01300811767578125, 0.000640869140625, -0.0043792724609375, -0.04156494140625, 0.029266357421875,
+                0.02386474609375, -0.036773681640625, -0.02508544921875, -0.0023555755615234375, -0.0260772705078125,
+                -0.0131683349609375, 0.091552734375, -0.006114959716796875, -0.040985107421875, -0.059051513671875,
+                0.03472900390625, -0.035980224609375, -0.049560546875, 0.011016845703125, -0.002429962158203125,
+                0.0198211669921875, -0.009979248046875, -0.017852783203125, 0.017486572265625, -0.004749298095703125,
+                -0.029388427734375, -0.038055419921875, -0.0155487060546875, 0.07000732421875, 0.021331787109375,
+                0.0058441162109375, 0.00855255126953125, 0.01479339599609375, -0.045745849609375, 0.01800537109375,
+                0.004970550537109375, 0.031982421875, 0.0278167724609375, -0.042236328125, 0.0103607177734375,
+                0.0018815994262695312, 0.002834320068359375, -0.0083465576171875, 0.0276641845703125,
+                -0.0032749176025390625, 0.0287017822265625, 0.044403076171875, 0.00696563720703125,
+                -0.01013946533203125, -0.0242156982421875, 0.03717041015625, 0.067138671875, -0.0516357421875,
+                0.058258056640625, -0.034576416015625, -0.00589752197265625, 0.0033435821533203125,
+                -0.005474090576171875, 0.01146697998046875, -0.029571533203125, 0.01349639892578125,
+                -0.0254364013671875, 0.0206146240234375, -0.01287078857421875, -0.0299224853515625, 0.00647735595703125,
+                -0.00998687744140625, -0.005313873291015625, 0.0199127197265625, 0.05963134765625, -0.0362548828125,
+                0.001483917236328125, 0.0124969482421875, -0.0007538795471191406, 0.0599365234375, -0.0117645263671875,
+                -0.007312774658203125, 0.0257568359375, -0.064453125, -0.031219482421875, -0.057647705078125,
+                -0.022705078125, 0.00936126708984375, -0.0086212158203125, 0.0305023193359375, 0.012237548828125,
+                -0.0207366943359375, 0.0124664306640625, 0.00878143310546875, -0.0260162353515625, -0.049346923828125,
+                0.02203369140625, 0.01154327392578125, -0.016510009765625, 0.0164337158203125, -0.00022614002227783203,
+                0.04205322265625, 0.042266845703125, 0.03668212890625, -0.06439208984375, 0.019439697265625,
+                -0.034088134765625, 0.01251220703125, -0.019500732421875, -0.00959014892578125, 0.00211334228515625,
+                0.0307769775390625, -0.028106689453125, -0.033966064453125, 0.035186767578125, -0.01190185546875,
+                -0.0076446533203125, -0.01111602783203125, -0.03594970703125, 0.00490570068359375, 0.038055419921875,
+                -0.04180908203125, -0.00555419921875, 0.011444091796875, -0.033599853515625, -0.040618896484375,
+                0.015869140625, -0.0284881591796875, 0.0017137527465820312, -0.0572509765625, 0.00006240606307983398,
+                0.01410675048828125, 0.07232666015625, -0.0499267578125, -0.0158538818359375, 0.042022705078125,
+                -0.004184722900390625, -0.0196533203125, 0.004848480224609375, 0.01430511474609375, -0.0196380615234375,
+                -0.0428466796875, 0.0318603515625, -0.01351165771484375, 0.037384033203125, 0.016815185546875,
+                0.00730133056640625, 0.024993896484375, 0.01605224609375, 0.0614013671875, -0.047332763671875,
+                0.0023651123046875, -0.0122833251953125, 0.0233154296875, 0.023406982421875, 0.0367431640625,
+                -0.031768798828125, -0.025146484375, 0.01580810546875, -0.0186614990234375, 0.0714111328125,
+                -0.00553131103515625, -0.06170654296875, 0.028289794921875, 0.0049285888671875, -0.06097412109375,
+                -0.0394287109375, -0.06561279296875, 0.04412841796875, -0.003284454345703125, -0.0119171142578125,
+                0.043731689453125, 0.0242462158203125, 0.028533935546875, 0.02374267578125, 0.017547607421875,
+                0.0270233154296875, -0.004772186279296875, -0.06866455078125, 0.04071044921875, -0.042510986328125,
+                0.04095458984375, 0.04119873046875, -0.0036067962646484375, -0.0167694091796875, -0.036468505859375,
+                -0.0290679931640625, -0.033782958984375, 0.0105743408203125, 0.03662109375, 0.0207366943359375,
+                -0.024444580078125, -0.0026798248291015625, -0.01151275634765625, 0.0560302734375, -0.0193023681640625,
+                -0.007076263427734375, -0.0474853515625, 0.031463623046875, 0.0275726318359375, 0.00861358642578125,
+                0.025421142578125, 0.01045989990234375, 0.004180908203125, 0.00295257568359375, -0.01082611083984375,
+                -0.02801513671875, 0.05059814453125, -0.00896453857421875, 0.007106781005859375, -0.007610321044921875,
+                -0.01306915283203125, -0.0122528076171875, -0.0011987686157226562, -0.0232086181640625,
+                -0.011260986328125, -0.0041961669921875, 0.006160736083984375, 0.040924072265625, -0.053192138671875,
+                -0.039459228515625, 0.01506805419921875, -0.0066070556640625, -0.00467681884765625, 0.00513458251953125,
+                0.0036258697509765625, -0.02642822265625, 0.0260772705078125, 0.0015964508056640625,
+                -0.0159454345703125, 0.03668212890625, -0.0027637481689453125, 0.0216522216796875, 0.0024871826171875,
+                -0.005374908447265625, -0.00927734375, 0.027862548828125, 0.0182647705078125, 0.020843505859375,
+                0.0200042724609375, -0.016448974609375, 0.0250396728515625, 0.0287017822265625, 0.0005016326904296875,
+                0.0187835693359375, 0.0167694091796875, 0.0179901123046875, -0.037017822265625, 0.00705718994140625,
+                -0.06304931640625, -0.016571044921875, 0.0298919677734375, -0.0157318115234375, 0.0263824462890625,
+                -0.00392913818359375, 0.0092315673828125, 0.0026493072509765625, -0.00583648681640625,
+                -0.00693511962890625, 0.0015811920166015625, -0.015655517578125, -0.0012760162353515625,
+                0.0421142578125, 0.02606201171875, 0.00873565673828125, 0.01355743408203125, -0.007335662841796875,
+                0.01446533203125, 0.0292510986328125, 0.0284576416015625, 0.05096435546875, 0.04150390625,
+                -0.0219268798828125, -0.061859130859375, -0.0330810546875, -0.0118560791015625, -0.0243682861328125,
+                -0.0075225830078125, -0.037078857421875, -0.03265380859375, 0.0214385986328125, -0.0170135498046875,
+                -0.0219879150390625, 0.01493072509765625, -0.0183563232421875, -0.026458740234375, -0.009765625,
+                -0.00021517276763916016, -0.0166015625, -0.0027675628662109375, -0.00360870361328125, -0.0408935546875,
+                0.0360107421875, 0.011444091796875, 0.0024127960205078125, 0.01361083984375, -0.0198211669921875,
+                -0.00848388671875, 0.025634765625, 0.007511138916015625, -0.00850677490234375, -0.01500701904296875,
+                0.01617431640625, -0.0208740234375, -0.02264404296875, 0.00989532470703125, -0.0238189697265625,
+                0.006488800048828125, 0.036895751953125, -0.0108489990234375, -0.015777587890625, -0.0083770751953125,
+                -0.00788116455078125, -0.0249176025390625, 0.0419921875, 0.0284881591796875, -0.00493621826171875,
+                0.0296478271484375, -0.01202392578125, 0.0179290771484375, -0.0230712890625, 0.004146575927734375,
+                -0.0015554428100585938, -0.0212554931640625, -0.0131378173828125, -0.0016412734985351562,
+                0.0024433135986328125, -0.0017337799072265625, 0.03387451171875, 0.01483154296875, -0.00897979736328125,
+                -0.017486572265625, -0.02606201171875, -0.0169219970703125, 0.03350830078125, -0.0379638671875,
+                0.019134521484375, 0.01076507568359375, 0.026458740234375, -0.0236968994140625, -0.040802001953125,
+                0.007152557373046875, 0.0010862350463867188, 0.0239105224609375, 0.0089569091796875,
+                -0.0109710693359375, 0.00923919677734375, 0.044647216796875, 0.024139404296875, 0.00904083251953125,
+                -0.0071563720703125, 0.039276123046875, 0.00894927978515625, 0.0179290771484375, -0.0143280029296875,
+                -0.00537872314453125, -0.01131439208984375, 0.0207672119140625, 0.005329132080078125, -0.0166015625,
+                -0.01267242431640625, -0.0037517547607421875, -0.0261383056640625, 0.047149658203125,
+                0.006153106689453125, -0.0126953125, -0.037750244140625, -0.0132293701171875, 0.059295654296875,
+                -0.0018711090087890625, -0.000019788742065429688, -0.024200439453125, -0.027069091796875,
+                0.01468658447265625, -0.01546478271484375, 0.0275726318359375, -0.052764892578125, 0.017425537109375,
+                0.0274658203125, 0.031158447265625, -0.0523681640625, -0.0195159912109375, -0.032501220703125,
+                0.0310211181640625, -0.016876220703125, 0.01446533203125, -0.01033782958984375, 0.002857208251953125,
+                -0.00885009765625, -0.0211029052734375, -0.0223846435546875, -0.031707763671875, -0.016571044921875,
+                -0.01229095458984375, -0.011932373046875, -0.02880859375, -0.005580902099609375, 0.0010786056518554688,
+                -0.0158233642578125, -0.056976318359375, 0.0130767822265625, 0.01389312744140625, 0.01062774658203125,
+                -0.003696441650390625, 0.0029735565185546875, -0.0213165283203125, -0.027618408203125,
+                0.0214385986328125, -0.00323486328125, -0.007724761962890625, 0.03192138671875, -0.008453369140625,
+                0.041412353515625, -0.03021240234375, 0.0165252685546875, -0.0239715576171875, -0.00797271728515625,
+                0.004352569580078125, -0.008026123046875, 0.00893402099609375, 0.0145263671875, 0.0003829002380371094,
+                -0.0213623046875, 0.026458740234375, -0.033538818359375, -0.0246734619140625, 0.0167236328125,
+                0.02191162109375, 0.00975799560546875, -0.002559661865234375, -0.03594970703125, 0.026947021484375,
+                0.0296478271484375, -0.004192352294921875, -0.038299560546875, 0.024078369140625, 0.044189453125,
+                -0.009857177734375, 0.0271759033203125, 0.003940582275390625, 0.017822265625, 0.0019378662109375,
+                0.011932373046875, -0.0182647705078125, 0.0130767822265625, -0.0380859375, -0.01088714599609375,
+                0.01238250732421875, 0.005832672119140625, 0.0025424957275390625, 0.0117645263671875,
+                0.0040435791015625, 0.00823974609375, 0.034332275390625, 0.0283050537109375, 0.00673675537109375,
+                0.0267486572265625, 0.011993408203125, -0.0033168792724609375, -0.00037598609924316406,
+                0.0276641845703125, -0.0306243896484375, -0.039764404296875, 0.002696990966796875,
+                -0.0035076141357421875, 0.03277587890625, -0.0111541748046875, 0.020263671875, 0.0272979736328125,
+                -0.005298614501953125, 0.0107879638671875, -0.01094818115234375, 0.0269775390625,
+                -0.0020923614501953125, -0.038726806640625, -0.0250396728515625, -0.0034332275390625, 0.043548583984375,
+                0.003063201904296875, -0.004131317138671875, -0.032684326171875, 0.013916015625, 0.004852294921875,
+                -0.01070404052734375, -0.019989013671875, -0.0027923583984375, -0.0088958740234375,
+                0.000591278076171875, -0.00795745849609375, -0.042633056640625, -0.005298614501953125, 0.02850341796875,
+                0.0015430450439453125, -0.006534576416015625, -0.0192413330078125, 0.0220947265625, -0.034759521484375,
+                0.024627685546875, 0.009033203125, 0.0208587646484375, -0.00373077392578125, 0.037139892578125,
+                0.00905609130859375, -0.0138092041015625, 0.0027790069580078125, 0.0237274169921875,
+                0.0007343292236328125, -0.040985107421875, -0.00835418701171875, 0.0017461776733398438,
+                -0.007843017578125, -0.0302886962890625, 0.017791748046875, 0.02099609375, 0.0024776458740234375,
+                -0.06390380859375, 0.004436492919921875, 0.0270233154296875, 0.016510009765625, 0.0016870498657226562,
+                -0.015289306640625, -0.043304443359375, 0.0048980712890625, 0.005901336669921875, -0.032562255859375,
+                -0.0182342529296875, 0.01407623291015625, -0.0640869140625, 0.00738525390625, -0.01226043701171875,
+                -0.0206756591796875, -0.0204620361328125, 0.0037975311279296875, -0.002658843994140625,
+                0.0009417533874511719, 0.00728607177734375, -0.0222320556640625, 0.0037822723388671875,
+                0.03155517578125, -0.007495880126953125, -0.0196075439453125, -0.039276123046875, 0.0212554931640625,
+                0.01715087890625, -0.023345947265625, -0.020416259765625, 0.02435302734375, -0.00495147705078125,
+                0.0012674331665039062, -0.012969970703125, -0.00555419921875, 0.01300811767578125,
+                -0.006336212158203125, 0.0164794921875, 0.0088043212890625, 0.0059661865234375, 0.036224365234375,
+                0.0176239013671875, 0.04327392578125, 0.0126800537109375, -0.037567138671875, 0.013153076171875,
+                -0.06781005859375, 0.006916046142578125, -0.0229339599609375, -0.0164337158203125, -0.0102081298828125,
+                0.00765228271484375, -0.0150299072265625, 0.0286712646484375, -0.033294677734375, 0.04547119140625,
+                0.0279693603515625, 0.0179290771484375, 0.00677490234375, 0.0295257568359375, 0.008087158203125,
+                0.0164947509765625, 0.044281005859375, 0.006626129150390625, -0.0113525390625, 0.0190277099609375,
+                -0.042877197265625, 0.002323150634765625, 0.01251220703125, -0.0152435302734375, 0.00506591796875,
+                -0.0479736328125, -0.0202789306640625, -0.0067291259765625, 0.0265350341796875, 0.013916015625,
+                0.041473388671875, -0.038299560546875, 0.014251708984375, -0.0701904296875, 0.002048492431640625,
+                -0.011016845703125, 0.018890380859375, -0.01267242431640625, -0.018585205078125, -0.030181884765625,
+                -0.005321502685546875, -0.025543212890625, 0.006587982177734375, 0.0008182525634765625,
+                0.0035419464111328125, -0.0003027915954589844, 0.0152435302734375, -0.023406982421875, 0.05023193359375,
+                -0.005832672119140625, 0.03631591796875, 0.0113525390625, -0.02325439453125, 0.0006771087646484375,
+                0.0014553070068359375, 0.002857208251953125, 0.0396728515625, -0.0181427001953125, -0.0260772705078125,
+                0.0325927734375, -0.003353118896484375, 0.0377197265625, -0.0192718505859375, -0.004924774169921875,
+                0.0221099853515625, 0.008453369140625, 0.018951416015625, 0.004421234130859375, -0.0360107421875,
+                0.004779815673828125, -0.006954193115234375, -0.02008056640625, 0.01032257080078125, 0.04150390625,
+                0.0166168212890625, -0.03057861328125, -0.019989013671875, -0.01605224609375, -0.02227783203125,
+                0.0038051605224609375, 0.01461029052734375, 0.0038051605224609375, 0.0280303955078125,
+                0.043304443359375, -0.0002543926239013672, 0.005710601806640625, 0.0306243896484375, -0.024505615234375,
+                0.0176849365234375, 0.0197601318359375, -0.0211181640625, -0.0220184326171875, 0.0240631103515625,
+                0.0232086181640625, 0.024383544921875, 0.011810302734375, 0.08734130859375, 0.01070404052734375,
+                -0.039581298828125, 0.009033203125, -0.045562744140625, 0.01326751708984375, 0.01177215576171875,
+                -0.00278472900390625, 0.0274658203125, 0.01233673095703125, -0.05853271484375, -0.0001233816146850586,
+                0.00629425048828125, 0.0291290283203125, 0.0235137939453125, 0.007335662841796875, 0.03070068359375,
+                -0.00201416015625, -0.01458740234375, 0.01468658447265625, -0.0049896240234375, 0.007602691650390625,
+                -0.0421142578125, 0.0009202957153320312, 0.00519561767578125, -0.03125, 0.00554656982421875,
+                -0.032623291015625, 0.0274658203125, -0.0017690658569335938, -0.0221710205078125, -0.0281829833984375,
+                0.032867431640625, 0.0041961669921875, -0.029541015625, -0.0277099609375, 0.0340576171875,
+                -0.013031005859375, -0.0030002593994140625, -0.00917816162109375, 0.016265869140625, 0.040618896484375,
+                -0.0089569091796875, -0.02581787109375, -0.0455322265625, 0.005901336669921875, -0.016510009765625,
+                0.0290985107421875, -0.0076751708984375, 0.0293731689453125, 0.0160064697265625, 0.049835205078125,
+                -0.024658203125, -0.015869140625, 0.022369384765625, -0.00461578369140625, -0.0165557861328125,
+                -0.0028934478759765625, 0.033050537109375, 0.004154205322265625, 0.0019474029541015625,
+                0.005329132080078125, 0.033538818359375, -0.011962890625, 0.03704833984375, -0.06060791015625,
+                0.00838470458984375, 0.041473388671875, 0.0689697265625, -0.02783203125, -0.001239776611328125,
+                0.0030651092529296875, -0.0201873779296875, 0.0040740966796875, -0.00838470458984375,
+                0.00881195068359375, 0.012420654296875, 0.031585693359375, -0.0360107421875, 0.0014095306396484375,
+                0.0465087890625, -0.037994384765625, -0.0174102783203125, -0.00852203369140625, -0.0050201416015625,
+                0.0084228515625, -0.01255035400390625, -0.0100860595703125, 0.035430908203125, 0.031707763671875,
+                0.0278167724609375, 0.02825927734375, -0.006946563720703125, -0.0209503173828125, -0.005435943603515625,
+                0.006366729736328125, -0.00762176513671875, -0.00839996337890625, 0.046051025390625, 0.005767822265625,
+                -0.050201416015625, 0.002315521240234375, -0.07513427734375, -0.03265380859375, -0.00246429443359375,
+                0.000331878662109375, -0.0268707275390625, -0.028900146484375, -0.042694091796875,
+                -0.003978729248046875, -0.01107025146484375, -0.0271759033203125, -0.042724609375, 0.003170013427734375,
+                -0.0291290283203125, 0.01483154296875, 0.0027294158935546875, -0.01349639892578125, -0.0186309814453125,
+                0.00673675537109375, 0.006015777587890625, 0.0112762451171875, 0.023345947265625, 0.041290283203125,
+                0.018341064453125, 0.00516510009765625, 0.004413604736328125, 0.003154754638671875, 0.00820159912109375,
+                -0.0082244873046875, 0.010955810546875, 0.0110015869140625, -0.03729248046875, 0.040313720703125,
+                0.0147247314453125, 0.01332855224609375, -0.0091705322265625, -0.005275726318359375, 0.01617431640625,
+                0.0343017578125, -0.049957275390625, -0.0017642974853515625, 0.0182037353515625, 0.007175445556640625,
+                -0.0097198486328125, -0.022369384765625, 0.00250244140625, 0.01480865478515625, 0.0138092041015625,
+                0.035430908203125, -0.0323486328125, -0.019775390625, -0.03765869140625, -0.01178741455078125,
+                0.007335662841796875, 0.01824951171875, -0.0217742919921875, -0.008392333984375, 0.006458282470703125,
+                0.06219482421875, -0.00391387939453125, -0.0163116455078125, 0.005199432373046875, -0.01059722900390625,
+                0.0321044921875, -0.0087432861328125, 0.06817626953125, 0.01033782958984375, -0.0149688720703125,
+                -0.039031982421875, 0.015655517578125, -0.0333251953125, 0.006992340087890625, -0.021484375,
+                0.01605224609375, 0.036285400390625, 0.007144927978515625, -0.0220794677734375, -0.01239776611328125,
+                0.006549835205078125, 0.007144927978515625, 0.0276336669921875, -0.003948211669921875,
+                0.0287322998046875, 0.0259857177734375, -0.002567291259765625, 0.0089874267578125, -0.04913330078125,
+                0.003292083740234375, 0.006404876708984375, 0.00923919677734375, 0.002040863037109375,
+                0.027435302734375, -0.0408935546875, 0.01126861572265625, -0.0038356781005859375, 0.0209503173828125,
+                0.0202178955078125, 0.02191162109375, 0.0172271728515625, -0.0008668899536132812, -0.00553131103515625,
+                -0.0002130270004272461, -0.028900146484375, 0.004638671875, 0.0174407958984375, -0.0389404296875,
+                -0.0261077880859375, -0.015655517578125, -0.0256805419921875, 0.025054931640625, 0.0160369873046875,
+                0.042877197265625, 0.00905609130859375, -0.01526641845703125, -0.0035839080810546875,
+                -0.049285888671875, 0.0247650146484375, 0.01454925537109375, -0.0102691650390625, 0.03558349609375,
+                -0.0223388671875, 0.040313720703125, -0.01763916015625, -0.026397705078125, 0.027618408203125,
+                0.0038013458251953125, 0.0118255615234375, -0.0263824462890625, 0.0256195068359375,
+                -0.01468658447265625, -0.00812530517578125, -0.004421234130859375, -0.0020751953125,
+                0.0007233619689941406, 0.0008978843688964844, 0.0440673828125, 0.0252838134765625, -0.0162506103515625,
+                0.01085662841796875, 0.01540374755859375, 0.00270843505859375, -0.026336669921875, 0.0042877197265625,
+                -0.0189056396484375, 0.0284271240234375, 0.024932861328125, -0.027252197265625, 0.037445068359375,
+                -0.006465911865234375, -0.0134735107421875, 0.0310211181640625, -0.04266357421875, -0.0224151611328125,
+                -0.02783203125, -0.009796142578125, -0.01873779296875, -0.00429534912109375, 0.003452301025390625,
+                -0.041107177734375, -0.00861358642578125, 0.02093505859375, -0.0236358642578125, -0.0220184326171875,
+                -0.004650115966796875, 0.00424957275390625, 0.0006809234619140625, -0.050628662109375,
+                -0.035858154296875, -0.0005083084106445312, 0.0109100341796875, -0.03924560546875, 0.032073974609375,
+                -0.0433349609375, 0.0173187255859375, -0.003665924072265625, -0.04437255859375, 0.0147247314453125,
+                0.0263824462890625, -0.01097869873046875, 0.0021038055419921875, -0.040283203125, 0.0121612548828125,
+                -0.0295867919921875, 0.0205230712890625, -0.00286865234375, -0.025360107421875, 0.0361328125,
+                0.00012874603271484375, -0.005565643310546875, 0.027496337890625, 0.0182647705078125, 0.02630615234375,
+                0.042083740234375, 0.007755279541015625, 0.027069091796875, 0.0169830322265625, 0.0029449462890625,
+                0.00862884521484375, -0.007076263427734375, 0.03399658203125, 0.0065155029296875, 0.0133514404296875,
+                0.0220489501953125, 0.0193023681640625, 0.007396697998046875, -0.054779052734375, -0.005588531494140625,
+                0.0242462158203125, -0.03289794921875, -0.0133514404296875, 0.005268096923828125, 0.00629425048828125,
+                0.0062408447265625, -0.046112060546875, 0.004215240478515625, -0.019866943359375, -0.0119476318359375,
+                0.004180908203125, -0.005084991455078125, 0.021148681640625, 0.0154876708984375, -0.016265869140625,
+                0.018035888671875, -0.01033782958984375, -0.025146484375, -0.00839996337890625, -0.006160736083984375,
+                -0.022705078125, -0.0191497802734375, -0.036956787109375, -0.0017261505126953125, 0.02996826171875,
+                0.03875732421875, -0.0266571044921875, 0.0114898681640625, 0.018890380859375, -0.01404571533203125,
+                -0.02685546875, -0.0213775634765625, 0.0005273818969726562, 0.0081787109375, 0.00853729248046875,
+                -0.01407623291015625, -0.0023651123046875, -0.0197601318359375, -0.018585205078125, 0.050445556640625,
+                0.002452850341796875, -0.006061553955078125, 0.01180267333984375, 0.02203369140625, 0.0095367431640625,
+                -0.0016546249389648438, -0.0030956268310546875, 0.00463104248046875, 0.012176513671875,
+                0.0020389556884765625, -0.0245361328125, -0.023468017578125, 0.016693115234375, 0.007793426513671875,
+                0.006626129150390625, -0.0192413330078125, -0.046539306640625, -0.033843994140625,
+                0.0010862350463867188, 0.0175628662109375, 0.03631591796875, 0.0005946159362792969, -0.020721435546875,
+                -0.0085601806640625, -0.00025343894958496094, 0.014892578125, -0.00952911376953125, 0.00559234619140625,
+                -0.00738525390625, -0.0175018310546875, 0.00864410400390625, 0.0038814544677734375, 0.0157928466796875,
+                0.03350830078125, -0.0228271484375, 0.037689208984375, 0.01097869873046875, 0.000972747802734375,
+                0.0168914794921875, -0.006313323974609375, 0.019805908203125, -0.015716552734375, -0.03802490234375,
+                0.033843994140625, 0.005863189697265625, -0.00943756103515625, -0.0053253173828125,
+                -0.0002734661102294922, 0.0421142578125, 0.02197265625, -0.0087432861328125, -0.0014362335205078125,
+                -0.0270233154296875, -0.0261077880859375, 0.02679443359375, -0.04559326171875, -0.0014829635620117188,
+                -0.01708984375, -0.0247650146484375, -0.033782958984375, -0.0008816719055175781, 0.01160430908203125,
+                -0.0308074951171875, 0.013916015625, 0.003910064697265625, 0.020782470703125, 0.02880859375,
+                -0.0006113052368164062, 0.032867431640625, -0.0021209716796875, 0.00731658935546875, -0.033172607421875,
+                0.0219573974609375, -0.01099395751953125, -0.00685882568359375, -0.0079803466796875,
+                0.0022602081298828125, -0.006656646728515625, 0.00882720947265625, 0.0078582763671875,
+                0.025360107421875, -0.0016193389892578125, 0.00850677490234375, -0.009521484375, -0.0023040771484375,
+                -0.00611114501953125, 0.025909423828125, 0.0124969482421875, -0.0179443359375, 0.039093017578125,
+                -0.00028634071350097656, 0.0075531005859375, 0.007511138916015625, -0.03143310546875,
+                0.005794525146484375, 0.039276123046875, 0.02593994140625, -0.03021240234375, -0.0202484130859375,
+                0.029815673828125, 0.0218963623046875, 0.00707244873046875, -0.020172119140625, -0.00037479400634765625,
+                -0.0014429092407226562, 0.0257110595703125, -0.03143310546875, 0.0321044921875, -0.00385284423828125,
+                -0.0223388671875, -0.004062652587890625, 0.003948211669921875, 0.036346435546875, 0.0357666015625,
+                -0.00778961181640625, -0.028411865234375, 0.00004023313522338867, 0.0177764892578125, 0.032867431640625,
+                -0.0298919677734375, -0.0123748779296875, 0.0259857177734375, -0.00910186767578125, 0.0181427001953125,
+                0.0035228729248046875, 0.01074981689453125, -0.0173492431640625, -0.01065826416015625,
+                0.025421142578125, 0.0151519775390625, 0.0012636184692382812, 0.0150909423828125, 0.012359619140625,
+                -0.0179290771484375, 0.007595062255859375, -0.021392822265625, 0.0006613731384277344,
+                0.0025844573974609375, -0.0059051513671875, -0.0006885528564453125, 0.004329681396484375,
+                0.0019359588623046875, -0.0250244140625, 0.0015478134155273438, -0.020904541015625,
+                -0.007656097412109375, 0.0139923095703125, 0.0003361701965332031, -0.020751953125, 0.02587890625,
+                0.037109375, 0.011444091796875, 0.0204925537109375, -0.0035877227783203125, 0.0211029052734375,
+                0.06097412109375, 0.014007568359375, -0.0235595703125, 0.025665283203125, -0.00716400146484375,
+                -0.0635986328125, 0.0024204254150390625, -0.01352691650390625, 0.04669189453125, -0.004550933837890625,
+                0.0038204193115234375, 0.0265960693359375, 0.006488800048828125, -0.0027637481689453125,
+                -0.0135498046875, 0.01369476318359375, -0.018646240234375, -0.0521240234375, 0.01183319091796875,
+                0.005573272705078125, -0.0122528076171875, 0.032684326171875, -0.0112457275390625, 0.026824951171875,
+                -0.021514892578125, 0.020538330078125, -0.01427459716796875, 0.0066375732421875, -0.0179595947265625,
+                -0.0099029541015625, 0.01384735107421875, -0.0027179718017578125, 0.0116424560546875,
+                0.01512908935546875, -0.01442718505859375, 0.0204925537109375, -0.036834716796875, 0.01007843017578125,
+                0.006587982177734375, 0.004077911376953125, -0.00788116455078125, -0.04364013671875,
+                0.00012385845184326172, -0.0029087066650390625, -0.00408935546875, 0.0135498046875, 0.004486083984375,
+                0.04119873046875, -0.0361328125, -0.005401611328125, 0.0352783203125, -0.0005574226379394531
+              ],
+              "index": 0
+            }
+          ],
+          "model": "text-embedding-3-small",
+          "usage": {
+            "prompt_tokens": 51,
+            "total_tokens": 51
+          }
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "9287d918bf91a4ed",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o",
+          "input": [
+            {
+              "role": "system",
+              "content": "you are a helpful assistant."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Hello, world!"
+                }
+              ]
+            }
+          ],
+          "temperature": 0
+        },
+        "timestamp": 1773147360000
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9e98c54fab8fb76b-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Thu, 09 Apr 2026 10:18:58 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "491",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-limit-tokens": "30000",
+          "x-ratelimit-remaining-requests": "499",
+          "x-ratelimit-remaining-tokens": "11345",
+          "x-ratelimit-reset-requests": "120ms",
+          "x-ratelimit-reset-tokens": "37.308s",
+          "x-request-id": "req_b650618b8acb4c509c2f8adf67d965ff"
+        },
+        "body": {
+          "id": "resp_01075e57f8f441a10069d77d11f5f481908b5a9f371c012c9f",
+          "object": "response",
+          "created_at": 1775729937,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1775729938,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-2024-08-06",
+          "output": [
+            {
+              "id": "msg_01075e57f8f441a10069d77d1235688190b254429be7ee8163",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "Hello! How can I assist you today?"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": null,
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 21,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 10,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 31
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

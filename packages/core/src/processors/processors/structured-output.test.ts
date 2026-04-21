@@ -3,6 +3,7 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 import type { Agent } from '../../agent';
+import { Mastra } from '../../mastra';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { StructuredOutputProcessor } from './structured-output';
@@ -57,6 +58,18 @@ describe('StructuredOutputProcessor', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  describe('__registerMastra', () => {
+    it('should propagate mastra registration to the internal structuring agent', () => {
+      const mastra = new Mastra({ logger: false });
+
+      expect((processor as any).structuringAgent.getMastraInstance()).toBeUndefined();
+
+      (processor as any).__registerMastra(mastra);
+
+      expect((processor as any).structuringAgent.getMastraInstance()).toBe(mastra);
+    });
   });
 
   describe('processOutputStream', () => {

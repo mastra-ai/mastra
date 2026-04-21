@@ -1,21 +1,19 @@
-import {
-  AuthRequired,
-  MainSidebarProvider,
-  NavigationCommand,
-  Toaster,
-  TooltipProvider,
-  useAuthCapabilities,
-  isAuthenticated,
-} from '@mastra/playground-ui';
+import { ErrorBoundary, MainSidebarProvider, Toaster, TooltipProvider } from '@mastra/playground-ui';
+import { useLocation } from 'react-router';
 import { AppSidebar } from './ui/app-sidebar';
 import { ThemeProvider } from './ui/theme-provider';
+import { AuthRequired } from '@/domains/auth/components/auth-required';
+import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
+import { isAuthenticated } from '@/domains/auth/types';
 import { ExperimentalUIProvider } from '@/domains/experimental-ui/experimental-ui-context';
 import { UI_EXPERIMENTS } from '@/domains/experimental-ui/experiments';
 import { useExperimentalUIEnabled } from '@/domains/experimental-ui/use-experimental-ui-enabled';
+import { NavigationCommand } from '@/lib/command';
 import { cn } from '@/lib/utils';
 
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const { data: authCapabilities, isFetched } = useAuthCapabilities();
+  const { pathname } = useLocation();
   const shouldHideSidebar = isFetched && authCapabilities?.enabled && !isAuthenticated(authCapabilities);
   const shouldShowSidebar = isFetched && !shouldHideSidebar;
 
@@ -29,7 +27,9 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
             'h-[calc(100%-1.5rem)]': shouldHideSidebar,
           })}
         >
-          <AuthRequired>{children}</AuthRequired>
+          <AuthRequired>
+            <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
+          </AuthRequired>
         </div>
       </div>
     </>

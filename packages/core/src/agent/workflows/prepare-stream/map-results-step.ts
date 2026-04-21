@@ -179,6 +179,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
         ...options.structuredOutput,
         logger: capabilities.logger,
       });
+      if (capabilities.mastra) {
+        structuredProcessor.__registerMastra(capabilities.mastra);
+      }
       effectiveOutputProcessors = effectiveOutputProcessors
         ? [...effectiveOutputProcessors, structuredProcessor]
         : [structuredProcessor];
@@ -193,6 +196,16 @@ export function createMapResultsStep<OUTPUT = undefined>({
           })
         : options.inputProcessors || capabilities.inputProcessors
       : options.inputProcessors || [];
+
+    // Resolve error processors
+    const effectiveErrorProcessors = capabilities.errorProcessors
+      ? typeof capabilities.errorProcessors === 'function'
+        ? await capabilities.errorProcessors({
+            requestContext: result.requestContext!,
+            overrides: options.errorProcessors,
+          })
+        : options.errorProcessors || capabilities.errorProcessors
+      : options.errorProcessors || [];
 
     const messageList = memoryData.messageList!;
 
@@ -218,36 +231,44 @@ export function createMapResultsStep<OUTPUT = undefined>({
           if (payload.finishReason === 'error') {
             const provider = payload.model?.provider;
             const modelId = payload.model?.modelId;
-            const isUpstreamError = APICallError.isInstance(payload.error);
-
-            if (isUpstreamError) {
-              capabilities.logger.error('Upstream LLM API error', {
-                error: payload.error,
-                runId,
-                ...(provider && { provider }),
-                ...(modelId && { modelId }),
-              });
-            } else {
-              capabilities.logger.error('Error in agent stream', {
-                error: payload.error,
-                runId,
-                ...(provider && { provider }),
-                ...(modelId && { modelId }),
-              });
-            }
-
             const error =
               payload.error instanceof Error
                 ? payload.error
                 : new MastraError(
                     {
                       id: 'AGENT_STREAM_ERROR',
+                      text:
+                        payload.error == null
+                          ? 'Agent stream finished with finishReason "error" but no error payload was provided'
+                          : undefined,
                       domain: ErrorDomain.AGENT,
                       category: ErrorCategory.SYSTEM,
-                      details: { runId },
+                      details: {
+                        runId,
+                        ...(provider && { provider }),
+                        ...(modelId && { modelId }),
+                      },
                     },
                     payload.error,
                   );
+            const isUpstreamError = APICallError.isInstance(error);
+
+            if (isUpstreamError) {
+              capabilities.logger.error('Upstream LLM API error', {
+                error,
+                runId,
+                ...(provider && { provider }),
+                ...(modelId && { modelId }),
+              });
+            } else {
+              capabilities.logger.error('Error in agent stream', {
+                error,
+                runId,
+                ...(provider && { provider }),
+                ...(modelId && { modelId }),
+              });
+            }
+
             // End the AGENT_RUN span so the trace is exported.
             // Without this, the span is orphaned and exporters that wait
             // for the root span to end (e.g. Datadog) never emit the trace.
@@ -326,6 +347,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       structuredOutput: options.structuredOutput,
       inputProcessors: effectiveInputProcessors,
       outputProcessors: effectiveOutputProcessors,
+      errorProcessors: effectiveErrorProcessors,
       modelSettings: {
         temperature: 0,
         ...(options.modelSettings || {}),

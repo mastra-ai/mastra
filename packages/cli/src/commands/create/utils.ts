@@ -102,13 +102,16 @@ You can start editing files inside the \`src/mastra\` directory. The development
 
 To learn more about Mastra, visit our [documentation](https://mastra.ai/docs/). Your bootstrapped project includes example code for [agents](https://mastra.ai/docs/agents/overview), [tools](https://mastra.ai/docs/agents/using-tools), [workflows](https://mastra.ai/docs/workflows/overview), [scorers](https://mastra.ai/docs/evals/overview), and [observability](https://mastra.ai/docs/observability/overview).
 
-If you're new to AI agents, check out our [course](https://mastra.ai/course) and [YouTube videos](https://youtube.com/@mastra-ai). You can also join our [Discord](https://discord.gg/BTYqqHKUrf) community to get help and share your projects.
+If you're new to AI agents, check out our [course](https://mastra.ai/learn) and [YouTube videos](https://youtube.com/@mastra-ai). You can also join our [Discord](https://discord.gg/BTYqqHKUrf) community to get help and share your projects.
 
-## Deploy on Mastra Cloud
+## Deploy to the Mastra platform
 
-[Mastra Cloud](https://cloud.mastra.ai/) gives you a serverless agent environment with atomic deployments. Access your agents from anywhere and monitor performance. Make sure they don't go off the rails with evals and tracing.
+The [Mastra platform](https://projects.mastra.ai) provides two products for deploying and managing AI applications built with the Mastra framework:
 
-Check out the [deployment guide](https://mastra.ai/docs/deployment/overview) for more details.`;
+- **Studio**: A hosted visual environment for testing agents, running workflows, and inspecting traces
+- **Server**: A production deployment target that runs your Mastra application as an API server
+
+Learn more in the [Mastra platform documentation](https://mastra.ai/docs/mastra-platform/overview).`;
 
   const formattedContent = await prettier.format(content, {
     parser: 'markdown',

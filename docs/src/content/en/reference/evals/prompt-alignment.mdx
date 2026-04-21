@@ -124,19 +124,19 @@ Prompt Alignment evaluates responses across four key dimensions with weighted sc
 
 Evaluates alignment with user prompts only:
 
-1. **Intent Alignment** (40% weight) - Whether the response addresses the user's core request
-1. **Requirements Fulfillment** (30% weight) - If all user requirements are met
-1. **Completeness** (20% weight) - Whether the response is comprehensive for user needs
-1. **Response Appropriateness** (10% weight) - If format and tone match user expectations
+1. **Intent Alignment** (40% weight): Whether the response addresses the user's core request
+1. **Requirements Fulfillment** (30% weight): If all user requirements are met
+1. **Completeness** (20% weight): Whether the response is comprehensive for user needs
+1. **Response Appropriateness** (10% weight): If format and tone match user expectations
 
 #### System Mode ('system')
 
 Evaluates compliance with system guidelines only:
 
-1. **Intent Alignment** (35% weight) - Whether the response follows system behavioral guidelines
-1. **Requirements Fulfillment** (35% weight) - If all system constraints are respected
-1. **Completeness** (15% weight) - Whether the response adheres to all system rules
-1. **Response Appropriateness** (15% weight) - If format and tone match system specifications
+1. **Intent Alignment** (35% weight): Whether the response follows system behavioral guidelines
+1. **Requirements Fulfillment** (35% weight): If all system constraints are respected
+1. **Completeness** (15% weight): Whether the response adheres to all system rules
+1. **Response Appropriateness** (15% weight): If format and tone match system specifications
 
 #### Both Mode ('both' - default)
 
@@ -656,7 +656,7 @@ const result = await scorer.run({
 
 ## Related
 
-- [Answer Relevancy Scorer](/reference/evals/answer-relevancy) - Evaluates query-response relevance
-- [Faithfulness Scorer](/reference/evals/faithfulness) - Measures context groundedness
-- [Tool Call Accuracy Scorer](/reference/evals/tool-call-accuracy) - Evaluates tool selection
-- [Custom Scorers](/docs/evals/custom-scorers) - Creating your own evaluation metrics
+- [Answer Relevancy Scorer](/reference/evals/answer-relevancy): Evaluates query-response relevance
+- [Faithfulness Scorer](/reference/evals/faithfulness): Measures context groundedness
+- [Tool Call Accuracy Scorer](/reference/evals/tool-call-accuracy): Evaluates tool selection
+- [Custom Scorers](/docs/evals/custom-scorers): Creating your own evaluation metrics

@@ -2742,6 +2742,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                     "format": 2,
                     "metadata": {
                       "modelId": "mock-model-id",
+                      "provider": "mock-provider",
                     },
                     "parts": [
                       {
@@ -7473,7 +7474,12 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                         },
                         {
                           "providerOptions": undefined,
-                          "text": "I'm thinking...Separate thoughts",
+                          "text": "Separate thoughts",
+                          "type": "reasoning",
+                        },
+                        {
+                          "providerOptions": undefined,
+                          "text": "I'm thinking...",
                           "type": "reasoning",
                         },
                         {
@@ -7520,7 +7526,12 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                         },
                         {
                           "providerOptions": undefined,
-                          "text": "I'm thinking...Separate thoughts",
+                          "text": "Separate thoughts",
+                          "type": "reasoning",
+                        },
+                        {
+                          "providerOptions": undefined,
+                          "text": "I'm thinking...",
                           "type": "reasoning",
                         },
                         {
@@ -7595,7 +7606,12 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                               },
                               {
                                 "providerOptions": undefined,
-                                "text": "I'm thinking...Separate thoughts",
+                                "text": "Separate thoughts",
+                                "type": "reasoning",
+                              },
+                              {
+                                "providerOptions": undefined,
+                                "text": "I'm thinking...",
                                 "type": "reasoning",
                               },
                               {
@@ -7670,7 +7686,12 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                         },
                         {
                           "providerOptions": undefined,
-                          "text": "I'm thinking...Separate thoughts",
+                          "text": "Separate thoughts",
+                          "type": "reasoning",
+                        },
+                        {
+                          "providerOptions": undefined,
+                          "text": "I'm thinking...",
                           "type": "reasoning",
                         },
                         {
@@ -7717,7 +7738,12 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                         },
                         {
                           "providerOptions": undefined,
-                          "text": "I'm thinking...Separate thoughts",
+                          "text": "Separate thoughts",
+                          "type": "reasoning",
+                        },
+                        {
+                          "providerOptions": undefined,
+                          "text": "I'm thinking...",
                           "type": "reasoning",
                         },
                         {
@@ -7792,7 +7818,12 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                               },
                               {
                                 "providerOptions": undefined,
-                                "text": "I'm thinking...Separate thoughts",
+                                "text": "Separate thoughts",
+                                "type": "reasoning",
+                              },
+                              {
+                                "providerOptions": undefined,
+                                "text": "I'm thinking...",
                                 "type": "reasoning",
                               },
                               {

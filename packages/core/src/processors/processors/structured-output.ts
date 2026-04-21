@@ -4,6 +4,7 @@ import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { IMastraLogger } from '../../logger';
+import type { Mastra } from '../../mastra';
 import type { ObservabilityContext } from '../../observability';
 import { resolveObservabilityContext } from '../../observability';
 import type { StandardSchemaWithJSON } from '../../schema';
@@ -72,6 +73,10 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
       instructions: options.instructions || this.generateInstructions(),
       model: options.model,
     });
+  }
+
+  __registerMastra(mastra: Mastra) {
+    this.structuringAgent.__registerMastra(mastra);
   }
 
   async processOutputStream(
