@@ -122,6 +122,18 @@ export class ObservabilityStorage extends StorageDomain {
   }
 
   /**
+   * Reports the tracing strategy currently in effect for this attached observability store.
+   *
+   * Single-strategy stores can rely on the default implementation. Multi-strategy stores
+   * should override this getter only when they can determine the actual configured mode
+   * from storage-owned configuration, not exporter state.
+   */
+  public get runtimeTracingStrategy(): TracingStorageStrategy | undefined {
+    const supportedStrategies = this.observabilityStrategy.supported;
+    return supportedStrategies.length === 1 ? supportedStrategies[0] : undefined;
+  }
+
+  /**
    * Creates a single Span record in the storage provider.
    */
   async createSpan(_args: CreateSpanArgs): Promise<void> {
