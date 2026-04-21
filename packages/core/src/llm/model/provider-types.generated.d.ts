@@ -1076,7 +1076,7 @@ export type ProviderModelsMap = {
     'accounts/fireworks/models/qwen3p6-plus',
     'accounts/fireworks/routers/kimi-k2p5-turbo',
   ];
-  readonly 'kimi-for-coding': readonly ['k2p5', 'kimi-k2-thinking'];
+  readonly 'kimi-for-coding': readonly ['k2p5', 'k2p6', 'kimi-k2-thinking'];
   readonly moark: readonly ['GLM-4.7', 'MiniMax-M2.1'];
   readonly 'opencode-go': readonly [
     'glm-5',
@@ -1294,6 +1294,7 @@ export type ProviderModelsMap = {
     'moonshotai/Kimi-K2-Instruct-0905',
     'moonshotai/Kimi-K2-Thinking',
     'moonshotai/Kimi-K2.5',
+    'moonshotai/Kimi-K2.6',
     'zai-org/GLM-4.7',
     'zai-org/GLM-4.7-Flash',
     'zai-org/GLM-5',
@@ -3440,6 +3441,7 @@ export type ProviderModelsMap = {
     '@cf/google/gemma-4-26b-a4b-it',
     '@cf/meta/llama-4-scout-17b-16e-instruct',
     '@cf/moonshotai/kimi-k2.5',
+    '@cf/moonshotai/kimi-k2.6',
     '@cf/nvidia/nemotron-3-120b-a12b',
     '@cf/openai/gpt-oss-120b',
     '@cf/openai/gpt-oss-20b',
