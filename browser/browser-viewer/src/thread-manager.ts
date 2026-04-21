@@ -340,7 +340,7 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       // Set shared manager (used by base class)
       this.setSharedManager(browser);
 
-    this.logger?.debug?.(`Connected to existing browser, CDP URL: ${cdpUrl}`);
+      this.logger?.debug?.(`Connected to existing browser, CDP URL: ${cdpUrl}`);
 
       // Notify callbacks
       this.onBrowserCreated?.(browser, DEFAULT_THREAD_ID, cdpUrl);
