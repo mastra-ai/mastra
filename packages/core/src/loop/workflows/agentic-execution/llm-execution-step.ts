@@ -172,9 +172,6 @@ async function processOutputStream<OUTPUT = undefined>({
           continue;
         }
         case 'error':
-          if (isAbortError(chunk.payload.error)) {
-            break;
-          }
           break;
         default:
           break;
