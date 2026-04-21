@@ -96,13 +96,34 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
   }
 
   /**
-   * Get the CDP session for a thread.
+   * Get or create a CDP session for the active page in a thread.
+   *
+   * CDP sessions are page-scoped, so we create a fresh one for the currently active page
+   * rather than caching one that may point to a closed or inactive page.
    */
-  getCdpSessionForThread(threadId?: string): CDPSession | null {
+  async getCdpSessionForThread(threadId?: string): Promise<CDPSession | null> {
     const effectiveThreadId = threadId ?? DEFAULT_THREAD_ID;
     const session = this.scope === 'shared' ? this.sharedSession : this.threadSessions.get(effectiveThreadId);
 
-    return session?.cdpSession ?? null;
+    if (!session?.context) {
+      return null;
+    }
+
+    // Get the currently active page (last one in the list, or first if only one)
+    const pages = session.context.pages();
+    const activePage = pages[pages.length - 1] ?? pages[0];
+
+    if (!activePage) {
+      return null;
+    }
+
+    // Create a new CDP session for the active page
+    try {
+      return await session.context.newCDPSession(activePage);
+    } catch {
+      // Page may have been closed between getting pages and creating session
+      return null;
+    }
   }
 
   /**
@@ -234,6 +255,60 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
   }
 
   /**
+   * Create a shared session by connecting to an existing browser via CDP URL.
+   * Used when BrowserViewer is configured with a cdpUrl to connect to an external browser.
+   */
+  async createSharedSessionFromCdp(cdpUrl: string): Promise<void> {
+    if (this.sharedSession) {
+      return; // Already created
+    }
+
+    this.logger?.debug?.(`Connecting to existing browser at ${cdpUrl}`);
+
+    const browser = await chromium.connectOverCDP(cdpUrl);
+
+    // Get or create context
+    const contexts = browser.contexts();
+    const context = contexts[0] ?? (await browser.newContext());
+
+    // Create initial page if none exists
+    const pages = context.pages();
+    if (pages.length === 0) {
+      await context.newPage();
+    }
+
+    // Set up CDP session for active page
+    const updatedPages = context.pages();
+    const cdpSession = updatedPages[0] ? await context.newCDPSession(updatedPages[0]) : null;
+
+    // Set up disconnection handler
+    browser.on('disconnected', () => {
+      this.handleBrowserDisconnected(DEFAULT_THREAD_ID);
+    });
+
+    this.sharedSession = {
+      threadId: DEFAULT_THREAD_ID,
+      createdAt: Date.now(),
+      browserServer: null as unknown as BrowserServer, // We don't own the server
+      browser,
+      context,
+      cdpSession,
+      cdpUrl,
+    };
+
+    // Store in base class sessions map (for hasSession() checks)
+    this.sessions.set(DEFAULT_THREAD_ID, this.sharedSession);
+
+    // Set shared manager (used by base class)
+    this.setSharedManager(browser);
+
+    this.logger?.debug?.(`Connected to existing browser, CDP URL: ${cdpUrl}`);
+
+    // Notify callback
+    this.onSessionCreated?.(this.sharedSession);
+  }
+
+  /**
    * Create a shared session (for 'shared' scope).
    */
   async createSharedSession(): Promise<void> {
@@ -332,6 +407,11 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
    */
   async connectToExternalCdp(cdpUrl: string, threadId: string): Promise<BrowserViewerSession> {
     this.logger?.debug?.(`Connecting to external CDP for thread ${threadId}: ${cdpUrl}`);
+
+    // Close any existing session for this thread to avoid leaking browser processes
+    if (this.threadSessions.has(threadId)) {
+      await this.closeThreadBrowser(threadId);
+    }
 
     try {
       // Connect to external browser via CDP

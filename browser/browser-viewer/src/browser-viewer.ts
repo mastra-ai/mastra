@@ -23,7 +23,6 @@ import type {
 } from '@mastra/core/browser';
 import type { Tool } from '@mastra/core/tools';
 import type { Page } from 'playwright-core';
-import { chromium } from 'playwright-core';
 import { BrowserViewerThreadManager } from './thread-manager';
 import type { BrowserViewerConfig, CLIProvider } from './types';
 
@@ -143,20 +142,8 @@ export class BrowserViewer extends MastraBrowser {
   private async connectToExisting(cdpUrl: string): Promise<void> {
     this.logger?.debug?.(`Connecting to existing browser at ${cdpUrl}`);
 
-    const browser = await chromium.connectOverCDP(cdpUrl);
-
-    // Get or create context
-    const contexts = browser.contexts();
-    const context = contexts[0] ?? (await browser.newContext());
-
-    // Create initial page if none exists
-    const pages = context.pages();
-    if (pages.length === 0) {
-      await context.newPage();
-    }
-
-    // Set up as shared session by setting shared manager
-    this.threadManager.setSharedManager(browser);
+    // Create a shared session from the external CDP connection
+    await this.threadManager.createSharedSessionFromCdp(cdpUrl);
 
     this.logger?.debug?.('Connected to existing browser');
   }
@@ -317,7 +304,10 @@ export class BrowserViewer extends MastraBrowser {
     // Set up tab change detection - reconnect screencast when tabs change
     const context = this.threadManager.getContextForThread(threadId);
     if (context) {
-      // New tab opened
+      // Track all listeners for cleanup
+      const pageListeners = new Map<Page, (frame: { url: () => string; parentFrame: () => unknown }) => void>();
+
+      // New tab opened - reconnect screencast
       const onNewPage = () => {
         setTimeout(() => {
           if (stream.isActive()) {
@@ -325,11 +315,17 @@ export class BrowserViewer extends MastraBrowser {
           }
         }, 100);
       };
-      context.on('page', onNewPage);
+
+      // Handler for new pages that sets up listeners
+      const onPageCreated = (page: Page) => {
+        setupPageListeners(page);
+      };
 
       // Set up page close listener for each page
       const setupPageListeners = (page: Page) => {
         page.once('close', () => {
+          // Clean up this page's listener
+          pageListeners.delete(page);
           setTimeout(() => {
             if (stream.isActive() && context.pages().length > 0) {
               stream.reconnect().catch(() => {});
@@ -338,26 +334,33 @@ export class BrowserViewer extends MastraBrowser {
         });
 
         // Navigation listener for URL updates
-        page.on('framenavigated', (frame: { url: () => string; parentFrame: () => unknown }) => {
+        const onFrameNavigated = (frame: { url: () => string; parentFrame: () => unknown }) => {
           if (!frame.parentFrame()) {
             stream.emitUrl(frame.url());
           }
-        });
+        };
+        page.on('framenavigated', onFrameNavigated);
+        pageListeners.set(page, onFrameNavigated);
       };
+
+      // Set up listeners
+      context.on('page', onNewPage);
+      context.on('page', onPageCreated);
 
       // Set up for existing pages
       for (const page of context.pages()) {
         setupPageListeners(page);
       }
 
-      // Set up for new pages
-      context.on('page', (newPage: Page) => {
-        setupPageListeners(newPage);
-      });
-
-      // Clean up on stream stop
+      // Clean up all listeners on stream stop
       stream.once('stop', () => {
         context.off('page', onNewPage);
+        context.off('page', onPageCreated);
+        // Remove framenavigated listeners from all pages
+        for (const [page, listener] of pageListeners) {
+          page.off('framenavigated', listener);
+        }
+        pageListeners.clear();
       });
     }
 
@@ -370,7 +373,7 @@ export class BrowserViewer extends MastraBrowser {
   // ---------------------------------------------------------------------------
 
   override async injectMouseEvent(params: MouseEventParams, threadId?: string): Promise<void> {
-    const cdpSession = this.threadManager.getCdpSessionForThread(threadId ?? this.getCurrentThread());
+    const cdpSession = await this.threadManager.getCdpSessionForThread(threadId ?? this.getCurrentThread());
     if (!cdpSession) {
       throw new Error('CDP session not available for mouse injection');
     }
@@ -379,7 +382,7 @@ export class BrowserViewer extends MastraBrowser {
   }
 
   override async injectKeyboardEvent(params: KeyboardEventParams, threadId?: string): Promise<void> {
-    const cdpSession = this.threadManager.getCdpSessionForThread(threadId ?? this.getCurrentThread());
+    const cdpSession = await this.threadManager.getCdpSessionForThread(threadId ?? this.getCurrentThread());
     if (!cdpSession) {
       throw new Error('CDP session not available for keyboard injection');
     }

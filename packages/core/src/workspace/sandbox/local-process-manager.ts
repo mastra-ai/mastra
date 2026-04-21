@@ -170,13 +170,15 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
       if (path.isAbsolute(options.cwd)) {
         cwd = options.cwd;
       } else {
-        // Prevent duplicate nesting when agent passes cwd that matches workingDirectory
+        // Prevent duplicate nesting when agent passes cwd that's already workspace-relative
         const normalizedWorkingDir = path.resolve(this.sandbox.workingDirectory);
         const normalizedOptionsCwd = path.resolve(options.cwd);
-        // Only resolve relative to workingDirectory if it's actually a subdirectory
-        if (normalizedOptionsCwd !== normalizedWorkingDir) {
-          cwd = path.resolve(this.sandbox.workingDirectory, options.cwd);
-        }
+        // Check if path is already under workspace (exact match or nested subpath)
+        const isAlreadyWorkspacePath =
+          normalizedOptionsCwd === normalizedWorkingDir ||
+          normalizedOptionsCwd.startsWith(`${normalizedWorkingDir}${path.sep}`);
+
+        cwd = isAlreadyWorkspacePath ? normalizedOptionsCwd : path.resolve(this.sandbox.workingDirectory, options.cwd);
       }
     }
     const env = this.sandbox.buildEnv(options.env);

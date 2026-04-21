@@ -1127,8 +1127,6 @@ export class Agent<
     // If agent has its own workspace configured, use it
     if (this.#workspace) {
       if (typeof this.#workspace !== 'function') {
-        // Set browser from workspace if agent doesn't have one (CLI browser approach)
-        this.#setBrowserFromWorkspace(this.#workspace);
         return this.#workspace;
       }
 
@@ -1154,37 +1152,11 @@ export class Agent<
         });
       }
 
-      // Set browser from workspace if agent doesn't have one (CLI browser approach)
-      this.#setBrowserFromWorkspace(resolvedWorkspace);
-
       return resolvedWorkspace;
     }
 
     // Fall back to Mastra's global workspace
-    const globalWorkspace = this.#mastra?.getWorkspace();
-    if (globalWorkspace) {
-      this.#setBrowserFromWorkspace(globalWorkspace);
-    }
-    return globalWorkspace;
-  }
-
-  /**
-   * Sets the agent's browser from workspace if:
-   * 1. Agent doesn't already have a browser configured (SDK approach)
-   * 2. Workspace has a browser configured (CLI approach)
-   * @internal
-   */
-  #setBrowserFromWorkspace(workspace: AnyWorkspace): void {
-    // Skip if agent already has a browser (SDK approach takes precedence)
-    if (this.#browser) {
-      return;
-    }
-
-    // Check if workspace has browser configured
-    const workspaceBrowser = workspace.browser;
-    if (workspaceBrowser) {
-      this.#browser = workspaceBrowser;
-    }
+    return this.#mastra?.getWorkspace();
   }
 
   get voice() {
@@ -4863,7 +4835,7 @@ export class Agent<
       // Use thread-aware running check to avoid cross-thread state leakage
       // In thread scope, only report running if this specific thread has a session
       const isThreadRunning = browserThreadId
-        ? browser.hasThreadSession(browserThreadId) && browser.isBrowserRunning()
+        ? browser.hasThreadSession(browserThreadId) && browser.isBrowserRunning(browserThreadId)
         : browser.isBrowserRunning();
 
       const browserCtx: BrowserContext = {
@@ -4873,7 +4845,11 @@ export class Agent<
         headless: browser.headless,
         currentUrl: isThreadRunning ? ((await browser.getCurrentUrl(browserThreadId)) ?? undefined) : undefined,
         // For CLI providers, include CDP URL so agent can pass it to CLI commands
-        cdpUrl: browser.providerType === 'cli' ? (browser.getCdpUrl(browserThreadId) ?? undefined) : undefined,
+        // Only expose CDP URL if the thread is actually running to avoid stale endpoints
+        cdpUrl:
+          browser.providerType === 'cli' && isThreadRunning
+            ? (browser.getCdpUrl(browserThreadId) ?? undefined)
+            : undefined,
       };
       requestContext.set('browser', browserCtx);
     }
@@ -4979,7 +4955,9 @@ export class Agent<
     });
 
     const memory = await this.getMemory({ requestContext });
-    const workspace = await this.getWorkspace({ requestContext });
+    // Reuse early workspace (resolved earlier for browser context) to avoid
+    // duplicate factory resolution which could create different instances
+    const workspace = earlyWorkspace;
 
     const saveQueueManager = new SaveQueueManager({
       logger: this.logger,

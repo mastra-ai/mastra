@@ -635,7 +635,12 @@ export abstract class MastraBrowser extends MastraBase {
    * Race-condition-safe - handles concurrent calls, status management, and lifecycle hooks.
    * @param _threadId - Thread identifier (for thread-scoped browsers, launches a browser for that thread)
    */
-  async launch(_threadId?: string): Promise<void> {
+  async launch(threadId?: string): Promise<void> {
+    // Set current thread if provided, so thread-scoped browsers launch for that thread
+    if (threadId !== undefined) {
+      this.setCurrentThread(threadId);
+    }
+
     // Already ready
     if (this.status === 'ready') {
       return;

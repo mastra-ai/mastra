@@ -111,12 +111,17 @@ export class BrowserCliHandler {
   /**
    * Split a command string on shell operators (&&, ||, ;) while preserving
    * the operators for reassembly.
+   *
+   * NOTE: This is a simple regex-based splitter that doesn't respect quotes.
+   * Commands like `bash -c 'agent-browser ... && echo done'` will be incorrectly
+   * split inside the quoted string. For agent-generated commands, this is typically
+   * fine since browser CLIs are usually invoked directly, not wrapped in subshells.
    */
   splitShellCommand(command: string): { parts: string[]; operators: string[] } {
     const parts: string[] = [];
     const operators: string[] = [];
 
-    // Match && or || or ; as separators
+    // Match && or || or ; as separators (doesn't handle quotes - see note above)
     const regex = /\s*(&&|\|\||;)\s*/g;
     let lastIndex = 0;
     let match;

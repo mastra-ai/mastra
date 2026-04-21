@@ -97,14 +97,14 @@ async function executeCommand(input: Record<string, any>, context: any) {
           if (sandbox.executeCommand) {
             await sandbox.executeCommand(warmupCmd, [], { timeout: 10000 });
           }
+          // Only mark as warmed up after successful warmup
           browserCliHandler.markWarmedUp(cliName, threadId);
+          // Register cleanup when browser closes
+          browserCliHandler.registerWarmupCleanup(cliName, threadId, browser);
         } catch {
-          // Still mark as warmed up to avoid retrying every command
-          browserCliHandler.markWarmedUp(cliName, threadId);
+          // Don't mark as warmed up - will retry on next command
+          // This allows recovery if the CLI daemon wasn't ready
         }
-
-        // Register cleanup when browser closes
-        browserCliHandler.registerWarmupCleanup(cliName, threadId, browser);
       }
 
       // Inject CDP URL into all browser CLI commands in the chain
