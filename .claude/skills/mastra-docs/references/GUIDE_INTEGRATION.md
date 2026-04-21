@@ -1,10 +1,15 @@
-# Styleguide: Integration guide
+# Integration guide styleguide
 
-An integration guide is a comprehensive reference for using Mastra with a specific external library or ecosystem (e.g. AI SDK UI). Unlike tutorials (which build one thing step-by-step), integration guides are organized by feature area. The reader jumps to the section they need — each section is self-contained.
+Read STYLEGUIDE.md first.
 
-Also read and follow the general [STYLEGUIDE.md](./STYLEGUIDE.md) for tone, readability, and formatting rules that apply to all documentation.
+Use this file for integration guides.
 
-## Template
+Goal:
+- document how to use Mastra with one external library or ecosystem
+- organize by feature area, not by step order
+- make each section self-contained so the reader can jump to it
+
+Use this shape:
 
 ````mdx
 ---
@@ -17,19 +22,19 @@ import TabItem from '@theme/TabItem'
 
 # Using $LIBRARY
 
-One to two sentences explaining what the library is and what you'll learn. Link to the library's official docs.
+One or two sentences on what the library is and what the guide covers. Link to the official docs.
 
 :::note
-Link to migration guides or important version notes if applicable.
+Link to migration guides or version notes when needed.
 :::
 
 :::tip
-Link to live examples or related quickstart guides.
+Link to live examples or related quickstarts.
 :::
 
 ## Getting started
 
-Brief explanation of what the integration package provides and which features it enables. List the key hooks, functions, or APIs it integrates with, linking to their official docs.
+Briefly explain what the integration package provides and which features it enables. List the key hooks, functions, or APIs it connects to, with links to official docs.
 
 Install the required packages:
 
@@ -37,11 +42,11 @@ Install the required packages:
 npm install @mastra/package@latest other-package
 ```
 
-One sentence confirming the reader is ready to proceed.
+One sentence confirming the reader is ready to continue.
 
 ## $FEATURE_AREA_1
 
-Brief explanation of the approaches available, with a bulleted list linking to the subsections below.
+Brief explanation of the feature area. Add a short list linking to the approaches below.
 
 - [$APPROACH_A](#approach-a)
 - [$APPROACH_B](#approach-b)
@@ -90,7 +95,7 @@ Code and explanation for option 2.
 
 ### $FRONTEND_HOOK
 
-Once the backend is set up, show how to connect the frontend. Include a complete code example with the key line highlighted.
+After the backend setup, show how to connect the frontend. Include a complete code example and highlight the key line.
 
 ```typescript {3}
 // Frontend code connecting to the backend
@@ -98,11 +103,11 @@ Once the backend is set up, show how to connect the frontend. Include a complete
 
 ## $FEATURE_AREA_2
 
-Brief explanation of the feature area and when to use it.
+Brief explanation of this feature area and when to use it.
 
-### $CONCEPT_REFERENCE (if applicable)
+### $CONCEPT_REFERENCE
 
-Reference table or list documenting the key types, events, or data structures.
+Use a table or list for types, events, or data structures the reader needs to look up.
 
 | Type     | Source      | Description        |
 | -------- | ----------- | ------------------ |
@@ -111,7 +116,7 @@ Reference table or list documenting the key types, events, or data structures.
 
 ### $PATTERN_1
 
-Context sentence explaining the pattern.
+Context for the pattern.
 
 <Tabs>
   <TabItem value="backend" label="Backend">
@@ -136,7 +141,7 @@ Explain naming conventions, key points, or common gotchas.
 
 ### $PATTERN_2
 
-Same structure as above — context, then Backend/Frontend Tabs.
+Same structure as above.
 
 For more details, see [Related doc](/docs/category/page).
 
@@ -175,72 +180,21 @@ Key points:
 For a complete implementation, see the [example-name example](https://link-to-example).
 ````
 
-## Rules
-
-1. **Title format**: Use `"Using $LIBRARY | $CATEGORY"` in frontmatter (e.g. `"Using AI SDK UI | Frameworks"`). The H1 matches: "Using $LIBRARY".
-2. **Intro with admonitions**: After the intro paragraph, use `:::note` for migration guides or version notes, and `:::tip` for links to live examples or related quickstarts.
-3. **"Getting started" section**: Install the integration package, briefly explain what it provides, and list the key APIs it connects to. Keep it short — this is not a tutorial.
-4. **H2s are feature areas, not steps**: Organize by what the reader wants to do (Integration Guides, Custom UI, Recipes), not by sequential order. The reader should be able to jump to any H2 independently.
-5. **H3s are self-contained patterns**: Each H3 within a feature area covers one approach or pattern. It should work on its own without reading the sections before it.
-6. **Backend/Frontend Tabs**: When a pattern involves both server and client code, always use `<Tabs>` with `"Backend"` and `"Frontend"` tab labels. Show complete, working code in each tab.
-7. **Approach Tabs**: When multiple backend approaches exist (e.g. Mastra server vs framework), use `<Tabs>` with descriptive labels (e.g. `"Mastra Server"`, `"Next.js"`).
-8. **Reference tables**: Use tables for documenting types, events, or data structures that the reader needs to look up. Place them in the relevant feature area, not in a separate reference section.
-9. **"Recipes" section**: Collect standalone patterns at the end under a "Recipes" H2. Each recipe is an H3 — brief context, code (often in Backend/Frontend Tabs), key points as bullets, and a link to a complete implementation.
-10. **Key points pattern**: After complex code examples, list the important takeaways as bullets starting with "Key points:". Keep each point to one sentence.
-11. **Link to live examples**: Reference external example repositories (e.g. UI Dojo) for complete implementations. Don't duplicate entire example apps in the guide.
-12. **No "Next steps" or "Related" section**: Integration guides don't need a closing section — the Recipes section serves as the natural end.
-13. **Use `npm2yarn` on install commands**: Same as other guide types.
-
-## Example: AI SDK UI integration
-
-See [ai-sdk-ui.mdx](../src/content/en/guides/build-your-ui/ai-sdk-ui.mdx) for the gold-standard implementation of this template.
-
-Key structural elements from that guide:
-
-```md
-# Using AI SDK UI ← "Using $LIBRARY" H1
-
-What the library is + what you'll learn
-:::note migration guide :::
-:::tip live examples :::
-
-## Getting Started ← install + brief overview of integration points
-
-## Integration Guides ← H2 feature area: backend setup
-
-### Mastra's server ← approach A with Tabs (chatRoute/workflowRoute/networkRoute)
-
-### Framework-agnostic ← approach B with Tabs (handleChatStream/handleWorkflowStream/...)
-
-### useChat() ← frontend hook connecting to the routes
-
-### useCompletion() ← another hook with Backend/Frontend Tabs
-
-## Custom UI ← H2 feature area: rendering patterns
-
-### Data part types ← reference table
-
-### Rendering tool outputs ← Backend/Frontend Tabs
-
-### Rendering workflow data ← Backend/Frontend Tabs
-
-### Rendering network data ← Backend/Frontend Tabs
-
-### Custom events ← Backend/Frontend Tabs
-
-### Examples ← links to live implementations
-
-## Recipes ← H2: standalone patterns
-
-### Stream transformations ← brief + link
-
-### Loading historical messages ← brief + link
-
-### Passing additional data ← Backend/Frontend Tabs
-
-### Workflow suspend/resume ← Backend/Frontend Tabs + key points
-
-### Nested agent streams ← Backend/Frontend Tabs + key points
-
-### Streaming from workflow steps ← Backend/Frontend Tabs + key points
-```
+Rules:
+- frontmatter title must be `Using $LIBRARY | $CATEGORY`
+- H1 must be `Using $LIBRARY`
+- after the intro, use `note` for migration or version notes and `tip` for live examples or related quickstarts when needed
+- Getting started must install the integration package, explain what it provides, and list the main APIs it connects to
+- keep Getting started short; this is not a tutorial
+- H2 sections must be feature areas, not sequential steps
+- each H3 must be a self-contained approach or pattern
+- when a pattern has both server and client code, use `Tabs` with `Backend` and `Frontend`
+- when there are multiple backend approaches, use `Tabs` with clear labels like `Mastra Server` or `Next.js`
+- show complete working code in tabs
+- use tables for types, events, and data structures in the relevant feature area
+- put standalone patterns at the end under `Recipes`
+- each recipe should include brief context, code, key points, and a link to a complete implementation when applicable
+- after complex examples, add a `Key points:` list with one-sentence bullets
+- link to live example repositories instead of duplicating entire apps
+- do not add `Next steps` or `Related`
+- use `npm2yarn` on install commands

@@ -1,10 +1,16 @@
-# Styleguide: Tutorial guide
+# Tutorial guide styleguide
 
-A guide tutorial teaches the reader how to build something specific with Mastra. Unlike quickstarts (which get to a working result as fast as possible), tutorials go deeper — each step teaches a concept while building toward a complete project. The reader already has a Mastra project set up.
+Read STYLEGUIDE.md first.
 
-Also read and follow the general [STYLEGUIDE.md](./STYLEGUIDE.md) for tone, readability, and formatting rules that apply to all documentation.
+Use this file for tutorials.
 
-## Template
+Goal:
+- teach the reader how to build one specific thing with Mastra
+- go deeper than a quickstart
+- assume the reader already has a Mastra project
+- teach concepts while building toward a complete result
+
+Use this shape:
 
 ````mdx
 ---
@@ -20,11 +26,11 @@ In this guide, you'll build a $THING that $WHAT_IT_DOES. You'll learn how to $CO
 
 - Node.js `v22.13.0` or later installed
 - An API key from a supported [Model Provider](/models)
-- An existing Mastra project (Follow the [installation guide](/guides/getting-started/quickstart) to set up a new project)
+- An existing Mastra project. Follow the [installation guide](/guides/getting-started/quickstart) if needed.
 
 ## $STEP_1
 
-Context sentence explaining what this step does and why. Mention the classes or concepts involved, linking to their reference docs.
+Context on what this step does and why. Link to relevant reference docs.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -43,25 +49,25 @@ export const mastra = new Mastra({
 })
 ```
 
-Explain what the code did. If files or folders need to be created manually, state that clearly after the code block.
+Explain what changed. If the reader must create files or folders manually, say so after the code block.
 
 ## $STEP_2
 
-Context sentence explaining the next concept.
+Context for the next concept.
 
-If this step creates non-TypeScript files, use the appropriate language tag:
+Use the right language tag for non-TypeScript files:
 
 ```markdown title="path/to/file.md"
 # Content of the file
 ```
 
-If this step creates multiple files, show each one with its own code block and a brief explanation between them.
+If a step creates multiple files, show each file in its own code block and add a brief explanation between them.
 
 ## $STEP_3
 
-Context sentence.
+Context.
 
-When updating a file shown in a previous step, show the full file again with highlight comments marking the new lines:
+When updating a file shown earlier, show the full file again and highlight the changed lines:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -82,21 +88,21 @@ export const mastra = new Mastra({
 
 ## Test the $THING
 
-Start the dev server and interact with what you built:
+Start the dev server and test what you built:
 
 ```bash npm2yarn
 npm run dev
 ```
 
-Explain how to access and test (e.g. open Studio, navigate to a specific page).
+Explain where to go and how to test.
 
-Provide a sample input the reader can use:
+Provide a sample input:
 
 ```text
 Sample input to try
 ```
 
-Describe the expected output. Since agent responses are non-deterministic, note that output may vary, then show an example:
+Describe the expected output. If responses are non-deterministic, say that output may vary, then show an example:
 
 ```md
 Expected output format
@@ -116,39 +122,24 @@ Learn more:
 - [Link to external resource](https://example.com)
 ````
 
-## Rules
-
-1. **Title format**: Use `"Guide: Building a $THING"` in frontmatter. The H1 drops the "Guide:" prefix and uses a gerund: "Building a $THING".
-2. **Intro paragraph**: Start with "In this guide, you'll build..." followed by what the reader will learn. List the key concepts with links to reference docs.
-3. **"Prerequisites" section**: Use "Prerequisites" (not "Before you begin"). Always require an existing Mastra project and link to the quickstart. Tutorials don't start from scratch.
-4. **Each H2 teaches a concept**: Unlike quickstarts where steps are actions (install, create, configure), tutorial steps introduce concepts (workspace, skill, agent). The heading should name what's being created (e.g. "Create the workspace", "Create the code standards skill").
-5. **Show files evolving**: When a file is modified across multiple steps, show the full file each time with `// highlight-start`, `// highlight-end`, and `// highlight-next-line` comments marking the new or changed lines. This lets the reader see what changed without diffing.
-6. **Multiple files per step**: Steps can create more than one file. Show each file in its own code block with a `title` attribute. Use the appropriate language tag for non-TypeScript files (markdown, json, etc.).
-7. **"Test the $THING" section**: Always include a test step. Show how to start the dev server, where to navigate, a sample input to try, and the expected output. Note that agent responses are non-deterministic when applicable.
-8. **Close with "Next steps"**: List extension ideas as bullets (what the reader could build next), then a "Learn more" section with links to related docs and external resources. No congratulations message.
-9. **No `<Steps>` component**: Like quickstarts, tutorials use H2 headings as steps for better navigation and longer content per step.
-10. **Use `npm2yarn` on install commands**: Same as other guide types.
-
-## Example: Code review bot
-
-See [code-review-bot.mdx](../src/content/en/guides/guide/code-review-bot.mdx) for the gold-standard implementation of this template.
-
-Key structural elements from that guide:
-
-```md
-# Building a Code Review Bot ← gerund H1
-
-In this guide, you'll build... you'll learn how to... ← intro with learning objectives
-
-## Prerequisites ← existing Mastra project required
-
-## Create the workspace ← step: concept + code + file creation
-
-## Create the code standards skill ← step: multiple files (SKILL.md + reference)
-
-## Create the review agent ← step: new file + update existing file with highlights
-
-## Test the bot ← dev server + sample input + expected output
-
-## Next steps ← extension ideas + learn more links
-```
+Rules:
+- frontmatter title must be `Guide: Building a $THING`
+- H1 must be `Building a $THING`
+- start the intro with `In this guide, you'll build...`
+- include what the reader will learn in the intro
+- use `Prerequisites`, not `Before you begin`
+- always require an existing Mastra project and link to the quickstart
+- each H2 step should teach a concept, not just list an action
+- headings should name what is being created
+- when a file changes across steps, show the full file again
+- mark changed lines with `highlight-start`, `highlight-end`, and `highlight-next-line`
+- a step may create multiple files; show each file in its own code block with a `title`
+- use the correct language tag for non-TypeScript files
+- always include `Test the $THING`
+- show how to start the dev server, where to navigate, a sample input, and expected output
+- note when outputs may vary
+- end with Next steps
+- Next steps should include extension ideas and a Learn more list
+- do not add a congratulations section
+- do not use the `<Steps>` component
+- use `npm2yarn` on install commands

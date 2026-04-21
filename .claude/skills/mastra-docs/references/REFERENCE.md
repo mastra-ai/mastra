@@ -1,10 +1,15 @@
-# Styleguide: Reference page
+# Reference page styleguide
 
-This styleguide covers pages found in `docs/src/content/en/reference/`. A reference page is the complete API documentation for a class or function. The reader comes here to look up specific details, not to learn concepts — that's the job of the doc pages.
+Read STYLEGUIDE.md first.
 
-Also read and follow the general [STYLEGUIDE.md](./STYLEGUIDE.md) for tone, readability, and formatting rules that apply to all documentation.
+Use this file for reference/API pages.
 
-## Template
+Goal:
+- document one class or function completely
+- optimize for lookup, not concept teaching
+- link to doc pages when a concept needs explanation
+
+Use this shape:
 
 ````mdx
 ---
@@ -17,15 +22,15 @@ packages:
 
 # $NAME
 
-**Added in:** `@mastra/$PACKAGE@$VERSION` (only if this is a new addition tied to a specific release)
+Added in: `@mastra/$PACKAGE@$VERSION`
 
-One to two sentences explaining what the class or function does and when to use it.
+One or two sentences on what the class or function does and when to use it.
 
-Link to alternatives when they exist (e.g. "Use [`otherFunction()`](/reference/category/other) if you need $ALTERNATIVE.").
+Link to alternatives when they exist.
 
 ## Usage example
 
-Brief sentence explaining the scenario.
+Brief sentence on the scenario.
 
 ```typescript title="src/mastra/index.ts"
 import { $Name } from '@mastra/<package>'
@@ -33,7 +38,7 @@ import { $Name } from '@mastra/<package>'
 // Minimal working example
 ```
 
-If the API supports multiple calling patterns, show each one with a brief explanation between them.
+If the API has multiple calling patterns, show each one here with a brief explanation.
 
 ## Constructor parameters / Parameters
 
@@ -49,7 +54,7 @@ If the API supports multiple calling patterns, show each one with a brief explan
   ]}
 />
 
-## Properties (classes only)
+## Properties
 
 <PropertiesTable
   content={[
@@ -61,13 +66,13 @@ If the API supports multiple calling patterns, show each one with a brief explan
   ]}
 />
 
-## Methods (classes only)
+## Methods
 
-### $METHOD_CATEGORY (e.g. Lifecycle, Search, Utility)
+### $METHOD_CATEGORY
 
 #### `$methodName($PARAM, options?)`
 
-One sentence describing what the method does.
+One sentence on what the method does.
 
 ```typescript
 const result = await instance.$methodName('value', {
@@ -75,86 +80,35 @@ const result = await instance.$methodName('value', {
 })
 ```
 
-## $DOMAIN_SPECIFIC_SECTION (if applicable)
+## $DOMAIN_SPECIFIC_SECTION
 
-Additional sections for class-specific concerns (e.g. tool configuration, agent tools).
-Use tables for listing capabilities, `<PropertiesTable>` for nested config options.
+Add sections for API-specific concerns such as tool configuration or agent tools. Use tables for capability lists and `<PropertiesTable>` for nested config.
 
-## Additional configuration (if applicable)
+## Additional configuration
 
-Advanced usage patterns that go beyond the basic parameters.
+Add advanced usage patterns that go beyond the basic parameters.
 ````
 
-## Rules
-
-1. **Title format**: Use `"Reference: $NAME | $CATEGORY"` in frontmatter. For functions, include parentheses in the name: `"Reference: chatRoute() | AI SDK"`. For classes, use the class name: `"Reference: Workspace Class | Workspace"`.
-2. **H1 naming**: Functions include parentheses (`# chatRoute()`). Classes use the class name (`# Workspace Class`).
-3. **"Added in:" badge**: Only include when the API was introduced in a specific release and the reader needs to know the minimum version. Place it immediately after the H1: `**Added in:** \`@mastra/$PACKAGE@$VERSION\``. Omit for APIs that have existed since the early versions.
-4. **Link to alternatives**: When a similar API exists for a different context, link to it right after the description.
-5. **Usage example first**: Show a minimal working example immediately after the description. If the API supports multiple calling patterns (e.g. static vs dynamic routing), show each one in the same section.
-6. **`<PropertiesTable>` for all parameter/property tables**: Use the `<PropertiesTable>` component for constructor parameters, function parameters, and instance properties. Each entry needs `name`, `type`, `description`, and optionally `isOptional`, `properties`, and `defaultValue`.
-
-- If there are nested types, add `properties` with another array of parameter definitions to the parent type. This will render a nested table and visually indicate the relationship.
-- Check against existing reference pages to understand how `<PropertiesTable>` works and ensure consistency in how parameters are documented.
-
-7. **Group methods by category**: Use H3 headings for method categories (e.g. "Lifecycle", "Search operations") and H4 headings with backtick-wrapped names for individual methods: `` #### `methodName()` ``. Include parameter names in the heading to show the signature: `` #### `search(query, options?)` ``.
-8. **One code example per method**: Every method must have at least one code example showing a real invocation.
-9. **Return types**: Document non-obvious return types with `**Returns:** \`$Type\`` after the code example. Include an interface definition when the return type is a custom object.
-10. **Domain-specific sections**: Add H2 sections for API-specific concerns (e.g. "Tool configuration", "Agent tools") after the standard sections. Use tables for listing capabilities.
-11. **Link to doc pages**: When a concept needs more explanation than fits in a reference, link to the relevant doc page rather than duplicating content.
-
-## Example: Workspace class
-
-See [workspace-class.mdx](../src/content/en/reference/workspace/workspace-class.mdx) for the gold-standard class reference.
-
-```md
-# Workspace Class
-
-**Added in:** `@mastra/core@1.1.0` ← new API, version matters
-
-## Usage Example ← minimal working code
-
-## Constructor parameters ← <PropertiesTable>
-
-## Tool configuration ← domain-specific section
-
-### Per-tool options ← nested <PropertiesTable>
-
-## Properties ← <PropertiesTable>
-
-## Methods
-
-### Lifecycle ← H3 category
-
-    #### `init()`                              ← H4 method + code
-    #### `destroy()`
-
-### Search operations
-
-    #### `index(path, content, options?)`       ← signature in heading
-    #### `search(query, options?)`
-
-### Utility
-
-    #### `getInfo()`
-    #### `getPathContext()`
-    #### `getToolsConfig()`
-
-## Agent tools ← domain-specific: capability tables
-```
-
-## Example: chatRoute()
-
-See [chat-route.mdx](../src/content/en/reference/ai-sdk/chat-route.mdx) for the gold-standard function reference.
-
-```md
-# chatRoute() ← parens in H1
-
-What it does + link to alternative ← no version badge (not new)
-
-## Usage example ← two calling patterns
-
-## Parameters ← <PropertiesTable>
-
-## Additional configuration ← advanced usage pattern
-```
+Rules:
+- frontmatter title must be `Reference: $NAME | $CATEGORY`
+- for functions, include parentheses in `$NAME` in frontmatter and H1
+- for classes, use the class name in frontmatter and H1
+- include `Added in:` only when the API was introduced in a specific release and the minimum version matters
+- place `Added in:` immediately after the H1
+- omit `Added in:` for long-standing APIs
+- link to alternative APIs right after the description when they exist
+- put a minimal working usage example immediately after the description
+- if the API has multiple calling patterns, show them in the Usage example section
+- use `<PropertiesTable>` for constructor parameters, function parameters, and properties
+- each `<PropertiesTable>` entry should include `name`, `type`, and `description`, and may include `isOptional`, `properties`, and `defaultValue`
+- for nested types, use nested `properties` arrays
+- check existing reference pages for `<PropertiesTable>` patterns and consistency
+- group methods by category with H3 headings
+- use H4 headings with backticked method signatures
+- include parameter names in method headings
+- every method must have at least one real code example
+- add `Returns: $Type` after the code example when the return type is not obvious
+- include an interface definition when the return type is a custom object
+- add domain-specific H2 sections after the standard sections when needed
+- use tables for capability lists
+- link to doc pages instead of duplicating long conceptual explanations
