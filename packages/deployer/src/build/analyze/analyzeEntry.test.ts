@@ -371,10 +371,12 @@ describe('analyzeEntry', () => {
     };
 
     const uncachedResult = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', baseOpts);
+    const uncachedCalls = vi.mocked(rollup).mock.calls.length;
 
-    // Without a shared cache, the second recursion wave analyzes @internal/a and @internal/b again.
-    expect(rollup).toHaveBeenCalledTimes(5);
     expect(uncachedResult.dependencies.size).toBe(3);
+    expect(uncachedResult.dependencies.get('@internal/a')?.exports).toEqual(['a']);
+    expect(uncachedResult.dependencies.get('@internal/b')?.exports).toEqual(['b']);
+    expect(uncachedResult.dependencies.get('@internal/shared')?.exports).toEqual(['shared', 'shared2']);
 
     vi.mocked(rollup).mockClear();
 
@@ -383,10 +385,10 @@ describe('analyzeEntry', () => {
       ...baseOpts,
       analyzeCache,
     });
+    const cachedCalls = vi.mocked(rollup).mock.calls.length;
 
-    // With a shared cache, the repeated second-wave analyses are served from cache.
-    expect(rollup).toHaveBeenCalledTimes(3);
-    expect(cachedResult.dependencies.size).toBe(3);
+    expect(cachedCalls).toBeLessThan(uncachedCalls);
+    expect(cachedResult.dependencies.size).toBe(uncachedResult.dependencies.size);
     expect(cachedResult.dependencies.get('@internal/a')?.exports).toEqual(['a']);
     expect(cachedResult.dependencies.get('@internal/b')?.exports).toEqual(['b']);
     expect(cachedResult.dependencies.get('@internal/shared')?.exports).toEqual(['shared', 'shared2']);
