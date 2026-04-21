@@ -1,9 +1,19 @@
-import type { SpanRecord } from '@mastra/core/storage';
+import { computeTraceStatus, TraceStatus } from '@mastra/core/storage';
 import { DataKeysAndValues } from '@mastra/playground-ui';
 import { format } from 'date-fns';
 
+/** Minimal root-span fields needed for the trace header. */
+type RootSpanSummary = {
+  entityId?: string | null;
+  entityName?: string | null;
+  entityType?: string | null;
+  startedAt: Date | string;
+  endedAt?: Date | string | null;
+  error?: unknown;
+};
+
 export interface TraceKeysAndValuesProps {
-  rootSpan: SpanRecord;
+  rootSpan: RootSpanSummary;
   numOfCol?: 1 | 2 | 3;
   className?: string;
 }
@@ -11,7 +21,8 @@ export interface TraceKeysAndValuesProps {
 export function TraceKeysAndValues({ rootSpan, numOfCol = 2, className }: TraceKeysAndValuesProps) {
   const startedAt = rootSpan.startedAt ? new Date(rootSpan.startedAt) : null;
   const endedAt = rootSpan.endedAt ? new Date(rootSpan.endedAt) : null;
-  const status = (rootSpan.attributes?.status as string) || '-';
+  const status = computeTraceStatus(rootSpan);
+  const statusLabel = status === TraceStatus.ERROR ? 'ERROR' : status === TraceStatus.RUNNING ? 'RUNNING' : 'SUCCESS';
 
   return (
     <DataKeysAndValues numOfCol={numOfCol} className={className}>
@@ -28,7 +39,7 @@ export function TraceKeysAndValues({ rootSpan, numOfCol = 2, className }: TraceK
         </>
       )}
       <DataKeysAndValues.Key>Status</DataKeysAndValues.Key>
-      <DataKeysAndValues.Value>{status}</DataKeysAndValues.Value>
+      <DataKeysAndValues.Value>{statusLabel}</DataKeysAndValues.Value>
       {startedAt && endedAt && (
         <>
           <DataKeysAndValues.Key>Duration</DataKeysAndValues.Key>

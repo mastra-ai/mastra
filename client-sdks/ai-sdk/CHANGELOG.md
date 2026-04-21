@@ -1,5 +1,14 @@
 # @mastra/ai-sdk
 
+## 1.4.1-alpha.2
+
+### Patch Changes
+
+- Fix AI SDK v6 approval replay so ordinary user follow-up turns do not resume stale approval responses. ([#15480](https://github.com/mastra-ai/mastra/pull/15480))
+
+- Updated dependencies [[`20f59b8`](https://github.com/mastra-ai/mastra/commit/20f59b876cf91199efbc49a0e36b391240708f08), [`e2687a7`](https://github.com/mastra-ai/mastra/commit/e2687a7408790c384563816a9a28ed06735684c9), [`8f1b280`](https://github.com/mastra-ai/mastra/commit/8f1b280b7fe6999ec654f160cb69c1a8719e7a57), [`12df98c`](https://github.com/mastra-ai/mastra/commit/12df98c4904643d9481f5c78f3bed443725b4c96)]:
+  - @mastra/core@1.26.0-alpha.11
+
 ## 1.4.1-alpha.1
 
 ### Patch Changes
