@@ -8,6 +8,7 @@ import type {
   GetRootSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
+  GetTraceLightResponse,
   ListTracesArgs,
   ListTracesResponse,
   BatchCreateSpansArgs,
@@ -215,6 +216,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   }
   async getTrace(args: GetTraceArgs): Promise<GetTraceResponse | null> {
     return tracingOps.getTrace(this.db, args);
+  }
+  async getTraceLight(args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
+    return tracingOps.getTraceLight(this.db, args);
   }
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     return tracingOps.listTraces(this.db, args);

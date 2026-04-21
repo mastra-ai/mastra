@@ -22,9 +22,9 @@ import { TracesTools } from '@/domains/observability/components/traces-tools';
 import { useEnvironments } from '@/domains/observability/hooks/use-environments';
 import { useServiceNames } from '@/domains/observability/hooks/use-service-names';
 import { useTags } from '@/domains/observability/hooks/use-tags';
-import { useTrace } from '@/domains/observability/hooks/use-trace';
 import { useTraces } from '@/domains/observability/hooks/use-traces';
 import { useScorers } from '@/domains/scores';
+import { useTraceLightSpans } from '@/domains/traces/hooks/use-trace-light-spans';
 import { CONTEXT_FIELD_IDS } from '@/domains/traces/types';
 import type { EntityOptions, TraceDatePreset } from '@/domains/traces/types';
 import { groupTracesByThread } from '@/domains/traces/utils/group-traces-by-thread';
@@ -58,7 +58,7 @@ export default function Observability() {
   const { data: discoveredEnvironments = [] } = useEnvironments();
   const { data: discoveredServiceNames = [] } = useServiceNames();
 
-  const { data: Trace, isLoading: isLoadingTrace } = useTrace(selectedTraceId, { enabled: !!selectedTraceId });
+  const { data: traceLight, isLoading: isLoadingTrace } = useTraceLightSpans(selectedTraceId);
 
   const traceId = searchParams.get('traceId');
   const spanId = searchParams.get('spanId');
@@ -471,12 +471,11 @@ export default function Observability() {
         )}
       </EntityListPageLayout>
       <TraceDialog
-        traceSpans={Trace?.spans}
+        traceSpans={traceLight?.spans}
         traceId={selectedTraceId}
         initialSpanId={spanId || undefined}
         initialSpanTab={spanTab === 'scores' ? 'scores' : 'details'}
         initialScoreId={scoreId || undefined}
-        traceDetails={traces.find(t => t.traceId === selectedTraceId)}
         isOpen={dialogIsOpen}
         onClose={() => {
           void navigate(`/observability`);

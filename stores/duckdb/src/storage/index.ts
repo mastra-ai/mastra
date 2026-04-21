@@ -168,6 +168,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return delegate.getTrace(...args);
   }
 
+  async getTraceLight(
+    ...args: Parameters<ObservabilityStoreImpl['getTraceLight']>
+  ): ReturnType<ObservabilityStoreImpl['getTraceLight']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getTraceLight(...args);
+  }
+
   async listTraces(
     ...args: Parameters<ObservabilityStoreImpl['listTraces']>
   ): ReturnType<ObservabilityStoreImpl['listTraces']> {
