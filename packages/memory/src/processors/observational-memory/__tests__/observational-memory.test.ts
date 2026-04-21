@@ -52,7 +52,9 @@ function createMemoryProvider(om: ObservationalMemory): MemoryContextProvider {
 
       if (record?.activeObservations) {
         if (om.scope === 'resource' && resourceId) {
-          otherThreadsContext = await om.getOtherThreadsContext(resourceId, threadId);
+          otherThreadsContext = await om.getOtherThreadsContext(resourceId, threadId, {
+            includePreviouslyObserved: true,
+          });
         }
         systemMessage = await om.buildContextSystemMessage({
           threadId,

@@ -2467,13 +2467,20 @@ ${formattedMessages}
   }
 
   /**
-   * Get unobserved messages from other threads for resource-scoped observation.
+   * Get messages from other threads for resource-scoped context.
    *
-   * Lists all threads for the resource, filters to unobserved messages,
-   * and formats them as context blocks.
+   * By default this only includes messages that are still unobserved so callers like
+   * `getStatus()` can count pending sibling-thread tokens accurately. Context-building
+   * callers can opt into including previously observed sibling-thread history so the
+   * actor still sees the raw conversation alongside summarized observations.
    */
   /** @internal Used by ObservationTurn. */
-  async getOtherThreadsContext(resourceId: string, currentThreadId: string): Promise<string | undefined> {
+  async getOtherThreadsContext(
+    resourceId: string,
+    currentThreadId: string,
+    opts?: { includePreviouslyObserved?: boolean },
+  ): Promise<string | undefined> {
+    const { includePreviouslyObserved = false } = opts ?? {};
     const { threads: allThreads } = await this.storage.listThreads({ filter: { resourceId } });
     const messagesByThread = new Map<string, MastraDBMessage[]>();
 
@@ -2487,7 +2494,11 @@ ${formattedMessages}
 
       const omMetadata = getThreadOMMetadata(thread.metadata);
       const threadLastObservedAt = omMetadata?.lastObservedAt ?? recordLastObservedAt;
-      const startDate = threadLastObservedAt ? new Date(new Date(threadLastObservedAt).getTime() + 1) : undefined;
+      const startDate = includePreviouslyObserved
+        ? undefined
+        : threadLastObservedAt
+          ? new Date(new Date(threadLastObservedAt).getTime() + 1)
+          : undefined;
 
       const result = await this.storage.listMessages({
         threadId: thread.id,
@@ -2496,7 +2507,9 @@ ${formattedMessages}
         filter: startDate ? { dateRange: { start: startDate } } : undefined,
       });
 
-      const filtered = result.messages.filter(m => !this.observedMessageIds.has(m.id));
+      const filtered = includePreviouslyObserved
+        ? result.messages
+        : result.messages.filter(m => !this.observedMessageIds.has(m.id));
 
       if (filtered.length > 0) {
         messagesByThread.set(thread.id, filtered);
