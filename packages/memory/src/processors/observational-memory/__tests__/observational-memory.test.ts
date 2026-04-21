@@ -6177,7 +6177,7 @@ describe('Reflection with Thread Attribution', () => {
 // =============================================================================
 
 describe('Resource Scope: other-conversation blocks after observation', () => {
-  it('should include other thread messages in context even after those threads have been observed', async () => {
+  it('includes only unobserved sibling-thread messages as other-conversation blocks', async () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
 
@@ -6186,7 +6186,7 @@ describe('Resource Scope: other-conversation blocks after observation', () => {
     const threadAId = 'thread-A';
     const threadBId = 'thread-B';
 
-    // Thread A's messages were created at 09:01-09:02, observed at 09:02
+    // Thread A's early messages were observed at 09:02; later messages were added post-observation.
     const threadAObservedAt = new Date('2025-01-01T09:02:00Z');
 
     // Create Thread A with per-thread lastObservedAt in metadata (simulating completed observation)
@@ -6198,7 +6198,7 @@ describe('Resource Scope: other-conversation blocks after observation', () => {
         createdAt: new Date('2025-01-01T09:00:00Z'),
         updatedAt: new Date('2025-01-01T09:00:00Z'),
         metadata: {
-          __om: { lastObservedAt: threadAObservedAt.toISOString() },
+          mastra: { om: { lastObservedAt: threadAObservedAt.toISOString() } },
         },
       },
     });
@@ -6215,7 +6215,7 @@ describe('Resource Scope: other-conversation blocks after observation', () => {
       },
     });
 
-    // Add messages to Thread A (already observed)
+    // Add messages to Thread A: two already-observed + one added after observation.
     await storage.saveMessages({
       messages: [
         {
@@ -6233,6 +6233,18 @@ describe('Resource Scope: other-conversation blocks after observation', () => {
           content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Blue is a great color!' }] },
           type: 'text',
           createdAt: new Date('2025-01-01T09:02:00Z'),
+          threadId: threadAId,
+          resourceId,
+        },
+        {
+          id: 'msg-a-3',
+          role: 'user' as const,
+          content: {
+            format: 2 as const,
+            parts: [{ type: 'text' as const, text: 'Actually I also like green' }],
+          },
+          type: 'text',
+          createdAt: new Date('2025-01-01T09:45:00Z'),
           threadId: threadAId,
           resourceId,
         },
@@ -6342,12 +6354,14 @@ describe('Resource Scope: other-conversation blocks after observation', () => {
       `<thread id="thread-A">\n- 🔴 User is debugging observational memory prompt ordering\n</thread>`,
     );
 
-    // KEY ASSERTION: Thread A's messages should appear as <other-conversation> blocks
-    // even though Thread A was already observed (its messages are older than resource-level lastObservedAt).
-    // The agent on Thread B needs to see Thread A's raw conversation to have full context.
+    // KEY ASSERTION: Thread A's already-observed messages (≤ lastObservedAt) should NOT
+    // re-appear as raw <other-conversation> blocks — they are already represented in the
+    // <observations> block. Only Thread A messages created AFTER lastObservedAt should
+    // surface as unobserved other-conversation context.
     expect(omContent).toContain('other-conversation');
-    expect(omContent).toContain('My favorite color is blue');
-    expect(omContent).toContain('Blue is a great color!');
+    expect(omContent).toContain('Actually I also like green');
+    expect(omContent).not.toContain('My favorite color is blue');
+    expect(omContent).not.toContain('Blue is a great color!');
 
     // Thread B's messages should NOT be in <other-conversation> blocks (it's the active thread)
     expect(omContent).not.toContain('Hello from thread B!');
