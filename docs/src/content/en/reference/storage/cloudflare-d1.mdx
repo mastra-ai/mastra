@@ -67,13 +67,14 @@ import { Mastra } from '@mastra/core'
 import { CloudflareDeployer } from '@mastra/deployer-cloudflare'
 
 type Env = {
-  D1Database: D1Database
+  D1Database: D1Database // TypeScript type definition
 }
 
+// Factory function to create Mastra with D1 binding
 function createMastra(env: Env) {
   const storage = new D1Store({
-    binding: env.D1Database,
-    tablePrefix: 'dev_',
+    binding: env.D1Database, // ✅ Access the actual binding from env
+    tablePrefix: 'dev_', // Optional: isolate tables per environment
   })
 
   return new Mastra({
@@ -82,7 +83,7 @@ function createMastra(env: Env) {
       name: 'my-worker',
       d1_databases: [
         {
-          binding: 'D1Database',
+          binding: 'D1Database', // Must match the property name in Env type
           database_name: 'your-database-name',
           database_id: 'your-database-id',
         },
@@ -91,10 +92,12 @@ function createMastra(env: Env) {
   })
 }
 
+// Cloudflare Worker export
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const mastra = createMastra(env)
 
+    // Your handler logic here
     return new Response('Hello from Mastra with D1!')
   },
 }
