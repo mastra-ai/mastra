@@ -1,8 +1,8 @@
 /**
- * TUI component for rendering OM observation/reflection output in a bordered box.
- * Uses observer (amber) color for observations and reflector (red) color for reflections.
+ * TUI component for rendering OM observation/reflection/activation output in a bordered box.
+ * Uses observer (amber) color for observations/activations and reflector (red) color for reflections.
  * Collapsed to COLLAPSED_LINES by default, expandable with ctrl+e.
- * Includes marker info (emoji, compression stats) in the footer.
+ * Includes marker info in the footer.
  */
 
 import { Container, Text, Spacer } from '@mariozechner/pi-tui';
@@ -88,7 +88,7 @@ function softWrapLines(lines: string[], maxWidth: number): { groups: string[][];
   return { groups, flat };
 }
 
-export type OMOutputType = 'observation' | 'reflection';
+export type OMOutputType = 'observation' | 'reflection' | 'activation';
 
 export interface OMOutputData {
   type: OMOutputType;
@@ -219,10 +219,13 @@ export class OMOutputComponent extends Container {
   }
 
   private buildFooterText(color: string): string {
-    const isReflection = this.data.type === 'reflection';
     const emoji = '🧠';
 
-    if (isReflection) {
+    if (this.data.type === 'activation') {
+      return `${emoji} ${chalk.hex(color)('Activated concise history')} ${chalk.hex(mastra.green)('✓')}`;
+    }
+
+    if (this.data.type === 'reflection') {
       // Reflection: "🧠 Reflected: Xk → Yk tokens (Zx compression) in Ns ✓"
       const observed = formatTokens(this.data.tokensObserved ?? 0);
       const compressed = formatTokens(this.data.compressedTokens ?? this.data.observationTokens ?? 0);
@@ -233,17 +236,17 @@ export class OMOutputComponent extends Container {
       const durationStr = this.data.durationMs ? ` in ${(this.data.durationMs / 1000).toFixed(1)}s` : '';
       const ratioStr = ratio ? ` (${ratio} compression)` : '';
       return `${emoji} ${chalk.hex(color)(`Reflected: ${observed} → ${compressed} tokens${ratioStr}${durationStr}`)} ${chalk.hex(mastra.green)('✓')}`;
-    } else {
-      // Observation: "🧠 Observed: Xk → Yk tokens (Zx compression) in Ns ✓"
-      const observed = formatTokens(this.data.tokensObserved ?? 0);
-      const compressed = formatTokens(this.data.observationTokens ?? 0);
-      const ratio =
-        (this.data.tokensObserved ?? 0) > 0 && (this.data.observationTokens ?? 0) > 0
-          ? `${Math.round((this.data.tokensObserved ?? 0) / (this.data.observationTokens ?? 1))}x`
-          : '';
-      const durationStr = this.data.durationMs ? ` in ${(this.data.durationMs / 1000).toFixed(1)}s` : '';
-      const ratioStr = ratio ? ` (${ratio} compression)` : '';
-      return `${emoji} ${chalk.hex(color)(`Observed: ${observed} → ${compressed} tokens${ratioStr}${durationStr}`)} ${chalk.hex(mastra.green)('✓')}`;
     }
+
+    // Observation: "🧠 Observed: Xk → Yk tokens (Zx compression) in Ns ✓"
+    const observed = formatTokens(this.data.tokensObserved ?? 0);
+    const compressed = formatTokens(this.data.observationTokens ?? 0);
+    const ratio =
+      (this.data.tokensObserved ?? 0) > 0 && (this.data.observationTokens ?? 0) > 0
+        ? `${Math.round((this.data.tokensObserved ?? 0) / (this.data.observationTokens ?? 1))}x`
+        : '';
+    const durationStr = this.data.durationMs ? ` in ${(this.data.durationMs / 1000).toFixed(1)}s` : '';
+    const ratioStr = ratio ? ` (${ratio} compression)` : '';
+    return `${emoji} ${chalk.hex(color)(`Observed: ${observed} → ${compressed} tokens${ratioStr}${durationStr}`)} ${chalk.hex(mastra.green)('✓')}`;
   }
 }

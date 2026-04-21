@@ -3,6 +3,7 @@ import type {
   DataOmBufferingEndPart,
   DataOmBufferingFailedPart,
   DataOmBufferingStartPart,
+  DataOmConciseHistoryPart,
   DataOmObservationEndPart,
   DataOmObservationFailedPart,
   DataOmObservationStartPart,
@@ -234,6 +235,22 @@ export function createActivationMarker(params: {
       ttlExpiredMs: params.ttlExpiredMs,
       previousModel: params.previousModel,
       currentModel: params.currentModel,
+    },
+  };
+}
+
+export function createConciseHistoryMarker(params: {
+  cycleId: string;
+  operationType: OmOperationType;
+  conciseHistory: string;
+}): DataOmConciseHistoryPart {
+  return {
+    type: 'data-om-concise-history',
+    data: {
+      cycleId: params.cycleId,
+      operationType: params.operationType,
+      emittedAt: new Date().toISOString(),
+      conciseHistory: params.conciseHistory,
     },
   };
 }

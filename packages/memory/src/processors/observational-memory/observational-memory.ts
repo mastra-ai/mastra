@@ -197,7 +197,7 @@ function parseActivationTTL(value: number | string | undefined, fieldPath: strin
 
 import { addRelativeTimeToObservations } from './date-utils';
 import { omDebug, omError } from './debug';
-import { createBufferingStartMarker, createActivationMarker } from './markers';
+import { createBufferingStartMarker, createActivationMarker, createConciseHistoryMarker } from './markers';
 import {
   findLastCompletedObservationBoundary,
   getUnobservedParts,
@@ -3242,6 +3242,15 @@ ${formattedMessages}
     // Fetch updated record for marker emission
     const postSwapRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
 
+    const activatedMessageIds = new Set(activationResult.activatedMessageIds ?? []);
+    const removedMessages =
+      activatedMessageIds.size > 0 && opts.messageList
+        ? opts.messageList.get.all
+            .db()
+            .filter(msg => !!msg?.id && msg.id !== 'om-continuation' && activatedMessageIds.has(msg.id))
+        : [];
+    const conciseHistory = formatConciseHistory(removedMessages, { maxTokens: 1000 }) || undefined;
+
     // Emit activation markers for UI feedback — one per activated cycleId
     if (opts.writer && postSwapRecord && activationResult.activatedCycleIds.length > 0) {
       const perChunkMap = new Map(activationResult.perChunk?.map(c => [c.cycleId, c]));
@@ -3273,20 +3282,26 @@ ${formattedMessages}
           record.resourceId ?? undefined,
         );
       }
+
+      if (conciseHistory) {
+        const conciseHistoryMarker = createConciseHistoryMarker({
+          cycleId: activationResult.activatedCycleIds[activationResult.activatedCycleIds.length - 1]!,
+          operationType: 'observation',
+          conciseHistory,
+        });
+        void opts.writer.custom(conciseHistoryMarker).catch(() => {});
+        await this.persistMarkerToMessage(
+          conciseHistoryMarker,
+          opts.messageList,
+          record.threadId ?? '',
+          record.resourceId ?? undefined,
+        );
+      }
     }
 
     // Update thread metadata with continuation hints from activated chunks
     const thread = await this.storage.getThreadById({ threadId });
     if (thread) {
-      const activatedMessageIds = new Set(activationResult.activatedMessageIds ?? []);
-      const removedMessages =
-        activatedMessageIds.size > 0 && opts.messageList
-          ? opts.messageList.get.all
-              .db()
-              .filter(msg => !!msg?.id && msg.id !== 'om-continuation' && activatedMessageIds.has(msg.id))
-          : [];
-      const conciseHistory = formatConciseHistory(removedMessages, { maxTokens: 1000 }) || undefined;
-
       // Get hints from the most recent activated chunk
       const activatedChunks = freshChunks.filter(c => activationResult.activatedCycleIds.includes(c.cycleId));
       const lastActivated = activatedChunks[activatedChunks.length - 1] as

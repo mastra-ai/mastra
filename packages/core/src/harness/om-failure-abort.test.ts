@@ -82,4 +82,31 @@ describe('Harness OM failure abort behavior', () => {
     expect((harness as any).abortRequested).toBe(true);
     expect(events.some(e => e.type === 'message_start')).toBe(false);
   });
+
+  it('forwards concise history on OM concise-history events', async () => {
+    const harness = createHarness();
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => events.push(event));
+
+    await (harness as any).processStream({
+      fullStream: (async function* () {
+        yield {
+          type: 'data-om-concise-history',
+          data: {
+            cycleId: 'c3',
+            operationType: 'observation',
+            conciseHistory: '**user (2026-04-21 10:00:00Z) [m1]:**\n  [p0] hello',
+          },
+        };
+      })(),
+    });
+
+    const conciseHistoryEvent = events.find(e => e.type === 'om_concise_history');
+    expect(conciseHistoryEvent).toMatchObject({
+      type: 'om_concise_history',
+      cycleId: 'c3',
+      operationType: 'observation',
+      conciseHistory: '**user (2026-04-21 10:00:00Z) [m1]:**\n  [p0] hello',
+    });
+  });
 });

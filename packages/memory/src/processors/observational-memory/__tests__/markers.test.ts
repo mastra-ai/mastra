@@ -8,6 +8,7 @@ import {
   createBufferingEndMarker,
   createBufferingFailedMarker,
   createActivationMarker,
+  createConciseHistoryMarker,
   createThreadUpdateMarker,
 } from '../markers';
 import type { ObservationMarkerConfig } from '../types';
@@ -313,6 +314,24 @@ describe('markers', () => {
           triggeredBy: 'ttl',
           lastActivityAt: 1750000000000,
           ttlExpiredMs: 301000,
+        },
+      });
+    });
+
+    it('creates a separate concise-history part', () => {
+      const marker = createConciseHistoryMarker({
+        cycleId: 'cycle-1',
+        operationType: 'observation',
+        conciseHistory: '**user (2025-06-15 11:59:00Z) [msg-1]:**\n  [p0] hello',
+      });
+
+      expect(marker).toEqual({
+        type: 'data-om-concise-history',
+        data: {
+          cycleId: 'cycle-1',
+          operationType: 'observation',
+          emittedAt: '2025-06-15T12:00:00.000Z',
+          conciseHistory: '**user (2025-06-15 11:59:00Z) [msg-1]:**\n  [p0] hello',
         },
       });
     });

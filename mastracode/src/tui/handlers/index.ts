@@ -11,6 +11,7 @@ export {
   handleOMBufferingEnd,
   handleOMBufferingFailed,
   handleOMActivation,
+  handleOMConciseHistory,
   handleOMThreadTitleUpdated,
 } from './om.js';
 export { handleAskQuestion, handleSandboxAccessRequest, handlePlanApproval } from './prompts.js';

@@ -1590,6 +1590,33 @@ export class Harness<TState = {}> {
           });
           break;
         }
+        case 'data-om-activation': {
+          const data = (part as { data?: Record<string, unknown> }).data ?? {};
+          content.push({
+            type: 'om_activation',
+            operationType: (data.operationType as 'observation' | 'reflection') ?? 'observation',
+            tokensActivated: (data.tokensActivated as number) ?? 0,
+            observationTokens: (data.observationTokens as number) ?? 0,
+            triggeredBy: (data.triggeredBy as 'threshold' | 'ttl' | 'provider_change') ?? undefined,
+            activateAfterIdle: (data.config as { activateAfterIdle?: number } | undefined)?.activateAfterIdle,
+            ttlExpiredMs: (data.ttlExpiredMs as number) ?? undefined,
+            previousModel: (data.previousModel as string) ?? undefined,
+            currentModel: (data.currentModel as string) ?? undefined,
+          });
+          break;
+        }
+        case 'data-om-concise-history': {
+          const data = (part as { data?: Record<string, unknown> }).data ?? {};
+          const conciseHistory = data.conciseHistory;
+          if (typeof conciseHistory === 'string') {
+            content.push({
+              type: 'om_concise_history',
+              operationType: (data.operationType as 'observation' | 'reflection') ?? 'observation',
+              conciseHistory,
+            });
+          }
+          break;
+        }
         case 'data-system-reminder': {
           const data = (part as { data?: Record<string, unknown> }).data ?? {};
           const message = data.message;
@@ -2089,6 +2116,19 @@ export class Harness<TState = {}> {
               activateAfterIdle: payload.config?.activateAfterIdle,
               previousModel: payload.previousModel,
               currentModel: payload.currentModel,
+            });
+          }
+          break;
+        }
+        case 'data-om-concise-history': {
+          const payload = (chunk as any).data as Record<string, any> | undefined;
+          const conciseHistory = payload?.conciseHistory;
+          if (payload?.cycleId && typeof conciseHistory === 'string') {
+            this.emit({
+              type: 'om_concise_history',
+              cycleId: payload.cycleId,
+              operationType: payload.operationType ?? 'observation',
+              conciseHistory,
             });
           }
           break;

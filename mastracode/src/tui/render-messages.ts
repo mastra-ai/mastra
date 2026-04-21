@@ -184,6 +184,68 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
  * Re-render all existing messages from the harness thread into the chat container.
  * Called on thread switch and initial load.
  */
+type OMActivationHistoryContent = {
+  type: 'om_activation';
+  operationType: 'observation' | 'reflection';
+  tokensActivated: number;
+  observationTokens: number;
+  triggeredBy?: 'threshold' | 'ttl' | 'provider_change';
+  activateAfterIdle?: number;
+  ttlExpiredMs?: number;
+  previousModel?: string;
+  currentModel?: string;
+};
+
+type OMConciseHistoryContent = {
+  type: 'om_concise_history';
+  operationType: 'observation' | 'reflection';
+  conciseHistory: string;
+};
+
+function renderActivationHistory(state: TUIState, content: OMActivationHistoryContent): void {
+  if (content.triggeredBy === 'ttl' && content.activateAfterIdle !== undefined && content.ttlExpiredMs !== undefined) {
+    state.chatContainer.addChild(
+      new OMMarkerComponent({
+        type: 'om_activation_ttl',
+        activateAfterIdle: content.activateAfterIdle,
+        ttlExpiredMs: content.ttlExpiredMs,
+      }),
+    );
+  }
+
+  if (content.triggeredBy === 'provider_change' && content.previousModel && content.currentModel) {
+    state.chatContainer.addChild(
+      new OMMarkerComponent({
+        type: 'om_activation_provider_change',
+        previousModel: content.previousModel,
+        currentModel: content.currentModel,
+      }),
+    );
+  }
+
+  state.chatContainer.addChild(
+    new OMMarkerComponent({
+      type: 'om_activation',
+      operationType: content.operationType,
+      tokensActivated: content.tokensActivated,
+      observationTokens: content.observationTokens,
+    }),
+  );
+}
+
+function renderConciseHistory(state: TUIState, content: OMConciseHistoryContent): void {
+  if (content.operationType !== 'observation' || !content.conciseHistory.trim()) {
+    return;
+  }
+
+  state.chatContainer.addChild(
+    new OMOutputComponent({
+      type: 'activation',
+      observations: content.conciseHistory,
+    }),
+  );
+}
+
 export async function renderExistingMessages(state: TUIState): Promise<void> {
   const messages = await state.harness.listMessages({ limit: 40 });
 
@@ -371,6 +433,26 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           if (!replacedWithInline) {
             state.chatContainer.addChild(toolComponent);
             state.allToolComponents.push(toolComponent);
+          }
+        } else if (content.type === 'om_activation' || content.type === 'om_concise_history') {
+          if (accumulatedContent.length > 0) {
+            const textMessage: HarnessMessage = {
+              ...message,
+              content: accumulatedContent,
+            };
+            const textComponent = new AssistantMessageComponent(
+              textMessage,
+              state.hideThinkingBlock,
+              getMarkdownTheme(),
+            );
+            state.chatContainer.addChild(textComponent);
+            accumulatedContent = [];
+          }
+
+          if (content.type === 'om_activation') {
+            renderActivationHistory(state, content);
+          } else {
+            renderConciseHistory(state, content);
           }
         } else if (
           content.type === 'om_observation_start' ||

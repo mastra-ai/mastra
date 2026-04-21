@@ -646,6 +646,26 @@ export interface DataOmActivationPart {
 }
 
 /**
+ * Marker emitted once after activation when concise history is available.
+ */
+export interface DataOmConciseHistoryPart {
+  type: 'data-om-concise-history';
+  data: {
+    /** Unique ID for the activation cycle that generated this history */
+    cycleId: string;
+
+    /** Which activation path produced this history */
+    operationType: OmOperationType;
+
+    /** When the concise history was emitted */
+    emittedAt: string;
+
+    /** Compact low-detail transcript of removed messages, injected into next om-continuation */
+    conciseHistory: string;
+  };
+}
+
+/**
  * Marker emitted when thread title is updated by the observer.
  */
 export interface DataOmThreadUpdatePart {
@@ -676,6 +696,7 @@ export type DataOmObservationPart =
   | DataOmObservationEndPart
   | DataOmObservationFailedPart
   | DataOmStatusPart
+  | DataOmConciseHistoryPart
   | DataOmThreadUpdatePart;
 
 /**

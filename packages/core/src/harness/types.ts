@@ -796,6 +796,12 @@ export type HarnessEvent =
       previousModel?: string;
       currentModel?: string;
     }
+  | {
+      type: 'om_concise_history';
+      cycleId: string;
+      operationType: 'observation' | 'reflection';
+      conciseHistory: string;
+    }
   | { type: 'om_thread_title_updated'; cycleId: string; threadId: string; oldTitle?: string; newTitle: string }
   | { type: 'sandbox_access_request'; questionId: string; path: string; reason: string }
   | {
@@ -898,6 +904,22 @@ export type HarnessMessageContent =
       error: string;
       tokensAttempted?: number;
       operationType?: 'observation' | 'reflection';
+    }
+  | {
+      type: 'om_activation';
+      operationType: 'observation' | 'reflection';
+      tokensActivated: number;
+      observationTokens: number;
+      triggeredBy?: 'threshold' | 'ttl' | 'provider_change';
+      activateAfterIdle?: number;
+      ttlExpiredMs?: number;
+      previousModel?: string;
+      currentModel?: string;
+    }
+  | {
+      type: 'om_concise_history';
+      operationType: 'observation' | 'reflection';
+      conciseHistory: string;
     }
   | { type: 'om_thread_title_updated'; threadId: string; oldTitle?: string; newTitle: string };
 

@@ -254,8 +254,20 @@ export function handleOMActivation(
   };
   state.activeActivationMarker = new OMMarkerComponent(activationData);
   addChildBeforeStreaming(ctx, state.activeActivationMarker);
+
   state.activeBufferingMarker = undefined;
   state.ui.requestRender();
+}
+
+export function handleOMConciseHistory(ctx: EventHandlerContext, conciseHistory: string): void {
+  addChildBeforeStreaming(
+    ctx,
+    new OMOutputComponent({
+      type: 'activation',
+      observations: conciseHistory,
+    }),
+  );
+  ctx.state.ui.requestRender();
 }
 
 export function handleOMThreadTitleUpdated(ctx: EventHandlerContext, newTitle: string, oldTitle?: string): void {

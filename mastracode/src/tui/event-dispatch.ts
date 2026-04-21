@@ -21,6 +21,7 @@ import {
   handleOMBufferingEnd,
   handleOMBufferingFailed,
   handleOMActivation,
+  handleOMConciseHistory,
   handleOMThreadTitleUpdated,
   handleAskQuestion,
   handleSandboxAccessRequest,
@@ -238,6 +239,10 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       );
       break;
     }
+
+    case 'om_concise_history':
+      handleOMConciseHistory(ectx, event.conciseHistory);
+      break;
 
     case 'om_thread_title_updated':
       state.currentThreadTitle = event.newTitle;
