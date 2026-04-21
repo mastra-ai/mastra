@@ -19,6 +19,8 @@ import type {
   UpdateSpanArgs,
   GetTraceArgs,
   GetTraceResponse,
+  GetTraceLightResponse,
+  LightSpanRecord,
   GetSpanArgs,
   GetSpanResponse,
   GetRootSpanArgs,
@@ -281,6 +283,56 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('MSSQL', 'GET_TRACE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: {
+            traceId,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async getTraceLight(args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
+    const { traceId } = args;
+    try {
+      const tableName = getTableName({
+        indexName: TABLE_SPANS,
+        schemaName: getSchemaName(this.schema),
+      });
+
+      const request = this.pool.request();
+      request.input('traceId', traceId);
+
+      const result = await request.query<LightSpanRecord>(
+        `SELECT
+          [traceId], [spanId], [parentSpanId], [name],
+          [entityType], [entityId], [entityName],
+          [spanType], [error], [isEvent],
+          [startedAt], [endedAt], [createdAt], [updatedAt]
+        FROM ${tableName}
+        WHERE [traceId] = @traceId
+        ORDER BY [startedAt] ASC`,
+      );
+
+      if (!result.recordset || result.recordset.length === 0) {
+        return null;
+      }
+
+      return {
+        traceId,
+        spans: result.recordset.map(span =>
+          transformFromSqlRow<LightSpanRecord>({
+            tableName: TABLE_SPANS,
+            sqlRow: span,
+          }),
+        ),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'GET_TRACE_LIGHT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {

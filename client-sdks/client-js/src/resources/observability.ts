@@ -2,6 +2,8 @@ import type { ListScoresResponse, Trajectory } from '@mastra/core/evals';
 import type { SpanType } from '@mastra/core/observability';
 import type {
   TraceRecord,
+  GetTraceLightResponse,
+  GetSpanResponse,
   ListTracesArgs,
   ListTracesResponse,
   SpanIds,
@@ -130,6 +132,29 @@ export class Observability extends BaseResource {
    */
   getTrace(traceId: string): Promise<TraceRecord> {
     return this.request(`/observability/traces/${traceId}`);
+  }
+
+  /**
+   * Retrieves a lightweight trace by ID (timeline fields only).
+   * Excludes heavy fields (input, output, attributes, metadata, tags, links)
+   * for ~97% payload reduction compared to getTrace.
+   *
+   * @param traceId - ID of the trace to retrieve
+   * @returns Promise containing the trace with lightweight spans
+   */
+  getTraceLight(traceId: string): Promise<GetTraceLightResponse> {
+    return this.request(`/observability/traces/${traceId}/light`);
+  }
+
+  /**
+   * Retrieves a single span with full details by trace ID and span ID.
+   *
+   * @param traceId - ID of the trace containing the span
+   * @param spanId - ID of the span to retrieve
+   * @returns Promise containing the full span record
+   */
+  getSpan(traceId: string, spanId: string): Promise<GetSpanResponse> {
+    return this.request(`/observability/traces/${traceId}/spans/${spanId}`);
   }
 
   /**

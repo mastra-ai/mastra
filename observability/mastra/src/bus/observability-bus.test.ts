@@ -51,6 +51,7 @@ function createLogEvent(): LogEvent {
   return {
     type: 'log',
     log: {
+      logId: 'log-bus-test',
       timestamp: new Date(),
       level: 'info',
       message: 'test log message',
@@ -63,6 +64,7 @@ function createMetricEvent(): MetricEvent {
   return {
     type: 'metric',
     metric: {
+      metricId: 'metric-bus-test',
       timestamp: new Date(),
       name: 'mastra_test_counter',
       value: 1,
@@ -75,6 +77,7 @@ function createScoreEvent(): ScoreEvent {
   return {
     type: 'score',
     score: {
+      scoreId: 'score-bus-test',
       timestamp: new Date(),
       traceId: 'trace-1',
       scorerId: 'relevance',
@@ -88,6 +91,7 @@ function createFeedbackEvent(): FeedbackEvent {
   return {
     type: 'feedback',
     feedback: {
+      feedbackId: 'feedback-bus-test',
       timestamp: new Date(),
       traceId: 'trace-1',
       source: 'user',

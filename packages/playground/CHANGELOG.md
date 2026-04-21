@@ -1,5 +1,27 @@
 # @internal/playground
 
+## 1.6.1-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [[`20f59b8`](https://github.com/mastra-ai/mastra/commit/20f59b876cf91199efbc49a0e36b391240708f08), [`e2687a7`](https://github.com/mastra-ai/mastra/commit/e2687a7408790c384563816a9a28ed06735684c9), [`e2687a7`](https://github.com/mastra-ai/mastra/commit/e2687a7408790c384563816a9a28ed06735684c9), [`e2687a7`](https://github.com/mastra-ai/mastra/commit/e2687a7408790c384563816a9a28ed06735684c9), [`732a5b1`](https://github.com/mastra-ai/mastra/commit/732a5b1b75f9e5f6dc1d4b62a629086bfcaf7cd8), [`8f1b280`](https://github.com/mastra-ai/mastra/commit/8f1b280b7fe6999ec654f160cb69c1a8719e7a57), [`12df98c`](https://github.com/mastra-ai/mastra/commit/12df98c4904643d9481f5c78f3bed443725b4c96)]:
+  - @mastra/core@1.26.0-alpha.11
+  - @mastra/client-js@1.14.0-alpha.11
+  - @mastra/playground-ui@23.0.0-alpha.11
+  - @mastra/ai-sdk@1.4.1-alpha.2
+  - @mastra/react@0.2.27-alpha.11
+
+## 1.6.1-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`aba393e`](https://github.com/mastra-ai/mastra/commit/aba393e2da7390c69b80e516a4f153cda6f09376), [`2792201`](https://github.com/mastra-ai/mastra/commit/2792201cad5b0a92ca359565346af7646b9b6cb8), [`0a5fa1d`](https://github.com/mastra-ai/mastra/commit/0a5fa1d3cb0583889d06687155f26fd7d2edc76c), [`ea43e64`](https://github.com/mastra-ai/mastra/commit/ea43e646dd95d507694b6112b0bf1df22ad552b2), [`00d1b16`](https://github.com/mastra-ai/mastra/commit/00d1b16b401199cb294fa23f43336547db4dca9b), [`af8a57e`](https://github.com/mastra-ai/mastra/commit/af8a57ed9ba9685ad8601d5b71ae3706da6222f9), [`0bab472`](https://github.com/mastra-ai/mastra/commit/0bab47297337e96ff0638d00b79605bd2b9570b6), [`be49755`](https://github.com/mastra-ai/mastra/commit/be4975575e63b38f63af588ea8ce6f4cf5b8ff2c)]:
+  - @mastra/core@1.26.0-alpha.10
+  - @mastra/playground-ui@23.0.0-alpha.10
+  - @mastra/client-js@1.14.0-alpha.10
+  - @mastra/ai-sdk@1.4.1-alpha.1
+  - @mastra/react@0.2.27-alpha.10
+
 ## 1.6.1-alpha.9
 
 ### Patch Changes

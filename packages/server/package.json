@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.26.0-alpha.9",
+  "version": "1.26.0-alpha.11",
   "description": "",
   "type": "module",
   "files": [
@@ -125,7 +125,7 @@
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.39.4",
+    "eslint": "^10.2.1",
     "superjson": "^2.2.6",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
