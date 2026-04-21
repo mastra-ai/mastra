@@ -61,7 +61,7 @@ export const mastra = new Mastra({
 
 When using D1Store in a Cloudflare Worker, you need to access the D1 binding from the worker's `env` parameter at runtime. The `D1Database` in your type definition is only for TypeScript type checking—the actual binding is provided by the Workers runtime.
 
-```typescript title="src/mastra/index.ts"
+```typescript
 import { D1Store } from '@mastra/cloudflare-d1'
 import { Mastra } from '@mastra/core'
 import { CloudflareDeployer } from '@mastra/deployer-cloudflare'
