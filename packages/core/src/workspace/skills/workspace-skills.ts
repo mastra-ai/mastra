@@ -1150,10 +1150,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    */
   #joinPath(...segments: string[]): string {
     return segments
-      .map((seg, i) => {
-        if (i === 0) return seg.replace(/\/+$/, '');
-        return seg.replace(/^\/+|\/+$/g, '');
-      })
+      .map((seg, i) => (i === 0 ? stripTrailingSlashes(seg) : stripLeadingAndTrailingSlashes(seg)))
       .filter(Boolean)
       .join('/');
   }
@@ -1178,4 +1175,24 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     const lastSlash = path.lastIndexOf('/');
     return lastSlash > 0 ? path.substring(0, lastSlash) : '/';
   }
+}
+
+function stripTrailingSlashes(s: string): string {
+  let end = s.length;
+  while (end > 0 && s.charCodeAt(end - 1) === 47 /* "/" */) {
+    end--;
+  }
+  return end === s.length ? s : s.slice(0, end);
+}
+
+function stripLeadingAndTrailingSlashes(s: string): string {
+  let start = 0;
+  while (start < s.length && s.charCodeAt(start) === 47 /* "/" */) {
+    start++;
+  }
+  let end = s.length;
+  while (end > start && s.charCodeAt(end - 1) === 47 /* "/" */) {
+    end--;
+  }
+  return start === 0 && end === s.length ? s : s.slice(start, end);
 }
