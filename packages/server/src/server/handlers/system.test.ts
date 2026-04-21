@@ -5,13 +5,24 @@ import { NoOpObservability } from '@mastra/core/observability';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GET_SYSTEM_PACKAGES_ROUTE } from './system';
 
+type MockStorage = {
+  name?: string;
+  stores?: {
+    observability?: {
+      constructor?: { name?: string };
+      runtimeTracingStrategy?: 'realtime' | 'batch-with-updates' | 'insert-only' | 'event-sourced';
+    };
+  };
+};
+
 const createMockMastra = ({
   hasEditor = false,
   hasObservability = false,
-}: { hasEditor?: boolean; hasObservability?: boolean } = {}) =>
+  storage,
+}: { hasEditor?: boolean; hasObservability?: boolean; storage?: MockStorage } = {}) =>
   ({
     getEditor: () => (hasEditor ? {} : undefined),
-    getStorage: () => undefined,
+    getStorage: () => storage,
     observability: hasObservability ? {} : new NoOpObservability(),
   }) as any;
 
@@ -54,6 +65,7 @@ describe('System Handlers', () => {
         hasObservability: false,
         storageType: undefined,
         observabilityStorageType: undefined,
+        observabilityRuntimeStrategy: undefined,
       });
     });
 
@@ -69,6 +81,7 @@ describe('System Handlers', () => {
         hasObservability: false,
         storageType: undefined,
         observabilityStorageType: undefined,
+        observabilityRuntimeStrategy: undefined,
       });
     });
 
@@ -85,6 +98,7 @@ describe('System Handlers', () => {
         hasObservability: false,
         storageType: undefined,
         observabilityStorageType: undefined,
+        observabilityRuntimeStrategy: undefined,
       });
     });
 
@@ -100,6 +114,7 @@ describe('System Handlers', () => {
         hasObservability: false,
         storageType: undefined,
         observabilityStorageType: undefined,
+        observabilityRuntimeStrategy: undefined,
       });
     });
 
@@ -116,6 +131,7 @@ describe('System Handlers', () => {
         hasObservability: false,
         storageType: undefined,
         observabilityStorageType: undefined,
+        observabilityRuntimeStrategy: undefined,
       });
     });
 
@@ -131,6 +147,7 @@ describe('System Handlers', () => {
         hasObservability: false,
         storageType: undefined,
         observabilityStorageType: undefined,
+        observabilityRuntimeStrategy: undefined,
       });
     });
 
@@ -146,6 +163,7 @@ describe('System Handlers', () => {
         hasObservability: false,
         storageType: undefined,
         observabilityStorageType: undefined,
+        observabilityRuntimeStrategy: undefined,
       });
     });
 
@@ -163,6 +181,33 @@ describe('System Handlers', () => {
         hasObservability: true,
         storageType: undefined,
         observabilityStorageType: undefined,
+        observabilityRuntimeStrategy: undefined,
+      });
+    });
+
+    it('should return runtime tracing strategy from the attached observability store', async () => {
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
+        mastra: createMockMastra({
+          storage: {
+            name: 'mock-storage',
+            stores: {
+              observability: {
+                constructor: { name: 'MockObservabilityStore' },
+                runtimeTracingStrategy: 'realtime',
+              },
+            },
+          },
+        }),
+      } as any);
+
+      expect(result).toEqual({
+        packages: [],
+        isDev: false,
+        cmsEnabled: false,
+        hasObservability: false,
+        storageType: 'mock-storage',
+        observabilityStorageType: 'MockObservabilityStore',
+        observabilityRuntimeStrategy: 'realtime',
       });
     });
   });

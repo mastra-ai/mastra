@@ -181,6 +181,10 @@ function summarizeRequestBody(body: unknown): StepInputPreview {
     return normalizeMessages((body as { messages: unknown[] }).messages);
   }
 
+  if (Array.isArray((body as { input?: unknown }).input)) {
+    return normalizeMessages((body as { input: unknown[] }).input);
+  }
+
   if (Array.isArray((body as { contents?: unknown }).contents)) {
     return (body as { contents: Array<{ role?: unknown; parts?: unknown[] }> }).contents.map(item => ({
       role: typeof item?.role === 'string' ? item.role : 'user',
@@ -717,7 +721,9 @@ export class ModelSpanTracker {
                 dynamic,
                 providerExecuted,
                 providerMetadata,
-                // Output - the actual result
+                // Keep provider-executed results on MODEL_CHUNK because they come
+                // from the model/provider stream and may not have a sibling TOOL_CALL span.
+                // For locally executed tools, the canonical payload lives on TOOL_CALL.
                 result,
                 // Stripped - redundant (already on TOOL_CALL span input)
                 args: _args,
@@ -730,7 +736,7 @@ export class ModelSpanTracker {
               if (providerExecuted !== undefined) metadata.providerExecuted = providerExecuted;
               if (providerMetadata !== undefined) metadata.providerMetadata = providerMetadata;
 
-              this.#createEventSpan(chunk.type, result, { metadata });
+              this.#createEventSpan(chunk.type, providerExecuted ? result : undefined, { metadata });
               break;
             }
 

@@ -87,6 +87,11 @@ export interface LLMIterationData<Tools extends ToolSet = ToolSet, OUTPUT = unde
    */
   fallbackModelIndex?: number;
   processorRetryFeedback?: string;
+  /**
+   * True when a background task result was injected and the LLM needs another
+   * iteration to process it. When set, isTaskCompleteStep is skipped.
+   */
+  backgroundTaskPending?: boolean;
 }
 
 // Zod schemas for common types used in validation
@@ -154,6 +159,7 @@ export const llmIterationOutputSchema = z.object({
   fallbackModelIndex: z.number().optional(),
   processorRetryFeedback: z.string().optional(),
   isTaskCompleteCheckFailed: z.boolean().optional(), //true if the isTaskComplete check failed and LLM has to run again
+  backgroundTaskPending: z.boolean().optional(), // true if a background task result was injected and LLM needs to process it
 });
 
 export const toolCallInputSchema = z.object({

@@ -14,6 +14,8 @@ import {
   maskStreamTags,
   resolveSerializedZodOutput,
   safeStringify,
+  selectFields,
+  setNestedValue,
 } from './utils';
 
 describe('maskStreamTags', () => {
@@ -602,5 +604,60 @@ describe('ensureSerializable', () => {
     expect(result.screen.properties.color).toBe('red');
     expect(result.screen.properties.variantScreenInstance).toBe('[Circular]');
     expect(() => JSON.stringify(result)).not.toThrow();
+  });
+});
+
+describe('setNestedValue', () => {
+  it('sets a simple key', () => {
+    const obj: any = {};
+    setNestedValue(obj, 'a', 1);
+    expect(obj.a).toBe(1);
+  });
+
+  it('sets a nested key, creating intermediate objects', () => {
+    const obj: any = {};
+    setNestedValue(obj, 'a.b.c', 'hello');
+    expect(obj.a.b.c).toBe('hello');
+  });
+
+  it('does not overwrite existing nested objects', () => {
+    const obj: any = { a: { existing: true } };
+    setNestedValue(obj, 'a.b', 1);
+    expect(obj.a.existing).toBe(true);
+    expect(obj.a.b).toBe(1);
+  });
+
+  it('rejects __proto__ as the final key', () => {
+    const obj: any = {};
+    setNestedValue(obj, '__proto__', { polluted: true });
+    expect(({} as any).polluted).toBeUndefined();
+    expect(Object.prototype.hasOwnProperty.call(obj, '__proto__')).toBe(false);
+  });
+
+  it('rejects __proto__ in an intermediate path segment', () => {
+    const obj: any = {};
+    setNestedValue(obj, '__proto__.polluted', true);
+    expect(({} as any).polluted).toBeUndefined();
+  });
+
+  it('rejects constructor and prototype keys', () => {
+    const obj: any = {};
+    setNestedValue(obj, 'constructor.prototype.polluted', true);
+    setNestedValue(obj, 'prototype.polluted', true);
+    expect(({} as any).polluted).toBeUndefined();
+  });
+});
+
+describe('selectFields', () => {
+  it('extracts specified dot-path fields', () => {
+    const src = { a: { b: 1, c: 2 }, d: 3 };
+    expect(selectFields(src, ['a.b', 'd'])).toEqual({ a: { b: 1 }, d: 3 });
+  });
+
+  it('ignores unsafe keys in field list without polluting', () => {
+    const src = { __proto__: { polluted: true } } as any;
+    const result = selectFields(src, ['__proto__.polluted']);
+    expect(result).toEqual({});
+    expect(({} as any).polluted).toBeUndefined();
   });
 });

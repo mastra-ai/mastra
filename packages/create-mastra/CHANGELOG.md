@@ -1,5 +1,38 @@
 # create-mastra
 
+## 1.6.1-alpha.10
+
+## 1.6.1-alpha.9
+
+### Patch Changes
+
+- dependencies updates: ([#15525](https://github.com/mastra-ai/mastra/pull/15525))
+  - Updated dependency [`prettier@^3.8.3` ↗︎](https://www.npmjs.com/package/prettier/v/3.8.3) (from `^3.8.1`, in `dependencies`)
+
+## 1.6.1-alpha.8
+
+## 1.6.1-alpha.7
+
+## 1.6.1-alpha.6
+
+## 1.6.1-alpha.5
+
+## 1.6.1-alpha.4
+
+## 1.6.1-alpha.3
+
+## 1.6.1-alpha.2
+
+## 1.6.1-alpha.1
+
+## 1.6.1-alpha.0
+
+## 1.6.0
+
+## 1.6.0-alpha.5
+
+## 1.6.0-alpha.4
+
 ## 1.5.1-alpha.3
 
 ## 1.5.1-alpha.2

@@ -1,8 +1,13 @@
+import { randomUUID } from 'node:crypto';
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
+import { createBackgroundTask } from '../../../background-tasks/create';
+import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
+import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
 import type { MastraDBMessage } from '../../../memory';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { ChunkFrom } from '../../../stream/types';
+import type { ProviderMetadata } from '../../../stream/types';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import { ensureSerializable } from '../../../utils';
@@ -40,6 +45,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   modelSpanTracker,
   _internal,
   logger,
+  agentId,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
@@ -546,6 +552,220 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           if (typeof args === 'object' && args !== null && 'prompt' in args) {
             args.threadId = _internal?.threadId;
             args.resourceId = _internal?.resourceId;
+          }
+        }
+
+        const llmBgOverrides =
+          typeof args === 'object' && args !== null && '_background' in args ? args._background : undefined;
+
+        if (llmBgOverrides) {
+          delete args._background;
+        }
+
+        // --- Background task dispatch ---
+        const backgroundTaskManager = _internal?.backgroundTaskManager;
+        const agentBgConfigCheck = _internal?.agentBackgroundConfig;
+        // Skip background dispatch entirely when disabled (e.g., for sub-agents whose
+        // entire invocation is itself dispatched as a background task by the parent)
+        if (backgroundTaskManager && !agentBgConfigCheck?.disabled && typeof args === 'object' && args !== null) {
+          const toolBgConfig = (tool as any).backgroundConfig as ToolBackgroundConfig | undefined;
+          const agentBgConfig = agentBgConfigCheck;
+          const managerConfig = _internal?.backgroundTaskManagerConfig;
+
+          const bgResolved = resolveBackgroundConfig({
+            llmBgOverrides,
+            toolName: inputData.toolName,
+            toolConfig: toolBgConfig,
+            agentConfig: agentBgConfig,
+            managerConfig,
+          });
+
+          if (bgResolved.runInBackground) {
+            // Resolve the tool executor from the current closure
+            const stepTools = (_internal?.stepTools as Tools) || tools;
+            const resolvedTool =
+              stepTools?.[inputData.toolName] ||
+              Object.values(stepTools || {})?.find((t: any) => 'id' in t && t.id === inputData.toolName);
+            if (!resolvedTool?.execute) {
+              throw new ToolNotFoundError(inputData.toolName);
+            }
+
+            // Create a self-contained background task with per-stream hooks
+            const bgTask = createBackgroundTask(backgroundTaskManager, {
+              toolName: inputData.toolName,
+              toolCallId: inputData.toolCallId,
+              args: args as Record<string, unknown>,
+              agentId,
+              threadId: _internal?.threadId,
+              resourceId: _internal?.resourceId,
+              timeoutMs: bgResolved.timeoutMs,
+              maxRetries: bgResolved.maxRetries,
+              runId,
+              context: {
+                // Executor — uses the tool from the current closure
+                executor: {
+                  execute: (
+                    bgArgs: Record<string, unknown>,
+                    opts?: {
+                      abortSignal?: AbortSignal;
+                      onProgress?: (chunk: BackgroundTaskProgressChunk) => Promise<void>;
+                    },
+                  ) => {
+                    return resolvedTool.execute!(bgArgs, {
+                      ...toolOptions,
+                      outputWriter: async (chunk: any) => {
+                        await opts?.onProgress?.(chunk);
+                        return toolOptions.outputWriter?.(chunk);
+                      },
+                      abortSignal: opts?.abortSignal,
+                    } as any);
+                  },
+                },
+
+                // Stream chunk emitter — background task chunks appear on THIS stream
+                onChunk: chunk => {
+                  try {
+                    const {
+                      type,
+                      payload: { runId: bgRunId },
+                    } = chunk;
+                    if (bgRunId !== runId || (bgRunId === runId && workflowResumeData)) {
+                      controller.enqueue({
+                        type: 'tool-call',
+                        runId: bgRunId,
+                        from: ChunkFrom.AGENT,
+                        payload: {
+                          toolCallId: chunk.payload.toolCallId,
+                          toolName: chunk.payload.toolName,
+                          args: inputData.args,
+                          providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                          providerExecuted: inputData.providerExecuted,
+                        },
+                      });
+                    }
+                    controller.enqueue({
+                      type,
+                      payload: chunk.payload as any,
+                      runId: bgRunId,
+                      from: ChunkFrom.AGENT,
+                    });
+
+                    if (chunk.type === 'background-task-completed') {
+                      controller.enqueue({
+                        type: 'tool-result',
+                        runId: bgRunId,
+                        from: ChunkFrom.AGENT,
+                        payload: {
+                          toolCallId: chunk.payload.toolCallId,
+                          toolName: chunk.payload.toolName,
+                          args: inputData.args,
+                          result: chunk.payload.result,
+                          providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                          providerExecuted: inputData.providerExecuted,
+                        },
+                      });
+                    } else {
+                      controller.enqueue({
+                        type: 'tool-error',
+                        runId: bgRunId,
+                        from: ChunkFrom.AGENT,
+                        payload: {
+                          toolCallId: chunk.payload.toolCallId,
+                          toolName: chunk.payload.toolName,
+                          error: chunk.payload.error,
+                          args: inputData.args,
+                          providerMetadata: inputData.providerMetadata as ProviderMetadata | undefined,
+                          providerExecuted: inputData.providerExecuted,
+                        },
+                      });
+                    }
+                  } catch {
+                    // Controller may be closed if stream ended — ignore
+                  }
+                },
+
+                // Result injector — injects results into THIS stream's message list
+                onResult: async params => {
+                  if (params.runId !== runId || (params.runId === runId && workflowResumeData)) {
+                    messageList.add(
+                      [
+                        {
+                          role: 'tool' as const,
+                          type: 'tool-call',
+                          id: _internal?.generateId?.() ?? randomUUID(),
+                          createdAt: new Date(),
+                          content: [
+                            {
+                              type: 'tool-call' as const,
+                              toolCallId: params.toolCallId,
+                              toolName: params.toolName,
+                              args: inputData.args,
+                            },
+                          ],
+                        },
+                      ],
+                      'response',
+                    );
+                  }
+                  messageList.add(
+                    [
+                      {
+                        role: 'tool' as const,
+                        content: [
+                          {
+                            type: 'tool-result' as const,
+                            toolCallId: params.toolCallId,
+                            toolName: params.toolName,
+                            result:
+                              params.status === 'failed'
+                                ? `Background task failed: ${params.error?.message ?? 'Unknown error'}`
+                                : params.result,
+                            isError: params.status === 'failed',
+                          },
+                        ],
+                      },
+                    ],
+                    'response',
+                  );
+
+                  // Flush to memory if available
+                  if (_internal?.saveQueueManager && _internal?.threadId) {
+                    await _internal.saveQueueManager.flushMessages(
+                      messageList,
+                      _internal.threadId,
+                      _internal.memoryConfig,
+                    );
+                  }
+                },
+
+                // Per-task callbacks
+                onComplete: toolBgConfig?.onComplete ?? agentBgConfig?.onTaskComplete,
+                onFailed: toolBgConfig?.onFailed ?? agentBgConfig?.onTaskFailed,
+              },
+            });
+
+            const { task, fallbackToSync } = await bgTask.dispatch();
+
+            if (!fallbackToSync) {
+              // Emit background-task-started chunk
+              controller.enqueue({
+                type: 'background-task-started' as any,
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  taskId: task.id,
+                  toolName: inputData.toolName,
+                  toolCallId: inputData.toolCallId,
+                },
+              });
+
+              // Return placeholder result so the LLM can continue
+              return {
+                result: `Background task started. Task ID: ${task.id}. The tool "${inputData.toolName}" is running in the background. You will be notified when it completes.`,
+                ...inputData,
+              };
+            }
+            // fallbackToSync: concurrency limit hit, fall through to synchronous execution
           }
         }
 

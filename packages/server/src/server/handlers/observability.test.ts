@@ -900,9 +900,31 @@ describe('Observability Handlers', () => {
 
       expect(result).toEqual({ success: true });
       expect(mockObservabilityStore.createScore).toHaveBeenCalledWith({
-        score: expect.objectContaining({ ...scoreData, timestamp: expect.any(Date) }),
+        score: expect.objectContaining({ ...scoreData, scoreId: expect.any(String), timestamp: expect.any(Date) }),
       });
       expect(handleErrorSpy).not.toHaveBeenCalled();
+    });
+
+    it('should preserve a caller-supplied scoreId', async () => {
+      (mockObservabilityStore.createScore as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      const scoreData = {
+        scoreId: 'score-from-client',
+        traceId: 'trace-123',
+        spanId: 'span-456',
+        scorerId: 'accuracy',
+        score: 0.95,
+        reason: 'High accuracy match',
+      };
+
+      await NEW_ROUTES.CREATE_SCORE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        score: scoreData,
+      });
+
+      expect(mockObservabilityStore.createScore).toHaveBeenCalledWith({
+        score: expect.objectContaining({ ...scoreData, timestamp: expect.any(Date) }),
+      });
     });
 
     it('should throw 500 when storage is not available', async () => {
@@ -1074,9 +1096,36 @@ describe('Observability Handlers', () => {
 
       expect(result).toEqual({ success: true });
       expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
-        feedback: expect.objectContaining({ ...feedbackData, timestamp: expect.any(Date) }),
+        feedback: expect.objectContaining({
+          ...feedbackData,
+          feedbackId: expect.any(String),
+          timestamp: expect.any(Date),
+        }),
       });
       expect(handleErrorSpy).not.toHaveBeenCalled();
+    });
+
+    it('should preserve a caller-supplied feedbackId', async () => {
+      (mockObservabilityStore.createFeedback as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      const feedbackData = {
+        feedbackId: 'feedback-from-client',
+        traceId: 'trace-123',
+        spanId: 'span-456',
+        source: 'user',
+        feedbackType: 'thumbs',
+        value: 1,
+        comment: 'Great response!',
+      };
+
+      await NEW_ROUTES.CREATE_FEEDBACK.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        feedback: feedbackData,
+      });
+
+      expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
+        feedback: expect.objectContaining({ ...feedbackData, timestamp: expect.any(Date) }),
+      });
     });
 
     it('should throw 500 when storage is not available', async () => {

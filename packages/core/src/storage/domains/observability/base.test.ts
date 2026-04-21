@@ -97,7 +97,7 @@ describe('ObservabilityStorage base class', () => {
       callThunk: () =>
         storage.createScore({
           score: {
-            id: 's1',
+            scoreId: 's1',
             timestamp: new Date(),
             traceId: 't1',
             scorerId: 'test',
@@ -138,7 +138,7 @@ describe('ObservabilityStorage base class', () => {
       callThunk: () =>
         storage.createFeedback({
           feedback: {
-            id: 'f1',
+            feedbackId: 'f1',
             timestamp: new Date(),
             traceId: 't1',
             feedbackSource: 'user',
