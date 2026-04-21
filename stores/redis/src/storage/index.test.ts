@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { createTestSuite, createConfigValidationTests } from '@internal/storage-test-utils';
+import {
+  createTestSuite,
+  createConfigValidationTests,
+  createClientAcceptanceTests,
+  createDomainDirectTests,
+} from '@internal/storage-test-utils';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type { MemoryStorage } from '@mastra/core/storage';
 import { createClient } from 'redis';
@@ -94,44 +99,34 @@ createConfigValidationTests({
   ],
 });
 
-// Pre-configured client acceptance tests
-describe('RedisStore client acceptance tests', () => {
-  it('should accept a pre-configured client', async () => {
-    const client = await createTestClient();
-    const store = new RedisStore({
-      id: 'redis-client-test',
-      client,
-    });
+// Pre-configured client acceptance + domain direct tests (shared across redis-family stores)
+let sharedClient: RedisClient;
 
-    expect(store).toBeDefined();
-    expect(store.name).toBe('Redis');
-
-    await client.quit();
-  });
+beforeAll(async () => {
+  sharedClient = await createTestClient();
 });
 
-// Domain-level pre-configured client tests
-describe('Redis domain direct tests', () => {
-  it('should allow memory domain with pre-configured client', async () => {
-    const client = await createTestClient();
-    const memoryDomain = new StoreMemoryRedis({ client });
-    expect(memoryDomain).toBeDefined();
-    await client.quit();
-  });
+afterAll(async () => {
+  if (sharedClient.isOpen) {
+    await sharedClient.quit();
+  }
+});
 
-  it('should allow workflows domain with pre-configured client', async () => {
-    const client = await createTestClient();
-    const workflowsDomain = new WorkflowsRedis({ client });
-    expect(workflowsDomain).toBeDefined();
-    await client.quit();
-  });
+createClientAcceptanceTests({
+  storeName: 'RedisStore',
+  expectedStoreName: 'Redis',
+  createStoreWithClient: () =>
+    new RedisStore({
+      id: 'redis-client-test',
+      client: sharedClient,
+    }),
+});
 
-  it('should allow scores domain with pre-configured client', async () => {
-    const client = await createTestClient();
-    const scoresDomain = new ScoresRedis({ client });
-    expect(scoresDomain).toBeDefined();
-    await client.quit();
-  });
+createDomainDirectTests({
+  storeName: 'Redis',
+  createMemoryDomain: () => new StoreMemoryRedis({ client: sharedClient }),
+  createWorkflowsDomain: () => new WorkflowsRedis({ client: sharedClient }),
+  createScoresDomain: () => new ScoresRedis({ client: sharedClient }),
 });
 
 // Additional Redis-specific tests
