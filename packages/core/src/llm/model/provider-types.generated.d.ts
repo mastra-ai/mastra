@@ -3561,6 +3561,7 @@ export type ProviderModelsMap = {
     'kimi-k2-thinking-turbo',
     'kimi-k2-turbo-preview',
     'kimi-k2.5',
+    'kimi-k2.6',
   ];
   readonly berget: readonly [
     'google/gemma-4-31B-it',

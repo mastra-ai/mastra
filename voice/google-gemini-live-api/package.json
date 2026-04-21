@@ -34,7 +34,7 @@
   "dependencies": {
     "@google/genai": "^1.45.0",
     "google-auth-library": "^10.6.1",
-    "ws": "^8.19.0"
+    "ws": "^8.20.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

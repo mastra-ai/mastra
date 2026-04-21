@@ -1074,6 +1074,9 @@ importers:
       '@tanstack/react-virtual':
         specifier: ^3.13.22
         version: 3.13.23(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@vercel/analytics':
+        specifier: ^2.0.1
+        version: 2.0.1(react@18.3.1)
       algoliasearch:
         specifier: ^5.49.2
         version: 5.49.2
@@ -1389,10 +1392,10 @@ importers:
         version: 1.20.1
       imvectordb:
         specifier: ^0.0.6
-        version: 0.0.6(encoding@0.1.13)(ws@8.19.0(bufferutil@4.1.0))(zod@3.25.76)
+        version: 0.0.6(encoding@0.1.13)(ws@8.20.0(bufferutil@4.1.0))(zod@3.25.76)
       openai:
         specifier: ^4.104.0
-        version: 4.104.0(encoding@0.1.13)(ws@8.19.0(bufferutil@4.1.0))(zod@3.25.76)
+        version: 4.104.0(encoding@0.1.13)(ws@8.20.0(bufferutil@4.1.0))(zod@3.25.76)
       ora:
         specifier: ^8.2.0
         version: 8.2.0
@@ -1905,7 +1908,7 @@ importers:
         version: link:../mastra
       langsmith:
         specifier: ^0.5.19
-        version: 0.5.19(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(openai@6.21.0(ws@8.19.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.19.0(bufferutil@4.1.0))
+        version: 0.5.19(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(openai@6.21.0(ws@8.20.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.20.0(bufferutil@4.1.0))
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.99
@@ -3052,8 +3055,8 @@ importers:
         specifier: ^1.3.0
         version: 1.3.0
       ws:
-        specifier: ^8.19.0
-        version: 8.19.0(bufferutil@4.1.0)
+        specifier: ^8.20.0
+        version: 8.20.0(bufferutil@4.1.0)
       xxhash-wasm:
         specifier: ^1.1.0
         version: 1.1.0
@@ -3366,8 +3369,8 @@ importers:
         specifier: ^1.5.1
         version: 1.5.1(typescript@5.9.3)
       ws:
-        specifier: ^8.18.0
-        version: 8.19.0(bufferutil@4.1.0)
+        specifier: ^8.20.0
+        version: 8.20.0(bufferutil@4.1.0)
     devDependencies:
       '@hono/node-server':
         specifier: ^1.19.11
@@ -3446,10 +3449,10 @@ importers:
         version: 2.3.0
       '@composio/core':
         specifier: ^0.6.5
-        version: 0.6.5(ws@8.19.0(bufferutil@4.1.0))(zod@3.25.76)
+        version: 0.6.5(ws@8.20.0(bufferutil@4.1.0))(zod@3.25.76)
       '@composio/mastra':
         specifier: ^0.6.5
-        version: 0.6.5(@composio/core@0.6.5(ws@8.19.0(bufferutil@4.1.0))(zod@3.25.76))(@mastra/core@packages+core)(zod@3.25.76)
+        version: 0.6.5(@composio/core@0.6.5(ws@8.20.0(bufferutil@4.1.0))(zod@3.25.76))(@mastra/core@packages+core)(zod@3.25.76)
       '@mastra/memory':
         specifier: workspace:*
         version: link:../memory
@@ -4830,8 +4833,8 @@ importers:
         specifier: ^2.1.0
         version: 2.1.0(patch_hash=42949ba7834aab28b47574e6989b8f3203c3ef91ee1ca866baf4dc8b151d34ae)
       ws:
-        specifier: ^8.18.0
-        version: 8.19.0(bufferutil@4.1.0)
+        specifier: ^8.20.0
+        version: 8.20.0(bufferutil@4.1.0)
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.99
@@ -6217,8 +6220,8 @@ importers:
         specifier: ^10.6.1
         version: 10.6.2
       ws:
-        specifier: ^8.19.0
-        version: 8.19.0(bufferutil@4.1.0)
+        specifier: ^8.20.0
+        version: 8.20.0(bufferutil@4.1.0)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -6340,7 +6343,7 @@ importers:
     dependencies:
       openai:
         specifier: ^5.23.2
-        version: 5.23.2(ws@8.19.0(bufferutil@4.1.0))(zod@3.25.76)
+        version: 5.23.2(ws@8.20.0(bufferutil@4.1.0))(zod@3.25.76)
       zod:
         specifier: ^3.25.0 || ^4.0.0
         version: 3.25.76
@@ -6382,8 +6385,8 @@ importers:
         specifier: ^1.0.8
         version: 1.0.8(bufferutil@4.1.0)
       ws:
-        specifier: ^8.19.0
-        version: 8.19.0(bufferutil@4.1.0)
+        specifier: ^8.20.0
+        version: 8.20.0(bufferutil@4.1.0)
       zod-to-json-schema:
         specifier: ^3.25.1
         version: 3.25.1(zod@4.3.6)
@@ -6786,7 +6789,7 @@ importers:
     dependencies:
       '@daytonaio/sdk':
         specifier: ^0.143.0
-        version: 0.143.0(ws@8.19.0(bufferutil@4.1.0))
+        version: 0.143.0(ws@8.20.0(bufferutil@4.1.0))
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -15805,6 +15808,35 @@ packages:
       '@sveltejs/kit':
         optional: true
       next:
+        optional: true
+      react:
+        optional: true
+      svelte:
+        optional: true
+      vue:
+        optional: true
+      vue-router:
+        optional: true
+
+  '@vercel/analytics@2.0.1':
+    resolution: {integrity: sha512-MTQG6V9qQrt1tsDeF+2Uoo5aPjqbVPys1xvnIftXSJYG2SrwXRHnqEvVoYID7BTruDz4lCd2Z7rM1BdkUehk2g==}
+    peerDependencies:
+      '@remix-run/react': ^2
+      '@sveltejs/kit': ^1 || ^2
+      next: '>= 13'
+      nuxt: '>= 3'
+      react: ^18 || ^19 || ^19.0.0-rc
+      svelte: '>= 4'
+      vue: ^3
+      vue-router: ^4
+    peerDependenciesMeta:
+      '@remix-run/react':
+        optional: true
+      '@sveltejs/kit':
+        optional: true
+      next:
+        optional: true
+      nuxt:
         optional: true
       react:
         optional: true
@@ -25442,8 +25474,8 @@ packages:
       utf-8-validate:
         optional: true
 
-  ws@8.19.0:
-    resolution: {integrity: sha512-blAT2mjOEIi0ZzruJfIhb3nps74PRWTCz1IjglWEEpQl5XS/UNama6u2/rjFkDDouqr4L67ry+1aGIALViWjDg==}
+  ws@8.20.0:
+    resolution: {integrity: sha512-sAt8BhgNbzCtgGbt2OxmpuryO63ZoDk/sqaB/znQm94T4fCEsy/yV+7CdC1kJhOU9lboAEU7R3kquuycDoibVA==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -28047,7 +28079,7 @@ snapshots:
       jwt-decode: 4.0.0
       toml: 3.0.0
       uuid: 11.1.0
-      ws: 8.19.0(bufferutil@4.1.0)
+      ws: 8.20.0(bufferutil@4.1.0)
       yaml: 2.8.3
       zod: 3.25.76
     transitivePeerDependencies:
@@ -28078,17 +28110,17 @@ snapshots:
       '@anthropic-ai/sdk': 0.39.0(encoding@0.1.13)
       '@browserbasehq/sdk': 2.9.0(encoding@0.1.13)
       '@google/genai': 1.46.0(@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@4.3.6))(bufferutil@4.1.0)
-      '@langchain/openai': 0.4.9(@langchain/core@0.3.80(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(openai@4.104.0(encoding@0.1.13)(ws@8.19.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.19.0(bufferutil@4.1.0)))(encoding@0.1.13)(ws@8.19.0(bufferutil@4.1.0))
+      '@langchain/openai': 0.4.9(@langchain/core@0.3.80(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(openai@4.104.0(encoding@0.1.13)(ws@8.20.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.20.0(bufferutil@4.1.0)))(encoding@0.1.13)(ws@8.20.0(bufferutil@4.1.0))
       '@modelcontextprotocol/sdk': 1.27.1(@cfworker/json-schema@4.1.1)(zod@4.3.6)
       ai: 5.0.155(zod@4.3.6)
       deepmerge: 4.3.1
       devtools-protocol: 0.0.1464554
       fetch-cookie: 3.2.0
-      openai: 4.104.0(encoding@0.1.13)(ws@8.19.0(bufferutil@4.1.0))(zod@4.3.6)
+      openai: 4.104.0(encoding@0.1.13)(ws@8.20.0(bufferutil@4.1.0))(zod@4.3.6)
       pino: 9.14.0
       pino-pretty: 13.1.3
       uuid: 11.1.0
-      ws: 8.19.0(bufferutil@4.1.0)
+      ws: 8.20.0(bufferutil@4.1.0)
       zod: 4.3.6
       zod-to-json-schema: 3.25.1(zod@4.3.6)
     optionalDependencies:
@@ -28105,7 +28137,7 @@ snapshots:
       '@ai-sdk/perplexity': 2.0.27(zod@4.3.6)
       '@ai-sdk/togetherai': 1.0.38(zod@4.3.6)
       '@ai-sdk/xai': 2.0.67(zod@4.3.6)
-      '@langchain/core': 0.3.80(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(openai@4.104.0(encoding@0.1.13)(ws@8.19.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.19.0(bufferutil@4.1.0))
+      '@langchain/core': 0.3.80(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(openai@4.104.0(encoding@0.1.13)(ws@8.20.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.20.0(bufferutil@4.1.0))
       bufferutil: 4.1.0
       chrome-launcher: 1.2.1
       ollama-ai-provider-v2: 1.5.5(zod@4.3.6)
@@ -28611,13 +28643,13 @@ snapshots:
 
   '@composio/client@0.1.0-alpha.61': {}
 
-  '@composio/core@0.6.5(ws@8.19.0(bufferutil@4.1.0))(zod@3.25.76)':
+  '@composio/core@0.6.5(ws@8.20.0(bufferutil@4.1.0))(zod@3.25.76)':
     dependencies:
       '@composio/client': 0.1.0-alpha.61
       '@composio/json-schema-to-zod': 0.1.20(zod@3.25.76)
       '@types/json-schema': 7.0.15
       chalk: 4.1.2
-      openai: 6.21.0(ws@8.19.0(bufferutil@4.1.0))(zod@3.25.76)
+      openai: 6.21.0(ws@8.20.0(bufferutil@4.1.0))(zod@3.25.76)
       pusher-js: 8.4.0
       semver: 7.7.4
       zod: 3.25.76
@@ -28629,9 +28661,9 @@ snapshots:
     dependencies:
       zod: 3.25.76
 
-  '@composio/mastra@0.6.5(@composio/core@0.6.5(ws@8.19.0(bufferutil@4.1.0))(zod@3.25.76))(@mastra/core@packages+core)(zod@3.25.76)':
+  '@composio/mastra@0.6.5(@composio/core@0.6.5(ws@8.20.0(bufferutil@4.1.0))(zod@3.25.76))(@mastra/core@packages+core)(zod@3.25.76)':
     dependencies:
-      '@composio/core': 0.6.5(ws@8.19.0(bufferutil@4.1.0))(zod@3.25.76)
+      '@composio/core': 0.6.5(ws@8.20.0(bufferutil@4.1.0))(zod@3.25.76)
       '@mastra/core': link:packages/core
       '@mastra/schema-compat': 1.1.0(zod@3.25.76)
       zod: 3.25.76
@@ -29120,7 +29152,7 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  '@daytonaio/sdk@0.143.0(ws@8.19.0(bufferutil@4.1.0))':
+  '@daytonaio/sdk@0.143.0(ws@8.20.0(bufferutil@4.1.0))':
     dependencies:
       '@aws-sdk/client-s3': 3.1033.0
       '@aws-sdk/lib-storage': 3.997.0(@aws-sdk/client-s3@3.1033.0)
@@ -29141,7 +29173,7 @@ snapshots:
       expand-tilde: 2.0.2
       fast-glob: 3.3.3
       form-data: 4.0.5
-      isomorphic-ws: 5.0.0(ws@8.19.0(bufferutil@4.1.0))
+      isomorphic-ws: 5.0.0(ws@8.20.0(bufferutil@4.1.0))
       pathe: 2.0.3
       shell-quote: 1.8.3
       tar: 7.5.11
@@ -29168,7 +29200,7 @@ snapshots:
       cross-fetch: 3.2.0(encoding@0.1.13)
       deepmerge: 4.3.1
       events: 3.3.0
-      ws: 8.19.0(bufferutil@4.1.0)
+      ws: 8.20.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -30699,7 +30731,7 @@ snapshots:
       google-auth-library: 10.6.2
       p-retry: 4.6.2
       protobufjs: 7.5.5
-      ws: 8.19.0(bufferutil@4.1.0)
+      ws: 8.20.0(bufferutil@4.1.0)
     optionalDependencies:
       '@modelcontextprotocol/sdk': 1.27.1(@cfworker/json-schema@4.1.1)(zod@4.3.6)
     transitivePeerDependencies:
@@ -30823,7 +30855,7 @@ snapshots:
     dependencies:
       '@hono/node-server': 1.19.14(hono@4.12.14)
       hono: 4.12.14
-      ws: 8.19.0(bufferutil@4.1.0)
+      ws: 8.20.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -31332,14 +31364,14 @@ snapshots:
       '@lancedb/lancedb-win32-arm64-msvc': 0.22.3
       '@lancedb/lancedb-win32-x64-msvc': 0.22.3
 
-  '@langchain/core@0.3.80(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(openai@4.104.0(encoding@0.1.13)(ws@8.19.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.19.0(bufferutil@4.1.0))':
+  '@langchain/core@0.3.80(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(openai@4.104.0(encoding@0.1.13)(ws@8.20.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.20.0(bufferutil@4.1.0))':
     dependencies:
       '@cfworker/json-schema': 4.1.1
       ansi-styles: 5.2.0
       camelcase: 6.3.0
       decamelize: 1.2.0
       js-tiktoken: 1.0.21
-      langsmith: 0.5.19(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(openai@4.104.0(encoding@0.1.13)(ws@8.19.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.19.0(bufferutil@4.1.0))
+      langsmith: 0.5.19(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(openai@4.104.0(encoding@0.1.13)(ws@8.20.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.20.0(bufferutil@4.1.0))
       mustache: 4.2.0
       p-queue: 6.6.2
       p-retry: 4.6.2
@@ -31353,11 +31385,11 @@ snapshots:
       - openai
       - ws
 
-  '@langchain/openai@0.4.9(@langchain/core@0.3.80(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(openai@4.104.0(encoding@0.1.13)(ws@8.19.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.19.0(bufferutil@4.1.0)))(encoding@0.1.13)(ws@8.19.0(bufferutil@4.1.0))':
+  '@langchain/openai@0.4.9(@langchain/core@0.3.80(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(openai@4.104.0(encoding@0.1.13)(ws@8.20.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.20.0(bufferutil@4.1.0)))(encoding@0.1.13)(ws@8.20.0(bufferutil@4.1.0))':
     dependencies:
-      '@langchain/core': 0.3.80(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(openai@4.104.0(encoding@0.1.13)(ws@8.19.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.19.0(bufferutil@4.1.0))
+      '@langchain/core': 0.3.80(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(openai@4.104.0(encoding@0.1.13)(ws@8.20.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.20.0(bufferutil@4.1.0))
       js-tiktoken: 1.0.21
-      openai: 4.104.0(encoding@0.1.13)(ws@8.19.0(bufferutil@4.1.0))(zod@3.25.76)
+      openai: 4.104.0(encoding@0.1.13)(ws@8.20.0(bufferutil@4.1.0))(zod@3.25.76)
       zod: 3.25.76
       zod-to-json-schema: 3.25.1(zod@3.25.76)
     transitivePeerDependencies:
@@ -31519,7 +31551,7 @@ snapshots:
   '@libsql/isomorphic-ws@0.1.5(bufferutil@4.1.0)':
     dependencies:
       '@types/ws': 8.18.1
-      ws: 8.19.0(bufferutil@4.1.0)
+      ws: 8.20.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -35742,7 +35774,7 @@ snapshots:
       '@types/phoenix': 1.6.6
       '@types/ws': 8.18.1
       tslib: 2.8.1
-      ws: 8.19.0(bufferutil@4.1.0)
+      ws: 8.20.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -36996,6 +37028,10 @@ snapshots:
     optionalDependencies:
       react: 18.3.1
 
+  '@vercel/analytics@2.0.1(react@18.3.1)':
+    optionalDependencies:
+      react: 18.3.1
+
   '@vercel/functions@1.6.0(@aws-sdk/credential-provider-web-identity@3.972.32)':
     optionalDependencies:
       '@aws-sdk/credential-provider-web-identity': 3.972.32
@@ -37587,7 +37623,7 @@ snapshots:
       node-simctl: 7.7.5
       playwright-core: 1.58.2
       webdriverio: 9.27.0(bufferutil@4.1.0)(puppeteer-core@22.15.0(bufferutil@4.1.0))
-      ws: 8.19.0(bufferutil@4.1.0)
+      ws: 8.20.0(bufferutil@4.1.0)
       zod: 3.25.76
     transitivePeerDependencies:
       - bare-abort-controller
@@ -41675,9 +41711,9 @@ snapshots:
 
   imurmurhash@0.1.4: {}
 
-  imvectordb@0.0.6(encoding@0.1.13)(ws@8.19.0(bufferutil@4.1.0))(zod@3.25.76):
+  imvectordb@0.0.6(encoding@0.1.13)(ws@8.20.0(bufferutil@4.1.0))(zod@3.25.76):
     dependencies:
-      openai: 4.104.0(encoding@0.1.13)(ws@8.19.0(bufferutil@4.1.0))(zod@3.25.76)
+      openai: 4.104.0(encoding@0.1.13)(ws@8.20.0(bufferutil@4.1.0))(zod@3.25.76)
     transitivePeerDependencies:
       - encoding
       - ws
@@ -42072,9 +42108,9 @@ snapshots:
 
   isobject@3.0.1: {}
 
-  isomorphic-ws@5.0.0(ws@8.19.0(bufferutil@4.1.0)):
+  isomorphic-ws@5.0.0(ws@8.20.0(bufferutil@4.1.0)):
     dependencies:
-      ws: 8.19.0(bufferutil@4.1.0)
+      ws: 8.20.0(bufferutil@4.1.0)
 
   isstream@0.1.2: {}
 
@@ -42222,7 +42258,7 @@ snapshots:
       whatwg-encoding: 3.1.1
       whatwg-mimetype: 4.0.0
       whatwg-url: 14.2.0
-      ws: 8.19.0(bufferutil@4.1.0)
+      ws: 8.20.0(bufferutil@4.1.0)
       xml-name-validator: 5.0.0
     transitivePeerDependencies:
       - bufferutil
@@ -42410,7 +42446,7 @@ snapshots:
 
   kysely@0.28.16: {}
 
-  langsmith@0.5.19(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(openai@4.104.0(encoding@0.1.13)(ws@8.19.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.19.0(bufferutil@4.1.0)):
+  langsmith@0.5.19(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(openai@4.104.0(encoding@0.1.13)(ws@8.20.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.20.0(bufferutil@4.1.0)):
     dependencies:
       p-queue: 6.6.2
       uuid: 10.0.0
@@ -42418,10 +42454,10 @@ snapshots:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/exporter-trace-otlp-proto': 0.215.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-base': 2.7.0(@opentelemetry/api@1.9.1)
-      openai: 4.104.0(encoding@0.1.13)(ws@8.19.0(bufferutil@4.1.0))(zod@4.3.6)
-      ws: 8.19.0(bufferutil@4.1.0)
+      openai: 4.104.0(encoding@0.1.13)(ws@8.20.0(bufferutil@4.1.0))(zod@4.3.6)
+      ws: 8.20.0(bufferutil@4.1.0)
 
-  langsmith@0.5.19(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(openai@6.21.0(ws@8.19.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.19.0(bufferutil@4.1.0)):
+  langsmith@0.5.19(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.215.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.1))(openai@6.21.0(ws@8.20.0(bufferutil@4.1.0))(zod@4.3.6))(ws@8.20.0(bufferutil@4.1.0)):
     dependencies:
       p-queue: 6.6.2
       uuid: 10.0.0
@@ -42429,8 +42465,8 @@ snapshots:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/exporter-trace-otlp-proto': 0.215.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-base': 2.7.0(@opentelemetry/api@1.9.1)
-      openai: 6.21.0(ws@8.19.0(bufferutil@4.1.0))(zod@4.3.6)
-      ws: 8.19.0(bufferutil@4.1.0)
+      openai: 6.21.0(ws@8.20.0(bufferutil@4.1.0))(zod@4.3.6)
+      ws: 8.20.0(bufferutil@4.1.0)
 
   latest-version@7.0.0:
     dependencies:
@@ -43617,7 +43653,7 @@ snapshots:
       bent: 7.3.12
       https-proxy-agent: 4.0.0
       uuid: 9.0.1
-      ws: 8.19.0(bufferutil@4.1.0)
+      ws: 8.20.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -44165,12 +44201,12 @@ snapshots:
   openai-realtime-api@1.0.8(bufferutil@4.1.0):
     dependencies:
       nanoid: 5.1.7
-      ws: 8.19.0(bufferutil@4.1.0)
+      ws: 8.20.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  openai@4.104.0(encoding@0.1.13)(ws@8.19.0(bufferutil@4.1.0))(zod@3.25.76):
+  openai@4.104.0(encoding@0.1.13)(ws@8.20.0(bufferutil@4.1.0))(zod@3.25.76):
     dependencies:
       '@types/node': 22.19.15
       '@types/node-fetch': 2.6.13
@@ -44180,12 +44216,12 @@ snapshots:
       formdata-node: 4.4.1
       node-fetch: 2.7.0(encoding@0.1.13)
     optionalDependencies:
-      ws: 8.19.0(bufferutil@4.1.0)
+      ws: 8.20.0(bufferutil@4.1.0)
       zod: 3.25.76
     transitivePeerDependencies:
       - encoding
 
-  openai@4.104.0(encoding@0.1.13)(ws@8.19.0(bufferutil@4.1.0))(zod@4.3.6):
+  openai@4.104.0(encoding@0.1.13)(ws@8.20.0(bufferutil@4.1.0))(zod@4.3.6):
     dependencies:
       '@types/node': 22.19.15
       '@types/node-fetch': 2.6.13
@@ -44195,24 +44231,24 @@ snapshots:
       formdata-node: 4.4.1
       node-fetch: 2.7.0(encoding@0.1.13)
     optionalDependencies:
-      ws: 8.19.0(bufferutil@4.1.0)
+      ws: 8.20.0(bufferutil@4.1.0)
       zod: 4.3.6
     transitivePeerDependencies:
       - encoding
 
-  openai@5.23.2(ws@8.19.0(bufferutil@4.1.0))(zod@3.25.76):
+  openai@5.23.2(ws@8.20.0(bufferutil@4.1.0))(zod@3.25.76):
     optionalDependencies:
-      ws: 8.19.0(bufferutil@4.1.0)
+      ws: 8.20.0(bufferutil@4.1.0)
       zod: 3.25.76
 
-  openai@6.21.0(ws@8.19.0(bufferutil@4.1.0))(zod@3.25.76):
+  openai@6.21.0(ws@8.20.0(bufferutil@4.1.0))(zod@3.25.76):
     optionalDependencies:
-      ws: 8.19.0(bufferutil@4.1.0)
+      ws: 8.20.0(bufferutil@4.1.0)
       zod: 3.25.76
 
-  openai@6.21.0(ws@8.19.0(bufferutil@4.1.0))(zod@4.3.6):
+  openai@6.21.0(ws@8.20.0(bufferutil@4.1.0))(zod@4.3.6):
     optionalDependencies:
-      ws: 8.19.0(bufferutil@4.1.0)
+      ws: 8.20.0(bufferutil@4.1.0)
       zod: 4.3.6
     optional: true
 
@@ -45401,7 +45437,7 @@ snapshots:
       chromium-bidi: 0.6.3(devtools-protocol@0.0.1312386)
       debug: 4.4.3
       devtools-protocol: 0.0.1312386
-      ws: 8.19.0(bufferutil@4.1.0)
+      ws: 8.20.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bare-abort-controller
       - bare-buffer
@@ -47261,7 +47297,7 @@ snapshots:
       esbuild-register: 3.6.0(esbuild@0.25.11)
       recast: 0.23.11
       semver: 7.7.4
-      ws: 8.19.0(bufferutil@4.1.0)
+      ws: 8.20.0(bufferutil@4.1.0)
     optionalDependencies:
       prettier: 3.8.3
     transitivePeerDependencies:
@@ -48820,7 +48856,7 @@ snapshots:
       deepmerge-ts: 7.1.5
       https-proxy-agent: 7.0.6
       undici: 6.24.1
-      ws: 8.19.0(bufferutil@4.1.0)
+      ws: 8.20.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bare-abort-controller
       - bare-buffer
@@ -48930,7 +48966,7 @@ snapshots:
       sockjs: 0.3.24
       spdy: 4.0.2
       webpack-dev-middleware: 7.4.5(tslib@2.8.1)(webpack@5.104.1(@swc/core@1.15.7(@swc/helpers@0.5.17)))
-      ws: 8.19.0(bufferutil@4.1.0)
+      ws: 8.20.0(bufferutil@4.1.0)
     optionalDependencies:
       webpack: 5.104.1(@swc/core@1.15.7(@swc/helpers@0.5.17))
     transitivePeerDependencies:
@@ -49177,7 +49213,7 @@ snapshots:
     optionalDependencies:
       bufferutil: 4.1.0
 
-  ws@8.19.0(bufferutil@4.1.0):
+  ws@8.20.0(bufferutil@4.1.0):
     optionalDependencies:
       bufferutil: 4.1.0
 
