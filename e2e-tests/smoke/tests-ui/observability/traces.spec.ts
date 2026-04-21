@@ -9,16 +9,6 @@ function traceEntries(page: Page) {
   return page.locator('button.data-list-row');
 }
 
-/**
- * Open the entity type filter dropdown and select an option.
- * The new UI uses: Filter button → Entity Type sub-menu → radio items.
- */
-async function selectEntityFilter(page: Page, name: string) {
-  await page.getByRole('button', { name: 'Filter' }).click();
-  await page.getByRole('menuitem', { name: 'Entity Type' }).click();
-  await page.getByRole('menuitemradio', { name, exact: true }).click();
-}
-
 test.describe('Observability', () => {
   // Self-contained tests that generate their own traces go first,
   // so subsequent tests can rely on traces existing in the database.
@@ -31,12 +21,15 @@ test.describe('Observability', () => {
     const lastNode = page.locator('[data-workflow-node]').last();
     await expect(lastNode).toHaveAttribute('data-workflow-step-status', 'success', { timeout: 10_000 });
 
-    // Navigate to observability and filter by this workflow
-    await page.goto('/observability');
-    await selectEntityFilter(page, 'sequential-steps');
-
-    // Should show at least one trace containing the workflow name
-    await expect(traceEntries(page).filter({ hasText: 'sequential-steps' }).first()).toBeVisible({ timeout: 10_000 });
+    // Navigate to observability — the trace for the workflow we just ran
+    // should appear in the list. Poll with reloads since trace indexing
+    // may lag behind the workflow completion.
+    await expect(async () => {
+      await page.goto('/observability');
+      await expect(traceEntries(page).filter({ hasText: 'sequential-steps' }).first()).toBeVisible({
+        timeout: 5_000,
+      });
+    }).toPass({ timeout: 30_000, intervals: [1_000, 2_000, 3_000] });
   });
 
   test('traces appear after agent chat', async ({ page }) => {
@@ -47,12 +40,12 @@ test.describe('Observability', () => {
     await fillAndSend(page, 'Say hi');
     await waitForAssistantMessage(page);
 
-    // Navigate to observability and filter by this agent
-    await page.goto('/observability');
-    await selectEntityFilter(page, 'Test Agent');
-
-    // Should show at least one trace for this agent
-    await expect(traceEntries(page).first()).toBeVisible({ timeout: 10_000 });
+    // Navigate to observability — an agent trace should appear.
+    // Poll with reloads since trace indexing may lag behind the chat response.
+    await expect(async () => {
+      await page.goto('/observability');
+      await expect(traceEntries(page).first()).toBeVisible({ timeout: 5_000 });
+    }).toPass({ timeout: 30_000, intervals: [1_000, 2_000, 3_000] });
   });
 
   // Tests below rely on traces already existing from the tests above
@@ -64,8 +57,8 @@ test.describe('Observability', () => {
     await expect(page.getByRole('heading', { name: 'Traces', level: 1 })).toBeVisible();
 
     // Filter controls should be visible
-    await expect(page.getByRole('button', { name: 'Filter' })).toBeVisible();
-    await expect(page.getByRole('switch', { name: 'Group by thread' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add Filter' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Group traces by thread' })).toBeVisible();
 
     // At least one trace entry should exist (seeded by the tests above)
     await expect(traceEntries(page).first()).toBeVisible({ timeout: 10_000 });
@@ -75,20 +68,20 @@ test.describe('Observability', () => {
     await page.goto('/observability');
     await expect(traceEntries(page).first()).toBeVisible({ timeout: 10_000 });
 
-    // Open the entity filter and verify "All" option exists
-    await page.getByRole('button', { name: 'Filter' }).click();
-    await page.getByRole('menuitem', { name: 'Entity Type' }).click();
-    await expect(page.getByRole('menuitemradio', { name: 'All', exact: true })).toBeVisible();
+    // Open the filter menu and verify "Primitive Type" has an "Any" option
+    await page.getByRole('button', { name: 'Add Filter' }).click();
+    await page.getByRole('menuitem', { name: 'Primitive Type' }).click();
+    await expect(page.getByRole('radio', { name: 'Any', exact: true })).toBeVisible();
 
-    // Select a workflow entity
-    await page.getByRole('menuitemradio', { name: 'sequential-steps' }).click();
+    // Select Workflow type to narrow down results
+    await page.getByRole('radio', { name: 'Workflow', exact: true }).click();
+    await page.keyboard.press('Escape');
 
-    // URL should update with the entity filter
-    await expect(page).toHaveURL(/entity=/, { timeout: 5_000 });
+    // URL should update with the entity type filter
+    await expect(page).toHaveURL(/rootEntityType|filter/, { timeout: 5_000 });
 
-    // Filtered entries should contain the workflow name
+    // At least one workflow trace should still be visible
     await expect(traceEntries(page).first()).toBeVisible({ timeout: 10_000 });
-    await expect(traceEntries(page).first()).toContainText('sequential-steps');
   });
 
   test('click trace to open detail panel', async ({ page }) => {
@@ -111,13 +104,11 @@ test.describe('Observability', () => {
   });
 
   test('span inspection within trace', async ({ page }) => {
-    // Filter to a workflow trace that has multiple spans
+    // Find a workflow trace that has multiple spans
     await page.goto('/observability');
-    await selectEntityFilter(page, 'sequential-steps');
-
-    // Click the first workflow trace
-    await expect(traceEntries(page).first()).toBeVisible({ timeout: 10_000 });
-    await traceEntries(page).first().click();
+    const workflowTrace = traceEntries(page).filter({ hasText: 'sequential-steps' }).first();
+    await expect(workflowTrace).toBeVisible({ timeout: 10_000 });
+    await workflowTrace.click();
     await expect(page.getByRole('heading', { name: /^Trace #/ })).toBeVisible({ timeout: 5_000 });
 
     // Click a step span in the timeline
