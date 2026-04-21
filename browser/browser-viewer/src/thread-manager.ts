@@ -71,16 +71,31 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
   }
 
   /**
+   * Check if a thread should use the shared session slot.
+   * In shared scope, all threads use the shared session.
+   * In thread scope, DEFAULT_THREAD_ID also uses the shared session.
+   */
+  private usesSharedSlot(threadId: string): boolean {
+    return this.scope === 'shared' || threadId === DEFAULT_THREAD_ID;
+  }
+
+  /**
+   * Get the viewer session for a thread, using consistent routing.
+   * Handles both shared and thread-scoped sessions.
+   */
+  private getViewerSession(threadId: string): BrowserViewerSession | null {
+    if (this.usesSharedSlot(threadId)) {
+      return this.sharedSession;
+    }
+    return this.threadSessions.get(threadId) ?? null;
+  }
+
+  /**
    * Get CDP URL for a specific thread.
    */
   getCdpUrlForThread(threadId?: string): string | null {
     const effectiveThreadId = threadId ?? DEFAULT_THREAD_ID;
-
-    if (this.scope === 'shared') {
-      return this.sharedSession?.cdpUrl ?? null;
-    }
-
-    return this.threadSessions.get(effectiveThreadId)?.cdpUrl ?? null;
+    return this.getViewerSession(effectiveThreadId)?.cdpUrl ?? null;
   }
 
   /**
@@ -88,7 +103,7 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
    */
   async getActivePageForThread(threadId?: string): Promise<Page | null> {
     const effectiveThreadId = threadId ?? DEFAULT_THREAD_ID;
-    const session = this.scope === 'shared' ? this.sharedSession : this.threadSessions.get(effectiveThreadId);
+    const session = this.getViewerSession(effectiveThreadId);
 
     if (!session?.context) {
       return null;
@@ -114,7 +129,7 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
    */
   async getCdpSessionForThread(threadId?: string): Promise<CDPSession | null> {
     const effectiveThreadId = threadId ?? DEFAULT_THREAD_ID;
-    const session = this.scope === 'shared' ? this.sharedSession : this.threadSessions.get(effectiveThreadId);
+    const session = this.getViewerSession(effectiveThreadId);
 
     if (!session?.context) {
       return null;
@@ -140,9 +155,7 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
    */
   getContextForThread(threadId?: string): BrowserContext | null {
     const effectiveThreadId = threadId ?? DEFAULT_THREAD_ID;
-    const session = this.scope === 'shared' ? this.sharedSession : this.threadSessions.get(effectiveThreadId);
-
-    return session?.context ?? null;
+    return this.getViewerSession(effectiveThreadId)?.context ?? null;
   }
 
   /**
@@ -165,57 +178,69 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       launchOptions.executablePath = this.browserConfig.executablePath;
     }
 
-    // Launch server - this starts Chrome
-    const browserServer = await chromium.launchServer(launchOptions);
+    // Track partially initialized resources for cleanup on failure
+    let browserServer: BrowserServer | null = null;
+    let browser: Browser | null = null;
 
-    // Discover the actual CDP WebSocket URL from Chrome's DevToolsActivePort file
-    const cdpUrl = this.discoverCdpUrl(browserServer);
+    try {
+      // Launch server - this starts Chrome
+      browserServer = await chromium.launchServer(launchOptions);
 
-    // Connect to the browser via Playwright for screencast/session management
-    const browser = await chromium.connect(browserServer.wsEndpoint());
+      // Discover the actual CDP WebSocket URL from Chrome's DevToolsActivePort file
+      const cdpUrl = this.discoverCdpUrl(browserServer);
 
-    // Create context and initial page
-    const context = await browser.newContext({
-      viewport: this.browserConfig.viewport ?? { width: 1280, height: 720 },
-    });
+      // Connect to the browser via Playwright for screencast/session management
+      browser = await chromium.connect(browserServer.wsEndpoint());
 
-    await context.newPage();
+      // Create context and initial page
+      const context = await browser.newContext({
+        viewport: this.browserConfig.viewport ?? { width: 1280, height: 720 },
+      });
 
-    // Set up CDP session for active page
-    const pages = context.pages();
-    const cdpSession = pages[0] ? await context.newCDPSession(pages[0]) : null;
+      await context.newPage();
 
-    // Set up disconnection handler
-    browser.on('disconnected', () => {
-      this.handleBrowserDisconnected(threadId);
-    });
+      // Set up CDP session for active page
+      const pages = context.pages();
+      const cdpSession = pages[0] ? await context.newCDPSession(pages[0]) : null;
 
-    const session: BrowserViewerSession = {
-      threadId,
-      createdAt: Date.now(),
-      browserState: savedState,
-      browserServer,
-      browser,
-      context,
-      cdpSession,
-      cdpUrl,
-    };
+      // Set up disconnection handler
+      browser.on('disconnected', () => {
+        this.handleBrowserDisconnected(threadId);
+      });
 
-    // Store in our session map
-    this.threadSessions.set(threadId, session);
+      const session: BrowserViewerSession = {
+        threadId,
+        createdAt: Date.now(),
+        browserState: savedState,
+        browserServer,
+        browser,
+        context,
+        cdpSession,
+        cdpUrl,
+      };
 
-    // Store in base class sessions map (for hasSession() checks)
-    this.sessions.set(threadId, session);
+      // Store in our session map
+      this.threadSessions.set(threadId, session);
 
-    // Store browser in thread managers map (used by base class)
-    this.threadManagers.set(threadId, browser);
+      // Store in base class sessions map (for hasSession() checks)
+      this.sessions.set(threadId, session);
 
-    this.logger?.debug?.(`Chrome launched for thread ${threadId}, CDP URL: ${cdpUrl}`);
+      // Store browser in thread managers map (used by base class)
+      this.threadManagers.set(threadId, browser);
 
-    // Notify callback
-    this.onBrowserCreated?.(browser, threadId, cdpUrl);
+      this.logger?.debug?.(`Chrome launched for thread ${threadId}, CDP URL: ${cdpUrl}`);
 
-    return session;
+      // Notify callback
+      this.onBrowserCreated?.(browser, threadId, cdpUrl);
+
+      return session;
+    } catch (error) {
+      // Clean up partially initialized resources
+      this.logger?.warn?.(`Failed to create session for thread ${threadId}: ${error}`);
+      await browser?.close().catch(() => {});
+      await browserServer?.close().catch(() => {});
+      throw error;
+    }
   }
 
   /**
@@ -275,48 +300,57 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
 
     this.logger?.debug?.(`Connecting to existing browser at ${cdpUrl}`);
 
-    const browser = await chromium.connectOverCDP(cdpUrl);
+    let browser: Browser | null = null;
 
-    // Get or create context
-    const contexts = browser.contexts();
-    const context = contexts[0] ?? (await browser.newContext());
+    try {
+      browser = await chromium.connectOverCDP(cdpUrl);
 
-    // Create initial page if none exists
-    const pages = context.pages();
-    if (pages.length === 0) {
-      await context.newPage();
-    }
+      // Get or create context
+      const contexts = browser.contexts();
+      const context = contexts[0] ?? (await browser.newContext());
 
-    // Set up CDP session for active page
-    const updatedPages = context.pages();
-    const cdpSession = updatedPages[0] ? await context.newCDPSession(updatedPages[0]) : null;
+      // Create initial page if none exists
+      const pages = context.pages();
+      if (pages.length === 0) {
+        await context.newPage();
+      }
 
-    // Set up disconnection handler
-    browser.on('disconnected', () => {
-      this.handleBrowserDisconnected(DEFAULT_THREAD_ID);
-    });
+      // Set up CDP session for active page
+      const updatedPages = context.pages();
+      const cdpSession = updatedPages[0] ? await context.newCDPSession(updatedPages[0]) : null;
 
-    this.sharedSession = {
-      threadId: DEFAULT_THREAD_ID,
-      createdAt: Date.now(),
-      browserServer: null, // We don't own the server for external CDP connections
-      browser,
-      context,
-      cdpSession,
-      cdpUrl,
-    };
+      // Set up disconnection handler
+      browser.on('disconnected', () => {
+        this.handleBrowserDisconnected(DEFAULT_THREAD_ID);
+      });
 
-    // Store in base class sessions map (for hasSession() checks)
-    this.sessions.set(DEFAULT_THREAD_ID, this.sharedSession);
+      this.sharedSession = {
+        threadId: DEFAULT_THREAD_ID,
+        createdAt: Date.now(),
+        browserServer: null, // We don't own the server for external CDP connections
+        browser,
+        context,
+        cdpSession,
+        cdpUrl,
+      };
 
-    // Set shared manager (used by base class)
-    this.setSharedManager(browser);
+      // Store in base class sessions map (for hasSession() checks)
+      this.sessions.set(DEFAULT_THREAD_ID, this.sharedSession);
+
+      // Set shared manager (used by base class)
+      this.setSharedManager(browser);
 
     this.logger?.debug?.(`Connected to existing browser, CDP URL: ${cdpUrl}`);
 
-    // Notify callbacks
-    this.onBrowserCreated?.(browser, DEFAULT_THREAD_ID, cdpUrl);
-    this.onSessionCreated?.(this.sharedSession);
+      // Notify callbacks
+      this.onBrowserCreated?.(browser, DEFAULT_THREAD_ID, cdpUrl);
+      this.onSessionCreated?.(this.sharedSession);
+    } catch (error) {
+      // Clean up partially initialized resources
+      this.logger?.warn?.(`Failed to connect to existing browser: ${error}`);
+      await browser?.close().catch(() => {});
+      throw error;
+    }
   }
 
   /**
@@ -340,51 +374,63 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       launchOptions.executablePath = this.browserConfig.executablePath;
     }
 
-    // Launch server - this starts Chrome
-    const browserServer = await chromium.launchServer(launchOptions);
+    // Track partially initialized resources for cleanup on failure
+    let browserServer: BrowserServer | null = null;
+    let browser: Browser | null = null;
 
-    // Discover the actual CDP WebSocket URL from Chrome's DevToolsActivePort file
-    const cdpUrl = this.discoverCdpUrl(browserServer);
+    try {
+      // Launch server - this starts Chrome
+      browserServer = await chromium.launchServer(launchOptions);
 
-    // Connect to the browser via Playwright for screencast/session management
-    const browser = await chromium.connect(browserServer.wsEndpoint());
+      // Discover the actual CDP WebSocket URL from Chrome's DevToolsActivePort file
+      const cdpUrl = this.discoverCdpUrl(browserServer);
 
-    // Create context and initial page
-    const context = await browser.newContext({
-      viewport: this.browserConfig.viewport ?? { width: 1280, height: 720 },
-    });
+      // Connect to the browser via Playwright for screencast/session management
+      browser = await chromium.connect(browserServer.wsEndpoint());
 
-    await context.newPage();
+      // Create context and initial page
+      const context = await browser.newContext({
+        viewport: this.browserConfig.viewport ?? { width: 1280, height: 720 },
+      });
 
-    // Set up CDP session for active page
-    const pages = context.pages();
-    const cdpSession = pages[0] ? await context.newCDPSession(pages[0]) : null;
+      await context.newPage();
 
-    // Set up disconnection handler
-    browser.on('disconnected', () => {
-      this.handleBrowserDisconnected(DEFAULT_THREAD_ID);
-    });
+      // Set up CDP session for active page
+      const pages = context.pages();
+      const cdpSession = pages[0] ? await context.newCDPSession(pages[0]) : null;
 
-    this.sharedSession = {
-      threadId: DEFAULT_THREAD_ID,
-      createdAt: Date.now(),
-      browserServer,
-      browser,
-      context,
-      cdpSession,
-      cdpUrl,
-    };
+      // Set up disconnection handler
+      browser.on('disconnected', () => {
+        this.handleBrowserDisconnected(DEFAULT_THREAD_ID);
+      });
 
-    // Store in base class sessions map (for hasSession() checks)
-    this.sessions.set(DEFAULT_THREAD_ID, this.sharedSession);
+      this.sharedSession = {
+        threadId: DEFAULT_THREAD_ID,
+        createdAt: Date.now(),
+        browserServer,
+        browser,
+        context,
+        cdpSession,
+        cdpUrl,
+      };
 
-    // Set shared manager (used by base class)
-    this.setSharedManager(browser);
+      // Store in base class sessions map (for hasSession() checks)
+      this.sessions.set(DEFAULT_THREAD_ID, this.sharedSession);
 
-    this.logger?.debug?.(`Shared Chrome launched, CDP URL: ${cdpUrl}`);
+      // Set shared manager (used by base class)
+      this.setSharedManager(browser);
 
-    // Notify callback
-    this.onBrowserCreated?.(browser, DEFAULT_THREAD_ID, cdpUrl);
+      this.logger?.debug?.(`Shared Chrome launched, CDP URL: ${cdpUrl}`);
+
+      // Notify callback
+      this.onBrowserCreated?.(browser, DEFAULT_THREAD_ID, cdpUrl);
+    } catch (error) {
+      // Clean up partially initialized resources
+      this.logger?.warn?.(`Failed to create shared session: ${error}`);
+      await browser?.close().catch(() => {});
+      await browserServer?.close().catch(() => {});
+      throw error;
+    }
   }
 
   /**
@@ -393,15 +439,14 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
   private handleBrowserDisconnected(threadId: string): void {
     this.logger?.debug?.(`Browser disconnected for thread ${threadId}`);
 
-    if (this.scope === 'shared') {
-      // Guard against already-closed session (browser.close() triggers 'disconnected')
-      if (!this.sharedSession) return;
+    // Guard against already-closed session (browser.close() triggers 'disconnected')
+    if (!this.getViewerSession(threadId)) return;
+
+    if (this.usesSharedSlot(threadId)) {
       this.sharedSession = null;
       this.clearSharedManager();
       this.sessions.delete(DEFAULT_THREAD_ID);
     } else {
-      // Guard against already-closed session
-      if (!this.threadSessions.has(threadId)) return;
       this.threadSessions.delete(threadId);
       this.threadManagers.delete(threadId);
       this.sessions.delete(threadId);
@@ -424,13 +469,19 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
     this.logger?.debug?.(`Connecting to external CDP for thread ${threadId}: ${cdpUrl}`);
 
     // Close any existing session for this thread to avoid leaking browser processes
-    if (this.threadSessions.has(threadId)) {
-      await this.closeThreadBrowser(threadId);
+    if (this.getViewerSession(threadId)) {
+      if (this.usesSharedSlot(threadId)) {
+        await this.closeSharedBrowser();
+      } else {
+        await this.closeThreadBrowser(threadId);
+      }
     }
+
+    let browser: Browser | null = null;
 
     try {
       // Connect to external browser via CDP
-      const browser = await chromium.connectOverCDP(cdpUrl);
+      browser = await chromium.connectOverCDP(cdpUrl);
 
       // Get the default context (external browsers typically have one)
       const contexts = browser.contexts();
@@ -479,7 +530,9 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
 
       return session;
     } catch (error) {
+      // Clean up partially initialized resources
       this.logger?.warn?.(`Failed to connect to external CDP: ${error}`);
+      await browser?.close().catch(() => {});
       throw error;
     }
   }
@@ -492,6 +545,11 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
     if (!session) {
       return;
     }
+
+    // Clear state BEFORE async operations to prevent double callback from disconnect handler
+    this.threadSessions.delete(threadId);
+    this.threadManagers.delete(threadId);
+    this.sessions.delete(threadId);
 
     // Detach CDP session
     if (session.cdpSession) {
@@ -518,10 +576,6 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       }
     }
 
-    this.threadSessions.delete(threadId);
-    this.threadManagers.delete(threadId);
-    this.sessions.delete(threadId);
-
     this.onBrowserClosed?.(threadId);
   }
 
@@ -533,10 +587,17 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       return;
     }
 
+    // Capture session reference and clear state BEFORE async operations
+    // to prevent double callback from disconnect handler
+    const session = this.sharedSession;
+    this.sharedSession = null;
+    this.clearSharedManager();
+    this.sessions.delete(DEFAULT_THREAD_ID);
+
     // Detach CDP session
-    if (this.sharedSession.cdpSession) {
+    if (session.cdpSession) {
       try {
-        await this.sharedSession.cdpSession.detach();
+        await session.cdpSession.detach();
       } catch {
         // Ignore
       }
@@ -544,23 +605,19 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
 
     // Close browser connection
     try {
-      await this.sharedSession.browser.close();
+      await session.browser.close();
     } catch {
       // Ignore
     }
 
     // Close browser server (kills the Chrome process) - only if we own it
-    if (this.sharedSession.browserServer) {
+    if (session.browserServer) {
       try {
-        await this.sharedSession.browserServer.close();
+        await session.browserServer.close();
       } catch {
         // Ignore
       }
     }
-
-    this.sharedSession = null;
-    this.clearSharedManager();
-    this.sessions.delete(DEFAULT_THREAD_ID);
 
     this.onBrowserClosed?.(DEFAULT_THREAD_ID);
   }
@@ -641,11 +698,6 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
    */
   isBrowserRunning(threadId?: string): boolean {
     const effectiveThreadId = threadId ?? DEFAULT_THREAD_ID;
-
-    if (this.scope === 'shared') {
-      return this.sharedSession !== null;
-    }
-
-    return this.threadSessions.has(effectiveThreadId);
+    return this.getViewerSession(effectiveThreadId) !== null;
   }
 }
