@@ -1536,13 +1536,16 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       const { content } = extractContent(errorText);
       error = content;
 
-      // Try to create an Error object with better structure
-      const errorMatch = content.match(/^([A-Z][a-zA-Z]*Error):\s*(.+)$/m);
+      // Try to create an Error object with better structure.
+      // Bounded quantifiers avoid polynomial backtracking on
+      // attacker-controlled input like 'AAAA...Error:'.
+      const errorMatch = content.match(/^([A-Z][A-Za-z]{0,64}Error):[ \t]*(.+)$/m);
       if (errorMatch) {
         const err = new Error(errorMatch[2]!);
         err.name = errorMatch[1]!;
-        // Try to extract stack trace
-        const stackMatch = content.match(/\n\s+at\s+.+/g);
+        // Try to extract stack trace. Use [ \t]+ (not \s+) so the
+        // leading '\n' in the pattern is unambiguous.
+        const stackMatch = content.match(/\n[ \t]+at[ \t]+.+/g);
         if (stackMatch) {
           err.stack = `${err.name}: ${err.message}\n${stackMatch.join('\n')}`;
         }
@@ -1671,7 +1674,10 @@ function highlightCode(content: string, path: string, startLine?: number): strin
  *  Handles both SGR sequences (\x1b[...m) and OSC 8 hyperlinks (\x1b]8;...;\x07).
  */
 function truncateAnsi(str: string, maxWidth: number): string {
-  const ansiRegex = /\x1b\[[0-9;]*m|\x1b\]8;[^\x07]*\x07/g;
+  // The OSC 8 hyperlink body is terminated by BEL (\x07). We also
+  // break on a new ESC (\x1b) so a missing terminator cannot scan
+  // unbounded input and amplify polynomial backtracking.
+  const ansiRegex = /\x1b\[[0-9;]{0,32}m|\x1b\]8;[^\x07\x1b]{0,2048}\x07/g;
   let visibleLength = 0;
   let result = '';
   let lastIndex = 0;

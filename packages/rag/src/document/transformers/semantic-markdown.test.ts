@@ -77,4 +77,33 @@ describe('SemanticMarkdownTransformer', () => {
       expect(totalCharsEncoded).toBeLessThan(markdown.length * 2);
     });
   });
+
+  describe('header parsing', () => {
+    it('parses headers with space or tab separators, up to depth 6', () => {
+      const transformer = SemanticMarkdownTransformer.fromTikToken({
+        encodingName: 'cl100k_base',
+        options: { joinThreshold: 10000 },
+      });
+      // Each header has body content so it survives merging and chunk output.
+      const md = `# One\nBody one.\n\n## Two\nBody two.\n\n###\tThree\nBody three.`;
+      const chunks = transformer.splitText({ text: md });
+      const joined = chunks.join('\n');
+      expect(joined).toContain('One');
+      expect(joined).toContain('Two');
+      expect(joined).toContain('Three');
+    });
+
+    it('runs in linear time on pathological header-like input (no ReDoS)', () => {
+      const transformer = SemanticMarkdownTransformer.fromTikToken({
+        encodingName: 'cl100k_base',
+        options: { joinThreshold: 10000 },
+      });
+      // Many '#' followed by tabs with no trailing content — the shape
+      // CodeQL flagged on the previous `^(#+)\s+(.+)$` regex.
+      const pathological = '#'.repeat(1000) + '\t'.repeat(5000);
+      const start = Date.now();
+      transformer.splitText({ text: pathological });
+      expect(Date.now() - start).toBeLessThan(500);
+    });
+  });
 });

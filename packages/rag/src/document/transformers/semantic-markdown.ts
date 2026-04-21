@@ -57,7 +57,10 @@ export class SemanticMarkdownTransformer extends TextTransformer {
     let currentDepth = 0;
     let inCodeBlock = false;
 
-    const headerRegex = /^(#+)\s+(.+)$/;
+    // Bounded quantifiers avoid the polynomial backtracking that
+    // `^(#+)\s+(.+)$` can exhibit on attacker-controlled input.
+    // Markdown headers cap at 6 '#' and use space/tab as separator.
+    const headerRegex = /^(#{1,6})[ \t]+(.+)$/;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]!;
