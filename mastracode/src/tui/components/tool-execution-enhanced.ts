@@ -1535,24 +1535,8 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     try {
       const { content } = extractContent(errorText);
       error = content;
-
-      // Try to create an Error object with better structure.
-      // Bounded quantifiers avoid polynomial backtracking. The message
-      // group requires a non-space leading char so it cannot overlap
-      // with the `[ \t]*` separator (previously flagged by CodeQL on
-      // inputs like `AError:\t\t\t...`).
-      const errorMatch = content.match(/^([A-Z][A-Za-z]{0,64}Error):[ \t]*(\S[^\n]{0,2048})$/m);
-      if (errorMatch) {
-        const err = new Error(errorMatch[2]!);
-        err.name = errorMatch[1]!;
-        // Try to extract stack trace. Use [ \t]+ (not \s+) so the
-        // leading '\n' in the pattern is unambiguous.
-        const stackMatch = content.match(/\n[ \t]+at[ \t]+.+/g);
-        if (stackMatch) {
-          err.stack = `${err.name}: ${err.message}\n${stackMatch.join('\n')}`;
-        }
-        error = err;
-      }
+      const parsed = parseErrorFromContent(content);
+      if (parsed) error = parsed;
     } catch {
       // Keep as string
     }
@@ -1672,6 +1656,27 @@ function highlightCode(content: string, path: string, startLine?: number): strin
     return codeLines.join('\n');
   }
 }
+/** Parse a `Name: message\n  at ...` error string into an Error object.
+ *  Returns null if the content does not look like a JavaScript Error.
+ *  Preserves the behaviour of the original `/^([A-Z][a-zA-Z]*Error):\s*(.+)$/m`
+ *  pattern (same captures for well-formed inputs) while using bounded
+ *  quantifiers and `[ \t]` separators to avoid the polynomial backtracking
+ *  CodeQL flagged on pathological inputs.
+ *  Exported for unit testing.
+ */
+export function parseErrorFromContent(content: string): Error | null {
+  const errorMatch = content.match(/^([A-Z][A-Za-z]{0,64}Error):[ \t]*(.{1,2048})$/m);
+  if (!errorMatch) return null;
+  const err = new Error(errorMatch[2]!);
+  err.name = errorMatch[1]!;
+  // Stack frames are always space/tab-indented — never vertical whitespace.
+  const stackMatch = content.match(/\n[ \t]+at[ \t]+.+/g);
+  if (stackMatch) {
+    err.stack = `${err.name}: ${err.message}\n${stackMatch.join('\n')}`;
+  }
+  return err;
+}
+
 /** Truncate a string with ANSI codes to a visible width.
  *  Handles both SGR sequences (\x1b[...m) and OSC 8 hyperlinks (\x1b]8;...;\x07).
  *  Exported for unit testing.
