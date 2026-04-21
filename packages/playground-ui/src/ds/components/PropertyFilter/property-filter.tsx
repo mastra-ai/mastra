@@ -94,13 +94,7 @@ function getSharedPrefix(values: string[]) {
   return prefix;
 }
 
-export function ClearableSingleSelect({
-  label,
-  options,
-  value,
-  onValueChange,
-  disabled,
-}: ClearableSingleSelectProps) {
+export function ClearableSingleSelect({ label, options, value, onValueChange, disabled }: ClearableSingleSelectProps) {
   const selected = options.find(option => option.value === value);
 
   return (
@@ -134,7 +128,7 @@ export function ClearableSingleSelect({
           </span>
         </Button>
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="start" className="min-w-[12rem]">
+      <DropdownMenu.Content align="start" className="min-w-48">
         {options.map(option => (
           <DropdownMenu.Item
             key={option.value}
@@ -399,7 +393,9 @@ export function PropertyFilter({
             />
           ) : (
             <>
-              <span className="shrink-0 rounded-md bg-surface4 px-2 py-1 text-ui-xs text-neutral3">{selectedField.label}</span>
+              <span className="shrink-0 rounded-md bg-surface4 px-2 py-1 text-ui-xs text-neutral3">
+                {selectedField.label}
+              </span>
 
               {selectedField.kind === 'text' ? (
                 <Input
@@ -450,7 +446,9 @@ export function PropertyFilter({
                   onClick={() => setOpen(true)}
                 >
                   <span className="truncate">
-                    {draftMultiValue.length > 0 ? draftMultiValue.join(', ') : selectedField.placeholder ?? `Choose ${selectedField.label}`}
+                    {draftMultiValue.length > 0
+                      ? draftMultiValue.join(', ')
+                      : (selectedField.placeholder ?? `Choose ${selectedField.label}`)}
                   </span>
                   <ChevronDownIcon className="h-4 w-4 shrink-0" />
                 </button>
