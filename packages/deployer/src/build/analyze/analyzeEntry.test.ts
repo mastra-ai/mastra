@@ -312,6 +312,87 @@ describe('analyzeEntry', () => {
     expect(analyzeCache.size).toBe(1);
   });
 
+  it('should avoid re-analyzing sibling workspace packages that share a transitive dependency', async () => {
+    const root = join(import.meta.dirname, '__fixtures__', 'nested-workspace');
+    const entryFilePath = join(root, 'apps', 'mastra', 'src', 'shared-transitive.ts');
+    vi.spyOn(process, 'cwd').mockReturnValue(join(root, 'apps', 'mastra'));
+
+    vi.mocked(resolveModule).mockImplementation(dep => {
+      if (dep === '@internal/a') {
+        return join(root, 'packages', 'a', 'src', 'index.ts');
+      }
+      if (dep === '@internal/b') {
+        return join(root, 'packages', 'b', 'src', 'index.ts');
+      }
+      if (dep === '@internal/shared') {
+        return join(root, 'packages', 'shared', 'src', 'index.ts');
+      }
+
+      return undefined;
+    });
+
+    const workspaceMap = new Map<string, WorkspacePackageInfo>([
+      [
+        '@internal/a',
+        {
+          location: `${root}/packages/a`,
+          dependencies: {
+            '@internal/shared': '1.0.0',
+          },
+          version: '1.0.0',
+        },
+      ],
+      [
+        '@internal/b',
+        {
+          location: `${root}/packages/b`,
+          dependencies: {
+            '@internal/shared': '1.0.0',
+          },
+          version: '1.0.0',
+        },
+      ],
+      [
+        '@internal/shared',
+        {
+          location: `${root}/packages/shared`,
+          dependencies: {},
+          version: '1.0.0',
+        },
+      ],
+    ]);
+
+    const baseOpts = {
+      shouldCheckTransitiveDependencies: true,
+      logger: noopLogger,
+      sourcemapEnabled: false,
+      workspaceMap,
+      projectRoot: root,
+    };
+
+    const uncachedResult = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', baseOpts);
+
+    // Without a shared cache, the second recursion wave analyzes @internal/a and @internal/b again.
+    expect(rollup).toHaveBeenCalledTimes(5);
+    expect(uncachedResult.dependencies.size).toBe(3);
+
+    vi.mocked(rollup).mockClear();
+
+    const analyzeCache = new Map();
+    const cachedResult = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', {
+      ...baseOpts,
+      analyzeCache,
+    });
+
+    // With a shared cache, the repeated second-wave analyses are served from cache.
+    expect(rollup).toHaveBeenCalledTimes(3);
+    expect(cachedResult.dependencies.size).toBe(3);
+    expect(cachedResult.dependencies.get('@internal/a')?.exports).toEqual(['a']);
+    expect(cachedResult.dependencies.get('@internal/b')?.exports).toEqual(['b']);
+    expect(cachedResult.dependencies.get('@internal/shared')?.exports).toEqual(['shared', 'shared2']);
+    expect(analyzeCache.size).toBe(3);
+  });
+
   it('should not cache virtual file entries', async () => {
     const entryCode = `
       import { Mastra } from '@mastra/core/mastra';

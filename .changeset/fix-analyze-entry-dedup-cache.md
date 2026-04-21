@@ -2,6 +2,6 @@
 '@mastra/deployer': patch
 ---
 
-fix(deployer): deduplicate Rollup instances in analyzeEntry to prevent hang in large monorepos
+Fixed `mastra dev` startup hangs in large monorepos with repeated workspace dependencies.
 
-Adds a shared `analyzeCache` map that prevents re-analyzing the same entry file across recursive `analyzeEntry` calls during transitive workspace dependency resolution. In large monorepos where multiple workspace packages share dependencies, this avoids spawning redundant Rollup instances that cause `mastra dev` to hang.
+Improved dependency analysis so shared workspace packages are only analyzed once during startup. This reduces repeated Rollup work and keeps development startup responsive in large repos. Fixes #12843.
