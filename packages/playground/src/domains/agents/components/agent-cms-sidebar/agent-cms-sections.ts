@@ -33,7 +33,7 @@ export const CODE_AGENT_OVERRIDE_SECTIONS: AgentCmsSection[] = AGENT_CMS_SECTION
  * `AgentBuilder.defaultMemoryConfig`). Users configure them from the edit
  * view once the agent exists.
  */
-const CREATE_MODE_SECTION_NAMES = new Set(['Identity', 'Instructions', 'Tools', 'Skills', 'Variables']);
+const CREATE_MODE_SECTION_NAMES = new Set(['Identity', 'Instructions', 'Tools', 'Skills']);
 
 export const CREATE_MODE_SECTIONS: AgentCmsSection[] = AGENT_CMS_SECTIONS.filter(s =>
   CREATE_MODE_SECTION_NAMES.has(s.name),
