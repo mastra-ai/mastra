@@ -138,10 +138,11 @@ describe('OtelBridge', () => {
         bridge.shutdown();
       });
 
-      it('should produce unique IDs across multiple createSpan calls', () => {
-        // With the bug, every span shares spanId "0000000000000000" and
-        // traceId "00...00", which is what causes TrackingExporter to
-        // infinite-loop trying to match children to parents.
+      it('should consistently return undefined across multiple createSpan calls', () => {
+        // With the bug, every span shared spanId "0000000000000000" and
+        // traceId "00...00", which is what caused TrackingExporter to
+        // infinite-loop trying to match children to parents. The fix makes
+        // every call return undefined so core generates unique IDs itself.
         const bridge = new OtelBridge();
 
         const options: CreateSpanOptions<SpanType.AGENT_RUN> = {
@@ -153,10 +154,8 @@ describe('OtelBridge', () => {
         const a = bridge.createSpan(options);
         const b = bridge.createSpan(options);
 
-        // If the bridge returns IDs at all, they must be unique per span.
-        if (a && b) {
-          expect(a.spanId).not.toBe(b.spanId);
-        }
+        expect(a).toBeUndefined();
+        expect(b).toBeUndefined();
 
         bridge.shutdown();
       });
