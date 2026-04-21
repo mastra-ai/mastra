@@ -41,6 +41,7 @@ const RESOURCE_DESCRIPTIONS: Record<string, string> = {
   'stored-agents': 'stored agents',
   system: 'system info',
   tools: 'tools',
+  user: 'own user preferences',
   vector: 'vector stores',
   workflows: 'workflows',
   workspaces: 'workspaces',

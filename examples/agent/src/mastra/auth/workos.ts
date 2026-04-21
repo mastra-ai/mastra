@@ -19,8 +19,8 @@ export async function initWorkOS(): Promise<AuthResult> {
     roleMapping: {
       // Full access
       admin: ['*'],
-      // Read and execute across all resources
-      member: ['*:read', '*:execute'],
+      // Read and execute across all resources, plus manage own preferences (stars, preview mode)
+      member: ['*:read', '*:execute', 'user:write'],
       // Read-only access to all resources
       viewer: ['*:read'],
       // Minimal default - no access

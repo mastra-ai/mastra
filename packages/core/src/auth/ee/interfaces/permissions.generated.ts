@@ -114,7 +114,7 @@ export const PERMISSION_PATTERNS = {
   'tool-providers:*': 'tool-providers:*',
   /** Full access to tools */
   'tools:*': 'tools:*',
-  /** Full access to user */
+  /** Full access to own user preferences */
   'user:*': 'user:*',
   /** Full access to vector stores */
   'vector:*': 'vector:*',
@@ -208,9 +208,9 @@ export const PERMISSION_PATTERNS = {
   'tools:execute': 'tools:execute',
   /** View tools */
   'tools:read': 'tools:read',
-  /** View user */
+  /** View own user preferences */
   'user:read': 'user:read',
-  /** Create and modify user */
+  /** Create and modify own user preferences */
   'user:write': 'user:write',
   /** Delete vector stores */
   'vector:delete': 'vector:delete',
