@@ -782,18 +782,30 @@ export function getNestedValue(obj: any, path: string): any {
 export function setNestedValue(obj: any, path: string, value: any): void {
   const keys = path.split('.');
   const lastKey = keys.pop();
-  if (!lastKey) {
+  if (!lastKey || isUnsafeKey(lastKey)) {
+    return;
+  }
+  if (keys.some(isUnsafeKey)) {
     return;
   }
 
-  const target = keys.reduce((current, key) => {
-    if (!current[key] || typeof current[key] !== 'object') {
+  let current = obj;
+  for (const key of keys) {
+    if (
+      !Object.prototype.hasOwnProperty.call(current, key) ||
+      typeof current[key] !== 'object' ||
+      current[key] === null
+    ) {
       current[key] = {};
     }
-    return current[key];
-  }, obj);
+    current = current[key];
+  }
 
-  target[lastKey] = value;
+  current[lastKey] = value;
+}
+
+function isUnsafeKey(key: string): boolean {
+  return key === '__proto__' || key === 'constructor' || key === 'prototype';
 }
 
 export const removeUndefinedValues = (obj: Record<string, any>) => {
