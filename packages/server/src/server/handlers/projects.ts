@@ -29,6 +29,7 @@ import {
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { toSlug } from '../utils';
 import { handleError } from './error';
+import { assertRecordOwnership, getCurrentUserIdIfAuthed } from './ownership';
 import type { VersionedStoreInterface } from './version-helpers';
 import { handleAutoVersioning } from './version-helpers';
 
@@ -90,6 +91,20 @@ async function requireProject(mastra: any, projectId: string) {
   return { agents, record } as { agents: any; record: StorageAgentType };
 }
 
+async function assertProjectOwnership(
+  mastra: any,
+  request: Request | undefined,
+  record: StorageAgentType,
+): Promise<void> {
+  await assertRecordOwnership({ mastra, request, record, resourceLabel: 'project' });
+}
+
+async function requireOwnedProject(mastra: any, request: Request | undefined, projectId: string) {
+  const result = await requireProject(mastra, projectId);
+  await assertProjectOwnership(mastra, request, result.record);
+  return result;
+}
+
 function isProjectRecord(record: StorageAgentType | null | undefined): boolean {
   if (!record) return false;
   if (record.role === 'supervisor') return true;
@@ -119,15 +134,24 @@ export const LIST_PROJECTS_ROUTE = createRoute({
   tags: ['Projects'],
   requiresAuth: true,
   requiresPermission: 'stored-agents:read',
-  handler: async ({ mastra }) => {
+  handler: async (ctx: any) => {
     try {
+      const { mastra } = ctx;
+      const request = (ctx as { request?: Request }).request;
       const agents = await getAgentsStore(mastra);
+      const currentUserId = await getCurrentUserIdIfAuthed(mastra, request);
       const result = await agents.listResolved({ status: 'published', perPage: 100 });
       const projectRecords = (result.agents as StorageResolvedAgentType[]).filter(a => {
         const project = (a.metadata as Record<string, unknown> | undefined)?.project as
           | { isProject?: boolean }
           | undefined;
-        return a.role === 'supervisor' || project?.isProject === true;
+        const isProject = a.role === 'supervisor' || project?.isProject === true;
+        if (!isProject) return false;
+        // When auth is configured, only show projects authored by the current user.
+        // When no auth is configured (currentUserId === null), keep legacy unfiltered behavior.
+        if (currentUserId === null) return true;
+        if (!a.authorId) return true; // legacy/back-compat: unowned records are visible.
+        return a.authorId === currentUserId;
       });
       return {
         projects: projectRecords.map(a => toProjectResponse(a)),
@@ -156,13 +180,16 @@ export const GET_PROJECT_ROUTE = createRoute({
   tags: ['Projects'],
   requiresAuth: true,
   requiresPermission: 'stored-agents:read',
-  handler: async ({ mastra, projectId }) => {
+  handler: async (ctx: any) => {
     try {
+      const { mastra, projectId } = ctx;
+      const request = (ctx as { request?: Request }).request;
       const agents = await getAgentsStore(mastra);
       const record = await agents.getById(projectId);
       if (!record || !isProjectRecord(record)) {
         throw new HTTPException(404, { message: `Project ${projectId} not found` });
       }
+      await assertProjectOwnership(mastra, request, record);
       const resolved = await agents.getByIdResolved(projectId, { status: record.status ?? 'published' });
       if (!resolved) {
         throw new HTTPException(500, { message: 'Failed to resolve project' });
@@ -189,9 +216,12 @@ export const CREATE_PROJECT_ROUTE = createRoute({
   tags: ['Projects'],
   requiresAuth: true,
   requiresPermission: 'stored-agents:write',
-  handler: async ({ mastra, id: providedId, name, description, instructions, model, invitedAgentIds }) => {
+  handler: async (ctx: any) => {
+    const { mastra, id: providedId, name, description, instructions, model, invitedAgentIds } = ctx;
+    const request = (ctx as { request?: Request }).request;
     try {
       const agents = await getAgentsStore(mastra);
+      const currentUserId = await getCurrentUserIdIfAuthed(mastra, request);
       const id = providedId || toSlug(name);
       if (!id) {
         throw new HTTPException(400, { message: 'Could not derive project id from name' });
@@ -239,6 +269,7 @@ export const CREATE_PROJECT_ROUTE = createRoute({
           model,
           tools: toolsMap,
           agents: agentsMap,
+          ...(currentUserId ? { authorId: currentUserId } : {}),
           ...(defaultMemory ? { memory: defaultMemory } : {}),
         } as any,
       });
@@ -275,9 +306,11 @@ export const UPDATE_PROJECT_ROUTE = createRoute({
   tags: ['Projects'],
   requiresAuth: true,
   requiresPermission: 'stored-agents:write',
-  handler: async ({ mastra, projectId, name, description, instructions, model }) => {
+  handler: async (ctx: any) => {
+    const { mastra, projectId, name, description, instructions, model } = ctx;
+    const request = (ctx as { request?: Request }).request;
     try {
-      const { agents, record } = await requireProject(mastra, projectId);
+      const { agents, record } = await requireOwnedProject(mastra, request, projectId);
       const updatedRecord = await agents.update({
         id: record.id,
         ...(name !== undefined && { name }),
@@ -325,9 +358,11 @@ export const DELETE_PROJECT_ROUTE = createRoute({
   tags: ['Projects'],
   requiresAuth: true,
   requiresPermission: 'stored-agents:delete',
-  handler: async ({ mastra, projectId }) => {
+  handler: async (ctx: any) => {
+    const { mastra, projectId } = ctx;
+    const request = (ctx as { request?: Request }).request;
     try {
-      const { agents } = await requireProject(mastra, projectId);
+      const { agents } = await requireOwnedProject(mastra, request, projectId);
       await agents.delete(projectId);
       return { id: projectId, deleted: true as const };
     } catch (error) {
@@ -351,9 +386,11 @@ export const INVITE_PROJECT_AGENT_ROUTE = createRoute({
   tags: ['Projects'],
   requiresAuth: true,
   requiresPermission: 'stored-agents:write',
-  handler: async ({ mastra, projectId, agentId }) => {
+  handler: async (ctx: any) => {
+    const { mastra, projectId, agentId } = ctx;
+    const request = (ctx as { request?: Request }).request;
     try {
-      const { agents, record } = await requireProject(mastra, projectId);
+      const { agents, record } = await requireOwnedProject(mastra, request, projectId);
       const meta = readProjectMetadata(record);
       if (!meta.invitedAgentIds.includes(agentId)) {
         meta.invitedAgentIds = [...meta.invitedAgentIds, agentId];
@@ -387,9 +424,11 @@ export const REMOVE_PROJECT_AGENT_ROUTE = createRoute({
   tags: ['Projects'],
   requiresAuth: true,
   requiresPermission: 'stored-agents:write',
-  handler: async ({ mastra, projectId, agentId }) => {
+  handler: async (ctx: any) => {
+    const { mastra, projectId, agentId } = ctx;
+    const request = (ctx as { request?: Request }).request;
     try {
-      const { agents, record } = await requireProject(mastra, projectId);
+      const { agents, record } = await requireOwnedProject(mastra, request, projectId);
       const meta = readProjectMetadata(record);
       meta.invitedAgentIds = meta.invitedAgentIds.filter(id => id !== agentId);
       const resolved = (await agents.getByIdResolved(projectId, { status: 'published' })) as any;
@@ -421,9 +460,11 @@ export const CREATE_PROJECT_TASK_ROUTE = createRoute({
   tags: ['Projects'],
   requiresAuth: true,
   requiresPermission: 'stored-agents:write',
-  handler: async ({ mastra, projectId, title, description, assigneeAgentId }) => {
+  handler: async (ctx: any) => {
+    const { mastra, projectId, title, description, assigneeAgentId } = ctx;
+    const request = (ctx as { request?: Request }).request;
     try {
-      const { agents, record } = await requireProject(mastra, projectId);
+      const { agents, record } = await requireOwnedProject(mastra, request, projectId);
       const meta = readProjectMetadata(record);
       const now = new Date().toISOString();
       const task: ProjectTask = {
@@ -458,9 +499,11 @@ export const UPDATE_PROJECT_TASK_ROUTE = createRoute({
   tags: ['Projects'],
   requiresAuth: true,
   requiresPermission: 'stored-agents:write',
-  handler: async ({ mastra, projectId, taskId, title, description, status, assigneeAgentId }) => {
+  handler: async (ctx: any) => {
+    const { mastra, projectId, taskId, title, description, status, assigneeAgentId } = ctx;
+    const request = (ctx as { request?: Request }).request;
     try {
-      const { agents, record } = await requireProject(mastra, projectId);
+      const { agents, record } = await requireOwnedProject(mastra, request, projectId);
       const meta = readProjectMetadata(record);
       const idx = meta.tasks.findIndex(t => t.id === taskId);
       if (idx < 0) throw new HTTPException(404, { message: `Task ${taskId} not found` });
@@ -497,9 +540,11 @@ export const DELETE_PROJECT_TASK_ROUTE = createRoute({
   tags: ['Projects'],
   requiresAuth: true,
   requiresPermission: 'stored-agents:write',
-  handler: async ({ mastra, projectId, taskId }) => {
+  handler: async (ctx: any) => {
+    const { mastra, projectId, taskId } = ctx;
+    const request = (ctx as { request?: Request }).request;
     try {
-      const { agents, record } = await requireProject(mastra, projectId);
+      const { agents, record } = await requireOwnedProject(mastra, request, projectId);
       const meta = readProjectMetadata(record);
       const tasks = meta.tasks.filter(t => t.id !== taskId);
       await writeProjectMetadata(agents, record, { ...meta, tasks });

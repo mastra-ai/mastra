@@ -1737,6 +1737,7 @@ export interface CreateProjectParams {
   instructions?: string;
   model: { provider: string; name: string };
   invitedAgentIds?: string[];
+  authorId?: string;
 }
 
 /** Body for PATCH /projects/:projectId. */

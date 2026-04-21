@@ -67,6 +67,10 @@ export const createProjectBodySchema = z.object({
   instructions: z.string().optional(),
   model: modelRefSchema,
   invitedAgentIds: z.array(z.string()).optional().default([]),
+  authorId: z
+    .string()
+    .optional()
+    .describe('Owner of the project. When auth is configured, only the author can view or edit it.'),
 });
 
 export const updateProjectBodySchema = z.object({

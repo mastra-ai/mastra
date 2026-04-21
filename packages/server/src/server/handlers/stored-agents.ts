@@ -1,5 +1,3 @@
-import type { IUserProvider } from '@mastra/core/auth';
-import type { MastraAuthProvider } from '@mastra/core/server';
 import type { StorageCreateAgentInput, StorageUpdateAgentInput } from '@mastra/core/storage';
 import type { z } from 'zod/v4';
 
@@ -25,44 +23,20 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import { toSlug } from '../utils';
 
 import { handleError } from './error';
+import { assertRecordOwnership } from './ownership';
 import { handleAutoVersioning } from './version-helpers';
 import type { VersionedStoreInterface } from './version-helpers';
 
 /**
- * Returns the authenticated user's id if the server is configured with a
- * `MastraAuthProvider` that implements `getCurrentUser`. Returns `null` when no
- * auth is configured — callers should treat this as "ownership checks disabled"
- * to preserve behavior for setups that don't have an auth provider.
- */
-async function getCurrentUserIdIfAuthed(mastra: any, request: Request | undefined): Promise<string | null> {
-  const serverConfig = mastra?.getServer?.();
-  const auth = serverConfig?.auth as MastraAuthProvider | undefined;
-  if (!auth || typeof (auth as any).authenticateToken !== 'function') return null;
-  if (typeof (auth as unknown as IUserProvider).getCurrentUser !== 'function') return null;
-  if (!request) return null;
-  const user = await (auth as unknown as IUserProvider).getCurrentUser(request);
-  return user?.id ?? null;
-}
-
-/**
- * Enforce that the authenticated user owns the stored agent. Only runs when:
- *   - the server has an auth provider with `getCurrentUser`, AND
- *   - the stored agent record has an `authorId`.
- *
- * This keeps existing unauthenticated setups working while preventing
- * non-authors from editing or deleting agents they did not create.
+ * Enforce that the authenticated user owns the stored agent. Thin wrapper over
+ * `assertRecordOwnership` that preserves the existing error message.
  */
 async function assertAgentOwnership(
   mastra: any,
   request: Request | undefined,
   existing: { authorId?: string | null } | null | undefined,
 ): Promise<void> {
-  if (!existing?.authorId) return;
-  const currentUserId = await getCurrentUserIdIfAuthed(mastra, request);
-  if (currentUserId === null) return; // No auth provider configured — skip.
-  if (currentUserId !== existing.authorId) {
-    throw new HTTPException(403, { message: 'You are not the author of this agent' });
-  }
+  await assertRecordOwnership({ mastra, request, record: existing, resourceLabel: 'agent' });
 }
 
 const AGENT_SNAPSHOT_CONFIG_FIELDS = [
