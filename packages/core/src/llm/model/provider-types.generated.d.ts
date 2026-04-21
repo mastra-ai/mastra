@@ -1082,6 +1082,7 @@ export type ProviderModelsMap = {
     'glm-5',
     'glm-5.1',
     'kimi-k2.5',
+    'kimi-k2.6',
     'mimo-v2-omni',
     'mimo-v2-pro',
     'minimax-m2.5',
@@ -3722,7 +3723,6 @@ export type ProviderModelsMap = {
   ];
   readonly nova: readonly ['nova-2-lite-v1', 'nova-2-pro-v1'];
   readonly netlify: readonly [
-    'anthropic/claude-3-haiku-20240307',
     'anthropic/claude-haiku-4-5',
     'anthropic/claude-haiku-4-5-20251001',
     'anthropic/claude-opus-4-1-20250805',
