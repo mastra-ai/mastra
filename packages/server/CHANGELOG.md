@@ -1,5 +1,49 @@
 # @mastra/server
 
+## 1.26.0-alpha.11
+
+### Minor Changes
+
+- You can now tag spans and redact sensitive input or output per request by passing `tags`, `hideInput`, or `hideOutput` in `tracingOptions` when calling an agent or workflow. ([#15512](https://github.com/mastra-ai/mastra/pull/15512))
+
+  Added a lightweight trace endpoint (`GET /observability/traces/:traceId/light`) that returns only timeline-relevant span fields, dramatically reducing payload size when rendering trace timelines. Also added a dedicated span endpoint (`GET /observability/traces/:traceId/spans/:spanId`) to fetch full span details on demand.
+
+### Patch Changes
+
+- Added unique IDs (`logId`, `metricId`, `scoreId`, `feedbackId`) to all observability signals, generated automatically at emission time for de-duplication across the framework pipeline and cross-system correlation. User-facing APIs (`logger.info()`, `metrics.emit()`, `addScore()`, `addFeedback()`) are unchanged. ([#15242](https://github.com/mastra-ai/mastra/pull/15242))
+
+  For existing ClickHouse and DuckDB observability signal tables, run `npx mastra migrate` before initializing the store so the new signal-ID schema is applied.
+
+- Updated dependencies [[`20f59b8`](https://github.com/mastra-ai/mastra/commit/20f59b876cf91199efbc49a0e36b391240708f08), [`e2687a7`](https://github.com/mastra-ai/mastra/commit/e2687a7408790c384563816a9a28ed06735684c9), [`8f1b280`](https://github.com/mastra-ai/mastra/commit/8f1b280b7fe6999ec654f160cb69c1a8719e7a57), [`12df98c`](https://github.com/mastra-ai/mastra/commit/12df98c4904643d9481f5c78f3bed443725b4c96)]:
+  - @mastra/core@1.26.0-alpha.11
+
+## 1.26.0-alpha.10
+
+### Minor Changes
+
+- Added `forEachIndex` to the workflow resume request body schema. The `/workflows/:workflowId/resume`, `/resume-async`, and `/resume-stream` endpoints (including their agent-builder equivalents) now accept an optional zero-based `forEachIndex` so clients can target a specific iteration of a suspended `.foreach()` step. ([#15563](https://github.com/mastra-ai/mastra/pull/15563))
+
+  ```ts
+  // POST /workflows/:workflowId/resume
+  // body
+  {
+    step: 'approve',
+    resumeData: { ok: true },
+    forEachIndex: 1, // resume only the second iteration; others stay suspended
+  }
+  ```
+
+### Patch Changes
+
+- Added support for `versions` field in agent generate and stream request bodies, enabling per-request sub-agent version overrides that propagate through delegation. ([#15373](https://github.com/mastra-ai/mastra/pull/15373))
+
+- Fix prototype pollution in `setNestedValue` (`@mastra/core/utils`) and `generateOpenAPIDocument` (`@mastra/server`). ([#15565](https://github.com/mastra-ai/mastra/pull/15565))
+
+  `setNestedValue` now rejects dot-path segments named `__proto__`, `constructor`, or `prototype`, preventing attacker-controlled field paths passed to `selectFields` from polluting `Object.prototype`. `generateOpenAPIDocument` builds its `paths` map with `Object.create(null)` so a route path of `__proto__` cannot poison the prototype chain.
+
+- Updated dependencies [[`aba393e`](https://github.com/mastra-ai/mastra/commit/aba393e2da7390c69b80e516a4f153cda6f09376), [`0a5fa1d`](https://github.com/mastra-ai/mastra/commit/0a5fa1d3cb0583889d06687155f26fd7d2edc76c), [`ea43e64`](https://github.com/mastra-ai/mastra/commit/ea43e646dd95d507694b6112b0bf1df22ad552b2), [`00d1b16`](https://github.com/mastra-ai/mastra/commit/00d1b16b401199cb294fa23f43336547db4dca9b), [`af8a57e`](https://github.com/mastra-ai/mastra/commit/af8a57ed9ba9685ad8601d5b71ae3706da6222f9)]:
+  - @mastra/core@1.26.0-alpha.10
+
 ## 1.26.0-alpha.9
 
 ### Patch Changes
