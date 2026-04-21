@@ -34,10 +34,10 @@ export function parseValidationErrors(error: unknown): ValidationError[] {
     // name and the ': ' separator to non-newline characters and bound it
     // to avoid the polynomial backtracking CodeQL flagged on
     // attacker-crafted repetitions of `at "!"`.
-    const zodMatch = error.match(/at "([^"\n]{1,256})"[^:\n]{0,256}: ([^\n]{1,1024})/g);
+    const zodMatch = error.match(/at "([^"\n]{1,256})"[^:\n]{0,256}: ([^\n]{1,4096})/g);
     if (zodMatch) {
       zodMatch.forEach(match => {
-        const [, field, message] = match.match(/at "([^"\n]{1,256})"[^:\n]{0,256}: ([^\n]{1,1024})/) || [];
+        const [, field, message] = match.match(/at "([^"\n]{1,256})"[^:\n]{0,256}: ([^\n]{1,4096})/) || [];
         if (field && message) {
           errors.push({ field, message });
         }

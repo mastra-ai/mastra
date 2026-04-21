@@ -1665,7 +1665,7 @@ function highlightCode(content: string, path: string, startLine?: number): strin
  *  Exported for unit testing.
  */
 export function parseErrorFromContent(content: string): Error | null {
-  const errorMatch = content.match(/^([A-Z][A-Za-z]{0,64}Error):[ \t]*(.{1,2048})$/m);
+  const errorMatch = content.match(/^([A-Z][A-Za-z]{0,64}Error):[ \t]*(.{1,8192})$/m);
   if (!errorMatch) return null;
   const err = new Error(errorMatch[2]!);
   err.name = errorMatch[1]!;
@@ -1685,7 +1685,7 @@ export function truncateAnsi(str: string, maxWidth: number): string {
   // The OSC 8 hyperlink body is terminated by BEL (\x07). We also
   // break on a new ESC (\x1b) so a missing terminator cannot scan
   // unbounded input and amplify polynomial backtracking.
-  const ansiRegex = /\x1b\[[0-9;]{0,32}m|\x1b\]8;[^\x07\x1b]{0,2048}\x07/g;
+  const ansiRegex = /\x1b\[[0-9;]{0,32}m|\x1b\]8;[^\x07\x1b]{0,8192}\x07/g;
   let visibleLength = 0;
   let result = '';
   let lastIndex = 0;
