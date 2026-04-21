@@ -1,9 +1,8 @@
 import type { ScoreRowData } from '@mastra/core/evals';
-import type { SpanRecord } from '@mastra/core/storage';
 import { TracesDataList, DataListSkeleton, cn } from '@mastra/playground-ui';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
-import { useTraceSpans } from '../hooks/use-trace-spans';
+import { useTraceLightSpans } from '../hooks/use-trace-light-spans';
 import { groupTracesByThread } from '../utils/group-traces-by-thread';
 import { getInputPreview } from '../utils/span-utils';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
@@ -68,7 +67,6 @@ export function ObservabilityTracesList({
   threadTitles,
 }: ObservabilityTracesListProps) {
   const [featuredTraceId, setFeaturedTraceId] = useState<string | null>(selectedTraceId ?? null);
-  const [featuredSpanRecord, setFeaturedSpanRecord] = useState<SpanRecord | undefined>();
   const [featuredSpanId, setFeaturedSpanId] = useState<string | null>(initialSpanId ?? null);
   const [spanScoresPage, setSpanScoresPage] = useState(0);
   const [featuredScore, setFeaturedScore] = useState<ScoreRowData | undefined>();
@@ -82,18 +80,19 @@ export function ObservabilityTracesList({
     page: spanScoresPage,
   });
 
-  // Sync with external selectedTraceId
+  // Sync with external selectedTraceId (including clears from URL when filters change)
   useEffect(() => {
-    if (selectedTraceId !== undefined) {
-      setFeaturedTraceId(selectedTraceId ?? null);
+    setFeaturedTraceId(selectedTraceId ?? null);
+    if (!selectedTraceId) {
+      setFeaturedSpanId(null);
+      setFeaturedScore(undefined);
+      setSpanTab('details');
     }
   }, [selectedTraceId]);
 
   // Sync with external initialSpanId
   useEffect(() => {
-    if (initialSpanId !== undefined) {
-      setFeaturedSpanId(initialSpanId ?? null);
-    }
+    setFeaturedSpanId(initialSpanId ?? null);
   }, [initialSpanId]);
 
   // Sync with external initialSpanTab
@@ -112,7 +111,6 @@ export function ObservabilityTracesList({
   }, [initialScoreId, spanScoresData?.scores, featuredScore]);
 
   const resetSpanState = useCallback(() => {
-    setFeaturedSpanRecord(undefined);
     setFeaturedSpanId(null);
     setFeaturedScore(undefined);
     setSpanTab('details');
@@ -141,11 +139,10 @@ export function ObservabilityTracesList({
   }, [onTraceClick, resetSpanState]);
 
   const handleSpanSelect = useCallback(
-    (span: SpanRecord | undefined) => {
-      const id = span?.spanId ?? null;
+    (spanId: string | undefined) => {
+      const id = spanId ?? null;
       const isSameSpan = id === featuredSpanId;
       setFeaturedSpanId(id);
-      setFeaturedSpanRecord(span);
       if (!isSameSpan) {
         setFeaturedScore(undefined);
         setSpanTab('details');
@@ -159,7 +156,6 @@ export function ObservabilityTracesList({
 
   const handleSpanClose = useCallback(() => {
     setFeaturedSpanId(null);
-    setFeaturedSpanRecord(undefined);
     setFeaturedScore(undefined);
     setSpanTab('details');
     onSpanChange?.(null);
@@ -197,27 +193,20 @@ export function ObservabilityTracesList({
   const featuredEntry = featuredTraceId ? traceIdToTrace.get(featuredTraceId) : undefined;
   const featuredIdx = featuredEntry?.idx ?? -1;
 
-  const { data: traceData } = useTraceSpans(featuredTraceId);
-  const traceSpans = useMemo(() => traceData?.spans ?? [], [traceData?.spans]);
+  const { data: traceLight } = useTraceLightSpans(featuredTraceId);
+  const lightSpans = useMemo(() => traceLight?.spans ?? [], [traceLight?.spans]);
 
   const handleEvaluateTrace = useCallback(() => {
-    const rootSpan = traceSpans.find(s => s.parentSpanId == null);
+    const rootSpan = lightSpans.find(s => s.parentSpanId == null);
     if (rootSpan) {
       setFeaturedSpanId(rootSpan.spanId);
-      setFeaturedSpanRecord(rootSpan);
       setSpanTab('scoring');
       onSpanChange?.(rootSpan.spanId);
       onSpanTabChange?.('scoring');
     }
-  }, [traceSpans, onSpanChange, onSpanTabChange]);
+  }, [lightSpans, onSpanChange, onSpanTabChange]);
 
-  const timelineSpanIds = useMemo(() => getAllSpanIds(formatHierarchicalSpans(traceSpans)), [traceSpans]);
-
-  const spanIdToRecord = useMemo(() => {
-    const m = new Map<string, SpanRecord>();
-    for (const s of traceSpans) m.set(s.spanId, s);
-    return m;
-  }, [traceSpans]);
+  const timelineSpanIds = useMemo(() => getAllSpanIds(formatHierarchicalSpans(lightSpans)), [lightSpans]);
 
   const featuredSpanIdx = featuredSpanId ? timelineSpanIds.indexOf(featuredSpanId) : -1;
 
@@ -226,7 +215,6 @@ export function ObservabilityTracesList({
       ? () => {
           const prevId = timelineSpanIds[featuredSpanIdx - 1];
           setFeaturedSpanId(prevId);
-          setFeaturedSpanRecord(spanIdToRecord.get(prevId));
           onSpanChange?.(prevId);
         }
       : undefined;
@@ -236,7 +224,6 @@ export function ObservabilityTracesList({
       ? () => {
           const nextId = timelineSpanIds[featuredSpanIdx + 1];
           setFeaturedSpanId(nextId);
-          setFeaturedSpanRecord(spanIdToRecord.get(nextId));
           onSpanChange?.(nextId);
         }
       : undefined;
@@ -293,7 +280,10 @@ export function ObservabilityTracesList({
 
   return (
     <div
-      className={cn('grid h-full min-h-0 gap-4 items-start ', hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]')}
+      className={cn(
+        'grid max-h-full min-h-0 gap-4 items-start ',
+        hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]',
+      )}
     >
       <TracesDataList columns={COLUMNS} className="min-w-0">
         <TracesDataList.Top>
@@ -357,12 +347,12 @@ export function ObservabilityTracesList({
       {featuredTraceId && (
         <div
           className={cn(
-            'grid gap-4 h-full overflow-auto',
+            'grid gap-4 max-h-full overflow-auto',
             featuredScore
               ? traceCollapsed
                 ? 'grid-rows-[auto_3fr_3fr]'
                 : 'grid-rows-[2fr_3fr_3fr]'
-              : featuredSpanRecord
+              : featuredSpanId
                 ? traceCollapsed
                   ? 'grid-rows-[auto_3fr]'
                   : 'grid-rows-[2fr_3fr]'
@@ -381,10 +371,12 @@ export function ObservabilityTracesList({
             onNext={handleNextTrace}
             collapsed={traceCollapsed}
             onCollapsedChange={setTraceCollapsed}
+            placement="traces-list"
           />
-          {featuredSpanRecord && (
+          {featuredSpanId && (
             <SpanDataPanel
-              span={featuredSpanRecord}
+              traceId={featuredTraceId}
+              spanId={featuredSpanId}
               onClose={handleSpanClose}
               onPrevious={handlePreviousSpan}
               onNext={handleNextSpan}

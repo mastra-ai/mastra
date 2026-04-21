@@ -718,7 +718,13 @@ export class AgentChannels {
 
             // Pass platform execution context (e.g. Vercel/Cloudflare waitUntil)
             // to the Chat SDK so background processing survives serverless responses.
-            const execCtx = c.executionCtx as { waitUntil?: (p: Promise<unknown>) => void } | undefined;
+            // Hono's `executionCtx` getter throws in Node.js when no ExecutionContext exists.
+            let execCtx: { waitUntil?: (p: Promise<unknown>) => void } | undefined;
+            try {
+              execCtx = c.executionCtx as { waitUntil?: (p: Promise<unknown>) => void } | undefined;
+            } catch {
+              execCtx = undefined;
+            }
             const waitUntilFn = execCtx?.waitUntil?.bind(execCtx);
             return webhookHandler(c.req.raw, waitUntilFn ? { waitUntil: waitUntilFn } : undefined);
           };

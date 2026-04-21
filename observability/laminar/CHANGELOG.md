@@ -1,5 +1,52 @@
 # @mastra/laminar
 
+## 1.0.17-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`20f59b8`](https://github.com/mastra-ai/mastra/commit/20f59b876cf91199efbc49a0e36b391240708f08), [`e2687a7`](https://github.com/mastra-ai/mastra/commit/e2687a7408790c384563816a9a28ed06735684c9), [`8f1b280`](https://github.com/mastra-ai/mastra/commit/8f1b280b7fe6999ec654f160cb69c1a8719e7a57), [`12df98c`](https://github.com/mastra-ai/mastra/commit/12df98c4904643d9481f5c78f3bed443725b4c96)]:
+  - @mastra/core@1.26.0-alpha.11
+  - @mastra/observability@1.10.0-alpha.3
+
+## 1.0.17-alpha.3
+
+### Patch Changes
+
+- dependencies updates: ([#15526](https://github.com/mastra-ai/mastra/pull/15526))
+  - Updated dependency [`@opentelemetry/api@^1.9.1` ↗︎](https://www.npmjs.com/package/@opentelemetry/api/v/1.9.1) (from `^1.9.0`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/exporter-trace-otlp-proto@^0.215.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/exporter-trace-otlp-proto/v/0.215.0) (from `^0.205.0`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/resources@^2.7.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/resources/v/2.7.0) (from `^2.6.0`, in `dependencies`)
+  - Updated dependency [`@opentelemetry/sdk-trace-base@^2.7.0` ↗︎](https://www.npmjs.com/package/@opentelemetry/sdk-trace-base/v/2.7.0) (from `^2.6.0`, in `dependencies`)
+
+- Fixed a security issue where several parsing and tracing paths could slow down on malformed or attacker-crafted input. Normal behavior is unchanged, and these packages now handle pathological input in linear time. ([#15566](https://github.com/mastra-ai/mastra/pull/15566))
+
+- Updated dependencies [[`aba393e`](https://github.com/mastra-ai/mastra/commit/aba393e2da7390c69b80e516a4f153cda6f09376), [`0a5fa1d`](https://github.com/mastra-ai/mastra/commit/0a5fa1d3cb0583889d06687155f26fd7d2edc76c), [`ea43e64`](https://github.com/mastra-ai/mastra/commit/ea43e646dd95d507694b6112b0bf1df22ad552b2), [`00d1b16`](https://github.com/mastra-ai/mastra/commit/00d1b16b401199cb294fa23f43336547db4dca9b), [`af8a57e`](https://github.com/mastra-ai/mastra/commit/af8a57ed9ba9685ad8601d5b71ae3706da6222f9)]:
+  - @mastra/core@1.26.0-alpha.10
+
+## 1.0.17-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`8613972`](https://github.com/mastra-ai/mastra/commit/86139723d82536d204f66a79a3a5d30af286a2e7), [`8786a61`](https://github.com/mastra-ai/mastra/commit/8786a61fa54ba265f85eeff9985ca39863d18bb6), [`8fb2405`](https://github.com/mastra-ai/mastra/commit/8fb2405138f2d208b7962ad03f121ca25bcc28c5)]:
+  - @mastra/observability@1.10.0-alpha.2
+  - @mastra/core@1.26.0-alpha.7
+
+## 1.0.17-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`6315317`](https://github.com/mastra-ai/mastra/commit/63153175fe9a7b224e5be7c209bbebc01dd9b0d5), [`9d3b24b`](https://github.com/mastra-ai/mastra/commit/9d3b24b19407ae9c09586cf7766d38dc4dff4a69), [`11d8fb7`](https://github.com/mastra-ai/mastra/commit/11d8fb7056bd56e2e6680109c71c4436e06c0a81)]:
+  - @mastra/core@1.26.0-alpha.6
+  - @mastra/observability@1.9.2-alpha.1
+
+## 1.0.17-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`3d83d06`](https://github.com/mastra-ai/mastra/commit/3d83d06f776f00fb5f4163dddd32a030c5c20844), [`3b02530`](https://github.com/mastra-ai/mastra/commit/3b025304fcf928c09b5e9f80b573bf11c24dc889), [`7e0e63e`](https://github.com/mastra-ai/mastra/commit/7e0e63e2e485e84442351f4c7a79a424c83539dc), [`40cea5e`](https://github.com/mastra-ai/mastra/commit/40cea5ef4a78101df40da1b3d31b245dc6e2642f), [`9467ea8`](https://github.com/mastra-ai/mastra/commit/9467ea87695749a53dfc041576410ebf9ee7bb67), [`7338d94`](https://github.com/mastra-ai/mastra/commit/7338d949380cf68b095342e8e42610dc51d557c1)]:
+  - @mastra/core@1.26.0-alpha.2
+  - @mastra/observability@1.9.2-alpha.0
+
 ## 1.0.16
 
 ### Patch Changes

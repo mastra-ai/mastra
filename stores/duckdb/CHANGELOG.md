@@ -1,5 +1,29 @@
 # @mastra/duckdb
 
+## 1.2.0-alpha.1
+
+### Minor Changes
+
+- Added unique IDs (`logId`, `metricId`, `scoreId`, `feedbackId`) to all observability signals, generated automatically at emission time for de-duplication across the framework pipeline and cross-system correlation. User-facing APIs (`logger.info()`, `metrics.emit()`, `addScore()`, `addFeedback()`) are unchanged. ([#15242](https://github.com/mastra-ai/mastra/pull/15242))
+
+  For existing ClickHouse and DuckDB observability signal tables, run `npx mastra migrate` before initializing the store so the new signal-ID schema is applied.
+
+### Patch Changes
+
+- Added `getTraceLight` method to the observability storage, returning only lightweight span fields needed for timeline rendering. This avoids transferring heavy fields like `input`, `output`, `attributes`, and `metadata` when they are not needed. ([#15574](https://github.com/mastra-ai/mastra/pull/15574))
+
+- Updated dependencies [[`20f59b8`](https://github.com/mastra-ai/mastra/commit/20f59b876cf91199efbc49a0e36b391240708f08), [`e2687a7`](https://github.com/mastra-ai/mastra/commit/e2687a7408790c384563816a9a28ed06735684c9), [`8f1b280`](https://github.com/mastra-ai/mastra/commit/8f1b280b7fe6999ec654f160cb69c1a8719e7a57), [`12df98c`](https://github.com/mastra-ai/mastra/commit/12df98c4904643d9481f5c78f3bed443725b4c96)]:
+  - @mastra/core@1.26.0-alpha.11
+
+## 1.1.3-alpha.0
+
+### Patch Changes
+
+- Fixed DuckDB installs by using a resolvable @duckdb/node-api version range. ([#15419](https://github.com/mastra-ai/mastra/pull/15419))
+
+- Updated dependencies [[`fdd54cf`](https://github.com/mastra-ai/mastra/commit/fdd54cf612a9af876e9fdd85e534454f6e7dd518), [`30456b6`](https://github.com/mastra-ai/mastra/commit/30456b6b08c8fd17e109dd093b73d93b65e83bc5), [`9d11a8c`](https://github.com/mastra-ai/mastra/commit/9d11a8c1c8924eb975a245a5884d40ca1b7e0491), [`d246696`](https://github.com/mastra-ai/mastra/commit/d246696139a3144a5b21b042d41c532688e957e1), [`354f9ce`](https://github.com/mastra-ai/mastra/commit/354f9ce1ca6af2074b6a196a23f8ec30012dccca), [`e9837b5`](https://github.com/mastra-ai/mastra/commit/e9837b53699e18711b09e0ca010a4106376f2653)]:
+  - @mastra/core@1.26.0-alpha.3
+
 ## 1.1.2
 
 ### Patch Changes

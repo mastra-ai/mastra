@@ -71,6 +71,7 @@ import type {
   GetSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
+  GetTraceLightResponse,
   ListTracesArgs,
   ListTracesResponse,
   UpdateSpanArgs,
@@ -119,6 +120,18 @@ export class ObservabilityStorage extends StorageDomain {
     supported: TracingStorageStrategy[];
   } {
     return this.observabilityStrategy;
+  }
+
+  /**
+   * Reports the tracing strategy currently in effect for this attached observability store.
+   *
+   * Single-strategy stores can rely on the default implementation. Multi-strategy stores
+   * should override this getter only when they can determine the actual configured mode
+   * from storage-owned configuration, not exporter state.
+   */
+  public get runtimeTracingStrategy(): TracingStorageStrategy | undefined {
+    const supportedStrategies = this.observabilityStrategy.supported;
+    return supportedStrategies.length === 1 ? supportedStrategies[0] : undefined;
   }
 
   /**
@@ -182,6 +195,19 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support getting traces',
+    });
+  }
+
+  /**
+   * Retrieves a lightweight trace with only the fields needed for timeline rendering.
+   * Excludes heavy fields: input, output, attributes, metadata, tags, links.
+   */
+  async getTraceLight(_args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_TRACE_LIGHT_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support getting lightweight traces',
     });
   }
 

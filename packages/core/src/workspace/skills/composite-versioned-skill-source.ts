@@ -54,7 +54,28 @@ export class CompositeVersionedSkillSource implements SkillSource {
   }
 
   #normalizePath(path: string): string {
-    return path.replace(/^[./\\]+|[/\\]+$/g, '');
+    // Strip any leading '.', '/', '\' and any trailing '/', '\' without
+    // using a regex to avoid polynomial backtracking on attacker-crafted
+    // paths like many leading slashes or dots.
+    let start = 0;
+    while (start < path.length) {
+      const c = path.charCodeAt(start);
+      if (c === 46 /* '.' */ || c === 47 /* '/' */ || c === 92 /* '\' */) {
+        start++;
+      } else {
+        break;
+      }
+    }
+    let end = path.length;
+    while (end > start) {
+      const c = path.charCodeAt(end - 1);
+      if (c === 47 /* '/' */ || c === 92 /* '\' */) {
+        end--;
+      } else {
+        break;
+      }
+    }
+    return start === 0 && end === path.length ? path : path.slice(start, end);
   }
 
   /**

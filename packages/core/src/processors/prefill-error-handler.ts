@@ -13,32 +13,47 @@ type SystemReminderChunk = DataChunkType & {
   };
 };
 
-const PREFILL_ERROR_PATTERN = /does not support assistant message prefill/i;
+const PREFILL_ERROR_PATTERNS = [
+  /does not support assistant message prefill/i,
+  /assistant response prefill is incompatible with enable[_\s-]?thinking/i,
+];
+
+function getErrorCandidates(error: APICallError | Error): string[] {
+  const candidates = [error.message];
+
+  if (APICallError.isInstance(error) && typeof error.responseBody === 'string') {
+    candidates.push(error.responseBody);
+  }
+
+  return candidates.filter(Boolean);
+}
 
 /**
- * Checks whether an error is the Anthropic "assistant message prefill" rejection.
+ * Checks whether an error is a known assistant-response prefill rejection.
  *
  * This error occurs when the request ends with an assistant message and the model
  * interprets it as pre-filling the response, which some models don't support.
  */
 function isPrefillError(error: unknown): boolean {
+  const matchesKnownPrefillError = (message: string) => PREFILL_ERROR_PATTERNS.some(pattern => pattern.test(message));
+
   if (APICallError.isInstance(error)) {
-    return PREFILL_ERROR_PATTERN.test((error as Error).message);
+    return getErrorCandidates(error).some(matchesKnownPrefillError);
   }
 
   if (error instanceof Error) {
-    return PREFILL_ERROR_PATTERN.test(error.message);
+    return getErrorCandidates(error).some(matchesKnownPrefillError);
   }
 
   return false;
 }
 
 /**
- * Handles the Anthropic "assistant message prefill" error reactively.
+ * Handles known "assistant response prefill" errors reactively.
  *
  * When an LLM API call fails because the conversation ends with an assistant
- * message (which some Anthropic models interpret as pre-filling), this processor
- * appends a `continue` system reminder message and signals a retry.
+ * message and the provider interprets it as pre-filling, this processor appends
+ * a `continue` system reminder message and signals a retry.
  *
  * This is a reactive complement to {@link TrailingAssistantGuard}, which
  * proactively prevents the error only for the structured output case.

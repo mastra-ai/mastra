@@ -71,6 +71,7 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
   observation?: ObservationalMemoryConfig['observation'];
   reflection?: ObservationalMemoryConfig['reflection'];
   activateAfterIdle?: ObservationalMemoryConfig['activateAfterIdle'];
+  activateOnProviderChange?: ObservationalMemoryConfig['activateOnProviderChange'];
   temporalGapMarkers?: boolean;
 };
 
@@ -1430,6 +1431,7 @@ ${workingMemory}`;
       scope: omConfig.scope,
       retrieval: omConfig.retrieval,
       activateAfterIdle: omConfig.activateAfterIdle,
+      activateOnProviderChange: omConfig.activateOnProviderChange,
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
       onIndexObservations,

@@ -137,7 +137,6 @@ export function LogDetails({
             )}
             {log.metadata && Object.keys(log.metadata).length > 0 && (
               <>
-                <KV.Header>Metadata</KV.Header>
                 {Object.entries(log.metadata).map(([key, value]) => (
                   <Fragment key={key}>
                     <KV.Key>{key}</KV.Key>

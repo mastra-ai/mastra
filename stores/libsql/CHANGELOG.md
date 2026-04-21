@@ -1,5 +1,27 @@
 # @mastra/libsql
 
+## 1.9.0-alpha.2
+
+### Patch Changes
+
+- Added `getTraceLight` method to the observability storage, returning only lightweight span fields needed for timeline rendering. This avoids transferring heavy fields like `input`, `output`, `attributes`, and `metadata` when they are not needed. ([#15574](https://github.com/mastra-ai/mastra/pull/15574))
+
+- Updated dependencies [[`20f59b8`](https://github.com/mastra-ai/mastra/commit/20f59b876cf91199efbc49a0e36b391240708f08), [`e2687a7`](https://github.com/mastra-ai/mastra/commit/e2687a7408790c384563816a9a28ed06735684c9), [`8f1b280`](https://github.com/mastra-ai/mastra/commit/8f1b280b7fe6999ec654f160cb69c1a8719e7a57), [`12df98c`](https://github.com/mastra-ai/mastra/commit/12df98c4904643d9481f5c78f3bed443725b4c96)]:
+  - @mastra/core@1.26.0-alpha.11
+
+## 1.9.0-alpha.1
+
+### Minor Changes
+
+- Use DiskANN vector_top_k() index for faster vector queries when available ([#14913](https://github.com/mastra-ai/mastra/pull/14913))
+
+  LibSQLVector.query() now automatically uses the existing DiskANN index for approximate nearest neighbor search instead of brute-force full table scans, providing 10-25x query speedups on larger datasets. Falls back to brute-force when no index exists.
+
+### Patch Changes
+
+- Updated dependencies [[`16e34ca`](https://github.com/mastra-ai/mastra/commit/16e34caa98b9a114b17a6125e4e3fd87f169d0d0)]:
+  - @mastra/core@1.26.0-alpha.9
+
 ## 1.8.2-alpha.0
 
 ### Patch Changes

@@ -1,5 +1,25 @@
 # @mastra/ai-sdk
 
+## 1.4.1-alpha.2
+
+### Patch Changes
+
+- Fix AI SDK v6 approval replay so ordinary user follow-up turns do not resume stale approval responses. ([#15480](https://github.com/mastra-ai/mastra/pull/15480))
+
+- Updated dependencies [[`20f59b8`](https://github.com/mastra-ai/mastra/commit/20f59b876cf91199efbc49a0e36b391240708f08), [`e2687a7`](https://github.com/mastra-ai/mastra/commit/e2687a7408790c384563816a9a28ed06735684c9), [`8f1b280`](https://github.com/mastra-ai/mastra/commit/8f1b280b7fe6999ec654f160cb69c1a8719e7a57), [`12df98c`](https://github.com/mastra-ai/mastra/commit/12df98c4904643d9481f5c78f3bed443725b4c96)]:
+  - @mastra/core@1.26.0-alpha.11
+
+## 1.4.1-alpha.1
+
+### Patch Changes
+
+- Fixed workflow streaming in @mastra/ai-sdk so intermediate `data-workflow` parts stop repeating every completed step output. Added `data-workflow-step` parts with the full payload for the step that just changed, which reduces stream size for long-running workflows while preserving final workflow outputs. ([#15218](https://github.com/mastra-ai/mastra/pull/15218))
+
+  If your UI reads live step outputs during workflow execution, it should now consume `data-workflow-step` parts in addition to `data-workflow`. Final workflow snapshots still include the full step outputs.
+
+- Updated dependencies [[`3d83d06`](https://github.com/mastra-ai/mastra/commit/3d83d06f776f00fb5f4163dddd32a030c5c20844), [`7e0e63e`](https://github.com/mastra-ai/mastra/commit/7e0e63e2e485e84442351f4c7a79a424c83539dc), [`9467ea8`](https://github.com/mastra-ai/mastra/commit/9467ea87695749a53dfc041576410ebf9ee7bb67), [`7338d94`](https://github.com/mastra-ai/mastra/commit/7338d949380cf68b095342e8e42610dc51d557c1)]:
+  - @mastra/core@1.26.0-alpha.2
+
 ## 1.4.1-alpha.0
 
 ### Patch Changes
