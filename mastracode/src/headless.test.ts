@@ -207,6 +207,32 @@ describe('parseHeadlessArgs', () => {
     expect(args.settings).toBeUndefined();
   });
 
+  it('parses --output-format text', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--output-format', 'text']);
+    expect(args.outputFormat).toBe('text');
+  });
+
+  it('parses --output-format json', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--output-format', 'json']);
+    expect(args.outputFormat).toBe('json');
+  });
+
+  it('parses --output-format stream-json', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--output-format', 'stream-json']);
+    expect(args.outputFormat).toBe('stream-json');
+  });
+
+  it('throws on invalid --output-format', () => {
+    expect(() => parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--output-format', 'yaml'])).toThrow(
+      '--output-format must be one of: text, json, stream-json',
+    );
+  });
+
+  it('returns undefined outputFormat when not provided', () => {
+    const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task']);
+    expect(args.outputFormat).toBeUndefined();
+  });
+
   it('parses --clone-thread hyphenated boolean flag', () => {
     const args = parseHeadlessArgs(['node', 'main.js', '-p', 'task', '--clone-thread']);
     expect(args.cloneThread).toBe(true);

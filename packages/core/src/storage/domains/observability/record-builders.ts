@@ -241,6 +241,7 @@ export function buildMetricRecord(event: MetricEvent): CreateMetricRecord {
   const cost = m.costContext;
 
   return {
+    metricId: m.metricId,
     timestamp: m.timestamp,
     name: m.name,
     value: m.value,
@@ -270,6 +271,7 @@ export function buildLogRecord(event: LogEvent): CreateLogRecord {
   const legacyCorrelationFields = buildLegacyLogMetadataCorrelationFields(l.metadata ?? null);
 
   return {
+    logId: l.logId,
     timestamp: l.timestamp,
     level: l.level,
     message: l.message,
@@ -297,6 +299,7 @@ export function buildScoreRecord(event: ScoreEvent): CreateScoreRecord {
   const s = event.score;
   const correlationFields = buildCorrelationRecordFields(s.correlationContext);
   return {
+    scoreId: s.scoreId,
     timestamp: s.timestamp,
     traceId: s.traceId ?? s.correlationContext?.traceId ?? null,
     spanId: s.spanId ?? s.correlationContext?.spanId ?? null,
@@ -320,6 +323,7 @@ export function buildFeedbackRecord(event: FeedbackEvent): CreateFeedbackRecord 
   const fb = event.feedback;
   const correlationFields = buildCorrelationRecordFields(fb.correlationContext);
   return {
+    feedbackId: fb.feedbackId,
     timestamp: fb.timestamp,
     traceId: fb.traceId ?? fb.correlationContext?.traceId ?? null,
     spanId: fb.spanId ?? fb.correlationContext?.spanId ?? null,
