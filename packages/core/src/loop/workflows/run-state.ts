@@ -9,7 +9,6 @@ type State = {
     modelVersion: string;
     modelProvider: string;
   };
-  hasToolCallStreaming: boolean;
   hasErrored: boolean;
   apiError: unknown | undefined;
   deferredErrorChunk: any | undefined;
@@ -34,7 +33,6 @@ export class AgenticRunState {
         modelProvider: model.provider,
       },
       providerOptions: undefined,
-      hasToolCallStreaming: false,
       hasErrored: false,
       apiError: undefined,
       deferredErrorChunk: undefined,
