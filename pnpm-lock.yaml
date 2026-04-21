@@ -2938,8 +2938,8 @@ importers:
         specifier: workspace:*
         version: link:../_config
       '@types/debug':
-        specifier: ^4.1.12
-        version: 4.1.12
+        specifier: ^4.1.13
+        version: 4.1.13
       '@types/jscodeshift':
         specifier: ^17.3.0
         version: 17.3.0
@@ -15115,8 +15115,8 @@ packages:
   '@types/d3-zoom@3.0.8':
     resolution: {integrity: sha512-iqMC4/YlFCSlO8+2Ii1GGGliCAY4XdeG748w5vQUbevlbDu0zSjH/+jojorQVBK/se0j6DUFNPBGSqD3YWYnDw==}
 
-  '@types/debug@4.1.12':
-    resolution: {integrity: sha512-vIChWdVG3LG1SMxEvI/AK+FWJthlrqlTu7fbrlywTkkaONwk/UAGaULXRlf8vkzFBLVm0zkMdCquhL5aOjhXPQ==}
+  '@types/debug@4.1.13':
+    resolution: {integrity: sha512-KSVgmQmzMwPlmtljOomayoR89W4FynCAi3E8PPs7vmDVPe84hT+vGPKkJfThkmXs0x0jAaa9U8uW8bbfyS2fWw==}
 
   '@types/deep-eql@4.0.2':
     resolution: {integrity: sha512-c9h9dVVMigMPc4bwTvC5dxqtqJZwQPePsWjPlpSOnojbor6pGqdk541lfA7AqFQr5pB1BRdq0juY9db81BwyFw==}
@@ -36248,7 +36248,7 @@ snapshots:
       '@types/d3-interpolate': 3.0.4
       '@types/d3-selection': 3.0.11
 
-  '@types/debug@4.1.12':
+  '@types/debug@4.1.13':
     dependencies:
       '@types/ms': 2.1.0
 
@@ -41730,7 +41730,7 @@ snapshots:
       '@opentelemetry/sdk-trace-base': 2.6.0(@opentelemetry/api@1.9.0)
       '@standard-schema/spec': 1.1.0
       '@traceloop/instrumentation-anthropic': 0.20.0
-      '@types/debug': 4.1.12
+      '@types/debug': 4.1.13
       '@types/ms': 2.1.0
       canonicalize: 1.0.8
       chalk: 4.1.2
@@ -41769,7 +41769,7 @@ snapshots:
       '@opentelemetry/sdk-trace-base': 2.6.0(@opentelemetry/api@1.9.0)
       '@standard-schema/spec': 1.1.0
       '@traceloop/instrumentation-anthropic': 0.20.0
-      '@types/debug': 4.1.12
+      '@types/debug': 4.1.13
       '@types/ms': 2.1.0
       canonicalize: 1.0.8
       chalk: 4.1.2
@@ -43565,7 +43565,7 @@ snapshots:
 
   micromark@3.2.0:
     dependencies:
-      '@types/debug': 4.1.12
+      '@types/debug': 4.1.13
       debug: 4.4.3
       decode-named-character-reference: 1.2.0
       micromark-core-commonmark: 1.1.0
@@ -43587,7 +43587,7 @@ snapshots:
 
   micromark@4.0.2:
     dependencies:
-      '@types/debug': 4.1.12
+      '@types/debug': 4.1.13
       debug: 4.4.3
       decode-named-character-reference: 1.2.0
       devlop: 1.1.0
@@ -48089,7 +48089,7 @@ snapshots:
   unified-engine@11.2.2:
     dependencies:
       '@types/concat-stream': 2.0.3
-      '@types/debug': 4.1.12
+      '@types/debug': 4.1.13
       '@types/is-empty': 1.2.3
       '@types/node': 22.19.15
       '@types/unist': 3.0.3
