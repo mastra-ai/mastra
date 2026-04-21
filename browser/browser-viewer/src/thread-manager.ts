@@ -353,6 +353,13 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
 
     const portFilePath = join(userDataDir, 'DevToolsActivePort');
 
+    // Chrome may still be writing the file during startup - retry with a short deadline
+    const deadline = Date.now() + 1500;
+    while (!existsSync(portFilePath) && Date.now() < deadline) {
+      // Use Atomics.wait for a non-blocking ~50ms sleep
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+    }
+
     if (!existsSync(portFilePath)) {
       this.logger?.warn?.('DevToolsActivePort file not found');
       return null;
@@ -487,9 +494,9 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       // Set up CDP session for active page
       const cdpSession = pages[0] ? await context.newCDPSession(pages[0]) : null;
 
-      // Set up disconnection handler
+      // Set up disconnection handler - use effectiveThreadId for consistent lifecycle callbacks
       browser.on('disconnected', () => {
-        this.handleBrowserDisconnected(threadId);
+        this.handleBrowserDisconnected(effectiveThreadId);
       });
 
       const session: BrowserViewerSession = {

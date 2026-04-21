@@ -194,6 +194,7 @@ export class Agent<
   #maxProcessorRetries?: number;
   #errorProcessors?: DynamicArgument<ErrorProcessorOrWorkflow[], TRequestContext>;
   #browser?: MastraBrowser;
+  #hasExplicitBrowser = false;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   #backgroundTasks?: AgentBackgroundConfig;
   readonly #options?: AgentCreateOptions;
@@ -344,6 +345,7 @@ export class Agent<
         throw mastraError;
       }
       this.#browser = config.browser;
+      this.#hasExplicitBrowser = true;
     }
 
     if (config.workspace) {
@@ -492,7 +494,7 @@ export class Agent<
    * Used by Harness to avoid overwriting agent-level browser configuration.
    */
   hasOwnBrowser(): boolean {
-    return Boolean(this.#browser);
+    return this.#hasExplicitBrowser;
   }
 
   /**
@@ -1173,16 +1175,14 @@ export class Agent<
    * @internal
    */
   #setBrowserFromWorkspace(workspace: AnyWorkspace): void {
-    // Skip if agent already has a browser (SDK approach takes precedence)
-    if (this.#browser) {
+    // Skip if agent has an explicitly configured browser (SDK approach takes precedence)
+    if (this.#hasExplicitBrowser) {
       return;
     }
 
-    // Check if workspace has browser configured
-    const workspaceBrowser = workspace.browser;
-    if (workspaceBrowser) {
-      this.#browser = workspaceBrowser;
-    }
+    // Keep browser in sync with workspace per-request; clear when absent
+    // This allows factory workspaces to return different browsers per request
+    this.#browser = workspace.browser;
   }
 
   get voice() {
