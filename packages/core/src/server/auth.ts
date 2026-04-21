@@ -5,7 +5,7 @@ import type { MastraAuthConfig } from './types';
 export interface MastraAuthProviderOptions<TUser = unknown> {
   name?: string;
   authorizeUser?: (user: TUser, request: HonoRequest) => Promise<boolean> | boolean;
-  mapUserToResourceId?: (user: TUser) => string | undefined | null;
+  mapUserToResourceId?(user: TUser): string | undefined | null;
   /**
    * Protected paths for the auth provider
    */
@@ -19,7 +19,7 @@ export interface MastraAuthProviderOptions<TUser = unknown> {
 export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase {
   public protected?: MastraAuthConfig['protected'];
   public public?: MastraAuthConfig['public'];
-  public mapUserToResourceId?: (user: TUser) => string | undefined | null;
+  public mapUserToResourceId?(user: TUser): string | undefined | null;
 
   constructor(options?: MastraAuthProviderOptions<TUser>) {
     super({ component: 'AUTH', name: options?.name });

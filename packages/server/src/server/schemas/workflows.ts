@@ -140,6 +140,7 @@ export const resumeBodySchema = z.object({
   requestContext: z.record(z.string(), z.unknown()).optional(),
   tracingOptions: tracingOptionsSchema.optional(),
   perStep: z.boolean().optional(),
+  forEachIndex: z.number().int().nonnegative().optional(),
 });
 
 /**
