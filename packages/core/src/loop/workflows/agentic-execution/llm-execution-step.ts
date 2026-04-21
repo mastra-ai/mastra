@@ -742,6 +742,19 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           activeFallbackModelIndex = models.findIndex(candidate => candidate.id === modelConfig.id);
           const model = modelConfig.model;
           const modelHeaders = modelConfig.headers;
+
+          // Re-stamp MODEL_GENERATION span with the fallback model so that downstream
+          // exporters (Langfuse, etc.) attribute usage and cost to the model that
+          // actually served the request instead of the first model in the list.
+          if (modelSpanTracker && activeFallbackModelIndex > 0) {
+            modelSpanTracker.updateGeneration({
+              name: `llm: '${model.modelId}'`,
+              attributes: {
+                model: model.modelId,
+                provider: model.provider,
+              },
+            });
+          }
           // Reset system messages to original before each step execution
           // This ensures that system message modifications in prepareStep/processInputStep/processors
           // don't persist across steps - each step starts fresh with original system messages

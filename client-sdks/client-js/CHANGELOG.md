@@ -1,5 +1,41 @@
 # @mastra/client-js
 
+## 1.14.0-alpha.10
+
+### Minor Changes
+
+- Added `forEachIndex` option to `run.resume()`, `run.resumeAsync()`, and `run.resumeStream()`. Use it to resume a single iteration of a suspended `.foreach()` step while leaving the other iterations suspended. ([#15563](https://github.com/mastra-ai/mastra/pull/15563))
+
+  ```ts
+  await client
+    .getWorkflow('myWorkflow')
+    .createRun(runId)
+    .resume({
+      step: 'approve',
+      resumeData: { ok: true },
+      forEachIndex: 1, // only resume the second iteration
+    });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`aba393e`](https://github.com/mastra-ai/mastra/commit/aba393e2da7390c69b80e516a4f153cda6f09376), [`0a5fa1d`](https://github.com/mastra-ai/mastra/commit/0a5fa1d3cb0583889d06687155f26fd7d2edc76c), [`ea43e64`](https://github.com/mastra-ai/mastra/commit/ea43e646dd95d507694b6112b0bf1df22ad552b2), [`00d1b16`](https://github.com/mastra-ai/mastra/commit/00d1b16b401199cb294fa23f43336547db4dca9b), [`af8a57e`](https://github.com/mastra-ai/mastra/commit/af8a57ed9ba9685ad8601d5b71ae3706da6222f9)]:
+  - @mastra/core@1.26.0-alpha.10
+
+## 1.13.5-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`16e34ca`](https://github.com/mastra-ai/mastra/commit/16e34caa98b9a114b17a6125e4e3fd87f169d0d0)]:
+  - @mastra/core@1.26.0-alpha.9
+
+## 1.13.5-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`1bd5104`](https://github.com/mastra-ai/mastra/commit/1bd51048b6da93507276d6623e3fd96a9e1a8944)]:
+  - @mastra/core@1.26.0-alpha.8
+
 ## 1.13.5-alpha.7
 
 ### Patch Changes

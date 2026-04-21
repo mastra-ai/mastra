@@ -538,6 +538,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/wafer.ai',
+          label: 'Wafer',
+        },
+        {
+          type: 'doc',
           id: 'providers/wandb',
           label: 'Weights & Biases',
         },

@@ -47,6 +47,7 @@ import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
+import type { VersionOverrides, VersionSelector } from './types';
 
 /**
  * Creates an error for when a null/undefined value is passed to an add* method.
@@ -270,6 +271,25 @@ export interface Config<
   editor?: IMastraEditor;
 
   /**
+   * Global version overrides for primitives.
+   * When set, sub-agent delegation (and future primitive resolution) will
+   * resolve the specified version instead of the code-defined default.
+   *
+   * @example
+   * ```typescript
+   * new Mastra({
+   *   versions: {
+   *     agents: {
+   *       'researcher-agent': { versionId: '123' },
+   *       'writer-agent': { status: 'published' },
+   *     },
+   *   },
+   * });
+   * ```
+   */
+  versions?: VersionOverrides;
+
+  /**
    * Background task configuration for running tool calls asynchronously.
    * When configured, agents can dispatch tool executions to run in the background
    * while the conversation continues.
@@ -371,6 +391,8 @@ export class Mastra<
   // Editor instance for handling agent instantiation and configuration
   #editor?: IMastraEditor;
   #datasets?: DatasetsManager;
+  // Global version overrides for primitives (agents, etc.)
+  #versions?: VersionOverrides;
 
   get pubsub() {
     return this.#pubsub;
@@ -420,6 +442,14 @@ export class Mastra<
    */
   public getEditor() {
     return this.#editor;
+  }
+
+  /**
+   * Returns the global version overrides configured on this Mastra instance.
+   * These are used as defaults when resolving sub-agent versions during delegation.
+   */
+  public getVersionOverrides(): VersionOverrides | undefined {
+    return this.#versions;
   }
 
   /**
@@ -592,6 +622,9 @@ export class Mastra<
     if (this.#editor && typeof this.#editor.registerWithMastra === 'function') {
       this.#editor.registerWithMastra(this);
     }
+
+    // Store global version overrides
+    this.#versions = config?.versions;
 
     if (config?.pubsub) {
       this.#pubsub = config.pubsub;
@@ -957,9 +990,19 @@ export class Mastra<
     return this.resolveVersionedAgent(agent as TAgents[TAgentName], version);
   }
 
-  private async resolveVersionedAgent<TAgent extends Agent>(
+  /**
+   * Resolve a versioned variant of an agent by applying stored overrides from the editor.
+   *
+   * Requires the editor package to be configured — throws
+   * `MASTRA_EDITOR_REQUIRED_FOR_VERSIONED_AGENT_LOOKUP` if it is not.
+   *
+   * @param agent - The code-defined agent to resolve a version for.
+   * @param version - Selects a version by ID or publication status.
+   * @returns A forked agent instance with the stored overrides applied.
+   */
+  public async resolveVersionedAgent<TAgent extends Agent>(
     agent: TAgent,
-    version: { versionId: string } | { status?: 'draft' | 'published' },
+    version: VersionSelector | { status?: 'draft' | 'published' },
   ): Promise<TAgent> {
     const editor = this.getEditor();
 

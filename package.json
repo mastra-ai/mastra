@@ -9,12 +9,12 @@
     "@vitest/ui": "catalog:",
     "changesets-changelog-github-local": "^1.0.1",
     "dotenv": "17.3.1",
-    "eslint": "^9.39.4",
+    "eslint": "^10.2.1",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
     "npm-run-all2": "^8.0.4",
     "path-to-regexp": "^8.3.0",
-    "prettier": "^3.8.1",
+    "prettier": "^3.8.3",
     "prettier-plugin-tailwindcss": "^0.7.2",
     "semver": "^7.7.4",
     "tsc-files": "^1.1.4",
@@ -118,7 +118,8 @@
       "langsmith@<0.5.19": "^0.5.19",
       "lodash@<=4.17.23": "^4.18.0",
       "prismjs@<1.30.0": "^1.30.0",
-      "serialize-javascript@<7.0.5": "^7.0.5"
+      "serialize-javascript@<7.0.5": "^7.0.5",
+      "@tootallnate/once@<3.0.1": "^3.0.1"
     },
     "patchedDependencies": {
       "@changesets/get-dependents-graph": "patches/@changesets__get-dependents-graph.patch",
