@@ -41,6 +41,7 @@ export * from './ds/components/MarkdownRenderer';
 export * from './ds/components/MetricsCard';
 export * from './ds/components/MetricsFlexGrid';
 export * from './ds/components/Popover';
+export * from './ds/components/PropertyFilter';
 export * from './ds/components/RadioGroup';
 export * from './ds/components/ScrollArea';
 export * from './ds/components/Searchbar';

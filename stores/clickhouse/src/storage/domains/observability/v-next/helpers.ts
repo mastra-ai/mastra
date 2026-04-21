@@ -252,6 +252,7 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
 
 export function rowToLogRecord(row: Record<string, any>): LogRecord {
   return {
+    logId: row.logId,
     timestamp: toDate(row.timestamp),
     level: row.level,
     message: row.message,
@@ -289,6 +290,7 @@ export function rowToLogRecord(row: Record<string, any>): LogRecord {
 
 export function logRecordToRow(log: CreateLogRecord): Record<string, unknown> {
   return {
+    logId: log.logId,
     timestamp: toISOString(log.timestamp),
     level: log.level,
     message: log.message,
@@ -326,6 +328,7 @@ export function logRecordToRow(log: CreateLogRecord): Record<string, unknown> {
 
 export function rowToMetricRecord(row: Record<string, any>): MetricRecord {
   return {
+    metricId: row.metricId,
     timestamp: toDate(row.timestamp),
     name: row.name,
     value: Number(row.value),
@@ -368,6 +371,7 @@ export function rowToMetricRecord(row: Record<string, any>): MetricRecord {
 
 export function metricRecordToRow(metric: CreateMetricRecord): Record<string, unknown> {
   return {
+    metricId: metric.metricId,
     timestamp: toISOString(metric.timestamp),
     name: metric.name,
     value: metric.value,
@@ -410,6 +414,7 @@ export function metricRecordToRow(metric: CreateMetricRecord): Record<string, un
 
 export function rowToScoreRecord(row: Record<string, any>): ScoreRecord {
   return {
+    scoreId: row.scoreId,
     timestamp: toDate(row.timestamp),
     // Core score/feedback shapes still type traceId as required for now.
     traceId: nullableString(row.traceId) as ScoreRecord['traceId'],
@@ -454,6 +459,7 @@ export function scoreRecordToRow(score: CreateScoreRecord): Record<string, unkno
   const scoreSource = score.scoreSource ?? score.source ?? null;
 
   return {
+    scoreId: score.scoreId,
     timestamp: toISOString(score.timestamp),
     traceId: score.traceId ?? null,
     spanId: score.spanId ?? null,
@@ -497,6 +503,7 @@ export function rowToFeedbackRecord(row: Record<string, any>): FeedbackRecord {
   const feedbackSource = nullableString(row.feedbackSource);
   const feedbackUserId = nullableString(row.feedbackUserId) ?? nullableString(row.userId);
   return {
+    feedbackId: row.feedbackId,
     timestamp: toDate(row.timestamp),
     // Core score/feedback shapes still type traceId as required for now.
     traceId: nullableString(row.traceId) as FeedbackRecord['traceId'],
@@ -542,6 +549,7 @@ export function feedbackRecordToRow(feedback: CreateFeedbackRecord): Record<stri
   const feedbackUserId = feedback.feedbackUserId ?? feedback.userId ?? null;
 
   return {
+    feedbackId: feedback.feedbackId,
     timestamp: toISOString(feedback.timestamp),
     traceId: feedback.traceId ?? null,
     spanId: feedback.spanId ?? null,

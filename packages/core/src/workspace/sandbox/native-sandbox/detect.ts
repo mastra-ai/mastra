@@ -12,7 +12,7 @@ import type { IsolationBackend, SandboxDetectionResult } from './types';
 /**
  * Check if a command exists on the system.
  */
-export function commandExists(command: string): boolean {
+function commandExists(command: string): boolean {
   try {
     // Use 'which' on Unix-like systems
     execFileSync('which', [command], { stdio: 'ignore' });
