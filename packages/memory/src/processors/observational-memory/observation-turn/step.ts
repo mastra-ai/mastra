@@ -2,7 +2,7 @@ import { getThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
 import { filterObservedMessages } from '../message-utils';
-import { getLatestStepParts } from '../observational-memory';
+import { getLastActivityFromMessages, getLatestStepParts } from '../observational-memory';
 import { resolveRetentionFloor } from '../thresholds';
 
 import type { ObservationTurn } from './turn';
@@ -63,6 +63,7 @@ export class ObservationStep {
         resourceId,
         checkThreshold: true,
         messages: step0Messages,
+        currentModel: this.turn.actorModelContext,
         writer: this.turn.writer,
         messageList,
       });
@@ -91,8 +92,11 @@ export class ObservationStep {
         observationTokens: obsTokens,
         threadId,
         writer: this.turn.writer,
+        messageList,
+        currentModel: this.turn.actorModelContext,
         requestContext: this.turn.requestContext,
         observabilityContext: this.turn.observabilityContext,
+        lastActivityAt: getLastActivityFromMessages(messageList.get.all.db()),
       });
       await this.turn.refreshRecord();
       if (this.turn.record.generationCount > preReflectGeneration) {
@@ -317,6 +321,7 @@ export class ObservationStep {
         threadId,
         resourceId,
         messages: messageList.get.all.db(),
+        currentModel: this.turn.actorModelContext,
         writer: this.turn.writer,
         messageList,
       });
@@ -332,8 +337,10 @@ export class ObservationStep {
           threadId,
           writer: this.turn.writer,
           messageList,
+          currentModel: this.turn.actorModelContext,
           requestContext: this.turn.requestContext,
           observabilityContext: this.turn.observabilityContext,
+          lastActivityAt: getLastActivityFromMessages(messageList.get.all.db()),
         });
 
         return {

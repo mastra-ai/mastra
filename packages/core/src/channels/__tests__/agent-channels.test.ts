@@ -116,6 +116,34 @@ describe('AgentChannels', () => {
         expect(route.requiresAuth).toBe(false);
       }
     });
+
+    it('handles Hono contexts without ExecutionContext without throwing', async () => {
+      const webhookFn = vi.fn().mockResolvedValue(new Response('ok', { status: 200 }));
+      (agentChannels as any).initPromise = Promise.resolve();
+      (agentChannels as any).chat = { webhooks: { slack: webhookFn } };
+
+      const slackRoute = agentChannels.getWebhookRoutes().find(route => route.path.endsWith('/slack/webhook')) as any;
+      expect(slackRoute).toBeDefined();
+
+      const handler = await slackRoute.createHandler({} as any);
+      const request = new Request('http://localhost/api/agents/test-agent/channels/slack/webhook', {
+        method: 'POST',
+        body: JSON.stringify({ type: 'url_verification', challenge: 'abc' }),
+        headers: { 'content-type': 'application/json' },
+      });
+
+      const ctx = {
+        req: { raw: request },
+        json: (body: unknown, status?: number) => new Response(JSON.stringify(body), { status: status ?? 200 }),
+        get executionCtx() {
+          throw new Error('This context has no ExecutionContext');
+        },
+      } as any;
+
+      await expect(handler(ctx)).resolves.toBeInstanceOf(Response);
+      expect(webhookFn).toHaveBeenCalledTimes(1);
+      expect(webhookFn).toHaveBeenCalledWith(request, undefined);
+    });
   });
 
   describe('sdk getter', () => {
