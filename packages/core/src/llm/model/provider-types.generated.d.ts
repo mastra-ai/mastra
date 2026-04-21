@@ -967,6 +967,7 @@ export type ProviderModelsMap = {
     'moonshotai/kimi-k2-0905:exacto',
     'moonshotai/kimi-k2-thinking',
     'moonshotai/kimi-k2.5',
+    'moonshotai/kimi-k2.6',
     'nousresearch/hermes-3-llama-3.1-405b:free',
     'nousresearch/hermes-4-405b',
     'nousresearch/hermes-4-70b',
@@ -1076,12 +1077,13 @@ export type ProviderModelsMap = {
     'accounts/fireworks/models/qwen3p6-plus',
     'accounts/fireworks/routers/kimi-k2p5-turbo',
   ];
-  readonly 'kimi-for-coding': readonly ['k2p5', 'kimi-k2-thinking'];
+  readonly 'kimi-for-coding': readonly ['k2p5', 'k2p6', 'kimi-k2-thinking'];
   readonly moark: readonly ['GLM-4.7', 'MiniMax-M2.1'];
   readonly 'opencode-go': readonly [
     'glm-5',
     'glm-5.1',
     'kimi-k2.5',
+    'kimi-k2.6',
     'mimo-v2-omni',
     'mimo-v2-pro',
     'minimax-m2.5',
@@ -1293,6 +1295,7 @@ export type ProviderModelsMap = {
     'moonshotai/Kimi-K2-Instruct-0905',
     'moonshotai/Kimi-K2-Thinking',
     'moonshotai/Kimi-K2.5',
+    'moonshotai/Kimi-K2.6',
     'zai-org/GLM-4.7',
     'zai-org/GLM-4.7-Flash',
     'zai-org/GLM-5',
@@ -2101,8 +2104,10 @@ export type ProviderModelsMap = {
     'gpt-5.4-nano',
     'gpt-5.4-pro',
     'kimi-k2.5',
+    'kimi-k2.6',
     'minimax-m2.5',
     'minimax-m2.5-free',
+    'minimax-m2.7',
     'nemotron-3-super-free',
     'qwen3.5-plus',
     'qwen3.6-plus',
@@ -2390,6 +2395,7 @@ export type ProviderModelsMap = {
     'gpt-oss:20b',
     'kimi-k2-thinking',
     'kimi-k2.5',
+    'kimi-k2.6:cloud',
     'kimi-k2:1t',
     'minimax-m2',
     'minimax-m2.1',
@@ -3439,6 +3445,7 @@ export type ProviderModelsMap = {
     '@cf/google/gemma-4-26b-a4b-it',
     '@cf/meta/llama-4-scout-17b-16e-instruct',
     '@cf/moonshotai/kimi-k2.5',
+    '@cf/moonshotai/kimi-k2.6',
     '@cf/nvidia/nemotron-3-120b-a12b',
     '@cf/openai/gpt-oss-120b',
     '@cf/openai/gpt-oss-20b',
@@ -3722,7 +3729,6 @@ export type ProviderModelsMap = {
   ];
   readonly nova: readonly ['nova-2-lite-v1', 'nova-2-pro-v1'];
   readonly netlify: readonly [
-    'anthropic/claude-3-haiku-20240307',
     'anthropic/claude-haiku-4-5',
     'anthropic/claude-haiku-4-5-20251001',
     'anthropic/claude-opus-4-1-20250805',
