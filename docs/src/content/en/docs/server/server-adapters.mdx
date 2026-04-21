@@ -1,9 +1,10 @@
 ---
 title: "Server adapters | Server"
-description: "Manually configure a Mastra server using Hono or Express adapters."
+description: "Manually configure a Mastra server using Express, Hono, Fastify, Koa, or LoopBack adapters."
 packages:
   - "@mastra/express"
   - "@mastra/hono"
+  - "@mastra/loopback"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -35,6 +36,7 @@ Mastra currently provides these official server adapters:
 - [@mastra/hono](/reference/server/hono-adapter)
 - [@mastra/fastify](/reference/server/fastify-adapter)
 - [@mastra/koa](/reference/server/koa-adapter)
+- [@mastra/loopback](/reference/server/loopback-adapter)
 
 You can build your own adapter, read [custom adapters](/docs/server/custom-adapters) for details.
 
@@ -64,6 +66,12 @@ Install the adapter for the framework of your choice.
   <TabItem value="koa" label="Koa">
     ```bash npm2yarn
     npm install @mastra/koa@latest
+    ```
+  </TabItem>
+
+  <TabItem value="loopback" label="LoopBack">
+    ```bash npm2yarn
+    npm install @mastra/loopback@latest @loopback/core @loopback/rest
     ```
   </TabItem>
 </Tabs>
@@ -193,6 +201,34 @@ Initialize your app as usual, then create a `MastraServer` by passing in the `ap
 
     :::
   </TabItem>
+
+  <TabItem value="loopback" label="LoopBack">
+    ```typescript {7} title="src/index.ts"
+    import { RestApplication } from '@loopback/rest'
+    import { LoopbackMastraServer } from '@mastra/loopback'
+    import { mastra } from './mastra'
+
+    const app = new RestApplication()
+
+    const server = new LoopbackMastraServer({
+      app,
+      mastra,
+      config: {
+        prefix: '/api/mastra',
+        openapiPath: '/openapi.json',
+      },
+    })
+
+    await server.init()
+    await app.start()
+    ```
+
+    :::info
+
+    See the [LoopBack Adapter](/reference/server/loopback-adapter) documentation for full configuration options.
+
+    :::
+  </TabItem>
 </Tabs>
 
 ## Initialization flow
@@ -258,6 +294,18 @@ const server = new MastraServer({
 ```
 
 With this prefix, Mastra routes become `/api/v2/agents`, `/api/v2/workflows`, etc. Custom routes you add directly to the app aren't affected by this prefix.
+
+## Related
+
+- [Express Adapter](/reference/server/express-adapter) - Express-specific setup
+- [Hono Adapter](/reference/server/hono-adapter) - Hono-specific setup
+- [Fastify Adapter](/reference/server/fastify-adapter) - Fastify-specific setup
+- [Koa Adapter](/reference/server/koa-adapter) - Koa-specific setup
+- [LoopBack Adapter](/reference/server/loopback-adapter) - LoopBack-specific setup
+- [Custom Adapters](/docs/server/custom-adapters) - Build adapters for other frameworks
+- [Server Configuration](/docs/server/mastra-server) - Use `mastra build` instead
+- [Authentication](/docs/server/auth) - Configure auth for your server
+- [MastraServer Reference](/reference/server/mastra-server) - Full API reference
 
 ## OpenAPI spec
 

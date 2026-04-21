@@ -50,6 +50,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'getting-started/loopback',
+          label: 'LoopBack',
+        },
+        {
+          type: 'doc',
           id: 'getting-started/hono',
           label: 'Hono',
         },
