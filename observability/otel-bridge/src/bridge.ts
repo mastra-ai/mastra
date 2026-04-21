@@ -135,6 +135,9 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
       // those IDs would collide across every Mastra span and break downstream
       // exporters. Bail out so DefaultSpan falls through to its own ID generator.
       if (!isSpanContextValid(otelSpanContext)) {
+        // End the span we just started so its lifecycle stays clean on
+        // providers that do track non-recording spans.
+        otelSpan.end();
         return undefined;
       }
 
