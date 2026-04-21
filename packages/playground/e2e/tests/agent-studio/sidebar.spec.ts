@@ -15,6 +15,7 @@ const END_USER_PERMISSIONS = [
   'stored:write',
   'tools:read',
   'workflows:read',
+  'user:write',
 ];
 
 const VIEWER_ONLY_PERMISSIONS = ['agents:read', 'stored-agents:read', 'stored:read', 'workflows:read'];
@@ -92,22 +93,18 @@ test.describe('Agent Studio agents list — behavior', () => {
     await resetStorage();
   });
 
-  test('scope tabs drive the Mine vs Team empty state, and toggles do not crash', async ({ page }) => {
+  test('empty state guides end-users to create, view toggles do not crash', async ({ page }) => {
     await setupMockAuth(page, { role: 'member', permissions: END_USER_PERMISSIONS });
 
     await page.goto('/agent-studio/agents');
 
-    // Kitchen-sink has code agents but no stored agents, so the All scope
-    // shows the generic empty state.
-    await expect(page.getByText('No agents match this view')).toBeVisible();
+    // Kitchen-sink has code agents but no stored agents. The Studio Agents
+    // page is the user's personal workspace (own + starred), so with no
+    // stored agents and no stars we render the empty-state create prompt.
+    await expect(page.getByText("You don't have any agents yet")).toBeVisible();
 
-    // "Mine" scope surfaces the create-your-first-agent prompt specifically.
-    await page.getByRole('tab', { name: 'Mine' }).click();
-    await expect(page.getByText("You haven't created any agents yet")).toBeVisible();
-
-    // Back to "All" and switch view modes — they must be clickable without
-    // throwing (the toggle buttons live outside the empty state).
-    await page.getByRole('tab', { name: 'All' }).click();
+    // View toggles must be clickable without throwing (they live outside the
+    // empty state).
     await expect(page.getByTestId('agent-studio-view-list')).toBeVisible();
     await page.getByTestId('agent-studio-view-list').click();
     await page.getByTestId('agent-studio-view-grid').click();

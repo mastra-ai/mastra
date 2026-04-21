@@ -41,6 +41,8 @@ function EditFormContent({
   latestVersionId,
   hideVersionPanel = false,
   isCodeAgentOverride = false,
+  basePath,
+  simplifiedSections = false,
 }: {
   agentId: string;
   selectedVersionId: string | null;
@@ -56,6 +58,8 @@ function EditFormContent({
   latestVersionId?: string;
   hideVersionPanel?: boolean;
   isCodeAgentOverride?: boolean;
+  basePath: string;
+  simplifiedSections?: boolean;
 }) {
   const [, setSearchParams] = useSearchParams();
   const location = useLocation();
@@ -95,18 +99,36 @@ function EditFormContent({
       handleSaveDraft={handleSaveDraft}
       readOnly={readOnly}
       isCodeAgentOverride={isCodeAgentOverride}
-      basePath={`/cms/agents/${agentId}/edit`}
+      basePath={basePath}
       currentPath={location.pathname}
       banner={banner}
       versionId={selectedVersionId ?? undefined}
       rightPanel={rightPanel}
+      simplifiedSections={simplifiedSections}
     >
       <Outlet />
     </AgentCmsFormShell>
   );
 }
 
-function EditLayoutWrapper() {
+interface EditLayoutWrapperProps {
+  /**
+   * URL prefix for this edit flow. Lets the same layout back both the admin
+   * `/cms/agents/:id/edit` path and the Agent Studio `/agent-studio/agents/:id/edit`
+   * path so studio users never leave their shell.
+   */
+  basePath?: (agentId: string) => string;
+  /** When true, hide Agents/Scorers/Workflows/Memory (matches the studio create form). */
+  simplifiedSections?: boolean;
+  /** Where to navigate on successful publish. Defaults to the admin chat page. */
+  redirectOnSuccess?: (agentId: string) => string;
+}
+
+function EditLayoutWrapper({
+  basePath: basePathFn,
+  simplifiedSections = false,
+  redirectOnSuccess,
+}: EditLayoutWrapperProps = {}) {
   const { agentId } = useParams<{ agentId: string }>();
   const { navigate, paths } = useLinkComponent();
   const routerNavigate = useNavigate();
@@ -137,7 +159,7 @@ function EditLayoutWrapper() {
   const isLoading = isLoadingCodeAgent || (hasVersions && isLoadingStoredAgent);
 
   // Redirect code agent overrides from the Identity page to Instructions
-  const basePath = `/cms/agents/${agentId}/edit`;
+  const basePath = basePathFn ? basePathFn(agentId ?? '') : `/cms/agents/${agentId}/edit`;
   const isOnIdentityPage = location.pathname === basePath || location.pathname === `${basePath}/`;
   useEffect(() => {
     if (isCodeAgentOverride && isOnIdentityPage) {
@@ -172,7 +194,7 @@ function EditLayoutWrapper() {
     dataSource,
     isCodeAgentOverride,
     hasStoredOverride: isCodeAgentOverride && !!storedAgent,
-    onSuccess: id => navigate(paths.agentLink(id)),
+    onSuccess: id => navigate(redirectOnSuccess ? redirectOnSuccess(id) : paths.agentLink(id)),
   });
 
   const handlePublishVersion = useCallback(async () => {
@@ -266,6 +288,8 @@ function EditLayoutWrapper() {
               onVersionSelect={handleVersionSelect}
               activeVersionId={activeVersionId}
               latestVersionId={latestVersion?.id}
+              basePath={basePath}
+              simplifiedSections={simplifiedSections}
             />
           </div>
         </>
@@ -284,6 +308,8 @@ function EditLayoutWrapper() {
           latestVersionId={latestVersion?.id}
           hideVersionPanel={isCodeAgentOverride && !storedAgent}
           isCodeAgentOverride={isCodeAgentOverride}
+          basePath={basePath}
+          simplifiedSections={simplifiedSections}
         />
       )}
     </MainContentLayout>

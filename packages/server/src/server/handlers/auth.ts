@@ -27,6 +27,8 @@ import {
   credentialsSignInBodySchema,
   credentialsSignUpBodySchema,
   refreshResponseSchema,
+  userLookupBodySchema,
+  userLookupResponseSchema,
 } from '../schemas/auth';
 import { createPublicRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
@@ -179,6 +181,77 @@ export const GET_CURRENT_USER_ROUTE = createPublicRoute({
       };
     } catch (error) {
       return handleError(error, 'Error getting current user');
+    }
+  },
+});
+
+// ============================================================================
+// POST /auth/users/lookup
+// ============================================================================
+
+/**
+ * Resolves a batch of user IDs to their public display info (name, email,
+ * avatar). Used by Studio to render author attribution in the Agent Studio
+ * without exposing raw IDs. Requires the caller to be authenticated; falls
+ * back to returning just the `{ id }` for any user that can't be resolved
+ * (no provider / unknown id) so the UI can still render the raw id.
+ */
+export const POST_USER_LOOKUP_ROUTE = createPublicRoute({
+  method: 'POST',
+  path: '/auth/users/lookup',
+  responseType: 'json',
+  bodySchema: userLookupBodySchema,
+  responseSchema: userLookupResponseSchema,
+  summary: 'Resolve user IDs to display info',
+  description:
+    'Given a list of user IDs, returns public display info (name, email, avatarUrl) for each. Requires authentication.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    try {
+      const { mastra, request, userIds } = ctx as any;
+      const auth = getAuthProvider(mastra);
+
+      if (!auth || !implementsInterface<IUserProvider>(auth, 'getCurrentUser')) {
+        return { users: (userIds as string[]).map(id => ({ id })) };
+      }
+
+      const currentUser = await auth.getCurrentUser(request);
+      if (!currentUser) {
+        throw new HTTPException(401, { message: 'Authentication required' });
+      }
+
+      const unique = Array.from(new Set(userIds as string[]));
+      const getUser = implementsInterface<IUserProvider>(auth, 'getUser') ? auth.getUser.bind(auth) : null;
+
+      const users = await Promise.all(
+        unique.map(async id => {
+          if (id === currentUser.id) {
+            return {
+              id: currentUser.id,
+              name: currentUser.name,
+              email: currentUser.email,
+              avatarUrl: currentUser.avatarUrl,
+            };
+          }
+          if (!getUser) return { id };
+          try {
+            const user = await getUser(id);
+            if (!user) return { id };
+            return {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              avatarUrl: user.avatarUrl,
+            };
+          } catch {
+            return { id };
+          }
+        }),
+      );
+
+      return { users };
+    } catch (error) {
+      return handleError(error, 'Error looking up users');
     }
   },
 });
@@ -610,6 +683,7 @@ export const POST_CREDENTIALS_SIGN_UP_ROUTE = createPublicRoute({
 export const AUTH_ROUTES = [
   GET_AUTH_CAPABILITIES_ROUTE,
   GET_CURRENT_USER_ROUTE,
+  POST_USER_LOOKUP_ROUTE,
   GET_SSO_LOGIN_ROUTE,
   GET_SSO_CALLBACK_ROUTE,
   POST_LOGOUT_ROUTE,

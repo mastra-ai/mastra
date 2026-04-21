@@ -1772,6 +1772,26 @@ export interface ListProjectsResponse extends PaginationInfo {
 }
 
 // ============================================================================
+// Auth — User Lookup
+// ============================================================================
+
+/**
+ * Public display info for a user, returned by the user-lookup endpoint. Used
+ * by Studio to render author attribution without exposing raw user ids.
+ * Unresolved users (no provider, unknown id) come back as `{ id }` only.
+ */
+export interface PublicUserResponse {
+  id: string;
+  name?: string;
+  email?: string;
+  avatarUrl?: string;
+}
+
+export interface UserLookupResponse {
+  users: PublicUserResponse[];
+}
+
+// ============================================================================
 // Workspace Types
 // ============================================================================
 

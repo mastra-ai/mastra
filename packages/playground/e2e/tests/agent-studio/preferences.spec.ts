@@ -11,6 +11,7 @@ const END_USER_PERMISSIONS = [
   'stored:write',
   'tools:read',
   'workflows:read',
+  'user:write',
 ];
 
 /**

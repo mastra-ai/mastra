@@ -1,11 +1,7 @@
-import { DashboardCard, PageHeader, PageLayout, SelectField } from '@mastra/playground-ui';
+import { DashboardCard, PageHeader, PageLayout } from '@mastra/playground-ui';
 import { PaletteIcon, SettingsIcon, SparklesIcon } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
 import { useAgentStudioConfig } from '@/domains/agent-studio/hooks/use-agent-studio-config';
-import { StudioConfigForm } from '@/domains/configuration/components/studio-config-form';
-import { useStudioConfig } from '@/domains/configuration/context/studio-config-context';
 import { useLinkComponent } from '@/lib/framework';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 type ConfigureEntry = {
   id: string;
@@ -16,26 +12,9 @@ type ConfigureEntry = {
   enabled: boolean;
 };
 
-const THEME_OPTIONS = [
-  { value: 'dark', label: 'Dark' },
-  { value: 'light', label: 'Light' },
-  { value: 'system', label: 'System' },
-] as const;
-
 export function AgentStudioConfigure() {
   const { config } = useAgentStudioConfig();
   const { Link } = useLinkComponent();
-  const { baseUrl, headers, apiPrefix } = useStudioConfig();
-  const { theme, setTheme } = usePlaygroundStore();
-  const [selectedTheme, setSelectedTheme] = useState(theme);
-  const selectedThemeRef = useRef(theme);
-
-  useEffect(() => {
-    setSelectedTheme(theme);
-    selectedThemeRef.current = theme;
-  }, [theme]);
-
-  const allowAppearance = config?.configure?.allowAppearance ?? true;
 
   const entries: ConfigureEntry[] = [
     {
@@ -52,7 +31,7 @@ export function AgentStudioConfigure() {
       description: 'Choose between light and dark mode.',
       href: '/agent-studio/configure/appearance',
       icon: <PaletteIcon />,
-      enabled: allowAppearance,
+      enabled: config?.configure?.allowAppearance ?? true,
     },
   ].filter(entry => entry.enabled);
 
@@ -65,7 +44,7 @@ export function AgentStudioConfigure() {
               <PageHeader.Title>
                 <SettingsIcon /> Configure
               </PageHeader.Title>
-              <PageHeader.Description>Manage your skills, appearance, and preferences.</PageHeader.Description>
+              <PageHeader.Description>Manage your skills and appearance.</PageHeader.Description>
             </PageHeader>
           </PageLayout.Column>
         </PageLayout.Row>
@@ -88,34 +67,6 @@ export function AgentStudioConfigure() {
           </Link>
         ))}
       </div>
-
-      {allowAppearance && (
-        <PageLayout.MainArea className="grid gap-8 mt-6 p-4" data-testid="configure-settings">
-          <section className="rounded-lg border border-border1 bg-surface3 p-4">
-            <div className="space-y-3">
-              <h2 className="text-icon6 font-medium">Theme</h2>
-              <SelectField
-                name="theme"
-                label="Theme mode"
-                value={selectedTheme}
-                onValueChange={value => {
-                  const nextTheme = value as 'dark' | 'light' | 'system';
-                  selectedThemeRef.current = nextTheme;
-                  setSelectedTheme(nextTheme);
-                }}
-                options={THEME_OPTIONS.map(option => ({ ...option }))}
-              />
-            </div>
-          </section>
-
-          <StudioConfigForm
-            initialConfig={{ baseUrl, headers, apiPrefix }}
-            onSave={() => {
-              setTheme(selectedThemeRef.current);
-            }}
-          />
-        </PageLayout.MainArea>
-      )}
     </PageLayout>
   );
 }

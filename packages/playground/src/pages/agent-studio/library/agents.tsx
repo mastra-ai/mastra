@@ -15,6 +15,7 @@ import { StoreIcon } from 'lucide-react';
 import { useState } from 'react';
 import { AgentStudioCard } from '@/domains/agent-studio/components/agent-studio-card';
 import { useStudioAgents } from '@/domains/agent-studio/hooks/use-studio-agents';
+import { useUserLookup } from '@/domains/agent-studio/hooks/use-user-lookup';
 
 export function AgentStudioLibraryAgents() {
   const [search, setSearch] = useState('');
@@ -23,6 +24,7 @@ export function AgentStudioLibraryAgents() {
     search,
     visibility: 'public',
   });
+  const { getDisplayName } = useUserLookup(agents.map(a => a.authorId));
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -80,7 +82,14 @@ export function AgentStudioLibraryAgents() {
           data-testid="library-agents-grid"
         >
           {agents.map(agent => (
-            <AgentStudioCard key={agent.id} agent={agent} showAuthor currentUserId={currentUserId} showStar />
+            <AgentStudioCard
+              key={agent.id}
+              agent={agent}
+              showAuthor
+              currentUserId={currentUserId}
+              authorDisplayName={getDisplayName(agent.authorId)}
+              showStar
+            />
           ))}
         </div>
       )}

@@ -12,10 +12,20 @@ export interface SkillStudioCardProps {
   linkBasePath: string;
   showAuthor?: boolean;
   currentUserId?: string;
-  /** Render the star toggle (marketplace view). */
+  /**
+   * Resolved display name for the author (from IUserProvider). Falls back
+   * to a shortened user id so we never render the raw UUID.
+   */
+  authorDisplayName?: string;
+  /** Render the star toggle (library view). */
   showStar?: boolean;
   /** Render the visibility badge. Default: true. */
   showVisibility?: boolean;
+}
+
+function shortenUserId(userId: string): string {
+  if (userId.length <= 12) return userId;
+  return `${userId.slice(0, 10)}…`;
 }
 
 export function SkillStudioCard({
@@ -23,12 +33,17 @@ export function SkillStudioCard({
   linkBasePath,
   showAuthor = false,
   currentUserId,
+  authorDisplayName,
   showStar = false,
   showVisibility = true,
 }: SkillStudioCardProps) {
   const { Link } = useLinkComponent();
   const url = `${linkBasePath}/${skill.id}`;
-  const authorLabel = skill.authorId ? (skill.authorId === currentUserId ? 'You' : skill.authorId) : 'Unknown author';
+  const authorLabel = !skill.authorId
+    ? 'Unknown author'
+    : skill.authorId === currentUserId
+      ? 'You'
+      : (authorDisplayName ?? shortenUserId(skill.authorId));
   const visibility = skill.visibility ?? resolveVisibility(skill.metadata);
 
   return (

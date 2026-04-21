@@ -1,3 +1,5 @@
+import type { IUserProvider } from '@mastra/core/auth';
+import type { MastraAuthProvider } from '@mastra/core/server';
 import type { StorageCreateAgentInput, StorageUpdateAgentInput } from '@mastra/core/storage';
 import type { z } from 'zod/v4';
 
@@ -25,6 +27,43 @@ import { toSlug } from '../utils';
 import { handleError } from './error';
 import { handleAutoVersioning } from './version-helpers';
 import type { VersionedStoreInterface } from './version-helpers';
+
+/**
+ * Returns the authenticated user's id if the server is configured with a
+ * `MastraAuthProvider` that implements `getCurrentUser`. Returns `null` when no
+ * auth is configured — callers should treat this as "ownership checks disabled"
+ * to preserve behavior for setups that don't have an auth provider.
+ */
+async function getCurrentUserIdIfAuthed(mastra: any, request: Request | undefined): Promise<string | null> {
+  const serverConfig = mastra?.getServer?.();
+  const auth = serverConfig?.auth as MastraAuthProvider | undefined;
+  if (!auth || typeof (auth as any).authenticateToken !== 'function') return null;
+  if (typeof (auth as unknown as IUserProvider).getCurrentUser !== 'function') return null;
+  if (!request) return null;
+  const user = await (auth as unknown as IUserProvider).getCurrentUser(request);
+  return user?.id ?? null;
+}
+
+/**
+ * Enforce that the authenticated user owns the stored agent. Only runs when:
+ *   - the server has an auth provider with `getCurrentUser`, AND
+ *   - the stored agent record has an `authorId`.
+ *
+ * This keeps existing unauthenticated setups working while preventing
+ * non-authors from editing or deleting agents they did not create.
+ */
+async function assertAgentOwnership(
+  mastra: any,
+  request: Request | undefined,
+  existing: { authorId?: string | null } | null | undefined,
+): Promise<void> {
+  if (!existing?.authorId) return;
+  const currentUserId = await getCurrentUserIdIfAuthed(mastra, request);
+  if (currentUserId === null) return; // No auth provider configured — skip.
+  if (currentUserId !== existing.authorId) {
+    throw new HTTPException(403, { message: 'You are not the author of this agent' });
+  }
+}
 
 const AGENT_SNAPSHOT_CONFIG_FIELDS = [
   'name',
@@ -275,33 +314,35 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
   description: 'Updates an existing agent in storage with the provided fields',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({
-    mastra,
-    storedAgentId,
-    // Metadata-level fields
-    authorId,
-    metadata,
-    // Config fields (snapshot-level)
-    name,
-    description,
-    instructions,
-    model,
-    tools,
-    defaultOptions,
-    workflows,
-    agents,
-    integrationTools,
-    mcpClients,
-    inputProcessors,
-    outputProcessors,
-    memory,
-    scorers,
-    skills,
-    workspace,
-    requestContextSchema,
-    // Version metadata
-    changeMessage,
-  }) => {
+  handler: async ctx => {
+    const {
+      mastra,
+      storedAgentId,
+      // Metadata-level fields
+      authorId,
+      metadata,
+      // Config fields (snapshot-level)
+      name,
+      description,
+      instructions,
+      model,
+      tools,
+      defaultOptions,
+      workflows,
+      agents,
+      integrationTools,
+      mcpClients,
+      inputProcessors,
+      outputProcessors,
+      memory,
+      scorers,
+      skills,
+      workspace,
+      requestContextSchema,
+      // Version metadata
+      changeMessage,
+    } = ctx;
+    const request = (ctx as unknown as { request?: Request }).request;
     try {
       const storage = mastra.getStorage();
 
@@ -319,6 +360,9 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       if (!existing) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
+
+      // Only the author may edit a stored agent (when auth is configured).
+      await assertAgentOwnership(mastra, request, existing);
 
       // Update the agent with both metadata-level and config-level fields
       // The storage layer handles separating these into agent-record updates vs new-version creation
@@ -420,7 +464,9 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
   description: 'Deletes an agent from storage by its unique identifier',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, storedAgentId }) => {
+  handler: async ctx => {
+    const { mastra, storedAgentId } = ctx;
+    const request = (ctx as unknown as { request?: Request }).request;
     try {
       const storage = mastra.getStorage();
 
@@ -438,6 +484,9 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
       if (!existing) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
+
+      // Only the author may delete a stored agent (when auth is configured).
+      await assertAgentOwnership(mastra, request, existing);
 
       await agentsStore.delete(storedAgentId);
 
@@ -502,7 +551,9 @@ export const UPLOAD_STORED_AGENT_AVATAR_ROUTE = createRoute({
   description: 'Uploads an avatar image for a stored agent and persists it as a data URL on metadata.avatarUrl.',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, storedAgentId, contentBase64, contentType }) => {
+  handler: async ctx => {
+    const { mastra, storedAgentId, contentBase64, contentType } = ctx;
+    const request = (ctx as unknown as { request?: Request }).request;
     try {
       const storage = mastra.getStorage();
       if (!storage) {
@@ -518,6 +569,9 @@ export const UPLOAD_STORED_AGENT_AVATAR_ROUTE = createRoute({
       if (!existing) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
+
+      // Only the author may upload a new avatar.
+      await assertAgentOwnership(mastra, request, existing);
 
       let decodedBytes: number;
       try {

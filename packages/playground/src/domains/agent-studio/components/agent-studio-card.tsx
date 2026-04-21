@@ -13,23 +13,39 @@ export interface AgentStudioCardProps {
   agent: StoredAgentResponse;
   showAuthor?: boolean;
   currentUserId?: string;
-  /** Render the star toggle (marketplace view). Hidden by default. */
+  /**
+   * Resolved display name for the author (from IUserProvider). When absent,
+   * we fall back to a shortened user id so we never render the raw UUID.
+   */
+  authorDisplayName?: string;
+  /** Render the star toggle (library view). Hidden by default. */
   showStar?: boolean;
   /** Render the visibility badge. Default: true. */
   showVisibility?: boolean;
+}
+
+function shortenUserId(userId: string): string {
+  // e.g. `user_abc123def456` → `user_abc1…`
+  if (userId.length <= 12) return userId;
+  return `${userId.slice(0, 10)}…`;
 }
 
 export function AgentStudioCard({
   agent,
   showAuthor = false,
   currentUserId,
+  authorDisplayName,
   showStar = false,
   showVisibility = true,
 }: AgentStudioCardProps) {
   const { Link } = useLinkComponent();
   const chatUrl = `/agent-studio/agents/${agent.id}/chat`;
   const description = agent.description ?? extractPrompt(agent.instructions as any);
-  const authorLabel = agent.authorId ? (agent.authorId === currentUserId ? 'You' : agent.authorId) : 'Unknown author';
+  const authorLabel = !agent.authorId
+    ? 'Unknown author'
+    : agent.authorId === currentUserId
+      ? 'You'
+      : (authorDisplayName ?? shortenUserId(agent.authorId));
   const avatarUrl = resolveAgentAvatar(agent);
   const visibility = agent.visibility ?? resolveVisibility(agent.metadata);
 

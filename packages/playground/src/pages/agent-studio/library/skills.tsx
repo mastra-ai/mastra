@@ -14,6 +14,7 @@ import { SparklesIcon, StoreIcon } from 'lucide-react';
 import { useState } from 'react';
 import { SkillStudioCard } from '@/domains/agent-studio/components/skill-studio-card';
 import { useStudioSkills } from '@/domains/agent-studio/hooks/use-studio-skills';
+import { useUserLookup } from '@/domains/agent-studio/hooks/use-user-lookup';
 
 export function AgentStudioLibrarySkills() {
   const [search, setSearch] = useState('');
@@ -22,6 +23,7 @@ export function AgentStudioLibrarySkills() {
     search,
     visibility: 'public',
   });
+  const { getDisplayName } = useUserLookup(skills.map(s => s.authorId));
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -85,6 +87,7 @@ export function AgentStudioLibrarySkills() {
               linkBasePath="/agent-studio/library/skills"
               showAuthor
               currentUserId={currentUserId}
+              authorDisplayName={getDisplayName(skill.authorId)}
               showStar
             />
           ))}

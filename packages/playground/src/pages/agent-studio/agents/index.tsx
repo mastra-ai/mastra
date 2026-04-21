@@ -10,17 +10,14 @@ import {
   PageLayout,
   PermissionDenied,
   SessionExpired,
-  Tab,
-  TabList,
-  Tabs,
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { LayoutGrid, List, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { AgentStudioCard } from '@/domains/agent-studio/components/agent-studio-card';
-import type { StudioAgentScope } from '@/domains/agent-studio/hooks/use-studio-agents';
 import { useStudioAgents } from '@/domains/agent-studio/hooks/use-studio-agents';
+import { useUserLookup } from '@/domains/agent-studio/hooks/use-user-lookup';
 import { AgentsList } from '@/domains/agents/components/agent-list/agents-list';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { useCanCreateAgent } from '@/domains/agents/hooks/use-can-create-agent';
@@ -32,21 +29,27 @@ export function AgentStudioAgents() {
   const { Link: FrameworkLink } = useLinkComponent();
   const { canCreateAgent } = useCanCreateAgent();
   const [search, setSearch] = useState('');
-  const [scope, setScope] = useState<StudioAgentScope>('all');
   const [view, setView] = useState<ViewMode>('grid');
 
+  // Agent Studio "Agents" is the end-user's personal workspace: their own
+  // agents plus anything they've starred from the Library. Cross-team
+  // discovery lives in the Library.
   const {
     agents: studioAgents,
     isLoading: isLoadingStudio,
     error: studioError,
     currentUserId,
-  } = useStudioAgents({ scope, search });
+  } = useStudioAgents({ scope: 'mine-and-starred', search });
 
   // AgentsList expects a Record<string, GetAgentResponse>. Build it from the
   // merged `useAgents` result but filtered to the ids our studio scope returned.
   const { data: allAgentsRecord = {}, isLoading: isLoadingMerged } = useAgents();
   const scopedIds = new Set(studioAgents.map(a => a.id));
   const listRecord = Object.fromEntries(Object.entries(allAgentsRecord).filter(([id]) => scopedIds.has(id)));
+
+  // Resolve author ids to display names once per page render; the hook
+  // dedupes + caches, so downstream cards render instantly.
+  const { getDisplayName } = useUserLookup(studioAgents.map(a => a.authorId));
 
   const createPath = '/agent-studio/agents/create';
   const showCreateCta = canCreateAgent;
@@ -97,18 +100,10 @@ export function AgentStudioAgents() {
           </PageLayout.Column>
         </PageLayout.Row>
 
-        <div className="flex items-center gap-4 justify-between flex-wrap">
-          <Tabs defaultTab="all" value={scope} onValueChange={v => setScope(v as StudioAgentScope)}>
-            <TabList>
-              <Tab value="all">All</Tab>
-              <Tab value="mine">Mine</Tab>
-              <Tab value="team">Team</Tab>
-            </TabList>
-          </Tabs>
-
+        <div className="flex items-center gap-4 justify-end flex-wrap">
           <div className="flex items-center gap-2">
             <div className="max-w-120 w-[20rem]">
-              <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or description" />
+              <ListSearch onSearch={setSearch} label="Search agents" placeholder="Search by name or description" />
             </div>
             <Button
               variant={view === 'grid' ? 'default' : 'ghost'}
@@ -134,14 +129,14 @@ export function AgentStudioAgents() {
         <div className="flex items-center justify-center h-full p-8">
           <EmptyState
             iconSlot={<AgentIcon />}
-            titleSlot={scope === 'mine' ? "You haven't created any agents yet" : 'No agents match this view'}
+            titleSlot={search ? 'No agents match your search' : "You don't have any agents yet"}
             descriptionSlot={
-              scope === 'mine'
-                ? 'Create your first agent to get started.'
-                : 'Try a different scope or clear your search.'
+              search
+                ? 'Try a different search, or browse the Library to star agents from your team.'
+                : 'Create your first agent, or star one from the Library to pin it here.'
             }
             actionSlot={
-              showCreateCta && scope !== 'team' ? (
+              showCreateCta ? (
                 <Button as={FrameworkLink} href={createPath} variant="default">
                   <Plus className="h-4 w-4" /> New agent
                 </Button>
@@ -156,7 +151,13 @@ export function AgentStudioAgents() {
           data-testid="agent-studio-grid"
         >
           {studioAgents.map(agent => (
-            <AgentStudioCard key={agent.id} agent={agent} showAuthor={scope !== 'mine'} currentUserId={currentUserId} />
+            <AgentStudioCard
+              key={agent.id}
+              agent={agent}
+              showAuthor
+              currentUserId={currentUserId}
+              authorDisplayName={getDisplayName(agent.authorId)}
+            />
           ))}
         </div>
       ) : (

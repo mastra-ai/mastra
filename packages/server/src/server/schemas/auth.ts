@@ -112,6 +112,25 @@ export const currentUserResponseSchema = z
   .nullable();
 
 // ============================================================================
+// User lookup schemas (resolve ids to display info)
+// ============================================================================
+
+export const userLookupBodySchema = z.object({
+  userIds: z.array(z.string()).min(1).max(100),
+});
+
+export const publicUserSchema = z.object({
+  id: z.string(),
+  name: z.string().optional(),
+  email: z.string().optional(),
+  avatarUrl: z.string().optional(),
+});
+
+export const userLookupResponseSchema = z.object({
+  users: z.array(publicUserSchema),
+});
+
+// ============================================================================
 // Credentials Schemas
 // ============================================================================
 

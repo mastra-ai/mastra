@@ -1,10 +1,11 @@
 import type { StoredAgentResponse, VisibilityValue } from '@mastra/client-js';
 import { useMemo } from 'react';
 import { resolveVisibility } from '../components/visibility';
+import { useStarredAgentIds } from './use-user-preferences';
 import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 
-export type StudioAgentScope = 'all' | 'mine' | 'team';
+export type StudioAgentScope = 'all' | 'mine' | 'team' | 'mine-and-starred';
 
 type UseStudioAgentsOptions = {
   scope?: StudioAgentScope;
@@ -21,6 +22,7 @@ export const useStudioAgents = ({
   visibility,
 }: UseStudioAgentsOptions = {}) => {
   const { data: user } = useCurrentUser();
+  const starredAgents = useStarredAgentIds();
   const { data, isLoading, error } = useStoredAgents({
     orderBy: { field: 'updatedAt', direction: 'DESC' },
     perPage,
@@ -29,16 +31,30 @@ export const useStudioAgents = ({
   const agents: StoredAgentResponse[] = useMemo(() => data?.agents ?? [], [data]);
 
   const scoped = useMemo(() => {
+    const resolvedVisibility = (a: StoredAgentResponse) => a.visibility ?? resolveVisibility(a.metadata);
+    const isMine = (a: StoredAgentResponse) => !!user?.id && a.authorId === user.id;
+    const starredSet = new Set(starredAgents);
+    const isStarred = (a: StoredAgentResponse) => starredSet.has(a.id);
+    // Visibility rule: you can only see agents that are yours OR public. This
+    // prevents private agents authored by other users from leaking into the
+    // Studio list, even in the unscoped "All" tab.
+    const visible = agents.filter(a => isMine(a) || resolvedVisibility(a) === 'public');
+
     const byScope =
-      scope === 'all' || !user?.id
-        ? agents
-        : scope === 'mine'
-          ? agents.filter(a => a.authorId === user.id)
-          : // Team = agents authored by someone else (or legacy agents without an author)
-            agents.filter(a => !a.authorId || a.authorId !== user.id);
+      scope === 'mine'
+        ? visible.filter(isMine)
+        : scope === 'team'
+          ? // Team = publicly shared agents authored by someone else.
+            visible.filter(a => !isMine(a))
+          : scope === 'mine-and-starred'
+            ? // The default end-user view: your own agents, plus agents you've
+              // starred from the Library. Keeps the list tight and personal.
+              visible.filter(a => isMine(a) || isStarred(a))
+            : visible;
+
     if (!visibility) return byScope;
-    return byScope.filter(a => (a.visibility ?? resolveVisibility(a.metadata)) === visibility);
-  }, [agents, scope, user?.id, visibility]);
+    return byScope.filter(a => resolvedVisibility(a) === visibility);
+  }, [agents, scope, user?.id, visibility, starredAgents]);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();

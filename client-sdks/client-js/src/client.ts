@@ -148,6 +148,7 @@ import type {
   InviteProjectAgentParams,
   CreateProjectTaskParams,
   UpdateProjectTaskParams,
+  UserLookupResponse,
   ListScoresResponse as ListScoresResponseOld,
   GetObservationalMemoryParams,
   GetObservationalMemoryResponse,
@@ -1534,6 +1535,22 @@ export class MastraClient extends BaseResource {
   public deleteProjectTask(projectId: string, taskId: string): Promise<{ id: string; deleted: true }> {
     return this.request(`/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}`, {
       method: 'DELETE',
+    });
+  }
+
+  // ============================================================================
+  // Auth — user lookup
+  // ============================================================================
+
+  /**
+   * Resolves a batch of user IDs to their public display info (name, email,
+   * avatarUrl). Used by Studio to render author attribution without exposing
+   * raw user IDs. Requires authentication; unresolved IDs come back as `{ id }`.
+   */
+  public lookupUsers(userIds: string[]): Promise<UserLookupResponse> {
+    return this.request('/auth/users/lookup', {
+      method: 'POST',
+      body: { userIds },
     });
   }
 

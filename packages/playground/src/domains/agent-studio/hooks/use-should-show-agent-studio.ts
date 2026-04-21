@@ -15,8 +15,8 @@ import { usePermissions } from '@/domains/auth/hooks/use-permissions';
  *     "View as end-user" preview toggle.
  */
 export const useShouldShowAgentStudio = () => {
-  const { isAgentStudioAvailable } = useIsAgentStudioAvailable();
-  const { hasPermission, rbacEnabled } = usePermissions();
+  const { isAgentStudioAvailable, isLoading: isLoadingPackages } = useIsAgentStudioAvailable();
+  const { hasPermission, rbacEnabled, isLoading: isLoadingPermissions } = usePermissions();
   const { isPreviewMode, setPreviewMode } = useAgentStudioPreviewMode();
 
   // When RBAC is off, treat everyone as an admin — they already have full access.
@@ -27,11 +27,14 @@ export const useShouldShowAgentStudio = () => {
 
   const showAgentStudio = isAgentStudioAvailable && canUseStudio && (!isAdmin || isPreviewMode);
 
+  const isLoading = isLoadingPackages || isLoadingPermissions;
+
   return {
     showAgentStudio,
     isAgentStudioAvailable,
     isAdmin,
     isPreviewMode,
     setPreviewMode,
+    isLoading,
   };
 };

@@ -42,8 +42,16 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
   {
     id: 'member',
     name: 'Member',
-    description: 'Execute agents and workflows',
-    permissions: ['*:read', '*:execute'],
+    description: 'Execute agents and workflows, create and manage their own stored agents and skills',
+    permissions: [
+      '*:read',
+      '*:execute',
+      // Agent Studio: members are the primary authors of stored agents/skills
+      // and need to be able to update their own user preferences (stars, etc.).
+      'stored-agents:write',
+      'stored:write',
+      'user:write',
+    ],
   },
   {
     id: 'viewer',
