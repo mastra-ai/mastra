@@ -35,6 +35,7 @@ export const TABLE_DATASET_VERSIONS = 'mastra_dataset_versions';
 export const TABLE_EXPERIMENTS = 'mastra_experiments';
 export const TABLE_EXPERIMENT_RESULTS = 'mastra_experiment_results';
 export const TABLE_BACKGROUND_TASKS = 'mastra_background_tasks';
+export const TABLE_USER_PREFERENCES = 'mastra_user_preferences';
 
 /** Union of all core table name constants. */
 export type TABLE_NAMES =
@@ -65,7 +66,8 @@ export type TABLE_NAMES =
   | typeof TABLE_DATASET_VERSIONS
   | typeof TABLE_EXPERIMENTS
   | typeof TABLE_EXPERIMENT_RESULTS
-  | typeof TABLE_BACKGROUND_TASKS;
+  | typeof TABLE_BACKGROUND_TASKS
+  | typeof TABLE_USER_PREFERENCES;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -308,6 +310,7 @@ export const SKILLS_SCHEMA: Record<string, StorageColumn> = {
   status: { type: 'text', nullable: false }, // 'draft', 'published', or 'archived'
   activeVersionId: { type: 'text', nullable: true }, // FK to skill_versions.id
   authorId: { type: 'text', nullable: true },
+  metadata: { type: 'jsonb', nullable: true }, // record-level metadata (visibility, stars, etc.) — not versioned
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -561,6 +564,13 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     createdAt: { type: 'timestamp', nullable: false },
     startedAt: { type: 'timestamp', nullable: true },
     completedAt: { type: 'timestamp', nullable: true },
+  },
+  [TABLE_USER_PREFERENCES]: {
+    userId: { type: 'text', nullable: false, primaryKey: true },
+    agentStudio: { type: 'jsonb', nullable: false },
+    metadata: { type: 'jsonb', nullable: true },
+    createdAt: { type: 'timestamp', nullable: false },
+    updatedAt: { type: 'timestamp', nullable: false },
   },
 };
 

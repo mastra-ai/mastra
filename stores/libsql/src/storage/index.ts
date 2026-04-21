@@ -16,6 +16,7 @@ import { PromptBlocksLibSQL } from './domains/prompt-blocks';
 import { ScorerDefinitionsLibSQL } from './domains/scorer-definitions';
 import { ScoresLibSQL } from './domains/scores';
 import { SkillsLibSQL } from './domains/skills';
+import { UserPreferencesLibSQL } from './domains/user-preferences';
 import { WorkflowsLibSQL } from './domains/workflows';
 import { WorkspacesLibSQL } from './domains/workspaces';
 
@@ -34,6 +35,7 @@ export {
   ScorerDefinitionsLibSQL,
   ScoresLibSQL,
   SkillsLibSQL,
+  UserPreferencesLibSQL,
   WorkflowsLibSQL,
   WorkspacesLibSQL,
 };
@@ -167,6 +169,7 @@ export class LibSQLStore extends MastraCompositeStore {
     const skills = new SkillsLibSQL(domainConfig);
     const blobs = new BlobsLibSQL(domainConfig);
     const backgroundTasks = new BackgroundTasksLibSQL(domainConfig);
+    const userPreferences = new UserPreferencesLibSQL(domainConfig);
 
     this.stores = {
       scores,
@@ -184,6 +187,7 @@ export class LibSQLStore extends MastraCompositeStore {
       skills,
       blobs,
       backgroundTasks,
+      userPreferences,
     };
   }
 }

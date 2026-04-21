@@ -290,6 +290,7 @@ export class MastraCompositeStore extends MastraBase {
         skills: resolve('skills'),
         blobs: resolve('blobs'),
         backgroundTasks: resolve('backgroundTasks'),
+        userPreferences: resolve('userPreferences'),
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
