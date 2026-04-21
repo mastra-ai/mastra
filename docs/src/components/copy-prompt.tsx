@@ -72,8 +72,8 @@ export function CopyPrompt({
     try {
       await navigator.clipboard.writeText(promptText)
       setCopied(true)
-      track('docs-copy_prompt', { identifier })
       setTimeout(setCopied, 2000, false)
+      track('docs-copy_prompt', { identifier })
     } catch {
       // silently fail
     }
