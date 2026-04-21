@@ -1385,15 +1385,28 @@ export class Agent extends BaseResource {
         },
         onFinish: async ({ finishReason, message }) => {
           if (finishReason === 'tool-calls') {
-            const toolCall = [...(message?.parts ?? [])]
-              .reverse()
-              .find(part => part.type === 'tool-invocation')?.toolInvocation;
-            if (toolCall) {
-              toolCalls.push(toolCall);
+            // Collect ALL pending tool invocations from this step (not just the last one)
+            const pendingToolCalls = (message?.parts ?? [])
+              .filter(
+                (part): part is ToolInvocationUIPart =>
+                  part.type === 'tool-invocation' && part.toolInvocation?.state === 'call',
+              )
+              .map(part => part.toolInvocation);
+
+            for (const tc of pendingToolCalls) {
+              if (!toolCalls.some(existing => existing.toolCallId === tc.toolCallId)) {
+                toolCalls.push(tc);
+              }
             }
 
             let shouldExecuteClientTool = false;
-            // Handle tool calls if needed
+
+            // Clone the last message once — all tool results are patched into this single copy
+            const lastMessageRaw = messages[messages.length - 1];
+            const lastMessage: UIMessage | undefined =
+              lastMessageRaw != null ? JSON.parse(JSON.stringify(lastMessageRaw)) : undefined;
+
+            // Execute all pending client tools and patch results into lastMessage
             for (const toolCall of toolCalls) {
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               if (clientTool && clientTool.execute) {
@@ -1411,10 +1424,6 @@ export class Agent extends BaseResource {
                     resourceId,
                   },
                 });
-
-                const lastMessageRaw = messages[messages.length - 1];
-                const lastMessage: UIMessage | undefined =
-                  lastMessageRaw != null ? JSON.parse(JSON.stringify(lastMessageRaw)) : undefined;
 
                 const toolInvocationPart = lastMessage?.parts?.find(
                   part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCall.toolCallId,
@@ -1437,30 +1446,36 @@ export class Agent extends BaseResource {
                   // @ts-expect-error - result property exists when state is 'result'
                   toolInvocation.result = result;
                 }
+              }
+            }
 
-                // Build updated messages for the recursive call
-                // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
-                // When no threadId (stateless), include full conversation history for context
-                const newMessages =
-                  lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
+            // Clear processed tool calls to prevent reprocessing on next continuation
+            toolCalls = [];
 
-                const updatedMessages = threadId
-                  ? newMessages
-                  : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
+            // Make a single recursive call with all tool results patched
+            if (shouldExecuteClientTool) {
+              // Build updated messages for the recursive call
+              // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
+              // When no threadId (stateless), include full conversation history for context
+              const newMessages =
+                lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
 
-                // Recursively call stream with updated messages
-                // This will wait for the recursive stream to complete before continuing
-                try {
-                  await this.processStreamResponse(
-                    {
-                      ...processedParams,
-                      messages: updatedMessages,
-                    },
-                    controller,
-                  );
-                } catch (error) {
-                  console.error('Error processing recursive stream response:', error);
-                }
+              const updatedMessages = threadId
+                ? newMessages
+                : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
+
+              // Recursively call stream with updated messages
+              // This will wait for the recursive stream to complete before continuing
+              try {
+                await this.processStreamResponse(
+                  {
+                    ...processedParams,
+                    messages: updatedMessages,
+                  },
+                  controller,
+                );
+              } catch (error) {
+                console.error('Error processing recursive stream response:', error);
               }
             }
 
@@ -1961,17 +1976,29 @@ export class Agent extends BaseResource {
         },
         onFinish: async ({ finishReason, message }) => {
           if (finishReason === 'tool-calls') {
-            const toolCall = [...(message?.parts ?? [])]
-              .reverse()
-              .find(part => part.type === 'tool-invocation')?.toolInvocation;
-            if (toolCall) {
-              toolCalls.push(toolCall);
+            // Collect ALL pending tool invocations from this step (not just the last one)
+            const pendingToolCalls = (message?.parts ?? [])
+              .filter(
+                (part): part is ToolInvocationUIPart =>
+                  part.type === 'tool-invocation' && part.toolInvocation?.state === 'call',
+              )
+              .map(part => part.toolInvocation);
+
+            for (const tc of pendingToolCalls) {
+              if (!toolCalls.some(existing => existing.toolCallId === tc.toolCallId)) {
+                toolCalls.push(tc);
+              }
             }
 
-            // Handle tool calls if needed
+            // Clone the last message once — all tool results are patched into this single copy
+            const lastMessage: UIMessage = JSON.parse(JSON.stringify(messages[messages.length - 1]));
+            let shouldExecuteClientTool = false;
+
+            // Execute all pending client tools and patch results into lastMessage
             for (const toolCall of toolCalls) {
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               if (clientTool && clientTool.execute) {
+                shouldExecuteClientTool = true;
                 const result = await clientTool.execute(toolCall?.args, {
                   requestContext: processedParams.requestContext as RequestContext,
                   // TODO: Pass proper tracing context when client-js supports tracing
@@ -1985,8 +2012,6 @@ export class Agent extends BaseResource {
                     resourceId,
                   },
                 });
-
-                const lastMessage: UIMessage = JSON.parse(JSON.stringify(messages[messages.length - 1]));
 
                 const toolInvocationPart = lastMessage?.parts?.find(
                   part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCall.toolCallId,
@@ -2027,26 +2052,32 @@ export class Agent extends BaseResource {
                 } finally {
                   writer.releaseLock();
                 }
-
-                // Build updated messages for the recursive call
-                // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
-                // When no threadId (stateless), include full conversation history for context
-                const newMessages = [...messages.filter(m => m.id !== lastMessage.id), lastMessage];
-                const updatedMessages = threadId
-                  ? newMessages
-                  : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
-
-                // Recursively call stream with updated messages
-                this.processStreamResponseLegacy(
-                  {
-                    ...processedParams,
-                    messages: updatedMessages,
-                  },
-                  writable,
-                ).catch(error => {
-                  console.error('Error processing stream response:', error);
-                });
               }
+            }
+
+            // Clear processed tool calls to prevent reprocessing on next continuation
+            toolCalls = [];
+
+            // Make a single recursive call with all tool results patched
+            if (shouldExecuteClientTool) {
+              // Build updated messages for the recursive call
+              // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
+              // When no threadId (stateless), include full conversation history for context
+              const newMessages = [...messages.filter(m => m.id !== lastMessage.id), lastMessage];
+              const updatedMessages = threadId
+                ? newMessages
+                : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
+
+              // Recursively call stream with updated messages
+              this.processStreamResponseLegacy(
+                {
+                  ...processedParams,
+                  messages: updatedMessages,
+                },
+                writable,
+              ).catch(error => {
+                console.error('Error processing stream response:', error);
+              });
             }
           } else {
             setTimeout(() => {
