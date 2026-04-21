@@ -2,8 +2,8 @@ import { describe, expectTypeOf, it } from 'vitest';
 import type { RequestContext } from '../request-context';
 import type { MastraAuthProvider } from './auth';
 import { CompositeAuth } from './composite-auth';
-import { registerApiRoute } from './index';
 import { SimpleAuth } from './simple-auth';
+import { registerApiRoute } from './index';
 
 /**
  * Type tests for registerApiRoute
