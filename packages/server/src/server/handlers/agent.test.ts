@@ -574,6 +574,7 @@ describe('Agent Handlers', () => {
 
     it('should return serialized agent with browser tools when browser is configured', async () => {
       const mockBrowser = {
+        providerType: 'sdk' as const,
         getTools: () => ({
           navigate: { name: 'navigate' },
           click: { name: 'click' },
