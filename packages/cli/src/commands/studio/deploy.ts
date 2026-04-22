@@ -111,40 +111,48 @@ export async function readEnvVars(
   projectDir: string,
   options: { autoAccept?: boolean; envFile?: string } = {},
 ): Promise<Record<string, string>> {
+  // When an explicit env file is provided, trust the user — read it directly.
+  if (options.envFile) {
+    const filePath = join(projectDir, options.envFile);
+    try {
+      await access(filePath);
+    } catch {
+      throw new Error(`Env file not found: ${options.envFile}`);
+    }
+    p.log.step(`Using env file: ${options.envFile}`);
+    return parseEnvFile(await readFile(filePath, 'utf-8'));
+  }
+
   const availableDeployEnvFiles = await getDeployEnvFiles(projectDir);
 
   if (availableDeployEnvFiles.length === 0) {
     throw new Error('No env file found for deploy. Add a .env or .env.* file before deploying.');
   }
 
-  let selectedEnvFile = options.envFile;
+  let selectedEnvFile: string;
 
-  if (selectedEnvFile) {
-    if (!availableDeployEnvFiles.includes(selectedEnvFile)) {
-      throw new Error(
-        `Env file not found for deploy: ${selectedEnvFile}. Available files: ${availableDeployEnvFiles.join(', ')}`,
-      );
-    }
+  if (availableDeployEnvFiles.length === 1) {
+    selectedEnvFile = availableDeployEnvFiles[0]!;
+  } else if (options.autoAccept) {
+    throw new Error(
+      `Multiple env files found: ${availableDeployEnvFiles.join(', ')}. Use --env-file to specify which one to deploy.`,
+    );
   } else {
-    selectedEnvFile =
+    const defaultFile =
       availableDeployEnvFiles.find(envFile => envFile === '.env.production') ?? availableDeployEnvFiles[0]!;
 
-    if (availableDeployEnvFiles.length > 1) {
-      if (!options.autoAccept) {
-        const selected = await p.select({
-          message: 'Choose env file to deploy',
-          options: availableDeployEnvFiles.map(envFile => ({ value: envFile, label: envFile })),
-          initialValue: selectedEnvFile,
-        });
+    const selected = await p.select({
+      message: 'Choose env file to deploy',
+      options: availableDeployEnvFiles.map(envFile => ({ value: envFile, label: envFile })),
+      initialValue: defaultFile,
+    });
 
-        if (p.isCancel(selected)) {
-          p.cancel('Deploy cancelled.');
-          process.exit(0);
-        }
-
-        selectedEnvFile = selected as string;
-      }
+    if (p.isCancel(selected)) {
+      p.cancel('Deploy cancelled.');
+      process.exit(0);
     }
+
+    selectedEnvFile = selected as string;
   }
 
   p.log.step(`Using env file: ${selectedEnvFile}`);
