@@ -504,6 +504,9 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     getProcessorProvider: vi
       .fn()
       .mockImplementation((id: string) => (id === 'test-provider' ? mockProcessorProvider : undefined)),
+    // Agent Builder EE methods (return false/undefined by default in tests)
+    hasEnabledBuilderConfig: vi.fn().mockReturnValue(false),
+    resolveBuilder: vi.fn().mockResolvedValue(undefined),
   } as any);
 
   await mockWorkflowRun(workflow);
