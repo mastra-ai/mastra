@@ -9,6 +9,7 @@ import { omDebug } from './debug';
 import type { ObservationTurn } from './observation-turn/index';
 import type { ObservationalMemory } from './observational-memory';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
+import { insertTemporalGapMarkers } from './temporal-markers';
 import type { TokenCounterModelContext } from './token-counter';
 
 /** Subset of Memory that the processor needs — avoids circular imports. */
@@ -70,12 +71,16 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
   /** Memory instance for loading context. */
   private readonly memory: MemoryContextProvider;
 
+  /** Whether temporal-gap reminder markers should be inserted. */
+  private readonly temporalMarkers: boolean;
+
   /** Active turn — created on first processInputStep, ended on processOutputResult. */
   private turn?: ObservationTurn;
 
-  constructor(engine: ObservationalMemory, memory: MemoryContextProvider) {
+  constructor(engine: ObservationalMemory, memory: MemoryContextProvider, options?: { temporalMarkers?: boolean }) {
     this.engine = engine;
     this.memory = memory;
+    this.temporalMarkers = options?.temporalMarkers ?? false;
   }
 
   // ─── Processor lifecycle hooks ──────────────────────────────────────────
@@ -163,6 +168,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         this.turn.writer = writer;
         this.turn.requestContext = requestContext;
         await this.turn.start(this.memory);
+        if (stepNumber === 0 && this.temporalMarkers) {
+          await insertTemporalGapMarkers({ messageList, writer });
+        }
         state.__omTurn = this.turn;
       }
 

@@ -38,6 +38,13 @@ const SIGNAL_MIGRATIONS: SignalMigration[] = [
   { table: TABLE_FEEDBACK_EVENTS, createDDL: FEEDBACK_EVENTS_DDL, idColumn: 'feedbackId' },
 ];
 
+// ClickHouse Cloud silently rewrites `ReplacingMergeTree` to `SharedReplacingMergeTree`,
+// and self-managed replicated clusters rewrite it to `ReplicatedReplacingMergeTree`.
+// All three share dedup-on-merge semantics, so treat them as already-migrated.
+export function isReplacingMergeTreeEngine(engine: string): boolean {
+  return engine.endsWith('ReplacingMergeTree');
+}
+
 async function getTableEngine(client: ClickHouseClient, table: string): Promise<string | null> {
   const result = await client.query({
     query: `SELECT engine FROM system.tables WHERE database = currentDatabase() AND name = {table:String}`,
@@ -81,7 +88,7 @@ export async function checkSignalTablesMigrationStatus(client: ClickHouseClient)
 
   for (const { table, idColumn } of SIGNAL_MIGRATIONS) {
     const engine = await getTableEngine(client, table);
-    if (!engine || engine === 'ReplacingMergeTree') {
+    if (!engine || isReplacingMergeTreeEngine(engine)) {
       continue;
     }
 
@@ -103,7 +110,7 @@ export async function checkSignalTablesMigrationStatus(client: ClickHouseClient)
 export async function migrateSignalTables(client: ClickHouseClient, logger?: IMastraLogger): Promise<void> {
   for (const { table, createDDL, idColumn } of SIGNAL_MIGRATIONS) {
     const engine = await getTableEngine(client, table);
-    if (!engine || engine === 'ReplacingMergeTree') continue;
+    if (!engine || isReplacingMergeTreeEngine(engine)) continue;
 
     logger?.info?.(`Migrating ${table} from ${engine} to ReplacingMergeTree with ${idColumn} column`);
 

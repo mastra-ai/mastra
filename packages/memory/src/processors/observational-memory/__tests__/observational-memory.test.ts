@@ -1295,6 +1295,42 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).toContain('Hello');
     });
 
+    it('should render persisted temporal gap markers as time-passed lines', () => {
+      const temporalGapMarker = createTestMessage('ignored', 'user');
+      temporalGapMarker.id = '__temporal_gap_test';
+      temporalGapMarker.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'text',
+            text: '<system-reminder type="temporal-gap" precedesMessageId="input-1">10 minutes later — 9:10 AM</system-reminder>',
+          },
+        ],
+        metadata: {
+          reminderType: 'temporal-gap',
+          gapText: '10 minutes later',
+          timestamp: '9:10 AM',
+          timestampMs: new Date('2025-01-01T09:10:00.000Z').getTime(),
+          precedesMessageId: 'input-1',
+          systemReminder: {
+            type: 'temporal-gap',
+            message: '10 minutes later — 9:10 AM',
+            gapText: '10 minutes later',
+            timestamp: '9:10 AM',
+            timestampMs: new Date('2025-01-01T09:10:00.000Z').getTime(),
+            precedesMessageId: 'input-1',
+          },
+        },
+      } as any;
+      const textMsg = createTestMessage('Hello after the gap', 'user');
+
+      const formatted = formatMessagesForObserver([temporalGapMarker, textMsg]);
+      expect(formatted).toMatch(/(?:^|\n) ?(?:\([^)]*\): )?10 minutes later/);
+      expect(formatted).toMatch(/User( \([^)]*\))?: Hello after the gap/);
+      expect(formatted).not.toContain('Time passed:');
+      expect(formatted).not.toContain('<system-reminder');
+    });
+
     it('should include non-obscured reasoning content', () => {
       const msg = createTestMessage('ignored', 'assistant');
       msg.content = {
