@@ -405,6 +405,10 @@ export class ViewerRegistry implements ViewerRegistryLike {
         if (this.screencasts.get(viewerKey) !== currentStream) return;
         console.error(`[ViewerRegistry] Screencast error for ${viewerKey}:`, error);
         this.screencasts.delete(viewerKey);
+        // Explicitly stop the stream to clean up CDP resources
+        currentStream.stop().catch(stopError => {
+          console.warn(`[ViewerRegistry] Error stopping errored screencast for ${viewerKey}:`, stopError);
+        });
         this.broadcastStatus(viewerKey, { status: 'browser_closed' });
       });
 

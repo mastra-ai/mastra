@@ -74,10 +74,10 @@ describe('BrowserCliHandler', () => {
         expect(handler.hasExternalCdpFlag(parts)).toBe(true);
       });
 
-      it('does not detect --cdp flag with just port number', () => {
-        // Port-only --cdp is for local injection, not external CDP
+      it('detects --cdp flag with port number as external', () => {
+        // Port-only --cdp connects to existing Chrome on that port
         const parts = ['agent-browser --cdp 9222 open https://google.com'];
-        expect(handler.hasExternalCdpFlag(parts)).toBe(false);
+        expect(handler.hasExternalCdpFlag(parts)).toBe(true);
       });
 
       it('does not detect connect without URL', () => {

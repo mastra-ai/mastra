@@ -63,6 +63,9 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
   /** Shared session info (for 'shared' scope) */
   private sharedSession: BrowserViewerSession | null = null;
 
+  /** Cached CDP sessions for input injection, keyed by threadId */
+  private inputCdpSessions = new Map<string, { session: CDPSession; pageUrl: string }>();
+
   constructor(config: BrowserViewerThreadManagerConfig) {
     super(config);
     this.browserConfig = config.browserConfig;
@@ -139,6 +142,8 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
   private async cleanupSession(session: BrowserViewerSession, threadId: string): Promise<void> {
     // Clear state BEFORE async operations to prevent double callback from disconnect handler
     this.clearSessionState(threadId);
+    // Clear cached input CDP session
+    this.inputCdpSessions.delete(threadId);
 
     // Detach CDP session
     if (session.cdpSession) {
@@ -338,12 +343,24 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       return null;
     }
 
+    // Check if we have a cached CDP session for the current active page
+    const cached = this.inputCdpSessions.get(effectiveThreadId);
+    const currentUrl = activePage.url();
+    if (cached && cached.pageUrl === currentUrl) {
+      // Reuse cached session if same page
+      return cached.session;
+    }
+
     // Create a new CDP session for the active page
     try {
-      return await session.context.newCDPSession(activePage);
+      const cdpSession = await session.context.newCDPSession(activePage);
+      // Cache it for future input events
+      this.inputCdpSessions.set(effectiveThreadId, { session: cdpSession, pageUrl: currentUrl });
+      return cdpSession;
     } catch {
       // Page may have been closed between getting pages and creating session
       // This often indicates browser was closed - trigger cleanup
+      this.inputCdpSessions.delete(effectiveThreadId);
       this.handleBrowserDisconnected(effectiveThreadId);
       return null;
     }
@@ -355,6 +372,30 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
   getContextForThread(threadId?: string): BrowserContext | null {
     const effectiveThreadId = threadId ?? DEFAULT_THREAD_ID;
     return this.getViewerSession(effectiveThreadId)?.context ?? null;
+  }
+
+  /**
+   * Create a fresh CDP session for the active page (not cached).
+   * Used by screencast which needs fresh sessions on tab switches.
+   */
+  async createFreshCdpSession(threadId?: string): Promise<CDPSession | null> {
+    const effectiveThreadId = threadId ?? DEFAULT_THREAD_ID;
+    const session = this.getViewerSession(effectiveThreadId);
+
+    if (!session?.context) {
+      return null;
+    }
+
+    const activePage = this.resolveActivePage(session.context);
+    if (!activePage) {
+      return null;
+    }
+
+    try {
+      return await session.context.newCDPSession(activePage);
+    } catch {
+      return null;
+    }
   }
 
   /**

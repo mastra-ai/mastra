@@ -41,8 +41,9 @@ const CLI_CDP_PATTERNS: Record<string, BrowserCliConfig> = {
     // agent-browser external CDP detection:
     // - "connect <url>" subcommand for external CDP
     // - "--cdp <url>" with full wss:// URL (not just port) also indicates external CDP
-    externalCdpPattern: /(?:\bconnect\s+["']?wss?:\/\/|--cdp\s+["']?wss?:\/\/)/,
-    // Extract URL from: connect "wss://..." or --cdp "wss://..."
+    // External CDP: "connect <url>", "--cdp <url>", or "--cdp <port>"
+    externalCdpPattern: /(?:\bconnect\s+["']?wss?:\/\/|--cdp\s+["']?\S)/,
+    // Extract URL from: connect "wss://..." or --cdp "wss://..." (ports don't have extractable URLs)
     externalCdpExtractor: /(?:\bconnect|--cdp)\s+["']?(wss?:\/\/[^\s"']+)["']?/,
   },
   'browser-use': {

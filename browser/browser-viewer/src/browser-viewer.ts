@@ -239,15 +239,17 @@ export class BrowserViewer extends MastraBrowser {
     }
 
     const pages = context.pages();
+    // Active page is the last one (most recently opened), consistent with resolveActivePage
+    const activeIndex = pages.length > 0 ? pages.length - 1 : 0;
     const tabs: BrowserTabState[] = pages.map((page, index) => ({
       url: page.url(),
       title: '', // Would need async call to get title
-      isActive: index === 0,
+      isActive: index === activeIndex,
     }));
 
     return {
       tabs,
-      activeTabIndex: 0,
+      activeTabIndex: activeIndex,
     };
   }
 
@@ -263,20 +265,10 @@ export class BrowserViewer extends MastraBrowser {
     // attached to the CURRENT page, not the original page from launch
     const provider: CdpSessionProvider = {
       getCdpSession: async () => {
-        const context = this.threadManager.getContextForThread(threadId);
-        if (!context) {
+        const cdpSession = await this.threadManager.createFreshCdpSession(threadId);
+        if (!cdpSession) {
           throw new Error('No browser context available for screencast');
         }
-
-        // Get the most recently active page (last in the list, or first if only one)
-        const pages = context.pages();
-        if (pages.length === 0) {
-          throw new Error('No pages available for screencast');
-        }
-        const currentPage = pages[pages.length - 1] ?? pages[0];
-
-        // Create a fresh CDP session for this page
-        const cdpSession = await context.newCDPSession(currentPage!);
 
         // Return wrapper that implements CdpSessionLike
         return {

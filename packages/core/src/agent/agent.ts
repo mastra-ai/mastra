@@ -488,9 +488,8 @@ export class Agent<
   setBrowser(browser: MastraBrowser | undefined): void {
     this.#browser = browser;
     // Mark as explicit so workspace browser doesn't overwrite
-    if (browser) {
-      this.#hasExplicitBrowser = true;
-    }
+    // Setting to undefined is also explicit (disabling browser tools)
+    this.#hasExplicitBrowser = true;
   }
 
   /**
