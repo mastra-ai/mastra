@@ -1001,7 +1001,17 @@ export async function executeForeach(
         results[i + resultIndex] = result?.output;
       }
 
-      prevForeachOutput[i + resultIndex] = { ...result, suspendPayload: {} };
+      // Preserve `suspendPayload` for iterations that are still suspended so
+      // their resume context (e.g. an agent's `__streamState`) survives the
+      // round-trip through the workflow snapshot. When a different iteration
+      // is resumed later, the foreach loop re-enters with `prevForeachOutput`
+      // and uses each entry's `suspendPayload` to rebuild execution state for
+      // the iterations that are still pending. Wiping it for suspended results
+      // (the previous behavior) caused those iterations to lose their state on
+      // every resume, e.g. parallel tool-call approvals losing conversation
+      // context after the first approval. For non-suspended results, we still
+      // clear `suspendPayload` to keep the snapshot small.
+      prevForeachOutput[i + resultIndex] = result?.status === 'suspended' ? result : { ...result, suspendPayload: {} };
     }
 
     if (Object.keys(foreachIndexObj).length > 0) {
