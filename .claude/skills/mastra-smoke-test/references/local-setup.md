@@ -30,12 +30,37 @@ Based on the selected LLM provider, ensure the API key is available:
 
 ## Start Development Server
 
+### 1. Check for a zombie on :4111 first
+
+`mastra dev` auto-increments the port if `:4111` is already in use (e.g.
+`:4112`, `:4113`). If you don't notice, your subsequent curls will hit the
+**wrong** project (any earlier test session left running). Always check:
+
+```bash
+lsof -i :4111
+# If a node process is listening, kill it before starting:
+kill $(lsof -ti :4111) 2>/dev/null
+```
+
+### 2. Start
+
 ```bash
 cd <project-directory>
 <pm> run dev
 ```
 
-Server starts on `http://localhost:4111`. Wait for "Server ready" message.
+Server starts on `http://localhost:4111`. Wait for "Mastra API running" in the
+output and confirm the printed URL before running tests:
+
+```bash
+curl -s -o /dev/null -w "HTTP %{http_code}\n" http://localhost:4111/api/agents
+# HTTP 200 → dev server up
+```
+
+**If the dev server prints `url: "http://localhost:4112/api"` instead of
+`:4111`,** port 4111 was already taken. Stop, kill the zombie, and restart,
+or pass `--port 4111` if supported — otherwise all the curl examples in the
+test references will target the wrong server.
 
 ## Local Observability Setup
 
