@@ -1,5 +1,12 @@
 # mastracode
 
+## 0.15.0-alpha.13
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.26.0-alpha.13
+
 ## 0.15.0-alpha.12
 
 ### Minor Changes
