@@ -2,4 +2,4 @@
 '@mastra/clickhouse': patch
 ---
 
-Fixed `ReplacingMergeTree` engine detection on ClickHouse Cloud and replicated clusters. Previously, the observability migration check only accepted the literal `ReplacingMergeTree` engine name, but ClickHouse Cloud silently rewrites it to `SharedReplacingMergeTree` (and self-managed replicated clusters rewrite it to `ReplicatedReplacingMergeTree`). This caused `mastra dev` to repeatedly throw `MIGRATION REQUIRED` on CH Cloud even after `npx mastra migrate` ran successfully. The check now accepts any `*ReplacingMergeTree` variant.
+Fixed `mastra dev` repeatedly reporting `MIGRATION REQUIRED` on ClickHouse Cloud after `mastra migrate` had already run successfully. The observability migration check now recognizes the engine-name variants that ClickHouse Cloud and replicated clusters use in place of `ReplacingMergeTree`.
