@@ -168,21 +168,6 @@ export class GatewayMemoryClient {
     }
   }
 
-  async saveMessages(
-    threadId: string,
-    params: { messages: Array<{ role: string; content: unknown; type?: string }> },
-  ): Promise<{ messages: GatewayMessage[] } | null> {
-    try {
-      return await this.request(`${this.threadPath(threadId)}/messages`, {
-        method: 'POST',
-        body: JSON.stringify(params),
-      });
-    } catch (e: unknown) {
-      if (e instanceof Error && e.message.includes('404')) return null;
-      throw e;
-    }
-  }
-
   async deleteMessages(threadId: string, params: { messageIds: string[] }): Promise<{ ok: boolean }> {
     try {
       return await this.request(`${this.threadPath(threadId)}/messages`, {
