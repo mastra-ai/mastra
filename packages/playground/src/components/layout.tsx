@@ -1,4 +1,4 @@
-import { ErrorBoundary, MainSidebarProvider, Toaster, TooltipProvider } from '@mastra/playground-ui';
+import { ErrorBoundary, Toaster, TooltipProvider } from '@mastra/playground-ui';
 import { useLocation } from 'react-router';
 import { AppSidebar } from './ui/app-sidebar';
 import { ThemeProvider } from './ui/theme-provider';
@@ -52,9 +52,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       <ThemeProvider defaultTheme="dark" attribute="class">
         <TooltipProvider delayDuration={0}>
           <ExperimentalUIProvider experiments={experimentalUIEnabled ? UI_EXPERIMENTS : []}>
-            <MainSidebarProvider>
-              <LayoutContent>{children}</LayoutContent>
-            </MainSidebarProvider>
+            <LayoutContent>{children}</LayoutContent>
           </ExperimentalUIProvider>
         </TooltipProvider>
       </ThemeProvider>

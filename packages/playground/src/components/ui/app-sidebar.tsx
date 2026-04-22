@@ -2,6 +2,7 @@ import {
   AgentIcon,
   LogoWithoutText,
   MainSidebar,
+  MainSidebarProvider,
   McpServerIcon,
   SettingsIcon,
   ToolsIcon,
@@ -203,10 +204,16 @@ export type AppSidebarProps = {
 };
 
 export function AppSidebar({ disableExpansion = false }: AppSidebarProps) {
+  return (
+    <MainSidebarProvider forceCollapsed={disableExpansion}>
+      <AppSidebarContent disableExpansion={disableExpansion} />
+    </MainSidebarProvider>
+  );
+}
+
+function AppSidebarContent({ disableExpansion = false }: AppSidebarProps) {
   const { Link } = useLinkComponent();
-  const { state: contextState } = useMainSidebar();
-  // Force collapsed state when expansion is disabled
-  const state = disableExpansion ? 'collapsed' : contextState;
+  const { state } = useMainSidebar();
 
   const location = useLocation();
   const pathname = location.pathname;
