@@ -1326,6 +1326,9 @@ export class Harness<TState = {}> {
         abortSignal: this.abortController.signal,
         requestContext,
         maxSteps: 1000,
+        // Harness supports suspending + resuming streams (tool approvals, tool suspensions, workflows).
+        // Persisting per-step snapshots ensures `resumeStream()` can load state reliably (especially in CI).
+        savePerStep: true,
         requireToolApproval: !isYolo,
         modelSettings: { temperature: 1 },
         ...(tracingContext && { tracingContext }),

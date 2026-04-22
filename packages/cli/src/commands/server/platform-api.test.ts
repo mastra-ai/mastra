@@ -562,6 +562,19 @@ describe('pollServerDeploy', () => {
 });
 
 describe('uploadServerDeploy', () => {
+  it('throws platform detail on 402 from deploy create', async () => {
+    mockPOST.mockResolvedValue({
+      data: undefined,
+      error: { detail: 'Billing required to deploy servers', type: 'problem', title: 'Payment', status: 402 },
+      response: { status: 402 },
+    });
+
+    const { uploadServerDeploy } = await import('./platform-api.js');
+    await expect(uploadServerDeploy('tok', 'org-1', 'proj-1', Buffer.from('zip'))).rejects.toThrow(
+      'Billing required to deploy servers',
+    );
+  });
+
   it('uploads zip and confirms', async () => {
     const mockFetch = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal('fetch', mockFetch);
