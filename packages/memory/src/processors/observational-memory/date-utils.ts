@@ -250,25 +250,50 @@ export const MIN_TEMPORAL_GAP_MS = 10 * 60 * 1000;
 export function formatTemporalGap(diffMs: number): string | null {
   if (diffMs < MIN_TEMPORAL_GAP_MS) return null;
 
-  const minutes = Math.floor(diffMs / (1000 * 60));
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-  const weeks = Math.floor(days / 7);
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+  const week = 7 * day;
+  const month = 30 * day;
+  const year = 365 * day;
 
-  if (weeks >= 2) return `${weeks} weeks later`;
-  if (weeks >= 1) return `1 week later`;
-  if (days >= 3) return `${days} days later`;
-  if (days >= 2) return `2 days later`;
-  if (days >= 1) return `1 day later`;
-  if (hours >= 12) return `12 hours later`;
-  if (hours >= 6) return `6 hours later`;
-  if (hours >= 3) return `3 hours later`;
-  if (hours >= 2) return `2 hours later`;
-  if (hours >= 1) return `1 hour later`;
-  if (minutes >= 30) return `30 minutes later`;
-  if (minutes >= 15) return `15 minutes later`;
-  if (minutes >= 5) return `5 minutes later`;
-  return `1 minute later`;
+  const formatUnit = (value: number, unit: string) => `${value} ${unit}${value === 1 ? '' : 's'}`;
+
+  if (diffMs < hour) {
+    const minutes = Math.max(10, Math.round(diffMs / minute));
+    return `${formatUnit(minutes, 'minute')} later`;
+  }
+
+  const formatTwoUnits = (primaryMs: number, primaryUnit: string, secondaryMs: number, secondaryUnit: string) => {
+    const primary = Math.floor(diffMs / primaryMs);
+    const remainder = diffMs - primary * primaryMs;
+    const secondary = Math.floor(remainder / secondaryMs);
+    const parts = [formatUnit(primary, primaryUnit)];
+
+    if (secondary > 0) {
+      parts.push(formatUnit(secondary, secondaryUnit));
+    }
+
+    return `${parts.join(' ')} later`;
+  };
+
+  if (diffMs < day) {
+    return formatTwoUnits(hour, 'hour', minute, 'minute');
+  }
+
+  if (diffMs < week) {
+    return formatTwoUnits(day, 'day', hour, 'hour');
+  }
+
+  if (diffMs < month) {
+    return formatTwoUnits(week, 'week', day, 'day');
+  }
+
+  if (diffMs < year) {
+    return formatTwoUnits(month, 'month', week, 'week');
+  }
+
+  return formatTwoUnits(year, 'year', month, 'month');
 }
 
 export function formatTemporalTimestamp(date: Date): string {

@@ -90,10 +90,30 @@ function createMemoryProvider(messages: MastraDBMessage[]): MemoryContextProvide
 }
 
 describe('ObservationalMemoryProcessor temporal markers', () => {
-  it('formats 10 minutes as the minimum temporal gap', () => {
+  it('formats temporal gaps using two-unit durations', () => {
     expect(formatTemporalGap(10 * 60 * 1000 - 1)).toBeNull();
-    expect(formatTemporalGap(10 * 60 * 1000)).toBe('5 minutes later');
-    expect(formatTemporalGap(15 * 60 * 1000)).toBe('15 minutes later');
+
+    const cases = [
+      { diffMs: 10 * 60 * 1000, expected: '10 minutes later' },
+      { diffMs: 15 * 60 * 1000, expected: '15 minutes later' },
+      { diffMs: 30 * 60 * 1000, expected: '30 minutes later' },
+      { diffMs: 45 * 60 * 1000, expected: '45 minutes later' },
+      { diffMs: 60 * 60 * 1000, expected: '1 hour later' },
+      { diffMs: 60 * 60 * 1000 + 26 * 60 * 1000, expected: '1 hour 26 minutes later' },
+      { diffMs: 6 * 60 * 60 * 1000 + 44 * 60 * 1000, expected: '6 hours 44 minutes later' },
+      { diffMs: 24 * 60 * 60 * 1000, expected: '1 day later' },
+      { diffMs: 24 * 60 * 60 * 1000 + 13 * 60 * 60 * 1000, expected: '1 day 13 hours later' },
+      { diffMs: 7 * 24 * 60 * 60 * 1000, expected: '1 week later' },
+      { diffMs: 7 * 24 * 60 * 60 * 1000 + 3 * 24 * 60 * 60 * 1000, expected: '1 week 3 days later' },
+      { diffMs: 30 * 24 * 60 * 60 * 1000, expected: '1 month later' },
+      { diffMs: 30 * 24 * 60 * 60 * 1000 + 14 * 24 * 60 * 60 * 1000, expected: '1 month 2 weeks later' },
+      { diffMs: 365 * 24 * 60 * 60 * 1000, expected: '1 year later' },
+      { diffMs: 365 * 24 * 60 * 60 * 1000 + 60 * 24 * 60 * 60 * 1000, expected: '1 year 2 months later' },
+    ];
+
+    for (const { diffMs, expected } of cases) {
+      expect(formatTemporalGap(diffMs)).toBe(expected);
+    }
   });
 
   it('labels the reported db fixture gap honestly', () => {
@@ -115,7 +135,7 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
     expect(getPartGapMs(previousVisibleMessage, newerMessage)).toBe(39884770);
     expect(gapMs).toBeGreaterThan(getTopLevelGapMs(previousVisibleMessage, newerMessage));
     expect(gapMs).toBeGreaterThan(getPartGapMs(previousVisibleMessage, newerMessage));
-    expect(formatTemporalGap(gapMs)).toBe('12 hours later');
+    expect(formatTemporalGap(gapMs)).toBe('11 hours 13 minutes later');
   });
 
   it('inserts temporal gap markers after history loads on step 0', async () => {
