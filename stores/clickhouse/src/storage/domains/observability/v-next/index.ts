@@ -193,12 +193,13 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       if (error instanceof MastraError) {
         throw error;
       }
+      const causeMessage = error instanceof Error ? error.message : String(error);
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'VNEXT_INIT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          text: 'Failed to initialize ClickHouse v-next observability tables',
+          text: `Failed to initialize ClickHouse v-next observability tables: ${causeMessage}`,
         },
         error,
       );

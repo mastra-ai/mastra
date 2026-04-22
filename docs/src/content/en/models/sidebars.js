@@ -458,6 +458,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/regolo-ai',
+          label: 'Regolo AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/requesty',
           label: 'Requesty',
         },
