@@ -2,8 +2,4 @@
 'mastra': patch
 ---
 
-Improved deploy env file handling for `mastra deploy` and `mastra studio deploy`:
-
-- **Single env file selection.** Deploy now uses one env file instead of merging multiple files together. When multiple `.env` files exist, you'll be prompted to choose which one to deploy.
-- **Added `--env-file` flag.** Specify exactly which env file to use (e.g. `--env-file .env.staging` or `--env-file config/prod.env`). Accepts any file path, not just `.env*` files.
-- **Non-interactive mode requires `--env-file` when ambiguous.** In CI (`--yes` or `MASTRA_API_TOKEN`), deploy requires `--env-file` when multiple env files exist instead of silently picking one. A single env file is auto-selected.
+Improved env file handling for `mastra server deploy` and `mastra studio deploy`. Deploy now selects a single env file instead of silently merging multiple files. When multiple `.env` files exist, you are prompted to choose one. Added `--env-file` to specify the file directly (e.g. `--env-file .env.staging`), which is required in non-interactive mode when multiple env files are present.
