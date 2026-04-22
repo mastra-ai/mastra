@@ -63,6 +63,7 @@ export default defineConfig({
     'src/evals/scoreTraces/index.ts',
     'src/agent/message-list/index.ts',
     'src/auth/ee/index.ts',
+    'src/agent-builder/ee/index.ts',
   ],
   format: ['esm', 'cjs'],
   clean: true,

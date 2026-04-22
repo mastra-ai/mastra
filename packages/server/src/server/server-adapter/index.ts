@@ -474,6 +474,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     this.registerAuthMiddleware();
     this.registerHttpLoggingMiddleware();
     await this.validateEELicense();
+    await this.validateAgentBuilderLicense();
     await this.registerCustomApiRoutes();
     await this.registerRoutes();
   }
@@ -503,6 +504,36 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       // @mastra/core/auth/ee module not available — RBAC cannot function
       throw new Error(
         '[mastra/auth-ee] RBAC is configured but the EE module (@mastra/core/auth/ee) could not be loaded.\n' +
+          'Ensure @mastra/core is updated to a version that includes EE support.',
+      );
+    }
+  }
+
+  /**
+   * Validate that Agent Builder EE feature has a valid license in production.
+   * Throws if builder is configured without a valid license outside dev/test environments.
+   */
+  async validateAgentBuilderLicense(): Promise<void> {
+    const editor = this.mastra.getEditor();
+    if (!editor?.hasEnabledBuilderConfig()) return;
+
+    try {
+      const { isEEEnabled } = await import('@mastra/core/auth/ee');
+      if (!isEEEnabled()) {
+        throw new Error(
+          '[mastra/auth-ee] Agent Builder is configured but no valid EE license was found.\n' +
+            'Agent Builder requires a Mastra Enterprise License for production use.\n' +
+            'Set the MASTRA_EE_LICENSE environment variable with your license key.\n' +
+            'Learn more: https://github.com/mastra-ai/mastra/blob/main/ee/LICENSE',
+        );
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith('[mastra/auth-ee]')) {
+        throw err;
+      }
+      // @mastra/core/auth/ee module not available — Agent Builder cannot function
+      throw new Error(
+        '[mastra/auth-ee] Agent Builder is configured but the EE module (@mastra/core/auth/ee) could not be loaded.\n' +
           'Ensure @mastra/core is updated to a version that includes EE support.',
       );
     }
