@@ -39,7 +39,7 @@ const {
 | `mcpManager` | `MCPManager` | Manager for MCP server connections |
 | `hookManager` | `HookManager` | Manager for lifecycle hooks |
 | `authStorage` | `AuthStorage` | Storage for OAuth credentials |
-| `resolveModel` | `(id: string) => LanguageModel` | Model resolution function |
+| `resolveModel` | `(modelId: string, options?: { thinkingLevel?: ThinkingLevel; remapForCodexOAuth?: boolean; requestContext?: RequestContext }) => ResolvedModel` | Model resolution function |
 | `storageWarning` | `string \| null` | Warning message if storage fallback occurred |
 | `builtinPacks` | `ModePack[]` | Built-in mode packs |
 | `builtinOmPacks` | `OmPack[]` | Built-in Observational Memory packs |
@@ -56,7 +56,7 @@ const {
 | `storage` | `StorageConfig` | Local LibSQL | Database configuration |
 | `initialState` | `Partial<MastraCodeState>` | Default state | Initial harness state values |
 | `heartbeatHandlers` | `HeartbeatHandler[]` | Default handlers | Background task definitions |
-| `resolveModel` | `(id: string) => LanguageModel` | Default resolver | Custom model resolution function |
+| `resolveModel` | `(modelId: string, options?: { thinkingLevel?: ThinkingLevel; remapForCodexOAuth?: boolean; requestContext?: RequestContext }) => ResolvedModel` | Default resolver | Custom model resolution function |
 
 #### `HarnessMode`
 
@@ -150,7 +150,7 @@ The `MastraTUI` class provides the terminal interface. Import it separately to b
 import { createMastraCode } from 'mastracode'
 import { MastraTUI } from 'mastracode/tui'
 
-const { harness, mcpManager, hookManager, authStorage } = createMastraCode()
+const { harness, mcpManager, hookManager, authStorage } = await createMastraCode()
 
 const tui = new MastraTUI({
   harness,
@@ -182,7 +182,7 @@ tui.run()
 ```typescript
 import { createMastraCode } from 'mastracode'
 
-const { harness } = createMastraCode({
+const { harness } = await createMastraCode({
   cwd: '/path/to/project',
 })
 
@@ -211,7 +211,7 @@ const reviewAgent = new Agent({
   model: 'anthropic/claude-sonnet-4-6',
 })
 
-const { harness } = createMastraCode({
+const { harness } = await createMastraCode({
   modes: [
     {
       id: 'review',
@@ -244,7 +244,7 @@ const deployTool = createTool({
   },
 })
 
-const { harness } = createMastraCode({
+const { harness } = await createMastraCode({
   extraTools: { deploy: deployTool },
 })
 ```
@@ -254,7 +254,7 @@ const { harness } = createMastraCode({
 ```typescript
 import { createMastraCode } from 'mastracode'
 
-const { harness } = createMastraCode({
+const { harness } = await createMastraCode({
   storage: {
     url: 'libsql://my-db.turso.io',
     authToken: process.env.TURSO_AUTH_TOKEN,
@@ -267,7 +267,7 @@ const { harness } = createMastraCode({
 ```typescript
 import { createMastraCode } from 'mastracode'
 
-const { harness } = createMastraCode({
+const { harness } = await createMastraCode({
   initialState: {
     yolo: false,
     permissionRules: {
