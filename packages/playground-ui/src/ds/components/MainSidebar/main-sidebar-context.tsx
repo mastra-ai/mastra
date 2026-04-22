@@ -28,7 +28,11 @@ const setLocalStorage = (value: SidebarState) => {
   window.localStorage.setItem(SIDEBAR_COOKIE_NAME, value.toString());
 };
 
-export function MainSidebarProvider({ children }: { children: React.ReactNode }) {
+export type MainSidebarProviderProps = {
+  children: React.ReactNode;
+};
+
+export function MainSidebarProvider({ children }: MainSidebarProviderProps) {
   // Always start with 'default' to prevent hydration mismatch
   const [state, setState] = React.useState<SidebarState>(() => 'default');
 
