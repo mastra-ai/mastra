@@ -9,15 +9,10 @@ export type MainSidebarTriggerProps = {
 };
 
 export function MainSidebarTrigger({ className }: MainSidebarTriggerProps) {
-  const { state, toggleSidebar, isExpansionDisabled } = useMainSidebar();
+  const { state, toggleSidebar } = useMainSidebar();
   const isCollapsed = state === 'collapsed';
 
   useEffect(() => {
-    // Don't register keyboard shortcut if expansion is disabled
-    if (isExpansionDisabled) {
-      return;
-    }
-
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.key === 'b') {
         event.preventDefault();
@@ -30,12 +25,7 @@ export function MainSidebarTrigger({ className }: MainSidebarTriggerProps) {
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [toggleSidebar, isExpansionDisabled]);
-
-  // Hide trigger when expansion is disabled
-  if (isExpansionDisabled) {
-    return null;
-  }
+  }, [toggleSidebar]);
 
   return (
     <Tooltip>

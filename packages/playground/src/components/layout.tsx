@@ -4,7 +4,6 @@ import { AppSidebar } from './ui/app-sidebar';
 import { ThemeProvider } from './ui/theme-provider';
 import { AuthRequired } from '@/domains/auth/components/auth-required';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
-import { useHasAnySidebarPermissions } from '@/domains/auth/hooks/use-has-sidebar-permissions';
 import { isAuthenticated } from '@/domains/auth/types';
 import { ExperimentalUIProvider } from '@/domains/experimental-ui/experimental-ui-context';
 import { UI_EXPERIMENTS } from '@/domains/experimental-ui/experiments';
@@ -15,20 +14,16 @@ import { cn } from '@/lib/utils';
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const { data: authCapabilities, isFetched } = useAuthCapabilities();
   const { pathname } = useLocation();
-  const { hasAnyLinks, isLoading: isPermissionsLoading } = useHasAnySidebarPermissions();
 
   const isUserAuthenticated = isFetched && authCapabilities?.enabled && isAuthenticated(authCapabilities);
   const shouldHideSidebar = isFetched && authCapabilities?.enabled && !isAuthenticated(authCapabilities);
-  // Show sidebar if user is authenticated (even if no links, so they can log out)
   const shouldShowSidebar = isFetched && isUserAuthenticated;
-  // Disable sidebar expansion if user has no visible links
-  const shouldDisableSidebarExpansion = !isPermissionsLoading && !hasAnyLinks;
 
   return (
     <>
       <NavigationCommand />
       <div className={shouldShowSidebar ? 'grid h-full grid-cols-[auto_1fr]' : 'h-full'}>
-        {shouldShowSidebar && <AppSidebar disableExpansion={shouldDisableSidebarExpansion} />}
+        {shouldShowSidebar && <AppSidebar />}
         <div
           className={cn('bg-transparent overflow-y-auto', {
             'h-[calc(100%-1.5rem)]': shouldHideSidebar,

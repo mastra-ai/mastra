@@ -198,20 +198,15 @@ function getIsLinkActive(link: SidebarLink, pathname: string): boolean {
   return link.activePaths?.some(matches) ?? false;
 }
 
-export type AppSidebarProps = {
-  /** When true, sidebar is locked in collapsed state (for users with no permissions) */
-  disableExpansion?: boolean;
-};
-
-export function AppSidebar({ disableExpansion = false }: AppSidebarProps) {
+export function AppSidebar() {
   return (
-    <MainSidebarProvider forceCollapsed={disableExpansion}>
-      <AppSidebarContent disableExpansion={disableExpansion} />
+    <MainSidebarProvider>
+      <AppSidebarContent />
     </MainSidebarProvider>
   );
 }
 
-function AppSidebarContent({ disableExpansion = false }: AppSidebarProps) {
+function AppSidebarContent() {
   const { Link } = useLinkComponent();
   const { state } = useMainSidebar();
 
@@ -333,14 +328,10 @@ function AppSidebarContent({ disableExpansion = false }: AppSidebarProps) {
             <MastraVersionFooter collapsed={false} />
           </>
         )}
-        {!disableExpansion && (
-          <>
-            <MainSidebar.NavSeparator />
-            <div className="flex justify-end pb-3">
-              <MainSidebar.Trigger />
-            </div>
-          </>
-        )}
+        <MainSidebar.NavSeparator />
+        <div className="flex justify-end pb-3">
+          <MainSidebar.Trigger />
+        </div>
       </MainSidebar.Bottom>
     </MainSidebar>
   );
