@@ -10,6 +10,7 @@ import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_STUDIO_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
 import { parseEnvFile } from '../studio/deploy.js';
+export { parseEnvFile };
 import { createProject, uploadDeploy, pollDeploy } from '../studio/platform-api.js';
 import { loadProjectConfig, saveProjectConfig, detectEnvFile } from '../studio/project-config.js';
 import type { ServerConfig } from '../studio/project-config.js';
