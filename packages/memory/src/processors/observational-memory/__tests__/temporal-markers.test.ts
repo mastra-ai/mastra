@@ -250,6 +250,14 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
       gapMs: 30 * 60 * 1000,
       timestamp: formatTemporalTimestamp(new Date('2025-01-01T08:50:00Z')),
       precedesMessageId: 'input-1',
+      systemReminder: {
+        type: 'temporal-gap',
+        message: `30 minutes later — ${formatTemporalTimestamp(new Date('2025-01-01T08:50:00Z'))}`,
+        gapText: '30 minutes later',
+        gapMs: 30 * 60 * 1000,
+        timestamp: formatTemporalTimestamp(new Date('2025-01-01T08:50:00Z')),
+        precedesMessageId: 'input-1',
+      },
     });
     expect(capturedParts.filter(part => part.type === 'data-system-reminder')).toEqual([
       expect.objectContaining({

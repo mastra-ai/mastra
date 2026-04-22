@@ -1311,6 +1311,13 @@ describe('Observer Agent Helpers', () => {
           gapText: '10 minutes later',
           timestamp: '9:10 AM',
           precedesMessageId: 'input-1',
+          systemReminder: {
+            type: 'temporal-gap',
+            message: '10 minutes later — 9:10 AM',
+            gapText: '10 minutes later',
+            timestamp: '9:10 AM',
+            precedesMessageId: 'input-1',
+          },
         },
       } as any;
       const textMsg = createTestMessage('Hello after the gap', 'user');

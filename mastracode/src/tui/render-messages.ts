@@ -155,6 +155,24 @@ export function addChildBeforeMessageOrFollowUps(
  * Add a user message to the chat container.
  */
 export function addUserMessage(state: TUIState, message: HarnessMessage): void {
+  const reminderPart = message.content.find(
+    (content): content is Extract<HarnessMessageContent, { type: 'system_reminder' }> => content.type === 'system_reminder',
+  );
+
+  if (reminderPart) {
+    const reminderComponent = createReminderComponent(reminderPart.reminderType, {
+      message: reminderPart.message,
+      path: reminderPart.path,
+      gapText: reminderPart.gapText,
+    });
+    reminderComponent.setExpanded(state.toolOutputExpanded);
+    state.allSystemReminderComponents.push(reminderComponent);
+
+    addChildBeforeMessageOrFollowUps(state, reminderComponent, reminderPart.precedesMessageId);
+    state.ui.requestRender();
+    return;
+  }
+
   const textContent = message.content
     .filter(c => c.type === 'text')
     .map(c => (c as { type: 'text'; text: string }).text)
@@ -165,29 +183,6 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
   // Strip [image] markers from text since we show count separately
   const displayText = imageCount > 0 ? textContent.replace(/\[image\]\s*/g, '').trim() : textContent.trim();
   const exactDisplayText = displayText.trim();
-
-  // Check for persisted system reminder tags. This must match the whole message,
-  // otherwise normal user text that quotes a reminder tag gets swallowed.
-  const systemReminderMatch = exactDisplayText.match(
-    /^<system-reminder(?<attrs>\s+[^>]*)?>(?<body>[\s\S]*?)<\/system-reminder>$/,
-  );
-  if (systemReminderMatch?.groups?.body) {
-    const reminderText = systemReminderMatch.groups.body.trim();
-    const attrs = systemReminderMatch.groups.attrs ?? '';
-    const reminderType = attrs.match(/\btype="([^"]*)"/)?.[1];
-    const path = attrs.match(/\bpath="([^"]*)"/)?.[1];
-    const precedesMessageId = attrs.match(/\bprecedesMessageId="([^"]*)"/)?.[1];
-    const reminderComponent = createReminderComponent(reminderType, {
-      message: reminderText,
-      path,
-    });
-    reminderComponent.setExpanded(state.toolOutputExpanded);
-    state.allSystemReminderComponents.push(reminderComponent);
-
-    addChildBeforeMessageOrFollowUps(state, reminderComponent, precedesMessageId);
-    state.ui.requestRender();
-    return;
-  }
 
   // Check for persisted slash command tags.
   const slashCommandMatch = exactDisplayText.match(/^<slash-command\s+name="([^"]*)">([\s\S]*?)<\/slash-command>$/);

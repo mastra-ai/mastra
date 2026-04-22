@@ -695,13 +695,13 @@ function formatObserverAttachmentPlaceholder(part: ObserverAttachmentPart, count
 }
 
 function formatObserverPartLine(title: string, body: string, time: string, previousTime?: string): string {
-  const timeLabel = time && time !== previousTime ? ` (${time})` : '';
+  const timeLabel = time && time !== previousTime ? `(${time})` : '';
 
   if (!title) {
     return timeLabel ? `${timeLabel}: ${body}` : body;
   }
 
-  return `${title}${timeLabel}: ${body}`;
+  return `${title}${timeLabel ? ` ${timeLabel}` : ''}: ${body}`;
 }
 
 function normalizeObserverCreatedAt(createdAt: unknown): Date | undefined {
@@ -752,26 +752,25 @@ function formatObserverLines(
 function getTemporalGapMarkerText(msg: MastraDBMessage): string | undefined {
   const metadata =
     typeof msg.content === 'object' && msg.content && 'metadata' in msg.content
-      ? (msg.content.metadata as { gapText?: unknown; timestamp?: unknown; reminderType?: unknown })
+      ? (msg.content.metadata as { gapText?: unknown; reminderType?: unknown; systemReminder?: unknown })
       : undefined;
 
   if (metadata?.reminderType === 'temporal-gap' && typeof metadata.gapText === 'string') {
     return metadata.gapText;
   }
 
-  const textPart =
-    typeof msg.content === 'object' && msg.content?.parts && Array.isArray(msg.content.parts)
-      ? msg.content.parts.find(
-          (part): part is { type: 'text'; text: string } => part.type === 'text' && typeof part.text === 'string',
-        )
-      : undefined;
-
-  if (!textPart) {
-    return undefined;
+  if (
+    typeof metadata?.systemReminder === 'object' &&
+    metadata.systemReminder &&
+    'type' in metadata.systemReminder &&
+    metadata.systemReminder.type === 'temporal-gap' &&
+    'gapText' in metadata.systemReminder &&
+    typeof metadata.systemReminder.gapText === 'string'
+  ) {
+    return metadata.systemReminder.gapText;
   }
 
-  const match = textPart.text.match(/<system-reminder[^>]*type="temporal-gap"[^>]*>(.*?)<\/system-reminder>/);
-  return match?.[1]?.split(' — ')[0]?.trim() || undefined;
+  return undefined;
 }
 
 function formatObserverMessage(

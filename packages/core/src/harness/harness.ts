@@ -1508,9 +1508,44 @@ export class Harness<TState = {}> {
         };
         [key: string]: unknown;
       }>;
+      metadata?: Record<string, unknown>;
     };
   }): HarnessMessage {
     const content: HarnessMessageContent[] = [];
+    const systemReminder =
+      typeof msg.content.metadata?.systemReminder === 'object' && msg.content.metadata.systemReminder !== null
+        ? msg.content.metadata.systemReminder
+        : undefined;
+
+    if (systemReminder && 'type' in systemReminder && typeof systemReminder.type === 'string') {
+      content.push({
+        type: 'system_reminder',
+        message:
+          'message' in systemReminder && typeof systemReminder.message === 'string' ? systemReminder.message : '',
+        reminderType: systemReminder.type,
+        path: 'path' in systemReminder && typeof systemReminder.path === 'string' ? systemReminder.path : undefined,
+        precedesMessageId:
+          'precedesMessageId' in systemReminder && typeof systemReminder.precedesMessageId === 'string'
+            ? systemReminder.precedesMessageId
+            : undefined,
+        gapText:
+          'gapText' in systemReminder && typeof systemReminder.gapText === 'string'
+            ? systemReminder.gapText
+            : undefined,
+        gapMs: 'gapMs' in systemReminder && typeof systemReminder.gapMs === 'number' ? systemReminder.gapMs : undefined,
+        timestamp:
+          'timestamp' in systemReminder && typeof systemReminder.timestamp === 'string'
+            ? systemReminder.timestamp
+            : undefined,
+      });
+
+      return {
+        id: msg.id,
+        role: msg.role,
+        content,
+        createdAt: msg.createdAt,
+      };
+    }
 
     for (const part of msg.content.parts) {
       switch (part.type) {

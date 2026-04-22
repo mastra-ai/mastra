@@ -32,13 +32,29 @@ function createUserMessage(text: string, id = 'user-1'): HarnessMessage {
   } as HarnessMessage;
 }
 
+function createReminderMessage(
+  reminder: Extract<HarnessMessage['content'][number], { type: 'system_reminder' }>,
+  id = '__temporal_1',
+): HarnessMessage {
+  return {
+    id,
+    role: 'user',
+    content: [reminder],
+  } as HarnessMessage;
+}
+
 describe('addUserMessage', () => {
-  it('renders a persisted temporal-gap marker only when the whole message is a system-reminder tag', () => {
+  it('renders a persisted temporal-gap marker from canonical system reminder content', () => {
     const state = createState();
 
     addUserMessage(
       state,
-      createUserMessage('<system-reminder type="temporal-gap">15 minutes later</system-reminder>', '__temporal_1'),
+      createReminderMessage({
+        type: 'system_reminder',
+        reminderType: 'temporal-gap',
+        message: '15 minutes later — 9:15 AM',
+        gapText: '15 minutes later',
+      }),
     );
 
     expect(state.chatContainer.children).toHaveLength(1);
@@ -53,10 +69,13 @@ describe('addUserMessage', () => {
     addUserMessage(state, createUserMessage('Real user message', 'user-1'));
     addUserMessage(
       state,
-      createUserMessage(
-        '<system-reminder type="temporal-gap" precedesMessageId="user-1">15 minutes later</system-reminder>',
-        '__temporal_1',
-      ),
+      createReminderMessage({
+        type: 'system_reminder',
+        reminderType: 'temporal-gap',
+        message: '15 minutes later — 9:15 AM',
+        gapText: '15 minutes later',
+        precedesMessageId: 'user-1',
+      }),
     );
 
     expect(state.chatContainer.children).toHaveLength(2);

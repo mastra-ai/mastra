@@ -1197,6 +1197,9 @@ export type SerializedObservationalMemoryConfig = {
   /** Share the token budget between messages and observations */
   shareTokenBudget?: boolean;
 
+  /** Persist inline temporal gap markers for long pauses between messages */
+  temporalMarkers?: boolean;
+
   /**
    * **Experimental.** Enable retrieval-mode observation groups as durable pointers to raw message history.
    * @experimental

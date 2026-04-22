@@ -10,12 +10,22 @@ function getTemporalGapReminderText(gapText: string, timestamp: number): string 
 }
 
 function getTemporalGapReminderMetadata(message: MastraDBMessage, gapText: string, gapMs: number, timestamp: number) {
+  const formattedTimestamp = formatTemporalTimestamp(new Date(timestamp));
+
   return {
     reminderType: TEMPORAL_GAP_REMINDER_TYPE,
     gapText,
     gapMs,
-    timestamp: formatTemporalTimestamp(new Date(timestamp)),
+    timestamp: formattedTimestamp,
     precedesMessageId: message.id,
+    systemReminder: {
+      type: TEMPORAL_GAP_REMINDER_TYPE,
+      message: getTemporalGapReminderText(gapText, timestamp),
+      gapText,
+      gapMs,
+      timestamp: formattedTimestamp,
+      precedesMessageId: message.id,
+    },
   };
 }
 
