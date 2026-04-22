@@ -1,5 +1,5 @@
 ---
-'@mastra/redis': minor
+'@mastra/redis': patch
 ---
 
 Add Redis storage provider
