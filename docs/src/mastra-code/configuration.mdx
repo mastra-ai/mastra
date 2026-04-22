@@ -219,8 +219,10 @@ Define reusable prompt templates as markdown files. Mastra Code scans these dire
 | - | - | - |
 | Highest | `.mastracode/commands/` | Project |
 | | `.claude/commands/` | Project (Claude Code compatible) |
+| | `.opencode/command/` | Project (Opencode compatible) |
 | | `~/.mastracode/commands/` | Global |
-| Lowest | `~/.claude/commands/` | Global (Claude Code compatible) |
+| | `~/.claude/commands/` | Global (Claude Code compatible) |
+| Lowest | `~/.opencode/command/` | Global (Opencode compatible) |
 
 Each command file can include YAML frontmatter with `name` and `description` fields:
 
