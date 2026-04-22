@@ -82,6 +82,7 @@ import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
 import Metrics from './pages/metrics';
+import NoAccess from './pages/no-access';
 import ObservabilityOverview from './pages/observability-overview';
 import Primitives from './pages/primitives';
 import PromptBlocks from './pages/prompt-blocks';
@@ -331,6 +332,7 @@ const routes = [
         : []),
 
       { index: true, element: <StudioIndexRedirect /> },
+      { path: '/no-access', element: <NoAccess /> },
       { path: '/request-context', element: <RequestContext /> },
 
       // Agent Studio (EE) — placeholder routes; pages land in follow-up PRs.

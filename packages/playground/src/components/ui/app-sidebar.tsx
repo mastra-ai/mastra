@@ -65,6 +65,7 @@ const mainNavigation: SidebarSection[] = [
         icon: <FileTextIcon />,
         isOnMastraPlatform: true,
         indent: true,
+        requiredPermission: 'prompts:read',
       },
       {
         name: 'Workflows',
@@ -112,6 +113,7 @@ const mainNavigation: SidebarSection[] = [
         icon: <GlobeIcon />,
         isOnMastraPlatform: true,
         indent: true,
+        requiredPermission: 'request-context:read',
       },
     ],
   },
@@ -187,12 +189,14 @@ const mainNavigation: SidebarSection[] = [
         url: '/settings',
         icon: <SettingsIcon />,
         isOnMastraPlatform: false,
+        requiredPermission: 'settings:read',
       },
       {
         name: 'Resources',
         url: '/resources',
         icon: <BookIcon />,
         isOnMastraPlatform: true,
+        requiredPermission: 'resources:read',
       },
     ],
   },
@@ -299,7 +303,13 @@ function AdminSidebar() {
       <MainSidebar.Nav>
         {mainNavigation.map(section => {
           const filteredLinks = section.links.filter(filterSidebarLink);
-          const showSeparator = filteredLinks.length > 0 && section?.separator;
+
+          // Don't render section if no links are visible
+          if (filteredLinks.length === 0) {
+            return null;
+          }
+
+          const showSeparator = section?.separator;
 
           const anySubLinkActive = filteredLinks.some(link => getIsLinkActive(link, pathname));
           const isHeaderActive = !!(section.href && pathname === section.href && !anySubLinkActive);
