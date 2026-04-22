@@ -227,3 +227,14 @@ th:has(header) {
   height: var(--top-bar-height) !important;
   padding-block: 0 !important ;
 }
+
+@layer base {
+  ::view-transition-group(agent-builder-frame) {
+    animation-duration: 320ms;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  ::view-transition-old(agent-builder-frame),
+  ::view-transition-new(agent-builder-frame) {
+    animation-duration: 220ms;
+  }
+}

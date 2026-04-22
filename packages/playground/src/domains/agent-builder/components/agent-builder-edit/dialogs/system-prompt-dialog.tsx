@@ -7,9 +7,10 @@ interface SystemPromptDialogProps {
   onOpenChange: (open: boolean) => void;
   prompt: string;
   onSave: (prompt: string) => void;
+  editable?: boolean;
 }
 
-export const SystemPromptDialog = ({ open, onOpenChange, prompt, onSave }: SystemPromptDialogProps) => {
+export const SystemPromptDialog = ({ open, onOpenChange, prompt, onSave, editable = true }: SystemPromptDialogProps) => {
   const [draft, setDraft] = useState(prompt);
 
   useEffect(() => {
@@ -41,16 +42,19 @@ export const SystemPromptDialog = ({ open, onOpenChange, prompt, onSave }: Syste
           onChange={e => setDraft(e.target.value)}
           rows={16}
           placeholder="You are a helpful assistant that…"
+          readOnly={!editable}
         />
 
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button variant="primary" onClick={() => onSave(draft)} data-testid="system-prompt-dialog-save">
-            Save
-          </Button>
-        </div>
+        {editable && (
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="ghost" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={() => onSave(draft)} data-testid="system-prompt-dialog-save">
+              Save
+            </Button>
+          </div>
+        )}
       </SideDialog.Content>
     </SideDialog>
   );

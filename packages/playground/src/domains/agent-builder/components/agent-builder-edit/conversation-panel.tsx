@@ -69,7 +69,10 @@ export const ConversationPanel = ({ initialUserMessage }: ConversationPanelProps
       </div>
 
       <form onSubmit={handleSubmit} className="shrink-0 pb-6">
-        <div className="rounded-xl border border-border1 bg-surface2 transition-colors focus-within:border-neutral3">
+        <div
+          className="rounded-xl border border-border1 bg-surface2 transition-colors focus-within:border-neutral3"
+          style={{ viewTransitionName: 'agent-builder-prompt' }}
+        >
           <Textarea
             testId="agent-builder-conversation-input"
             size="md"

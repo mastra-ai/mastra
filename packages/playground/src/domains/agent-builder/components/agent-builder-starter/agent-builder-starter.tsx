@@ -41,7 +41,10 @@ export const AgentBuilderStarter = () => {
     e.preventDefault();
     if (trimmed.length === 0) return;
     const id = nanoid();
-    void navigate(`/agent-builder/agents/${id}/edit`, { state: { userMessage: trimmed } });
+    void navigate(`/agent-builder/agents/${id}/edit`, {
+      state: { userMessage: trimmed },
+      viewTransition: true,
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -70,7 +73,10 @@ export const AgentBuilderStarter = () => {
         </h1>
 
         <form onSubmit={handleSubmit}>
-          <div className="rounded-2xl border border-border1 bg-surface2 transition-colors duration-normal ease-out-custom focus-within:border-neutral3">
+          <div
+            className="rounded-2xl border border-border1 bg-surface2 transition-colors duration-normal ease-out-custom focus-within:border-neutral3"
+            style={{ viewTransitionName: 'agent-builder-prompt' }}
+          >
             <Textarea
               ref={textareaRef}
               testId="agent-builder-starter-input"

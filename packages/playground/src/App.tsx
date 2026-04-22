@@ -30,6 +30,7 @@ import { Link } from './lib/link';
 import AgentBuilder from './pages/agent-builder';
 import AgentBuilderAdmin from './pages/agent-builder/admin';
 import AgentBuilderAgentEdit from './pages/agent-builder/agents/edit';
+import AgentBuilderAgentView from './pages/agent-builder/agents/view';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
@@ -218,6 +219,7 @@ const routes = [
       { index: true, element: <AgentBuilder /> },
       { path: 'admin', element: <AgentBuilderAdmin /> },
       { path: 'agents/:id/edit', element: <AgentBuilderAgentEdit /> },
+      { path: 'agents/:id/view', element: <AgentBuilderAgentView /> },
     ],
   },
   {

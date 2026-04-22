@@ -13,6 +13,7 @@ export const BrowserFrame = ({ children, className }: BrowserFrameProps) => {
         'h-full min-h-0 overflow-hidden rounded-3xl border border-border1 shadow-elevated bg-surface2',
         className,
       )}
+      style={{ viewTransitionName: 'agent-builder-frame' }}
     >
       {children}
     </div>

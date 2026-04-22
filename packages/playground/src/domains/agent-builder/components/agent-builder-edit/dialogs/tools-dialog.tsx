@@ -15,9 +15,10 @@ const CATEGORY_LABEL: Record<ToolFixture['category'], string> = {
 interface ToolsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  editable?: boolean;
 }
 
-export const ToolsDialog = ({ open, onOpenChange }: ToolsDialogProps) => {
+export const ToolsDialog = ({ open, onOpenChange, editable = true }: ToolsDialogProps) => {
   const [enabledMap, setEnabledMap] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(toolsFixture.map(t => [t.id, t.enabled])),
   );
@@ -82,6 +83,7 @@ export const ToolsDialog = ({ open, onOpenChange }: ToolsDialogProps) => {
                     <Switch
                       checked={enabledMap[tool.id] ?? false}
                       onCheckedChange={next => toggle(tool.id, next)}
+                      disabled={!editable}
                     />
                   </div>
                 ))}
