@@ -1,4 +1,4 @@
-import { ErrorBoundary, Toaster, TooltipProvider } from '@mastra/playground-ui';
+import { ErrorBoundary, MainSidebarProvider, Toaster, TooltipProvider } from '@mastra/playground-ui';
 import { useLocation } from 'react-router';
 import { AppSidebar } from './ui/app-sidebar';
 import { ThemeProvider } from './ui/theme-provider';
@@ -15,9 +15,8 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const { data: authCapabilities, isFetched } = useAuthCapabilities();
   const { pathname } = useLocation();
 
-  const isUserAuthenticated = isFetched && authCapabilities?.enabled && isAuthenticated(authCapabilities);
   const shouldHideSidebar = isFetched && authCapabilities?.enabled && !isAuthenticated(authCapabilities);
-  const shouldShowSidebar = isFetched && isUserAuthenticated;
+  const shouldShowSidebar = isFetched && !shouldHideSidebar;
 
   return (
     <>
@@ -47,7 +46,9 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       <ThemeProvider defaultTheme="dark" attribute="class">
         <TooltipProvider delayDuration={0}>
           <ExperimentalUIProvider experiments={experimentalUIEnabled ? UI_EXPERIMENTS : []}>
-            <LayoutContent>{children}</LayoutContent>
+            <MainSidebarProvider>
+              <LayoutContent>{children}</LayoutContent>
+            </MainSidebarProvider>
           </ExperimentalUIProvider>
         </TooltipProvider>
       </ThemeProvider>

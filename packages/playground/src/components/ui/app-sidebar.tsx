@@ -2,7 +2,6 @@ import {
   AgentIcon,
   LogoWithoutText,
   MainSidebar,
-  MainSidebarProvider,
   McpServerIcon,
   SettingsIcon,
   ToolsIcon,
@@ -199,14 +198,6 @@ function getIsLinkActive(link: SidebarLink, pathname: string): boolean {
 }
 
 export function AppSidebar() {
-  return (
-    <MainSidebarProvider>
-      <AppSidebarContent />
-    </MainSidebarProvider>
-  );
-}
-
-function AppSidebarContent() {
   const { Link } = useLinkComponent();
   const { state } = useMainSidebar();
 
