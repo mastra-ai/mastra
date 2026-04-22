@@ -1453,6 +1453,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
 
       const streamResult = await agent.approveToolCall({
         ...params,
+        requestContext,
         abortSignal,
       });
 
@@ -1497,6 +1498,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
 
       const streamResult = await agent.declineToolCall({
         ...params,
+        requestContext,
         abortSignal,
       });
 
@@ -1540,6 +1542,7 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
 
       const result = await agent.approveToolCallGenerate({
         ...params,
+        requestContext,
         abortSignal,
       });
 
@@ -1583,6 +1586,7 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
 
       const result = await agent.declineToolCallGenerate({
         ...params,
+        requestContext,
         abortSignal,
       });
 
