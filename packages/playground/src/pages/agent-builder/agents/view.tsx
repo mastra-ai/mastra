@@ -27,7 +27,10 @@ export default function AgentBuilderAgentView() {
           <AgentPreviewChat agent={defaultAgentFixture} />
         </div>
 
-        <div className="h-full overflow-y-auto pr-6 pb-6 pt-6">
+        <div
+          className="h-full overflow-y-auto pr-6 pb-6 pt-6"
+          style={{ viewTransitionName: 'agent-builder-configure-panel' }}
+        >
           <AgentConfigurePanel agent={defaultAgentFixture} onAgentChange={() => {}} editable={false} />
         </div>
       </BrowserFrame>

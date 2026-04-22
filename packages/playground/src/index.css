@@ -229,12 +229,37 @@ th:has(header) {
 }
 
 @layer base {
+  /*
+   * Keep both the height AND the snapshot scale stable during the
+   * edit ↔ view transition. The UA animation would otherwise stretch
+   * the captured raster to fill the tweening group box, making inner
+   * content appear to scale as the width changes. Rendering the snapshot
+   * at its natural pixel size with `object-fit: none` and a top-left
+   * anchor means it simply gets clipped / reveals empty area as the
+   * group's width morphs — no scaling, no vertical motion.
+   */
   ::view-transition-group(agent-builder-frame) {
     animation-duration: 320ms;
     animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    height: 100%;
   }
   ::view-transition-old(agent-builder-frame),
   ::view-transition-new(agent-builder-frame) {
     animation-duration: 220ms;
+    height: 100%;
+    width: 100%;
+    object-fit: none;
+    object-position: top left;
+  }
+
+  /*
+   * The right-hand AgentConfigurePanel column is the same width, height
+   * and position in both routes, so giving it a shared view-transition
+   * name makes its captured snapshot sit perfectly still while the frame
+   * around it resizes — avoiding any visible re-layout of that column.
+   */
+  ::view-transition-group(agent-builder-configure-panel) {
+    animation-duration: 320ms;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
   }
 }

@@ -37,7 +37,10 @@ export default function AgentBuilderAgentEdit() {
             <AgentPreviewChat agent={agent} />
           </div>
 
-          <div className="h-full overflow-y-auto pr-6 pb-6 pt-6">
+          <div
+            className="h-full overflow-y-auto pr-6 pb-6 pt-6"
+            style={{ viewTransitionName: 'agent-builder-configure-panel' }}
+          >
             <AgentConfigurePanel agent={agent} onAgentChange={setAgent} />
           </div>
         </BrowserFrame>
