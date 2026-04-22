@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
 import archiver from 'archiver';
 import { runBuild } from '../../utils/run-build.js';
+import { loadAndValidatePresets } from '../../utils/validate-presets.js';
 import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_STUDIO_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
@@ -96,6 +97,18 @@ export function parseEnvFile(content: string): Record<string, string> {
   return vars;
 }
 
+async function readSingleEnvFile(projectDir: string, envFile: string): Promise<Record<string, string>> {
+  try {
+    const content = await readFile(join(projectDir, envFile), 'utf-8');
+    return parseEnvFile(content);
+  } catch (err: unknown) {
+    if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(`Configured envFile not found: ${envFile}`);
+    }
+    throw err;
+  }
+}
+
 async function readEnvVars(projectDir: string): Promise<Record<string, string>> {
   const vars: Record<string, string> = {};
   for (const envFile of ['.env.production', '.env.local', '.env']) {
@@ -108,6 +121,15 @@ async function readEnvVars(projectDir: string): Promise<Record<string, string>> 
     }
   }
   return vars;
+}
+
+function validatePresetsObject(presets: Record<string, Record<string, unknown>>): string {
+  for (const [key, value] of Object.entries(presets)) {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      throw new Error(`Preset "${key}" must be a JSON object`);
+    }
+  }
+  return JSON.stringify(presets);
 }
 
 /* ------------------------------------------------------------------ */
@@ -259,6 +281,12 @@ export async function deployAction(
   // Step 2: Load existing project config
   const projectConfig = await loadProjectConfig(targetDir, opts.config);
 
+  // Extract extended config fields
+  const configEnvFile = projectConfig?.envFile;
+  const configEnvVars = projectConfig?.envVars;
+  const configPresets = projectConfig?.requestContextPresets;
+  const configServer = projectConfig?.server;
+
   // Step 3: Resolve org
   const { orgId, orgName } = await resolveOrg(token, projectConfig, opts.org);
 
@@ -284,6 +312,10 @@ export async function deployAction(
         `Directory:     ${targetDir}`,
         ...(gitBranch ? [`Git branch:    ${gitBranch}`] : []),
         ...(mastraVersion ? [`Mastra:        ${mastraVersion}`] : []),
+        ...(configEnvFile ? [`Env file:      ${configEnvFile}`] : []),
+        ...(typeof configPresets === 'string' ? [`Presets:       ${configPresets}`] : []),
+        ...(typeof configPresets === 'object' && configPresets ? [`Presets:       (inline)`] : []),
+        ...(configServer?.host ? [`Server:        ${configServer.protocol ?? 'https'}://${configServer.host}`] : []),
       ].join('\n'),
       'Deploy settings',
     );
@@ -371,12 +403,29 @@ export async function deployAction(
   s.stop(`Created ${sizeLabel} archive (${elapsed(performance.now() - t)})`);
 
   s.start('Reading environment variables...');
-  const envVars = await readEnvVars(targetDir);
+  let envVars: Record<string, string>;
+  if (configEnvFile) {
+    envVars = await readSingleEnvFile(targetDir, configEnvFile);
+  } else {
+    envVars = await readEnvVars(targetDir);
+  }
+  // Merge configEnvVars on top (overrides)
+  if (configEnvVars) {
+    Object.assign(envVars, configEnvVars);
+  }
   const envCount = Object.keys(envVars).length;
   if (envCount > 0) {
     s.stop(`Found ${envCount} env var(s)`);
   } else {
     s.stop('No .env file found');
+  }
+
+  // Resolve presets
+  let requestContextPresets: string | undefined;
+  if (typeof configPresets === 'string') {
+    requestContextPresets = await loadAndValidatePresets(configPresets);
+  } else if (typeof configPresets === 'object' && configPresets) {
+    requestContextPresets = validatePresetsObject(configPresets);
   }
 
   t = performance.now();
@@ -387,6 +436,8 @@ export async function deployAction(
     projectName,
     envVars: envCount > 0 ? envVars : undefined,
     mastraVersion: mastraVersion ?? undefined,
+    requestContextPresets,
+    server: configServer,
   });
   s.stop(`Uploaded (${elapsed(performance.now() - t)})`);
 

@@ -2,8 +2,8 @@ import { chmod, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
+import { parseEnvFile } from '../studio/deploy.js';
 import { loadProjectConfig } from '../studio/project-config.js';
-import { parseEnvFile } from './deploy.js';
 import { fetchServerProjects, getServerProjectEnv, updateServerProjectEnv } from './platform-api.js';
 
 /* ------------------------------------------------------------------ */

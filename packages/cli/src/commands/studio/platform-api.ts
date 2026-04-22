@@ -2,6 +2,7 @@ import { bestEffortCancel, confirmUploadWithRetry } from '../../utils/deploy-upl
 import { withPollingRetries } from '../../utils/polling.js';
 import { authHeaders, createApiClient, MASTRA_PLATFORM_API_URL, platformFetch, throwApiError } from '../auth/client.js';
 import { getToken } from '../auth/credentials.js';
+import type { ServerConfig } from './project-config.js';
 
 export interface Project {
   id: string;
@@ -73,7 +74,14 @@ export async function uploadDeploy(
   orgId: string,
   projectId: string,
   zipBuffer: Buffer,
-  meta?: { gitBranch?: string; projectName?: string; envVars?: Record<string, string>; mastraVersion?: string },
+  meta?: {
+    gitBranch?: string;
+    projectName?: string;
+    envVars?: Record<string, string>;
+    mastraVersion?: string;
+    requestContextPresets?: string;
+    server?: ServerConfig;
+  },
 ): Promise<{ id: string; status: string }> {
   const client = createApiClient(token, orgId);
 
@@ -87,7 +95,11 @@ export async function uploadDeploy(
         'x-mastra-version': meta?.mastraVersion,
       },
     },
-    body: { envVars: meta?.envVars },
+    body: {
+      envVars: meta?.envVars,
+      requestContextPresets: meta?.requestContextPresets,
+      server: meta?.server,
+    },
   });
 
   if (error) {
