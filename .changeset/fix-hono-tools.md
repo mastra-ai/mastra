@@ -2,4 +2,4 @@
 '@mastra/hono': patch
 ---
 
-Fix inconsistency by exposing `tools` in handler params to align with Fastify and Express adapters
+Fix inconsistency by exposing `tools` in handler params in the Hono adapter
