@@ -91,9 +91,10 @@ function createMemoryProvider(messages: MastraDBMessage[]): MemoryContextProvide
 
 describe('ObservationalMemoryProcessor temporal markers', () => {
   it('formats temporal gaps using two-unit durations', () => {
-    expect(formatTemporalGap(10 * 60 * 1000 - 1)).toBeNull();
+    expect(formatTemporalGap(5 * 60 * 1000 - 1)).toBeNull();
 
     const cases = [
+      { diffMs: 5 * 60 * 1000, expected: '5 minutes later' },
       { diffMs: 10 * 60 * 1000, expected: '10 minutes later' },
       { diffMs: 15 * 60 * 1000, expected: '15 minutes later' },
       { diffMs: 30 * 60 * 1000, expected: '30 minutes later' },

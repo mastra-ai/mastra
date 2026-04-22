@@ -184,6 +184,26 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
   const displayText = imageCount > 0 ? textContent.replace(/\[image\]\s*/g, '').trim() : textContent.trim();
   const exactDisplayText = displayText.trim();
 
+  const legacyReminderMatch = exactDisplayText.match(/^<system-reminder(?<attrs>\s+[^>]*)?>(?<body>[\s\S]*?)<\/system-reminder>$/);
+  if (legacyReminderMatch?.groups?.body) {
+    const attrs = legacyReminderMatch.groups.attrs ?? '';
+    const reminderType = attrs.match(/\stype="([^"]+)"/)?.[1];
+    const path = attrs.match(/\spath="([^"]+)"/)?.[1];
+    const precedesMessageId = attrs.match(/\sprecedesMessageId="([^"]+)"/)?.[1];
+    const reminderText = legacyReminderMatch.groups.body.trim();
+    const reminderComponent = createReminderComponent(reminderType, {
+      message: reminderText,
+      path,
+      gapText: reminderType === 'temporal-gap' ? reminderText.split(' — ')[0]?.trim() : undefined,
+    });
+    reminderComponent.setExpanded(state.toolOutputExpanded);
+    state.allSystemReminderComponents.push(reminderComponent);
+
+    addChildBeforeMessageOrFollowUps(state, reminderComponent, precedesMessageId);
+    state.ui.requestRender();
+    return;
+  }
+
   // Check for persisted slash command tags.
   const slashCommandMatch = exactDisplayText.match(/^<slash-command\s+name="([^"]*)">([\s\S]*?)<\/slash-command>$/);
   if (slashCommandMatch) {

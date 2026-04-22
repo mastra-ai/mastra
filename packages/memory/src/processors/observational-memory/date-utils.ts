@@ -245,7 +245,7 @@ export function addRelativeTimeToObservations(observations: string, currentDate:
   return result;
 }
 
-export const MIN_TEMPORAL_GAP_MS = 10 * 60 * 1000;
+export const MIN_TEMPORAL_GAP_MS = 5 * 60 * 1000;
 
 export function formatTemporalGap(diffMs: number): string | null {
   if (diffMs < MIN_TEMPORAL_GAP_MS) return null;
@@ -260,7 +260,7 @@ export function formatTemporalGap(diffMs: number): string | null {
   const formatUnit = (value: number, unit: string) => `${value} ${unit}${value === 1 ? '' : 's'}`;
 
   if (diffMs < hour) {
-    const minutes = Math.max(10, Math.round(diffMs / minute));
+    const minutes = Math.max(1, Math.round(diffMs / minute));
     return `${formatUnit(minutes, 'minute')} later`;
   }
 

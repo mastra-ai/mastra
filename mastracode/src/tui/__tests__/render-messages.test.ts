@@ -84,6 +84,20 @@ describe('addUserMessage', () => {
     expect(state.messageComponentsById.get('user-1')).toBe(state.chatContainer.children[1]);
   });
 
+  it('renders a legacy persisted temporal-gap marker from whole-message XML', () => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createUserMessage('<system-reminder type="temporal-gap" precedesMessageId="user-1">15 minutes later — 9:15 AM</system-reminder>'),
+    );
+
+    expect(state.chatContainer.children).toHaveLength(1);
+    expect(state.chatContainer.children[0]).toBeInstanceOf(TemporalGapComponent);
+    expect((state.chatContainer.children[0] as TemporalGapComponent).render(80).join('\n')).toContain('⏳ 15 minutes later');
+    expect(state.allSystemReminderComponents).toHaveLength(1);
+  });
+
   it('keeps normal user text visible when it merely quotes a system-reminder tag', () => {
     const state = createState();
 
