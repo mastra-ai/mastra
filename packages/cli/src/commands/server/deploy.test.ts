@@ -25,8 +25,9 @@ vi.mock('node:fs/promises', () => ({
   rm: vi.fn().mockResolvedValue(undefined),
   stat: vi.fn().mockResolvedValue({ size: 1024 }),
   access: vi.fn().mockResolvedValue(undefined),
+  readdir: vi.fn().mockResolvedValue([]),
   readFile: vi.fn(async (path: string) => {
-    if (path.endsWith('.env') || path.endsWith('.env.local') || path.endsWith('.env.production')) {
+    if (String(path).includes('/.env')) {
       const err = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
       throw err;
     }
@@ -119,6 +120,79 @@ describe('parseEnvFile (server deploy)', () => {
   });
 });
 
+describe('readEnvVars (server deploy)', () => {
+  it('prompts for which env file to deploy when multiple files exist', async () => {
+    const { readdir, readFile } = await import('node:fs/promises');
+    const prompts = await import('@clack/prompts');
+    vi.mocked(readdir).mockResolvedValue([
+      { name: '.env.production', isFile: () => true },
+      { name: '.env', isFile: () => true },
+      { name: '.env.staging', isFile: () => true },
+    ] as unknown as Awaited<ReturnType<typeof readdir>>);
+    vi.mocked(readFile).mockImplementation(async path => {
+      const filePath = String(path);
+      if (filePath.endsWith('.env')) return 'SHARED=base\nBASE_ONLY=1';
+      if (filePath.endsWith('.env.production')) return 'SHARED=prod\nPROD_ONLY=1';
+      if (filePath.endsWith('.env.staging')) return 'SHARED=staging\nSTAGING_ONLY=1';
+      const err = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+      throw err;
+    });
+    vi.mocked(prompts.select).mockResolvedValue('.env.staging');
+
+    const { readEnvVars } = await import('./deploy.js');
+
+    await expect(readEnvVars('/project')).resolves.toEqual({
+      SHARED: 'staging',
+      STAGING_ONLY: '1',
+    });
+    expect(prompts.select).toHaveBeenCalledWith({
+      message: 'Choose env file to deploy',
+      options: [
+        { value: '.env.production', label: '.env.production' },
+        { value: '.env', label: '.env' },
+        { value: '.env.staging', label: '.env.staging' },
+      ],
+      initialValue: '.env.production',
+    });
+    expect(prompts.log.step).toHaveBeenCalledWith('Using env file: .env.staging');
+  });
+
+  it('defaults to the first discovered env file in auto-accept mode when multiple files exist', async () => {
+    const { readdir, readFile } = await import('node:fs/promises');
+    const prompts = await import('@clack/prompts');
+    vi.mocked(readdir).mockResolvedValue([
+      { name: '.env.staging', isFile: () => true },
+      { name: '.env', isFile: () => true },
+    ] as unknown as Awaited<ReturnType<typeof readdir>>);
+    vi.mocked(readFile).mockImplementation(async path => {
+      const filePath = String(path);
+      if (filePath.endsWith('.env')) return 'SHARED=base\nBASE_ONLY=1';
+      if (filePath.endsWith('.env.staging')) return 'SHARED=staging\nSTAGING_ONLY=1';
+      const err = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+      throw err;
+    });
+
+    const { readEnvVars } = await import('./deploy.js');
+
+    await expect(readEnvVars('/project', { autoAccept: true })).resolves.toEqual({
+      SHARED: 'base',
+      BASE_ONLY: '1',
+    });
+    expect(prompts.select).not.toHaveBeenCalled();
+  });
+
+  it('fails when no deploy env file exists', async () => {
+    const { readdir } = await import('node:fs/promises');
+    vi.mocked(readdir).mockResolvedValue([] as Awaited<ReturnType<typeof readdir>>);
+
+    const { readEnvVars } = await import('./deploy.js');
+
+    await expect(readEnvVars('/project')).rejects.toThrow(
+      'No env file found for deploy. Add a .env or .env.* file before deploying.',
+    );
+  });
+});
+
 describe('serverDeployAction', () => {
   afterEach(() => {
     vi.resetModules();
@@ -151,7 +225,15 @@ describe('serverDeployAction', () => {
     process.env.MASTRA_API_TOKEN = 'headless-token';
     vi.resetModules();
 
+    const { readdir, readFile } = await import('node:fs/promises');
     const { loadProjectConfig } = await import('../studio/project-config.js');
+    vi.mocked(readdir).mockResolvedValue([{ name: '.env', isFile: () => true }] as unknown as Awaited<
+      ReturnType<typeof readdir>
+    >);
+    vi.mocked(readFile).mockImplementation(async path => {
+      if (String(path).endsWith('.env')) return 'API_KEY=test';
+      return Buffer.from('zip-data');
+    });
     vi.mocked(loadProjectConfig).mockResolvedValue({
       organizationId: 'org-1',
       projectId: 'proj-1',
@@ -168,9 +250,17 @@ describe('serverDeployAction', () => {
     process.env.MASTRA_API_TOKEN = 'headless-token';
     vi.resetModules();
 
+    const { readdir, readFile } = await import('node:fs/promises');
     const { loadProjectConfig } = await import('../studio/project-config.js');
     const { fetchOrgs } = await import('../auth/api.js');
 
+    vi.mocked(readdir).mockResolvedValue([{ name: '.env', isFile: () => true }] as unknown as Awaited<
+      ReturnType<typeof readdir>
+    >);
+    vi.mocked(readFile).mockImplementation(async path => {
+      if (String(path).endsWith('.env')) return 'API_KEY=test';
+      return Buffer.from('zip-data');
+    });
     vi.mocked(loadProjectConfig).mockResolvedValue({
       organizationId: 'org-1',
       projectId: 'proj-1',

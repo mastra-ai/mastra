@@ -79,6 +79,26 @@ vi.mock('archiver', () => ({
   default: vi.fn(),
 }));
 
+vi.mock('node:fs/promises', async importOriginal => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    mkdir: vi.fn().mockResolvedValue(undefined),
+    rm: vi.fn().mockResolvedValue(undefined),
+    stat: vi.fn().mockResolvedValue({ size: 1024 }),
+    access: vi.fn().mockResolvedValue(undefined),
+    readdir: vi.fn().mockResolvedValue([]),
+    readFile: vi.fn(async (path: string) => {
+      const filePath = String(path);
+      if (filePath.includes('/.env')) {
+        const err = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+        throw err;
+      }
+      return (actual.readFile as (path: string) => Promise<string>)(path);
+    }),
+  };
+});
+
 vi.mock('../auth/credentials.js', () => ({
   getToken: vi.fn().mockResolvedValue('test-token'),
   getCurrentOrgId: vi.fn().mockResolvedValue('org-1'),
@@ -172,6 +192,79 @@ describe('parseEnvFile', () => {
 
     const result = parseEnvFile('export FOO=bar\nexport BAZ="qux"');
     expect(result).toEqual({ FOO: 'bar', BAZ: 'qux' });
+  });
+});
+
+describe('readEnvVars', () => {
+  it('prompts for which env file to deploy when multiple files exist', async () => {
+    const { readdir, readFile } = await import('node:fs/promises');
+    const prompts = await import('@clack/prompts');
+    vi.mocked(readdir).mockResolvedValue([
+      { name: '.env.production', isFile: () => true },
+      { name: '.env', isFile: () => true },
+      { name: '.env.staging', isFile: () => true },
+    ] as unknown as Awaited<ReturnType<typeof readdir>>);
+    vi.mocked(readFile).mockImplementation(async path => {
+      const filePath = String(path);
+      if (filePath.endsWith('.env')) return 'SHARED=base\nBASE_ONLY=1';
+      if (filePath.endsWith('.env.production')) return 'SHARED=prod\nPROD_ONLY=1';
+      if (filePath.endsWith('.env.staging')) return 'SHARED=staging\nSTAGING_ONLY=1';
+      const err = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+      throw err;
+    });
+    vi.mocked(prompts.select).mockResolvedValue('.env.staging');
+
+    const { readEnvVars } = await import('./deploy.js');
+
+    await expect(readEnvVars('/project')).resolves.toEqual({
+      SHARED: 'staging',
+      STAGING_ONLY: '1',
+    });
+    expect(prompts.select).toHaveBeenCalledWith({
+      message: 'Choose env file to deploy',
+      options: [
+        { value: '.env.production', label: '.env.production' },
+        { value: '.env', label: '.env' },
+        { value: '.env.staging', label: '.env.staging' },
+      ],
+      initialValue: '.env.production',
+    });
+    expect(prompts.log.step).toHaveBeenCalledWith('Using env file: .env.staging');
+  });
+
+  it('defaults to the first discovered env file in auto-accept mode when multiple files exist', async () => {
+    const { readdir, readFile } = await import('node:fs/promises');
+    const prompts = await import('@clack/prompts');
+    vi.mocked(readdir).mockResolvedValue([
+      { name: '.env.staging', isFile: () => true },
+      { name: '.env', isFile: () => true },
+    ] as unknown as Awaited<ReturnType<typeof readdir>>);
+    vi.mocked(readFile).mockImplementation(async path => {
+      const filePath = String(path);
+      if (filePath.endsWith('.env')) return 'SHARED=base\nBASE_ONLY=1';
+      if (filePath.endsWith('.env.staging')) return 'SHARED=staging\nSTAGING_ONLY=1';
+      const err = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+      throw err;
+    });
+
+    const { readEnvVars } = await import('./deploy.js');
+
+    await expect(readEnvVars('/project', { autoAccept: true })).resolves.toEqual({
+      SHARED: 'base',
+      BASE_ONLY: '1',
+    });
+    expect(prompts.select).not.toHaveBeenCalled();
+  });
+
+  it('fails when no deploy env file exists', async () => {
+    const { readdir } = await import('node:fs/promises');
+    vi.mocked(readdir).mockResolvedValue([] as Awaited<ReturnType<typeof readdir>>);
+
+    const { readEnvVars } = await import('./deploy.js');
+
+    await expect(readEnvVars('/project')).rejects.toThrow(
+      'No env file found for deploy. Add a .env or .env.* file before deploying.',
+    );
   });
 });
 

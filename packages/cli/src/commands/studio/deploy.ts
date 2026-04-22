@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process';
 import { createWriteStream, readFileSync } from 'node:fs';
-import { mkdir, rm, stat, access, readFile } from 'node:fs/promises';
+import { mkdir, rm, stat, access, readFile, readdir } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -96,18 +96,64 @@ export function parseEnvFile(content: string): Record<string, string> {
   return vars;
 }
 
-async function readEnvVars(projectDir: string): Promise<Record<string, string>> {
-  const vars: Record<string, string> = {};
-  for (const envFile of ['.env.production', '.env.local', '.env']) {
-    try {
-      const content = await readFile(join(projectDir, envFile), 'utf-8');
-      Object.assign(vars, parseEnvFile(content));
-    } catch (err: unknown) {
-      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') continue;
-      throw err;
+async function readOptionalEnvFile(projectDir: string, envFile: string): Promise<string | null> {
+  try {
+    return await readFile(join(projectDir, envFile), 'utf-8');
+  } catch (err: unknown) {
+    if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null;
+    }
+    throw err;
+  }
+}
+
+async function getDeployEnvFiles(projectDir: string): Promise<string[]> {
+  const entries = await readdir(projectDir, { withFileTypes: true });
+
+  return entries
+    .filter(entry => entry.isFile() && (entry.name === '.env' || entry.name.startsWith('.env.')))
+    .map(entry => entry.name)
+    .sort((a, b) => {
+      if (a === '.env.production') return -1;
+      if (b === '.env.production') return 1;
+      if (a === '.env') return -1;
+      if (b === '.env') return 1;
+      return a.localeCompare(b);
+    });
+}
+
+export async function readEnvVars(
+  projectDir: string,
+  options: { autoAccept?: boolean } = {},
+): Promise<Record<string, string>> {
+  const availableDeployEnvFiles = await getDeployEnvFiles(projectDir);
+
+  if (availableDeployEnvFiles.length === 0) {
+    throw new Error('No env file found for deploy. Add a .env or .env.* file before deploying.');
+  }
+
+  let selectedEnvFile = availableDeployEnvFiles[0]!;
+
+  if (availableDeployEnvFiles.length > 1) {
+    if (!options.autoAccept) {
+      const selected = await p.select({
+        message: 'Choose env file to deploy',
+        options: availableDeployEnvFiles.map(envFile => ({ value: envFile, label: envFile })),
+        initialValue: selectedEnvFile,
+      });
+
+      if (p.isCancel(selected)) {
+        p.cancel('Deploy cancelled.');
+        process.exit(0);
+      }
+
+      selectedEnvFile = selected as string;
     }
   }
-  return vars;
+
+  p.log.step(`Using env file: ${selectedEnvFile}`);
+
+  return parseEnvFile((await readOptionalEnvFile(projectDir, selectedEnvFile)) ?? '');
 }
 
 /* ------------------------------------------------------------------ */
@@ -371,7 +417,7 @@ export async function deployAction(
   s.stop(`Created ${sizeLabel} archive (${elapsed(performance.now() - t)})`);
 
   s.start('Reading environment variables...');
-  const envVars = await readEnvVars(targetDir);
+  const envVars = await readEnvVars(targetDir, { autoAccept });
   const envCount = Object.keys(envVars).length;
   if (envCount > 0) {
     s.stop(`Found ${envCount} env var(s)`);
