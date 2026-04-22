@@ -236,9 +236,9 @@ describe('readEnvVars', () => {
     const { readdir, readFile } = await import('node:fs/promises');
     const prompts = await import('@clack/prompts');
     vi.mocked(readdir).mockResolvedValue([
-      { name: '.env.staging', isFile: () => true },
-      { name: '.env', isFile: () => true },
-      { name: '.env.production', isFile: () => true },
+      { name: '.env.staging', isFile: () => true, isSymbolicLink: () => false },
+      { name: '.env', isFile: () => true, isSymbolicLink: () => false },
+      { name: '.env.production', isFile: () => true, isSymbolicLink: () => false },
     ] as unknown as Awaited<ReturnType<typeof readdir>>);
     vi.mocked(readFile).mockImplementation(async path => {
       const filePath = String(path);
@@ -257,6 +257,39 @@ describe('readEnvVars', () => {
     });
     expect(prompts.select).not.toHaveBeenCalled();
     expect(prompts.log.step).toHaveBeenCalledWith('Using env file: .env.production');
+  });
+
+  it('includes symlinked env files when discovering deploy env files', async () => {
+    const { readdir, readFile } = await import('node:fs/promises');
+    const prompts = await import('@clack/prompts');
+    vi.mocked(readdir).mockResolvedValue([
+      { name: '.env', isFile: () => false, isSymbolicLink: () => true },
+      { name: '.env.production', isFile: () => true, isSymbolicLink: () => false },
+    ] as unknown as Awaited<ReturnType<typeof readdir>>);
+    vi.mocked(readFile).mockImplementation(async path => {
+      const filePath = String(path);
+      if (filePath.endsWith('.env')) return 'SHARED=base\nBASE_ONLY=1';
+      if (filePath.endsWith('.env.production')) return 'SHARED=prod\nPROD_ONLY=1';
+      const err = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+      throw err;
+    });
+    vi.mocked(prompts.select).mockResolvedValue('.env');
+
+    const { readEnvVars } = await import('./deploy.js');
+
+    await expect(readEnvVars('/project')).resolves.toEqual({
+      SHARED: 'base',
+      BASE_ONLY: '1',
+    });
+    expect(prompts.select).toHaveBeenCalledWith({
+      message: 'Choose env file to deploy',
+      options: [
+        { value: '.env', label: '.env' },
+        { value: '.env.production', label: '.env.production' },
+      ],
+      initialValue: '.env.production',
+    });
+    expect(prompts.log.step).toHaveBeenCalledWith('Using env file: .env');
   });
 
   it('fails when the selected env file disappears before it can be read', async () => {

@@ -72,7 +72,9 @@ async function getDeployEnvFiles(projectDir: string): Promise<string[]> {
   const entries = await readdir(projectDir, { withFileTypes: true });
 
   return entries
-    .filter(entry => entry.isFile() && (entry.name === '.env' || entry.name.startsWith('.env.')))
+    .filter(
+      entry => (entry.isFile() || entry.isSymbolicLink()) && (entry.name === '.env' || entry.name.startsWith('.env.')),
+    )
     .map(entry => entry.name)
     .sort((a, b) => a.localeCompare(b));
 }
