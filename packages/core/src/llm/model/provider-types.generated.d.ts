@@ -1093,6 +1093,8 @@ export type ProviderModelsMap = {
     'kimi-k2.6',
     'mimo-v2-omni',
     'mimo-v2-pro',
+    'mimo-v2.5',
+    'mimo-v2.5-pro',
     'minimax-m2.5',
     'minimax-m2.7',
     'qwen3.5-plus',
@@ -3728,6 +3730,21 @@ export type ProviderModelsMap = {
     'MiniMax-M2.5-highspeed',
     'MiniMax-M2.7',
     'MiniMax-M2.7-highspeed',
+  ];
+  readonly 'regolo-ai': readonly [
+    'gpt-oss-120b',
+    'gpt-oss-20b',
+    'llama-3.1-8b-instruct',
+    'llama-3.3-70b-instruct',
+    'minimax-m2.5',
+    'mistral-small-4-119b',
+    'mistral-small3.2',
+    'qwen-image',
+    'qwen3-coder-next',
+    'qwen3-embedding-8b',
+    'qwen3-reranker-4b',
+    'qwen3.5-122b',
+    'qwen3.5-9b',
   ];
   readonly 'xiaomi-token-plan-ams': readonly ['mimo-v2-omni', 'mimo-v2-pro', 'mimo-v2-tts'];
   readonly zhipuai: readonly [
