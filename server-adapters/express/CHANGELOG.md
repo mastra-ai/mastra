@@ -1,5 +1,13 @@
 # @mastra/express
 
+## 1.3.10-alpha.13
+
+### Patch Changes
+
+- Updated dependencies [[`2b0baf4`](https://github.com/mastra-ai/mastra/commit/2b0baf4541fabbcd8139c8933589c0a85a78ca36)]:
+  - @mastra/server@1.26.0-alpha.13
+  - @mastra/core@1.26.0-alpha.13
+
 ## 1.3.10-alpha.12
 
 ### Patch Changes
