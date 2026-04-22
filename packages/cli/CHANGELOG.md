@@ -1,5 +1,17 @@
 # mastra
 
+## 1.6.2-alpha.1
+
+### Patch Changes
+
+- Improved server deploy errors: the CLI now shows the platform API message (for example billing or payment errors) instead of only a generic status code. ([#15459](https://github.com/mastra-ai/mastra/pull/15459))
+
+- Improved env file handling for `mastra server deploy` and `mastra studio deploy`. Deploy now selects a single env file instead of silently merging multiple files. When multiple `.env` files exist, you are prompted to choose one. Added `--env-file` to specify the file directly (e.g. `--env-file .env.staging`), which is required in non-interactive mode when multiple env files are present. ([#15641](https://github.com/mastra-ai/mastra/pull/15641))
+
+- Updated dependencies [[`0a0aa94`](https://github.com/mastra-ai/mastra/commit/0a0aa94729592e99885af2efb90c56aaada62247), [`01a7d51`](https://github.com/mastra-ai/mastra/commit/01a7d513493d21562f677f98550f7ceb165ba78c)]:
+  - @mastra/core@1.27.0-alpha.1
+  - @mastra/deployer@1.27.0-alpha.1
+
 ## 1.6.2-alpha.0
 
 ### Patch Changes
