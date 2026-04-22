@@ -30,6 +30,5 @@ export const StudioIndexRedirect = () => {
   // Find the first route the user has permission to access
   const firstAccessibleRoute = getFirstAccessibleRoute(hasPermission, hasAnyPermission);
 
-  // Fallback to /resources (always accessible as a public page)
-  return <Navigate to={firstAccessibleRoute ?? '/resources'} replace />;
+  return <Navigate to={firstAccessibleRoute} replace />;
 };
