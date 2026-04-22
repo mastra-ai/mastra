@@ -44,6 +44,38 @@ import { CrudEditorNamespace } from './base';
 import type { StorageAdapter } from './base';
 import { EditorMCPNamespace } from './mcp';
 
+// ============================================================================
+// Builder Defaults
+// ============================================================================
+
+/** Fields from builder.configuration.agent that can be applied as creation defaults */
+const BUILDER_DEFAULT_FIELDS = ['memory'] as const;
+
+/**
+ * Apply builder defaults to agent creation input.
+ * Only applies for fields where input is `undefined` (not `null` — null is explicit disable).
+ */
+function applyBuilderDefaults(
+  input: StorageCreateAgentInput,
+  builderAgentConfig: Record<string, unknown> | undefined,
+): StorageCreateAgentInput {
+  if (!builderAgentConfig) return input;
+
+  const defaults: Partial<StorageCreateAgentInput> = {};
+
+  for (const field of BUILDER_DEFAULT_FIELDS) {
+    if (input[field] === undefined && builderAgentConfig[field] !== undefined) {
+      (defaults as Record<string, unknown>)[field] = builderAgentConfig[field];
+    }
+  }
+
+  return Object.keys(defaults).length > 0 ? { ...input, ...defaults } : input;
+}
+
+// ============================================================================
+// EditorAgentNamespace
+// ============================================================================
+
 export class EditorAgentNamespace extends CrudEditorNamespace<
   StorageCreateAgentInput,
   StorageUpdateAgentInput,
@@ -111,6 +143,21 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
    */
   protected async hydrate(storedAgent: StorageResolvedAgentType): Promise<Agent> {
     return this.createAgentFromStoredConfig(storedAgent);
+  }
+
+  /**
+   * Create a new agent, applying builder defaults for fields not specified in input.
+   */
+  async create(input: StorageCreateAgentInput): Promise<Agent> {
+    let finalInput = input;
+
+    if (this.editor.hasEnabledBuilderConfig()) {
+      const builder = await this.editor.resolveBuilder();
+      const agentConfig = builder?.getConfiguration()?.agent;
+      finalInput = applyBuilderDefaults(input, agentConfig);
+    }
+
+    return super.create(finalInput);
   }
 
   protected override onCacheEvict(id: string): void {

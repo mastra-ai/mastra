@@ -1446,3 +1446,150 @@ describe('MastraEditor.resolveBuilder', () => {
     expect(result?.getConfiguration()).toBe(configuration);
   });
 });
+
+// ============================================================================
+// agent.create with builder defaults
+// ============================================================================
+
+describe('agent.create with builder defaults', () => {
+  it('applies default memory config when input has none', async () => {
+    const storage = new InMemoryStore();
+    const builderMemory = { vector: 'default-vector', options: { lastMessages: 10 } };
+    const editor = new MastraEditor({
+      builder: {
+        enabled: true,
+        configuration: { agent: { memory: builderMemory } },
+      },
+    });
+    new Mastra({ storage, editor });
+
+    const agent = await editor.agent.create({
+      id: 'test-agent-no-memory',
+      name: 'Test Agent',
+      instructions: 'Test',
+      model: { provider: 'openai', name: 'gpt-4' },
+    });
+
+    const rawConfig = agent.toRawConfig?.();
+    expect(rawConfig?.memory).toEqual(builderMemory);
+  });
+
+  it('preserves input memory config when provided', async () => {
+    const storage = new InMemoryStore();
+    const builderMemory = { vector: 'default-vector', options: { lastMessages: 10 } };
+    const inputMemory = { vector: 'custom-vector', options: { lastMessages: 5 } };
+    const editor = new MastraEditor({
+      builder: {
+        enabled: true,
+        configuration: { agent: { memory: builderMemory } },
+      },
+    });
+    new Mastra({ storage, editor });
+
+    const agent = await editor.agent.create({
+      id: 'test-agent-with-memory',
+      name: 'Test Agent',
+      instructions: 'Test',
+      model: { provider: 'openai', name: 'gpt-4' },
+      memory: inputMemory,
+    });
+
+    const rawConfig = agent.toRawConfig?.();
+    expect(rawConfig?.memory).toEqual(inputMemory);
+  });
+
+  it('does not override null memory (explicit disable)', async () => {
+    const storage = new InMemoryStore();
+    const builderMemory = { vector: 'default-vector', options: { lastMessages: 10 } };
+    const editor = new MastraEditor({
+      builder: {
+        enabled: true,
+        configuration: { agent: { memory: builderMemory } },
+      },
+    });
+    new Mastra({ storage, editor });
+
+    const agent = await editor.agent.create({
+      id: 'test-agent-null-memory',
+      name: 'Test Agent',
+      instructions: 'Test',
+      model: { provider: 'openai', name: 'gpt-4' },
+      memory: null,
+    });
+
+    const rawConfig = agent.toRawConfig?.();
+    expect(rawConfig?.memory).toBeNull();
+  });
+
+  it('does nothing when builder has no configuration', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor({
+      builder: { enabled: true },
+    });
+    new Mastra({ storage, editor });
+
+    const agent = await editor.agent.create({
+      id: 'test-agent-no-config',
+      name: 'Test Agent',
+      instructions: 'Test',
+      model: { provider: 'openai', name: 'gpt-4' },
+    });
+
+    const rawConfig = agent.toRawConfig?.();
+    expect(rawConfig?.memory).toBeUndefined();
+  });
+
+  it('does nothing when builder is disabled', async () => {
+    const storage = new InMemoryStore();
+    const builderMemory = { vector: 'default-vector', options: { lastMessages: 10 } };
+    const editor = new MastraEditor({
+      builder: {
+        enabled: false,
+        configuration: { agent: { memory: builderMemory } },
+      },
+    });
+    new Mastra({ storage, editor });
+
+    const agent = await editor.agent.create({
+      id: 'test-agent-disabled-builder',
+      name: 'Test Agent',
+      instructions: 'Test',
+      model: { provider: 'openai', name: 'gpt-4' },
+    });
+
+    const rawConfig = agent.toRawConfig?.();
+    expect(rawConfig?.memory).toBeUndefined();
+  });
+
+  it('clone() does not apply builder default memory', async () => {
+    const storage = new InMemoryStore();
+    const builderMemory = { vector: 'default-vector', options: { lastMessages: 50 } };
+    const editor = new MastraEditor({
+      builder: {
+        enabled: true,
+        configuration: { agent: { memory: builderMemory } },
+      },
+    });
+    new Mastra({ storage, editor });
+
+    // Create an agent via storage directly (bypassing builder defaults) with no memory
+    const agentsStore = await storage.getStore('agents');
+    await agentsStore.create({
+      agent: {
+        id: 'no-memory-agent',
+        name: 'No Memory Agent',
+        instructions: 'No memory',
+        model: { provider: 'openai', name: 'gpt-4' },
+        // memory is undefined - no memory config
+      },
+    });
+
+    const noMemoryAgent = await editor.agent.getById('no-memory-agent');
+    expect(noMemoryAgent).not.toBeNull();
+
+    // Clone this agent - should NOT pick up builder defaults
+    // clone() copies source agent config exactly, bypassing EditorAgentNamespace.create()
+    const clonedNoMemory = await editor.agent.clone(noMemoryAgent!, { newId: 'cloned-no-memory' });
+    expect(clonedNoMemory.memory).toBeUndefined();
+  });
+});
