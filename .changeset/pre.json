@@ -130,6 +130,11 @@
     "@mastra/vercel": "0.1.0"
   },
   "changesets": [
-    "green-birds-knock"
+    "automated-provider-registry-20260422-065134",
+    "fix-foreach-suspend-payload",
+    "green-birds-knock",
+    "little-emus-create",
+    "small-otters-take",
+    "true-snails-watch"
   ]
 }
