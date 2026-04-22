@@ -5,6 +5,7 @@
  * metadata) is snapshotted at construction time.
  */
 
+import { generateSignalId } from '@mastra/core/observability';
 import type { LogLevel, LoggerContext, ExportedLog, LogEvent, CorrelationContext } from '@mastra/core/observability';
 
 import type { ObservabilityBus } from '../bus';
@@ -92,6 +93,7 @@ export class LoggerContextImpl implements LoggerContext {
     }
 
     const exportedLog: ExportedLog = {
+      logId: generateSignalId(),
       timestamp: new Date(),
       level,
       message,

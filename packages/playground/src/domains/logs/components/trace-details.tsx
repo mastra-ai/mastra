@@ -1,29 +1,30 @@
-import type { SpanRecord } from '@mastra/core/storage';
 import { DataDetailsPanel } from '@mastra/playground-ui';
 import { useEffect, useMemo, useState } from 'react';
-import { useTraceSpans } from '../hooks/use-trace-spans';
+
 import { formatHierarchicalSpans } from './trace/format-hierarchical-spans';
 import { getAllSpanIds } from './trace/get-descendant-ids';
 import { TraceTimeline } from './trace/trace-timeline';
+import { useTraceLightSpans } from '@/domains/traces/hooks/use-trace-light-spans';
 
 export interface TraceDetailsProps {
   traceId: string;
   onClose: () => void;
-  onSpanSelect?: (span: SpanRecord | undefined) => void;
+  onSpanSelect?: (spanId: string | undefined) => void;
   initialSpanId?: string | null;
 }
 
 export function TraceDetails({ traceId, onClose, onSpanSelect, initialSpanId }: TraceDetailsProps) {
-  const { data: traceData, isLoading } = useTraceSpans(traceId);
+  const { data: traceLight, isLoading } = useTraceLightSpans(traceId);
+  const spans = traceLight?.spans;
   const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(initialSpanId ?? undefined);
 
   // Sync selected span when initialSpanId or trace data changes
   useEffect(() => {
-    if (initialSpanId && traceData?.spans) {
-      const span = traceData.spans.find(s => s.spanId === initialSpanId);
-      if (span) {
+    if (initialSpanId && spans) {
+      const found = spans.find(s => s.spanId === initialSpanId);
+      if (found) {
         setSelectedSpanId(initialSpanId);
-        onSpanSelect?.(span);
+        onSpanSelect?.(initialSpanId);
         return;
       }
     }
@@ -31,9 +32,9 @@ export function TraceDetails({ traceId, onClose, onSpanSelect, initialSpanId }: 
     setSelectedSpanId(undefined);
     onSpanSelect?.(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialSpanId, traceData?.spans]);
+  }, [initialSpanId, spans]);
 
-  const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(traceData?.spans ?? []), [traceData?.spans]);
+  const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(spans ?? []), [spans]);
 
   const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>([]);
 
@@ -46,8 +47,7 @@ export function TraceDetails({ traceId, onClose, onSpanSelect, initialSpanId }: 
   const handleSpanClick = (id: string) => {
     const newId = selectedSpanId === id ? undefined : id;
     setSelectedSpanId(newId);
-    const span = newId ? traceData?.spans?.find(s => s.spanId === newId) : undefined;
-    onSpanSelect?.(span);
+    onSpanSelect?.(newId);
   };
 
   return (

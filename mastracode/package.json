@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.15.0-alpha.10",
+  "version": "0.15.0",
   "description": "",
   "type": "module",
   "files": [
@@ -69,7 +69,7 @@
     "@mastra/mcp": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/pg": "workspace:*",
-    "@tavily/core": "^0.7.2",
+    "@mastra/tavily": "workspace:*",
     "ai": "^6.0.116",
     "chalk": "^5.5.0",
     "cli-highlight": "^2.1.11",

@@ -18,7 +18,7 @@
     "prettier-plugin-tailwindcss": "^0.7.2",
     "semver": "^7.7.4",
     "tsc-files": "^1.1.4",
-    "turbo": "^2.8.17",
+    "turbo": "^2.9.6",
     "typescript": "catalog:",
     "vite": "^7.3.1",
     "vitest": "catalog:",

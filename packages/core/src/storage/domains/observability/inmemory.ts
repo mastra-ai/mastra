@@ -84,6 +84,8 @@ import type {
   GetSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
+  GetTraceLightResponse,
+  LightSpanRecord,
   ListTracesArgs,
   ListTracesResponse,
   SpanRecord,
@@ -265,6 +267,44 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return {
       traceId,
       spans,
+    };
+  }
+
+  async getTraceLight(args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
+    const { traceId } = args;
+    const traceEntry = this.db.traces.get(traceId);
+    if (!traceEntry) {
+      return null;
+    }
+
+    const spans = Object.values(traceEntry.spans);
+    if (spans.length === 0) {
+      return null;
+    }
+
+    // Sort spans by startedAt
+    spans.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
+
+    return {
+      traceId,
+      spans: spans.map(
+        (span): LightSpanRecord => ({
+          traceId: span.traceId,
+          spanId: span.spanId,
+          parentSpanId: span.parentSpanId,
+          name: span.name,
+          spanType: span.spanType,
+          isEvent: span.isEvent,
+          startedAt: span.startedAt,
+          endedAt: span.endedAt,
+          error: span.error,
+          entityType: span.entityType,
+          entityId: span.entityId,
+          entityName: span.entityName,
+          createdAt: span.createdAt,
+          updatedAt: span.updatedAt,
+        }),
+      ),
     };
   }
 
