@@ -1,6 +1,6 @@
 {
   "name": "@mastra/tavily",
-  "version": "1.0.0-alpha.1",
+  "version": "1.0.0",
   "description": "Tavily web search, extract, crawl, and map tools for Mastra agents",
   "type": "module",
   "main": "./dist/index.js",
