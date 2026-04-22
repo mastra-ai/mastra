@@ -215,14 +215,61 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
 
       await context.newPage();
 
-      // Set up CDP session for active page
+      // Set up CDP session for active page (used for screencast/input injection)
       const pages = context.pages();
       const cdpSession = pages[0] ? await context.newCDPSession(pages[0]) : null;
 
-      // Set up disconnection handler
-      browser.on('disconnected', () => {
+      // Set up disconnection handlers - multiple events can indicate browser closure:
+      // - browserServer.on('close'): fires when Chrome process exits
+      // - browser.on('disconnected'): fires when Playwright connection is lost
+      // - CDP Target.targetDestroyed: fires when any target (page/context) is destroyed
+      let disconnectHandled = false;
+      const handleDisconnect = () => {
+        if (disconnectHandled) return;
+        disconnectHandled = true;
         this.handleBrowserDisconnected(threadId);
-      });
+      };
+
+      // Listen for browser server close (fires when Chrome process exits)
+      browserServer.on('close', handleDisconnect);
+      // Listen for browser connection lost
+      browser.on('disconnected', handleDisconnect);
+
+      // Use browser-level CDP session to watch for ALL target destruction
+      // Page-level CDP session only sees events for that specific page, but CLI creates its own pages
+      // Browser-level session sees all targets across all contexts
+      try {
+        const browserCdpSession = await browser.newBrowserCDPSession();
+        // Enable target discovery to get notified of all targets
+        await browserCdpSession.send('Target.setDiscoverTargets', { discover: true });
+
+        browserCdpSession.on('Target.targetDestroyed', async () => {
+          // When a target is destroyed, check if any page targets remain
+          // browser.isConnected() stays true because browserServer keeps Chrome alive,
+          // so we need to check for actual page targets instead
+          try {
+            const { targetInfos } = (await browserCdpSession.send('Target.getTargets')) as {
+              targetInfos: Array<{ type: string; url: string }>;
+            };
+            // Filter to actual page targets (not background pages, service workers, etc.)
+            const pageTargets = targetInfos.filter(
+              t => t.type === 'page' && !t.url.startsWith('chrome://') && !t.url.startsWith('devtools://'),
+            );
+            if (pageTargets.length === 0) {
+              handleDisconnect();
+            }
+          } catch {
+            // CDP session dead, browser definitely closed
+            handleDisconnect();
+          }
+        });
+
+        // Also listen for detached event (fires when CDP connection is lost)
+        browserCdpSession.on('Inspector.detached', handleDisconnect);
+      } catch {
+        // Non-fatal: target watching is a reliability enhancement, not required
+        this.logger?.debug?.('Failed to set up browser-level CDP target watching');
+      }
 
       return { browserServer, browser, context, cdpSession, cdpUrl };
     } catch (error) {
@@ -279,6 +326,12 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       return null;
     }
 
+    // Check if browser is still connected - if not, trigger cleanup
+    if (session.browser && !session.browser.isConnected()) {
+      this.handleBrowserDisconnected(effectiveThreadId);
+      return null;
+    }
+
     const activePage = this.resolveActivePage(session.context);
 
     if (!activePage) {
@@ -290,6 +343,8 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       return await session.context.newCDPSession(activePage);
     } catch {
       // Page may have been closed between getting pages and creating session
+      // This often indicates browser was closed - trigger cleanup
+      this.handleBrowserDisconnected(effectiveThreadId);
       return null;
     }
   }
@@ -494,10 +549,18 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
       // Set up CDP session for active page
       const cdpSession = pages[0] ? await context.newCDPSession(pages[0]) : null;
 
-      // Set up disconnection handler - use effectiveThreadId for consistent lifecycle callbacks
-      browser.on('disconnected', () => {
+      // Set up disconnection handlers - use effectiveThreadId for consistent lifecycle callbacks
+      let disconnectHandled = false;
+      const handleDisconnect = () => {
+        if (disconnectHandled) return;
+        disconnectHandled = true;
         this.handleBrowserDisconnected(effectiveThreadId);
-      });
+      };
+
+      // Listen for context close (fires when browser window is closed manually)
+      context.on('close', handleDisconnect);
+      // Listen for browser connection lost
+      browser.on('disconnected', handleDisconnect);
 
       const session: BrowserViewerSession = {
         threadId: effectiveThreadId,

@@ -93,6 +93,8 @@ export class BrowserViewer extends MastraBrowser {
       },
       onBrowserClosed: threadId => {
         this.logger?.debug?.(`Browser closed for thread ${threadId}`);
+        // Notify base class callbacks so ViewerRegistry gets notified
+        this.notifyBrowserClosed(threadId);
       },
     });
   }
