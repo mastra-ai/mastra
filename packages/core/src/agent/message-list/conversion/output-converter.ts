@@ -10,54 +10,67 @@ import type { AIV5Type, AIV6Type } from '../types';
 import { ensureAnthropicCompatibleMessages } from '../utils/provider-compat';
 
 /**
- * Merges text parts that share the same OpenAI itemId.
- *
- * When OpenAI streams a response with web search, it interleaves `source` chunks
- * with text-deltas. If the streaming pipeline flushes text on these source chunks,
- * it creates multiple text parts all sharing the same `providerMetadata.openai.itemId`.
- *
- * When these parts are later converted to model messages, each part with an itemId
- * becomes an `item_reference` pointing to the same ID, causing OpenAI to reject
- * the request with: "Duplicate item found with id msg_*"
- *
- * This function merges consecutive text parts with the same itemId into a single part,
- * concatenating their text content and keeping the metadata from the first part.
+ * Extracts the OpenAI itemId from a part's providerMetadata, if present.
  */
-function mergeTextPartsWithDuplicateItemIds<T extends { type: string }>(parts: T[]): T[] {
+function getItemId(part: { providerMetadata?: Record<string, unknown> }): string | undefined {
+  const openai = (part.providerMetadata as Record<string, unknown> | undefined)?.openai as
+    | Record<string, unknown>
+    | undefined;
+  return openai?.itemId as string | undefined;
+}
+
+/**
+ * Deduplicates parts that share the same OpenAI itemId.
+ *
+ * Text parts with the same itemId are merged by concatenating their text content.
+ * Non-text parts (reasoning, tool-call, etc.) with duplicate itemIds are dropped
+ * (only the first occurrence is kept).
+ *
+ * This prevents OpenAI from rejecting requests with:
+ *   "Duplicate item found with id msg_*" (text parts)
+ *   "Duplicate item found with id rs_*"  (reasoning parts)
+ *
+ * The reasoning duplication can occur when Observational Memory's async buffering
+ * causes the same response parts to appear multiple times in the message history.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/15617
+ */
+function deduplicatePartsWithOpenAIItemIds<T extends { type: string }>(parts: T[]): T[] {
   const result: T[] = [];
+  const seenItemIds = new Set<string>();
 
   for (const part of parts) {
-    // Only process text parts with OpenAI itemId
-    if (part.type !== 'text') {
-      result.push(part);
-      continue;
-    }
+    const itemId = getItemId(part as T & { providerMetadata?: Record<string, unknown> });
 
-    const textPart = part as T & { text: string; providerMetadata?: Record<string, unknown> };
-    const itemId = (textPart.providerMetadata?.openai as Record<string, unknown> | undefined)?.itemId as
-      | string
-      | undefined;
     if (!itemId) {
       result.push(part);
       continue;
     }
 
-    // Find an existing text part in result with the same itemId
-    const existingIndex = result.findIndex(p => {
-      if (p.type !== 'text') return false;
-      const existingTextPart = p as T & { providerMetadata?: Record<string, unknown> };
-      const existingItemId = (existingTextPart.providerMetadata?.openai as Record<string, unknown> | undefined)?.itemId;
-      return existingItemId === itemId;
-    });
+    if (part.type === 'text') {
+      // Text parts: merge by concatenating text content
+      const existingIndex = result.findIndex(p => {
+        if (p.type !== 'text') return false;
+        return getItemId(p as T & { providerMetadata?: Record<string, unknown> }) === itemId;
+      });
 
-    if (existingIndex !== -1) {
-      // Merge: concatenate text into the existing part
-      const existing = result[existingIndex] as T & { text: string };
-      result[existingIndex] = {
-        ...existing,
-        text: existing.text + textPart.text,
-      };
+      if (existingIndex !== -1) {
+        const existing = result[existingIndex] as T & { text: string };
+        const textPart = part as T & { text: string };
+        result[existingIndex] = {
+          ...existing,
+          text: existing.text + textPart.text,
+        };
+      } else {
+        seenItemIds.add(itemId);
+        result.push(part);
+      }
     } else {
+      // Non-text parts (reasoning, tool-call, etc.): keep first occurrence only
+      if (seenItemIds.has(itemId)) {
+        continue;
+      }
+      seenItemIds.add(itemId);
       result.push(part);
     }
   }
@@ -108,6 +121,13 @@ export function sanitizeV5UIMessages(
   messages: AIV5Type.UIMessage[],
   filterIncompleteToolCalls = false,
 ): AIV5Type.UIMessage[] {
+  // Track OpenAI itemIds across ALL messages to deduplicate reasoning/tool-call parts
+  // that appear in multiple assistant messages (e.g., when memory loads non-merged messages).
+  // Without this, the AI SDK generates duplicate item_reference entries for the same rs_*/fc_* ID,
+  // causing OpenAI to reject with "Duplicate item found with id ...".
+  // @see https://github.com/mastra-ai/mastra/issues/15617
+  const globalSeenItemIds = new Set<string>();
+
   const msgs = messages
     .map(m => {
       if (m.parts.length === 0) return false;
@@ -158,14 +178,27 @@ export function sanitizeV5UIMessages(
 
       if (!safeParts.length) return false;
 
-      // Merge text parts with duplicate OpenAI itemIds to prevent "Duplicate item found" errors.
-      // This can happen when streaming flushes text multiple times for the same response
-      // (e.g., when source citations are interleaved with text-deltas).
-      const mergedParts = mergeTextPartsWithDuplicateItemIds(safeParts);
+      // Deduplicate parts with duplicate OpenAI itemIds within this message.
+      // Text parts are merged by concatenating; non-text parts keep only the first occurrence.
+      const mergedParts = deduplicatePartsWithOpenAIItemIds(safeParts);
+
+      // Cross-message deduplication: remove non-text parts whose OpenAI itemId
+      // was already seen in a previous message. Text parts with duplicate cross-message
+      // itemIds are also dropped (not merged across messages) to prevent duplicate
+      // item_reference entries in the Responses API input.
+      const crossDedupedParts = mergedParts.filter(part => {
+        const itemId = getItemId(part as typeof part & { providerMetadata?: Record<string, unknown> });
+        if (!itemId) return true;
+        if (globalSeenItemIds.has(itemId)) return false;
+        globalSeenItemIds.add(itemId);
+        return true;
+      });
+
+      if (!crossDedupedParts.length) return false;
 
       const sanitized = {
         ...m,
-        parts: mergedParts.map(part => {
+        parts: crossDedupedParts.map(part => {
           if (AIV5.isToolUIPart(part) && part.state === 'output-available') {
             return {
               ...part,
