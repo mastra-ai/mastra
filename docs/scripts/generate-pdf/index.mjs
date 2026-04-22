@@ -186,15 +186,11 @@ async function resolvePartTree(part) {
 
 async function renderNode(node, ctx) {
   if (node.type === 'category') {
-    const slug = slugify(node.label, ctx.usedSlugs)
-    const categoryToc = { id: slug, title: node.label, depth: node.depth, children: [] }
+    // Categories only appear in the TOC as a labelled group header; we no
+    // longer emit a per-category body page since it would render as a nearly
+    // blank sheet between the previous chapter and the category's first doc.
+    const categoryToc = { title: node.label, depth: node.depth, children: [] }
     ctx.tocChildren.push(categoryToc)
-    ctx.rendered.push(
-      `<section class="chapter-header" id="${slug}">` +
-        `<div class="chapter-eyebrow">Category</div>` +
-        `<h2>${escapeHtml(node.label)}</h2>` +
-        `</section>`,
-    )
     for (const child of node.children) {
       await renderNode(child, { ...ctx, tocChildren: categoryToc.children })
     }
@@ -241,19 +237,10 @@ function buildHtml({ sections, toc, style }) {
   })
 
   const tocHtml = renderToc(toc)
-  const body = sections
-    .map(
-      (s) =>
-        `<section class="part-header" id="${s.tocId}">` +
-        `<div class="part-eyebrow">Part</div>` +
-        `<h1>${escapeHtml(s.part.title)}</h1>` +
-        (s.part.description
-          ? `<p class="part-description">${escapeHtml(s.part.description)}</p>`
-          : '') +
-        `</section>\n` +
-        s.body,
-    )
-    .join('\n')
+  // Part headers used to be full-page title sheets (mostly blank). They added
+  // little beyond what the TOC already conveys and disrupted the reading flow,
+  // so body rendering now goes straight into the first chapter of each part.
+  const body = sections.map((s) => s.body).join('\n')
 
   return `<!doctype html>
 <html lang="en">
@@ -285,9 +272,8 @@ function buildHtml({ sections, toc, style }) {
 function renderToc(entries) {
   const lines = ['<ol>']
   for (const part of entries) {
-    lines.push(
-      `<li class="toc-part"><a href="#${part.id}">${escapeHtml(part.title)}</a></li>`,
-    )
+    // Parts no longer have a body anchor, so render the label as plain text.
+    lines.push(`<li class="toc-part">${escapeHtml(part.title)}</li>`)
     lines.push(...renderTocChildren(part.children, 'toc-chapter'))
   }
   lines.push('</ol>')
@@ -298,9 +284,12 @@ function renderTocChildren(children, cls) {
   const out = []
   for (const child of children || []) {
     const childCls = cls === 'toc-chapter' && child.children ? 'toc-chapter' : cls
-    out.push(
-      `<li class="${child.children ? 'toc-chapter' : childCls}"><a href="#${child.id}">${escapeHtml(child.title)}</a></li>`,
-    )
+    const itemCls = child.children ? 'toc-chapter' : childCls
+    const label = escapeHtml(child.title)
+    // Categories have no id (they're just visual grouping), so render the
+    // label as plain text instead of a broken anchor.
+    const inner = child.id ? `<a href="#${child.id}">${label}</a>` : label
+    out.push(`<li class="${itemCls}">${inner}</li>`)
     if (child.children && child.children.length) {
       out.push(...renderTocChildren(child.children, 'toc-section'))
     }
