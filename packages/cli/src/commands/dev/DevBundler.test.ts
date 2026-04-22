@@ -129,5 +129,34 @@ describe('DevBundler', () => {
         await remove(tmpDir);
       }
     });
+
+    it('should forward user-specified externals to the watcher', async () => {
+      // Arrange
+      const devBundler = new DevBundler();
+      vi.spyOn(devBundler as any, 'getUserBundlerOptions').mockResolvedValue({
+        externals: ['tsx'],
+        sourcemap: false,
+        transpilePackages: [],
+      });
+      const { getWatcherInputOptions } = await import('@mastra/deployer/build');
+
+      // Act
+      const tmpDir = '.test-tmp';
+      try {
+        await devBundler.watch('test-entry.js', tmpDir, []);
+
+        // Assert
+        expect(getWatcherInputOptions).toHaveBeenCalledWith(
+          'test-entry.js',
+          'node',
+          expect.any(Object),
+          expect.objectContaining({
+            bundlerOptions: expect.objectContaining({ externals: ['tsx'] }),
+          }),
+        );
+      } finally {
+        await remove(tmpDir);
+      }
+    });
   });
 });

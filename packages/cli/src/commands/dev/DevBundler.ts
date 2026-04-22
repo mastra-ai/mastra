@@ -73,7 +73,15 @@ export class DevBundler extends Bundler {
       {
         'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
       },
-      { sourcemap: sourcemapEnabled },
+      {
+        sourcemap: sourcemapEnabled,
+        bundlerOptions: {
+          enableSourcemap: sourcemapEnabled,
+          enableEsmShim: true,
+          externals: bundlerOptions?.externals ?? [],
+          dynamicPackages: bundlerOptions?.dynamicPackages,
+        },
+      },
     );
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
 
