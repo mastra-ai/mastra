@@ -399,11 +399,13 @@ export class ViewerRegistry implements ViewerRegistryLike {
         this.broadcastStatus(viewerKey, { status: 'browser_closed' });
       });
 
-      // Wire up error events
+      // Wire up error events - treat errors as browser closed since screencast can't continue
       stream.on('error', error => {
         // Ignore errors from superseded streams
         if (this.screencasts.get(viewerKey) !== currentStream) return;
         console.error(`[ViewerRegistry] Screencast error for ${viewerKey}:`, error);
+        this.screencasts.delete(viewerKey);
+        this.broadcastStatus(viewerKey, { status: 'browser_closed' });
       });
 
       this.broadcastStatus(viewerKey, { status: 'streaming' });
