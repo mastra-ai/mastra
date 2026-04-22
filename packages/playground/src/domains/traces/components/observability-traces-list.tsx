@@ -3,6 +3,7 @@ import type { SpanRecord } from '@mastra/core/storage';
 import { TracesDataList, DataListSkeleton, cn } from '@mastra/playground-ui';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
+import { useTraceFeedback } from '../hooks/use-trace-feedback';
 import { useTraceSpans } from '../hooks/use-trace-spans';
 import { groupTracesByThread } from '../utils/group-traces-by-thread';
 import { getInputPreview } from '../utils/span-utils';
@@ -28,7 +29,7 @@ type Trace = {
 
 const COLUMNS = 'auto auto auto auto minmax(5rem,1fr) auto auto';
 
-export type SpanTab = 'details' | 'scoring';
+export type SpanTab = 'details' | 'scoring' | 'feedback';
 
 export interface ObservabilityTracesListProps {
   traces: Trace[];
@@ -71,6 +72,7 @@ export function ObservabilityTracesList({
   const [featuredSpanRecord, setFeaturedSpanRecord] = useState<SpanRecord | undefined>();
   const [featuredSpanId, setFeaturedSpanId] = useState<string | null>(initialSpanId ?? null);
   const [spanScoresPage, setSpanScoresPage] = useState(0);
+  const [feedbackPage, setFeedbackPage] = useState(0);
   const [featuredScore, setFeaturedScore] = useState<ScoreRowData | undefined>();
   const [spanTab, setSpanTab] = useState<SpanTab>(initialSpanTab ?? 'details');
   const [traceCollapsed, setTraceCollapsed] = useState(false);
@@ -80,6 +82,10 @@ export function ObservabilityTracesList({
     traceId: featuredTraceId ?? undefined,
     spanId: featuredSpanId ?? undefined,
     page: spanScoresPage,
+  });
+  const { data: feedbackData, isLoading: isLoadingFeedbackData } = useTraceFeedback({
+    traceId: featuredTraceId ?? undefined,
+    page: feedbackPage,
   });
 
   // Sync with external selectedTraceId
@@ -116,6 +122,7 @@ export function ObservabilityTracesList({
     setFeaturedSpanId(null);
     setFeaturedScore(undefined);
     setSpanTab('details');
+    setFeedbackPage(0);
   }, []);
 
   const handleTraceClick = useCallback(
@@ -394,6 +401,9 @@ export function ObservabilityTracesList({
               isLoadingSpanScoresData={isLoadingSpanScoresData}
               onSpanScoresPageChange={setSpanScoresPage}
               onScoreSelect={handleScoreSelect}
+              feedbackData={feedbackData}
+              onFeedbackPageChange={setFeedbackPage}
+              isLoadingFeedbackData={isLoadingFeedbackData}
               activeTab={spanTab}
               onTabChange={handleSpanTabChange}
             />

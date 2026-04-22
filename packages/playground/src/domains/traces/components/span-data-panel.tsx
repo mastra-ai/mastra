@@ -1,7 +1,7 @@
 import type { GetScorerResponse } from '@mastra/client-js';
 import type { ListScoresResponse, ScoreRowData } from '@mastra/core/evals';
 import { EntityType } from '@mastra/core/observability';
-import type { SpanRecord } from '@mastra/core/storage';
+import type { ListFeedbackResponse, SpanRecord } from '@mastra/core/storage';
 import {
   Alert,
   AlertTitle,
@@ -17,6 +17,7 @@ import {
 import { format } from 'date-fns';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import { isTokenLimitExceeded, getTokenLimitMessage } from '../utils/span-utils';
+import { SpanFeedbackList } from './span-feedback-list';
 import { SpanScoresList } from './span-scores-list';
 import { SpanScoring } from './span-scoring';
 import { SpanTokenUsage } from './span-token-usage';
@@ -50,6 +51,9 @@ export interface SpanDataPanelProps {
   onScoreSelect?: (score: ScoreRowData) => void;
   scorers?: Record<string, GetScorerResponse>;
   isLoadingScorers?: boolean;
+  feedbackData?: ListFeedbackResponse | null;
+  onFeedbackPageChange?: (page: number) => void;
+  isLoadingFeedbackData?: boolean;
   activeTab?: string;
   onTabChange?: (tab: string) => void;
 }
@@ -65,6 +69,9 @@ export function SpanDataPanel({
   onScoreSelect,
   scorers,
   isLoadingScorers,
+  feedbackData,
+  onFeedbackPageChange,
+  isLoadingFeedbackData,
   activeTab,
   onTabChange,
 }: SpanDataPanelProps) {
@@ -96,6 +103,7 @@ export function SpanDataPanel({
             <Tab value="scoring">
               Scoring {spanScoresData?.pagination && `(${spanScoresData.pagination.total || 0})`}
             </Tab>
+            <Tab value="feedback">Feedback {feedbackData?.pagination && `(${feedbackData.pagination.total || 0})`}</Tab>
           </TabList>
 
           <TabContent value="details">
@@ -197,6 +205,14 @@ export function SpanDataPanel({
                 onScoreSelect={onScoreSelect}
               />
             </div>
+          </TabContent>
+
+          <TabContent value="feedback">
+            <SpanFeedbackList
+              feedbackData={feedbackData}
+              isLoadingFeedbackData={isLoadingFeedbackData}
+              onPageChange={onFeedbackPageChange}
+            />
           </TabContent>
         </Tabs>
       </DataPanel.Content>

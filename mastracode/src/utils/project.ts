@@ -409,6 +409,22 @@ export function getUserId(projectDir?: string): string {
 }
 
 /**
+ * Get the current user's display name.
+ *
+ * Priority:
+ *   1. git config user.name
+ *   2. OS username as fallback
+ */
+export function getUserName(projectDir?: string): string {
+  const cwd = projectDir || process.cwd();
+  const name = git('config user.name', cwd);
+  if (name) {
+    return name;
+  }
+  return os.userInfo().username || 'unknown';
+}
+
+/**
  * Observational memory scope: "thread" (per-conversation) or "resource" (shared across threads).
  */
 export type OmScope = 'thread' | 'resource';

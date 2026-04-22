@@ -55,7 +55,13 @@ export default function Traces() {
   const spanIdParam = searchParams.get('spanId') || undefined;
   const tabParam = searchParams.get('tab');
   const spanTabParam: SpanTab | undefined =
-    tabParam === 'scoring' ? 'scoring' : tabParam === 'details' ? 'details' : undefined;
+    tabParam === 'scoring'
+      ? 'scoring'
+      : tabParam === 'feedback'
+        ? 'feedback'
+        : tabParam === 'details'
+          ? 'details'
+          : undefined;
   const scoreIdParam = searchParams.get('scoreId') || undefined;
 
   const handleTraceClick = useCallback(

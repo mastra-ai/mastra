@@ -1,3 +1,4 @@
+import { getUserName } from '../../utils/project.js';
 import type { SlashCommandContext } from './types.js';
 
 /**
@@ -99,7 +100,8 @@ export async function handleFeedbackCommand(ctx: SlashCommandContext, args: stri
       },
       feedback: {
         feedbackType,
-        feedbackSource: 'user',
+        feedbackSource: 'mastracode',
+        feedbackUserId: getUserName(),
         value,
         comment,
         metadata: {
