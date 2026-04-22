@@ -1,5 +1,5 @@
 import { IconButton } from '@mastra/playground-ui';
-import { PencilIcon } from 'lucide-react';
+import { ArrowLeftIcon, PencilIcon } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router';
 import { AgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { AgentPreviewChat } from '@/domains/agent-builder/components/agent-builder-edit/agent-preview-chat';
@@ -13,9 +13,12 @@ export default function AgentBuilderAgentView() {
 
   return (
     <div className="flex flex-1 min-w-0 flex-col p-6 h-full bg-surface1">
-      <BrowserFrame className="grid grid-cols-[1fr_380px] relative">
-        <div className="h-full w-full overflow-hidden">
-          <div className="absolute top-6 left-6 right-0 bottom-0">
+      <BrowserFrame className="grid grid-cols-[1fr_380px] relative h-full">
+        <div className="h-full w-full overflow-hidden grid grid-rows-[auto_1fr]">
+          <div className="flex gap-2 items-center pl-6 pt-6">
+            <IconButton tooltip="Aents list" className="rounded-full" onClick={() => navigate(`/agent-builder/agents`)}>
+              <ArrowLeftIcon />
+            </IconButton>
             <IconButton
               tooltip="Edit agent"
               className="rounded-full"
@@ -24,6 +27,7 @@ export default function AgentBuilderAgentView() {
               <PencilIcon />
             </IconButton>
           </div>
+
           <AgentPreviewChat agent={defaultAgentFixture} />
         </div>
 

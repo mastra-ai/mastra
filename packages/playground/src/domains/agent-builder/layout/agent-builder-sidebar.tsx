@@ -16,7 +16,7 @@ export function AgentBuilderSidebar() {
   const { pathname } = useLocation();
 
   return (
-    <MainSidebar>
+    <MainSidebar className="h-full">
       <div className="pt-3 mb-4 -ml-0.5 sticky top-0 bg-surface1 z-10">
         {state === 'collapsed' ? (
           <div className="flex flex-col gap-3 items-center">

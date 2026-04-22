@@ -30,15 +30,25 @@ interface AgentConfigurePanelProps {
   agent: AgentFixture;
   onAgentChange: (next: AgentFixture) => void;
   editable?: boolean;
+  draftName?: string;
+  draftAvatarUrl?: string;
+  onDraftNameChange?: (next: string) => void;
+  onDraftAvatarUrlChange?: (next: string) => void;
 }
 
-export const AgentConfigurePanel = ({ agent, onAgentChange, editable = true }: AgentConfigurePanelProps) => {
+export const AgentConfigurePanel = ({
+  agent,
+  onAgentChange,
+  editable = true,
+  draftName = agent.name,
+  draftAvatarUrl = agent.avatarUrl ?? '',
+  onDraftNameChange = () => {},
+  onDraftAvatarUrlChange = () => {},
+}: AgentConfigurePanelProps) => {
   const [systemPromptOpen, setSystemPromptOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false);
   const [channelsOpen, setChannelsOpen] = useState(false);
-  const [draftName, setDraftName] = useState(agent.name);
-  const [draftAvatarUrl, setDraftAvatarUrl] = useState(agent.avatarUrl ?? '');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleAvatarFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -46,7 +56,7 @@ export const AgentConfigurePanel = ({ agent, onAgentChange, editable = true }: A
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      if (typeof reader.result === 'string') setDraftAvatarUrl(reader.result);
+      if (typeof reader.result === 'string') onDraftAvatarUrlChange(reader.result);
     };
     reader.readAsDataURL(file);
     e.target.value = '';
@@ -93,14 +103,14 @@ export const AgentConfigurePanel = ({ agent, onAgentChange, editable = true }: A
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="group relative h-12 w-12 shrink-0 overflow-hidden rounded-full border border-border1 bg-surface3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral3"
+              className="group relative h-avatar-lg w-avatar-lg shrink-0 overflow-hidden rounded-full border border-border1 bg-surface3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral3"
               aria-label="Upload avatar"
               data-testid="agent-configure-avatar-trigger"
             >
               {draftAvatarUrl ? (
                 <img src={draftAvatarUrl} alt="" className="h-full w-full object-cover" />
               ) : (
-                <span className="flex h-full w-full items-center justify-center text-header-md text-neutral4">
+                <span className="flex h-full w-full items-center justify-center text-ui-md text-neutral4">
                   {(draftName[0] ?? 'A').toUpperCase()}
                 </span>
               )}
@@ -122,7 +132,7 @@ export const AgentConfigurePanel = ({ agent, onAgentChange, editable = true }: A
                 label="Name"
                 value={draftName}
                 placeholder="My agent"
-                onChange={e => setDraftName(e.target.value)}
+                onChange={e => onDraftNameChange(e.target.value)}
                 testId="agent-configure-name"
               />
             </div>

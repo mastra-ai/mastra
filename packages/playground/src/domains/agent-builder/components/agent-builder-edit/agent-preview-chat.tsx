@@ -57,7 +57,7 @@ export const AgentPreviewChat = ({ agent }: AgentPreviewChatProps) => {
         )}
       </div>
 
-      <form onSubmit={handleSubmit} className="shrink-0 px-8 pb-6">
+      <form onSubmit={handleSubmit} className="shrink-0 px-6 pb-6">
         <div className="mx-auto w-full max-w-2xl">
           <div className="rounded-xl border border-border1 bg-surface2 transition-colors focus-within:border-neutral3">
             <Textarea

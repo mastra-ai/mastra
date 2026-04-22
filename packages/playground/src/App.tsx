@@ -27,7 +27,6 @@ import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } fr
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/link';
-import AgentBuilder from './pages/agent-builder';
 import AgentBuilderCreate from './pages/agent-builder/agents/create';
 import AgentBuilderAgentEdit from './pages/agent-builder/agents/edit';
 import AgentBuilderAgentView from './pages/agent-builder/agents/view';
@@ -91,7 +90,7 @@ import Workspace from './pages/workspace';
 import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
 import { Layout } from '@/components/layout';
 import { MinimalLayout } from '@/components/minimal-layout';
-import { AgentBuilderLayout } from '@/domains/agent-builder/layout/agent-builder-layout';
+import { AgentBuilderEditionLayout, AgentBuilderLayout } from '@/domains/agent-builder/layout/agent-builder-layout';
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import { createFetchWithRefresh } from '@/domains/auth/hooks/fetch-with-refresh';
 import { PlaygroundConfigGuard } from '@/domains/configuration/components/playground-config-guard';
@@ -184,9 +183,7 @@ const AgentBuilderRootLayout = () => {
   return (
     <TooltipProvider>
       <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
-        <AgentBuilderLayout>
-          <Outlet />
-        </AgentBuilderLayout>
+        <Outlet />
       </LinkComponentProvider>
     </TooltipProvider>
   );
@@ -216,12 +213,32 @@ const routes = [
     path: '/agent-builder',
     element: <AgentBuilderRootLayout />,
     children: [
-      { index: true, element: <AgentBuilder /> },
-      { path: 'agents/create', element: <AgentBuilderCreate /> },
-      { path: 'agents/:id/edit', element: <AgentBuilderAgentEdit /> },
-      { path: 'agents/:id/view', element: <AgentBuilderAgentView /> },
+      {
+        index: true,
+        loader: () => redirect('/agent-builder/agents/create'),
+      },
+      {
+        path: 'agents',
+        element: <AgentBuilderLayout />,
+        children: [
+          {
+            index: true,
+            element: <div>lol</div>,
+          },
+        ],
+      },
+      {
+        path: 'agents',
+        element: <AgentBuilderEditionLayout />,
+        children: [
+          { path: 'create', element: <AgentBuilderCreate /> },
+          { path: ':id/edit', element: <AgentBuilderAgentEdit /> },
+          { path: ':id/view', element: <AgentBuilderAgentView /> },
+        ],
+      },
     ],
   },
+
   {
     element: <AgentBuilderRootLayout />,
     children: [],

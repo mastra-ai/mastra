@@ -1,6 +1,7 @@
 import { IconButton, Textarea, Txt, cn } from '@mastra/playground-ui';
-import { ArrowUpIcon } from 'lucide-react';
+import { ArrowLeftIcon, ArrowUpIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { buildInitialConversation } from '../../fixtures';
 import type { BuilderMessage } from '../../fixtures';
 
@@ -12,6 +13,7 @@ export const ConversationPanel = ({ initialUserMessage }: ConversationPanelProps
   const [messages, setMessages] = useState<BuilderMessage[]>(() => buildInitialConversation(initialUserMessage));
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -53,7 +55,11 @@ export const ConversationPanel = ({ initialUserMessage }: ConversationPanelProps
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-surface1">
+    <div className="flex h-full min-h-0 flex-col bg-surface1 pt-6">
+      <IconButton onClick={() => navigate('/agent-builder/agents')} className="rounded-full" tooltip="Agents list">
+        <ArrowLeftIcon />
+      </IconButton>
+
       <div className="flex shrink-0 items-center py-3">
         <Txt variant="ui-xs" className="font-medium uppercase tracking-wider text-neutral3">
           Builder

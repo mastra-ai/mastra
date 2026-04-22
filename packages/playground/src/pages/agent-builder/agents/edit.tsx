@@ -16,7 +16,10 @@ export default function AgentBuilderAgentEdit() {
   const location = useLocation();
   const state = (location.state as LocationState) ?? null;
   const [agent, setAgent] = useState<AgentFixture>(defaultAgentFixture);
+  const [draftName, setDraftName] = useState<string>(defaultAgentFixture.name);
+  const [draftAvatarUrl, setDraftAvatarUrl] = useState<string>(defaultAgentFixture.avatarUrl ?? '');
   const navigate = useNavigate();
+  const previewAgent = { ...agent, name: draftName, avatarUrl: draftAvatarUrl.trim() || undefined };
   return (
     <div className="flex flex-1 min-h-0 h-full bg-surface1">
       <div className="flex w-[40ch] shrink-0 flex-col bg-surface1 py-6 px-6">
@@ -34,14 +37,21 @@ export default function AgentBuilderAgentEdit() {
                 <EyeIcon />
               </IconButton>
             </div>
-            <AgentPreviewChat agent={agent} />
+            <AgentPreviewChat agent={previewAgent} />
           </div>
 
           <div
             className="h-full overflow-y-auto pr-6 pb-6 pt-6"
             style={{ viewTransitionName: 'agent-builder-configure-panel' }}
           >
-            <AgentConfigurePanel agent={agent} onAgentChange={setAgent} />
+            <AgentConfigurePanel
+              agent={agent}
+              onAgentChange={setAgent}
+              draftName={draftName}
+              draftAvatarUrl={draftAvatarUrl}
+              onDraftNameChange={setDraftName}
+              onDraftAvatarUrlChange={setDraftAvatarUrl}
+            />
           </div>
         </BrowserFrame>
       </div>
