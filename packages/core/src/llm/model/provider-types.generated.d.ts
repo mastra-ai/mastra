@@ -1064,7 +1064,6 @@ export type ProviderModelsMap = {
     'z-ai/glm-5-turbo',
     'z-ai/glm-5.1',
   ];
-  readonly 'tencent-token-plan': readonly ['hy3-preview'];
   readonly 'fireworks-ai': readonly [
     'accounts/fireworks/models/deepseek-v3p1',
     'accounts/fireworks/models/deepseek-v3p2',
@@ -1136,6 +1135,7 @@ export type ProviderModelsMap = {
     'glm-5.1',
     'kimi-k2-thinking',
     'kimi-k2.5',
+    'kimi-k2.6',
     'kimi/kimi-k2.5',
     'moonshot-kimi-k2-instruct',
     'qvq-max',
@@ -2505,6 +2505,7 @@ export type ProviderModelsMap = {
     'grok-4-1-fast-non-reasoning',
     'grok-4-1-fast-reasoning',
     'grok-code-fast-1',
+    'kimi-k2-6',
     'kimi-k2.5',
     'minimax-m2-5',
     'qwen-3-6-plus',

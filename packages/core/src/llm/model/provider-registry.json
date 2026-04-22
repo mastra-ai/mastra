@@ -1160,15 +1160,6 @@
       "gateway": "models.dev",
       "npm": "@openrouter/ai-sdk-provider"
     },
-    "tencent-token-plan": {
-      "url": "https://api.lkeap.cloud.tencent.com/plan/v3",
-      "apiKeyEnvVar": "TENCENT_TOKEN_PLAN_API_KEY",
-      "apiKeyHeader": "Authorization",
-      "name": "Tencent Token Plan",
-      "models": ["hy3-preview"],
-      "docUrl": "https://cloud.tencent.com/document/product/1823/130060",
-      "gateway": "models.dev"
-    },
     "fireworks-ai": {
       "url": "https://api.fireworks.ai/inference/v1/",
       "apiKeyEnvVar": "FIREWORKS_API_KEY",
@@ -1286,6 +1277,7 @@
         "glm-5.1",
         "kimi-k2-thinking",
         "kimi-k2.5",
+        "kimi-k2.6",
         "kimi/kimi-k2.5",
         "moonshot-kimi-k2-instruct",
         "qvq-max",
@@ -2919,6 +2911,7 @@
         "grok-4-1-fast-non-reasoning",
         "grok-4-1-fast-reasoning",
         "grok-code-fast-1",
+        "kimi-k2-6",
         "kimi-k2.5",
         "minimax-m2-5",
         "qwen-3-6-plus",
@@ -5673,7 +5666,6 @@
       "z-ai/glm-5-turbo",
       "z-ai/glm-5.1"
     ],
-    "tencent-token-plan": ["hy3-preview"],
     "fireworks-ai": [
       "accounts/fireworks/models/deepseek-v3p1",
       "accounts/fireworks/models/deepseek-v3p2",
@@ -5745,6 +5737,7 @@
       "glm-5.1",
       "kimi-k2-thinking",
       "kimi-k2.5",
+      "kimi-k2.6",
       "kimi/kimi-k2.5",
       "moonshot-kimi-k2-instruct",
       "qvq-max",
@@ -7114,6 +7107,7 @@
       "grok-4-1-fast-non-reasoning",
       "grok-4-1-fast-reasoning",
       "grok-code-fast-1",
+      "kimi-k2-6",
       "kimi-k2.5",
       "minimax-m2-5",
       "qwen-3-6-plus",
