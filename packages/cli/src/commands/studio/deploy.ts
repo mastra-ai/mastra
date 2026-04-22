@@ -96,17 +96,6 @@ export function parseEnvFile(content: string): Record<string, string> {
   return vars;
 }
 
-async function readOptionalEnvFile(projectDir: string, envFile: string): Promise<string | null> {
-  try {
-    return await readFile(join(projectDir, envFile), 'utf-8');
-  } catch (err: unknown) {
-    if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
-      return null;
-    }
-    throw err;
-  }
-}
-
 async function getDeployEnvFiles(projectDir: string): Promise<string[]> {
   const entries = await readdir(projectDir, { withFileTypes: true });
 
@@ -147,7 +136,7 @@ export async function readEnvVars(
 
   p.log.step(`Using env file: ${selectedEnvFile}`);
 
-  return parseEnvFile((await readOptionalEnvFile(projectDir, selectedEnvFile)) ?? '');
+  return parseEnvFile(await readFile(join(projectDir, selectedEnvFile), 'utf-8'));
 }
 
 /* ------------------------------------------------------------------ */

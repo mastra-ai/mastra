@@ -181,6 +181,28 @@ describe('readEnvVars (server deploy)', () => {
     expect(prompts.select).not.toHaveBeenCalled();
   });
 
+  it('fails when the selected env file disappears before it can be read', async () => {
+    const { readdir, readFile } = await import('node:fs/promises');
+    const prompts = await import('@clack/prompts');
+    vi.mocked(readdir).mockResolvedValue([
+      { name: '.env', isFile: () => true },
+      { name: '.env.staging', isFile: () => true },
+    ] as unknown as Awaited<ReturnType<typeof readdir>>);
+    vi.mocked(prompts.select).mockResolvedValue('.env.staging');
+    vi.mocked(readFile).mockImplementation(async path => {
+      if (String(path).endsWith('.env.staging')) {
+        const err = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+        throw err;
+      }
+
+      return 'BASE_ONLY=1';
+    });
+
+    const { readEnvVars } = await import('./deploy.js');
+
+    await expect(readEnvVars('/project')).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('fails when no deploy env file exists', async () => {
     const { readdir } = await import('node:fs/promises');
     vi.mocked(readdir).mockResolvedValue([] as Awaited<ReturnType<typeof readdir>>);
