@@ -257,7 +257,8 @@
     "picomatch": "^4.0.3",
     "radash": "^12.1.1",
     "ws": "^8.20.0",
-    "xxhash-wasm": "^1.1.0"
+    "xxhash-wasm": "^1.1.0",
+    "@vercel/oidc": "3.1.0"
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"
