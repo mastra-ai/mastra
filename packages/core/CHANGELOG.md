@@ -1,5 +1,19 @@
 # @mastra/core
 
+## 1.26.0-alpha.12
+
+### Minor Changes
+
+- You can now opt into parent-agent reuse for the separate structured-output pass with `structuredOutput: { schema, model, useAgent: true }`, which lets the structuring request reuse the parent agent config, including memory. ([#15318](https://github.com/mastra-ai/mastra/pull/15318))
+
+### Patch Changes
+
+- Refactored how assistant messages are constructed during streaming. Messages are now built from the complete chunk sequence after each step instead of being assembled mid-stream. This fixes duplicate OpenAI item IDs (`rs_*`, `msg_*`), eliminates empty text parts from streaming artifacts, and ensures provider metadata is correctly attributed. ([#15454](https://github.com/mastra-ai/mastra/pull/15454))
+
+- Fixed structured output to keep persisted assistant text behavior aligned with existing memory recall paths. ([#15318](https://github.com/mastra-ai/mastra/pull/15318))
+
+- Fixed `dataset.startExperiment` hanging forever when `targetType` is `'workflow'`. Workflow experiments now complete normally, honour `itemTimeout`, and surface failures. Fixes #15453. ([#15570](https://github.com/mastra-ai/mastra/pull/15570))
+
 ## 1.26.0-alpha.11
 
 ### Minor Changes
