@@ -4505,13 +4505,9 @@ export class Agent<
 
     const scorerInput: ScorerRunInputForAgent = {
       inputMessages: messageList.getPersisted.input.db(),
-      rememberedMessages: stripInternalParts(messageList.getPersisted.remembered.db()),
-      // System messages and tagged system messages (observational memory) are omitted
-      // from scorer input to reduce payload size. They are accessible from the
-      // AGENT_RUN span via targetTraceId/targetSpanId (instructions in span attributes)
-      // and from the thread (observational memory).
-      systemMessages: [],
-      taggedSystemMessages: {},
+      rememberedMessages: messageList.getPersisted.remembered.db(),
+      systemMessages: messageList.getSystemMessages(),
+      taggedSystemMessages: messageList.getPersisted.taggedSystemMessages,
     };
 
     const scorerOutput: ScorerRunOutputForAgent = messageList.getPersisted.response.db();
@@ -6042,38 +6038,4 @@ export class Agent<
       });
     }
   }
-}
-
-/**
- * Internal part type prefixes that are bookkeeping/lifecycle signals and
- * should not be sent to scorers. These add significant payload size
- * without providing information relevant to scoring quality.
- */
-const INTERNAL_PART_PREFIXES = ['data-om-', 'data-workspace-', 'data-sandbox-', 'step-start'];
-
-/**
- * Strips internal bookkeeping parts from messages before passing to scorers.
- * Keeps only content relevant for quality evaluation (text, tool-invocation, etc.).
- * Messages that become empty after filtering are removed entirely.
- */
-function stripInternalParts(messages: MastraDBMessage[]): MastraDBMessage[] {
-  const result: MastraDBMessage[] = [];
-  for (const msg of messages) {
-    const parts = msg.content?.parts;
-    if (!parts) {
-      result.push(msg);
-      continue;
-    }
-    const filtered = parts.filter(part => {
-      const type = (part as { type?: string }).type || '';
-      return !INTERNAL_PART_PREFIXES.some(prefix => type.startsWith(prefix));
-    });
-    if (filtered.length === 0) continue;
-    if (filtered.length === parts.length) {
-      result.push(msg);
-    } else {
-      result.push({ ...msg, content: { ...msg.content, parts: filtered } });
-    }
-  }
-  return result;
 }
