@@ -515,7 +515,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
    */
   async validateAgentBuilderLicense(): Promise<void> {
     const editor = this.mastra.getEditor();
-    if (!editor?.hasEnabledBuilderConfig()) return;
+    if (!editor?.hasEnabledBuilderConfig?.()) return;
 
     try {
       const { isEEEnabled } = await import('@mastra/core/auth/ee');

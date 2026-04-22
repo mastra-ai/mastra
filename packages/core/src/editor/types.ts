@@ -326,13 +326,15 @@ export interface IMastraEditor {
   /**
    * Check if the builder config is present and enabled.
    * Sync. OSS-safe. Does NOT import @mastra/editor/ee.
+   * Optional for backwards compatibility.
    */
-  hasEnabledBuilderConfig(): boolean;
+  hasEnabledBuilderConfig?(): boolean;
 
   /**
    * Resolve and return the Agent Builder instance.
    * Dynamic-imports @mastra/editor/ee on first call.
    * Returns undefined if builder is not configured or disabled.
+   * Optional for backwards compatibility.
    */
-  resolveBuilder(): Promise<IAgentBuilder | undefined>;
+  resolveBuilder?(): Promise<IAgentBuilder | undefined>;
 }
