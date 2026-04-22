@@ -39,12 +39,12 @@ export const GET_EDITOR_BUILDER_SETTINGS_ROUTE = createRoute({
 
       // Resolve the builder instance
       const builder = await editor.resolveBuilder();
-      if (!builder) {
+      if (!builder || !builder.enabled) {
         return { enabled: false };
       }
 
       return {
-        enabled: builder.enabled,
+        enabled: true,
         features: builder.getFeatures(),
         configuration: builder.getConfiguration(),
       };

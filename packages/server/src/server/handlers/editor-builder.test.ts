@@ -26,13 +26,15 @@ describe('GET /editor/builder/settings', () => {
   });
 
   it('returns enabled: false when hasEnabledBuilderConfig returns false', async () => {
+    const resolveBuilder = vi.fn();
     const mastra = createMockMastra({
       hasEnabledBuilderConfig: () => false,
-      resolveBuilder: vi.fn(),
+      resolveBuilder,
     });
     const result = await GET_EDITOR_BUILDER_SETTINGS_ROUTE.handler({ mastra } as any);
 
     expect(result).toEqual({ enabled: false });
+    expect(resolveBuilder).not.toHaveBeenCalled();
   });
 
   it('returns enabled: false when resolveBuilder returns undefined', async () => {
@@ -64,11 +66,11 @@ describe('GET /editor/builder/settings', () => {
     });
   });
 
-  it('returns enabled: false when builder.enabled is false', async () => {
+  it('returns only enabled: false when builder.enabled is false (no features/config exposed)', async () => {
     const mockBuilder: IAgentBuilder = {
       enabled: false,
-      getFeatures: () => ({}),
-      getConfiguration: () => ({}),
+      getFeatures: () => ({ agent: { tools: true } }),
+      getConfiguration: () => ({ agent: { maxTokens: 4096 } }),
     };
     const mastra = createMockMastra({
       hasEnabledBuilderConfig: () => true,
@@ -76,11 +78,8 @@ describe('GET /editor/builder/settings', () => {
     });
     const result = await GET_EDITOR_BUILDER_SETTINGS_ROUTE.handler({ mastra } as any);
 
-    expect(result).toEqual({
-      enabled: false,
-      features: {},
-      configuration: {},
-    });
+    // Should NOT expose features/config when disabled
+    expect(result).toEqual({ enabled: false });
   });
 
   it('throws HTTPException when resolveBuilder throws', async () => {
