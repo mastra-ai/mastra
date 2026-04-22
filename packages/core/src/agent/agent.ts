@@ -30,11 +30,14 @@ import type {
   StreamTextResult,
 } from '../llm/model/base.types';
 import { MastraLLMVNext } from '../llm/model/model.loop';
+import type { ProviderOptions } from '../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
+import type { VersionOverrides } from '../mastra/types';
+import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfigInternal } from '../memory/types';
 import type { DefinitionSource, TracingProperties, ObservabilityContext } from '../observability';
@@ -58,7 +61,7 @@ import { SkillsProcessor } from '../processors/processors/skills';
 import { WorkspaceInstructionsProcessor } from '../processors/processors/workspace-instructions';
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
-import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
+import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, MASTRA_VERSIONS_KEY } from '../request-context';
 import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import { ChunkFrom } from '../stream';
@@ -66,6 +69,7 @@ import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
+import { isProviderTool } from '../tools/toolchecks';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
@@ -106,6 +110,7 @@ import type {
   AgentMethodType,
   StructuredOutputOptions,
   PublicStructuredOutputOptions,
+  ModelFallbackSettings,
   ModelWithRetries,
   ZodSchema,
 } from './types';
@@ -120,6 +125,9 @@ type ModelFallbacks = {
   model: DynamicArgument<MastraModelConfig>;
   maxRetries: number;
   enabled: boolean;
+  modelSettings?: DynamicArgument<ModelFallbackSettings>;
+  providerOptions?: DynamicArgument<ProviderOptions>;
+  headers?: DynamicArgument<Record<string, string>>;
 }[];
 
 type ResolvedModelSelection = MastraModelConfig | ModelFallbacks;
@@ -255,12 +263,7 @@ export class Agent<
         this.logger.trackException(mastraError);
         throw mastraError;
       }
-      this.model = config.model.map(mdl => ({
-        id: mdl.id ?? randomUUID(),
-        model: mdl.model,
-        maxRetries: mdl.maxRetries ?? config?.maxRetries ?? 0,
-        enabled: mdl.enabled ?? true,
-      })) as ModelFallbacks;
+      this.model = config.model.map(mdl => Agent.toFallbackEntry(mdl, config?.maxRetries ?? 0)) as ModelFallbacks;
       this.#originalModel = [...this.model];
     } else {
       this.model = config.model;
@@ -1625,10 +1628,16 @@ export class Agent<
       return resolveMaybePromise(resolvedModel, modelInfo => {
         let llm: MastraLLM | Promise<MastraLLM>;
         if (isSupportedLanguageModel(modelInfo)) {
-          llm = this.prepareModels(requestContext, modelSelection).then(models => {
-            const enabledModels = models.filter(model => model.enabled);
+          // Filter disabled entries before prepareModels so their model factories and
+          // dynamic resolvers are never invoked on the streaming path. A disabled
+          // entry's throwing/side-effecting factory must not break the request.
+          const enabledSelection = Array.isArray(modelSelection)
+            ? (modelSelection.filter(m => m.enabled) as typeof modelSelection)
+            : modelSelection;
+
+          llm = this.prepareModels(requestContext, enabledSelection).then(models => {
             return new MastraLLMVNext({
-              models: enabledModels,
+              models,
               mastra: this.#mastra,
               options: { tracingPolicy: this.#options?.tracingPolicy },
             });
@@ -1708,12 +1717,24 @@ export class Agent<
       return models;
     }
 
-    return models.map(m => ({
-      id: m.id ?? randomUUID(),
-      model: m.model as DynamicArgument<MastraModelConfig>,
-      maxRetries: m.maxRetries ?? this.maxRetries,
-      enabled: m.enabled ?? true,
-    })) as ModelFallbacks;
+    return models.map(m => Agent.toFallbackEntry(m, this.maxRetries ?? 0)) as ModelFallbacks;
+  }
+
+  /**
+   * Builds a single normalized fallback entry from a user-supplied `ModelWithRetries`.
+   * Shared by the constructor and `normalizeModelFallbacks` to keep the mapping in one place.
+   * @internal
+   */
+  private static toFallbackEntry(mdl: ModelWithRetries, defaultMaxRetries: number): ModelFallbacks[number] {
+    return {
+      id: mdl.id ?? randomUUID(),
+      model: mdl.model as DynamicArgument<MastraModelConfig>,
+      maxRetries: mdl.maxRetries ?? defaultMaxRetries,
+      enabled: mdl.enabled ?? true,
+      modelSettings: mdl.modelSettings,
+      providerOptions: mdl.providerOptions,
+      headers: mdl.headers,
+    };
   }
 
   /**
@@ -3027,6 +3048,7 @@ export class Agent<
       this.logger.debug('Adding client tools', { agent: this.name, tools: Object.keys(clientTools || {}), runId });
       for (const [toolName, tool] of clientToolsForInput) {
         const { execute, ...toolRest } = tool;
+        const toolToConvert = isProviderTool(tool) ? tool : toolRest;
         const options: ToolOptions = {
           name: toolName,
           runId,
@@ -3045,7 +3067,7 @@ export class Agent<
           backgroundConfig: (tool as any).background,
         };
         const convertedToCoreTool = makeCoreTool(
-          toolRest,
+          toolToConvert,
           options,
           'client-tool',
           autoResumeSuspendedTools,
@@ -3159,8 +3181,6 @@ export class Agent<
             .optional(),
         });
 
-        const modelVersion = (await agent.getModel({ requestContext })).specificationVersion;
-
         const toolObj = createTool({
           id: `agent-${agentName}`,
           description: agent.getDescription() || `Agent: ${agentName}`,
@@ -3226,9 +3246,6 @@ export class Agent<
                   entityId: agentName,
                 }) || `${slugify.default(this.id)}-${agentName}`;
 
-            const subAgentDefaultOptions = await agent.getDefaultOptions?.({ requestContext });
-            const subAgentHasOwnMemoryConfig = subAgentDefaultOptions?.memory !== undefined;
-
             // Save the parent agent's MastraMemory before the sub-agent runs.
             // The sub-agent's prepare-memory-step will overwrite this key with
             // its own thread/resource identity. We restore it after the sub-agent
@@ -3249,15 +3266,44 @@ export class Agent<
               requestContext.delete(MASTRA_RESOURCE_ID_KEY);
             }
 
+            // Resolve versioned sub-agent if a version override exists on requestContext.
+            // This must happen before onDelegationStart so the rejection branch can
+            // use the correct model version and memory config from the resolved agent.
+            let resolvedAgent = agent;
+            const versionOverrides = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+            const agentVersionSelector = versionOverrides?.agents?.[agent.id];
+            if (agentVersionSelector && this.#mastra) {
+              try {
+                resolvedAgent = await this.#mastra.resolveVersionedAgent(agent, agentVersionSelector);
+              } catch (versionError) {
+                this.logger.warn('Failed to resolve versioned sub-agent, using code-defined default', {
+                  agent: this.name,
+                  targetAgent: agentName,
+                  targetAgentId: agent.id,
+                  versionSelector: agentVersionSelector,
+                  error: versionError,
+                });
+              }
+            }
+
+            // Recompute derived values from the resolved agent (may differ from
+            // code-defined agent if a stored version changed the model or defaults)
+            const resolvedModelVersion = (await resolvedAgent.getModel({ requestContext })).specificationVersion;
+            const resolvedDefaultOptions = await resolvedAgent.getDefaultOptions?.({ requestContext });
+            const resolvedHasOwnMemoryConfig = resolvedDefaultOptions?.memory !== undefined;
+
+            // Propagate parent memory to the resolved agent if it doesn't have its own.
+            // This must happen before onDelegationStart so the rejection path can
+            // save messages via resolvedAgent.getMemory().
             if (
               (methodType === 'generate' ||
                 methodType === 'generateLegacy' ||
                 methodType === 'stream' ||
                 methodType === 'streamLegacy') &&
-              supportedLanguageModelSpecifications.includes(modelVersion)
+              supportedLanguageModelSpecifications.includes(resolvedModelVersion)
             ) {
-              if (!agent.hasOwnMemory() && this.#memory) {
-                agent.__setMemory(this.#memory as DynamicArgument<MastraMemory>);
+              if (!resolvedAgent.hasOwnMemory() && this.#memory) {
+                resolvedAgent.__setMemory(this.#memory as DynamicArgument<MastraMemory>);
               }
             }
 
@@ -3281,7 +3327,7 @@ export class Agent<
 
                     if (
                       (methodType === 'stream' || methodType === 'streamLegacy') &&
-                      supportedLanguageModelSpecifications.includes(modelVersion)
+                      supportedLanguageModelSpecifications.includes(resolvedModelVersion)
                     ) {
                       await context.writer?.write({
                         type: 'text-delta',
@@ -3295,7 +3341,7 @@ export class Agent<
                     }
 
                     // Save rejection messages to sub-agent's memory so the UI can display them
-                    const memory = await agent.getMemory({ requestContext });
+                    const memory = await resolvedAgent.getMemory({ requestContext });
                     if (memory) {
                       try {
                         // Create user message with the original prompt
@@ -3392,7 +3438,7 @@ export class Agent<
 
             // Append LLM-provided instructions to the sub-agent's own instructions
             if (effectiveInstructions) {
-              const agentOwnInstructions = await agent.getInstructions({ requestContext });
+              const agentOwnInstructions = await resolvedAgent.getInstructions({ requestContext });
               if (agentOwnInstructions) {
                 const ownStr = this.#convertInstructionsToString(agentOwnInstructions);
                 if (ownStr) {
@@ -3447,17 +3493,17 @@ export class Agent<
 
               if (
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
-                supportedLanguageModelSpecifications.includes(modelVersion)
+                supportedLanguageModelSpecifications.includes(resolvedModelVersion)
               ) {
                 const generateResult = resumeData
-                  ? await agent.resumeGenerate(resumeData, {
+                  ? await resolvedAgent.resumeGenerate(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       context: filteredContextMessages as unknown as ModelMessage[],
-                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
+                      ...(resourceId && threadId && !resolvedHasOwnMemoryConfig
                         ? {
                             memory: {
                               resource: subAgentResourceId,
@@ -3468,13 +3514,13 @@ export class Agent<
                         : {}),
                       disableBackgroundTasks: true,
                     })
-                  : await agent.generate(messagesForSubAgent, {
+                  : await resolvedAgent.generate(messagesForSubAgent, {
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       context: filteredContextMessages as unknown as ModelMessage[],
-                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
+                      ...(resourceId && threadId && !resolvedHasOwnMemoryConfig
                         ? {
                             memory: {
                               resource: subAgentResourceId,
@@ -3516,7 +3562,7 @@ export class Agent<
                 fullSubAgentMessages = [userMessage, ...agentResponseMessages];
 
                 // Save response messages to sub-agent's memory so the UI can display them
-                const memory = await agent.getMemory({ requestContext });
+                const memory = await resolvedAgent.getMemory({ requestContext });
                 if (memory) {
                   try {
                     await memory.createThread({
@@ -3550,8 +3596,8 @@ export class Agent<
                 }
 
                 result = { text: generateResult.text, subAgentThreadId, subAgentResourceId, subAgentToolResults };
-              } else if (methodType === 'generate' && modelVersion === 'v1') {
-                const generateResult = await agent.generateLegacy(messagesForSubAgent, {
+              } else if (methodType === 'generate' && resolvedModelVersion === 'v1') {
+                const generateResult = await resolvedAgent.generateLegacy(messagesForSubAgent, {
                   requestContext,
                   ...resolveObservabilityContext(context ?? {}),
                   context: filteredContextMessages as unknown as CoreMessage[],
@@ -3559,17 +3605,17 @@ export class Agent<
                 result = { text: generateResult.text };
               } else if (
                 (methodType === 'stream' || methodType === 'streamLegacy') &&
-                supportedLanguageModelSpecifications.includes(modelVersion)
+                supportedLanguageModelSpecifications.includes(resolvedModelVersion)
               ) {
                 const streamResult = resumeData
-                  ? await agent.resumeStream(resumeData, {
+                  ? await resolvedAgent.resumeStream(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       context: filteredContextMessages as unknown as ModelMessage[],
-                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
+                      ...(resourceId && threadId && !resolvedHasOwnMemoryConfig
                         ? {
                             memory: {
                               resource: subAgentResourceId,
@@ -3582,13 +3628,13 @@ export class Agent<
                         : {}),
                       disableBackgroundTasks: true,
                     })
-                  : await agent.stream(messagesForSubAgent, {
+                  : await resolvedAgent.stream(messagesForSubAgent, {
                       requestContext,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
                       context: filteredContextMessages as unknown as ModelMessage[],
-                      ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
+                      ...(resourceId && threadId && !resolvedHasOwnMemoryConfig
                         ? {
                             memory: {
                               resource: subAgentResourceId,
@@ -3665,15 +3711,15 @@ export class Agent<
                 fullSubAgentMessages = [userMessage, ...agentResponseMessages];
 
                 // Save response messages to sub-agent's memory so the UI can display them
-                const memory = await agent.getMemory({ requestContext });
-                if (memory) {
+                const streamMemory = await resolvedAgent.getMemory({ requestContext });
+                if (streamMemory) {
                   try {
-                    await memory.createThread({
+                    await streamMemory.createThread({
                       resourceId: subAgentResourceId,
                       threadId: subAgentThreadId,
                     });
 
-                    await memory.saveMessages({
+                    await streamMemory.saveMessages({
                       messages: fullSubAgentMessages,
                     });
                   } catch (memoryError) {
@@ -3709,7 +3755,7 @@ export class Agent<
                   subAgentToolResults,
                 };
               } else {
-                const streamResult = await agent.streamLegacy(effectivePrompt, {
+                const streamResult = await resolvedAgent.streamLegacy(effectivePrompt, {
                   requestContext,
                   ...resolveObservabilityContext(context ?? {}),
                 });
@@ -4636,22 +4682,91 @@ export class Agent<
         }
 
         // Extract headers from ModelRouterLanguageModel if available
-        let headers: Record<string, string> | undefined;
+        let routerHeaders: Record<string, string> | undefined;
         if (model instanceof ModelRouterLanguageModel) {
-          headers = (model as any).config?.headers;
+          routerHeaders = (model as any).config?.headers;
         }
+
+        // Disabled entries are filtered out in getLLM(); skip resolving their dynamic
+        // fields so a throwing or side-effecting resolver on an unused entry can't
+        // break the whole fallback array.
+        const isEnabled = modelConfig.enabled ?? true;
+        const [resolvedModelSettings, resolvedProviderOptions, resolvedUserHeaders] = isEnabled
+          ? await Promise.all([
+              this.resolveFallbackDynamic(modelConfig.modelSettings, requestContext),
+              this.resolveFallbackDynamic(modelConfig.providerOptions, requestContext),
+              this.resolveFallbackDynamic(modelConfig.headers, requestContext),
+            ])
+          : [undefined, undefined, undefined];
+
+        const mergedHeaders =
+          routerHeaders || resolvedUserHeaders
+            ? { ...(routerHeaders ?? {}), ...(resolvedUserHeaders ?? {}) }
+            : undefined;
 
         return {
           id: modelId,
           model: model,
           maxRetries: modelConfig.maxRetries ?? 0,
-          enabled: modelConfig.enabled ?? true,
-          headers,
+          enabled: isEnabled,
+          headers: mergedHeaders,
+          modelSettings: resolvedModelSettings,
+          providerOptions: resolvedProviderOptions,
         };
       }),
     );
 
     return models;
+  }
+
+  /** @internal */
+  private async resolveFallbackDynamic<T>(
+    value: DynamicArgument<T> | undefined,
+    requestContext: RequestContext,
+  ): Promise<T | undefined> {
+    if (value === undefined) return undefined;
+    if (typeof value === 'function') {
+      return await (value as (args: { requestContext: RequestContext; mastra?: Mastra }) => Promise<T> | T)({
+        requestContext,
+        mastra: this.#mastra,
+      });
+    }
+    return value;
+  }
+
+  /**
+   * Loads the agentic-loop workflow snapshot for resume, or throws an actionable error.
+   * Used by resumeStream and resumeGenerate to fail fast at the agent boundary.
+   * @internal
+   */
+  async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const existingSnapshot = await workflowsStore?.loadWorkflowSnapshot({
+      workflowName: 'agentic-loop',
+      runId,
+    });
+
+    if (!existingSnapshot) {
+      const hasStorage = !!workflowsStore;
+      throw new MastraError({
+        id: 'AGENT_RESUME_NO_SNAPSHOT_FOUND',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text:
+          `Agent "${this.name}" ${method}() could not find a suspended run for runId "${runId}". ` +
+          (hasStorage
+            ? `The run may have already completed, never suspended, or the runId is invalid. `
+            : `No storage is configured on this Mastra instance, so workflow snapshots cannot be persisted. Register the agent on a Mastra instance with persistent storage (e.g. PostgreSQL, LibSQL). `) +
+          `Ensure you are calling ${method}() only with a runId from a currently-suspended run.`,
+        details: {
+          runId,
+          agentName: this.name,
+          hasStorage,
+        },
+      });
+    }
+
+    return existingSnapshot;
   }
 
   /**
@@ -4671,6 +4786,19 @@ export class Agent<
       }
     }
     const requestContext = options.requestContext || new RequestContext();
+
+    // Build version overrides by merging: Mastra defaults < requestContext < call-site
+    const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
+    let mergedVersions = mergeVersionOverrides(this.#mastra?.getVersionOverrides(), requestVersions);
+
+    // Merge call-site version overrides on top (call-site wins over request + Mastra defaults)
+    if (options.versions) {
+      mergedVersions = mergeVersionOverrides(mergedVersions, options.versions);
+    }
+
+    if (mergedVersions) {
+      requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
+    }
 
     // Inject browser context for BrowserContextProcessor
     if (this.#browser && !requestContext.has('browser')) {
@@ -4808,6 +4936,7 @@ export class Agent<
 
     // Create a capabilities object with bound methods
     const capabilities = {
+      agent: this,
       agentName: this.name,
       logger: this.logger,
       getMemory: this.getMemory.bind(this),
@@ -5586,11 +5715,8 @@ export class Agent<
       });
     }
 
-    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const existingSnapshot = await workflowsStore?.loadWorkflowSnapshot({
-      workflowName: 'agentic-loop',
-      runId: streamOptions?.runId ?? '',
-    });
+    const runId = streamOptions?.runId ?? '';
+    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeStream' });
 
     const result = await this.#execute({
       ...mergedStreamOptions,
@@ -5714,11 +5840,8 @@ export class Agent<
       });
     }
 
-    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-    const existingSnapshot = await workflowsStore?.loadWorkflowSnapshot({
-      workflowName: 'agentic-loop',
-      runId: options?.runId ?? '',
-    });
+    const runId = options?.runId ?? '';
+    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeGenerate' });
 
     const result = await this.#execute({
       ...mergedOptions,

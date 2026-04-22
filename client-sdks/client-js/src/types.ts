@@ -1621,6 +1621,7 @@ export interface GetSystemPackagesResponse {
   cmsEnabled: boolean;
   storageType?: string;
   observabilityStorageType?: string;
+  observabilityRuntimeStrategy?: 'realtime' | 'batch-with-updates' | 'insert-only' | 'event-sourced';
 }
 
 // ============================================================================

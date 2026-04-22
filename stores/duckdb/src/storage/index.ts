@@ -121,6 +121,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return delegate.init(...args);
   }
 
+  async migrateSpans(
+    ...args: Parameters<ObservabilityStoreImpl['migrateSpans']>
+  ): ReturnType<ObservabilityStoreImpl['migrateSpans']> {
+    const delegate = await this.requireDelegate();
+    return delegate.migrateSpans(...args);
+  }
+
   async dangerouslyClearAll(
     ...args: Parameters<ObservabilityStoreImpl['dangerouslyClearAll']>
   ): ReturnType<ObservabilityStoreImpl['dangerouslyClearAll']> {
@@ -159,6 +166,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   ): ReturnType<ObservabilityStoreImpl['getTrace']> {
     const delegate = await this.requireDelegate();
     return delegate.getTrace(...args);
+  }
+
+  async getTraceLight(
+    ...args: Parameters<ObservabilityStoreImpl['getTraceLight']>
+  ): ReturnType<ObservabilityStoreImpl['getTraceLight']> {
+    const delegate = await this.requireDelegate();
+    return delegate.getTraceLight(...args);
   }
 
   async listTraces(

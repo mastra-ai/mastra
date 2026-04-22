@@ -57,4 +57,33 @@ describe('AISDKV5LanguageModel', () => {
       expect(call.tools[0]).not.toHaveProperty('strict');
     },
   );
+
+  describe('serializeForSpan', () => {
+    it('returns only identity fields', () => {
+      const model = createMockV2Model();
+      const wrapped = new AISDKV5LanguageModel(
+        Object.assign(model, { gatewayId: 'mastra' }) as LanguageModelV2 & { gatewayId?: string },
+      );
+
+      expect(wrapped.serializeForSpan()).toEqual({
+        specificationVersion: 'v2',
+        modelId: 'test-model',
+        provider: 'openai-compatible',
+        gatewayId: 'mastra',
+      });
+    });
+
+    it('does not expose the wrapped provider SDK client', () => {
+      const model = createMockV2Model();
+      const wrapped = new AISDKV5LanguageModel(model);
+
+      const serialized = JSON.stringify(wrapped.serializeForSpan());
+
+      // supportedUrls (regex map / PromiseLike) and doGenerate/doStream
+      // closures from the wrapped model should not appear.
+      expect(serialized).not.toContain('supportedUrls');
+      expect(serialized).not.toContain('doGenerate');
+      expect(serialized).not.toContain('doStream');
+    });
+  });
 });

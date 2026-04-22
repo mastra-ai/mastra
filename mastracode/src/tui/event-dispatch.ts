@@ -218,10 +218,12 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
 
     case 'om_activation': {
       const activationEvent = event as Extract<HarnessEvent, { type: 'om_activation' }> & {
-        triggeredBy?: 'threshold' | 'ttl';
+        triggeredBy?: 'threshold' | 'ttl' | 'provider_change';
         lastActivityAt?: number;
         ttlExpiredMs?: number;
         activateAfterIdle?: number;
+        previousModel?: string;
+        currentModel?: string;
       };
       handleOMActivation(
         ectx,
@@ -231,6 +233,8 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
         activationEvent.triggeredBy,
         activationEvent.activateAfterIdle,
         activationEvent.ttlExpiredMs,
+        activationEvent.previousModel,
+        activationEvent.currentModel,
       );
       break;
     }

@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.15.0-alpha.2",
+  "version": "0.15.0",
   "description": "",
   "type": "module",
   "files": [
@@ -69,7 +69,7 @@
     "@mastra/mcp": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/pg": "workspace:*",
-    "@tavily/core": "^0.7.2",
+    "@mastra/tavily": "workspace:*",
     "ai": "^6.0.116",
     "chalk": "^5.5.0",
     "cli-highlight": "^2.1.11",
@@ -90,7 +90,7 @@
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.39.4",
+    "eslint": "^10.2.1",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
     "typescript": "catalog:",
