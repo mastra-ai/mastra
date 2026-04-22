@@ -87,7 +87,9 @@ export const agent = new Agent({
 })
 ```
 
-Mastra inserts a temporal gap marker when the gap is at least 15 minutes. The marker is stored in memory and also emitted as a transient reminder event, so clients can render it as a lightweight timeline hint.
+Mastra inserts a temporal gap marker when the gap is at least 10 minutes. The marker is stored in memory and also emitted as a transient reminder event, so clients can render it as a lightweight timeline hint.
+
+The observer also sees these markers when it processes the thread, so the observations it writes can anchor memories to when they happened (for example, "User asked about deployment after a 2-day gap").
 
 See [the API reference](/reference/memory/observational-memory#configuration) for the full configuration shape.
 
