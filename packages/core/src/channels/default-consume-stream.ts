@@ -298,9 +298,9 @@ export async function defaultConsumeStream(args: ConsumeStreamArgs): Promise<voi
 
   // Check for errors that occurred during streaming
   if (stream.error) {
-    const msg = stream.error.message;
-    const display = msg.length > 500 ? msg.slice(0, 500) + '…' : msg;
+    const formatted = adapterConfig?.formatError ? adapterConfig.formatError(stream.error) : stream.error.message;
+    const display = typeof formatted === 'string' && formatted.length > 500 ? formatted.slice(0, 500) + '…' : formatted;
     logger?.error(`[${platform}] Stream completed with error`, { error: display });
-    await sdkThread.post(`❌ Error: ${display}`);
+    await sdkThread.post(typeof display === 'string' && !adapterConfig?.formatError ? `❌ Error: ${display}` : display);
   }
 }
