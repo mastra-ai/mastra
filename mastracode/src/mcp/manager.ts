@@ -15,6 +15,9 @@ import type { McpConfig, McpHttpServerConfig, McpServerConfig, McpServerStatus, 
 const MASTRACODE_MCP_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const OAUTH_CALLBACK_PATH = '/oauth/callback';
 const OAUTH_CALLBACK_TIMEOUT_MS = 120_000;
+const OAUTH_TIMEOUT_ERROR = 'OAuth authorization timed out';
+const OAUTH_SUCCESS_HTML =
+  '<html><body><h2>Authorization successful.</h2><p>You can close this tab.</p></body></html>';
 
 /** Summary of MCP initialization result. */
 export interface McpInitResult {
@@ -54,8 +57,15 @@ export interface McpManager {
 
 interface OAuthCallbackServer {
   port: number;
-  waitForCode(): Promise<string | null>;
+  arm(expectedState: string): void;
+  reset(): void;
+  waitForCode(): Promise<OAuthCallbackResult | null>;
   close(): void;
+}
+
+interface OAuthCallbackResult {
+  code: string;
+  state: string;
 }
 
 function getTransport(cfg: McpServerConfig): 'stdio' | 'http' {
@@ -79,7 +89,8 @@ function openBrowser(url: string): void {
 
 function startOAuthCallbackServer(): Promise<OAuthCallbackServer> {
   return new Promise((resolve, reject) => {
-    let receivedCode: string | null = null;
+    let expectedState: string | null = null;
+    let callbackResult: OAuthCallbackResult | null = null;
     let cancelled = false;
 
     const server = http.createServer((req, res) => {
@@ -90,6 +101,12 @@ function startOAuthCallbackServer(): Promise<OAuthCallbackServer> {
         return;
       }
 
+      if (!expectedState) {
+        res.writeHead(409);
+        res.end('No OAuth authorization is pending');
+        return;
+      }
+
       const code = url.searchParams.get('code');
       if (!code) {
         res.writeHead(400);
@@ -97,9 +114,23 @@ function startOAuthCallbackServer(): Promise<OAuthCallbackServer> {
         return;
       }
 
-      receivedCode = code;
+      const state = url.searchParams.get('state');
+      if (!state) {
+        res.writeHead(400);
+        res.end('Missing OAuth state');
+        return;
+      }
+
+      if (state !== expectedState) {
+        res.writeHead(400);
+        res.end('State mismatch');
+        return;
+      }
+
+      callbackResult = { code, state };
+      expectedState = null;
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end('<html><body><h2>Authorization successful.</h2><p>You can close this tab.</p></body></html>');
+      res.end(OAUTH_SUCCESS_HTML);
     });
 
     server.listen(0, '127.0.0.1', () => {
@@ -113,11 +144,19 @@ function startOAuthCallbackServer(): Promise<OAuthCallbackServer> {
 
       resolve({
         port,
+        arm(state) {
+          callbackResult = null;
+          expectedState = state;
+        },
+        reset() {
+          callbackResult = null;
+          expectedState = null;
+        },
         async waitForCode() {
           const interval = 100;
           const iterations = OAUTH_CALLBACK_TIMEOUT_MS / interval;
           for (let i = 0; i < iterations; i++) {
-            if (receivedCode) return receivedCode;
+            if (callbackResult) return callbackResult;
             if (cancelled) return null;
             await new Promise(r => setTimeout(r, interval));
           }
@@ -125,6 +164,8 @@ function startOAuthCallbackServer(): Promise<OAuthCallbackServer> {
         },
         close() {
           cancelled = true;
+          callbackResult = null;
+          expectedState = null;
           server.close();
         },
       });
@@ -134,17 +175,30 @@ function startOAuthCallbackServer(): Promise<OAuthCallbackServer> {
   });
 }
 
-interface OAuthContext {
+interface OAuthSession {
   callbackServer: OAuthCallbackServer;
+  currentState: string | null;
   redirectTriggered: boolean;
+  provider: MCPOAuthClientProvider;
+  serverName: string;
+  serverUrl: URL;
 }
 
-function createOAuthProvider(serverName: string, dataDir: string, oauthCtx: OAuthContext): MCPOAuthClientProvider {
+async function createOAuthSession(serverName: string, dataDir: string, serverUrl: URL): Promise<OAuthSession> {
+  const callbackServer = await startOAuthCallbackServer();
   const storagePath = join(dataDir, 'mcp-oauth.json');
   const storage = new McpOAuthFileStorage(serverName, storagePath);
-  const redirectUrl = `http://localhost:${oauthCtx.callbackServer.port}${OAUTH_CALLBACK_PATH}`;
+  const redirectUrl = `http://localhost:${callbackServer.port}${OAUTH_CALLBACK_PATH}`;
+  const session: OAuthSession = {
+    callbackServer,
+    currentState: null,
+    redirectTriggered: false,
+    provider: null as unknown as MCPOAuthClientProvider,
+    serverName,
+    serverUrl,
+  };
 
-  return new MCPOAuthClientProvider({
+  session.provider = new MCPOAuthClientProvider({
     redirectUrl,
     clientMetadata: {
       redirect_uris: [redirectUrl],
@@ -153,30 +207,29 @@ function createOAuthProvider(serverName: string, dataDir: string, oauthCtx: OAut
       response_types: ['code'],
     },
     storage,
+    stateGenerator: () => {
+      const state = crypto.randomUUID();
+      session.currentState = state;
+      return state;
+    },
     onRedirectToAuthorization: (url: URL) => {
-      oauthCtx.redirectTriggered = true;
+      if (!session.currentState) {
+        throw new Error(`OAuth state was not initialized for server "${serverName}"`);
+      }
+      session.redirectTriggered = true;
+      session.callbackServer.arm(session.currentState);
       openBrowser(url.toString());
     },
   });
-}
-
-function hasOAuthServers(servers: Record<string, McpServerConfig>): boolean {
-  return Object.values(servers).some(cfg => 'url' in cfg && (cfg as McpHttpServerConfig).auth === 'oauth');
+  return session;
 }
 
 async function buildServerDefs(
   servers: Record<string, McpServerConfig>,
   dataDir: string,
-): Promise<{ defs: Record<string, MastraMCPServerDefinition>; oauthCtx: OAuthContext | null }> {
+): Promise<{ defs: Record<string, MastraMCPServerDefinition>; oauthSessions: Map<string, OAuthSession> }> {
   const defs: Record<string, MastraMCPServerDefinition> = {};
-  let oauthCtx: OAuthContext | null = null;
-
-  if (hasOAuthServers(servers)) {
-    oauthCtx = {
-      callbackServer: await startOAuthCallbackServer(),
-      redirectTriggered: false,
-    };
-  }
+  const oauthSessions = new Map<string, OAuthSession>();
 
   for (const [name, cfg] of Object.entries(servers)) {
     if ('url' in cfg) {
@@ -185,8 +238,10 @@ async function buildServerDefs(
         url: new URL(httpCfg.url),
         requestInit: httpCfg.headers ? { headers: httpCfg.headers } : undefined,
       };
-      if (httpCfg.auth === 'oauth' && oauthCtx) {
-        def.authProvider = createOAuthProvider(name, dataDir, oauthCtx);
+      if (httpCfg.auth === 'oauth') {
+        const oauthSession = await createOAuthSession(name, dataDir, def.url as URL);
+        def.authProvider = oauthSession.provider;
+        oauthSessions.set(name, oauthSession);
       }
       defs[name] = def;
     } else {
@@ -194,7 +249,7 @@ async function buildServerDefs(
     }
   }
 
-  return { defs, oauthCtx };
+  return { defs, oauthSessions };
 }
 
 /**
@@ -216,6 +271,7 @@ export function createMcpManager(
   let config = applyExtraServers(loadMcpConfig(projectDir));
   let client: MCPClient | null = null;
   let tools: Record<string, any> = {};
+  let oauthSessions = new Map<string, OAuthSession>();
   let serverStatuses = new Map<string, McpServerStatus>();
   let stderrLogs = new Map<string, string[]>();
   let initialized = false;
@@ -336,48 +392,80 @@ export function createMcpManager(
     }
   }
 
+  function setOAuthServerError(name: string, error: string): void {
+    const cfg = config.mcpServers?.[name];
+    if (!cfg) return;
+
+    serverStatuses.set(name, {
+      name,
+      connected: false,
+      toolCount: 0,
+      toolNames: [],
+      transport: getTransport(cfg),
+      error,
+    });
+  }
+
+  async function completePendingOAuthAuthorizations(targetNames?: Set<string>): Promise<boolean> {
+    let authorizedAny = false;
+
+    for (const [name, session] of oauthSessions) {
+      if (targetNames && !targetNames.has(name)) continue;
+      if (!session.redirectTriggered) continue;
+
+      const callbackResult = await session.callbackServer.waitForCode();
+      session.redirectTriggered = false;
+      session.currentState = null;
+      session.callbackServer.reset();
+
+      if (!callbackResult) {
+        setOAuthServerError(name, OAUTH_TIMEOUT_ERROR);
+        continue;
+      }
+
+      try {
+        await auth(session.provider, {
+          serverUrl: session.serverUrl,
+          authorizationCode: callbackResult.code,
+        });
+        authorizedAny = true;
+      } catch (error) {
+        setOAuthServerError(name, error instanceof Error ? error.message : String(error));
+      }
+    }
+
+    return authorizedAny;
+  }
+
   async function connectAndCollectTools(): Promise<void> {
     const servers = config.mcpServers;
     if (!servers || Object.keys(servers).length === 0) {
       return;
     }
 
-    const { defs, oauthCtx } = await buildServerDefs(servers, resolvedDataDir);
+    const initialBuild = await buildServerDefs(servers, resolvedDataDir);
+    oauthSessions = initialBuild.oauthSessions;
 
     try {
-      await tryConnect(servers, defs);
+      await tryConnect(servers, initialBuild.defs);
     } catch {
       // tryConnect sets statuses on failure — continue to check for auth redirect
     }
 
-    if (!oauthCtx?.redirectTriggered) {
-      oauthCtx?.callbackServer.close();
+    const didAuthorize = await completePendingOAuthAuthorizations();
+    if (!didAuthorize) {
       return;
-    }
-
-    const code = await oauthCtx.callbackServer.waitForCode();
-    oauthCtx.callbackServer.close();
-
-    if (!code) return;
-
-    for (const [, def] of Object.entries(defs)) {
-      if (!def.authProvider) continue;
-      try {
-        await auth(def.authProvider, {
-          serverUrl: def.url as URL,
-          authorizationCode: code,
-        });
-      } catch {
-        // Token exchange failed — continue with others
-      }
     }
 
     await safeDisconnect();
     serverStatuses = new Map();
     tools = {};
 
+    const retryBuild = await buildServerDefs(servers, resolvedDataDir);
+    oauthSessions = retryBuild.oauthSessions;
+
     try {
-      await tryConnect(servers, defs);
+      await tryConnect(servers, retryBuild.defs);
     } catch {
       // Retry failed — statuses already set by tryConnect
     }
@@ -392,6 +480,11 @@ export function createMcpManager(
       }
       client = null;
     }
+
+    for (const session of oauthSessions.values()) {
+      session.callbackServer.close();
+    }
+    oauthSessions = new Map();
   }
 
   return {
@@ -450,88 +543,93 @@ export function createMcpManager(
       }
 
       const transport = getTransport(cfg);
+      const activeClient = client;
 
-      // Remove old tools for this server
-      const prefix = `${name}_`;
-      for (const key of Object.keys(tools)) {
-        if (key.startsWith(prefix)) {
-          delete tools[key];
-        }
-      }
-
-      // Clear old logs and mark as connecting
-      stderrLogs.delete(name);
-      serverStatuses.set(name, {
-        name,
-        connected: false,
-        connecting: true,
-        toolCount: 0,
-        toolNames: [],
-        transport,
-      });
-
-      try {
-        // Use MCPClient's per-server reconnect
-        await client.reconnectServer(name);
-
-        // Recapture stderr for the reconnected server
-        captureStderr(name);
-
-        // Fetch updated toolsets to get this server's tools
-        const { toolsets, errors } = await client.listToolsetsWithErrors();
-        const serverTools = toolsets[name];
-        const serverError = errors[name];
-
-        if (serverError) {
-          const status: McpServerStatus = {
-            name,
-            connected: false,
-            toolCount: 0,
-            toolNames: [],
-            transport,
-            error: serverError,
-          };
-          serverStatuses.set(name, status);
-          return status;
-        } else if (serverTools && Object.keys(serverTools).length > 0) {
-          const toolNames = Object.keys(serverTools).map(t => `${name}_${t}`);
-          for (const [toolName, toolConfig] of Object.entries(serverTools)) {
-            tools[`${name}_${toolName}`] = toolConfig;
+      const attemptReconnect = async (): Promise<McpServerStatus> => {
+        const prefix = `${name}_`;
+        for (const key of Object.keys(tools)) {
+          if (key.startsWith(prefix)) {
+            delete tools[key];
           }
-          const status: McpServerStatus = {
-            name,
-            connected: true,
-            toolCount: toolNames.length,
-            toolNames,
-            transport,
-          };
-          serverStatuses.set(name, status);
-          return status;
-        } else {
-          const status: McpServerStatus = {
-            name,
-            connected: false,
-            toolCount: 0,
-            toolNames: [],
-            transport,
-            error: 'Failed to connect',
-          };
-          serverStatuses.set(name, status);
-          return status;
         }
-      } catch (error) {
-        const errMsg = error instanceof Error ? error.message : String(error);
-        const status: McpServerStatus = {
+
+        stderrLogs.delete(name);
+        serverStatuses.set(name, {
           name,
           connected: false,
+          connecting: true,
           toolCount: 0,
           toolNames: [],
           transport,
-          error: errMsg,
-        };
-        serverStatuses.set(name, status);
-        return status;
+        });
+
+        try {
+          await activeClient.reconnectServer(name);
+          captureStderr(name);
+
+          const { toolsets, errors } = await activeClient.listToolsetsWithErrors();
+          const serverTools = toolsets[name];
+          const serverError = errors[name];
+
+          if (serverError) {
+            const status: McpServerStatus = {
+              name,
+              connected: false,
+              toolCount: 0,
+              toolNames: [],
+              transport,
+              error: serverError,
+            };
+            serverStatuses.set(name, status);
+            return status;
+          } else if (serverTools && Object.keys(serverTools).length > 0) {
+            const toolNames = Object.keys(serverTools).map(t => `${name}_${t}`);
+            for (const [toolName, toolConfig] of Object.entries(serverTools)) {
+              tools[`${name}_${toolName}`] = toolConfig;
+            }
+            const status: McpServerStatus = {
+              name,
+              connected: true,
+              toolCount: toolNames.length,
+              toolNames,
+              transport,
+            };
+            serverStatuses.set(name, status);
+            return status;
+          } else {
+            const status: McpServerStatus = {
+              name,
+              connected: false,
+              toolCount: 0,
+              toolNames: [],
+              transport,
+              error: 'Failed to connect',
+            };
+            serverStatuses.set(name, status);
+            return status;
+          }
+        } catch (error) {
+          const errMsg = error instanceof Error ? error.message : String(error);
+          const status: McpServerStatus = {
+            name,
+            connected: false,
+            toolCount: 0,
+            toolNames: [],
+            transport,
+            error: errMsg,
+          };
+          serverStatuses.set(name, status);
+          return status;
+        }
+      };
+
+      const initialStatus = await attemptReconnect();
+      const didAuthorize = await completePendingOAuthAuthorizations(new Set([name]));
+      if (!didAuthorize) {
+        return serverStatuses.get(name) ?? initialStatus;
       }
+
+      return attemptReconnect();
     },
 
     disconnect: safeDisconnect,

@@ -97,22 +97,23 @@ Launch a local process that communicates via stdin/stdout. Requires a `command` 
 
 #### HTTP servers
 
-Connect to a remote MCP server via URL. Requires a `url` field. The optional `headers` field lets you pass static headers such as authentication tokens.
+Connect to a remote MCP server via URL. Requires a `url` field. The optional `headers` field lets you pass static headers. Set `auth` to `"oauth"` when the server requires an OAuth flow.
 
 ```json title=".mastracode/mcp.json"
 {
   "mcpServers": {
     "remote-api": {
-      "url": "https://mcp.example.com/sse",
+      "url": "https://mcp.example.com/mcp",
       "headers": {
-        "Authorization": "Bearer your-token"
-      }
+        "X-Client": "mastracode"
+      },
+      "auth": "oauth"
     }
   }
 }
 ```
 
-Since `headers` only supports static values, use a stdio wrapper for dynamic authentication such as token refresh.
+Mastra Code stores OAuth tokens automatically for HTTP MCP servers. Static `headers` are still sent with every request, so use them for fixed metadata and `auth: "oauth"` for dynamic authorization.
 
 #### Startup behavior
 
