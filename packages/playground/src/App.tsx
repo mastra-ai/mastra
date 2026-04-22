@@ -26,6 +26,8 @@ import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } fr
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/link';
+import AgentBuilder from './pages/agent-builder';
+import AgentBuilderAdmin from './pages/agent-builder/admin';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
@@ -86,6 +88,7 @@ import Workspace from './pages/workspace';
 import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
 import { Layout } from '@/components/layout';
 import { MinimalLayout } from '@/components/minimal-layout';
+import { AgentBuilderLayout } from '@/domains/agent-builder/layout/agent-builder-layout';
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import { createFetchWithRefresh } from '@/domains/auth/hooks/fetch-with-refresh';
 import { PlaygroundConfigGuard } from '@/domains/configuration/components/playground-config-guard';
@@ -171,6 +174,19 @@ const MinimalRootLayout = () => {
   );
 };
 
+const AgentBuilderRootLayout = () => {
+  const navigate = useNavigate();
+  const frameworkNavigate = (path: string) => navigate(path, { viewTransition: true });
+
+  return (
+    <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
+      <AgentBuilderLayout>
+        <Outlet />
+      </AgentBuilderLayout>
+    </LinkComponentProvider>
+  );
+};
+
 // Determine platform status at module level for route configuration
 const isMastraPlatform = Boolean(window.MASTRA_CLOUD_API_ENDPOINT);
 const isExperimentalFeatures = coreFeatures.has('datasets');
@@ -191,6 +207,14 @@ const routes = [
   // Auth pages - no layout
   { path: '/login', element: <Login /> },
   { path: '/signup', element: <SignUp /> },
+  {
+    path: '/agent-builder',
+    element: <AgentBuilderRootLayout />,
+    children: [
+      { index: true, element: <AgentBuilder /> },
+      { path: 'admin', element: <AgentBuilderAdmin /> },
+    ],
+  },
   {
     element: <MinimalRootLayout />,
     children: [
