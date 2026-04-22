@@ -157,14 +157,14 @@ curl -sw "\nHTTP %{http_code}\n" -X POST \
 The current server returns the following. These are the values to assert
 against — flag any deviation as a regression.
 
-| Case                             | HTTP | Body shape                                               |
-| -------------------------------- | ---- | -------------------------------------------------------- |
-| Unknown agent id                 | 404  | `{ error: "Agent with id <id> not found" }` (or similar) |
-| Unknown tool id                  | 404  | `{ error: "Tool not found" }`                            |
-| Unknown workflow id              | 404  | `{ error: "Workflow not found" }`                        |
-| Workflow missing required input  | 500  | `{ error: "Invalid input data: <field> expected ..." }`  |
-| Tool missing required input      | 200  | `{ error: true, validationErrors: { ... } }`             |
-| Invalid JSON body                | 400  | `{ error: "..." }` (Hono body parse failure)             |
+| Case                            | HTTP | Body shape                                               |
+| ------------------------------- | ---- | -------------------------------------------------------- |
+| Unknown agent id                | 404  | `{ error: "Agent with id <id> not found" }` (or similar) |
+| Unknown tool id                 | 404  | `{ error: "Tool not found" }`                            |
+| Unknown workflow id             | 404  | `{ error: "Workflow not found" }`                        |
+| Workflow missing required input | 500  | `{ error: "Invalid input data: <field> expected ..." }`  |
+| Tool missing required input     | 200  | `{ error: true, validationErrors: { ... } }`             |
+| Invalid JSON body               | 400  | `{ error: "..." }` (Hono body parse failure)             |
 
 **Known inconsistencies** (document if you observe, don't treat as
 failures unless they change):

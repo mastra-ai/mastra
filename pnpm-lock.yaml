@@ -42,6 +42,7 @@ overrides:
   prismjs@<1.30.0: ^1.30.0
   serialize-javascript@<7.0.5: ^7.0.5
   '@tootallnate/once@<3.0.1': ^3.0.1
+  '@vercel/oidc': 3.1.0
 
 patchedDependencies:
   '@changesets/get-dependents-graph':
@@ -15993,10 +15994,6 @@ packages:
       '@aws-sdk/credential-provider-web-identity':
         optional: true
 
-  '@vercel/oidc@3.0.5':
-    resolution: {integrity: sha512-fnYhv671l+eTTp48gB4zEsTW/YtRgRPnkI2nT7x6qw5rkI1Lq2hTmQIpHPgyThI0znLK+vX2n9XxKdXZ7BUbbw==}
-    engines: {node: '>= 20'}
-
   '@vercel/oidc@3.1.0':
     resolution: {integrity: sha512-Fw28YZpRnA3cAHHDlkt7xQHiJ0fcL+NRcIqsocZQUSmbzeIKRpwttJjik5ZGanXP+vlA4SbTg+AbA3bP363l+w==}
     engines: {node: '>= 20'}
@@ -26038,7 +26035,7 @@ snapshots:
     dependencies:
       '@ai-sdk/provider': 2.0.0
       '@ai-sdk/provider-utils': 3.0.17(zod@4.3.6)
-      '@vercel/oidc': 3.0.5
+      '@vercel/oidc': 3.1.0
       zod: 4.3.6
 
   '@ai-sdk/gateway@2.0.35(zod@4.3.6)':
@@ -37401,8 +37398,6 @@ snapshots:
   '@vercel/functions@1.6.0(@aws-sdk/credential-provider-web-identity@3.972.32)':
     optionalDependencies:
       '@aws-sdk/credential-provider-web-identity': 3.972.32
-
-  '@vercel/oidc@3.0.5': {}
 
   '@vercel/oidc@3.1.0': {}
 
