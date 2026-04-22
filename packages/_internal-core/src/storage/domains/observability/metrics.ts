@@ -50,6 +50,7 @@ const costMetadField = z.record(z.string(), z.unknown()).nullish().describe('Str
  */
 export const metricRecordSchema = z
   .object({
+    metricId: z.string().nullish().describe('Unique id for this metric event'),
     timestamp: z.date().describe('When the metric was recorded'),
     name: metricNameField,
     value: metricValueField,
