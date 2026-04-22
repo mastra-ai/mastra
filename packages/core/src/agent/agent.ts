@@ -194,6 +194,7 @@ export class Agent<
   #maxProcessorRetries?: number;
   #errorProcessors?: DynamicArgument<ErrorProcessorOrWorkflow[], TRequestContext>;
   #browser?: MastraBrowser;
+  #hasExplicitBrowser = false;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   #backgroundTasks?: AgentBackgroundConfig;
   readonly #options?: AgentCreateOptions;
@@ -327,7 +328,24 @@ export class Agent<
     }
 
     if (config.browser) {
+      // Runtime check: Agent requires SDK providers (AgentBrowser, StagehandBrowser)
+      // CLI providers (BrowserViewer) should be used with Workspace instead
+      if (config.browser.providerType !== 'sdk') {
+        const mastraError = new MastraError({
+          id: 'AGENT_INVALID_BROWSER_PROVIDER',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: config.name,
+            providerType: config.browser.providerType,
+          },
+          text: `Agent.browser requires an SDK provider (providerType: 'sdk'), but received '${config.browser.providerType}'. Use @mastra/agent-browser or @mastra/stagehand for Agent.browser. For CLI providers like @mastra/browser-viewer, use Workspace.browser instead.`,
+        });
+        this.logger.trackException(mastraError);
+        throw mastraError;
+      }
       this.#browser = config.browser;
+      this.#hasExplicitBrowser = true;
     }
 
     if (config.workspace) {
@@ -469,6 +487,9 @@ export class Agent<
    */
   setBrowser(browser: MastraBrowser | undefined): void {
     this.#browser = browser;
+    // Mark as explicit so workspace browser doesn't overwrite
+    // Setting to undefined is also explicit (disabling browser tools)
+    this.#hasExplicitBrowser = true;
   }
 
   /**
@@ -476,7 +497,7 @@ export class Agent<
    * Used by Harness to avoid overwriting agent-level browser configuration.
    */
   hasOwnBrowser(): boolean {
-    return Boolean(this.#browser);
+    return this.#hasExplicitBrowser;
   }
 
   /**
@@ -1111,6 +1132,7 @@ export class Agent<
     // If agent has its own workspace configured, use it
     if (this.#workspace) {
       if (typeof this.#workspace !== 'function') {
+        this.#setBrowserFromWorkspace(this.#workspace);
         return this.#workspace;
       }
 
@@ -1121,6 +1143,10 @@ export class Agent<
       const resolvedWorkspace = await Promise.resolve(result);
 
       if (!resolvedWorkspace) {
+        // Clear derived browser when factory returns no workspace
+        if (!this.#hasExplicitBrowser) {
+          this.#browser = undefined;
+        }
         return undefined;
       }
 
@@ -1136,11 +1162,37 @@ export class Agent<
         });
       }
 
+      this.#setBrowserFromWorkspace(resolvedWorkspace);
+
       return resolvedWorkspace;
     }
 
     // Fall back to Mastra's global workspace
-    return this.#mastra?.getWorkspace();
+    const globalWorkspace = this.#mastra?.getWorkspace();
+    if (globalWorkspace) {
+      this.#setBrowserFromWorkspace(globalWorkspace);
+    } else if (!this.#hasExplicitBrowser) {
+      // Clear derived browser when no workspace available
+      this.#browser = undefined;
+    }
+    return globalWorkspace;
+  }
+
+  /**
+   * Sets the agent's browser from workspace if:
+   * 1. Agent doesn't already have a browser configured (SDK approach)
+   * 2. Workspace has a browser configured (CLI approach)
+   * @internal
+   */
+  #setBrowserFromWorkspace(workspace: AnyWorkspace): void {
+    // Skip if agent has an explicitly configured browser (SDK approach takes precedence)
+    if (this.#hasExplicitBrowser) {
+      return;
+    }
+
+    // Keep browser in sync with workspace per-request; clear when absent
+    // This allows factory workspaces to return different browsers per request
+    this.#browser = workspace.browser;
   }
 
   get voice() {
@@ -4800,8 +4852,13 @@ export class Agent<
       requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
     }
 
+    // Resolve workspace early so we can get browser from it if needed
+    const earlyWorkspace = await this.getWorkspace({ requestContext });
+
     // Inject browser context for BrowserContextProcessor
-    if (this.#browser && !requestContext.has('browser')) {
+    // Check both agent's browser (SDK providers) and workspace's browser (CLI providers)
+    const browser = this.#browser ?? earlyWorkspace?.browser;
+    if (browser && !requestContext.has('browser')) {
       // Get threadId early for browser context - can come from requestContext, options, or snapshot
       // Normalize memory.thread which can be a string or { id, ... } object
       const memoryThread = options.memory?.thread;
@@ -4814,14 +4871,21 @@ export class Agent<
       // Use thread-aware running check to avoid cross-thread state leakage
       // In thread scope, only report running if this specific thread has a session
       const isThreadRunning = browserThreadId
-        ? this.#browser.hasThreadSession(browserThreadId) && this.#browser.isBrowserRunning()
-        : this.#browser.isBrowserRunning();
+        ? browser.hasThreadSession(browserThreadId) && browser.isBrowserRunning(browserThreadId)
+        : browser.isBrowserRunning();
 
       const browserCtx: BrowserContext = {
-        provider: this.#browser.provider,
-        sessionId: this.#browser.getSessionId(browserThreadId),
-        headless: this.#browser.headless,
-        currentUrl: isThreadRunning ? ((await this.#browser.getCurrentUrl(browserThreadId)) ?? undefined) : undefined,
+        provider: browser.provider,
+        providerType: browser.providerType,
+        sessionId: browser.getSessionId(browserThreadId),
+        headless: browser.headless,
+        currentUrl: isThreadRunning ? ((await browser.getCurrentUrl(browserThreadId)) ?? undefined) : undefined,
+        // For CLI providers, include CDP URL so agent can pass it to CLI commands
+        // Only expose CDP URL if the thread is actually running to avoid stale endpoints
+        cdpUrl:
+          browser.providerType === 'cli' && isThreadRunning
+            ? (browser.getCdpUrl(browserThreadId) ?? undefined)
+            : undefined,
       };
       requestContext.set('browser', browserCtx);
     }
@@ -4927,7 +4991,9 @@ export class Agent<
     });
 
     const memory = await this.getMemory({ requestContext });
-    const workspace = await this.getWorkspace({ requestContext });
+    // Reuse early workspace (resolved earlier for browser context) to avoid
+    // duplicate factory resolution which could create different instances
+    const workspace = earlyWorkspace;
 
     const saveQueueManager = new SaveQueueManager({
       logger: this.logger,
