@@ -2,7 +2,7 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
 
-function createRecordingStreamModel(modelId: string, responseText: string) {
+function createRecordingModel(modelId: string, responseText: string) {
   return new MockLanguageModelV2({
     modelId,
     doStream: async () => ({
@@ -17,21 +17,29 @@ function createRecordingStreamModel(modelId: string, responseText: string) {
         { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
       ]),
     }),
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+      finishReason: 'stop',
+      usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+      content: [{ type: 'text', text: responseText }],
+    }),
   });
 }
 
 describe('Agent default modelSettings', () => {
-  it('should not inject a temperature when the caller did not set one', async () => {
-    // Regression test for https://github.com/mastra-ai/mastra/issues/15240.
-    // Previously the agent stream workflow forced `temperature: 0` into modelSettings
-    // whenever the caller didn't specify one, which broke models that restrict
-    // temperature (for example Moonshot Kimi K2.5, which rejects any value other
-    // than 1 with `400 Bad Request`).
-    const model = createRecordingStreamModel('default-temperature', 'hello');
+  // Regression tests for https://github.com/mastra-ai/mastra/issues/15240.
+  // Previously the agent workflow forced `temperature: 0` into modelSettings
+  // whenever the caller didn't specify one, which broke models that restrict
+  // temperature (for example Moonshot Kimi K2.5, which rejects any value other
+  // than 1 with `400 Bad Request`).
+
+  it('stream: should not inject a temperature when the caller did not set one', async () => {
+    const model = createRecordingModel('stream-default-temperature', 'hello');
 
     const agent = new Agent({
-      id: 'agent-default-temperature',
-      name: 'Default Temperature Agent',
+      id: 'agent-stream-default-temperature',
+      name: 'Stream Default Temperature Agent',
       instructions: 'You are a test agent',
       model,
     });
@@ -40,15 +48,16 @@ describe('Agent default modelSettings', () => {
       await agent.stream('Hi')
     ).text;
 
-    expect(model.doStreamCalls[0]?.temperature).toBeUndefined();
+    expect(model.doStreamCalls).toHaveLength(1);
+    expect(model.doStreamCalls[0].temperature).toBeUndefined();
   });
 
-  it('should forward a temperature of 0 when the caller explicitly sets it', async () => {
-    const model = createRecordingStreamModel('explicit-zero-temperature', 'hello');
+  it('stream: should forward a temperature of 0 when the caller explicitly sets it', async () => {
+    const model = createRecordingModel('stream-explicit-zero-temperature', 'hello');
 
     const agent = new Agent({
-      id: 'agent-explicit-zero-temperature',
-      name: 'Explicit Zero Temperature Agent',
+      id: 'agent-stream-explicit-zero-temperature',
+      name: 'Stream Explicit Zero Temperature Agent',
       instructions: 'You are a test agent',
       model,
     });
@@ -57,6 +66,39 @@ describe('Agent default modelSettings', () => {
       await agent.stream('Hi', { modelSettings: { temperature: 0 } })
     ).text;
 
-    expect(model.doStreamCalls[0]?.temperature).toBe(0);
+    expect(model.doStreamCalls).toHaveLength(1);
+    expect(model.doStreamCalls[0].temperature).toBe(0);
+  });
+
+  it('generate: should not inject a temperature when the caller did not set one', async () => {
+    const model = createRecordingModel('generate-default-temperature', 'hello');
+
+    const agent = new Agent({
+      id: 'agent-generate-default-temperature',
+      name: 'Generate Default Temperature Agent',
+      instructions: 'You are a test agent',
+      model,
+    });
+
+    await agent.generate('Hi');
+
+    expect(model.doGenerateCalls).toHaveLength(1);
+    expect(model.doGenerateCalls[0].temperature).toBeUndefined();
+  });
+
+  it('generate: should forward a temperature of 0 when the caller explicitly sets it', async () => {
+    const model = createRecordingModel('generate-explicit-zero-temperature', 'hello');
+
+    const agent = new Agent({
+      id: 'agent-generate-explicit-zero-temperature',
+      name: 'Generate Explicit Zero Temperature Agent',
+      instructions: 'You are a test agent',
+      model,
+    });
+
+    await agent.generate('Hi', { modelSettings: { temperature: 0 } });
+
+    expect(model.doGenerateCalls).toHaveLength(1);
+    expect(model.doGenerateCalls[0].temperature).toBe(0);
   });
 });
