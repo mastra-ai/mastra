@@ -158,8 +158,8 @@ interface StorageAgentType {
   id: string;
   status: 'draft' | 'published' | 'archived';
   activeVersionId?: string;
-  authorId?: string;                  // multi-tenant filter
-  role?: 'agent' | 'supervisor';      // NEW — projects are supervisors
+  authorId?: string; // multi-tenant filter
+  role?: 'agent' | 'supervisor'; // NEW — projects are supervisors
   metadata?: Record<string, unknown>; // NEW — thin-record bag
   createdAt: Date;
   updatedAt: Date;
@@ -213,14 +213,14 @@ Same pattern as agents. Skills can now carry `visibility` and any forward-compat
 interface StorageUserPreferencesAgentStudio {
   starredAgents?: string[];
   starredSkills?: string[];
-  previewMode?: boolean;              // admin → end-user preview
+  previewMode?: boolean; // admin → end-user preview
   appearance?: 'light' | 'dark';
   agentsView?: 'grid' | 'list';
   agentsScope?: 'all' | 'mine' | 'team';
 }
 
 interface StorageUserPreferencesType {
-  userId: string;                     // primary key
+  userId: string; // primary key
   agentStudio: StorageUserPreferencesAgentStudio;
   metadata?: Record<string, unknown>;
   createdAt: Date;
@@ -240,36 +240,36 @@ All routes register through `packages/server/src/server/server-adapter/routes/in
 
 ### 6.1 Projects (`/projects`)
 
-| Method | Path | Permission | Notes |
-|---|---|---|---|
-| `POST` | `/projects` | `stored-agents:write` | Creates a `role: 'supervisor'` stored agent with `metadata.project` seeded and the 5 `project_*` tool keys pre-registered. Applies `defaultMemoryConfig` if unset. Auto-publishes version 1. |
-| `GET` | `/projects` | `stored-agents:read` | Lists supervisor records (author-scoped). |
-| `GET` | `/projects/:projectId` | `stored-agents:read` | 404 if record is not a supervisor. |
-| `PATCH` | `/projects/:projectId` | `stored-agents:write` | Uses `handleAutoVersioning` + auto-activate. Owner-gated. |
-| `DELETE` | `/projects/:projectId` | `stored-agents:delete` | Owner-gated. |
-| `POST` | `/projects/:projectId/invite-agent` | `stored-agents:write` | Appends to `metadata.project.invitedAgentIds` + supervisor `agents` snapshot; auto-stars for caller via user-preferences. |
-| `DELETE` | `/projects/:projectId/invite-agent/:agentId` | `stored-agents:write` | — |
-| `POST` | `/projects/:projectId/tasks` | `stored-agents:write` | — |
-| `PATCH` | `/projects/:projectId/tasks/:taskId` | `stored-agents:write` | — |
-| `DELETE` | `/projects/:projectId/tasks/:taskId` | `stored-agents:write` | — |
+| Method   | Path                                         | Permission             | Notes                                                                                                                                                                                        |
+| -------- | -------------------------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST`   | `/projects`                                  | `stored-agents:write`  | Creates a `role: 'supervisor'` stored agent with `metadata.project` seeded and the 5 `project_*` tool keys pre-registered. Applies `defaultMemoryConfig` if unset. Auto-publishes version 1. |
+| `GET`    | `/projects`                                  | `stored-agents:read`   | Lists supervisor records (author-scoped).                                                                                                                                                    |
+| `GET`    | `/projects/:projectId`                       | `stored-agents:read`   | 404 if record is not a supervisor.                                                                                                                                                           |
+| `PATCH`  | `/projects/:projectId`                       | `stored-agents:write`  | Uses `handleAutoVersioning` + auto-activate. Owner-gated.                                                                                                                                    |
+| `DELETE` | `/projects/:projectId`                       | `stored-agents:delete` | Owner-gated.                                                                                                                                                                                 |
+| `POST`   | `/projects/:projectId/invite-agent`          | `stored-agents:write`  | Appends to `metadata.project.invitedAgentIds` + supervisor `agents` snapshot; auto-stars for caller via user-preferences.                                                                    |
+| `DELETE` | `/projects/:projectId/invite-agent/:agentId` | `stored-agents:write`  | —                                                                                                                                                                                            |
+| `POST`   | `/projects/:projectId/tasks`                 | `stored-agents:write`  | —                                                                                                                                                                                            |
+| `PATCH`  | `/projects/:projectId/tasks/:taskId`         | `stored-agents:write`  | —                                                                                                                                                                                            |
+| `DELETE` | `/projects/:projectId/tasks/:taskId`         | `stored-agents:write`  | —                                                                                                                                                                                            |
 
 ### 6.2 User preferences (`/user/preferences`)
 
-| Method | Path | Auth | Notes |
-|---|---|---|---|
-| `GET` | `/user/preferences` | Required | Returns defaults if no row exists. 401 if no auth provider. |
-| `PATCH` | `/user/preferences` | Required | Deep-merge on `agentStudio`. |
+| Method  | Path                | Auth     | Notes                                                       |
+| ------- | ------------------- | -------- | ----------------------------------------------------------- |
+| `GET`   | `/user/preferences` | Required | Returns defaults if no row exists. 401 if no auth provider. |
+| `PATCH` | `/user/preferences` | Required | Deep-merge on `agentStudio`.                                |
 
 ### 6.3 Avatar upload
 
-| Method | Path | Permission | Notes |
-|---|---|---|---|
+| Method | Path                                   | Permission            | Notes                                                                 |
+| ------ | -------------------------------------- | --------------------- | --------------------------------------------------------------------- |
 | `POST` | `/stored/agents/:storedAgentId/avatar` | `stored-agents:write` | Base64 data URL body; persisted at `metadata.avatarUrl`. Owner-gated. |
 
 ### 6.4 User lookup (`/auth/users/lookup`)
 
-| Method | Path | Notes |
-|---|---|---|
+| Method | Path                 | Notes                                                                                                                                                                                                                             |
+| ------ | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST` | `/auth/users/lookup` | Batched: body `{ ids: string[] }`; returns `{ [id]: { id, name?, email?, avatarUrl? } }`. Uses `IUserProvider.getUser(id)` when available. Used by Agent Studio cards to resolve `authorId` → display name across auth providers. |
 
 ### 6.5 Ownership guard
@@ -289,13 +289,13 @@ All routes register through `packages/server/src/server/server-adapter/routes/in
 
 Defined in `packages/core/src/agent-builder/ee/tools/index.ts`. They all accept an optional `projectId` arg; otherwise resolved from `requestContext.projectId`.
 
-| Tool ID | Purpose |
-|---|---|
-| `project_add_task` | Append a `ProjectTask` under `metadata.project.tasks`. |
-| `project_update_task` | Partial update on a task (title/description/status/assignee). |
-| `project_list_tasks` | Read-only listing for the supervisor's own reasoning. |
-| `project_search_marketplace` | Search `visibility: 'public'` agents + skills (via `listResolved`). |
-| `project_propose_agent` | Emit a structured payload the UI renders as an approval card. Accepting the proposal calls `POST /projects/:projectId/invite-agent` and stars the agent. |
+| Tool ID                      | Purpose                                                                                                                                                  |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `project_add_task`           | Append a `ProjectTask` under `metadata.project.tasks`.                                                                                                   |
+| `project_update_task`        | Partial update on a task (title/description/status/assignee).                                                                                            |
+| `project_list_tasks`         | Read-only listing for the supervisor's own reasoning.                                                                                                    |
+| `project_search_marketplace` | Search `visibility: 'public'` agents + skills (via `listResolved`).                                                                                      |
+| `project_propose_agent`      | Emit a structured payload the UI renders as an approval card. Accepting the proposal calls `POST /projects/:projectId/invite-agent` and stars the agent. |
 
 All five tools use `MastraUnion` via `context.mastra` to reach storage, and are stateless otherwise. They write with the same `handleAutoVersioning` pattern used by `/projects` update so task mutations are reflected immediately on the thin record.
 
@@ -341,11 +341,11 @@ Flat, four top-level links: **Agents**, **Projects**, **Library**, **Configure**
 
 ### 8.6 Agents list filtering (`useStudioAgents`)
 
-| Scope | Behavior |
-|---|---|
-| `mine` | All agents where `authorId === user.id`, any visibility. |
+| Scope  | Behavior                                                  |
+| ------ | --------------------------------------------------------- |
+| `mine` | All agents where `authorId === user.id`, any visibility.  |
 | `team` | `authorId !== user.id` **and** `visibility === 'public'`. |
-| `all` | `authorId === user.id` OR `visibility === 'public'`. |
+| `all`  | `authorId === user.id` OR `visibility === 'public'`.      |
 
 Private agents authored by others are never visible client-side. Server-side ownership guards protect the write paths.
 

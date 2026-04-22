@@ -7,9 +7,9 @@ This package is licensed under the **Mastra Enterprise Edition (EE) License**.
 
 ## Directory map
 
-| Path | License |
-| ---- | ------- |
-| `ee/**` | Mastra Enterprise License (see `../../ee/LICENSE`) |
+| Path     | License                                             |
+| -------- | --------------------------------------------------- |
+| `ee/**`  | Mastra Enterprise License (see `../../ee/LICENSE`)  |
 | `src/**` | Mastra Enterprise License (re-exports from `ee/**`) |
 
 ## Runtime gating
