@@ -51,30 +51,25 @@ export function runScorer({
     return;
   }
 
-  // Only serialize safe, lightweight keys from requestContext.
-  // The full requestContext contains large objects (harness state, workspace with env vars)
-  // that should not leak into scorer data or observability storage.
-  // The harness stores threadId, resourceId, modeId, harnessId inside a nested 'harness'
-  // object — we extract those scalars so they're available to scorers.
-  const SAFE_HARNESS_KEYS = ['threadId', 'resourceId', 'modeId', 'harnessId'] as const;
+  // Extract all primitive (string | number | boolean) values from requestContext,
+  // flattening nested objects so scorers can access any key regardless of depth.
+  // Non-primitive values (objects with circular refs, buffers, functions, env vars)
+  // are skipped to keep the payload lightweight and safe.
   const safeContext: Record<string, any> = {};
   if (requestContext) {
-    const entries: Iterable<[string, any]> =
-      typeof requestContext.entries === 'function' ? requestContext.entries() : Object.entries(requestContext);
-    for (const [key, value] of entries) {
-      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-        // Allow primitive values from any top-level key (they're lightweight and safe)
-        safeContext[key] = value;
-      } else if (key === 'harness' && value && typeof value === 'object') {
-        // Extract only safe scalar fields from the harness context
-        for (const hKey of SAFE_HARNESS_KEYS) {
-          const v = (value as Record<string, unknown>)[hKey];
-          if (v !== undefined && (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean')) {
-            safeContext[hKey] = v;
-          }
+    const flatten = (obj: Record<string, unknown>, prefix?: string) => {
+      const entries: Iterable<[string, unknown]> =
+        typeof (obj as any).entries === 'function' ? (obj as any).entries() : Object.entries(obj);
+      for (const [key, value] of entries) {
+        const flatKey = prefix ? `${prefix}.${key}` : key;
+        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+          safeContext[flatKey] = value;
+        } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+          flatten(value as Record<string, unknown>, flatKey);
         }
       }
-    }
+    };
+    flatten(requestContext as Record<string, unknown>);
   }
 
   const payload: ScoringHookInput = {
