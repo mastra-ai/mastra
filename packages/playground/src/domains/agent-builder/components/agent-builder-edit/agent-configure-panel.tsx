@@ -2,6 +2,7 @@ import {
   Avatar,
   Button,
   FieldBlock,
+  IconButton,
   Select,
   SelectContent,
   SelectItem,
@@ -10,7 +11,7 @@ import {
   TextFieldBlock,
   Txt,
 } from '@mastra/playground-ui';
-import { ChevronRight, FileText, GraduationCap, Plus, RadioIcon, Wrench } from 'lucide-react';
+import { ChevronRight, FileText, GraduationCap, Plus, RadioIcon, Wrench, X } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import {
   channelsFixture,
@@ -34,6 +35,7 @@ interface AgentConfigurePanelProps {
   draftAvatarUrl?: string;
   onDraftNameChange?: (next: string) => void;
   onDraftAvatarUrlChange?: (next: string) => void;
+  onClose: () => void;
 }
 
 export const AgentConfigurePanel = ({
@@ -44,6 +46,7 @@ export const AgentConfigurePanel = ({
   draftAvatarUrl = agent.avatarUrl ?? '',
   onDraftNameChange = () => {},
   onDraftAvatarUrlChange = () => {},
+  onClose = () => {},
 }: AgentConfigurePanelProps) => {
   const [systemPromptOpen, setSystemPromptOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -97,6 +100,11 @@ export const AgentConfigurePanel = ({
 
   return (
     <div className="flex h-full flex-col border border-border1 bg-surface3 rounded-3xl overflow-hidden">
+      <div className="pr-6 pt-6 flex justify-end">
+        <IconButton onClick={onClose} className="rounded-full" tooltip="Close" variant="ghost">
+          <X />
+        </IconButton>
+      </div>
       <div className="flex-1 flex flex-col gap-6 py-6 overflow-y-auto">
         {editable ? (
           <div className="flex items-center gap-4 px-6">
