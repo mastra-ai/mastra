@@ -1,14 +1,5 @@
-import {
-  Button,
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  Textarea,
-} from '@mastra/playground-ui';
+import { Button, SideDialog, Textarea } from '@mastra/playground-ui';
+import { FileTextIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 interface SystemPromptDialogProps {
@@ -26,31 +17,41 @@ export const SystemPromptDialog = ({ open, onOpenChange, prompt, onSave }: Syste
   }, [open, prompt]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[720px]">
-        <DialogHeader>
-          <DialogTitle>Edit system prompt</DialogTitle>
-          <DialogDescription>Edit the instructions that shape your agent.</DialogDescription>
-        </DialogHeader>
-        <DialogBody>
-          <Textarea
-            testId="system-prompt-dialog-input"
-            size="default"
-            value={draft}
-            onChange={e => setDraft(e.target.value)}
-            rows={16}
-            placeholder="You are a helpful assistant that…"
-          />
-        </DialogBody>
-        <DialogFooter className="px-6 pt-4">
+    <SideDialog
+      isOpen={open}
+      onClose={() => onOpenChange(false)}
+      dialogTitle="Edit system prompt"
+      dialogDescription="Edit the instructions that shape your agent."
+      level={2}
+    >
+      <SideDialog.Top>
+        <FileTextIcon className="size-4" /> Instructions
+      </SideDialog.Top>
+      <SideDialog.Content>
+        <SideDialog.Header>
+          <SideDialog.Heading>
+            <FileTextIcon /> Edit system prompt
+          </SideDialog.Heading>
+        </SideDialog.Header>
+
+        <Textarea
+          testId="system-prompt-dialog-input"
+          size="default"
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          rows={16}
+          placeholder="You are a helpful assistant that…"
+        />
+
+        <div className="flex justify-end gap-2 pt-2">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button variant="primary" onClick={() => onSave(draft)} data-testid="system-prompt-dialog-save">
             Save
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </SideDialog.Content>
+    </SideDialog>
   );
 };
