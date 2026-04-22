@@ -2,6 +2,7 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 
 import { stripEphemeralAnchorIds } from './anchor-ids';
+import { isTemporalGapMarker } from './date-utils';
 import {
   DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS,
   formatToolResultForObserver,
@@ -694,8 +695,13 @@ function formatObserverAttachmentPlaceholder(part: ObserverAttachmentPart, count
 }
 
 function formatObserverPartLine(title: string, body: string, time: string, previousTime?: string): string {
-  const timeLabel = time && time !== previousTime ? ` (${time})` : '';
-  return `${title}${timeLabel}: ${body}`;
+  const timeLabel = time && time !== previousTime ? `(${time})` : '';
+
+  if (!title) {
+    return timeLabel ? `${timeLabel}: ${body}` : body;
+  }
+
+  return `${title}${timeLabel ? ` ${timeLabel}` : ''}: ${body}`;
 }
 
 function normalizeObserverCreatedAt(createdAt: unknown): Date | undefined {
@@ -743,6 +749,30 @@ function formatObserverLines(
   };
 }
 
+function getTemporalGapMarkerText(msg: MastraDBMessage): string | undefined {
+  const metadata =
+    typeof msg.content === 'object' && msg.content && 'metadata' in msg.content
+      ? (msg.content.metadata as { gapText?: unknown; reminderType?: unknown; systemReminder?: unknown })
+      : undefined;
+
+  if (metadata?.reminderType === 'temporal-gap' && typeof metadata.gapText === 'string') {
+    return metadata.gapText;
+  }
+
+  if (
+    typeof metadata?.systemReminder === 'object' &&
+    metadata.systemReminder &&
+    'type' in metadata.systemReminder &&
+    metadata.systemReminder.type === 'temporal-gap' &&
+    'gapText' in metadata.systemReminder &&
+    typeof metadata.systemReminder.gapText === 'string'
+  ) {
+    return metadata.systemReminder.gapText;
+  }
+
+  return undefined;
+}
+
 function formatObserverMessage(
   msg: MastraDBMessage,
   counter: ObserverAttachmentCounter,
@@ -755,6 +785,8 @@ function formatObserverMessage(
   const messageCreatedAt = normalizeObserverCreatedAt(msg.createdAt);
 
   let lines: ObserverFormattedLine[] = [];
+
+  const temporalGapText = isTemporalGapMarker(msg) ? getTemporalGapMarkerText(msg) : undefined;
 
   const pushLine = (title: string, body: string, createdAt?: unknown) => {
     if (!body) {
@@ -770,7 +802,9 @@ function formatObserverMessage(
     });
   };
 
-  if (typeof msg.content === 'string') {
+  if (temporalGapText) {
+    pushLine('', temporalGapText, messageCreatedAt);
+  } else if (typeof msg.content === 'string') {
     pushLine(role, maybeTruncate(msg.content, maxLen), messageCreatedAt);
   } else if (msg.content?.parts && Array.isArray(msg.content.parts) && msg.content.parts.length > 0) {
     msg.content.parts.forEach(part => {

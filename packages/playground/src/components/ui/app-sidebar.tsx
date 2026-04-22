@@ -26,6 +26,7 @@ import { useLocation } from 'react-router';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { getPermissionForRoute, hasRoutePermission } from '@/domains/auth/route-permissions';
 import { isAuthenticated } from '@/domains/auth/types';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { MastraVersionFooter } from '@/domains/configuration/components/mastra-version-footer';
@@ -33,8 +34,6 @@ import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 
 type SidebarLink = NavLink & {
-  requiredPermission?: string;
-  requiredAnyPermission?: string[];
   requiresExperimentalFeatures?: boolean;
   activePaths?: string[];
 };
@@ -55,7 +54,6 @@ const mainNavigation: SidebarSection[] = [
         icon: <AgentIcon />,
         isOnMastraPlatform: true,
         indent: true,
-        requiredPermission: 'agents:read',
       },
       {
         name: 'Prompts',
@@ -70,7 +68,6 @@ const mainNavigation: SidebarSection[] = [
         icon: <WorkflowIcon />,
         isOnMastraPlatform: true,
         indent: true,
-        requiredPermission: 'workflows:read',
       },
       {
         name: 'Processors',
@@ -78,7 +75,6 @@ const mainNavigation: SidebarSection[] = [
         icon: <Cpu />,
         isOnMastraPlatform: false,
         indent: true,
-        requiredPermission: 'processors:read',
       },
       {
         name: 'MCP Servers',
@@ -86,7 +82,6 @@ const mainNavigation: SidebarSection[] = [
         icon: <McpServerIcon />,
         isOnMastraPlatform: true,
         indent: true,
-        requiredPermission: 'mcps:read',
       },
       {
         name: 'Tools',
@@ -94,7 +89,6 @@ const mainNavigation: SidebarSection[] = [
         icon: <ToolsIcon />,
         isOnMastraPlatform: true,
         indent: true,
-        requiredPermission: 'tools:read',
       },
       {
         name: 'Workspaces',
@@ -102,7 +96,6 @@ const mainNavigation: SidebarSection[] = [
         icon: <FolderIcon />,
         isOnMastraPlatform: true,
         indent: true,
-        requiredPermission: 'workspaces:read',
       },
       {
         name: 'Request Context',
@@ -124,7 +117,6 @@ const mainNavigation: SidebarSection[] = [
         icon: <GaugeIcon />,
         isOnMastraPlatform: true,
         indent: true,
-        requiredPermission: 'scorers:read',
       },
       {
         name: 'Datasets',
@@ -132,7 +124,6 @@ const mainNavigation: SidebarSection[] = [
         icon: <DatabaseIcon />,
         isOnMastraPlatform: true,
         indent: true,
-        requiredAnyPermission: ['datasets:read'],
       },
       {
         name: 'Experiments',
@@ -140,7 +131,6 @@ const mainNavigation: SidebarSection[] = [
         icon: <FlaskConical />,
         isOnMastraPlatform: true,
         indent: true,
-        requiredAnyPermission: ['datasets:read'],
       },
     ],
   },
@@ -155,7 +145,6 @@ const mainNavigation: SidebarSection[] = [
         icon: <BarChart3Icon />,
         isOnMastraPlatform: true,
         indent: true,
-        requiredPermission: 'observability:read',
       },
       {
         name: 'Traces',
@@ -164,7 +153,6 @@ const mainNavigation: SidebarSection[] = [
         icon: <EyeIcon />,
         isOnMastraPlatform: true,
         indent: true,
-        requiredPermission: 'observability:read',
       },
       {
         name: 'Logs',
@@ -172,7 +160,6 @@ const mainNavigation: SidebarSection[] = [
         icon: <LogsIcon />,
         isOnMastraPlatform: true,
         indent: true,
-        requiredPermission: 'observability:read',
       },
     ],
   },
@@ -243,17 +230,14 @@ export function AppSidebar() {
       return false;
     }
 
-    // 3) RBAC link gating
+    // 3) RBAC link gating - look up permission from registry
     // Avoid hiding during transient permission loading to prevent nav flicker.
     if (rbacEnabled && isPermissionsAuthenticated && isPermissionsLoading) {
       return true;
     }
 
-    if (link.requiredPermission && !hasPermission(link.requiredPermission)) {
-      return false;
-    }
-
-    if (link.requiredAnyPermission && !hasAnyPermission(link.requiredAnyPermission)) {
+    const requiredPermission = getPermissionForRoute(link.url);
+    if (!hasRoutePermission(requiredPermission, hasPermission, hasAnyPermission)) {
       return false;
     }
 
@@ -289,7 +273,13 @@ export function AppSidebar() {
       <MainSidebar.Nav>
         {mainNavigation.map(section => {
           const filteredLinks = section.links.filter(filterSidebarLink);
-          const showSeparator = filteredLinks.length > 0 && section?.separator;
+
+          // Don't render section if no links are visible
+          if (filteredLinks.length === 0) {
+            return null;
+          }
+
+          const showSeparator = section?.separator;
 
           const anySubLinkActive = filteredLinks.some(link => getIsLinkActive(link, pathname));
           const isHeaderActive = !!(section.href && pathname === section.href && !anySubLinkActive);

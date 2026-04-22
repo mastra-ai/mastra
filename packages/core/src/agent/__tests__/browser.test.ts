@@ -45,6 +45,7 @@ function createMockBrowser(
 
   return {
     id: browserId,
+    providerType: 'sdk' as const,
     provider: options.provider ?? 'mock',
     headless: options.headless ?? true,
     getTools: () => tools,
