@@ -1,5 +1,15 @@
 # mastra
 
+## 1.6.1-alpha.12
+
+### Patch Changes
+
+- Fixed Ctrl+C on `mastra dev` so the dev server shuts down cleanly without freezing the terminal or printing warnings. Fixes #15446. ([#15558](https://github.com/mastra-ai/mastra/pull/15558))
+
+- Updated dependencies [[`a371ac5`](https://github.com/mastra-ai/mastra/commit/a371ac534aa1bb368a1acf9d8b313378dfdc787e), [`47cee3e`](https://github.com/mastra-ai/mastra/commit/47cee3e137fe39109cf7fffd2a8cf47b76dc702e), [`c80dc16`](https://github.com/mastra-ai/mastra/commit/c80dc16e113e6cc159f510ffde501ad4711b2189), [`47cee3e`](https://github.com/mastra-ai/mastra/commit/47cee3e137fe39109cf7fffd2a8cf47b76dc702e)]:
+  - @mastra/core@1.26.0-alpha.12
+  - @mastra/deployer@1.26.0-alpha.12
+
 ## 1.6.1-alpha.11
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # @mastra/otel-bridge
 
+## 1.0.17-alpha.5
+
+### Patch Changes
+
+- Return `undefined` from `OtelBridge.createSpan` when no OpenTelemetry SDK is registered, so core generates valid span/trace IDs instead of reusing the OTEL no-op all-zero IDs. This prevents downstream trace exporters from dropping spans and stops the infinite-loop CPU spike in parent-matching. Fixes #15589. ([#15591](https://github.com/mastra-ai/mastra/pull/15591))
+
+- Updated dependencies [[`a371ac5`](https://github.com/mastra-ai/mastra/commit/a371ac534aa1bb368a1acf9d8b313378dfdc787e), [`47cee3e`](https://github.com/mastra-ai/mastra/commit/47cee3e137fe39109cf7fffd2a8cf47b76dc702e), [`c80dc16`](https://github.com/mastra-ai/mastra/commit/c80dc16e113e6cc159f510ffde501ad4711b2189), [`47cee3e`](https://github.com/mastra-ai/mastra/commit/47cee3e137fe39109cf7fffd2a8cf47b76dc702e)]:
+  - @mastra/core@1.26.0-alpha.12
+
 ## 1.0.17-alpha.4
 
 ### Patch Changes

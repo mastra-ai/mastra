@@ -1,5 +1,18 @@
 # mastracode
 
+## 0.15.0-alpha.12
+
+### Minor Changes
+
+- Added the `@mastra/tavily` integration with first-class Mastra tools for Tavily web search, extract, crawl, and map APIs, and migrated `mastracode`'s web search tools to use it. ([#15448](https://github.com/mastra-ai/mastra/pull/15448))
+
+### Patch Changes
+
+- Updated dependencies [[`a371ac5`](https://github.com/mastra-ai/mastra/commit/a371ac534aa1bb368a1acf9d8b313378dfdc787e), [`3a347a9`](https://github.com/mastra-ai/mastra/commit/3a347a95c563df027d082bcc82ddc31b88410744), [`2ca2d23`](https://github.com/mastra-ai/mastra/commit/2ca2d23913dec4e6cb0fa8e8eecb1184af7ccd81), [`47cee3e`](https://github.com/mastra-ai/mastra/commit/47cee3e137fe39109cf7fffd2a8cf47b76dc702e), [`c80dc16`](https://github.com/mastra-ai/mastra/commit/c80dc16e113e6cc159f510ffde501ad4711b2189), [`47cee3e`](https://github.com/mastra-ai/mastra/commit/47cee3e137fe39109cf7fffd2a8cf47b76dc702e)]:
+  - @mastra/core@1.26.0-alpha.12
+  - @mastra/memory@1.16.0-alpha.4
+  - @mastra/tavily@1.0.0-alpha.1
+
 ## 0.15.0-alpha.11
 
 ### Patch Changes
