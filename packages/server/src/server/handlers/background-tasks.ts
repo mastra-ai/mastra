@@ -22,7 +22,21 @@ export const BACKGROUND_TASK_STREAM_ROUTE = createRoute({
   handler: async ({ mastra, agentId, runId, threadId, resourceId, abortSignal }) => {
     const bgManager = mastra.backgroundTaskManager;
     if (!bgManager) {
-      throw new HTTPException(400, { message: 'Background task manager not available' });
+      // Background tasks are not enabled — return an empty stream that stays
+      // open until the client disconnects. This avoids spamming the logs with
+      // false-positive errors when clients (e.g. the studio UI) optimistically
+      // subscribe to the stream.
+      return new ReadableStream({
+        start(controller) {
+          abortSignal?.addEventListener('abort', () => {
+            try {
+              controller.close();
+            } catch {
+              // Already closed
+            }
+          });
+        },
+      });
     }
 
     return bgManager.stream({ agentId, runId, threadId, resourceId, abortSignal });
@@ -41,7 +55,8 @@ export const LIST_BACKGROUND_TASKS_ROUTE = createRoute({
   handler: async ({ mastra, ...params }) => {
     const bgManager = mastra.backgroundTaskManager;
     if (!bgManager) {
-      throw new HTTPException(400, { message: 'Background task manager not available' });
+      // Background tasks not enabled — there are no tasks to return.
+      return { tasks: [], total: 0 };
     }
 
     return bgManager.listTasks(params);
@@ -60,7 +75,8 @@ export const GET_BACKGROUND_TASK_ROUTE = createRoute({
   handler: async ({ mastra, backgroundTaskId }) => {
     const bgManager = mastra.backgroundTaskManager;
     if (!bgManager) {
-      throw new HTTPException(400, { message: 'Background task manager not available' });
+      // Background tasks not enabled — the task can't exist.
+      throw new HTTPException(404, { message: 'Background task not found' });
     }
 
     const task = await bgManager.getTask(backgroundTaskId);
