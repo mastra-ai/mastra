@@ -11,7 +11,8 @@ import {
   cn,
 } from '@mastra/playground-ui';
 import { useMemo, useState } from 'react';
-import { toolsFixture, type ToolFixture } from '../../../fixtures';
+import { toolsFixture } from '../../../fixtures';
+import type { ToolFixture } from '../../../fixtures';
 
 const CATEGORY_LABEL: Record<ToolFixture['category'], string> = {
   web: 'Web',

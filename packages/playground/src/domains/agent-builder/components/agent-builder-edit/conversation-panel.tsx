@@ -1,7 +1,8 @@
-import { Avatar, IconButton, Textarea, Txt, cn } from '@mastra/playground-ui';
-import { ArrowUpIcon, SparklesIcon } from 'lucide-react';
+import { IconButton, Textarea, Txt, cn } from '@mastra/playground-ui';
+import { ArrowUpIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { buildInitialConversation, type BuilderMessage } from '../../fixtures';
+import { buildInitialConversation } from '../../fixtures';
+import type { BuilderMessage } from '../../fixtures';
 
 interface ConversationPanelProps {
   initialUserMessage?: string;
@@ -20,24 +21,28 @@ export const ConversationPanel = ({ initialUserMessage }: ConversationPanelProps
 
   const trimmed = draft.trim();
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (trimmed.length === 0) return;
+  const sendMessage = (content: string) => {
+    const text = content.trim();
+    if (text.length === 0) return;
 
     const userId = `user-${Date.now()}`;
     const assistantId = `assistant-${Date.now()}`;
 
     setMessages(prev => [
       ...prev,
-      { id: userId, role: 'user', content: trimmed },
+      { id: userId, role: 'user', content: text },
       {
         id: assistantId,
         role: 'assistant',
-        content:
-          "Thanks — I've updated the agent preview on the right. Tell me what else we should tune and I'll keep iterating.",
+        content: "Done — I've updated the agent. Want to tune anything else?",
       },
     ]);
     setDraft('');
+  };
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    sendMessage(trimmed);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -48,47 +53,43 @@ export const ConversationPanel = ({ initialUserMessage }: ConversationPanelProps
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center gap-3 border-b border-border1 px-6 py-4">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent1Dark text-accent1">
-          <SparklesIcon className="h-4 w-4" />
-        </div>
-        <div className="flex flex-col">
-          <Txt variant="ui-md" className="font-medium text-neutral6">
-            Agent Builder
-          </Txt>
-          <Txt variant="ui-xs" className="text-neutral3">
-            Chat to shape your agent
-          </Txt>
-        </div>
+    <div className="flex h-full min-h-0 flex-col bg-surface1">
+      <div className="flex shrink-0 items-center py-3">
+        <Txt variant="ui-xs" className="font-medium uppercase tracking-wider text-neutral3">
+          Builder
+        </Txt>
       </div>
 
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-6 py-6">
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto pb-4">
+        <div className="flex flex-col gap-3">
           {messages.map(message => (
-            <MessageBubble key={message.id} message={message} />
+            <MessageRow key={message.id} message={message} />
           ))}
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="border-t border-border1 px-6 py-4">
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-2">
+      <form onSubmit={handleSubmit} className="shrink-0 pb-6">
+        <div className="rounded-xl border border-border1 bg-surface2 transition-colors focus-within:border-neutral3">
           <Textarea
             testId="agent-builder-conversation-input"
-            size="default"
-            placeholder="Describe what to change, add or remove…"
+            size="md"
+            variant="unstyled"
+            placeholder="Ask a follow-up…"
             value={draft}
             onChange={e => setDraft(e.target.value)}
             onKeyDown={handleKeyDown}
+            className="min-h-[44px] resize-none px-3 py-2.5 outline-none focus:outline-none focus-visible:outline-none"
+            rows={1}
           />
-          <div className="flex items-center justify-end">
+          <div className="flex items-center justify-end px-2 pb-2">
             <IconButton
               type="submit"
-              variant="primary"
-              size="md"
+              variant="default"
+              size="sm"
               tooltip="Send"
               disabled={trimmed.length === 0}
               data-testid="agent-builder-conversation-submit"
+              className="rounded-full"
             >
               <ArrowUpIcon />
             </IconButton>
@@ -99,28 +100,24 @@ export const ConversationPanel = ({ initialUserMessage }: ConversationPanelProps
   );
 };
 
-const MessageBubble = ({ message }: { message: BuilderMessage }) => {
+const MessageRow = ({ message }: { message: BuilderMessage }) => {
   const isUser = message.role === 'user';
 
-  return (
-    <div className={cn('flex items-start gap-3', isUser && 'flex-row-reverse')}>
-      {isUser ? (
-        <Avatar name="You" size="sm" />
-      ) : (
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border1 bg-accent1Dark text-accent1">
-          <SparklesIcon className="h-4 w-4" />
-        </div>
-      )}
-      <div
-        className={cn(
-          'max-w-[80%] rounded-lg border border-border1 px-4 py-3',
-          isUser ? 'bg-surface4 text-neutral6' : 'bg-surface2 text-neutral5',
-        )}
-      >
-        <Txt variant="ui-sm" className="whitespace-pre-wrap leading-relaxed">
+  if (isUser) {
+    return (
+      <div className="rounded-md bg-surface3 px-3 py-2">
+        <Txt variant="ui-sm" className="whitespace-pre-wrap leading-relaxed text-neutral6">
           {message.content}
         </Txt>
       </div>
+    );
+  }
+
+  return (
+    <div className="px-1">
+      <Txt variant="ui-sm" className={cn('whitespace-pre-wrap leading-relaxed text-neutral4')}>
+        {message.content}
+      </Txt>
     </div>
   );
 };

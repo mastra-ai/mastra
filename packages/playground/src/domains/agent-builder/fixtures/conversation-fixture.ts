@@ -7,14 +7,7 @@ export type BuilderMessage = {
 };
 
 export const buildInitialConversation = (userMessage?: string): BuilderMessage[] => {
-  const messages: BuilderMessage[] = [
-    {
-      id: 'welcome',
-      role: 'assistant',
-      content:
-        "Hi! I'm your Agent Builder. Tell me what you want your agent to do and I'll scaffold it on the right. You can tweak the name, model, tools and skills at any time.",
-    },
-  ];
+  const messages: BuilderMessage[] = [];
 
   if (userMessage && userMessage.trim().length > 0) {
     messages.push({ id: 'user-initial', role: 'user', content: userMessage });
