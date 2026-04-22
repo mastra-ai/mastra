@@ -109,7 +109,7 @@ async function getDeployEnvFiles(projectDir: string): Promise<string[]> {
 
 export async function readEnvVars(
   projectDir: string,
-  options: { autoAccept?: boolean } = {},
+  options: { autoAccept?: boolean; envFile?: string } = {},
 ): Promise<Record<string, string>> {
   const availableDeployEnvFiles = await getDeployEnvFiles(projectDir);
 
@@ -117,23 +117,33 @@ export async function readEnvVars(
     throw new Error('No env file found for deploy. Add a .env or .env.* file before deploying.');
   }
 
-  let selectedEnvFile =
-    availableDeployEnvFiles.find(envFile => envFile === '.env.production') ?? availableDeployEnvFiles[0]!;
+  let selectedEnvFile = options.envFile;
 
-  if (availableDeployEnvFiles.length > 1) {
-    if (!options.autoAccept) {
-      const selected = await p.select({
-        message: 'Choose env file to deploy',
-        options: availableDeployEnvFiles.map(envFile => ({ value: envFile, label: envFile })),
-        initialValue: selectedEnvFile,
-      });
+  if (selectedEnvFile) {
+    if (!availableDeployEnvFiles.includes(selectedEnvFile)) {
+      throw new Error(
+        `Env file not found for deploy: ${selectedEnvFile}. Available files: ${availableDeployEnvFiles.join(', ')}`,
+      );
+    }
+  } else {
+    selectedEnvFile =
+      availableDeployEnvFiles.find(envFile => envFile === '.env.production') ?? availableDeployEnvFiles[0]!;
 
-      if (p.isCancel(selected)) {
-        p.cancel('Deploy cancelled.');
-        process.exit(0);
+    if (availableDeployEnvFiles.length > 1) {
+      if (!options.autoAccept) {
+        const selected = await p.select({
+          message: 'Choose env file to deploy',
+          options: availableDeployEnvFiles.map(envFile => ({ value: envFile, label: envFile })),
+          initialValue: selectedEnvFile,
+        });
+
+        if (p.isCancel(selected)) {
+          p.cancel('Deploy cancelled.');
+          process.exit(0);
+        }
+
+        selectedEnvFile = selected as string;
       }
-
-      selectedEnvFile = selected as string;
     }
   }
 
@@ -269,7 +279,15 @@ async function resolveProject(
 
 export async function deployAction(
   dir: string | undefined,
-  opts: { org?: string; project?: string; yes?: boolean; config?: string; skipBuild?: boolean; debug?: boolean },
+  opts: {
+    org?: string;
+    project?: string;
+    yes?: boolean;
+    config?: string;
+    skipBuild?: boolean;
+    debug?: boolean;
+    envFile?: string;
+  },
 ) {
   const targetDir = resolve(dir || process.cwd());
   const isHeadless = Boolean(process.env.MASTRA_API_TOKEN);
@@ -403,7 +421,7 @@ export async function deployAction(
   s.stop(`Created ${sizeLabel} archive (${elapsed(performance.now() - t)})`);
 
   s.start('Reading environment variables...');
-  const envVars = await readEnvVars(targetDir, { autoAccept });
+  const envVars = await readEnvVars(targetDir, { autoAccept, envFile: opts.envFile });
   const envCount = Object.keys(envVars).length;
   if (envCount > 0) {
     s.stop(`Found ${envCount} env var(s)`);

@@ -292,6 +292,47 @@ describe('readEnvVars', () => {
     expect(prompts.log.step).toHaveBeenCalledWith('Using env file: .env');
   });
 
+  it('uses the requested env file without prompting', async () => {
+    const { readdir, readFile } = await import('node:fs/promises');
+    const prompts = await import('@clack/prompts');
+    vi.mocked(readdir).mockResolvedValue([
+      { name: '.env', isFile: () => true },
+      { name: '.env.staging', isFile: () => true },
+      { name: '.env.production', isFile: () => true },
+    ] as unknown as Awaited<ReturnType<typeof readdir>>);
+    vi.mocked(readFile).mockImplementation(async path => {
+      const filePath = String(path);
+      if (filePath.endsWith('.env')) return 'SHARED=base\nBASE_ONLY=1';
+      if (filePath.endsWith('.env.production')) return 'SHARED=prod\nPROD_ONLY=1';
+      if (filePath.endsWith('.env.staging')) return 'SHARED=staging\nSTAGING_ONLY=1';
+      const err = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+      throw err;
+    });
+
+    const { readEnvVars } = await import('./deploy.js');
+
+    await expect(readEnvVars('/project', { envFile: '.env.staging' })).resolves.toEqual({
+      SHARED: 'staging',
+      STAGING_ONLY: '1',
+    });
+    expect(prompts.select).not.toHaveBeenCalled();
+    expect(prompts.log.step).toHaveBeenCalledWith('Using env file: .env.staging');
+  });
+
+  it('fails when the requested env file is not available', async () => {
+    const { readdir } = await import('node:fs/promises');
+    vi.mocked(readdir).mockResolvedValue([
+      { name: '.env', isFile: () => true },
+      { name: '.env.production', isFile: () => true },
+    ] as unknown as Awaited<ReturnType<typeof readdir>>);
+
+    const { readEnvVars } = await import('./deploy.js');
+
+    await expect(readEnvVars('/project', { envFile: '.env.staging' })).rejects.toThrow(
+      'Env file not found for deploy: .env.staging. Available files: .env, .env.production',
+    );
+  });
+
   it('fails when the selected env file disappears before it can be read', async () => {
     const { readdir, readFile } = await import('node:fs/promises');
     const prompts = await import('@clack/prompts');
