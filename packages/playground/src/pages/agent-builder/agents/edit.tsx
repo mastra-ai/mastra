@@ -24,7 +24,7 @@ export default function AgentBuilderAgentEdit() {
         <BrowserFrame className="grid grid-cols-[1fr_380px]">
           <AgentPreviewChat agent={agent} />
 
-          <div className="h-full overflow-y-auto p-6">
+          <div className="h-full overflow-y-auto pr-6 pb-6 pt-6">
             <AgentConfigurePanel agent={agent} onAgentChange={setAgent} />
           </div>
         </BrowserFrame>

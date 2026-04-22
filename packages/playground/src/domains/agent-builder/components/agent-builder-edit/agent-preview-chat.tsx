@@ -1,4 +1,4 @@
-import { Avatar, IconButton, Textarea, Txt, cn } from '@mastra/playground-ui';
+import { Avatar, EmptyState, IconButton, Textarea, Txt, cn } from '@mastra/playground-ui';
 import { ArrowUpIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { buildPreviewConversation, buildPreviewReply } from '../../fixtures';
@@ -40,11 +40,21 @@ export const AgentPreviewChat = ({ agent }: AgentPreviewChatProps) => {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-8 py-6">
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
-          {messages.map(message => (
-            <PreviewBubble key={message.id} message={message} agent={agent} />
-          ))}
-        </div>
+        {messages.length === 0 ? (
+          <div className="flex h-full items-center justify-center" data-testid="agent-preview-chat-empty">
+            <EmptyState
+              iconSlot={<Avatar name={agent.name} size="lg" src={agent.avatarUrl} />}
+              titleSlot={`Say hello to ${agent.name}`}
+              descriptionSlot={`Send a message to preview how ${agent.name} responds as you shape it.`}
+            />
+          </div>
+        ) : (
+          <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+            {messages.map(message => (
+              <PreviewBubble key={message.id} message={message} agent={agent} />
+            ))}
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="shrink-0 px-8 pb-6">
