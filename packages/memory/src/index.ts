@@ -1272,11 +1272,9 @@ ${workingMemory}`;
       if (omRecord?.activeObservations) {
         hasObservations = true;
 
-        // For resource scope, load other threads' full conversation context
+        // For resource scope, load other threads' unobserved context
         if (omEngine.scope === 'resource' && resourceId) {
-          otherThreadsContext = await omEngine.getOtherThreadsContext(resourceId, threadId, {
-            includePreviouslyObserved: true,
-          });
+          otherThreadsContext = await omEngine.getOtherThreadsContext(resourceId, threadId);
         }
 
         const obsSystemMessage = await omEngine.buildContextSystemMessage({

@@ -1906,33 +1906,6 @@ describe('getOtherThreadsContext()', () => {
     expect(result).toContain('New sibling message');
     expect(result).not.toContain('Older sibling message');
   });
-
-  it('can include previously observed sibling-thread history for actor context building', async () => {
-    const om = createOM(storage, { scope: 'resource' });
-    const record = await om.getOrCreateRecord(threadA, resourceId);
-    const lastObservedAt = new Date('2026-04-16T15:00:00.000Z');
-
-    await storage.updateActiveObservations({
-      id: record.id,
-      observations: 'Existing resource observations',
-      tokenCount: 10,
-      lastObservedAt,
-    });
-
-    await storage.saveMessages({
-      messages: [
-        createTestMessage('Older sibling message', 'user', 'thread-b-old', new Date('2026-04-16T14:59:59.000Z')),
-        createTestMessage('New sibling message', 'assistant', 'thread-b-new', new Date('2026-04-16T15:00:01.000Z')),
-      ].map(message => ({ ...message, threadId: threadB })),
-    });
-
-    const result = await om.getOtherThreadsContext(resourceId, threadA, {
-      includePreviouslyObserved: true,
-    });
-
-    expect(result).toContain('Older sibling message');
-    expect(result).toContain('New sibling message');
-  });
 });
 
 // =============================================================================
