@@ -117,7 +117,7 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
     });
 
     const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(history), {
-      temporalGapMarkers: true,
+      temporalMarkers: true,
     });
     const messageList = new MessageList({ threadId, resourceId });
     messageList.add(inputMessage, 'input');
@@ -235,7 +235,7 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
     });
 
     const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(history), {
-      temporalGapMarkers: true,
+      temporalMarkers: true,
     });
     const messageList = new MessageList({ threadId, resourceId });
     messageList.add(inputMessage, 'input');

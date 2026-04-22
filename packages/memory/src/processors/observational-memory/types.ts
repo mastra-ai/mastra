@@ -853,7 +853,7 @@ export interface ObservationalMemoryConfig {
    *
    * @default false
    */
-  temporalGapMarkers?: boolean;
+  temporalMarkers?: boolean;
 
   /**
    * Time before buffered observations or buffered reflections are force-activated after inactivity.

@@ -72,7 +72,7 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
   reflection?: ObservationalMemoryConfig['reflection'];
   activateAfterIdle?: ObservationalMemoryConfig['activateAfterIdle'];
   activateOnProviderChange?: ObservationalMemoryConfig['activateOnProviderChange'];
-  temporalGapMarkers?: boolean;
+  temporalMarkers?: boolean;
 };
 
 type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {
@@ -2684,7 +2684,7 @@ Notes:
 
     const { ObservationalMemoryProcessor } = await import('./processors/observational-memory');
     return new ObservationalMemoryProcessor(engine, this, {
-      temporalGapMarkers: effectiveConfig.temporalGapMarkers,
+      temporalMarkers: effectiveConfig.temporalMarkers,
     });
   }
 }

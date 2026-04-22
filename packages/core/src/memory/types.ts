@@ -764,7 +764,7 @@ export interface ObservationalMemoryOptions {
    *
    * @default false
    */
-  temporalGapMarkers?: boolean;
+  temporalMarkers?: boolean;
 
   /**
    * **Experimental.** Enable retrieval-mode observation groups as durable pointers
