@@ -594,6 +594,69 @@ describe('DaytonaSandbox', () => {
     });
   });
 
+  describe('Mount Configuration', () => {
+    it('S3 prefix mount uses bucket:/prefix syntax in mount command', async () => {
+      mockSandbox.process.executeCommand.mockImplementation(async (command: string) => {
+        if (command.includes('mountpoint -q') && command.includes('echo "mounted"')) {
+          return { exitCode: 0, result: 'not mounted' };
+        }
+        if (command.includes('echo "non-empty" || echo "ok"')) {
+          return { exitCode: 0, result: 'ok' };
+        }
+        if (command.includes('sudo mkdir -p')) {
+          return { exitCode: 0, result: '' };
+        }
+        if (command.includes('which s3fs')) {
+          return { exitCode: 0, result: '/usr/bin/s3fs' };
+        }
+        if (command.includes('id -u && id -g')) {
+          return { exitCode: 0, result: '1000\n1000' };
+        }
+        if (command.includes('chmod a+rw /dev/fuse')) {
+          return { exitCode: 0, result: '' };
+        }
+        if (command.includes('s3fs') && command.includes('/data/s3-prefix')) {
+          return { exitCode: 0, result: '' };
+        }
+        if (command.includes('mkdir -p /tmp/.mastra-mounts')) {
+          return { exitCode: 0, result: '' };
+        }
+        return { exitCode: 0, result: '' };
+      });
+
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const mockFilesystem = {
+        id: 'test-s3-prefix',
+        name: 'S3Filesystem',
+        provider: 's3',
+        status: 'ready',
+        getMountConfig: () => ({
+          type: 's3',
+          bucket: 'test-bucket',
+          region: 'us-east-1',
+          accessKeyId: 'key',
+          secretAccessKey: 'secret',
+          prefix: 'workspace/data/',
+        }),
+      } as any;
+
+      await sandbox.mount(mockFilesystem, '/data/s3-prefix');
+
+      const mountCall = mockSandbox.process.executeCommand.mock.calls.find((call: any[]) => {
+        const command = call[0] || '';
+        return command.includes('s3fs') && command.includes('/data/s3-prefix') && !command.includes('which s3fs');
+      });
+
+      expect(mountCall).toBeDefined();
+      if (mountCall) {
+        expect(mountCall[0]).toContain('test-bucket:/workspace/data');
+        expect(mountCall[0]).not.toContain('test-bucket:/workspace/data/');
+      }
+    });
+  });
+
   describe('Stop & Destroy', () => {
     it('stop calls daytona.stop()', async () => {
       const sandbox = new DaytonaSandbox();

@@ -182,6 +182,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
       if (capabilities.mastra) {
         structuredProcessor.__registerMastra(capabilities.mastra);
       }
+      if (options.structuredOutput.useAgent) {
+        structuredProcessor.setAgent(capabilities.agent);
+      }
       effectiveOutputProcessors = effectiveOutputProcessors
         ? [...effectiveOutputProcessors, structuredProcessor]
         : [structuredProcessor];
