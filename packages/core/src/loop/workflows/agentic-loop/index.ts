@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage } from '../../../memory';
 import { InternalSpans } from '../../../observability';
-import { safeEnqueue } from '../../../stream/base';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createWorkflow } from '../../../workflows';
@@ -237,12 +236,10 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       const shouldEmitStepFinish = typedInputData.stepResult?.reason !== 'tripwire' || hasSteps;
 
       if (shouldEmitStepFinish) {
-        // Only enqueue if controller is still open
-        safeEnqueue(controller, {
+        await outputWriter({
           type: 'step-finish',
           runId,
           from: ChunkFrom.AGENT,
-          // @ts-expect-error TODO: Look into the proper types for this
           payload: typedInputData,
         });
       }

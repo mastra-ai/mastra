@@ -223,13 +223,110 @@ describe('Output Processor State Persistence Across Tool Execution', () => {
     expect(finishChunks.length).toBe(1);
 
     const toolCallIndex = capturedChunks.findIndex(c => c.type === 'tool-call');
-    expect(toolCallIndex).toBe(1); // Should be the second chunk (after response-metadata)
+    expect(toolCallIndex).toBe(2); // After step-start and response-metadata
 
     // Verify state accumulation works
-    expect(capturedChunks[0]!.type).toBe('response-metadata');
-    expect(capturedChunks[0]!.accumulatedTypes).toEqual(['response-metadata']);
+    expect(capturedChunks[0]!.type).toBe('step-start');
+    expect(capturedChunks[0]!.accumulatedTypes).toEqual(['step-start']);
 
-    expect(capturedChunks[1]!.type).toBe('tool-call');
-    expect(capturedChunks[1]!.accumulatedTypes).toEqual(['response-metadata', 'tool-call']);
+    expect(capturedChunks[1]!.type).toBe('response-metadata');
+    expect(capturedChunks[1]!.accumulatedTypes).toEqual(['step-start', 'response-metadata']);
+
+    expect(capturedChunks[2]!.type).toBe('tool-call');
+    expect(capturedChunks[2]!.accumulatedTypes).toEqual(['step-start', 'response-metadata', 'tool-call']);
+  });
+});
+
+describe('Output Processor Step Lifecycle Chunks', () => {
+  it('should deliver step-start and step-finish chunks to processOutputStream across tool-calling steps', async () => {
+    const capturedTypes: string[] = [];
+
+    class LifecycleCapturingProcessor implements Processor {
+      readonly id = 'lifecycle-capturing-processor';
+      readonly name = 'Lifecycle Capturing Processor';
+
+      async processOutputStream({ part }: any) {
+        capturedTypes.push(part.type);
+        return part;
+      }
+    }
+
+    const echoTool = createTool({
+      id: 'echoTool',
+      description: 'A test tool that echoes input',
+      inputSchema: z.object({ text: z.string() }),
+      execute: async inputData => `Echo: ${inputData.text}`,
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        const hasToolResults = prompt.some(
+          (msg: any) =>
+            msg.role === 'tool' ||
+            (Array.isArray(msg.content) && msg.content.some((c: any) => c.type === 'tool-result')),
+        );
+
+        if (!hasToolResults) {
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-lifecycle',
+                toolName: 'echoTool',
+                input: JSON.stringify({ text: 'hi' }),
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
+              },
+            ]),
+            rawCall: { rawPrompt: [], rawSettings: {} },
+            warnings: [],
+          };
+        }
+
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Echo: hi' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+          ]),
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'lifecycle-test-agent',
+      name: 'Lifecycle Test Agent',
+      instructions: 'Test agent for step lifecycle chunks',
+      model: mockModel as any,
+      tools: { echoTool },
+      outputProcessors: [new LifecycleCapturingProcessor()],
+    });
+
+    const stream = await agent.stream('Call echoTool with text "hi"', { maxSteps: 5 });
+    for await (const _chunk of stream.fullStream) {
+      // consume stream
+    }
+
+    const stepStartCount = capturedTypes.filter(t => t === 'step-start').length;
+    const stepFinishCount = capturedTypes.filter(t => t === 'step-finish').length;
+
+    expect(stepStartCount).toBe(2);
+    expect(stepFinishCount).toBe(2);
+
+    const firstStepStart = capturedTypes.indexOf('step-start');
+    const toolCallIdx = capturedTypes.indexOf('tool-call');
+    const firstStepFinish = capturedTypes.indexOf('step-finish');
+    expect(firstStepStart).toBeLessThan(toolCallIdx);
+    expect(toolCallIdx).toBeLessThan(firstStepFinish);
   });
 });

@@ -777,17 +777,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                     warnings = warningsFromStream;
                     request = requestFromStream || {};
                     rawResponse = rawResponseFromStream;
-
-                    safeEnqueue(controller, {
-                      runId,
-                      from: ChunkFrom.AGENT,
-                      type: 'step-start',
-                      payload: {
-                        request: request || {},
-                        warnings: warnings || [],
-                        messageId: currentStep.messageId,
-                      },
-                    });
                   },
                   shouldThrowError: !isLastModel,
                 }),
@@ -827,6 +816,30 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
 
           try {
+            if (outputWriter) {
+              await outputWriter({
+                runId,
+                from: ChunkFrom.AGENT,
+                type: 'step-start',
+                payload: {
+                  request: request || {},
+                  warnings: warnings || [],
+                  messageId: currentStep.messageId,
+                },
+              } as ChunkType);
+            } else {
+              safeEnqueue(controller, {
+                runId,
+                from: ChunkFrom.AGENT,
+                type: 'step-start',
+                payload: {
+                  request: request || {},
+                  warnings: warnings || [],
+                  messageId: currentStep.messageId,
+                },
+              });
+            }
+
             const collectedChunks = await processOutputStream({
               outputStream,
               includeRawChunks,
