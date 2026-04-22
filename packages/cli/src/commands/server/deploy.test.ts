@@ -148,11 +148,11 @@ describe('readEnvVars (server deploy)', () => {
     expect(prompts.select).toHaveBeenCalledWith({
       message: 'Choose env file to deploy',
       options: [
-        { value: '.env.production', label: '.env.production' },
         { value: '.env', label: '.env' },
+        { value: '.env.production', label: '.env.production' },
         { value: '.env.staging', label: '.env.staging' },
       ],
-      initialValue: '.env.production',
+      initialValue: '.env',
     });
     expect(prompts.log.step).toHaveBeenCalledWith('Using env file: .env.staging');
   });

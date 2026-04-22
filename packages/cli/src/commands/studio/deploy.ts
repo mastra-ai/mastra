@@ -113,13 +113,7 @@ async function getDeployEnvFiles(projectDir: string): Promise<string[]> {
   return entries
     .filter(entry => entry.isFile() && (entry.name === '.env' || entry.name.startsWith('.env.')))
     .map(entry => entry.name)
-    .sort((a, b) => {
-      if (a === '.env.production') return -1;
-      if (b === '.env.production') return 1;
-      if (a === '.env') return -1;
-      if (b === '.env') return 1;
-      return a.localeCompare(b);
-    });
+    .sort((a, b) => a.localeCompare(b));
 }
 
 export async function readEnvVars(
