@@ -113,6 +113,7 @@ import {
 } from '../reflector-agent';
 import { resolveRetentionFloor } from '../thresholds';
 import { TokenCounter } from '../token-counter';
+import { formatToolResultForObserver } from '../tool-result-helpers';
 
 // =============================================================================
 // Test Helpers
@@ -1432,6 +1433,28 @@ describe('Observer Agent Helpers', () => {
       expect(loneHighSurrogate.test(formatted)).toBe(false);
       expect(loneLowSurrogate.test(formatted)).toBe(false);
       // Belt-and-suspenders: the serialized form must also be free of lone surrogates.
+      expect(loneHighSurrogate.test(serialized)).toBe(false);
+      expect(loneLowSurrogate.test(serialized)).toBe(false);
+    });
+
+    it('should not leave lone UTF-16 surrogates when truncating tool results with emoji', () => {
+      // Regression for the same surrogate issue, but via the tool-result path.
+      // formatToolResultForObserver serializes the value, then truncateStringByTokens
+      // performs a binary-search slice. A large tool result containing an emoji at
+      // the token boundary must not produce a lone surrogate.
+      const prefix = 'b'.repeat(20);
+      const emoji = '🔥'; // U+1F525 surrogate pair
+      const suffix = ' '.repeat(1000); // spaces are cheap in tokens so binary search lands near length
+      const toolResult = { summary: prefix + emoji + suffix };
+
+      // Force a very low token limit so truncation is guaranteed.
+      const formatted = formatToolResultForObserver(toolResult, { maxTokens: 10 });
+      const serialized = JSON.stringify({ content: formatted });
+
+      const loneHighSurrogate = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])/;
+      const loneLowSurrogate = /(^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+      expect(loneHighSurrogate.test(formatted)).toBe(false);
+      expect(loneLowSurrogate.test(formatted)).toBe(false);
       expect(loneHighSurrogate.test(serialized)).toBe(false);
       expect(loneLowSurrogate.test(serialized)).toBe(false);
     });
