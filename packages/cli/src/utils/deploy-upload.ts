@@ -38,8 +38,16 @@ export async function confirmUploadWithRetry(opts: {
   client: ApiClient;
   orgId: string;
   maxRetries?: number;
+  /** Override for testing — refresh the client with a new token. */
+  refreshClient?: (orgId: string) => Promise<ApiClient>;
 }): Promise<void> {
-  const { postUploadComplete, cancelDeploy, orgId, maxRetries = 3 } = opts;
+  const {
+    postUploadComplete,
+    cancelDeploy,
+    orgId,
+    maxRetries = 3,
+    refreshClient = async (o: string) => createApiClient(await getToken(), o),
+  } = opts;
   let lastError: Error | undefined;
   let currentClient = opts.client;
 
@@ -79,8 +87,7 @@ export async function confirmUploadWithRetry(opts: {
     // On 401, refresh the token before retrying
     if (status === 401) {
       try {
-        const freshToken = await getToken();
-        currentClient = createApiClient(freshToken, orgId);
+        currentClient = await refreshClient(orgId);
       } catch (refreshError) {
         lastError = refreshError instanceof Error ? refreshError : new Error('Failed to refresh authentication token');
         break;
