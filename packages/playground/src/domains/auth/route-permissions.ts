@@ -129,14 +129,20 @@ export function hasRoutePermission(
 /**
  * Find the first route a user can access based on their permissions.
  * Used for redirecting users who land on a page they can't access.
+ *
+ * Skips public routes so we prefer gated routes the user has access to.
+ * Falls back to /resources (a public route) if no gated routes are accessible.
  */
 export function getFirstAccessibleRoute(
   hasPermission: (p: string) => boolean,
   hasAnyPermission: (p: string[]) => boolean,
-): string | null {
+): string {
   // Get unique routes by permission (first occurrence wins for redirect priority)
   const seen = new Set<string>();
   for (const { route, permission } of ROUTE_PERMISSIONS) {
+    // Skip public routes - we want to redirect to a gated route if possible
+    if (permission === 'public') continue;
+
     const key = Array.isArray(permission) ? permission.sort().join(',') : permission;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -145,5 +151,6 @@ export function getFirstAccessibleRoute(
       return route;
     }
   }
-  return null;
+  // Fall back to /resources if no gated routes are accessible
+  return '/resources';
 }

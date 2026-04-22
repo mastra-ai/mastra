@@ -14,7 +14,6 @@ import { cn } from '@/lib/utils';
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const { data: authCapabilities, isFetched } = useAuthCapabilities();
   const { pathname } = useLocation();
-
   const shouldHideSidebar = isFetched && authCapabilities?.enabled && !isAuthenticated(authCapabilities);
   const shouldShowSidebar = isFetched && !shouldHideSidebar;
 
