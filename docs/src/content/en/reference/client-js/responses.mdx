@@ -112,6 +112,8 @@ Stored responses include both `response.id` and `conversation_id`.
 - `response.id` is the response ID. For stored agent-backed responses, this is the persisted assistant message ID.
 - `conversation_id` is the raw Mastra thread ID.
 
+Gateway-backed agents follow the same stored-response contract. Use `store`, `conversation_id`, and `previous_response_id` the same way you would for local memory. If you need resource scoping, pass it through `requestContext` instead of sending `resource_id` in the request body.
+
 Use `previous_response_id` when you want to continue from a previous stored response. Use `conversation_id` when you want to target a known thread directly.
 
 ```typescript

@@ -11,6 +11,8 @@ The OpenAI Responses API Conversations surface gives you the conversation-manage
 
 This API follows up on the [OpenAI Responses API](/reference/client-js/responses). Stored Responses calls return `conversation_id`, and in Mastra that value is the raw memory `threadId`. Use `client.conversations` when you want to work with that thread directly.
 
+Gateway-backed agents use the same conversation flow. Continue stored responses with `previous_response_id` or inspect the thread with `conversation_id`. If you need resource scoping, pass it through `requestContext` instead of sending `resource_id` in the request body.
+
 This API is currently experimental.
 
 ## Relationship to OpenAI Responses
