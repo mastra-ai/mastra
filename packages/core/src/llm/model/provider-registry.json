@@ -793,6 +793,28 @@
       "docUrl": "https://abacus.ai/help/api",
       "gateway": "models.dev"
     },
+    "regolo": {
+      "url": "https://api.regolo.ai/v1",
+      "apiKeyEnvVar": "REGOLO_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Regolo.ai",
+      "models": [
+        "MiniMax-M2.5",
+        "qwen3.5-122b-a10b",
+        "mistral-small-4-119b-2603",
+        "gpt-oss-120b",
+        "apertus-70b-2509",
+        "gpt-oss-20b",
+        "llama-3.1-8b-instruct",
+        "mistral-small-3.2-24b-instruct-2506",
+        "llama-3.3-70b-instruct",
+        "qwen3.5-9b",
+        "qwen3-coder-next",
+        "qwen3.5-35b-a3b"
+      ],
+      "docUrl": "https://docs.regolo.ai",
+      "gateway": "models.dev"
+    },
     "perplexity-agent": {
       "url": "https://api.perplexity.ai/v1",
       "apiKeyEnvVar": "PERPLEXITY_API_KEY",
