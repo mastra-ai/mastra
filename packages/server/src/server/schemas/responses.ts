@@ -9,13 +9,7 @@ export const responseLookupQuerySchema = z.object({
   conversation_id: z
     .string()
     .optional()
-    .describe('Conversation thread ID. Required for gateway-backed response lookup and deletion.'),
-  resource_id: z
-    .string()
-    .optional()
-    .describe(
-      'Resource ID associated with the conversation. Required for gateway-backed response lookup and deletion.',
-    ),
+    .describe('Optional conversation thread ID used to scope stored response lookup and deletion.'),
 });
 
 export const responseInputTextPartSchema = z.object({
@@ -82,12 +76,6 @@ export const createResponseBodySchema = z
         'Optional text output format. Supports `json_object` for JSON mode and `json_schema` for schema-constrained structured output.',
       ),
     conversation_id: z.string().optional().describe('Optional conversation ID. In Mastra this is the raw threadId.'),
-    resource_id: z
-      .string()
-      .optional()
-      .describe(
-        'Optional resource ID. Required for gateway-backed responses where memory is keyed by thread and resource.',
-      ),
     providerOptions: providerOptionsSchema
       .optional()
       .describe('Optional provider-specific options passed through to the underlying model call'),

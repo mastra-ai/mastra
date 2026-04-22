@@ -257,7 +257,6 @@ export type ConversationDeleted = {
 export type CreateConversationParams = {
   agent_id: string;
   conversation_id?: string;
-  resource_id?: string;
   title?: string;
   metadata?: Record<string, unknown>;
   requestContext?: RequestContext | Record<string, any>;

@@ -102,6 +102,7 @@ type PreparedCreateResponseRequest = {
   didStore: boolean;
   executionInput: AgentExecutionInput;
   isGatewayBacked: boolean;
+  previousGatewayResponseMatch: GatewayResponseMessageMatch | null;
   previousResponseTurnRecord: ResponseTurnRecord | null;
   resolvedModel: ResolvedAgentModel;
   responseId: string;
@@ -190,16 +191,41 @@ async function listGatewayThreadMessages({ threadId }: { threadId: string }): Pr
   return messages;
 }
 
+async function listGatewayThreads({
+  resourceId,
+}: {
+  resourceId?: string;
+}): Promise<Array<ReturnType<typeof toLocalThread>>> {
+  const gwClient = getGatewayClient();
+  if (!gwClient) {
+    return [];
+  }
+
+  const threads: Array<ReturnType<typeof toLocalThread>> = [];
+  let offset = 0;
+  const limit = 200;
+
+  while (true) {
+    const result = await gwClient.listThreads({ resourceId, limit, offset });
+    threads.push(...result.threads.map(toLocalThread));
+    offset += result.threads.length;
+
+    if (offset >= result.total || result.threads.length === 0) {
+      break;
+    }
+  }
+
+  return threads;
+}
+
 async function findGatewayResponseMessage({
   agent,
   conversationId,
-  resourceId,
   responseId,
   requestContext,
 }: {
   agent: Agent<any, any, any, any>;
-  conversationId: string;
-  resourceId?: string;
+  conversationId?: string;
   responseId: string;
   requestContext: RequestContext;
 }): Promise<GatewayResponseMessageMatch | null> {
@@ -208,51 +234,62 @@ async function findGatewayResponseMessage({
     return null;
   }
 
-  const threadResult = await gwClient.getThread(conversationId);
-  if (!threadResult) {
-    return null;
+  const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
+  const candidateThreads = conversationId
+    ? (() => {
+        const singleThread = async () => {
+          const threadResult = await gwClient.getThread(conversationId);
+          if (!threadResult) {
+            return [];
+          }
+
+          return [toLocalThread(threadResult.thread)];
+        };
+
+        return singleThread();
+      })()
+    : listGatewayThreads({ resourceId: effectiveResourceId });
+
+  for (const thread of await candidateThreads) {
+    await validateThreadOwnership(thread, effectiveResourceId);
+
+    const messages = await listGatewayThreadMessages({ threadId: thread.id });
+    const message = messages.find(m => m.id === responseId && m.role === 'assistant');
+    if (!message) {
+      continue;
+    }
+
+    const resolvedModel = await agent.getModel({ requestContext });
+    const responseModel = getResponseModelString({ resolvedModel });
+    const configuredTools = mapMastraToolsToResponseTools(
+      (await Promise.resolve(agent.listTools({ requestContext }))) as Record<string, unknown>,
+    );
+
+    return {
+      agent,
+      configuredTools,
+      message,
+      responseModel,
+      threadContext: {
+        threadId: thread.id,
+        resourceId: effectiveResourceId ?? thread.resourceId,
+      },
+    };
   }
 
-  const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
-  const thread = toLocalThread(threadResult.thread);
-  await validateThreadOwnership(thread, effectiveResourceId);
-
-  const messages = await listGatewayThreadMessages({ threadId: conversationId });
-  const message = messages.find(m => m.id === responseId && m.role === 'assistant');
-  if (!message) {
-    return null;
-  }
-
-  const resolvedModel = await agent.getModel({ requestContext });
-  const responseModel = getResponseModelString({ resolvedModel });
-  const configuredTools = mapMastraToolsToResponseTools(
-    (await Promise.resolve(agent.listTools({ requestContext }))) as Record<string, unknown>,
-  );
-
-  return {
-    agent,
-    configuredTools,
-    message,
-    responseModel,
-    threadContext: {
-      threadId: conversationId,
-      resourceId: effectiveResourceId ?? thread.resourceId,
-    },
-  };
+  return null;
 }
 
 async function findGatewayResponseMessageAcrossAgents({
   mastra,
   agentId,
   conversationId,
-  resourceId,
   responseId,
   requestContext,
 }: {
   mastra: Mastra | undefined;
   agentId?: string;
-  conversationId: string;
-  resourceId?: string;
+  conversationId?: string;
   responseId: string;
   requestContext: RequestContext;
 }): Promise<GatewayResponseMessageMatch | null> {
@@ -269,7 +306,6 @@ async function findGatewayResponseMessageAcrossAgents({
     const match = await findGatewayResponseMessage({
       agent,
       conversationId,
-      resourceId,
       responseId,
       requestContext,
     });
@@ -353,32 +389,66 @@ async function resolveThreadExecutionContext({
   agent,
   store,
   conversationId,
-  resourceId,
   isGatewayBacked,
+  previousGatewayResponseMatch,
   previousResponseTurnRecord,
   requestContext,
 }: {
   agent: Agent<any, any, any, any>;
   store: boolean;
   conversationId?: string;
-  resourceId?: string;
   isGatewayBacked: boolean;
+  previousGatewayResponseMatch: GatewayResponseMessageMatch | null;
   previousResponseTurnRecord: ResponseTurnRecord | null;
   requestContext: RequestContext;
 }): Promise<ThreadExecutionContext | null> {
   const effectiveThreadId = getEffectiveThreadId(requestContext, conversationId);
-  const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+  const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
   if (isGatewayBacked) {
-    if (!effectiveThreadId || !effectiveResourceId) {
+    if (
+      conversationId &&
+      previousGatewayResponseMatch &&
+      previousGatewayResponseMatch.threadContext.threadId !== conversationId
+    ) {
       throw new HTTPException(400, {
-        message: 'Gateway-backed responses require both conversation_id and resource_id',
+        message:
+          'conversation_id and previous_response_id must reference the same conversation thread when both are provided',
       });
     }
 
+    if (previousGatewayResponseMatch) {
+      return previousGatewayResponseMatch.threadContext;
+    }
+
+    if (conversationId) {
+      const gwClient = getGatewayClient();
+      if (!gwClient) {
+        throw new HTTPException(500, { message: 'Gateway memory client is not configured' });
+      }
+
+      const threadResult = await gwClient.getThread(conversationId);
+      if (!threadResult) {
+        throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
+      }
+
+      const thread = toLocalThread(threadResult.thread);
+      await validateThreadOwnership(thread, effectiveResourceId);
+
+      return {
+        threadId: thread.id,
+        resourceId: effectiveResourceId ?? thread.resourceId,
+      };
+    }
+
+    if (!store && !effectiveThreadId) {
+      return null;
+    }
+
+    const threadId = effectiveThreadId ?? randomUUID();
     return {
-      threadId: effectiveThreadId,
-      resourceId: effectiveResourceId,
+      threadId,
+      resourceId: effectiveResourceId ?? threadId,
     };
   }
 
@@ -478,6 +548,29 @@ function createExecutionMemory(threadContext: ThreadExecutionContext | null) {
       resource: threadContext.resourceId,
     },
   } as const;
+}
+
+function getFinalAssistantMessageId(messages: MastraDBMessage[], fallbackId: string) {
+  const finalAssistantMessage = [...messages].reverse().find(message => message.role === 'assistant');
+  return finalAssistantMessage?.id ?? fallbackId;
+}
+
+async function getStoredGatewayAssistantMessageId(threadId: string, fallbackId: string) {
+  const maxAttempts = 3;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const messages = await listGatewayThreadMessages({ threadId });
+    const finalAssistantMessage = [...messages].reverse().find(message => message.role === 'assistant');
+    if (finalAssistantMessage?.id) {
+      return finalAssistantMessage.id;
+    }
+
+    if (attempt < maxAttempts - 1) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+
+  return fallbackId;
 }
 
 /**
@@ -773,9 +866,15 @@ async function finalizeResponse({
     text: completedState.text,
     threadContext,
   });
+  const fallbackResponseId =
+    !agentMemoryStore && didStore ? getFinalAssistantMessageId(responseMessages, responseId) : responseId;
+  const publicResponseId =
+    !agentMemoryStore && didStore && threadContext
+      ? await getStoredGatewayAssistantMessageId(threadContext.threadId, fallbackResponseId)
+      : fallbackResponseId;
   const response = buildCompletedResponse({
-    responseId,
-    outputMessageId: responseId,
+    responseId: publicResponseId,
+    outputMessageId: publicResponseId,
     model,
     createdAt,
     completedAt: completedState.completedAt,
@@ -848,10 +947,24 @@ async function prepareCreateResponseRequest({
             : 'conversation_id requires the target agent to have memory storage configured',
       })
     : null;
+  const previousGatewayResponseMatch =
+    isGatewayBacked && body.previous_response_id
+      ? await findGatewayResponseMessageAcrossAgents({
+          mastra,
+          agentId: body.agent_id,
+          conversationId: body.conversation_id,
+          responseId: body.previous_response_id,
+          requestContext,
+        })
+      : null;
   const previousResponseTurnRecord =
     !isGatewayBacked && body.previous_response_id
       ? await findResponseTurnRecord({ agent, responseId: body.previous_response_id, requestContext })
       : null;
+
+  if (isGatewayBacked && body.previous_response_id && !previousGatewayResponseMatch) {
+    throw new HTTPException(404, { message: `Stored response ${body.previous_response_id} was not found` });
+  }
 
   if (!isGatewayBacked && body.previous_response_id && !previousResponseTurnRecord) {
     throw new HTTPException(404, { message: `Stored response ${body.previous_response_id} was not found` });
@@ -867,8 +980,8 @@ async function prepareCreateResponseRequest({
     agent,
     store: shouldStore,
     conversationId: body.conversation_id,
-    resourceId: body.resource_id,
     isGatewayBacked,
+    previousGatewayResponseMatch,
     previousResponseTurnRecord,
     requestContext,
   });
@@ -889,6 +1002,7 @@ async function prepareCreateResponseRequest({
     didStore,
     executionInput,
     isGatewayBacked,
+    previousGatewayResponseMatch,
     previousResponseTurnRecord,
     resolvedModel,
     responseId,
@@ -900,6 +1014,9 @@ async function prepareCreateResponseRequest({
       instructions: body.instructions,
       text: body.text,
       previousResponseId: previousResponseTurnRecord?.message.id ?? body.previous_response_id,
+      ...(previousGatewayResponseMatch?.message.id
+        ? { previousResponseId: previousGatewayResponseMatch.message.id }
+        : {}),
       tools: configuredTools,
       store: didStore,
     },
@@ -917,6 +1034,7 @@ function createResponseEventStream({
   configuredTools,
   createdAt,
   didStore,
+  previousGatewayResponseMatch,
   previousResponseTurnRecord,
   responseId,
   responseModel,
@@ -929,6 +1047,7 @@ function createResponseEventStream({
   configuredTools: ReturnType<typeof mapMastraToolsToResponseTools>;
   createdAt: number;
   didStore: boolean;
+  previousGatewayResponseMatch: GatewayResponseMessageMatch | null;
   previousResponseTurnRecord: ResponseTurnRecord | null;
   responseId: string;
   responseModel: string;
@@ -945,7 +1064,7 @@ function createResponseEventStream({
     createdAt,
     instructions: body.instructions,
     textConfig: body.text,
-    previousResponseId: body.previous_response_id,
+    previousResponseId: previousGatewayResponseMatch?.message.id ?? body.previous_response_id,
     conversationId: threadContext?.threadId ?? body.conversation_id,
     tools: configuredTools,
     store: didStore,
@@ -1023,7 +1142,10 @@ function createResponseEventStream({
           createdAt,
           model: responseModel,
           instructions: body.instructions,
-          previousResponseId: previousResponseTurnRecord?.message.id ?? body.previous_response_id,
+          previousResponseId:
+            previousGatewayResponseMatch?.message.id ??
+            previousResponseTurnRecord?.message.id ??
+            body.previous_response_id,
           conversationId: threadContext?.threadId ?? body.conversation_id,
           configuredTools,
           responseMetadata,
@@ -1092,6 +1214,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
         didStore,
         executionInput,
         previousResponseTurnRecord,
+        previousGatewayResponseMatch,
         resolvedModel,
         responseId,
         responseModel,
@@ -1123,6 +1246,9 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
           model: responseModel,
           instructions: body.instructions,
           previousResponseId: previousResponseTurnRecord?.message.id ?? body.previous_response_id,
+          ...(previousGatewayResponseMatch?.message.id
+            ? { previousResponseId: previousGatewayResponseMatch.message.id }
+            : {}),
           conversationId: threadContext?.threadId ?? body.conversation_id,
           configuredTools,
           responseMetadata,
@@ -1152,6 +1278,7 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
         createdAt,
         didStore,
         previousResponseTurnRecord,
+        previousGatewayResponseMatch,
         responseId,
         responseModel,
         responseMetadata,
@@ -1185,14 +1312,23 @@ export const GET_RESPONSE_ROUTE = createRoute({
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: 'agents:read',
-  handler: async ({ mastra, requestContext, responseId, agent_id, conversation_id, resource_id }) => {
+  handler: async ({ mastra, requestContext, responseId, agent_id, conversation_id }) => {
     try {
       if (mastra && agent_id) {
         const agent = await getAgentFromSystem({ mastra, agentId: agent_id });
-        if (getGatewayClient() && (await isGatewayAgentAsync(agent)) && (!conversation_id || !resource_id)) {
-          throw new HTTPException(400, {
-            message: 'Gateway-backed response lookup requires both conversation_id and resource_id',
+        if (getGatewayClient() && (await isGatewayAgentAsync(agent))) {
+          const gatewayMatch = await findGatewayResponseMessageAcrossAgents({
+            mastra,
+            agentId: agent_id,
+            conversationId: conversation_id,
+            responseId,
+            requestContext,
           });
+          if (!gatewayMatch) {
+            throw new HTTPException(404, { message: `Stored response ${responseId} was not found` });
+          }
+
+          return mapGatewayMessageToResponse(gatewayMatch);
         }
       }
 
@@ -1201,18 +1337,11 @@ export const GET_RESPONSE_ROUTE = createRoute({
         return mapResponseTurnRecordToResponse(responseTurnRecord);
       }
 
-      if (conversation_id || resource_id) {
-        if (!conversation_id || !resource_id) {
-          throw new HTTPException(400, {
-            message: 'Gateway-backed response lookup requires both conversation_id and resource_id',
-          });
-        }
-
+      if (conversation_id || getGatewayClient()) {
         const gatewayMatch = await findGatewayResponseMessageAcrossAgents({
           mastra,
           agentId: agent_id,
           conversationId: conversation_id,
-          resourceId: resource_id,
           responseId,
           requestContext,
         });
@@ -1242,14 +1371,34 @@ export const DELETE_RESPONSE_ROUTE = createRoute({
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: 'agents:delete',
-  handler: async ({ mastra, requestContext, responseId, agent_id, conversation_id, resource_id }) => {
+  handler: async ({ mastra, requestContext, responseId, agent_id, conversation_id }) => {
     try {
       if (mastra && agent_id) {
         const agent = await getAgentFromSystem({ mastra, agentId: agent_id });
-        if (getGatewayClient() && (await isGatewayAgentAsync(agent)) && (!conversation_id || !resource_id)) {
-          throw new HTTPException(400, {
-            message: 'Gateway-backed response deletion requires both conversation_id and resource_id',
+        if (getGatewayClient() && (await isGatewayAgentAsync(agent))) {
+          const gatewayMatch = await findGatewayResponseMessageAcrossAgents({
+            mastra,
+            agentId: agent_id,
+            conversationId: conversation_id,
+            responseId,
+            requestContext,
           });
+          if (!gatewayMatch) {
+            throw new HTTPException(404, { message: `Stored response ${responseId} was not found` });
+          }
+
+          const gwClient = getGatewayClient();
+          if (!gwClient) {
+            throw new HTTPException(500, { message: 'Gateway memory client is not configured' });
+          }
+
+          await gwClient.deleteMessages(gatewayMatch.threadContext.threadId, { messageIds: [responseId] });
+
+          return {
+            id: responseId,
+            object: 'response',
+            deleted: true,
+          } satisfies DeleteResponse;
         }
       }
 
@@ -1266,18 +1415,11 @@ export const DELETE_RESPONSE_ROUTE = createRoute({
         return response;
       }
 
-      if (conversation_id || resource_id) {
-        if (!conversation_id || !resource_id) {
-          throw new HTTPException(400, {
-            message: 'Gateway-backed response deletion requires both conversation_id and resource_id',
-          });
-        }
-
+      if (conversation_id || getGatewayClient()) {
         const gatewayMatch = await findGatewayResponseMessageAcrossAgents({
           mastra,
           agentId: agent_id,
           conversationId: conversation_id,
-          resourceId: resource_id,
           responseId,
           requestContext,
         });

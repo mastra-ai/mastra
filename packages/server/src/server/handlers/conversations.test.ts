@@ -439,7 +439,7 @@ describe('Conversation Handlers', () => {
         thread: {
           id: 'conv_gateway',
           projectId: 'proj_123',
-          resourceId: 'user_gateway',
+          resourceId: 'conv_gateway',
           title: 'Gateway thread',
           metadata: null,
           createdAt: '2026-04-20T10:00:00.000Z',
@@ -452,7 +452,6 @@ describe('Conversation Handlers', () => {
       ...createTestServerContext({ mastra: gateway.mastra }),
       agent_id: 'gateway-agent',
       conversation_id: 'conv_gateway',
-      resource_id: 'user_gateway',
       title: 'Gateway thread',
     });
 
@@ -461,37 +460,69 @@ describe('Conversation Handlers', () => {
       object: 'conversation',
       thread: {
         id: 'conv_gateway',
-        resourceId: 'user_gateway',
+        resourceId: 'conv_gateway',
         title: 'Gateway thread',
       },
     });
   });
 
-  it('requires resource_id for gateway-backed conversations', async () => {
+  it('creates and retrieves gateway-backed conversations without extra scoping params', async () => {
     const gateway = createGatewayMastra();
+    const getThread = vi.fn().mockResolvedValue({
+      thread: {
+        id: 'conv_gateway',
+        projectId: 'proj_123',
+        resourceId: 'conv_gateway',
+        title: 'Gateway thread',
+        metadata: null,
+        createdAt: '2026-04-20T10:00:00.000Z',
+        updatedAt: '2026-04-20T10:00:00.000Z',
+      },
+    });
     vi.spyOn(gatewayMemory, 'getGatewayClient').mockReturnValue({
-      createThread: vi.fn(),
-      getThread: vi.fn(),
+      createThread: vi.fn().mockResolvedValue({
+        thread: {
+          id: 'conv_gateway',
+          projectId: 'proj_123',
+          resourceId: 'conv_gateway',
+          title: null,
+          metadata: null,
+          createdAt: '2026-04-20T10:00:00.000Z',
+          updatedAt: '2026-04-20T10:00:00.000Z',
+        },
+      }),
+      getThread,
     } as any);
 
-    await expect(
-      CREATE_CONVERSATION_ROUTE.handler({
-        ...createTestServerContext({ mastra: gateway.mastra }),
-        agent_id: 'gateway-agent',
-      }),
-    ).rejects.toMatchObject({
-      status: 400,
+    const created = await CREATE_CONVERSATION_ROUTE.handler({
+      ...createTestServerContext({ mastra: gateway.mastra }),
+      agent_id: 'gateway-agent',
     });
 
-    await expect(
-      GET_CONVERSATION_ROUTE.handler({
-        ...createTestServerContext({ mastra: gateway.mastra }),
-        conversationId: 'conv_gateway',
-        agent_id: 'gateway-agent',
-      }),
-    ).rejects.toMatchObject({
-      status: 400,
+    expect(created).toMatchObject({
+      id: 'conv_gateway',
+      object: 'conversation',
+      thread: {
+        id: 'conv_gateway',
+        resourceId: 'conv_gateway',
+      },
     });
+
+    const retrieved = await GET_CONVERSATION_ROUTE.handler({
+      ...createTestServerContext({ mastra: gateway.mastra }),
+      conversationId: 'conv_gateway',
+      agent_id: 'gateway-agent',
+    });
+
+    expect(retrieved).toMatchObject({
+      id: 'conv_gateway',
+      object: 'conversation',
+      thread: {
+        id: 'conv_gateway',
+        resourceId: 'conv_gateway',
+      },
+    });
+    expect(getThread).toHaveBeenCalledWith('conv_gateway');
   });
 
   it('retrieves, lists items, and deletes conversations through the gateway', async () => {
@@ -530,7 +561,6 @@ describe('Conversation Handlers', () => {
       ...createTestServerContext({ mastra: gateway.mastra }),
       conversationId: 'conv_gateway',
       agent_id: 'gateway-agent',
-      resource_id: 'user_gateway',
     });
 
     expect(conversation).toMatchObject({
@@ -546,7 +576,6 @@ describe('Conversation Handlers', () => {
       ...createTestServerContext({ mastra: gateway.mastra }),
       conversationId: 'conv_gateway',
       agent_id: 'gateway-agent',
-      resource_id: 'user_gateway',
     });
 
     expect(items).toMatchObject({
@@ -565,7 +594,6 @@ describe('Conversation Handlers', () => {
       ...createTestServerContext({ mastra: gateway.mastra }),
       conversationId: 'conv_gateway',
       agent_id: 'gateway-agent',
-      resource_id: 'user_gateway',
     });
 
     expect(deleteThread).toHaveBeenCalledWith('conv_gateway');

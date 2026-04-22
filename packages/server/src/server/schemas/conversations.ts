@@ -11,16 +11,11 @@ export const conversationLookupQuerySchema = z.object({
     .string()
     .optional()
     .describe('Optional Mastra agent ID used to scope gateway-backed conversation lookups'),
-  resource_id: z
-    .string()
-    .optional()
-    .describe('Optional resource ID used to validate gateway-backed conversation access'),
 });
 
 export const createConversationBodySchema = z.object({
   agent_id: z.string().describe('Mastra agent ID used to create the conversation thread'),
   conversation_id: z.string().optional().describe('Optional conversation ID to use as the raw threadId'),
-  resource_id: z.string().optional().describe('Optional resource ID to associate with the conversation'),
   title: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });

@@ -50,13 +50,11 @@ async function findGatewayConversationThread({
   mastra,
   agentId,
   conversationId,
-  resourceId,
   requestContext,
 }: {
   mastra: Mastra | undefined;
   agentId?: string;
   conversationId: string;
-  resourceId?: string;
   requestContext: RequestContext;
 }) {
   const gwClient = getGatewayClient();
@@ -64,7 +62,7 @@ async function findGatewayConversationThread({
     return null;
   }
 
-  const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+  const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
   const agents = agentId
     ? [await getAgentFromSystem({ mastra, agentId })]
     : (Object.values(mastra.listAgents()) as Agent<any, any, any, any>[]);
@@ -72,12 +70,6 @@ async function findGatewayConversationThread({
   for (const agent of agents) {
     if (!(await isGatewayAgentAsync(agent))) {
       continue;
-    }
-
-    if (!effectiveResourceId) {
-      throw new HTTPException(400, {
-        message: 'Gateway-backed conversation access requires resource_id',
-      });
     }
 
     const result = await gwClient.getThread(conversationId);
@@ -131,7 +123,7 @@ export const CREATE_CONVERSATION_ROUTE = createRoute({
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: 'agents:create',
-  handler: async ({ mastra, requestContext, agent_id, conversation_id, resource_id, title, metadata }) => {
+  handler: async ({ mastra, requestContext, agent_id, conversation_id, title, metadata }) => {
     try {
       if (!mastra) {
         throw new HTTPException(500, { message: 'Mastra instance is required for conversations' });
@@ -141,12 +133,7 @@ export const CREATE_CONVERSATION_ROUTE = createRoute({
       const gwClient = getGatewayClient();
       if (gwClient && (await isGatewayAgentAsync(agent))) {
         const threadId = conversation_id ?? randomUUID();
-        const resourceId = getEffectiveResourceId(requestContext, resource_id);
-        if (!resourceId) {
-          throw new HTTPException(400, {
-            message: 'Gateway-backed conversation creation requires resource_id',
-          });
-        }
+        const resourceId = getEffectiveResourceId(requestContext, undefined) ?? threadId;
 
         const created = await gwClient.createThread({
           id: threadId,
@@ -167,7 +154,7 @@ export const CREATE_CONVERSATION_ROUTE = createRoute({
       }
 
       const threadId = conversation_id ?? randomUUID();
-      const resourceId = getEffectiveResourceId(requestContext, resource_id) ?? threadId;
+      const resourceId = getEffectiveResourceId(requestContext, undefined) ?? threadId;
       const thread = await memory.createThread({
         threadId,
         resourceId,
@@ -194,7 +181,7 @@ export const GET_CONVERSATION_ROUTE = createRoute({
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: 'agents:read',
-  handler: async ({ mastra, requestContext, conversationId, agent_id, resource_id }) => {
+  handler: async ({ mastra, requestContext, conversationId, agent_id }) => {
     try {
       const match = await findConversationThreadAcrossAgents({ mastra, conversationId, requestContext });
       if (match) {
@@ -205,7 +192,6 @@ export const GET_CONVERSATION_ROUTE = createRoute({
         mastra,
         agentId: agent_id,
         conversationId,
-        resourceId: resource_id,
         requestContext,
       });
       if (!gatewayThread) {
@@ -231,7 +217,7 @@ export const GET_CONVERSATION_ITEMS_ROUTE = createRoute({
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: 'agents:read',
-  handler: async ({ mastra, requestContext, conversationId, agent_id, resource_id }) => {
+  handler: async ({ mastra, requestContext, conversationId, agent_id }) => {
     try {
       const match = await findConversationThreadAcrossAgents({ mastra, conversationId, requestContext });
       if (match) {
@@ -248,7 +234,6 @@ export const GET_CONVERSATION_ITEMS_ROUTE = createRoute({
         mastra,
         agentId: agent_id,
         conversationId,
-        resourceId: resource_id,
         requestContext,
       });
       if (!gatewayThread) {
@@ -275,7 +260,7 @@ export const DELETE_CONVERSATION_ROUTE = createRoute({
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: 'agents:delete',
-  handler: async ({ mastra, requestContext, conversationId, agent_id, resource_id }) => {
+  handler: async ({ mastra, requestContext, conversationId, agent_id }) => {
     try {
       const match = await findConversationThreadAcrossAgents({ mastra, conversationId, requestContext });
       if (match) {
@@ -287,7 +272,6 @@ export const DELETE_CONVERSATION_ROUTE = createRoute({
         mastra,
         agentId: agent_id,
         conversationId,
-        resourceId: resource_id,
         requestContext,
       });
       if (!gatewayThread) {
