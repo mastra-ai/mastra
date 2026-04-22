@@ -1,6 +1,14 @@
 import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Button,
   ButtonWithTooltip,
+  DateRangeSelector,
+  EmptyState,
   ErrorState,
+  MetricsFlexGrid,
+  MetricsProvider,
   NoDataPageLayout,
   PageHeader,
   PageLayout,
@@ -8,18 +16,35 @@ import {
   SessionExpired,
   is401UnauthorizedError,
   is403ForbiddenError,
+  isValidPreset,
+  useAgentRunsKpiMetrics,
 } from '@mastra/playground-ui';
-import { BarChart3Icon, BookIcon } from 'lucide-react';
+import type { DatePreset } from '@mastra/playground-ui';
+import { BarChart3Icon, BookIcon, CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 import { useCallback } from 'react';
 import { useSearchParams } from 'react-router';
-import { MetricsProvider, useAgentRunsKpiMetrics, isValidPreset } from '@/domains/metrics/components';
-import { DateRangeSelector } from '@/domains/metrics/components/date-range-selector';
-import { MetricsDashboard } from '@/domains/metrics/components/metrics-dashboard';
-import type { DatePreset } from '@/domains/metrics/hooks/use-metrics';
+import { useMastraPackages } from '@/domains/configuration/hooks/use-mastra-packages';
+import { LatencyCard } from '@/domains/metrics/components/latency-card';
+import {
+  AgentRunsKpiCard,
+  AvgScoreKpiCard,
+  ModelCostKpiCard,
+  TotalTokensKpiCard,
+} from '@/domains/metrics/components/metrics-kpi-cards';
+import { ModelUsageCostCard } from '@/domains/metrics/components/model-usage-cost-card';
+import { ScoresCard } from '@/domains/metrics/components/scores-card';
+import { TokenUsageByAgentCard } from '@/domains/metrics/components/token-usage-by-agent-card';
+import { TracesVolumeCard } from '@/domains/metrics/components/traces-volume-card';
+
+const ANALYTICS_OBSERVABILITY_TYPES = new Set([
+  'ObservabilityStorageClickhouseVNext',
+  'ObservabilityStorageDuckDB',
+  'ObservabilityInMemory',
+]);
 
 const PERIOD_PARAM = 'period';
 
-export default function Metrics() {
+export default function MetricsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlPreset = searchParams.get(PERIOD_PARAM);
   const initialPreset: DatePreset = isValidPreset(urlPreset) ? urlPreset : '24h';
@@ -51,6 +76,10 @@ export default function Metrics() {
 
 function MetricsContent() {
   const { error } = useAgentRunsKpiMetrics();
+  const { data, isLoading } = useMastraPackages();
+  const observabilityType = data?.observabilityStorageType;
+  const supportsMetrics = observabilityType ? ANALYTICS_OBSERVABILITY_TYPES.has(observabilityType) : false;
+  const isInMemory = observabilityType === 'ObservabilityInMemory';
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -102,7 +131,53 @@ function MetricsContent() {
         </PageLayout.Row>
       </PageLayout.TopArea>
 
-      <MetricsDashboard />
+      {isLoading ? null : !supportsMetrics ? (
+        <div className="flex h-full items-center justify-center">
+          <EmptyState
+            iconSlot={<CircleSlashIcon />}
+            titleSlot="Metrics are not available with your current storage"
+            descriptionSlot="Metrics require ClickHouse, DuckDB, or in-memory storage for observability. Relational databases (PostgreSQL, LibSQL) do not support metrics collection. To enable metrics on an existing project, switch the observability storage in the Mastra configuration."
+            actionSlot={
+              <Button
+                variant="ghost"
+                as="a"
+                href="https://mastra.ai/docs/observability/metrics/overview"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Metrics Documentation <ExternalLinkIcon />
+              </Button>
+            }
+          />
+        </div>
+      ) : (
+        <div className="grid gap-8 content-start pb-10">
+          {isInMemory && (
+            <Alert variant="info">
+              <AlertTitle>Metrics are not persisted</AlertTitle>
+              <AlertDescription as="p">
+                This project uses in-memory storage for observability. Metrics will be lost on every server restart. For
+                persistent metrics, switch the observability storage to ClickHouse or DuckDB.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <MetricsFlexGrid>
+            <AgentRunsKpiCard />
+            <ModelCostKpiCard />
+            <TotalTokensKpiCard />
+            <AvgScoreKpiCard />
+          </MetricsFlexGrid>
+
+          <MetricsFlexGrid>
+            <ModelUsageCostCard />
+            <TokenUsageByAgentCard />
+            <ScoresCard />
+            <TracesVolumeCard />
+            <LatencyCard />
+          </MetricsFlexGrid>
+        </div>
+      )}
     </PageLayout>
   );
 }
