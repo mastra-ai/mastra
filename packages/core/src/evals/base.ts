@@ -1137,10 +1137,6 @@ export function filterRun<TInput = unknown, TOutput = unknown>(
       result.input = {
         ...agentInput,
         rememberedMessages: remembered,
-        // When partTypes is specified, the scorer declared exactly what it needs.
-        // System messages use CoreMessage format (not MastraDBMessage) and can't be
-        // filtered by partType, so drop them to avoid sending unfiltered payload.
-        ...(options.partTypes ? { systemMessages: [], taggedSystemMessages: {} } : {}),
       } as unknown as TInput;
     }
 
