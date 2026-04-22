@@ -698,6 +698,40 @@ describe('BlaxelSandbox Mount Configuration', () => {
       expect(s3fsMountCall[0].command).toMatch(/\bro\b/);
     }
   });
+
+  it('S3 prefix mount uses bucket:/prefix syntax in mount command', async () => {
+    const sandbox = new BlaxelSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-prefix',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+        prefix: 'workspace/data/',
+      }),
+    } as any;
+
+    await sandbox.mount(mockFilesystem, '/data/s3-prefix');
+
+    const calls = mockSandbox.process.exec.mock.calls;
+    const s3fsMountCall = calls.find((call: any[]) => {
+      const cmd = call[0]?.command || '';
+      return cmd.includes('s3fs') && cmd.includes('/data/s3-prefix') && !cmd.includes('which');
+    });
+
+    expect(s3fsMountCall).toBeDefined();
+    if (s3fsMountCall) {
+      expect(s3fsMountCall[0].command).toContain('test-bucket:/workspace/data');
+      expect(s3fsMountCall[0].command).not.toContain('test-bucket:/workspace/data/');
+    }
+  });
 });
 
 /**
