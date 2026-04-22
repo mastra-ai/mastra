@@ -1,5 +1,10 @@
-import { AgentBuilderStarter } from '@/domains/agent-builder/components/agent-builder-starter/agent-builder-starter';
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router';
 
 export default function AgentBuilder() {
-  return <AgentBuilderStarter />;
+  const navigate = useNavigate();
+  useEffect(() => {
+    void navigate('/agent-builder/agents/create');
+  }, [navigate]);
+  return null;
 }

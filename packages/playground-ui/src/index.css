@@ -321,6 +321,8 @@ html.light {
   body {
     background-color: var(--surface1);
     color: var(--neutral6);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 

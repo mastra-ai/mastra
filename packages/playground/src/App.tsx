@@ -28,7 +28,7 @@ import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/link';
 import AgentBuilder from './pages/agent-builder';
-import AgentBuilderAdmin from './pages/agent-builder/admin';
+import AgentBuilderCreate from './pages/agent-builder/agents/create';
 import AgentBuilderAgentEdit from './pages/agent-builder/agents/edit';
 import AgentBuilderAgentView from './pages/agent-builder/agents/view';
 import Agents from './pages/agents';
@@ -217,10 +217,14 @@ const routes = [
     element: <AgentBuilderRootLayout />,
     children: [
       { index: true, element: <AgentBuilder /> },
-      { path: 'admin', element: <AgentBuilderAdmin /> },
+      { path: 'agents/create', element: <AgentBuilderCreate /> },
       { path: 'agents/:id/edit', element: <AgentBuilderAgentEdit /> },
       { path: 'agents/:id/view', element: <AgentBuilderAgentView /> },
     ],
+  },
+  {
+    element: <AgentBuilderRootLayout />,
+    children: [],
   },
   {
     element: <MinimalRootLayout />,
@@ -344,7 +348,7 @@ const routes = [
           ]
         : []),
 
-      { index: true, loader: () => redirect('/agents') },
+      { index: true, loader: () => redirect('/agents/create') },
       { path: '/request-context', element: <RequestContext /> },
     ],
   },
