@@ -487,6 +487,10 @@ export class Agent<
    */
   setBrowser(browser: MastraBrowser | undefined): void {
     this.#browser = browser;
+    // Mark as explicit so workspace browser doesn't overwrite
+    if (browser) {
+      this.#hasExplicitBrowser = true;
+    }
   }
 
   /**
@@ -1140,6 +1144,10 @@ export class Agent<
       const resolvedWorkspace = await Promise.resolve(result);
 
       if (!resolvedWorkspace) {
+        // Clear derived browser when factory returns no workspace
+        if (!this.#hasExplicitBrowser) {
+          this.#browser = undefined;
+        }
         return undefined;
       }
 
@@ -1164,6 +1172,9 @@ export class Agent<
     const globalWorkspace = this.#mastra?.getWorkspace();
     if (globalWorkspace) {
       this.#setBrowserFromWorkspace(globalWorkspace);
+    } else if (!this.#hasExplicitBrowser) {
+      // Clear derived browser when no workspace available
+      this.#browser = undefined;
     }
     return globalWorkspace;
   }

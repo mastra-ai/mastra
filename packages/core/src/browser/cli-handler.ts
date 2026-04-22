@@ -90,14 +90,16 @@ export class BrowserCliHandler {
    * Track which CLI providers have been warmed up per browser instance and thread.
    * Key format: `${browserId}:${cliName}:${threadId}`
    * Browser ID scopes warmup state so different agents/workspaces don't share state.
+   * @internal Exposed for testing
    */
-  private warmedUpClis = new Set<string>();
+  warmedUpClis = new Set<string>();
 
   /**
    * Track cleanup callbacks for warmed up CLIs to avoid duplicate registrations.
    * Key format: `${browserId}:${cliName}:${threadId}`
+   * @internal Exposed for testing
    */
-  private warmupCleanups = new Map<string, () => void>();
+  warmupCleanups = new Map<string, () => void>();
 
   /**
    * Build a warmup key scoped to browser instance.

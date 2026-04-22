@@ -239,8 +239,9 @@ describe('BrowserCliHandler', () => {
       const specialUrl = "ws://localhost:9222/devtools?foo=bar&baz='test'";
       const result = handler.injectCdpUrl('agent-browser open https://google.com', specialUrl, threadId);
 
-      // Should be shell-escaped
-      expect(result).toContain("'ws://localhost:9222/devtools?foo=bar&baz=");
+      // Should be shell-escaped - verify the full escaped URL is present
+      // Single quotes in URL get escaped as '\'' (end quote, escaped quote, start quote)
+      expect(result).toContain("'ws://localhost:9222/devtools?foo=bar&baz='\\''test'\\'''");
     });
 
     it('escapes special characters in thread IDs', () => {

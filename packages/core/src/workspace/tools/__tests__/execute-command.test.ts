@@ -549,8 +549,10 @@ function createMockContextWithBrowser(options: {
 
 describe('executeCommandTool browser CLI logic', () => {
   beforeEach(() => {
-    // Clear warmup state between tests
+    // Clear mocks + warmup state between tests
     vi.clearAllMocks();
+    browserCliHandler.warmedUpClis.clear();
+    browserCliHandler.warmupCleanups.clear();
   });
 
   describe('browser launch', () => {
