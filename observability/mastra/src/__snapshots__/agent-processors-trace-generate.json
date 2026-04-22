@@ -35,9 +35,7 @@
         },
         "input": "  Hello! How are you?  ",
         "output": {
-          "text": {
-            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-          },
+          "text": "Mock V2 generate response",
           "files": []
         }
       },
@@ -62,37 +60,6 @@
               "runId": "<runId-1>"
             },
             "input": {
-              "phase": "input",
-              "messageCount": 1
-            },
-            "output": {
-              "phase": "input",
-              "messageList": {
-                "messages": [
-                  {
-                    "role": "user",
-                    "content": [
-                      {
-                        "type": "text",
-                        "text": "  Hello! How are you?  "
-                      }
-                    ]
-                  }
-                ],
-                "systemMessages": [
-                  {
-                    "role": "system",
-                    "content": "You are a helpful assistant"
-                  }
-                ]
-              },
-              "systemMessages": [
-                {
-                  "role": "system",
-                  "content": "You are a helpful assistant"
-                }
-              ],
-              "retryCount": 0,
               "messages": [
                 {
                   "id": "<id-1>",
@@ -103,14 +70,23 @@
                     "parts": [
                       {
                         "type": "text",
-                        "text": "  Hello! How are you?  "
+                        "text": "  Hello! How are you?  ",
+                        "createdAt": "<date>"
                       }
                     ],
                     "content": "  Hello! How are you?  "
                   }
                 }
-              ]
-            }
+              ],
+              "systemMessages": [
+                {
+                  "role": "system",
+                  "content": "You are a helpful assistant"
+                }
+              ],
+              "retryCount": 0
+            },
+            "output": {}
           },
           "children": [
             {
@@ -133,9 +109,7 @@
                 },
                 "input": "Validate:   Hello! How are you?  ",
                 "output": {
-                  "text": {
-                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                  },
+                  "text": "Mock V2 generate response",
                   "files": []
                 }
               },
@@ -198,9 +172,7 @@
                       "files": [],
                       "reasoning": [],
                       "sources": [],
-                      "text": {
-                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                      },
+                      "text": "Mock V2 generate response",
                       "warnings": []
                     }
                   },
@@ -244,9 +216,7 @@
                         },
                         "input": {},
                         "output": {
-                          "text": {
-                            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                          },
+                          "text": "Mock V2 generate response",
                           "toolCalls": []
                         }
                       },
@@ -271,9 +241,7 @@
                               "runId": "<runId-2>"
                             },
                             "output": {
-                              "text": {
-                                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                              }
+                              "text": "Mock V2 generate response"
                             }
                           }
                         }
@@ -343,9 +311,7 @@
               "files": [],
               "reasoning": [],
               "sources": [],
-              "text": {
-                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-              },
+              "text": "Mock V2 generate response",
               "warnings": []
             }
           },
@@ -389,9 +355,7 @@
                 },
                 "input": {},
                 "output": {
-                  "text": {
-                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                  },
+                  "text": "Mock V2 generate response",
                   "toolCalls": []
                 }
               },
@@ -416,9 +380,7 @@
                       "runId": "<runId-1>"
                     },
                     "output": {
-                      "text": {
-                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                      }
+                      "text": "Mock V2 generate response"
                     }
                   }
                 }
@@ -446,53 +408,6 @@
               "runId": "<runId-1>"
             },
             "input": {
-              "phase": "outputResult",
-              "messageCount": 1
-            },
-            "output": {
-              "phase": "outputResult",
-              "messageList": {
-                "messages": [
-                  {
-                    "role": "user",
-                    "content": [
-                      {
-                        "type": "text",
-                        "text": "  Hello! How are you?  "
-                      }
-                    ]
-                  },
-                  {
-                    "role": "assistant",
-                    "content": [
-                      {
-                        "type": "text",
-                        "text": {
-                          "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                        }
-                      }
-                    ]
-                  }
-                ],
-                "systemMessages": [
-                  {
-                    "role": "system",
-                    "content": "You are a helpful assistant"
-                  }
-                ]
-              },
-              "result": {
-                "text": {
-                  "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                },
-                "usage": {
-                  "inputTokens": 15,
-                  "outputTokens": 25,
-                  "totalTokens": 40
-                },
-                "finishReason": "stop"
-              },
-              "retryCount": 0,
               "messages": [
                 {
                   "id": "<id-2>",
@@ -502,22 +417,27 @@
                     "parts": [
                       {
                         "type": "text",
-                        "text": {
-                          "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                        }
+                        "text": "Mock V2 generate response",
+                        "createdAt": "<date>"
                       }
                     ],
                     "metadata": {
-                      "modelId": "mock-model-id"
+                      "modelId": "mock-model-id",
+                      "provider": "mock-provider"
                     },
-                    "content": {
-                      "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                    }
+                    "content": "Mock V2 generate response"
                   },
                   "createdAt": "<date>"
                 }
-              ]
-            }
+              ],
+              "result": {
+                "text": "Mock V2 generate response",
+                "finishReason": "stop",
+                "stepCount": 1
+              },
+              "retryCount": 0
+            },
+            "output": {}
           },
           "children": [
             {
@@ -538,13 +458,9 @@
                 "metadata": {
                   "runId": "<runId-3>"
                 },
-                "input": {
-                  "__or__": ["Summarize: Mock V2 generate response", "Summarize: Mock V2 stream response"]
-                },
+                "input": "Summarize: Mock V2 generate response",
                 "output": {
-                  "text": {
-                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                  },
+                  "text": "Mock V2 generate response",
                   "files": []
                 }
               },
@@ -597,9 +513,7 @@
                           "content": [
                             {
                               "type": "text",
-                              "text": {
-                                "__or__": ["Summarize: Mock V2 generate response", "Summarize: Mock V2 stream response"]
-                              }
+                              "text": "Summarize: Mock V2 generate response"
                             }
                           ]
                         }
@@ -609,9 +523,7 @@
                       "files": [],
                       "reasoning": [],
                       "sources": [],
-                      "text": {
-                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                      },
+                      "text": "Mock V2 generate response",
                       "warnings": []
                     }
                   },
@@ -655,9 +567,7 @@
                         },
                         "input": {},
                         "output": {
-                          "text": {
-                            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                          },
+                          "text": "Mock V2 generate response",
                           "toolCalls": []
                         }
                       },
@@ -682,9 +592,7 @@
                               "runId": "<runId-3>"
                             },
                             "output": {
-                              "text": {
-                                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                              }
+                              "text": "Mock V2 generate response"
                             }
                           }
                         }

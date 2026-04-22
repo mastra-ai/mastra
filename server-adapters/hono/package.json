@@ -1,6 +1,6 @@
 {
   "name": "@mastra/hono",
-  "version": "1.4.1-alpha.1",
+  "version": "1.4.5",
   "description": "Mastra Hono adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -29,7 +29,7 @@
     "@hono/node-ws": "^1.3.0",
     "@mastra/server": "workspace:*",
     "fetch-to-node": "^2.1.0",
-    "ws": "^8.18.0"
+    "ws": "^8.20.0"
   },
   "devDependencies": {
     "@ai-sdk/openai": "^2.0.99",
@@ -45,7 +45,7 @@
     "@mastra/memory": "workspace:*",
     "@mastra/observability": "workspace:*",
     "@types/node": "22.19.15",
-    "eslint": "^9.39.4",
+    "eslint": "^10.2.1",
     "hono": "^4.12.8",
     "tsup": "^8.5.1",
     "typescript": "catalog:",

@@ -2,8 +2,18 @@ import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import type { ModelInformation } from '../types';
 import { MetaSchemaCompatLayer } from './meta';
+import { createSuite } from './test-suite';
 
 describe('MetaSchemaCompatLayer', () => {
+  const modelInfo: ModelInformation = {
+    provider: 'meta',
+    modelId: 'meta-llama-3.1-70b-instruct',
+    supportsStructuredOutputs: false,
+  };
+
+  const layer = new MetaSchemaCompatLayer(modelInfo);
+  createSuite(layer);
+
   describe('shouldApply', () => {
     it('should apply for meta models', () => {
       const modelInfo: ModelInformation = {

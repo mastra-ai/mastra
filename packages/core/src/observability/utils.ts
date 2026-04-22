@@ -9,7 +9,70 @@
 import { EntityType, SpanType } from './types';
 import type { Span, GetOrCreateSpanOptions, AnySpan } from './types';
 
-const entityTypeValues = new Set(Object.values(EntityType));
+const entityTypeValues = new Set<EntityType>(Object.values(EntityType));
+let currentSpanResolver: (() => AnySpan | undefined) | undefined;
+
+export function setCurrentSpanResolver(resolver: (() => AnySpan | undefined) | undefined): void {
+  currentSpanResolver = resolver;
+}
+
+export function resolveCurrentSpan(): AnySpan | undefined {
+  return currentSpanResolver?.();
+}
+
+/** Generate a unique id for an observability signal (log, metric, score, feedback). */
+export function generateSignalId(): string {
+  return crypto.randomUUID();
+}
+
+// --- Lazy resolvers for executeWithContext / executeWithContextSync ---
+// The real implementations live in context-storage.ts (which imports AsyncLocalStorage).
+// context-storage.ts registers them at import time so that consumer code can call these
+// browser-safe wrappers without pulling async_hooks into shared chunks.
+
+type ExecuteWithContextFn = <T>(params: { span?: AnySpan; fn: () => Promise<T> }) => Promise<T>;
+type ExecuteWithContextSyncFn = <T>(params: { span?: AnySpan; fn: () => T }) => T;
+
+let executeWithContextImpl: ExecuteWithContextFn | undefined;
+let executeWithContextSyncImpl: ExecuteWithContextSyncFn | undefined;
+
+export function setExecuteWithContext(impl: ExecuteWithContextFn): void {
+  executeWithContextImpl = impl;
+}
+
+export function setExecuteWithContextSync(impl: ExecuteWithContextSyncFn): void {
+  executeWithContextSyncImpl = impl;
+}
+
+/**
+ * Execute an async function within a span's tracing context.
+ * Falls back to direct execution if no context-storage implementation is registered or no span exists.
+ */
+export async function executeWithContext<T>(params: { span?: AnySpan; fn: () => Promise<T> }): Promise<T> {
+  if (executeWithContextImpl) {
+    return executeWithContextImpl(params);
+  }
+  const { span, fn } = params;
+  if (span?.executeInContext) {
+    return span.executeInContext(fn);
+  }
+  return fn();
+}
+
+/**
+ * Execute a sync function within a span's tracing context.
+ * Falls back to direct execution if no context-storage implementation is registered or no span exists.
+ */
+export function executeWithContextSync<T>(params: { span?: AnySpan; fn: () => T }): T {
+  if (executeWithContextSyncImpl) {
+    return executeWithContextSyncImpl(params);
+  }
+  const { span, fn } = params;
+  if (span?.executeInContextSync) {
+    return span.executeInContextSync(fn);
+  }
+  return fn();
+}
 
 /**
  * Creates or gets a child span from existing tracing context or starts a new trace.
@@ -100,6 +163,8 @@ export function getEntityTypeForSpan(span: {
   switch (span.spanType) {
     case SpanType.AGENT_RUN:
       return EntityType.AGENT;
+    case SpanType.RAG_INGESTION:
+      return EntityType.RAG_INGESTION;
     case SpanType.SCORER_RUN:
     case SpanType.SCORER_STEP:
       return EntityType.SCORER;

@@ -1437,6 +1437,44 @@ describe('MCPServer', () => {
 
       await client.disconnect();
     });
+
+    it('should return 404 when a stale session ID is provided', async () => {
+      sessionServer = new MCPServer({
+        name: 'StaleSessionServer',
+        version: '1.0.0',
+        tools: minimalTestTool,
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+        });
+      });
+
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+
+      // Send a POST request with a session ID that doesn't exist on the server
+      const response = await fetch(`http://localhost:${currentTestPort}/http`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'mcp-session-id': 'non-existent-session-id',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'tools/list',
+          id: 1,
+        }),
+      });
+
+      expect(response.status).toBe(404);
+      const body = await response.json();
+      expect(body.error.message).toBe('Session not found');
+    });
   });
 });
 

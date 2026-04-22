@@ -1,16 +1,20 @@
 import type { TransformStreamDefaultController } from 'node:stream/web';
 import { Agent } from '../../agent';
+import type { MessageInput, MessageListInput } from '../../agent/message-list';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { ProviderOptions } from '../../llm/model/provider-options';
+import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
+import type { Mastra } from '../../mastra';
 import type { ObservabilityContext } from '../../observability';
 import { resolveObservabilityContext } from '../../observability';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import type { StandardSchemaWithJSON } from '../../schema';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType } from '../../stream';
 import type { ToolCallChunk, ToolResultChunk } from '../../stream/types';
-import type { Processor } from '../index';
+import type { ProcessOutputStreamArgs, Processor } from '../index';
 
 export type { StructuredOutputOptions } from '../../agent/types';
 
@@ -34,6 +38,10 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
 
   public schema: StandardSchemaWithJSON<OUTPUT>;
   private structuringAgent: Agent<any, any, undefined>;
+  private structuringModel: MastraModelConfig;
+  private structuringInstructions: string;
+  private agent?: Agent<any, any, any>;
+  private useAgent = false;
   private errorStrategy: 'strict' | 'warn' | 'fallback';
   private fallbackValue?: OUTPUT;
   private isStructuringAgentStreamStarted = false;
@@ -60,34 +68,35 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     }
 
     this.schema = options.schema;
+    this.structuringModel = options.model;
+    this.useAgent = options.useAgent ?? false;
     this.errorStrategy = options.errorStrategy ?? 'strict';
     this.fallbackValue = options.fallbackValue;
     this.jsonPromptInjection = options.jsonPromptInjection;
     this.providerOptions = options.providerOptions;
     this.logger = options.logger;
-    // Create internal structuring agent
+    this.structuringInstructions = options.instructions || this.generateInstructions();
+    // Create internal structuring agent as fallback (used when no explicit agent is set)
     this.structuringAgent = new Agent({
       id: 'structured-output-structurer',
       name: 'structured-output-structurer',
-      instructions: options.instructions || this.generateInstructions(),
+      instructions: this.structuringInstructions,
       model: options.model,
     });
   }
 
-  async processOutputStream(
-    args: {
-      part: ChunkType;
-      streamParts: ChunkType[];
-      state: Record<string, unknown> & {
-        controller?: TransformStreamDefaultController<ChunkType<OUTPUT>>;
-      };
-      abort: (reason?: string, options?: unknown) => never;
-      retryCount: number;
-    } & Partial<ObservabilityContext>,
-  ): Promise<ChunkType | null | undefined> {
-    const { part, state, streamParts, abort, ...rest } = args;
+  __registerMastra(mastra: Mastra) {
+    this.structuringAgent.__registerMastra(mastra);
+  }
+
+  setAgent(agent: Agent<any, any, any>) {
+    this.agent = agent;
+  }
+
+  async processOutputStream(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined> {
+    const { part, state, streamParts, abort, requestContext, messageList, ...rest } = args;
     const observabilityContext = resolveObservabilityContext(rest);
-    const controller = state.controller as TransformStreamDefaultController<ChunkType<OUTPUT>>;
+    const controller = state.controller as TransformStreamDefaultController<ChunkType<OUTPUT>> | undefined;
 
     switch (part.type) {
       case 'finish':
@@ -95,7 +104,14 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         // - enqueue the structuring agent stream chunks into the main stream
         // - when the structuring agent stream is finished, enqueue the final chunk into the main stream
 
-        await this.processAndEmitStructuredOutput(streamParts, controller, abort, observabilityContext);
+        await this.processAndEmitStructuredOutput(
+          streamParts,
+          controller,
+          abort,
+          observabilityContext,
+          requestContext,
+          messageList,
+        );
         return part;
 
       default:
@@ -105,25 +121,21 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
 
   private async processAndEmitStructuredOutput(
     streamParts: ChunkType[],
-    controller: TransformStreamDefaultController<ChunkType<OUTPUT>>,
-    abort: (reason?: string) => never,
+    controller: TransformStreamDefaultController<ChunkType<OUTPUT>> | undefined,
+    abort: ProcessOutputStreamArgs['abort'],
     observabilityContext?: ObservabilityContext,
+    requestContext?: RequestContext,
+    messageList?: ProcessOutputStreamArgs['messageList'],
   ): Promise<void> {
     if (this.isStructuringAgentStreamStarted) return;
     this.isStructuringAgentStreamStarted = true;
     try {
-      const structuringPrompt = this.buildStructuringPrompt(streamParts);
-      const prompt = `Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n${structuringPrompt}`;
-
-      // Use structuredOutput in 'direct' mode (no model) since this agent already has a model
-      const structuringAgentStream = await this.structuringAgent.stream(prompt, {
-        structuredOutput: {
-          schema: this.schema,
-          jsonPromptInjection: this.jsonPromptInjection,
-        },
-        providerOptions: this.providerOptions,
-        ...observabilityContext,
-      });
+      const structuringAgentStream = await this.getStructuringStream(
+        streamParts,
+        requestContext,
+        messageList,
+        observabilityContext,
+      );
 
       const excludedChunkTypes = [
         'start',
@@ -141,7 +153,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
           continue;
         }
         if (chunk.type === 'error') {
-          this.handleError('Structuring failed', 'Internal agent did not generate structured output', abort);
+          this.handleError('Structuring failed', chunk.payload.error, abort);
 
           if (this.errorStrategy === 'warn') {
             // avoid enqueuing the error chunk to the main agent stream
@@ -158,7 +170,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
                 fallback: true,
               },
             };
-            controller.enqueue(fallbackChunk);
+            controller?.enqueue(fallbackChunk);
             break;
           }
         }
@@ -169,15 +181,91 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
             from: 'structured-output',
           },
         } as unknown as ChunkType<OUTPUT>;
-        controller.enqueue(newChunk);
+        controller?.enqueue(newChunk);
       }
     } catch (error) {
-      this.handleError(
-        'Structured output processing failed',
-        error instanceof Error ? error.message : 'Unknown error',
-        abort,
-      );
+      this.handleError('Structured output processing failed', error, abort);
     }
+  }
+
+  /**
+   * Get the structuring stream, using the explicit agent with model override and
+   * read-only memory when request context provides thread info, falling back to the bare internal agent.
+   */
+  private async getStructuringStream(
+    streamParts: ChunkType[],
+    requestContext?: RequestContext,
+    messageList?: ProcessOutputStreamArgs['messageList'],
+    observabilityContext?: ObservabilityContext,
+  ) {
+    const requestThreadId = requestContext?.get(MASTRA_THREAD_ID_KEY);
+    const requestResourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY);
+    const serializedMemoryInfo = messageList?.serialize().memoryInfo;
+    const threadId =
+      typeof requestThreadId === 'string'
+        ? requestThreadId
+        : typeof serializedMemoryInfo?.threadId === 'string'
+          ? serializedMemoryInfo.threadId
+          : undefined;
+    const resourceId =
+      typeof requestResourceId === 'string'
+        ? requestResourceId
+        : typeof serializedMemoryInfo?.resourceId === 'string'
+          ? serializedMemoryInfo.resourceId
+          : undefined;
+
+    // When opted in and an explicit agent is available with thread info,
+    // use that agent with a model override and read-only memory.
+    // This gives the structuring model full conversation context.
+    if (this.useAgent && this.agent && threadId) {
+      const promptMessage: MessageInput = {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: `Extract and structure information from the conversation so far. keep the original meaning and details. Rely on the provided text and conversation history`,
+          },
+        ],
+      };
+
+      const messages: MessageListInput = [
+        ...(messageList?.get?.input?.db() || []),
+        ...(messageList?.get?.response?.db() || []),
+        promptMessage,
+      ];
+
+      const structuringRequestContext = requestContext ? new RequestContext(requestContext.entries()) : undefined;
+
+      return this.agent.stream(messages, {
+        model: this.structuringModel,
+        requestContext: structuringRequestContext,
+        toolChoice: 'none',
+        structuredOutput: {
+          schema: this.schema,
+          jsonPromptInjection: this.jsonPromptInjection,
+        },
+        memory: {
+          thread: threadId,
+          ...(resourceId ? { resource: resourceId } : {}),
+          options: { readOnly: true },
+        },
+        providerOptions: this.providerOptions,
+        ...observabilityContext,
+      });
+    }
+
+    // Fallback: use the bare internal structuring agent (no conversation context)
+    return this.structuringAgent.stream(
+      `Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details. Rely on the provided text and conversation history.\n\n${this.buildStructuringPrompt(streamParts)}`,
+      {
+        structuredOutput: {
+          schema: this.schema,
+          jsonPromptInjection: this.jsonPromptInjection,
+        },
+        providerOptions: this.providerOptions,
+        ...observabilityContext,
+      },
+    );
   }
 
   /**
@@ -266,20 +354,38 @@ The input text may be in any format (sentences, bullet points, paragraphs, etc.)
   /**
    * Handle errors based on the configured strategy
    */
-  private handleError(context: string, error: string, abort: (reason?: string) => never): void {
-    const message = `[StructuredOutputProcessor] ${context}: ${error}`;
+  private handleError(context: string, error: unknown, abort: (reason?: string) => never): void {
+    const errorMessage = this.getErrorMessage(error);
+    const message = `[StructuredOutputProcessor] ${context}: ${errorMessage}`;
 
     switch (this.errorStrategy) {
       case 'strict':
-        this.logger?.error(message);
+        this.logger?.error(message, error);
         abort(message);
         break;
       case 'warn':
-        this.logger?.warn(message);
+        this.logger?.warn(message, error);
         break;
       case 'fallback':
-        this.logger?.info(`${message} (using fallback)`);
+        this.logger?.info(`${message} (using fallback)`, error);
         break;
     }
+  }
+
+  private getErrorMessage(error: unknown): string {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'message' in error &&
+      typeof (error as { message?: unknown }).message === 'string'
+    ) {
+      return (error as { message: string }).message;
+    }
+
+    if (error instanceof Error) {
+      return error.message;
+    }
+
+    return String(error);
   }
 }

@@ -4,6 +4,7 @@ import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { z } from 'zod/v4';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
+import type { ToolBackgroundConfig } from './background-tasks';
 import type { MastraBrowser } from './browser/browser';
 import { ErrorCategory, ErrorDomain, MastraError } from './error';
 import type { MastraLanguageModel, MastraLegacyLanguageModel } from './llm/model/shared.types';
@@ -355,6 +356,7 @@ export interface ToolOptions extends Partial<ObservabilityContext> {
    * workspace.filesystem and workspace.sandbox for file operations and command execution.
    */
   workspace?: Workspace;
+  backgroundConfig?: ToolBackgroundConfig;
   /**
    * Browser available for tool execution. When provided, tools can access
    * browser capabilities for web automation, screenshots, and data extraction.
@@ -469,8 +471,15 @@ export function makeCoreTool(
   options: ToolOptions,
   logType?: 'tool' | 'toolset' | 'client-tool',
   autoResumeSuspendedTools?: boolean,
+  backgroundTaskEnabled?: boolean,
 ): CoreTool {
-  return new CoreToolBuilder({ originalTool, options, logType, autoResumeSuspendedTools }).build();
+  return new CoreToolBuilder({
+    originalTool,
+    options,
+    logType,
+    autoResumeSuspendedTools,
+    backgroundTaskEnabled,
+  }).build();
 }
 
 export function makeCoreToolV5(
@@ -478,8 +487,15 @@ export function makeCoreToolV5(
   options: ToolOptions,
   logType?: 'tool' | 'toolset' | 'client-tool',
   autoResumeSuspendedTools?: boolean,
+  backgroundTaskEnabled?: boolean,
 ): VercelToolV5 {
-  return new CoreToolBuilder({ originalTool, options, logType, autoResumeSuspendedTools }).buildV5();
+  return new CoreToolBuilder({
+    originalTool,
+    options,
+    logType,
+    autoResumeSuspendedTools,
+    backgroundTaskEnabled,
+  }).buildV5();
 }
 
 /**
@@ -766,18 +782,32 @@ export function getNestedValue(obj: any, path: string): any {
 export function setNestedValue(obj: any, path: string, value: any): void {
   const keys = path.split('.');
   const lastKey = keys.pop();
-  if (!lastKey) {
+  if (!lastKey) return;
+
+  // Validate every segment up-front so we never walk or assign through
+  // a prototype-mutating key like "__proto__", "constructor", or "prototype".
+  for (const key of keys) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      return;
+    }
+  }
+  if (lastKey === '__proto__' || lastKey === 'constructor' || lastKey === 'prototype') {
     return;
   }
 
-  const target = keys.reduce((current, key) => {
-    if (!current[key] || typeof current[key] !== 'object') {
-      current[key] = {};
+  let current = obj;
+  for (const key of keys) {
+    const existing = Object.prototype.hasOwnProperty.call(current, key) ? current[key] : undefined;
+    if (existing === null || typeof existing !== 'object') {
+      // Use a null-prototype object so intermediate containers cannot be
+      // used as a prototype-pollution sink even if a sanitizer check is
+      // bypassed upstream.
+      current[key] = Object.create(null);
     }
-    return current[key];
-  }, obj);
+    current = current[key];
+  }
 
-  target[lastKey] = value;
+  current[lastKey] = value;
 }
 
 export const removeUndefinedValues = (obj: Record<string, any>) => {

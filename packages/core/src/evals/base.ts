@@ -23,7 +23,7 @@ import type {
   ScorerTargetScope,
   Span,
 } from '../observability';
-import { executeWithContext } from '../observability/context-storage';
+import { executeWithContext } from '../observability/utils';
 import { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';

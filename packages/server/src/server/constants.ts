@@ -1,9 +1,14 @@
 /**
- * Workspace tool constants and utilities.
+ * Constants inlined from @mastra/core to avoid import compatibility
+ * issues with older core versions that don't export them yet.
  *
- * Inlined from @mastra/core/workspace to avoid import compatibility
- * issues with older core versions that don't have the workspace module.
+ * - Reserved RequestContext keys are inlined from @mastra/core/request-context.
+ * - Workspace tool constants are inlined from @mastra/core/workspace.
  */
+
+export const MASTRA_RESOURCE_ID_KEY = 'mastra__resourceId';
+
+export const MASTRA_THREAD_ID_KEY = 'mastra__threadId';
 
 export const WORKSPACE_TOOLS_PREFIX = 'mastra_workspace' as const;
 

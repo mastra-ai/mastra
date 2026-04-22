@@ -1,0 +1,273 @@
+---
+title: "Reference: DockerSandbox | Workspace"
+description: "API reference for DockerSandbox, a Docker-based sandbox for local container code execution."
+packages:
+  - "@mastra/docker"
+---
+
+# DockerSandbox
+
+Executes commands inside Docker containers on the local machine. Uses long-lived containers with `docker exec` for command execution. Targets local development, CI/CD, air-gapped deployments, and cost-sensitive scenarios where cloud sandboxes are unnecessary.
+
+:::info
+
+For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
+
+:::
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/docker
+```
+
+Requires [Docker Engine](https://docs.docker.com/engine/install/) running on the host machine.
+
+## Usage
+
+Add a `DockerSandbox` to a workspace and assign it to an agent:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { DockerSandbox } from '@mastra/docker'
+
+const workspace = new Workspace({
+  sandbox: new DockerSandbox({
+    image: 'node:22-slim',
+  }),
+})
+
+const agent = new Agent({
+  name: 'dev-agent',
+  model: 'anthropic/claude-opus-4-6',
+  workspace,
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this sandbox instance. Used for container naming and reconnection via labels.',
+    isOptional: true,
+    defaultValue: 'Auto-generated',
+  },
+  {
+    name: 'image',
+    type: 'string',
+    description: 'Docker image to use for the container.',
+    isOptional: true,
+    defaultValue: "'node:22-slim'",
+  },
+  {
+    name: 'command',
+    type: 'string[]',
+    description: 'Container entrypoint command. Must keep the container alive for exec-based command execution.',
+    isOptional: true,
+    defaultValue: "['sleep', 'infinity']",
+  },
+  {
+    name: 'env',
+    type: 'Record<string, string>',
+    description: 'Environment variables to set in the container.',
+    isOptional: true,
+  },
+  {
+    name: 'volumes',
+    type: 'Record<string, string>',
+    description: 'Host-to-container bind mounts. Keys are host paths, values are container paths.',
+    isOptional: true,
+  },
+  {
+    name: 'network',
+    type: 'string',
+    description: 'Docker network to join.',
+    isOptional: true,
+  },
+  {
+    name: 'privileged',
+    type: 'boolean',
+    description: 'Run in privileged mode.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'workingDir',
+    type: 'string',
+    description: 'Working directory inside the container.',
+    isOptional: true,
+    defaultValue: "'/workspace'",
+  },
+  {
+    name: 'labels',
+    type: 'Record<string, string>',
+    description: 'Additional container labels. Mastra labels (mastra.sandbox, mastra.sandbox.id) are always included.',
+    isOptional: true,
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    description: 'Default command timeout in milliseconds.',
+    isOptional: true,
+    defaultValue: '300000 (5 minutes)',
+  },
+  {
+    name: 'dockerOptions',
+    type: 'Docker.DockerOptions',
+    description:
+      'Pass-through dockerode connection options for custom socket paths, remote hosts, or TLS certificates.',
+    isOptional: true,
+  },
+  {
+    name: 'instructions',
+    type: 'string | function',
+    description:
+      'Custom instructions that override the default instructions returned by getInstructions(). Pass an empty string to suppress instructions.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Sandbox instance identifier.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Provider name ('DockerSandbox').",
+  },
+  {
+    name: 'provider',
+    type: 'string',
+    description: "Provider identifier ('docker').",
+  },
+  {
+    name: 'status',
+    type: 'ProviderStatus',
+    description: "'pending' | 'starting' | 'running' | 'stopping' | 'stopped' | 'destroying' | 'destroyed' | 'error'",
+  },
+  {
+    name: 'container',
+    type: 'Container',
+    description:
+      'The underlying dockerode Container instance. Throws SandboxNotReadyError if the sandbox has not been started.',
+  },
+  {
+    name: 'processes',
+    type: 'DockerProcessManager',
+    description:
+      'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+  },
+]}
+/>
+
+## Background processes
+
+`DockerSandbox` includes a built-in process manager for spawning and managing background processes. Processes run inside the container using `docker exec`.
+
+```typescript
+const sandbox = new DockerSandbox({ id: 'dev-sandbox' })
+await sandbox._start()
+
+// Spawn a background process
+const handle = await sandbox.processes.spawn('node server.js', {
+  env: { PORT: '3000' },
+  onStdout: data => console.log(data),
+})
+
+// Interact with the process
+console.log(handle.stdout)
+await handle.sendStdin('input\n')
+await handle.kill()
+```
+
+See [`SandboxProcessManager` reference](/reference/workspace/process-manager) for the full API.
+
+## Environment variables
+
+Set environment variables at the container level with `env`. Per-command environment variables can also be passed when spawning processes:
+
+```typescript
+const sandbox = new DockerSandbox({
+  image: 'node:22-slim',
+  env: {
+    NODE_ENV: 'production',
+    DATABASE_URL: 'postgres://localhost:5432/mydb',
+  },
+})
+```
+
+## Bind mounts
+
+Mount host directories into the container using the `volumes` option:
+
+```typescript
+const sandbox = new DockerSandbox({
+  image: 'node:22-slim',
+  volumes: {
+    '/my/project': '/workspace/project',
+    '/shared/data': '/data',
+  },
+})
+```
+
+Bind mounts are applied at container creation time. The host paths must exist before the sandbox starts.
+
+## Reconnection
+
+`DockerSandbox` can reconnect to existing containers by matching labels. When `start()` is called, it checks for a container with the `mastra.sandbox.id` label matching the sandbox ID. If found:
+
+- A running container is reused directly.
+- A stopped container is restarted.
+
+```typescript
+// First run — creates a new container
+const sandbox = new DockerSandbox({ id: 'persistent-sandbox' })
+await sandbox._start()
+
+// Later — reconnects to the existing container
+const sandbox2 = new DockerSandbox({ id: 'persistent-sandbox' })
+await sandbox2._start()
+```
+
+## Docker connection options
+
+Connect to remote Docker hosts or use custom socket paths via `dockerOptions`:
+
+```typescript
+// Remote Docker host
+const sandbox = new DockerSandbox({
+  dockerOptions: {
+    host: '192.168.1.100',
+    port: 2376,
+    ca: fs.readFileSync('ca.pem'),
+    cert: fs.readFileSync('cert.pem'),
+    key: fs.readFileSync('key.pem'),
+  },
+})
+
+// Custom socket path
+const sandbox = new DockerSandbox({
+  dockerOptions: {
+    socketPath: '/var/run/docker.sock',
+  },
+})
+```
+
+## Related
+
+- [SandboxProcessManager reference](/reference/workspace/process-manager)
+- [WorkspaceSandbox interface](/reference/workspace/sandbox)
+- [LocalSandbox reference](/reference/workspace/local-sandbox)
+- [E2BSandbox reference](/reference/workspace/e2b-sandbox)
+- [Workspace overview](/docs/workspace/overview)

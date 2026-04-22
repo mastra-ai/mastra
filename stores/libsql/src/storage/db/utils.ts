@@ -305,6 +305,11 @@ export function transformFromSqlRow<T>({
       .filter(key => TABLE_SCHEMAS[tableName][key]!.type === 'timestamp')
       .map(key => key),
   );
+  const booleanColumns = new Set(
+    Object.keys(TABLE_SCHEMAS[tableName])
+      .filter(key => TABLE_SCHEMAS[tableName][key]!.type === 'boolean')
+      .map(key => key),
+  );
 
   for (const [key, value] of Object.entries(sqlRow)) {
     if (value === null || value === undefined) {
@@ -319,6 +324,11 @@ export function transformFromSqlRow<T>({
 
     if (jsonColumns.has(key) && typeof value === 'string') {
       result[key] = safelyParseJSON(value);
+      continue;
+    }
+
+    if (booleanColumns.has(key)) {
+      result[key] = Boolean(value);
       continue;
     }
 

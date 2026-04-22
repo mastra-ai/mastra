@@ -135,14 +135,13 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       if (currentThread) {
         state.currentThreadTitle = currentThread.title;
       }
-      // Restore tasks from thread state
-      const threadState = state.harness.getState() as {
-        tasks?: TaskItem[];
-      };
+      // Clear tasks — they are ephemeral per-thread and should not leak
+      // from the previous thread's global harness state.
       if (state.taskProgress) {
-        state.taskProgress.updateTasks(threadState.tasks ?? []);
+        state.taskProgress.updateTasks([]);
         state.ui.requestRender();
       }
+      state.taskWriteInsertIndex = -1;
       break;
     }
 
@@ -217,9 +216,28 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       handleOMBufferingFailed(ectx, event.operationType, event.error);
       break;
 
-    case 'om_activation':
-      handleOMActivation(ectx, event.operationType, event.tokensActivated, event.observationTokens);
+    case 'om_activation': {
+      const activationEvent = event as Extract<HarnessEvent, { type: 'om_activation' }> & {
+        triggeredBy?: 'threshold' | 'ttl' | 'provider_change';
+        lastActivityAt?: number;
+        ttlExpiredMs?: number;
+        activateAfterIdle?: number;
+        previousModel?: string;
+        currentModel?: string;
+      };
+      handleOMActivation(
+        ectx,
+        activationEvent.operationType,
+        activationEvent.tokensActivated,
+        activationEvent.observationTokens,
+        activationEvent.triggeredBy,
+        activationEvent.activateAfterIdle,
+        activationEvent.ttlExpiredMs,
+        activationEvent.previousModel,
+        activationEvent.currentModel,
+      );
       break;
+    }
 
     case 'om_thread_title_updated':
       state.currentThreadTitle = event.newTitle;

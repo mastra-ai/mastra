@@ -73,6 +73,7 @@ function buildMetricNameFilter(name: string | string[]): { clause: string; param
 }
 
 const METRIC_COLUMNS = [
+  'metricId',
   'timestamp',
   'name',
   'value',
@@ -81,9 +82,12 @@ const METRIC_COLUMNS = [
   'entityType',
   'entityId',
   'entityName',
+  'entityVersionId',
+  'parentEntityVersionId',
   'parentEntityType',
   'parentEntityId',
   'parentEntityName',
+  'rootEntityVersionId',
   'rootEntityType',
   'rootEntityId',
   'rootEntityName',
@@ -201,6 +205,7 @@ function resolveGroupBy(groupBy: string[]): ResolvedGroupBy[] {
 
 function rowToMetricRecord(row: Record<string, unknown>): Record<string, unknown> {
   return {
+    metricId: row.metricId as string,
     timestamp: toDate(row.timestamp),
     name: row.name as string,
     value: Number(row.value),
@@ -209,9 +214,12 @@ function rowToMetricRecord(row: Record<string, unknown>): Record<string, unknown
     entityType: (row.entityType as string) ?? null,
     entityId: (row.entityId as string) ?? null,
     entityName: (row.entityName as string) ?? null,
+    entityVersionId: (row.entityVersionId as string) ?? null,
+    parentEntityVersionId: (row.parentEntityVersionId as string) ?? null,
     parentEntityType: (row.parentEntityType as string) ?? null,
     parentEntityId: (row.parentEntityId as string) ?? null,
     parentEntityName: (row.parentEntityName as string) ?? null,
+    rootEntityVersionId: (row.rootEntityVersionId as string) ?? null,
     rootEntityType: (row.rootEntityType as string) ?? null,
     rootEntityId: (row.rootEntityId as string) ?? null,
     rootEntityName: (row.rootEntityName as string) ?? null,
@@ -248,6 +256,7 @@ export async function batchCreateMetrics(db: DuckDBConnection, args: BatchCreate
 
   const tuples = args.metrics.map(m => {
     return `(${[
+      v(m.metricId),
       v(m.timestamp),
       v(m.name),
       v(m.value),
@@ -256,9 +265,12 @@ export async function batchCreateMetrics(db: DuckDBConnection, args: BatchCreate
       v(m.entityType ?? null),
       v(m.entityId ?? null),
       v(m.entityName ?? null),
+      v(m.entityVersionId ?? null),
+      v(m.parentEntityVersionId ?? null),
       v(m.parentEntityType ?? null),
       v(m.parentEntityId ?? null),
       v(m.parentEntityName ?? null),
+      v(m.rootEntityVersionId ?? null),
       v(m.rootEntityType ?? null),
       v(m.rootEntityId ?? null),
       v(m.rootEntityName ?? null),
@@ -285,7 +297,9 @@ export async function batchCreateMetrics(db: DuckDBConnection, args: BatchCreate
     ].join(', ')})`;
   });
 
-  await db.execute(`INSERT INTO metric_events (${METRIC_COLUMNS_SQL}) VALUES ${tuples.join(',\n')}`);
+  await db.execute(
+    `INSERT INTO metric_events (${METRIC_COLUMNS_SQL}) VALUES ${tuples.join(',\n')} ON CONFLICT DO NOTHING`,
+  );
 }
 
 /** Query metric events with filtering, ordering, and pagination. */

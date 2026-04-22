@@ -3,23 +3,47 @@ import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import type { ToolsInput } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
+import { RequestContext } from '../request-context';
 import { createTool } from '../tools/tool';
 import { createWorkspaceTools } from '../workspace/tools/tools';
 
-import type { HarnessRequestContext, HarnessSubagent } from './types';
+import type { HarnessQuestionAnswer, HarnessRequestContext, HarnessSubagent } from './types';
 
 let questionCounter = 0;
 let planCounter = 0;
 
 /**
+ * Converts the user's answer into the text returned to the model after the `ask_user`
+ * tool resumes. Free-text and single-select prompts already produce a single string,
+ * while multi-select prompts return an array of selected labels that must be flattened
+ * before the tool result is added back into the generation context.
+ *
+ * The formatter intentionally keeps the model-facing output compact by joining
+ * multi-select answers with commas. This mirrors the old single-answer behavior while
+ * still preserving every selected option in a readable form.
+ */
+function formatQuestionAnswer(answer: HarnessQuestionAnswer): string {
+  return Array.isArray(answer) ? answer.join(', ') : answer;
+}
+
+/**
  * Built-in harness tool: ask the user a question and wait for their response.
- * Supports single-select options and free-text input.
- * The tool pauses execution while the UI shows the dialog.
+ *
+ * The tool supports three prompt shapes. Omitting `options` asks an open-ended
+ * free-text question. Providing `options` without `selectionMode` asks the UI to
+ * render a single-select prompt for backwards compatibility. Providing
+ * `selectionMode: 'multi_select'` lets the UI return multiple selected option labels
+ * as a string array through `respondToQuestion()`.
+ *
+ * During normal harness execution the tool emits an `ask_question` event, registers a
+ * resolver, and pauses until the UI answers. When the tool is executed without harness
+ * callbacks, it returns a readable fallback prompt so non-UI execution paths still
+ * expose the question and available choices to the model.
  */
 export const askUserTool = createTool({
   id: 'ask_user',
   description:
-    'Ask the user a question and wait for their response. Use this when you need clarification, want to validate assumptions, or need the user to make a decision between options. Provide options for structured choices (2-4 options), or omit them for open-ended questions.',
+    'Ask the user a question and wait for their response. Use this when you need clarification, want to validate assumptions, or need the user to make a decision between options. Provide options for structured choices (2-4 options), or omit them for open-ended questions. Use selectionMode to choose whether the user can pick one option or multiple options.',
   inputSchema: z.object({
     question: z.string().min(1).describe('The question to ask the user. Should be clear and specific.'),
     options: z
@@ -31,21 +55,37 @@ export const askUserTool = createTool({
       )
       .optional()
       .describe('Optional choices. If provided, shows a selection list. If omitted, shows a free-text input.'),
+    selectionMode: z
+      .enum(['single_select', 'multi_select'])
+      .optional()
+      .describe(
+        'Controls how many provided options the user can select. Defaults to single_select when options are provided. Requires options.',
+      ),
   }),
-  execute: async ({ question, options }, context) => {
+  execute: async ({ question, options, selectionMode }, context) => {
     try {
       const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext | undefined;
+      const resolvedSelectionMode = options?.length ? (selectionMode ?? 'single_select') : undefined;
+
+      if (selectionMode && !options?.length) {
+        return {
+          content: 'Failed to ask user: selectionMode requires options.',
+          isError: true,
+        };
+      }
 
       if (!harnessCtx?.emitEvent || !harnessCtx?.registerQuestion) {
         return {
-          content: `[Question for user]: ${question}${options ? '\nOptions: ' + options.map(o => o.label).join(', ') : ''}`,
+          content: `[Question for user]: ${question}${
+            options?.length ? '\nOptions: ' + options.map(o => o.label).join(', ') : ''
+          }${resolvedSelectionMode ? '\nSelection mode: ' + resolvedSelectionMode : ''}`,
           isError: false,
         };
       }
 
       const questionId = `q_${++questionCounter}_${Date.now()}`;
 
-      const answer = await new Promise<string>((resolve, reject) => {
+      const answer = await new Promise<HarnessQuestionAnswer>((resolve, reject) => {
         const signal = harnessCtx.abortSignal;
         if (signal?.aborted) {
           reject(new DOMException('Aborted', 'AbortError'));
@@ -67,10 +107,11 @@ export const askUserTool = createTool({
           questionId,
           question,
           options,
+          selectionMode: resolvedSelectionMode,
         });
       });
 
-      return { content: `User answered: ${answer}`, isError: false };
+      return { content: `User answered: ${formatQuestionAnswer(answer)}`, isError: false };
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       return { content: `Failed to ask user: ${msg}`, isError: true };
@@ -445,15 +486,25 @@ Use this tool when:
       let partialText = '';
       const toolCallLog: Array<{ name: string; toolCallId: string; isError?: boolean }> = [];
 
+      // Build a request context for the subagent that inherits sandbox paths
+      // and harness state but strips threadId/resourceId so the subagent
+      // doesn't trigger OM enrichment on the parent's memory thread.
+      let subagentRequestContext: RequestContext | undefined;
+      if (context?.requestContext) {
+        subagentRequestContext = new RequestContext(context.requestContext.entries());
+        if (harnessCtx) {
+          subagentRequestContext.set('harness', { ...harnessCtx, threadId: null, resourceId: '' });
+        }
+      }
+
       try {
         const response = await subagent.stream(task, {
           maxSteps: definition.maxSteps ?? (definition.stopWhen ? undefined : 50),
           stopWhen: definition.stopWhen,
           abortSignal,
           requireToolApproval: false,
-          // Forward the parent's request context so the subagent inherits
-          // sandbox allowed paths and other harness state.
-          requestContext: context?.requestContext,
+          requestContext: subagentRequestContext,
+          ...(context?.tracingContext && { tracingContext: context.tracingContext }),
           // When allowedWorkspaceTools is set, hide workspace tools not in
           // the list. Non-workspace tools always pass through.
           prepareStep:

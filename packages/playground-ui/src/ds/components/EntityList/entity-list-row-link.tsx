@@ -1,16 +1,15 @@
 import type { ReactNode } from 'react';
-import { useLinkComponent } from '@/lib/framework';
+import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
 export type EntityListRowLinkProps = {
   children: ReactNode;
   to: string;
   className?: string;
+  LinkComponent: LinkComponent;
 };
 
-export function EntityListRowLink({ children, to, className }: EntityListRowLinkProps) {
-  const { Link } = useLinkComponent();
-
+export function EntityListRowLink({ children, to, className, LinkComponent: Link }: EntityListRowLinkProps) {
   return (
     <Link
       href={to}

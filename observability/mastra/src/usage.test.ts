@@ -151,6 +151,27 @@ describe('extractUsageMetrics', () => {
       expect(result.outputDetails?.text).toBe(50);
     });
 
+    it('should not double count Anthropic cache tokens when raw field is absent but cachedInputTokens is set', () => {
+      const usage = {
+        inputTokens: 3493,
+        outputTokens: 125,
+        cachedInputTokens: 3170,
+      } as LanguageModelUsage;
+
+      const providerMetadata: ProviderMetadata = {
+        anthropic: {
+          cacheReadInputTokens: 3170,
+        },
+      };
+
+      const result = extractUsageMetrics(usage, providerMetadata);
+
+      expect(result.inputTokens).toBe(3493);
+      expect(result.inputDetails?.text).toBe(323);
+      expect(result.inputDetails?.cacheRead).toBe(3170);
+      expect(result.outputTokens).toBe(125);
+    });
+
     it('should not double count Anthropic cache tokens when v6 usage already includes them', () => {
       const usage: LanguageModelUsage = {
         inputTokens: 106,

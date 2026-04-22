@@ -3,6 +3,7 @@ import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { WorkspaceReadOnlyError } from '../errors';
 import { emitWorkspaceMetadata, getEditDiagnosticsText, requireFilesystem } from './helpers';
+import { startWorkspaceSpan } from './tracing';
 
 export const writeFileTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
@@ -16,18 +17,31 @@ export const writeFileTool = createTool({
     const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
 
-    if (filesystem.readOnly) {
-      throw new WorkspaceReadOnlyError('write_file');
-    }
-
-    await filesystem.writeFile(path, content, {
-      overwrite,
-      expectedMtime: (context as any)?.__expectedMtime,
+    const span = startWorkspaceSpan(context, workspace, {
+      category: 'filesystem',
+      operation: 'writeFile',
+      input: { path, overwrite, contentLength: content.length },
+      attributes: { filesystemProvider: filesystem.provider },
     });
 
-    const size = Buffer.byteLength(content, 'utf-8');
-    let output = `Wrote ${size} bytes to ${path}`;
-    output += await getEditDiagnosticsText(workspace, path, content);
-    return output;
+    try {
+      if (filesystem.readOnly) {
+        throw new WorkspaceReadOnlyError('write_file');
+      }
+
+      await filesystem.writeFile(path, content, {
+        overwrite,
+        expectedMtime: (context as any)?.__expectedMtime,
+      });
+
+      const size = Buffer.byteLength(content, 'utf-8');
+      let output = `Wrote ${size} bytes to ${path}`;
+      output += await getEditDiagnosticsText(workspace, path, content);
+      span.end({ success: true }, { bytesTransferred: size });
+      return output;
+    } catch (err) {
+      span.error(err);
+      throw err;
+    }
   },
 });

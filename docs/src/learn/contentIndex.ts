@@ -12,4 +12,7 @@ export const contentModules: Record<string, () => Promise<{ default: ComponentTy
   'build-a-workflow': () => import('./content/build-a-workflow.mdx'),
   'agents-vs-workflows': () => import('./content/agents-vs-workflows.mdx'),
   'agents-in-workflows': () => import('./content/agents-in-workflows.mdx'),
+  'how-memory-works': () => import('./content/how-memory-works.mdx'),
+  'observational-memory': () => import('./content/observational-memory.mdx'),
+  'guardrails-with-processors': () => import('./content/guardrails-with-processors.mdx'),
 }
