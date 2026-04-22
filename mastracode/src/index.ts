@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import { Agent } from '@mastra/core/agent';
 import type { MastraBrowser } from '@mastra/core/browser';
 import { Harness } from '@mastra/core/harness';
@@ -12,6 +14,10 @@ import { GatewayRegistry, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { LanguageModel, ProviderConfig } from '@mastra/core/llm';
 import { AgentsMDInjector, PrefillErrorHandler } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
+import { MastraCompositeStore } from '@mastra/core/storage';
+import { DuckDBStore } from '@mastra/duckdb';
+
+import { Observability, DefaultExporter, CloudExporter } from '@mastra/observability';
 
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
@@ -46,10 +52,16 @@ import { stateSchema } from './schema.js';
 
 import { mastra } from './tui/theme.js';
 import { syncGateways } from './utils/gateway-sync.js';
-import { detectProject, getStorageConfig, getResourceIdOverride } from './utils/project.js';
+import {
+  detectProject,
+  getObservabilityDatabasePath,
+  getStorageConfig,
+  getResourceIdOverride,
+} from './utils/project.js';
 import type { StorageConfig } from './utils/project.js';
 import { createStorage, createVectorStore } from './utils/storage-factory.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
+import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
 
 const PROVIDER_TO_OAUTH_ID: Record<string, string> = {
   anthropic: 'anthropic',
@@ -106,6 +118,13 @@ export function createAuthStorage() {
 
 export async function createMastraCode(config?: MastraCodeConfig) {
   const cwd = config?.cwd ?? process.cwd();
+
+  // Load .env file from cwd if present (for observability API keys, etc.)
+  try {
+    process.loadEnvFile(path.join(cwd, '.env'));
+  } catch {
+    // No .env file — that's fine, keys may be in shell environment
+  }
 
   const gatewayRegistry = GatewayRegistry.getInstance({ useDynamicLoading: true });
 
@@ -166,8 +185,90 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   // Storage
   const storageConfig = config?.storage ?? getStorageConfig(project.rootPath, globalSettings.storage);
   const storageResult = await createStorage(storageConfig);
-  const storage = storageResult.storage;
   const storageWarning = storageResult.warning;
+
+  // Observability storage (DuckDB — separate file for OLAP-style trace/score/feedback queries).
+  // DuckDB only allows a single process to hold the file lock, so if another MastraCode
+  // instance is already running we gracefully degrade: observability (traces, scores,
+  // feedback) will be unavailable in this session, but everything else works normally.
+  let observabilityDomain: DuckDBStore['observability'] | undefined;
+  let observabilityWarning: string | undefined;
+  try {
+    const observabilityDuckDB = new DuckDBStore({
+      id: 'mastra-code-observability',
+      path: getObservabilityDatabasePath(),
+    });
+    // Force an early connection attempt so the lock error surfaces now, not mid-session.
+    await observabilityDuckDB.db.getConnection();
+    observabilityDomain = observabilityDuckDB.observability;
+  } catch {
+    // Lock held by another process — skip DuckDB observability for this session.
+    observabilityWarning =
+      'Observability unavailable — another MastraCode instance holds the database lock. Traces, scores, and feedback will not be recorded in this session.';
+  }
+
+  // Compose the main storage with the DuckDB observability domain (if available)
+  const storage = new MastraCompositeStore({
+    id: 'mastra-code-storage',
+    default: storageResult.storage,
+    domains: {
+      ...(observabilityDomain ? { observability: observabilityDomain } : {}),
+    },
+  });
+
+  // Observability (tracing, scoring, feedback)
+  const observability = new Observability({
+    configs: {
+      default: {
+        serviceName: 'mastracode',
+        // Only these requestContext keys are stored on spans — prevents leaking
+        // large objects (harness state, workspace, env vars) into trace data.
+        // Use dot-notation because these are nested inside the 'harness' key.
+        //
+        // Session identifiers:
+        //   threadId, resourceId, modeId, harnessId
+        // Environment & project:
+        //   state.projectName, state.gitBranch
+        // Model configuration:
+        //   state.currentModelId, state.subagentModelId
+        // Agent settings:
+        //   state.yolo, state.thinkingLevel, state.smartEditing
+        // Observational memory settings:
+        //   state.omScope, state.observerModelId, state.reflectorModelId,
+        //   state.observationThreshold, state.reflectionThreshold
+        requestContextKeys: [
+          // Session identifiers
+          'harness.threadId',
+          'harness.resourceId',
+          'harness.modeId',
+          'harness.harnessId',
+          // Environment & project
+          'harness.state.projectName',
+          'harness.state.gitBranch',
+          // Model configuration
+          'harness.state.currentModelId',
+          'harness.state.subagentModelId',
+          // Agent settings
+          'harness.state.yolo',
+          'harness.state.thinkingLevel',
+          'harness.state.smartEditing',
+          // Observational memory settings
+          'harness.state.omScope',
+          'harness.state.observerModelId',
+          'harness.state.reflectorModelId',
+          'harness.state.observationThreshold',
+          'harness.state.reflectionThreshold',
+        ],
+        exporters: [
+          new DefaultExporter({ strategy: 'event-sourced' }),
+          new CloudExporter({
+            accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN,
+            projectId: process.env.MASTRA_PROJECT_ID,
+          }),
+        ],
+      },
+    },
+  });
 
   // Vector store for recall search (separate DB file to avoid bloating main storage)
   const vectorStore = await createVectorStore(storageConfig, storageResult.backend);
@@ -186,6 +287,10 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     console.info(`Hooks: ${hookCount} hook(s) configured`);
   }
 
+  // Scorers (live evaluation with sampling)
+  const outcomeScorer = createOutcomeScorer();
+  const efficiencyScorer = createEfficiencyScorer();
+
   // Agent
   const codeAgent = new Agent({
     id: 'code-agent',
@@ -193,6 +298,16 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     instructions: getDynamicInstructions,
     model: getDynamicModel,
     tools: createDynamicTools(mcpManager, config?.extraTools, hookManager, config?.disabledTools),
+    scorers: {
+      outcome: {
+        scorer: outcomeScorer,
+        sampling: { type: 'none' },
+      },
+      efficiency: {
+        scorer: efficiencyScorer,
+        sampling: { type: 'ratio', rate: 0.3 },
+      },
+    },
     inputProcessors: [
       new AgentsMDInjector({
         getIgnoredInstructionPaths: ({ requestContext }) => {
@@ -354,6 +469,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     id: 'mastra-code',
     resourceId: project.resourceId,
     storage,
+    observability,
     memory,
     stateSchema,
     subagents,
@@ -452,5 +568,5 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     });
   }
 
-  return { harness, mcpManager, hookManager, authStorage, resolveModel, storageWarning };
+  return { harness, mcpManager, hookManager, authStorage, resolveModel, storageWarning, observabilityWarning };
 }

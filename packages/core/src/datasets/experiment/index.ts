@@ -32,6 +32,9 @@ export { resolveScorers, runScorersForItem } from './scorer';
 // Re-export analytics
 export * from './analytics';
 
+// Re-export sandbox experiment infrastructure
+export * from './sandbox';
+
 /**
  * Run a dataset experiment against a target with optional scoring.
  *

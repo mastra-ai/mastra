@@ -51,6 +51,32 @@ export function runScorer({
     return;
   }
 
+  // Only serialize safe, lightweight keys from requestContext.
+  // The full requestContext contains large objects (harness state, workspace with env vars)
+  // that should not leak into scorer data or observability storage.
+  // The harness stores threadId, resourceId, modeId, harnessId inside a nested 'harness'
+  // object — we extract those scalars so they're available to scorers.
+  const SAFE_HARNESS_KEYS = ['threadId', 'resourceId', 'modeId', 'harnessId'] as const;
+  const safeContext: Record<string, any> = {};
+  if (requestContext) {
+    const entries: Iterable<[string, any]> =
+      typeof requestContext.entries === 'function' ? requestContext.entries() : Object.entries(requestContext);
+    for (const [key, value] of entries) {
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        // Allow primitive values from any top-level key (they're lightweight and safe)
+        safeContext[key] = value;
+      } else if (key === 'harness' && value && typeof value === 'object') {
+        // Extract only safe scalar fields from the harness context
+        for (const hKey of SAFE_HARNESS_KEYS) {
+          const v = (value as Record<string, unknown>)[hKey];
+          if (v !== undefined && (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean')) {
+            safeContext[hKey] = v;
+          }
+        }
+      }
+    }
+  }
+
   const payload: ScoringHookInput = {
     scorer: {
       id: scorerObject.scorer?.id || scorerId,
@@ -59,7 +85,7 @@ export function runScorer({
     },
     input,
     output,
-    requestContext: Object.fromEntries(requestContext.entries()),
+    requestContext: safeContext,
     runId,
     source,
     entity,

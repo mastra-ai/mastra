@@ -207,6 +207,18 @@ export function getVectorDatabasePath(): string {
   return path.join(getAppDataDir(), 'mastra-vectors.db');
 }
 
+/**
+ * Get the observability DuckDB database path for mastracode.
+ * Separate from the main DB — DuckDB is used for OLAP-style trace/score/feedback queries.
+ * Can be overridden with the MASTRA_OBSERVABILITY_DB_PATH environment variable.
+ */
+export function getObservabilityDatabasePath(): string {
+  if (process.env.MASTRA_OBSERVABILITY_DB_PATH) {
+    return process.env.MASTRA_OBSERVABILITY_DB_PATH;
+  }
+  return path.join(getAppDataDir(), 'observability.duckdb');
+}
+
 import type { StorageBackend, StorageSettings } from '../onboarding/settings.js';
 
 /**

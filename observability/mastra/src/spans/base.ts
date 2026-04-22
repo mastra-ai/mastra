@@ -163,7 +163,35 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       this.deepCleanOptions,
     );
     if (options.requestContext && options.requestContext.size() > 0) {
-      this.requestContext = deepClean(options.requestContext.all, this.deepCleanOptions);
+      // Only store requestContext keys explicitly listed in requestContextKeys.
+      // This prevents leaking large objects (harness state, workspace, env vars)
+      // into trace data. If no keys are configured, nothing is stored.
+      const keys = options.traceState?.requestContextKeys;
+      if (keys && keys.length > 0) {
+        const filtered: Record<string, any> = {};
+        for (const key of keys) {
+          const parts = key.split('.');
+          const rootKey = parts[0]!;
+          const value = options.requestContext.get(rootKey);
+          if (value !== undefined) {
+            if (parts.length > 1) {
+              // Dot-notation: extract nested value
+              let nested: any = value;
+              for (let i = 1; i < parts.length && nested != null; i++) {
+                nested = typeof nested === 'object' ? nested[parts[i]!] : undefined;
+              }
+              if (nested !== undefined) {
+                filtered[key] = nested;
+              }
+            } else {
+              filtered[key] = value;
+            }
+          }
+        }
+        if (Object.keys(filtered).length > 0) {
+          this.requestContext = deepClean(filtered, this.deepCleanOptions);
+        }
+      }
     }
     this.parent = options.parent;
     this.startTime = options.startTime ?? new Date();
