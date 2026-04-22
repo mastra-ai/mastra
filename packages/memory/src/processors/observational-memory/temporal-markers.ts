@@ -17,6 +17,7 @@ function getTemporalGapReminderMetadata(message: MastraDBMessage, gapText: strin
     gapText,
     gapMs,
     timestamp: formattedTimestamp,
+    timestampMs: timestamp,
     precedesMessageId: message.id,
     systemReminder: {
       type: TEMPORAL_GAP_REMINDER_TYPE,
@@ -24,9 +25,32 @@ function getTemporalGapReminderMetadata(message: MastraDBMessage, gapText: strin
       gapText,
       gapMs,
       timestamp: formattedTimestamp,
+      timestampMs: timestamp,
       precedesMessageId: message.id,
     },
   };
+}
+
+function isTemporalGapMarkerForMessage(message: MastraDBMessage, targetMessageId: string): boolean {
+  if (!isTemporalGapMarker(message)) {
+    return false;
+  }
+
+  const metadata = message.content.metadata as
+    | {
+        precedesMessageId?: unknown;
+        systemReminder?: { type?: unknown; precedesMessageId?: unknown };
+      }
+    | undefined;
+
+  if (metadata?.precedesMessageId === targetMessageId) {
+    return true;
+  }
+
+  return (
+    metadata?.systemReminder?.type === TEMPORAL_GAP_REMINDER_TYPE &&
+    metadata.systemReminder.precedesMessageId === targetMessageId
+  );
 }
 
 function createTemporalGapMarker(
@@ -72,6 +96,10 @@ export async function insertTemporalGapMarkers({
   const latestInputIndex = allMessages.findIndex(message => message.id === latestInputMessage.id);
 
   if (latestInputIndex <= 0) {
+    return;
+  }
+
+  if (allMessages.some(message => isTemporalGapMarkerForMessage(message, latestInputMessage.id))) {
     return;
   }
 

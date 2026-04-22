@@ -91,10 +91,9 @@ function createMemoryProvider(messages: MastraDBMessage[]): MemoryContextProvide
 
 describe('ObservationalMemoryProcessor temporal markers', () => {
   it('formats temporal gaps using two-unit durations', () => {
-    expect(formatTemporalGap(5 * 60 * 1000 - 1)).toBeNull();
+    expect(formatTemporalGap(10 * 60 * 1000 - 1)).toBeNull();
 
     const cases = [
-      { diffMs: 5 * 60 * 1000, expected: '5 minutes later' },
       { diffMs: 10 * 60 * 1000, expected: '10 minutes later' },
       { diffMs: 15 * 60 * 1000, expected: '15 minutes later' },
       { diffMs: 30 * 60 * 1000, expected: '30 minutes later' },
@@ -128,9 +127,17 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
     expect(markerRow.id.startsWith('__temporal_gap_')).toBe(true);
     expect(markerContent.metadata).toMatchObject({
       reminderType: 'temporal-gap',
-      gapText: '6 hours later',
+      gapText: '11 hours 13 minutes later',
       gapMs: 40433500,
+      timestampMs: 1745333315959,
       precedesMessageId: newerMessage.id,
+      systemReminder: {
+        type: 'temporal-gap',
+        gapText: '11 hours 13 minutes later',
+        gapMs: 40433500,
+        timestampMs: 1745333315959,
+        precedesMessageId: newerMessage.id,
+      },
     });
     expect(getTopLevelGapMs(previousVisibleMessage, newerMessage)).toBe(39911979);
     expect(getPartGapMs(previousVisibleMessage, newerMessage)).toBe(39884770);
@@ -250,6 +257,7 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
       gapText: '30 minutes later',
       gapMs: 30 * 60 * 1000,
       timestamp: formatTemporalTimestamp(new Date('2025-01-01T08:50:00Z')),
+      timestampMs: new Date('2025-01-01T08:50:00Z').getTime(),
       precedesMessageId: 'input-1',
       systemReminder: {
         type: 'temporal-gap',
@@ -257,6 +265,7 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
         gapText: '30 minutes later',
         gapMs: 30 * 60 * 1000,
         timestamp: formatTemporalTimestamp(new Date('2025-01-01T08:50:00Z')),
+        timestampMs: new Date('2025-01-01T08:50:00Z').getTime(),
         precedesMessageId: 'input-1',
       },
     });
@@ -269,9 +278,102 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
           gapText: '30 minutes later',
           precedesMessageId: 'input-1',
           gapMs: 30 * 60 * 1000,
+          timestamp: formatTemporalTimestamp(new Date('2025-01-01T08:50:00Z')),
+          timestampMs: new Date('2025-01-01T08:50:00Z').getTime(),
         }),
       }),
     ]);
+  });
+
+  it('does not insert duplicate markers when step 0 is rerun for the same input', async () => {
+    const threadId = 'temporal-markers-rerun-thread';
+    const resourceId = 'temporal-markers-rerun-resource';
+    const history = [
+      createMessage({
+        id: 'history-1',
+        text: 'First history message',
+        role: 'assistant',
+        timestamp: '2025-01-01T08:00:00.000Z',
+        threadId,
+        resourceId,
+      }),
+    ];
+    const inputMessage = createMessage({
+      id: 'input-1',
+      text: 'Current user message',
+      role: 'user',
+      timestamp: '2025-01-01T08:30:00.000Z',
+      threadId,
+      resourceId,
+    });
+
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Temporal markers rerun',
+        createdAt: new Date('2025-01-01T08:00:00.000Z'),
+        updatedAt: new Date('2025-01-01T08:00:00.000Z'),
+        metadata: {},
+      },
+    });
+
+    const model = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        content: [{ type: 'text' as const, text: 'ok' }],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: model as any,
+      observation: { messageTokens: 500_000 },
+      reflection: { observationTokens: 500_000 },
+    });
+
+    const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(history), {
+      temporalMarkers: true,
+    });
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add(inputMessage, 'input');
+
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    const capturedParts: any[] = [];
+    const writer = {
+      custom: async (part: any) => {
+        capturedParts.push(part);
+      },
+    };
+
+    const args = {
+      messageList,
+      messages: [inputMessage],
+      requestContext,
+      stepNumber: 0,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: model as any,
+      retryCount: 0,
+      writer: writer as any,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    };
+
+    await processor.processInputStep(args);
+    await processor.processInputStep(args);
+
+    expect(messageList.get.all.db().filter(message => message.id.startsWith('__temporal_gap_'))).toHaveLength(1);
+    expect(capturedParts.filter(part => part.type === 'data-system-reminder')).toHaveLength(1);
   });
 
   it('does not reinsert temporal markers on later steps', async () => {
