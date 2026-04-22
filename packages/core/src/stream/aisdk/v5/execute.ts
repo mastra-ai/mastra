@@ -7,6 +7,7 @@ import type { StructuredOutputOptions } from '../../../agent/types';
 import type { ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import type { LoopOptions } from '../../../loop/types';
+import { delay } from '../../../utils';
 import { getResponseFormat } from '../../base/schema';
 import type { LanguageModelV2StreamResult, OnResult } from '../../types';
 import { prepareToolsAndToolChoice } from './compat';
@@ -19,6 +20,45 @@ function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K
     delete newObj[key];
   }
   return newObj;
+}
+
+function getHeaderAwareRetryDelay(error: unknown, attemptNumber: number): number {
+  const baseDelay = Math.min(1000 * Math.pow(2, attemptNumber - 1), 30000);
+
+  if (APICallError.isInstance(error)) {
+    const headers = (error as any).responseHeaders as Record<string, string> | undefined;
+
+    if (headers) {
+      const retryAfterMsHeader = headers['retry-after-ms'];
+      if (retryAfterMsHeader !== undefined) {
+        const retryAfterMs = Number.parseFloat(retryAfterMsHeader);
+        if (!Number.isNaN(retryAfterMs) && retryAfterMs >= 0 && (retryAfterMs < 60000 || retryAfterMs < baseDelay)) {
+          return retryAfterMs;
+        }
+      }
+
+      const retryAfterHeader = headers['retry-after'];
+      if (retryAfterHeader !== undefined) {
+        const retryAfterSeconds = Number.parseFloat(retryAfterHeader);
+        if (!Number.isNaN(retryAfterSeconds)) {
+          const retryAfterMs = retryAfterSeconds * 1000;
+          if (retryAfterMs >= 0 && (retryAfterMs < 60000 || retryAfterMs < baseDelay)) {
+            return retryAfterMs;
+          }
+        }
+
+        const retryAfterDate = new Date(retryAfterHeader);
+        if (!Number.isNaN(retryAfterDate.getTime())) {
+          const retryAfterMs = retryAfterDate.getTime() - Date.now();
+          if (retryAfterMs >= 0 && (retryAfterMs < 60000 || retryAfterMs < baseDelay)) {
+            return retryAfterMs;
+          }
+        }
+      }
+    }
+  }
+
+  return baseDelay;
 }
 
 type ExecutionProps<OUTPUT = undefined> = {
@@ -174,11 +214,26 @@ export function execute<OUTPUT = undefined>({
           {
             retries: modelSettings?.maxRetries ?? 2,
             signal: abortSignal,
+            // Disable p-retry's built-in backoff because delay timing is fully
+            // handled by onFailedAttempt via getHeaderAwareRetryDelay().
+            minTimeout: 0,
+            factor: 1,
             shouldRetry(context) {
               if (APICallError.isInstance(context.error)) {
                 return context.error.isRetryable;
               }
               return true;
+            },
+            onFailedAttempt: async context => {
+              if (context.retriesLeft === 0) {
+                return;
+              }
+
+              if (APICallError.isInstance(context.error) && !context.error.isRetryable) {
+                return;
+              }
+
+              await delay(getHeaderAwareRetryDelay(context.error, context.attemptNumber));
             },
           },
         );
