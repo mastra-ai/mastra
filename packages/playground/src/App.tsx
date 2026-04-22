@@ -20,6 +20,7 @@ declare global {
   }
 }
 
+import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { useMemo } from 'react';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
@@ -28,6 +29,7 @@ import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/link';
 import AgentBuilder from './pages/agent-builder';
 import AgentBuilderAdmin from './pages/agent-builder/admin';
+import AgentBuilderAgentEdit from './pages/agent-builder/agents/edit';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
@@ -179,11 +181,13 @@ const AgentBuilderRootLayout = () => {
   const frameworkNavigate = (path: string) => navigate(path, { viewTransition: true });
 
   return (
-    <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
-      <AgentBuilderLayout>
-        <Outlet />
-      </AgentBuilderLayout>
-    </LinkComponentProvider>
+    <TooltipProvider>
+      <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
+        <AgentBuilderLayout>
+          <Outlet />
+        </AgentBuilderLayout>
+      </LinkComponentProvider>
+    </TooltipProvider>
   );
 };
 
@@ -213,6 +217,7 @@ const routes = [
     children: [
       { index: true, element: <AgentBuilder /> },
       { path: 'admin', element: <AgentBuilderAdmin /> },
+      { path: 'agents/:id/edit', element: <AgentBuilderAgentEdit /> },
     ],
   },
   {
