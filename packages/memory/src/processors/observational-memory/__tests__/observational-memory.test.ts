@@ -1402,6 +1402,39 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).toContain('[truncated ~');
       expect(formatted).not.toContain('x'.repeat(200));
     });
+
+    // Regression test for https://github.com/mastra-ai/mastra/issues/15573
+    // Anthropic rejects bodies containing lone UTF-16 surrogates with
+    // `The request body is not valid JSON: no low surrogate in string`.
+    // Truncating via `str.slice(0, maxLen)` can cut between the high and low
+    // surrogate of a non-BMP character (e.g. emoji like 🔥 U+1F525), leaving a
+    // lone high surrogate in the <other-conversation> blocks we inject into
+    // the actor's context.
+    it('should not leave lone UTF-16 surrogates when truncating emoji across maxPartLength boundary', () => {
+      // Place an emoji (surrogate pair) such that maxPartLength lands between
+      // its high and low surrogate code units.
+      const prefix = 'a'.repeat(9);
+      const emoji = '🔥'; // length 2 in UTF-16
+      const suffix = 'tail content that will be truncated';
+      const text = prefix + emoji + suffix;
+
+      const msg = createTestMessage(text, 'user');
+      // Cut in the middle of the emoji's surrogate pair (after prefix + high surrogate).
+      const formatted = formatMessagesForObserver([msg], { maxPartLength: prefix.length + 1 });
+
+      // JSON.stringify is what the AI SDK / Anthropic client uses to serialize
+      // the request body. A lone surrogate survives stringification and is
+      // what Anthropic's server-side parser rejects.
+      const serialized = JSON.stringify({ content: formatted });
+
+      const loneHighSurrogate = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])/;
+      const loneLowSurrogate = /(^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+      expect(loneHighSurrogate.test(formatted)).toBe(false);
+      expect(loneLowSurrogate.test(formatted)).toBe(false);
+      // Belt-and-suspenders: the serialized form must also be free of lone surrogates.
+      expect(loneHighSurrogate.test(serialized)).toBe(false);
+      expect(loneLowSurrogate.test(serialized)).toBe(false);
+    });
   });
 
   describe('buildObserverHistoryMessage', () => {
