@@ -1,6 +1,6 @@
 {
   "name": "@mastra/google-cloud-pubsub",
-  "version": "1.0.3-alpha.1",
+  "version": "1.0.3",
   "description": "Mastra Google Cloud PubSub integration",
   "type": "module",
   "main": "dist/index.js",

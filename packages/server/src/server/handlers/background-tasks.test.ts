@@ -141,16 +141,16 @@ describe('Background Tasks handlers', () => {
       expect(result.total).toBe(5);
     });
 
-    it('throws when background task manager is not available', async () => {
+    it('returns an empty list when background task manager is not available', async () => {
       const noTasksMastra = new Mastra({ logger: false, storage, backgroundTasks: { enabled: false } });
 
-      await expect(
-        LIST_BACKGROUND_TASKS_ROUTE.handler({
-          mastra: noTasksMastra,
-          requestContext: {} as any,
-          abortSignal: new AbortController().signal,
-        } as any),
-      ).rejects.toThrow(HTTPException);
+      const result = await LIST_BACKGROUND_TASKS_ROUTE.handler({
+        mastra: noTasksMastra,
+        requestContext: {} as any,
+        abortSignal: new AbortController().signal,
+      } as any);
+
+      expect(result).toEqual({ tasks: [], total: 0 });
     });
   });
 
@@ -185,7 +185,7 @@ describe('Background Tasks handlers', () => {
       ).rejects.toThrow(HTTPException);
     });
 
-    it('throws when background task manager is not available', async () => {
+    it('throws 404 when background task manager is not available', async () => {
       const noTasksMastra = new Mastra({ logger: false, storage, backgroundTasks: { enabled: false } });
 
       await expect(
@@ -313,16 +313,22 @@ describe('Background Tasks handlers', () => {
       abortController.abort();
     });
 
-    it('throws when background task manager is not available', async () => {
+    it('returns an empty stream that closes on abort when background task manager is not available', async () => {
       const noTasksMastra = new Mastra({ logger: false, storage, backgroundTasks: { enabled: false } });
+      const abortController = new AbortController();
 
-      await expect(
-        BACKGROUND_TASK_STREAM_ROUTE.handler({
-          mastra: noTasksMastra,
-          abortSignal: new AbortController().signal,
-          requestContext: {} as any,
-        } as any),
-      ).rejects.toThrow(HTTPException);
+      const result = await BACKGROUND_TASK_STREAM_ROUTE.handler({
+        mastra: noTasksMastra,
+        abortSignal: abortController.signal,
+        requestContext: {} as any,
+      } as any);
+
+      expect(result).toBeInstanceOf(ReadableStream);
+
+      const reader = (result as ReadableStream).getReader();
+      abortController.abort();
+      const { done } = await reader.read();
+      expect(done).toBe(true);
     });
   });
 });
