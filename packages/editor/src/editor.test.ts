@@ -1380,3 +1380,69 @@ describe('agent.applyStoredOverrides', () => {
     expect(result).toBe(codeAgent);
   });
 });
+
+describe('MastraEditor.hasEnabledBuilderConfig', () => {
+  it('returns false when builder is omitted', () => {
+    const editor = new MastraEditor({});
+    expect(editor.hasEnabledBuilderConfig()).toBe(false);
+  });
+
+  it('returns false when builder.enabled is false', () => {
+    const editor = new MastraEditor({ builder: { enabled: false } });
+    expect(editor.hasEnabledBuilderConfig()).toBe(false);
+  });
+
+  it('returns true when builder is present with defaults', () => {
+    const editor = new MastraEditor({ builder: {} });
+    expect(editor.hasEnabledBuilderConfig()).toBe(true);
+  });
+
+  it('returns true when builder.enabled is true', () => {
+    const editor = new MastraEditor({ builder: { enabled: true } });
+    expect(editor.hasEnabledBuilderConfig()).toBe(true);
+  });
+
+  it('returns true when builder has features', () => {
+    const editor = new MastraEditor({ builder: { features: { agent: {} } } });
+    expect(editor.hasEnabledBuilderConfig()).toBe(true);
+  });
+});
+
+describe('MastraEditor.resolveBuilder', () => {
+  it('returns undefined when builder is omitted', async () => {
+    const editor = new MastraEditor({});
+    const result = await editor.resolveBuilder();
+    expect(result).toBeUndefined();
+  });
+
+  it('returns undefined when builder.enabled is false', async () => {
+    const editor = new MastraEditor({ builder: { enabled: false } });
+    const result = await editor.resolveBuilder();
+    expect(result).toBeUndefined();
+  });
+
+  it('returns IAgentBuilder when builder is enabled', async () => {
+    const editor = new MastraEditor({ builder: { enabled: true } });
+    const result = await editor.resolveBuilder();
+    expect(result).toBeDefined();
+    expect(typeof result?.enabled).toBe('boolean');
+    expect(typeof result?.getFeatures).toBe('function');
+    expect(typeof result?.getConfiguration).toBe('function');
+  });
+
+  it('caches the builder instance', async () => {
+    const editor = new MastraEditor({ builder: {} });
+    const result1 = await editor.resolveBuilder();
+    const result2 = await editor.resolveBuilder();
+    expect(result1).toBe(result2);
+  });
+
+  it('passes options to EditorAgentBuilder', async () => {
+    const features = { agent: { tools: true } };
+    const configuration = { agent: { memory: {} } };
+    const editor = new MastraEditor({ builder: { features, configuration } });
+    const result = await editor.resolveBuilder();
+    expect(result?.getFeatures()).toBe(features);
+    expect(result?.getConfiguration()).toBe(configuration);
+  });
+});
