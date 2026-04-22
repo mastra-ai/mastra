@@ -23,6 +23,7 @@ declare global {
 import { MastraReactProvider } from '@mastra/react';
 import { useMemo } from 'react';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
+import { StudioIndexRedirect } from './domains/agent-studio/components/studio-index-redirect';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/link';
@@ -65,6 +66,7 @@ import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
 import Metrics from './pages/metrics';
+import NoAccess from './pages/no-access';
 import ObservabilityOverview from './pages/observability-overview';
 import Primitives from './pages/primitives';
 import PromptBlocks from './pages/prompt-blocks';
@@ -313,7 +315,8 @@ const routes = [
           ]
         : []),
 
-      { index: true, loader: () => redirect('/agents') },
+      { index: true, element: <StudioIndexRedirect /> },
+      { path: '/no-access', element: <NoAccess /> },
       { path: '/request-context', element: <RequestContext /> },
     ],
   },
