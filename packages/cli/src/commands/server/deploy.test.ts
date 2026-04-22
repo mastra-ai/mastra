@@ -152,21 +152,23 @@ describe('readEnvVars (server deploy)', () => {
         { value: '.env.production', label: '.env.production' },
         { value: '.env.staging', label: '.env.staging' },
       ],
-      initialValue: '.env',
+      initialValue: '.env.production',
     });
     expect(prompts.log.step).toHaveBeenCalledWith('Using env file: .env.staging');
   });
 
-  it('defaults to the first discovered env file in auto-accept mode when multiple files exist', async () => {
+  it('defaults to .env.production in auto-accept mode when it exists', async () => {
     const { readdir, readFile } = await import('node:fs/promises');
     const prompts = await import('@clack/prompts');
     vi.mocked(readdir).mockResolvedValue([
       { name: '.env.staging', isFile: () => true },
       { name: '.env', isFile: () => true },
+      { name: '.env.production', isFile: () => true },
     ] as unknown as Awaited<ReturnType<typeof readdir>>);
     vi.mocked(readFile).mockImplementation(async path => {
       const filePath = String(path);
       if (filePath.endsWith('.env')) return 'SHARED=base\nBASE_ONLY=1';
+      if (filePath.endsWith('.env.production')) return 'SHARED=prod\nPROD_ONLY=1';
       if (filePath.endsWith('.env.staging')) return 'SHARED=staging\nSTAGING_ONLY=1';
       const err = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
       throw err;
@@ -175,10 +177,11 @@ describe('readEnvVars (server deploy)', () => {
     const { readEnvVars } = await import('./deploy.js');
 
     await expect(readEnvVars('/project', { autoAccept: true })).resolves.toEqual({
-      SHARED: 'base',
-      BASE_ONLY: '1',
+      SHARED: 'prod',
+      PROD_ONLY: '1',
     });
     expect(prompts.select).not.toHaveBeenCalled();
+    expect(prompts.log.step).toHaveBeenCalledWith('Using env file: .env.production');
   });
 
   it('fails when the selected env file disappears before it can be read', async () => {

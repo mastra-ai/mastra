@@ -87,7 +87,8 @@ export async function readEnvVars(
     throw new Error('No env file found for deploy. Add a .env or .env.* file before deploying.');
   }
 
-  let selectedEnvFile = availableDeployEnvFiles[0]!;
+  let selectedEnvFile =
+    availableDeployEnvFiles.find(envFile => envFile === '.env.production') ?? availableDeployEnvFiles[0]!;
 
   if (availableDeployEnvFiles.length > 1) {
     if (!options.autoAccept) {
