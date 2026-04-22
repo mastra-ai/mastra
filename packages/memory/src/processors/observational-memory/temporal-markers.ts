@@ -91,7 +91,6 @@ export async function insertTemporalGapMarkers({
     return;
   }
 
-  const check = messageList.makeMessageSourceChecker();
   const allMessages = messageList.get.all.db().filter((message): message is MastraDBMessage => Boolean(message));
   const latestInputIndex = allMessages.findIndex(message => message.id === latestInputMessage.id);
 
@@ -136,11 +135,5 @@ export async function insertTemporalGapMarkers({
   });
 
   const marker = createTemporalGapMarker(latestInputMessage, gapText, gapMs, timestamp);
-  const rebuiltMessages = [...allMessages];
-  rebuiltMessages.splice(latestInputIndex, 0, marker);
-
-  messageList.clear.all.db();
-  for (const message of rebuiltMessages) {
-    messageList.add(message, message === marker ? 'input' : (check.getSource(message) ?? 'memory'));
-  }
+  messageList.add(marker, 'input');
 }

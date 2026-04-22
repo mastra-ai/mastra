@@ -1,5 +1,14 @@
 # @mastra/clickhouse
 
+## 1.5.1-alpha.1
+
+### Patch Changes
+
+- Improved ClickHouse v-next observability initialization errors to include the underlying ClickHouse message in the standard error text. This makes init failures actionable in loggers that only print `error.message`. ([#15588](https://github.com/mastra-ai/mastra/pull/15588))
+
+- Updated dependencies [[`0a0aa94`](https://github.com/mastra-ai/mastra/commit/0a0aa94729592e99885af2efb90c56aaada62247), [`01a7d51`](https://github.com/mastra-ai/mastra/commit/01a7d513493d21562f677f98550f7ceb165ba78c)]:
+  - @mastra/core@1.27.0-alpha.1
+
 ## 1.5.1-alpha.0
 
 ### Patch Changes
