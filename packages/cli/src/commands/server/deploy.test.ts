@@ -157,19 +157,30 @@ describe('readEnvVars (server deploy)', () => {
     expect(prompts.log.step).toHaveBeenCalledWith('Using env file: .env.staging');
   });
 
-  it('defaults to .env.production in auto-accept mode when it exists', async () => {
-    const { readdir, readFile } = await import('node:fs/promises');
-    const prompts = await import('@clack/prompts');
+  it('throws in auto-accept mode when multiple env files exist and no --env-file specified', async () => {
+    const { readdir } = await import('node:fs/promises');
     vi.mocked(readdir).mockResolvedValue([
       { name: '.env.staging', isFile: () => true, isSymbolicLink: () => false },
       { name: '.env', isFile: () => true, isSymbolicLink: () => false },
       { name: '.env.production', isFile: () => true, isSymbolicLink: () => false },
     ] as unknown as Awaited<ReturnType<typeof readdir>>);
+
+    const { readEnvVars } = await import('./deploy.js');
+
+    await expect(readEnvVars('/project', { autoAccept: true })).rejects.toThrow(
+      'Multiple env files found: .env, .env.production, .env.staging. Use --env-file to specify which one to deploy.',
+    );
+  });
+
+  it('auto-selects the only env file in auto-accept mode without prompting', async () => {
+    const { readdir, readFile } = await import('node:fs/promises');
+    const prompts = await import('@clack/prompts');
+    vi.mocked(readdir).mockResolvedValue([
+      { name: '.env.production', isFile: () => true, isSymbolicLink: () => false },
+    ] as unknown as Awaited<ReturnType<typeof readdir>>);
     vi.mocked(readFile).mockImplementation(async path => {
       const filePath = String(path);
-      if (filePath.endsWith('.env')) return 'SHARED=base\nBASE_ONLY=1';
       if (filePath.endsWith('.env.production')) return 'SHARED=prod\nPROD_ONLY=1';
-      if (filePath.endsWith('.env.staging')) return 'SHARED=staging\nSTAGING_ONLY=1';
       const err = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
       throw err;
     });
@@ -218,17 +229,11 @@ describe('readEnvVars (server deploy)', () => {
   });
 
   it('uses the requested env file without prompting', async () => {
-    const { readdir, readFile } = await import('node:fs/promises');
+    const { access, readFile } = await import('node:fs/promises');
     const prompts = await import('@clack/prompts');
-    vi.mocked(readdir).mockResolvedValue([
-      { name: '.env', isFile: () => true },
-      { name: '.env.staging', isFile: () => true },
-      { name: '.env.production', isFile: () => true },
-    ] as unknown as Awaited<ReturnType<typeof readdir>>);
+    vi.mocked(access).mockResolvedValue(undefined);
     vi.mocked(readFile).mockImplementation(async path => {
       const filePath = String(path);
-      if (filePath.endsWith('.env')) return 'SHARED=base\nBASE_ONLY=1';
-      if (filePath.endsWith('.env.production')) return 'SHARED=prod\nPROD_ONLY=1';
       if (filePath.endsWith('.env.staging')) return 'SHARED=staging\nSTAGING_ONLY=1';
       const err = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
       throw err;
@@ -244,17 +249,34 @@ describe('readEnvVars (server deploy)', () => {
     expect(prompts.log.step).toHaveBeenCalledWith('Using env file: .env.staging');
   });
 
-  it('fails when the requested env file is not available', async () => {
-    const { readdir } = await import('node:fs/promises');
-    vi.mocked(readdir).mockResolvedValue([
-      { name: '.env', isFile: () => true },
-      { name: '.env.production', isFile: () => true },
-    ] as unknown as Awaited<ReturnType<typeof readdir>>);
+  it('accepts a non-.env-prefixed file when explicitly requested', async () => {
+    const { access, readFile } = await import('node:fs/promises');
+    const prompts = await import('@clack/prompts');
+    vi.mocked(access).mockResolvedValue(undefined);
+    vi.mocked(readFile).mockImplementation(async path => {
+      const filePath = String(path);
+      if (filePath.endsWith('config/prod.env')) return 'SECRET=abc';
+      const err = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+      throw err;
+    });
+
+    const { readEnvVars } = await import('./deploy.js');
+
+    await expect(readEnvVars('/project', { envFile: 'config/prod.env' })).resolves.toEqual({
+      SECRET: 'abc',
+    });
+    expect(prompts.select).not.toHaveBeenCalled();
+    expect(prompts.log.step).toHaveBeenCalledWith('Using env file: config/prod.env');
+  });
+
+  it('fails when the requested env file does not exist on disk', async () => {
+    const { access } = await import('node:fs/promises');
+    vi.mocked(access).mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
 
     const { readEnvVars } = await import('./deploy.js');
 
     await expect(readEnvVars('/project', { envFile: '.env.staging' })).rejects.toThrow(
-      'Env file not found for deploy: .env.staging. Available files: .env, .env.production',
+      'Env file not found: .env.staging',
     );
   });
 
@@ -293,6 +315,11 @@ describe('readEnvVars (server deploy)', () => {
 });
 
 describe('serverDeployAction', () => {
+  beforeEach(async () => {
+    const { access } = await import('node:fs/promises');
+    vi.mocked(access).mockResolvedValue(undefined);
+  });
+
   afterEach(() => {
     vi.resetModules();
   });
