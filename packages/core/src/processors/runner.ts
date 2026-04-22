@@ -397,6 +397,7 @@ export class ProcessorRunner {
           },
           observabilityContext,
           requestContext,
+          writer,
         );
         continue;
       }
@@ -1308,6 +1309,7 @@ export class ProcessorRunner {
           },
           observabilityContext,
           requestContext,
+          writer,
         );
         continue;
       }
