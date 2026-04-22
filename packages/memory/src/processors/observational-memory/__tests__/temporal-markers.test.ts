@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
@@ -14,13 +16,16 @@ function createMessage(params: {
   id: string;
   text: string;
   role?: 'user' | 'assistant';
-  timestamp: string;
+  timestamp: string | number;
+  partTimestamps?: number[];
   threadId: string;
   resourceId: string;
 }): MastraDBMessage {
+  const createdAt = new Date(params.timestamp);
+  const partTimestamps = params.partTimestamps ?? [createdAt.getTime()];
   const content: MastraMessageContentV2 = {
     format: 2,
-    parts: [{ type: 'text', text: params.text, createdAt: new Date(params.timestamp).getTime() }],
+    parts: partTimestamps.map(createdAt => ({ type: 'text' as const, text: params.text, createdAt })),
   };
 
   return {
@@ -28,10 +33,46 @@ function createMessage(params: {
     role: params.role ?? 'user',
     content,
     type: 'text',
-    createdAt: new Date(params.timestamp),
+    createdAt,
     threadId: params.threadId,
     resourceId: params.resourceId,
   };
+}
+
+type FixtureRow = {
+  id: string;
+  role: 'user' | 'assistant';
+  createdAt: string;
+  content: string;
+  resourceId: string;
+  thread_id?: string;
+};
+
+function loadTemporalGapDbFixture(): FixtureRow[] {
+  return JSON.parse(
+    readFileSync(new URL('./fixtures/temporal-gap-db-fixture.json', import.meta.url), 'utf8'),
+  ) as FixtureRow[];
+}
+
+function parseRowContent(row: FixtureRow): MastraMessageContentV2 {
+  return JSON.parse(row.content) as MastraMessageContentV2;
+}
+
+function getTopLevelGapMs(previousRow: FixtureRow, nextRow: FixtureRow) {
+  return new Date(nextRow.createdAt).getTime() - new Date(previousRow.createdAt).getTime();
+}
+
+function getPartGapMs(previousRow: FixtureRow, nextRow: FixtureRow) {
+  const previousContent = parseRowContent(previousRow);
+  const nextContent = parseRowContent(nextRow);
+  const previousPartTimestamps = previousContent.parts
+    .map(part => ('createdAt' in part ? part.createdAt : undefined))
+    .filter((timestamp): timestamp is number => typeof timestamp === 'number');
+  const nextPartTimestamps = nextContent.parts
+    .map(part => ('createdAt' in part ? part.createdAt : undefined))
+    .filter((timestamp): timestamp is number => typeof timestamp === 'number');
+
+  return nextPartTimestamps[0]! - previousPartTimestamps[previousPartTimestamps.length - 1]!;
 }
 
 function createMemoryProvider(messages: MastraDBMessage[]): MemoryContextProvider {
@@ -53,6 +94,28 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
     expect(formatTemporalGap(10 * 60 * 1000 - 1)).toBeNull();
     expect(formatTemporalGap(10 * 60 * 1000)).toBe('5 minutes later');
     expect(formatTemporalGap(15 * 60 * 1000)).toBe('15 minutes later');
+  });
+
+  it('labels the reported db fixture gap honestly', () => {
+    const rows = loadTemporalGapDbFixture();
+    const newerMessage = rows[0]!;
+    const markerRow = rows[1]!;
+    const previousVisibleMessage = rows[2]!;
+    const markerContent = parseRowContent(markerRow);
+    const { gapMs } = markerContent.metadata as { gapMs: number };
+
+    expect(markerRow.id.startsWith('__temporal_gap_')).toBe(true);
+    expect(markerContent.metadata).toMatchObject({
+      reminderType: 'temporal-gap',
+      gapText: '6 hours later',
+      gapMs: 40433500,
+      precedesMessageId: newerMessage.id,
+    });
+    expect(getTopLevelGapMs(previousVisibleMessage, newerMessage)).toBe(39911979);
+    expect(getPartGapMs(previousVisibleMessage, newerMessage)).toBe(39884770);
+    expect(gapMs).toBeGreaterThan(getTopLevelGapMs(previousVisibleMessage, newerMessage));
+    expect(gapMs).toBeGreaterThan(getPartGapMs(previousVisibleMessage, newerMessage));
+    expect(formatTemporalGap(gapMs)).toBe('12 hours later');
   });
 
   it('inserts temporal gap markers after history loads on step 0', async () => {
