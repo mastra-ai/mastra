@@ -135,7 +135,9 @@ describe('handleMessageUpdate system reminders', () => {
 
     expect(state.chatContainer.children).toHaveLength(4);
     expect(state.chatContainer.children[1]).toBeInstanceOf(TemporalGapComponent);
-    expect((state.chatContainer.children[1] as TemporalGapComponent).render(80).join('\n')).toContain('⏳ 1 hour later');
+    expect((state.chatContainer.children[1] as TemporalGapComponent).render(80).join('\n')).toContain(
+      '⏳ 1 hour later',
+    );
     expect(state.chatContainer.children[2]).toBe(userMessage);
     expect(state.chatContainer.children[3]).toBe(streamingMessage);
   });

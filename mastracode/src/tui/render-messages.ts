@@ -131,11 +131,7 @@ function addChildBeforeFollowUps(state: TUIState, child: Component): void {
   state.chatContainer.addChild(child);
 }
 
-export function addChildBeforeMessageOrFollowUps(
-  state: TUIState,
-  child: Component,
-  precedesMessageId?: string,
-): void {
+export function addChildBeforeMessageOrFollowUps(state: TUIState, child: Component, precedesMessageId?: string): void {
   if (precedesMessageId) {
     const anchor = state.messageComponentsById.get(precedesMessageId);
     if (anchor) {
@@ -156,7 +152,8 @@ export function addChildBeforeMessageOrFollowUps(
  */
 export function addUserMessage(state: TUIState, message: HarnessMessage): void {
   const reminderPart = message.content.find(
-    (content): content is Extract<HarnessMessageContent, { type: 'system_reminder' }> => content.type === 'system_reminder',
+    (content): content is Extract<HarnessMessageContent, { type: 'system_reminder' }> =>
+      content.type === 'system_reminder',
   );
 
   if (reminderPart) {
@@ -184,7 +181,9 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
   const displayText = imageCount > 0 ? textContent.replace(/\[image\]\s*/g, '').trim() : textContent.trim();
   const exactDisplayText = displayText.trim();
 
-  const legacyReminderMatch = exactDisplayText.match(/^<system-reminder(?<attrs>\s+[^>]*)?>(?<body>[\s\S]*?)<\/system-reminder>$/);
+  const legacyReminderMatch = exactDisplayText.match(
+    /^<system-reminder(?<attrs>\s+[^>]*)?>(?<body>[\s\S]*?)<\/system-reminder>$/,
+  );
   if (legacyReminderMatch?.groups?.body) {
     const attrs = legacyReminderMatch.groups.attrs ?? '';
     const reminderType = attrs.match(/\stype="([^"]+)"/)?.[1];

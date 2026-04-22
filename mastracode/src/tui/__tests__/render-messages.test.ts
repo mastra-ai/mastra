@@ -59,7 +59,9 @@ describe('addUserMessage', () => {
 
     expect(state.chatContainer.children).toHaveLength(1);
     expect(state.chatContainer.children[0]).toBeInstanceOf(TemporalGapComponent);
-    expect((state.chatContainer.children[0] as TemporalGapComponent).render(80).join('\n')).toContain('⏳ 15 minutes later');
+    expect((state.chatContainer.children[0] as TemporalGapComponent).render(80).join('\n')).toContain(
+      '⏳ 15 minutes later',
+    );
     expect(state.messageComponentsById.size).toBe(0);
   });
 
@@ -89,12 +91,16 @@ describe('addUserMessage', () => {
 
     addUserMessage(
       state,
-      createUserMessage('<system-reminder type="temporal-gap" precedesMessageId="user-1">15 minutes later — 9:15 AM</system-reminder>'),
+      createUserMessage(
+        '<system-reminder type="temporal-gap" precedesMessageId="user-1">15 minutes later — 9:15 AM</system-reminder>',
+      ),
     );
 
     expect(state.chatContainer.children).toHaveLength(1);
     expect(state.chatContainer.children[0]).toBeInstanceOf(TemporalGapComponent);
-    expect((state.chatContainer.children[0] as TemporalGapComponent).render(80).join('\n')).toContain('⏳ 15 minutes later');
+    expect((state.chatContainer.children[0] as TemporalGapComponent).render(80).join('\n')).toContain(
+      '⏳ 15 minutes later',
+    );
     expect(state.allSystemReminderComponents).toHaveLength(1);
   });
 
