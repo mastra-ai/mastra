@@ -65,10 +65,10 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
 
 function buildResponseModelMetadata(
   runState: AgenticRunState,
-  model?: { provider?: string },
+  model?: { provider?: string; modelId?: string },
 ): { metadata: Record<string, unknown> } | undefined {
   const metadata: Record<string, unknown> = {};
-  const modelId = runState.state.responseMetadata?.modelId;
+  const modelId = model?.modelId ?? runState.state.responseMetadata?.modelId;
 
   if (modelId) {
     metadata.modelId = modelId;
