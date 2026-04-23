@@ -104,6 +104,18 @@ This works with any [CDP-compatible](https://chromedevtools.github.io/devtools-p
 
 Browser providers stream a live video feed of the browser to the Mastra Studio UI. This lets you watch the agent interact with pages in real-time.
 
+Screencast requires WebSocket support. Install these packages in your project:
+
+```bash npm2yarn
+npm install ws @hono/node-ws
+```
+
+:::note
+
+These packages are not included by default because they are incompatible with serverless environments like Cloudflare Workers. If they are not installed, screencast is disabled but all other browser functionality works normally.
+
+:::
+
 Screencast is enabled by default and can be configured:
 
 ```typescript
