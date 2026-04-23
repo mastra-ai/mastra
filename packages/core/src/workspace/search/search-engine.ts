@@ -357,6 +357,28 @@ export class SearchEngine {
   }
 
   /**
+   * Remove a source document and all of its chunked variants.
+   *
+   * This also attempts a metadata-based bulk delete for chunk vectors so stale
+   * chunk IDs from previous process runs are cleaned up in persistent stores.
+   */
+  async removeSource(sourceId: string): Promise<void> {
+    await this.remove(sourceId);
+    await this.removeByPrefix(`${sourceId}#chunk-`);
+
+    if (this.#vectorConfig) {
+      try {
+        await this.#vectorConfig.vectorStore.deleteVectors({
+          indexName: this.#vectorConfig.indexName,
+          filter: { sourceFile: sourceId } as VectorFilter,
+        });
+      } catch {
+        // Bulk delete/filter may not be supported by all vector backends.
+      }
+    }
+  }
+
+  /**
    * Clear all indexed documents
    */
   clear(): void {

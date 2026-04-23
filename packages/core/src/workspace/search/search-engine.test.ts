@@ -581,6 +581,7 @@ Third line has learning too`;
             upsert: vi.fn(async () => {}),
             query: vi.fn(async () => []),
             deleteVector: mockDeleteVector,
+            deleteVectors: vi.fn(async () => {}),
           } as any,
           embedder: vi.fn(async () => [1, 2, 3]),
           indexName: 'test-index',
@@ -596,6 +597,39 @@ Third line has learning too`;
       expect(mockDeleteVector).toHaveBeenCalledTimes(2);
       expect(mockDeleteVector).toHaveBeenCalledWith({ indexName: 'test-index', id: 'file.txt#chunk-0' });
       expect(mockDeleteVector).toHaveBeenCalledWith({ indexName: 'test-index', id: 'file.txt#chunk-1' });
+    });
+  });
+
+  describe('removeSource', () => {
+    it('should remove source doc, chunks, and sourceFile vectors', async () => {
+      const mockDeleteVector = vi.fn(async () => {});
+      const mockDeleteVectors = vi.fn(async () => {});
+      const engine = new SearchEngine({
+        vector: {
+          vectorStore: {
+            upsert: vi.fn(async () => {}),
+            query: vi.fn(async () => []),
+            deleteVector: mockDeleteVector,
+            deleteVectors: mockDeleteVectors,
+          } as any,
+          embedder: vi.fn(async () => [1, 2, 3]),
+          indexName: 'test-index',
+        },
+      });
+
+      await engine.index({ id: 'file.txt', content: 'full file content' });
+      await engine.index({ id: 'file.txt#chunk-0', content: 'chunk zero', metadata: { sourceFile: 'file.txt' } });
+      await engine.index({ id: 'file.txt#chunk-1', content: 'chunk one', metadata: { sourceFile: 'file.txt' } });
+
+      await engine.removeSource('file.txt');
+
+      expect(mockDeleteVector).toHaveBeenCalledWith({ indexName: 'test-index', id: 'file.txt' });
+      expect(mockDeleteVector).toHaveBeenCalledWith({ indexName: 'test-index', id: 'file.txt#chunk-0' });
+      expect(mockDeleteVector).toHaveBeenCalledWith({ indexName: 'test-index', id: 'file.txt#chunk-1' });
+      expect(mockDeleteVectors).toHaveBeenCalledWith({
+        indexName: 'test-index',
+        filter: { sourceFile: 'file.txt' },
+      });
     });
   });
 });
