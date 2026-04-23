@@ -32,6 +32,7 @@ export const useStoredAgent = (agentId?: string, options?: { status?: 'draft' | 
       }
     },
     enabled: Boolean(agentId) && enabled,
+    retry: false,
   });
 };
 

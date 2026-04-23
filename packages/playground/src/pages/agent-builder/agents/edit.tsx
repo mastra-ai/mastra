@@ -1,7 +1,7 @@
-import { Button, cn, IconButton } from '@mastra/playground-ui';
+import { cn, IconButton } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { ArrowLeftIcon, Columns2, EyeIcon } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
@@ -14,6 +14,7 @@ import { defaultAgentFixture } from '@/domains/agent-builder/fixtures';
 import type { AgentFixture } from '@/domains/agent-builder/fixtures';
 import { useSaveAgent } from '@/domains/agent-builder/hooks/use-save-agent';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
+import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 
 interface AvailableTool {
@@ -38,6 +39,7 @@ export default function AgentBuilderAgentEdit() {
   const [agent, setAgent] = useState<AgentFixture>(defaultAgentFixture);
   const features = useBuilderAgentFeatures();
   const { data: toolsData, isPending } = useTools();
+  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id);
 
   const availableTools = useMemo<AvailableTool[]>(
     () =>
@@ -50,7 +52,21 @@ export default function AgentBuilderAgentEdit() {
     [toolsData],
   );
 
-  const { save, isSaving } = useSaveAgent({ agentId: id!, availableTools });
+  useEffect(() => {
+    if (!storedAgent) return;
+    const instructions = typeof storedAgent.instructions === 'string' ? storedAgent.instructions : '';
+    const tools = Object.fromEntries(Object.keys(storedAgent.tools ?? {}).map(k => [k, true]));
+    const skills = Object.keys(storedAgent.skills ?? {});
+    formMethods.reset({
+      name: storedAgent.name ?? '',
+      instructions,
+      tools,
+      skills,
+    });
+  }, [storedAgent, formMethods]);
+
+  const mode: 'create' | 'edit' = storedAgent ? 'edit' : 'create';
+  const { save, isSaving } = useSaveAgent({ agentId: id!, mode, availableTools });
   const handleSaveSuccess = async (values: AgentBuilderEditFormValues) => {
     await save(values);
     void navigate(`/agent-builder/agents`, { viewTransition: true });
@@ -76,11 +92,7 @@ export default function AgentBuilderAgentEdit() {
             </IconButton>
           </div>
           <AgentBuilderBreadcrumb className="justify-self-center" />
-          <div className="justify-self-end">
-            <Button variant="primary" onClick={handleSave} disabled={isSaving} data-testid="agent-builder-edit-save">
-              {isSaving ? 'Saving…' : 'Save'}
-            </Button>
-          </div>
+          <div className="justify-self-end" />
         </div>
         <div className="flex flex-1 min-h-0">
           <div className="flex w-[40ch] shrink-0 flex-col bg-surface1 pt-4 pb-6 px-6">
@@ -128,6 +140,9 @@ export default function AgentBuilderAgentEdit() {
                     onAgentChange={setAgent}
                     onClose={() => setExpanded(false)}
                     availableTools={availableTools}
+                    onSave={handleSave}
+                    isSaving={isSaving}
+                    isLoading={isStoredAgentLoading}
                   />
                 </div>
               </div>

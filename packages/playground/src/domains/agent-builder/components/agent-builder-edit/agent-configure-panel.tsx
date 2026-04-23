@@ -1,4 +1,4 @@
-import { Avatar, IconButton, TextFieldBlock, Txt } from '@mastra/playground-ui';
+import { Avatar, Button, IconButton, Skeleton, TextFieldBlock, Txt } from '@mastra/playground-ui';
 import { ChevronRight, FileText, GraduationCap, Plus, Wrench, X } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
@@ -27,6 +27,9 @@ interface AgentConfigurePanelProps {
   onDraftInstructionsChange?: (next: string) => void;
   onClose: () => void;
   availableTools?: AvailableTool[];
+  onSave?: () => void;
+  isSaving?: boolean;
+  isLoading?: boolean;
 }
 
 export const AgentConfigurePanel = ({
@@ -41,6 +44,9 @@ export const AgentConfigurePanel = ({
   onDraftInstructionsChange = () => {},
   onClose = () => {},
   availableTools = [],
+  onSave,
+  isSaving = false,
+  isLoading = false,
 }: AgentConfigurePanelProps) => {
   const features = useBuilderAgentFeatures();
   const [systemPromptOpen, setSystemPromptOpen] = useState(false);
@@ -61,10 +67,7 @@ export const AgentConfigurePanel = ({
 
   const { control } = useFormContext<AgentBuilderEditFormValues>();
   const toolsMap = useWatch({ control, name: 'tools' });
-  const activeToolsCount = useMemo(
-    () => Object.values(toolsMap ?? {}).filter(Boolean).length,
-    [toolsMap],
-  );
+  const activeToolsCount = useMemo(() => Object.values(toolsMap ?? {}).filter(Boolean).length, [toolsMap]);
   const totalToolsCount = availableTools.length;
   const activeSkillsCount = useMemo(() => skillsFixture.filter(s => s.enabled).length, []);
 
@@ -73,6 +76,10 @@ export const AgentConfigurePanel = ({
     onAgentChange({ ...agent, systemPrompt: nextPrompt });
     setSystemPromptOpen(false);
   };
+
+  if (isLoading) {
+    return <AgentConfigurePanelSkeleton onClose={onClose} showSaveButton={Boolean(onSave) && editable} />;
+  }
 
   return (
     <div className="flex h-full flex-col border border-border1 bg-surface3 rounded-3xl overflow-hidden">
@@ -163,6 +170,20 @@ export const AgentConfigurePanel = ({
         </div>
       </div>
 
+      {onSave && editable && (
+        <div className="border-t border-border1 px-6 py-4">
+          <Button
+            variant="primary"
+            className="w-full justify-center"
+            onClick={onSave}
+            disabled={isSaving}
+            data-testid="agent-builder-edit-save"
+          >
+            {isSaving ? 'Saving…' : 'Save'}
+          </Button>
+        </div>
+      )}
+
       <SystemPromptDialog
         open={systemPromptOpen}
         onOpenChange={setSystemPromptOpen}
@@ -171,12 +192,7 @@ export const AgentConfigurePanel = ({
         editable={editable}
       />
       {features.tools && (
-        <ToolsDialog
-          open={toolsOpen}
-          onOpenChange={setToolsOpen}
-          editable={editable}
-          availableTools={availableTools}
-        />
+        <ToolsDialog open={toolsOpen} onOpenChange={setToolsOpen} editable={editable} availableTools={availableTools} />
       )}
       {features.skills && <SkillsDialog open={skillsOpen} onOpenChange={setSkillsOpen} editable={editable} />}
     </div>
@@ -216,6 +232,50 @@ const ConfigRow = ({ icon, label, description, count, total, onClick, testId }: 
     )}
     <ChevronRight className="h-4 w-4 shrink-0 text-neutral3 transition-colors group-hover:text-neutral5" />
   </button>
+);
+
+interface AgentConfigurePanelSkeletonProps {
+  onClose: () => void;
+  showSaveButton: boolean;
+}
+
+const AgentConfigurePanelSkeleton = ({ onClose, showSaveButton }: AgentConfigurePanelSkeletonProps) => (
+  <div
+    className="flex h-full flex-col border border-border1 bg-surface3 rounded-3xl overflow-hidden"
+    data-testid="agent-configure-panel-skeleton"
+  >
+    <div className="pr-6 pt-6 flex justify-end">
+      <IconButton onClick={onClose} className="rounded-full" tooltip="Close" variant="ghost">
+        <X />
+      </IconButton>
+    </div>
+    <div className="flex-1 flex flex-col gap-6 py-6 overflow-y-auto">
+      <div className="flex items-center gap-4 px-6">
+        <Skeleton className="h-avatar-lg w-avatar-lg rounded-full shrink-0" />
+        <div className="min-w-0 flex-1 flex flex-col gap-2">
+          <Skeleton className="h-3 w-12" />
+          <Skeleton className="h-9 w-full" />
+        </div>
+      </div>
+      <div className="flex flex-col">
+        {[0, 1, 2].map(i => (
+          <div key={i} className="flex items-center gap-4 border-b border-border1 px-6 py-4 first:border-t">
+            <Skeleton className="h-4 w-4 shrink-0 rounded" />
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-3 w-40" />
+            </div>
+            <Skeleton className="h-4 w-4 shrink-0 rounded" />
+          </div>
+        ))}
+      </div>
+    </div>
+    {showSaveButton && (
+      <div className="border-t border-border1 px-6 py-4">
+        <Skeleton className="h-9 w-full rounded-lg" />
+      </div>
+    )}
+  </div>
 );
 
 export const EditableAgentConfigurePanel = (props: AgentConfigurePanelProps) => {

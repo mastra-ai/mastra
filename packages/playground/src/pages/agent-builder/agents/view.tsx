@@ -1,6 +1,6 @@
 import { cn, IconButton } from '@mastra/playground-ui';
 import { ArrowLeftIcon, Columns2, PencilIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router';
 import { AgentBuilderBreadcrumb } from '@/domains/agent-builder/components/agent-builder-edit/agent-builder-breadcrumb';
@@ -8,13 +8,46 @@ import { AgentConfigurePanel } from '@/domains/agent-builder/components/agent-bu
 import { AgentPreviewChat } from '@/domains/agent-builder/components/agent-builder-edit/agent-preview-chat';
 import { BrowserFrame } from '@/domains/agent-builder/components/browser-frame';
 import { defaultAgentFixture } from '@/domains/agent-builder/fixtures';
+import type { AgentFixture } from '@/domains/agent-builder/fixtures';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
+import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
+import { useTools } from '@/domains/tools/hooks/use-all-tools';
+
+interface AvailableTool {
+  id: string;
+  description?: string;
+}
 
 export default function AgentBuilderAgentView() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
   const gridClass = expanded ? 'grid-cols-[1fr_380px]' : 'grid-cols-[1fr_0px]';
+  const { data: storedAgent, isLoading } = useStoredAgent(id);
+  const { data: toolsData } = useTools();
+
+  const availableTools = useMemo<AvailableTool[]>(
+    () =>
+      toolsData
+        ? Object.entries(toolsData).map(([toolId, tool]) => ({
+            id: toolId,
+            description: (tool as { description?: string }).description,
+          }))
+        : [],
+    [toolsData],
+  );
+
+  const agent = useMemo<AgentFixture>(() => {
+    if (!storedAgent) return defaultAgentFixture;
+    const instructions = typeof storedAgent.instructions === 'string' ? storedAgent.instructions : '';
+    return {
+      ...defaultAgentFixture,
+      id: storedAgent.id ?? defaultAgentFixture.id,
+      name: storedAgent.name ?? defaultAgentFixture.name,
+      systemPrompt: instructions || defaultAgentFixture.systemPrompt,
+    };
+  }, [storedAgent]);
+
   const formMethods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {
       name: defaultAgentFixture.name,
@@ -23,6 +56,20 @@ export default function AgentBuilderAgentView() {
       skills: [],
     },
   });
+
+  useEffect(() => {
+    if (!storedAgent) return;
+    const instructions = typeof storedAgent.instructions === 'string' ? storedAgent.instructions : '';
+    const tools = Object.fromEntries(Object.keys(storedAgent.tools ?? {}).map(k => [k, true]));
+    const skills = Object.keys(storedAgent.skills ?? {});
+    formMethods.reset({
+      name: storedAgent.name ?? '',
+      instructions,
+      tools,
+      skills,
+    });
+  }, [storedAgent, formMethods]);
+
   return (
     <FormProvider {...formMethods}>
       <div className="flex flex-1 min-w-0 flex-col h-full bg-surface1">
@@ -59,7 +106,7 @@ export default function AgentBuilderAgentView() {
                 )}
               </div>
 
-              <AgentPreviewChat agent={defaultAgentFixture} />
+              <AgentPreviewChat agent={agent} />
             </div>
 
             <div className="h-full min-w-0 overflow-hidden" aria-hidden={!expanded}>
@@ -71,10 +118,12 @@ export default function AgentBuilderAgentView() {
                 style={expanded ? { viewTransitionName: 'agent-builder-configure-panel' } : undefined}
               >
                 <AgentConfigurePanel
-                  agent={defaultAgentFixture}
+                  agent={agent}
                   onAgentChange={() => {}}
                   editable={false}
                   onClose={() => setExpanded(false)}
+                  isLoading={isLoading}
+                  availableTools={availableTools}
                 />
               </div>
             </div>
