@@ -1,7 +1,7 @@
 import { EntityType } from '@mastra/core/observability';
 import type { ListTracesArgs } from '@mastra/core/storage';
-import type { PropertyFilterField, PropertyFilterToken } from '@mastra/playground-ui';
 import type { TraceDatePreset } from './types';
+import type { PropertyFilterField, PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
 export type EntityOptions = { label: string; entityType: EntityType };
 
@@ -71,12 +71,15 @@ export const TRACE_PROPERTY_FILTER_FIELD_IDS = Object.keys(TRACE_PROPERTY_FILTER
 
 export const TRACE_STATUS_VALUES = new Set<TraceStatusFilter>(['running', 'success', 'error']);
 
-const TRACE_FILTERS_STORAGE_KEY = 'mastra:traces:saved-filters';
+export const DEFAULT_TRACE_FILTERS_STORAGE_KEY = 'mastra:traces:saved-filters';
 
 /** Serialize the filter-related URL params (date + rootEntityType + status +
  *  generic filterX set) to localStorage so the user can restore them on next
  *  visit. Throws no errors — storage being unavailable is fine. */
-export function saveTraceFiltersToStorage(params: URLSearchParams): void {
+export function saveTraceFiltersToStorage(
+  params: URLSearchParams,
+  storageKey: string = DEFAULT_TRACE_FILTERS_STORAGE_KEY,
+): void {
   const serialized = getPreservedTraceFilterParams(params);
   const preset = params.get(TRACE_DATE_PRESET_PARAM);
   if (preset) serialized.set(TRACE_DATE_PRESET_PARAM, preset);
@@ -86,7 +89,7 @@ export function saveTraceFiltersToStorage(params: URLSearchParams): void {
   if (to) serialized.set(TRACE_DATE_TO_PARAM, to);
 
   try {
-    localStorage.setItem(TRACE_FILTERS_STORAGE_KEY, serialized.toString());
+    localStorage.setItem(storageKey, serialized.toString());
   } catch {
     // localStorage may be unavailable (private mode / quota) — silently skip.
   }
@@ -94,9 +97,9 @@ export function saveTraceFiltersToStorage(params: URLSearchParams): void {
 
 /** Forget any previously saved filter set. Called from the "Remove filters"
  *  action so the next plain sidebar nav lands on an empty page. */
-export function clearSavedTraceFilters(): void {
+export function clearSavedTraceFilters(storageKey: string = DEFAULT_TRACE_FILTERS_STORAGE_KEY): void {
   try {
-    localStorage.removeItem(TRACE_FILTERS_STORAGE_KEY);
+    localStorage.removeItem(storageKey);
   } catch {
     // ignore — storage may be unavailable
   }
@@ -104,9 +107,11 @@ export function clearSavedTraceFilters(): void {
 
 /** Read a previously saved filter set and return it as URLSearchParams, or
  *  null if nothing is saved or storage is unavailable. */
-export function loadTraceFiltersFromStorage(): URLSearchParams | null {
+export function loadTraceFiltersFromStorage(
+  storageKey: string = DEFAULT_TRACE_FILTERS_STORAGE_KEY,
+): URLSearchParams | null {
   try {
-    const raw = localStorage.getItem(TRACE_FILTERS_STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (!raw) return null;
     const parsed = new URLSearchParams(raw);
     return parsed.toString() ? parsed : null;
@@ -435,4 +440,24 @@ export function buildTraceListFilters({
   }
 
   return filters;
+}
+
+/**
+ * "Clear" semantics: keep all filter pills but neutralize each value.
+ * '' for text fields, 'Any' for single-select pick-multi, [] for multi-select pick-multi.
+ * Date range is intentionally NOT touched here — that's a separate concern.
+ */
+export function neutralizeFilterTokens(
+  filterFields: PropertyFilterField[],
+  filterTokens: PropertyFilterToken[],
+): PropertyFilterToken[] {
+  return filterTokens.map(token => {
+    const field = filterFields.find(f => f.id === token.fieldId);
+    if (!field) return token;
+    if (field.kind === 'text') return { fieldId: token.fieldId, value: '' };
+    if (field.kind === 'pick-multi') {
+      return field.multi ? { fieldId: token.fieldId, value: [] } : { fieldId: token.fieldId, value: 'Any' };
+    }
+    return token;
+  });
 }

@@ -1,10 +1,9 @@
-import { DataDetailsPanel } from '@mastra/playground-ui';
+import { DataDetailsPanel, useTraceLightSpans } from '@mastra/playground-ui';
 import { useEffect, useMemo, useState } from 'react';
 
 import { formatHierarchicalSpans } from './trace/format-hierarchical-spans';
 import { getAllSpanIds } from './trace/get-descendant-ids';
 import { TraceTimeline } from './trace/trace-timeline';
-import { useTraceLightSpans } from '@/domains/traces/hooks/use-trace-light-spans';
 
 export interface TraceDetailsProps {
   traceId: string;

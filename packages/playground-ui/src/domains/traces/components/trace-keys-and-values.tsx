@@ -1,8 +1,19 @@
-import { computeTraceStatus, TraceStatus } from '@internal-temp/core/index';
-import { DataKeysAndValues } from '@mastra/playground-ui';
 import { format } from 'date-fns';
+import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 
-/** Minimal root-span fields needed for the trace header. */
+enum TraceStatus {
+  SUCCESS = 'success',
+  ERROR = 'error',
+  RUNNING = 'running',
+}
+
+function computeTraceStatus(span: { error?: unknown; endedAt?: Date | string | null }): TraceStatus {
+  if (span.error != null) return TraceStatus.ERROR;
+  if (span.endedAt == null) return TraceStatus.RUNNING;
+  return TraceStatus.SUCCESS;
+}
+
+/** Lightweight root-span fields available from `useTraceLightSpans`. */
 type RootSpanSummary = {
   entityId?: string | null;
   entityName?: string | null;

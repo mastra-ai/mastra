@@ -1,6 +1,11 @@
-import { AgentIcon, FolderIcon, McpServerIcon, MemoryIcon, ToolsIcon, WorkflowIcon } from '@mastra/playground-ui';
 import { BrainIcon } from 'lucide-react';
 import type { UISpanStyle } from '../types';
+import { AgentIcon } from '@/ds/icons/AgentIcon';
+import { FolderIcon } from '@/ds/icons/FolderIcon';
+import { McpServerIcon } from '@/ds/icons/McpServerIcon';
+import { MemoryIcon } from '@/ds/icons/MemoryIcon';
+import { ToolsIcon } from '@/ds/icons/ToolsIcon';
+import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 
 export const spanTypePrefixes = ['agent', 'workflow', 'model', 'mcp', 'tool', 'memory', 'workspace', 'other'];
 

@@ -1,1 +1,1 @@
-export type { UISpan, UISpanStyle } from '@/domains/traces/types';
+export type { UISpan, UISpanStyle } from '@mastra/playground-ui';

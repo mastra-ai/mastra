@@ -1,1 +1,1 @@
-export { TimelineStructureSign } from '@/domains/traces/components/timeline-structure-sign';
+export { TimelineStructureSign } from '@mastra/playground-ui';

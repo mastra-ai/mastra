@@ -12,6 +12,10 @@ import {
   is401UnauthorizedError,
   is403ForbiddenError,
   toast,
+  useEntityNames,
+  useEnvironments,
+  useServiceNames,
+  useTags,
 } from '@mastra/playground-ui';
 import { BookIcon, LogsIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -39,10 +43,6 @@ import {
   saveLogsFiltersToStorage,
 } from '@/domains/logs/log-filters';
 import type { LogsDatePreset } from '@/domains/logs/log-filters';
-import { useEntityNames } from '@/domains/observability/hooks/use-entity-names';
-import { useEnvironments } from '@/domains/observability/hooks/use-environments';
-import { useServiceNames } from '@/domains/observability/hooks/use-service-names';
-import { useTags } from '@/domains/observability/hooks/use-tags';
 
 const LOG_PARAM = 'logId';
 const TRACE_PARAM = 'traceId';
