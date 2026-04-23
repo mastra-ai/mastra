@@ -163,6 +163,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           observabilityContext: getOmObservabilityContext(args),
           hooks: {
             onBufferChunkSealed: rotateResponseMessageId,
+            onSyncObservationComplete: rotateResponseMessageId,
           },
         });
         this.turn.writer = writer;

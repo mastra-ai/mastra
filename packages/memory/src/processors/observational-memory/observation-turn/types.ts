@@ -16,6 +16,7 @@ export type RotateResponseMessageId = () => string;
 
 export interface ObservationTurnHooks {
   onBufferChunkSealed?: RotateResponseMessageId | (() => void | Promise<void>);
+  onSyncObservationComplete?: RotateResponseMessageId | (() => void | Promise<void>);
 }
 
 /** Returned by `step.prepare()` — what the agent needs for this step. */

@@ -362,6 +362,16 @@ export class ObservationStep {
       observabilityContext: this.turn.observabilityContext,
     });
 
+    if (obsResult.observed) {
+      try {
+        await this.turn.hooks?.onSyncObservationComplete?.();
+      } catch (error) {
+        omDebug(
+          `[OM:observe] onSyncObservationComplete hook failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
     return {
       succeeded: obsResult.observed,
       record: obsResult.record,
