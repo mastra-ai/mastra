@@ -85,6 +85,8 @@ import Workflows from './pages/workflows';
 import { Workflow } from './pages/workflows/workflow';
 import Workspace from './pages/workspace';
 import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
+import AgentBuilderIndex from './pages/agent-builder';
+import AgentBuilderCreatePage from './pages/agent-builder/agents/create';
 import { Layout } from '@/components/layout';
 import { MinimalLayout } from '@/components/minimal-layout';
 import { AgentLayout } from '@/domains/agents/agent-layout';
@@ -119,6 +121,7 @@ const paths: LinkComponentProviderProps['paths'] = {
   cmsScorerEditLink: (scorerId: string) => `/cms/scorers/${scorerId}/edit`,
   cmsAgentCreateLink: () => '/cms/agents/create',
   cmsAgentEditLink: (agentId: string) => `/cms/agents/${agentId}/edit`,
+  agentBuilderCreateLink: () => '/agent-builder/agents/create',
   promptBlockLink: (promptBlockId: string) => `/prompts/${promptBlockId}`,
   promptBlocksLink: () => '/prompts',
   cmsPromptBlockCreateLink: () => '/cms/prompts/create',
@@ -234,6 +237,10 @@ const routes = [
       },
       { path: '/cms/scorers/create', element: <CmsScorersCreatePage /> },
       { path: '/cms/scorers/:scorerId/edit', element: <CmsScorersEditPage /> },
+
+      // Agent Builder routes
+      { path: '/agent-builder', element: <AgentBuilderIndex /> },
+      { path: '/agent-builder/agents/create', element: <AgentBuilderCreatePage /> },
       { path: '/prompts', element: <PromptBlocks /> },
       { path: '/cms/prompts/create', element: <CmsPromptBlocksCreatePage /> },
       { path: '/cms/prompts/:promptBlockId/edit', element: <CmsPromptBlocksEditPage /> },

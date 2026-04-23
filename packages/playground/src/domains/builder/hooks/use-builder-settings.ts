@@ -33,3 +33,21 @@ export const useIsBuilderEnabled = () => {
     error,
   };
 };
+
+/**
+ * Returns feature flags for agent builder sections.
+ * Supports tools, memory, skills, workflows, agents.
+ * Scorers and variables deferred (always false).
+ */
+export const useBuilderAgentFeatures = () => {
+  const { data } = useBuilderSettings();
+  const features = data?.features?.agent;
+
+  return {
+    tools: features?.tools === true,
+    memory: features?.memory === true,
+    skills: features?.skills === true,
+    workflows: features?.workflows === true,
+    agents: features?.agents === true,
+  };
+};
