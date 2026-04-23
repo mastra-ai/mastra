@@ -1328,6 +1328,7 @@ export class Harness<TState = {}> {
         maxSteps: 1000,
         // Harness supports suspending + resuming streams (tool approvals, tool suspensions, workflows).
         // Persisting per-step snapshots ensures `resumeStream()` can load state reliably (especially in CI).
+        // Doesn't do anything when OM is enabled though, OM does its own saving per step
         savePerStep: true,
         requireToolApproval: !isYolo,
         modelSettings: { temperature: 1 },

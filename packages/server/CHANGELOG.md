@@ -1,5 +1,38 @@
 # @mastra/server
 
+## 1.27.0
+
+### Patch Changes
+
+- Forward `requestContext` from the `/approve-tool-call`, `/decline-tool-call`, `/approve-tool-call-generate` and `/decline-tool-call-generate` REST handlers to `agent.approveToolCall(...)` / `declineToolCall(...)` / `approveToolCallGenerate(...)` / `declineToolCallGenerate(...)`. ([#15620](https://github.com/mastra-ai/mastra/pull/15620))
+
+  Previously `requestContext` was destructured from the handler arguments but never passed through. On resume, `dynamicInstructions` ran with `requestContext: undefined`, so any value placed on the per-request `RequestContext` by upstream middleware (or by `body.requestContext` auto-merge) was lost for the rest of the turn. Agents whose prompt assembly depends on request-scoped data (e.g. read-only state from the frontend) produced blank or placeholder responses after the user approved a HITL tool call. Other agent entry points (`stream`, `generate`) already forwarded `requestContext` correctly; this brings the approval routes in line.
+
+- Fixed screencast panel staying "Live" after browser closes due to an error. The `ViewerRegistry` now broadcasts `browser_closed` status when a screencast stream emits an error, not just when it stops cleanly. ([#15415](https://github.com/mastra-ai/mastra/pull/15415))
+
+- Updated dependencies [[`f112db1`](https://github.com/mastra-ai/mastra/commit/f112db179557ae9b5a0f1d25dc47f928d7d61cd9), [`21d9706`](https://github.com/mastra-ai/mastra/commit/21d970604d89eee970cbf8013d26d7551aff6ea5), [`0a0aa94`](https://github.com/mastra-ai/mastra/commit/0a0aa94729592e99885af2efb90c56aaada62247), [`ed07df3`](https://github.com/mastra-ai/mastra/commit/ed07df32a9d539c8261e892fc1bade783f5b41a6), [`01a7d51`](https://github.com/mastra-ai/mastra/commit/01a7d513493d21562f677f98550f7ceb165ba78c)]:
+  - @mastra/core@1.27.0
+
+## 1.27.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`ed07df3`](https://github.com/mastra-ai/mastra/commit/ed07df32a9d539c8261e892fc1bade783f5b41a6)]:
+  - @mastra/core@1.27.0-alpha.2
+
+## 1.27.0-alpha.1
+
+### Patch Changes
+
+- Forward `requestContext` from the `/approve-tool-call`, `/decline-tool-call`, `/approve-tool-call-generate` and `/decline-tool-call-generate` REST handlers to `agent.approveToolCall(...)` / `declineToolCall(...)` / `approveToolCallGenerate(...)` / `declineToolCallGenerate(...)`. ([#15620](https://github.com/mastra-ai/mastra/pull/15620))
+
+  Previously `requestContext` was destructured from the handler arguments but never passed through. On resume, `dynamicInstructions` ran with `requestContext: undefined`, so any value placed on the per-request `RequestContext` by upstream middleware (or by `body.requestContext` auto-merge) was lost for the rest of the turn. Agents whose prompt assembly depends on request-scoped data (e.g. read-only state from the frontend) produced blank or placeholder responses after the user approved a HITL tool call. Other agent entry points (`stream`, `generate`) already forwarded `requestContext` correctly; this brings the approval routes in line.
+
+- Fixed screencast panel staying "Live" after browser closes due to an error. The `ViewerRegistry` now broadcasts `browser_closed` status when a screencast stream emits an error, not just when it stops cleanly. ([#15415](https://github.com/mastra-ai/mastra/pull/15415))
+
+- Updated dependencies [[`0a0aa94`](https://github.com/mastra-ai/mastra/commit/0a0aa94729592e99885af2efb90c56aaada62247), [`01a7d51`](https://github.com/mastra-ai/mastra/commit/01a7d513493d21562f677f98550f7ceb165ba78c)]:
+  - @mastra/core@1.27.0-alpha.1
+
 ## 1.26.1-alpha.0
 
 ### Patch Changes
