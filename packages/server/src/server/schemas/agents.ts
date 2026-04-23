@@ -301,7 +301,7 @@ export const agentExecutionLegacyBodySchema = agentExecutionBodySchema.extend({
 });
 
 export const streamUntilIdleBodySchema = agentExecutionBodySchema.extend({
-  maxIdleMs: z.number().optional(),
+  maxIdleMs: z.number().int().positive().optional(),
 });
 /**
  * Body schema for tool execute endpoint
