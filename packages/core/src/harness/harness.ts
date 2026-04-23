@@ -26,6 +26,7 @@ import type {
   HarnessMessage,
   HarnessMessageContent,
   HarnessMode,
+  HarnessQuestionAnswer,
   HarnessRequestContext,
   HarnessSession,
   HarnessThread,
@@ -84,7 +85,7 @@ export class Harness<TState = {}> {
   private pendingApprovalToolName: string | null = null;
   private pendingSuspensionRunId: string | null = null;
   private pendingSuspensionToolCallId: string | null = null;
-  private pendingQuestions = new Map<string, (answer: string) => void>();
+  private pendingQuestions = new Map<string, (answer: HarnessQuestionAnswer) => void>();
   private pendingPlanApprovals = new Map<
     string,
     (result: { action: 'approved' | 'rejected'; feedback?: string }) => void
@@ -1343,6 +1344,10 @@ export class Harness<TState = {}> {
         abortSignal: this.abortController.signal,
         requestContext,
         maxSteps: 1000,
+        // Harness supports suspending + resuming streams (tool approvals, tool suspensions, workflows).
+        // Persisting per-step snapshots ensures `resumeStream()` can load state reliably (especially in CI).
+        // Doesn't do anything when OM is enabled though, OM does its own saving per step
+        savePerStep: true,
         requireToolApproval: !isYolo,
         modelSettings: { temperature: 1 },
         ...(tracingContext && { tracingContext }),
@@ -1525,9 +1530,44 @@ export class Harness<TState = {}> {
         };
         [key: string]: unknown;
       }>;
+      metadata?: Record<string, unknown>;
     };
   }): HarnessMessage {
     const content: HarnessMessageContent[] = [];
+    const systemReminder =
+      typeof msg.content.metadata?.systemReminder === 'object' && msg.content.metadata.systemReminder !== null
+        ? msg.content.metadata.systemReminder
+        : undefined;
+
+    if (systemReminder && 'type' in systemReminder && typeof systemReminder.type === 'string') {
+      content.push({
+        type: 'system_reminder',
+        message:
+          'message' in systemReminder && typeof systemReminder.message === 'string' ? systemReminder.message : '',
+        reminderType: systemReminder.type,
+        path: 'path' in systemReminder && typeof systemReminder.path === 'string' ? systemReminder.path : undefined,
+        precedesMessageId:
+          'precedesMessageId' in systemReminder && typeof systemReminder.precedesMessageId === 'string'
+            ? systemReminder.precedesMessageId
+            : undefined,
+        gapText:
+          'gapText' in systemReminder && typeof systemReminder.gapText === 'string'
+            ? systemReminder.gapText
+            : undefined,
+        gapMs: 'gapMs' in systemReminder && typeof systemReminder.gapMs === 'number' ? systemReminder.gapMs : undefined,
+        timestamp:
+          'timestamp' in systemReminder && typeof systemReminder.timestamp === 'string'
+            ? systemReminder.timestamp
+            : undefined,
+      });
+
+      return {
+        id: msg.id,
+        role: msg.role,
+        content,
+        createdAt: msg.createdAt,
+      };
+    }
 
     for (const part of msg.content.parts) {
       switch (part.type) {
@@ -1616,6 +1656,10 @@ export class Harness<TState = {}> {
               message,
               reminderType: typeof data.reminderType === 'string' ? data.reminderType : undefined,
               path: typeof data.path === 'string' ? data.path : undefined,
+              precedesMessageId: typeof data.precedesMessageId === 'string' ? data.precedesMessageId : undefined,
+              gapText: typeof data.gapText === 'string' ? data.gapText : undefined,
+              gapMs: typeof data.gapMs === 'number' ? data.gapMs : undefined,
+              timestamp: typeof data.timestamp === 'string' ? data.timestamp : undefined,
             });
           }
           break;
@@ -1686,6 +1730,7 @@ export class Harness<TState = {}> {
       createdAt: new Date(),
     };
 
+    let isSuspended = false;
     const textContentById = new Map<string, { index: number; text: string }>();
     const thinkingContentById = new Map<string, { index: number; text: string }>();
     const abortForOmFailure = ({
@@ -1878,7 +1923,11 @@ export class Harness<TState = {}> {
           this.pendingSuspensionRunId = this.currentRunId;
           this.pendingSuspensionToolCallId = suspToolCallId;
 
-          return { message: currentMessage, suspended: true };
+          // Don't return immediately — continue draining the stream so the
+          // workflow engine has a chance to persist the snapshot before the
+          // caller tries to resume.
+          isSuspended = true;
+          break;
         }
 
         case 'error': {
@@ -2086,6 +2135,10 @@ export class Harness<TState = {}> {
               message,
               reminderType: typeof payload?.reminderType === 'string' ? payload.reminderType : undefined,
               path: typeof payload?.path === 'string' ? payload.path : undefined,
+              precedesMessageId: typeof payload?.precedesMessageId === 'string' ? payload.precedesMessageId : undefined,
+              gapText: typeof payload?.gapText === 'string' ? payload.gapText : undefined,
+              gapMs: typeof payload?.gapMs === 'number' ? payload.gapMs : undefined,
+              timestamp: typeof payload?.timestamp === 'string' ? payload.timestamp : undefined,
             });
             this.emit({ type: 'message_update', message: currentMessage });
           }
@@ -2103,6 +2156,12 @@ export class Harness<TState = {}> {
               observationTokens: payload.observationTokens ?? 0,
               messagesActivated: payload.messagesActivated ?? 0,
               generationCount: payload.generationCount ?? 0,
+              triggeredBy: payload.triggeredBy,
+              lastActivityAt: payload.lastActivityAt,
+              ttlExpiredMs: payload.ttlExpiredMs,
+              activateAfterIdle: payload.config?.activateAfterIdle,
+              previousModel: payload.previousModel,
+              currentModel: payload.currentModel,
             });
           }
           break;
@@ -2143,7 +2202,7 @@ export class Harness<TState = {}> {
     }
 
     this.emit({ type: 'message_end', message: currentMessage });
-    return { message: currentMessage };
+    return { message: currentMessage, suspended: isSuspended || undefined };
   }
 
   // ===========================================================================
@@ -2299,7 +2358,13 @@ export class Harness<TState = {}> {
    * Register a pending question resolver.
    * Called by agent tools (e.g., ask_user) to pause execution until the UI responds.
    */
-  registerQuestion({ questionId, resolve }: { questionId: string; resolve: (answer: string) => void }): void {
+  registerQuestion({
+    questionId,
+    resolve,
+  }: {
+    questionId: string;
+    resolve: (answer: HarnessQuestionAnswer) => void;
+  }): void {
     this.pendingQuestions.set(questionId, resolve);
   }
 
@@ -2307,7 +2372,7 @@ export class Harness<TState = {}> {
    * Resolve a pending question with the user's answer.
    * Called by the UI when the user responds to a question dialog.
    */
-  respondToQuestion({ questionId, answer }: { questionId: string; answer: string }): void {
+  respondToQuestion({ questionId, answer }: { questionId: string; answer: HarnessQuestionAnswer }): void {
     const resolve = this.pendingQuestions.get(questionId);
     if (resolve) {
       this.pendingQuestions.delete(questionId);
@@ -2664,6 +2729,7 @@ export class Harness<TState = {}> {
           questionId: event.questionId,
           question: event.question,
           options: event.options,
+          selectionMode: event.selectionMode,
         };
         break;
 
