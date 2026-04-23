@@ -26,6 +26,8 @@ describe('MastraMemory config serialization', () => {
 
     expect(memory.getConfig().observationalMemory).toEqual({
       scope: 'thread',
+      activateAfterIdle: undefined,
+      temporalMarkers: undefined,
       retrieval: true,
       observation: {
         messageTokens: 500,
@@ -62,6 +64,8 @@ describe('MastraMemory config serialization', () => {
 
     expect(memory.getConfig().observationalMemory).toEqual({
       scope: 'resource',
+      activateAfterIdle: undefined,
+      temporalMarkers: undefined,
       retrieval: true,
       model: 'test-model',
       shareTokenBudget: undefined,
@@ -104,5 +108,49 @@ describe('MastraMemory config serialization', () => {
     if (typeof omConfig !== 'boolean' && omConfig) {
       expect(omConfig.retrieval).toBe(false);
     }
+  });
+
+  it('should serialize top-level activateAfterIdle for observational memory', () => {
+    const memory = new MockMemory({
+      storage: new InMemoryStore(),
+      options: {
+        observationalMemory: {
+          scope: 'thread',
+          activateAfterIdle: '5m',
+          model: 'test-model',
+        },
+      },
+    });
+
+    expect(memory.getConfig().observationalMemory).toEqual({
+      scope: 'thread',
+      activateAfterIdle: '5m',
+      model: 'test-model',
+      shareTokenBudget: undefined,
+      temporalMarkers: undefined,
+      retrieval: undefined,
+    });
+  });
+
+  it('should serialize temporalMarkers for observational memory', () => {
+    const memory = new MockMemory({
+      storage: new InMemoryStore(),
+      options: {
+        observationalMemory: {
+          scope: 'thread',
+          temporalMarkers: true,
+          model: 'test-model',
+        },
+      },
+    });
+
+    expect(memory.getConfig().observationalMemory).toEqual({
+      scope: 'thread',
+      activateAfterIdle: undefined,
+      model: 'test-model',
+      shareTokenBudget: undefined,
+      temporalMarkers: true,
+      retrieval: undefined,
+    });
   });
 });

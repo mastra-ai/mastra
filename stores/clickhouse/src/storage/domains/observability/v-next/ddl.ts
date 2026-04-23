@@ -197,7 +197,7 @@ WHERE parentSpanId IS NULL
 `;
 
 // ---------------------------------------------------------------------------
-// metric_events — append-only MergeTree
+// metric_events — ReplacingMergeTree with metricId dedup
 // ---------------------------------------------------------------------------
 
 export const METRIC_EVENTS_DDL = `
@@ -206,6 +206,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_METRIC_EVENTS} (
   timestamp          DateTime64(3, 'UTC'),
 
   -- IDs
+  metricId           String,
   traceId            Nullable(String),
   spanId             Nullable(String),
   experimentId       Nullable(String),
@@ -253,13 +254,13 @@ CREATE TABLE IF NOT EXISTS ${TABLE_METRIC_EVENTS} (
   metadata           Nullable(String),
   scope              Nullable(String)
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
-ORDER BY (name, timestamp)
+ORDER BY (name, timestamp, metricId)
 `;
 
 // ---------------------------------------------------------------------------
-// log_events — append-only MergeTree
+// log_events — ReplacingMergeTree with logId dedup
 // ---------------------------------------------------------------------------
 
 export const LOG_EVENTS_DDL = `
@@ -268,6 +269,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_LOG_EVENTS} (
   timestamp          DateTime64(3, 'UTC'),
 
   -- IDs
+  logId              String,
   traceId            Nullable(String),
   spanId             Nullable(String),
   experimentId       Nullable(String),
@@ -310,14 +312,13 @@ CREATE TABLE IF NOT EXISTS ${TABLE_LOG_EVENTS} (
   metadata           Nullable(String),
   scope              Nullable(String)
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
-ORDER BY (timestamp, traceId)
-SETTINGS allow_nullable_key = 1
+ORDER BY (timestamp, logId)
 `;
 
 // ---------------------------------------------------------------------------
-// score_events — append-only MergeTree
+// score_events — ReplacingMergeTree with scoreId dedup
 // ---------------------------------------------------------------------------
 
 export const SCORE_EVENTS_DDL = `
@@ -326,6 +327,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
   timestamp          DateTime64(3, 'UTC'),
 
   -- IDs
+  scoreId            String,
   traceId            Nullable(String),
   spanId             Nullable(String),
   experimentId       Nullable(String),
@@ -375,14 +377,14 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
   metadata           Nullable(String),
   scope              Nullable(String)
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
-ORDER BY (traceId, timestamp)
+ORDER BY (traceId, timestamp, scoreId)
 SETTINGS allow_nullable_key = 1
 `;
 
 // ---------------------------------------------------------------------------
-// feedback_events — append-only MergeTree
+// feedback_events — ReplacingMergeTree with feedbackId dedup
 // ---------------------------------------------------------------------------
 
 export const FEEDBACK_EVENTS_DDL = `
@@ -391,6 +393,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS} (
   timestamp          DateTime64(3, 'UTC'),
 
   -- IDs
+  feedbackId         String,
   traceId            Nullable(String),
   spanId             Nullable(String),
   experimentId       Nullable(String),
@@ -443,9 +446,9 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS} (
   metadata           Nullable(String),
   scope              Nullable(String)
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
-ORDER BY (traceId, timestamp)
+ORDER BY (traceId, timestamp, feedbackId)
 SETTINGS allow_nullable_key = 1
 `;
 

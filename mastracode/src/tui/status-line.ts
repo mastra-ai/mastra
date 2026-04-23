@@ -88,12 +88,18 @@ export function updateStatusLine(state: TUIState): void {
 
   // --- Collect raw data ---
   // Show OM model when observing/reflecting, otherwise main model
-  const fullModelId =
+  const rawModelId =
     (showOMMode
       ? isObserving
         ? state.harness.getObserverModelId()
         : state.harness.getReflectorModelId()
       : state.harness.getFullModelId()) ?? '';
+  // Rewrite Fireworks AI long paths: fireworks-ai/accounts/fireworks/models/<name> → fireworks/<name>
+  let fullModelId = rawModelId.startsWith('fireworks-ai/accounts/fireworks/models/')
+    ? 'fireworks/' + rawModelId.slice('fireworks-ai/accounts/fireworks/models/'.length)
+    : rawModelId;
+  // Rewrite version separators where 'p' stands for '.': e.g. kimi-k2p6 → kimi-k2.6, minimax-m2p7 → minimax-m2.7
+  fullModelId = fullModelId.replace(/\b([a-z]+-[a-z])(\d+)p(\d+)\b/g, '$1$2.$3');
   const compactModelId = (modelId: string): string => {
     const parts = modelId.split('/');
     if (parts.length >= 3) {

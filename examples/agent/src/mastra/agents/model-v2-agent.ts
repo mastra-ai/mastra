@@ -28,6 +28,7 @@ const workspace = new Workspace({
   filesystem: new LocalFilesystem({
     basePath: './workspace',
   }),
+  skills: ['.agents/skills'],
 });
 
 const memory = new Memory({

@@ -73,6 +73,7 @@ function buildMetricNameFilter(name: string | string[]): { clause: string; param
 }
 
 const METRIC_COLUMNS = [
+  'metricId',
   'timestamp',
   'name',
   'value',
@@ -204,6 +205,7 @@ function resolveGroupBy(groupBy: string[]): ResolvedGroupBy[] {
 
 function rowToMetricRecord(row: Record<string, unknown>): Record<string, unknown> {
   return {
+    metricId: row.metricId as string,
     timestamp: toDate(row.timestamp),
     name: row.name as string,
     value: Number(row.value),
@@ -254,6 +256,7 @@ export async function batchCreateMetrics(db: DuckDBConnection, args: BatchCreate
 
   const tuples = args.metrics.map(m => {
     return `(${[
+      v(m.metricId),
       v(m.timestamp),
       v(m.name),
       v(m.value),
@@ -294,7 +297,9 @@ export async function batchCreateMetrics(db: DuckDBConnection, args: BatchCreate
     ].join(', ')})`;
   });
 
-  await db.execute(`INSERT INTO metric_events (${METRIC_COLUMNS_SQL}) VALUES ${tuples.join(',\n')}`);
+  await db.execute(
+    `INSERT INTO metric_events (${METRIC_COLUMNS_SQL}) VALUES ${tuples.join(',\n')} ON CONFLICT DO NOTHING`,
+  );
 }
 
 /** Query metric events with filtering, ordering, and pagination. */

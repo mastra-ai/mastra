@@ -1,8 +1,9 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { LangfuseExporter, LANGFUSE_DEFAULT_BASE_URL } from './tracing';
 
 // Track constructor args to verify config is passed correctly
 const processorArgs: any[] = [];
+const originalLangfuseBaseUrl = process.env.LANGFUSE_BASE_URL;
 
 vi.mock('@langfuse/otel', () => {
   class MockLangfuseSpanProcessor {
@@ -37,6 +38,12 @@ vi.mock('@mastra/otel-exporter', () => {
 describe('LangfuseExporterConfig', () => {
   beforeEach(() => {
     processorArgs.length = 0;
+    delete process.env.LANGFUSE_BASE_URL;
+  });
+
+  afterEach(() => {
+    if (originalLangfuseBaseUrl === undefined) delete process.env.LANGFUSE_BASE_URL;
+    else process.env.LANGFUSE_BASE_URL = originalLangfuseBaseUrl;
   });
 
   it('uses default base URL when none provided', () => {

@@ -450,6 +450,7 @@ const sidebars = {
         { type: 'doc', id: 'storage/mongodb', label: 'MongoDB Storage' },
         { type: 'doc', id: 'storage/mssql', label: 'MSSQL Storage' },
         { type: 'doc', id: 'storage/postgresql', label: 'PostgreSQL Storage' },
+        { type: 'doc', id: 'storage/redis', label: 'Redis Storage' },
         { type: 'doc', id: 'storage/upstash', label: 'Upstash Storage' },
       ],
     },
@@ -501,6 +502,7 @@ const sidebars = {
         { type: 'doc', id: 'tools/vector-query-tool', label: 'createVectorQueryTool()' },
         { type: 'doc', id: 'tools/mcp-client', label: 'MCPClient' },
         { type: 'doc', id: 'tools/mcp-server', label: 'MCPServer' },
+        { type: 'doc', id: 'tools/tavily', label: 'Tavily Tools' },
       ],
     },
     {
@@ -608,6 +610,7 @@ const sidebars = {
         { type: 'doc', id: 'workspace/agentfs-filesystem', label: 'AgentFSFilesystem' },
         { type: 'doc', id: 'workspace/blaxel-sandbox', label: 'BlaxelSandbox' },
         { type: 'doc', id: 'workspace/daytona-sandbox', label: 'DaytonaSandbox' },
+        { type: 'doc', id: 'workspace/docker-sandbox', label: 'DockerSandbox' },
         { type: 'doc', id: 'workspace/e2b-sandbox', label: 'E2BSandbox' },
         { type: 'doc', id: 'workspace/gcs-filesystem', label: 'GCSFilesystem' },
         { type: 'doc', id: 'workspace/local-filesystem', label: 'LocalFilesystem' },

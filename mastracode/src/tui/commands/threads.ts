@@ -146,6 +146,7 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
         state.chatContainer.clear();
         state.allToolComponents = [];
         state.allSystemReminderComponents = [];
+        state.messageComponentsById.clear();
         state.allShellComponents = [];
         state.pendingTools.clear();
         await ctx.renderExistingMessages();

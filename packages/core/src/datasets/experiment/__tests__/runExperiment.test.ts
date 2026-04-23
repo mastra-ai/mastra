@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { z } from 'zod';
 import type { MastraScorer } from '../../../evals/base';
 import type { Mastra } from '../../../mastra';
 import { RequestContext } from '../../../request-context';
@@ -6,6 +7,7 @@ import type { MastraCompositeStore, StorageDomains } from '../../../storage/base
 import { DatasetsInMemory } from '../../../storage/domains/datasets/inmemory';
 import { ExperimentsInMemory } from '../../../storage/domains/experiments/inmemory';
 import { InMemoryDB } from '../../../storage/domains/inmemory-db';
+import { createStep, createWorkflow } from '../../../workflows';
 import { runExperiment } from '../index';
 
 // Mock agent that returns predictable output
@@ -403,6 +405,46 @@ describe('runExperiment', () => {
       expect(result.succeededCount).toBe(2);
       expect(mockWorkflow.createRun).toHaveBeenCalledTimes(2);
     });
+
+    // Regression test for issue #15453: a real Workflow is thenable (has a `.then`
+    // builder method). Returning one from an async resolver caused Promise
+    // unwrapping to hang forever. Uses a real createWorkflow instance rather than
+    // a plain mock so the thenable behaviour is exercised.
+    it('runs against a real workflow instance without hanging', async () => {
+      const inputSchema = z.object({ prompt: z.string() });
+      const outputSchema = z.object({ text: z.string() });
+
+      const echoStep = createStep({
+        id: 'echo',
+        inputSchema,
+        outputSchema,
+        execute: async ({ inputData }) => ({ text: `echo:${inputData.prompt}` }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'real-echo-wf',
+        inputSchema,
+        outputSchema,
+      })
+        .then(echoStep)
+        .commit();
+
+      (mastra.getWorkflowById as ReturnType<typeof vi.fn>).mockReturnValue(workflow);
+      (mastra.getWorkflow as ReturnType<typeof vi.fn>).mockReturnValue(workflow);
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'workflow',
+        targetId: 'real-echo-wf',
+        itemTimeout: 5_000,
+      });
+
+      expect(result.status).toBe('completed');
+      expect(result.succeededCount).toBe(2);
+      expect(result.failedCount).toBe(0);
+      const outputs = result.results.map(r => r.output);
+      expect(outputs).toEqual(expect.arrayContaining([{ text: 'echo:Hello' }, { text: 'echo:Goodbye' }]));
+    }, 10_000);
   });
 
   describe('scorer target', () => {

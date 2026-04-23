@@ -4,6 +4,8 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type {
   PaginationInfo,
   TraceRecord,
+  GetTraceLightResponse,
+  GetSpanResponse,
   ListTracesArgs,
   ListTracesResponse,
   // Logs
@@ -902,6 +904,16 @@ export class MastraClient extends BaseResource {
   /** Retrieves a specific trace by ID. */
   getTrace(traceId: string): Promise<TraceRecord> {
     return this.observability.getTrace(traceId);
+  }
+
+  /** Retrieves a lightweight trace by ID (timeline fields only, excludes heavy fields). */
+  getTraceLight(traceId: string): Promise<GetTraceLightResponse> {
+    return this.observability.getTraceLight(traceId);
+  }
+
+  /** Retrieves a single span with full details by trace ID and span ID. */
+  getSpan(traceId: string, spanId: string): Promise<GetSpanResponse> {
+    return this.observability.getSpan(traceId, spanId);
   }
 
   /** Extracts a structured trajectory from a trace's spans. */
