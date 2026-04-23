@@ -37,8 +37,7 @@ const modeConfig: Record<SearchMode, { label: string; icon: React.ReactNode; col
 };
 
 function getWorkspaceSearchResultFileId(result: SearchResult): string {
-  const sourceFile = result.metadata?.sourceFile;
-  return typeof sourceFile === 'string' ? sourceFile : result.id.replace(/#chunk-\d+$/, '');
+  return result.id.replace(/#chunk-\d+$/, '');
 }
 
 export function SearchWorkspacePanel({
