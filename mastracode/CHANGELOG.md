@@ -1,5 +1,18 @@
 # mastracode
 
+## 0.15.1
+
+### Patch Changes
+
+- Added opt-in temporal-gap markers for observational memory. When enabled via `observationalMemory.temporalMarkers: true`, the agent receives a `<system-reminder type="temporal-gap">` before any user message that arrives more than 10 minutes after the previous one, so it can anchor responses in real elapsed time. Markers are persisted, surfaced to the observer, and rendered by the MastraCode TUI on reload. ([#15605](https://github.com/mastra-ai/mastra/pull/15605))
+
+- Improved model ID display in the Mastra Code TUI status line. Fireworks model IDs are now shown in compact form (e.g. fireworks/kimi-k2.6 instead of the full fireworks-ai/accounts/fireworks/models/... path). Version separators in model names are also normalized (e.g. kimi-k2p6 is displayed as kimi-k2.6). ([#15631](https://github.com/mastra-ai/mastra/pull/15631))
+
+- Updated dependencies [[`f112db1`](https://github.com/mastra-ai/mastra/commit/f112db179557ae9b5a0f1d25dc47f928d7d61cd9), [`21d9706`](https://github.com/mastra-ai/mastra/commit/21d970604d89eee970cbf8013d26d7551aff6ea5), [`0a0aa94`](https://github.com/mastra-ai/mastra/commit/0a0aa94729592e99885af2efb90c56aaada62247), [`ed07df3`](https://github.com/mastra-ai/mastra/commit/ed07df32a9d539c8261e892fc1bade783f5b41a6), [`96f6fb2`](https://github.com/mastra-ai/mastra/commit/96f6fb2dc9ed0980091e66f727542394ba5b300d), [`01a7d51`](https://github.com/mastra-ai/mastra/commit/01a7d513493d21562f677f98550f7ceb165ba78c), [`6e9ab07`](https://github.com/mastra-ai/mastra/commit/6e9ab07b7120e0f4ed1e117c45db0f94840f4afd)]:
+  - @mastra/core@1.27.0
+  - @mastra/tavily@1.0.1
+  - @mastra/memory@1.17.0
+
 ## 0.15.1-alpha.2
 
 ### Patch Changes
