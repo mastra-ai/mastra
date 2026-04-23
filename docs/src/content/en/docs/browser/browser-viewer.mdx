@@ -7,7 +7,7 @@ packages:
 
 # BrowserViewer
 
-The `@mastra/browser-viewer` package provides browser automation for CLI-based tools like [agent-browser](https://github.com/vercel-labs/agent-browser), [browser-use](https://github.com/browser-use/browser-use), and [browse](https://github.com/browserbase/stagehand/tree/main/packages/cli). BrowserViewer launches Chrome via Playwright, exposes a Chrome DevTools Protocol (CDP) URL, and automatically injects it into CLI commands run through [workspace tools](/docs/workspace/overview).
+The `@mastra/browser-viewer` package provides browser automation for CLI-based tools like [agent-browser](https://www.npmjs.com/package/agent-browser), [browser-use](https://pypi.org/project/browser-use/), and [browse](https://www.npmjs.com/package/@browserbasehq/browse-cli). BrowserViewer launches Chrome via Playwright, exposes a Chrome DevTools Protocol (CDP) URL, and automatically injects it into CLI commands run through [workspace tools](/docs/workspace/overview).
 
 ## When to use BrowserViewer
 
@@ -22,10 +22,22 @@ For SDK-based browser automation, use [AgentBrowser](/docs/browser/agent-browser
 
 ## Quickstart
 
-Install the package:
+Install `@mastra/browser-viewer` and the CLI tool your agent will use. BrowserViewer manages Chrome, but the CLI tool itself must be installed separately.
 
 ```bash npm2yarn
 npm install @mastra/browser-viewer
+```
+
+Install the CLI tool in your workspace environment. This example uses `browser-use`:
+
+```bash
+pip install browser-use
+```
+
+Install the corresponding [skill](/docs/workspace/skills) so the agent knows how to use the CLI:
+
+```bash
+npx skills add browser-use/browser-use --skill browser-use
 ```
 
 Create a workspace with BrowserViewer and assign it to an agent:
@@ -41,7 +53,7 @@ const workspace = new Workspace({
     workingDirectory: './workspace',
   }),
   browser: new BrowserViewer({
-    cli: 'agent-browser',
+    cli: 'browser-use',
     headless: false,
   }),
 })
@@ -51,7 +63,7 @@ const browserAgent = new Agent({
   model: 'openai/gpt-5.4',
   workspace,
   instructions: `You are a web automation assistant.
-Use agent-browser commands to navigate and interact with websites.`,
+Use browser-use commands to navigate and interact with websites.`,
 })
 
 export const mastra = new Mastra({
@@ -59,7 +71,7 @@ export const mastra = new Mastra({
 })
 ```
 
-When the agent runs a CLI command like `agent-browser open https://example.com`, Mastra automatically launches Chrome, injects the CDP connection, and starts streaming the screencast to Studio.
+When the agent runs a CLI command like `browser-use open https://example.com`, Mastra automatically launches Chrome, injects the CDP connection, and starts streaming the screencast to Studio.
 
 ## How it works
 
@@ -70,15 +82,15 @@ When the agent runs a CLI command like `agent-browser open https://example.com`,
 
 ## Supported CLIs
 
-BrowserViewer supports three CLI providers:
+BrowserViewer supports three CLI providers. Each CLI must be installed separately in your workspace environment. Each CLI also publishes a [skill](/docs/workspace/skills) that teaches the agent its commands and workflows.
 
-| CLI | CDP flag | Description |
-| - | - | - |
-| `agent-browser` | `--cdp` | Accessibility-first browser automation CLI |
-| `browser-use` | `--cdp-url` | Python-based browser automation |
-| `browse-cli` | `--ws` | Browserbase's Stagehand CLI |
+| CLI | Install CLI | Install skill | CDP flag |
+| - | - | - | - |
+| `agent-browser` | `npm install -g agent-browser` | `npx skills add vercel-labs/agent-browser` | `--cdp` |
+| `browser-use` | `pip install browser-use` | `npx skills add browser-use/browser-use --skill browser-use` | `--cdp-url` |
+| `browse-cli` | `npm install -g @browserbasehq/browse-cli` | `npx skills add browserbase/skills` | `--ws` |
 
-Set the `cli` option to tell BrowserViewer which CLI the agent uses:
+Set the `cli` option to match the CLI your agent uses:
 
 ```typescript
 const viewer = new BrowserViewer({
@@ -86,8 +98,6 @@ const viewer = new BrowserViewer({
   headless: false,
 })
 ```
-
-The CLI tool must be installed separately in the workspace environment.
 
 ## Configuration
 
@@ -107,7 +117,7 @@ To connect to a browser that is already running, pass a `cdpUrl`:
 
 ```typescript
 const viewer = new BrowserViewer({
-  cli: 'agent-browser',
+  cli: 'browser-use',
   cdpUrl: 'ws://127.0.0.1:9222/devtools/browser/abc123',
 })
 ```
@@ -124,3 +134,4 @@ When the agent provides its own CDP URL in a command (for example, `browser-use 
 - [AgentBrowser](/docs/browser/agent-browser)
 - [Stagehand](/docs/browser/stagehand)
 - [Workspace overview](/docs/workspace/overview)
+- [Workspace skills](/docs/workspace/skills)
