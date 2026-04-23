@@ -1,4 +1,5 @@
 import type { SerializedMemoryConfig } from '../../memory/types';
+import type { StorageBrowserRef, StorageWorkspaceRef } from '../../storage/types';
 
 /**
  * Default values for agents created via the builder.
@@ -7,6 +8,10 @@ import type { SerializedMemoryConfig } from '../../memory/types';
 export interface BuilderAgentDefaults extends Record<string, unknown> {
   /** Default memory configuration for new agents */
   memory?: SerializedMemoryConfig;
+  /** Default workspace reference for new agents */
+  workspace?: StorageWorkspaceRef;
+  /** Default browser configuration for new agents */
+  browser?: StorageBrowserRef;
 }
 
 /**

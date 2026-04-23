@@ -165,6 +165,7 @@ export const AGENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   workspace: { type: 'jsonb', nullable: true },
   skills: { type: 'jsonb', nullable: true },
   skillsFormat: { type: 'text', nullable: true },
+  browser: { type: 'jsonb', nullable: true },
   // Version metadata
   changedFields: { type: 'jsonb', nullable: true }, // Array of field names
   changeMessage: { type: 'text', nullable: true },
