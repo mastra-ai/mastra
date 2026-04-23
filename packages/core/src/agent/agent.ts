@@ -404,6 +404,20 @@ export class Agent<
   }
 
   /**
+   * True when this agent has any sub-agent registry configured — either a
+   * static record with entries OR a dynamic (function-based) resolver.
+   * Used by Mastra at registration time to decide whether to auto-enable
+   * background tasks; we can't know what a function resolver will return
+   * at request time, so we enable defensively.
+   * @internal
+   */
+  __hasSubAgentsConfigured(): boolean {
+    if (typeof this.#agents === 'function') return true;
+    const record = this.#agents as Record<string, Agent> | undefined;
+    return !!record && Object.keys(record).length > 0;
+  }
+
+  /**
    * Disables background task dispatch for this agent. Every tool call will run
    * synchronously in the agentic loop, regardless of the agent's or tools'
    * background configuration.

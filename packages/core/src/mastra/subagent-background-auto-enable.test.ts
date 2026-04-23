@@ -72,7 +72,7 @@ describe('Mastra — background tasks auto-enable for sub-agents', () => {
     expect(mastra.backgroundTaskManager).toBeUndefined();
   });
 
-  it('does not enable when agents are configured via a function (resolved per-request)', () => {
+  it('enables the manager when agents are configured via a function resolver', () => {
     const parent = new Agent({
       id: 'parent',
       name: 'parent',
@@ -95,9 +95,10 @@ describe('Mastra — background tasks auto-enable for sub-agents', () => {
       agents: { parent },
     });
 
-    // Function-configured sub-agents are resolved lazily, so we don't auto-enable.
-    // Users can still opt in explicitly via backgroundTasks.enabled: true.
-    expect(mastra.backgroundTaskManager).toBeUndefined();
+    // Function resolvers are evaluated per-request, so we can't inspect their
+    // contents at registration time. Enable defensively so resolved sub-agents
+    // still dispatch in the background by default.
+    expect(mastra.backgroundTaskManager).toBeDefined();
   });
 
   it('keeps manager enabled when adding a second agent without sub-agents', () => {
