@@ -1,0 +1,10 @@
+{
+  "name": "@internal/forge",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "zod": "^3.0.0"
+  }
+}
