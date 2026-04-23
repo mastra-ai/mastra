@@ -793,6 +793,7 @@ export type ProviderModelsMap = {
     'Pro/moonshotai/Kimi-K2-Instruct-0905',
     'Pro/moonshotai/Kimi-K2-Thinking',
     'Pro/moonshotai/Kimi-K2.5',
+    'Pro/moonshotai/Kimi-K2.6',
     'Pro/zai-org/GLM-4.7',
     'Pro/zai-org/GLM-5',
     'Pro/zai-org/GLM-5.1',
@@ -833,6 +834,7 @@ export type ProviderModelsMap = {
     'Qwen/Qwen3.5-397B-A17B',
     'Qwen/Qwen3.5-4B',
     'Qwen/Qwen3.5-9B',
+    'Qwen/Qwen3.6-35B-A3B',
     'THUDM/GLM-4-32B-0414',
     'THUDM/GLM-4-9B-0414',
     'THUDM/GLM-Z1-32B-0414',
@@ -1625,6 +1627,7 @@ export type ProviderModelsMap = {
     'moonshotai/Kimi-K2-Instruct-0905',
     'moonshotai/Kimi-K2-Thinking',
     'moonshotai/Kimi-K2.5',
+    'moonshotai/Kimi-K2.6',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
     'zai-org/GLM-4.6',
@@ -3017,6 +3020,7 @@ export type ProviderModelsMap = {
     'moonshotai/Kimi-K2-Instruct-0905',
     'moonshotai/Kimi-K2-Thinking',
     'moonshotai/Kimi-K2.5',
+    'moonshotai/Kimi-K2.6',
     'nex-agi/DeepSeek-V3.1-Nex-N1',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
@@ -3569,7 +3573,7 @@ export type ProviderModelsMap = {
     'gemma-3-4b-it',
     'gemma-3n-e2b-it',
     'gemma-3n-e4b-it',
-    'gemma-4-26b-it',
+    'gemma-4-26b-a4b-it',
     'gemma-4-31b-it',
   ];
   readonly drun: readonly ['public/deepseek-r1', 'public/deepseek-v3', 'public/minimax-m25'];
@@ -3660,6 +3664,7 @@ export type ProviderModelsMap = {
     'google/gemma-4-31B-it',
     'meta-llama/Llama-3.3-70B-Instruct-Turbo',
     'moonshotai/Kimi-K2.5',
+    'moonshotai/Kimi-K2.6',
     'openai/gpt-oss-120b',
     'zai-org/GLM-5.1',
   ];
