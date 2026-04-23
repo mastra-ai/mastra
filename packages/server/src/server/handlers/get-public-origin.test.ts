@@ -43,13 +43,13 @@ describe('getPublicOrigin — reverse proxy header resolution', () => {
     expect(getPublicOrigin(request)).toBe('http://example.com');
   });
 
-  it('should fall back to request.url when Host is present but X-Forwarded-Proto is absent', () => {
+  it('should use request.url scheme with Host header when X-Forwarded-Proto is absent (http)', () => {
     const headers = new Headers({
       host: 'example.com',
     });
     const request = new Request('http://example.com/some-path', { headers });
 
-    // Host without X-Forwarded-Proto: fallback to request.url scheme
+    // Host without X-Forwarded-Proto: scheme comes from request.url, host from header
     expect(getPublicOrigin(request)).toBe('http://example.com');
   });
 

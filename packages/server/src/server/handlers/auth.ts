@@ -65,17 +65,21 @@ function getAuthProvider(mastra: any): MastraAuthProvider | null {
 
 /**
  * Get the public-facing origin from a request, respecting reverse proxy headers.
- * Behind a proxy (e.g. edge router), request.url contains the internal hostname.
- * X-Forwarded-Host tells us the real public hostname.
- * Always uses https when behind a proxy — Knative's queue-proxy overwrites
- * X-Forwarded-Proto based on the internal HTTP connection, so it's unreliable.
+ * Behind a proxy (e.g. edge router), request.url contains the internal hostname,
+ * so we rely on forwarded headers to reconstruct the real public origin.
+ *
+ * Assumes the server is behind a trusted proxy (or running locally). When
+ * exposed directly to untrusted clients, the Host header is attacker-controlled
+ * and must be validated upstream.
  *
  * Priority:
- * 1. X-Forwarded-Host (traditional reverse proxy) → always HTTPS
- * 2. Host header with X-Forwarded-Proto (AWS ALB, some proxies) → respect proto
- * 3. Host header alone → ambiguous; could be direct HTTP or proxy without proto header
- *    Fallback to request.url to preserve the actual scheme
- * 4. No headers → fallback to request.url
+ * 1. X-Forwarded-Host (traditional reverse proxy) → always HTTPS. Knative's
+ *    queue-proxy overwrites X-Forwarded-Proto based on the internal HTTP
+ *    connection, so X-Forwarded-Proto is ignored here.
+ * 2. Host header with X-Forwarded-Proto (AWS ALB, some proxies) → respect proto.
+ * 3. Host header alone → use the scheme from request.url (covers both direct
+ *    HTTP access and proxies that preserve Host but don't set a proto header).
+ * 4. No Host header → fall back to request.url.origin (local dev / direct access).
  */
 export function getPublicOrigin(request: Request): string {
   const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
