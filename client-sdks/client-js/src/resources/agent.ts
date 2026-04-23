@@ -1449,7 +1449,9 @@ export class Agent extends BaseResource {
                   : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
 
                 // Recursively call stream with updated messages
-                // This will wait for the recursive stream to complete before continuing
+                // This will wait for the recursive stream to complete before continuing.
+                // Forward `route` so stream-until-idle (and future non-default routes)
+                // stay on the same endpoint across client-tool continuations.
                 try {
                   await this.processStreamResponse(
                     {
@@ -1457,6 +1459,7 @@ export class Agent extends BaseResource {
                       messages: updatedMessages,
                     },
                     controller,
+                    route,
                   );
                 } catch (error) {
                   console.error('Error processing recursive stream response:', error);
