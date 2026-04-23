@@ -12,9 +12,12 @@ type FeedbackDialogProps = {
 };
 
 function formatValue(fb: FeedbackRecord): string {
-  if (fb.feedbackType === 'thumbs' || fb.feedbackType === 'rating') {
+  if (fb.feedbackType === 'thumbs') {
     if (fb.value === 1) return '\u{1F44D} Positive (1)';
-    if (fb.value === -1) return '\u{1F44E} Negative (-1)';
+    if (fb.value === 0 || fb.value === -1) return '\u{1F44E} Negative';
+    return String(fb.value);
+  }
+  if (fb.feedbackType === 'rating') {
     return String(fb.value);
   }
   if (fb.feedbackType === 'comment') {
