@@ -2452,6 +2452,7 @@ export type ProviderModelsMap = {
     'deepseek-ai/DeepSeek-V3-0324',
     'deepseek-ai/DeepSeek-V3.1',
     'moonshotai/Kimi-K2.5',
+    'moonshotai/Kimi-K2.6',
     'nvidia/Nemotron-120B-A12B',
     'openai/gpt-oss-120b',
     'zai-org/GLM-4.6',
