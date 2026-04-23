@@ -1,1 +1,1 @@
-export { spanTypePrefixes, getSpanTypeUi } from '@/domains/traces/components/shared';
+export { spanTypePrefixes, getSpanTypeUi } from '@mastra/playground-ui';

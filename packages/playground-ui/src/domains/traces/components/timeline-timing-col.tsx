@@ -1,7 +1,8 @@
-import { DataKeysAndValues, cn } from '@mastra/playground-ui';
 import * as HoverCard from '@radix-ui/react-hover-card';
 import { format } from 'date-fns/format';
 import type { UISpan } from '../types';
+import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
+import { cn } from '@/lib/utils';
 
 type TimelineTimingColProps = {
   span: UISpan;

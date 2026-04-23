@@ -1,1 +1,1 @@
-export { getSpanDescendantIds, getAllSpanIds } from '@/domains/traces/hooks/get-all-span-ids';
+export { getSpanDescendantIds, getAllSpanIds } from '@mastra/playground-ui';

@@ -1,4 +1,4 @@
-import { cn } from '@mastra/playground-ui';
+import { cn } from '@/lib/utils';
 
 type TimelineStructureSignProps = {
   isLastChild?: boolean;
