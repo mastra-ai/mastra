@@ -49,6 +49,7 @@ const SNAPSHOT_FIELDS = [
   'workspace',
   'skills',
   'skillsFormat',
+  'browser',
 ] as const;
 
 export class MongoDBAgentsStorage extends AgentsStorage {
