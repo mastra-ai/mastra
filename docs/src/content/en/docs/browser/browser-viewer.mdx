@@ -84,11 +84,32 @@ When the agent runs a CLI command like `browser-use open https://example.com`, M
 
 BrowserViewer supports three CLI providers. Each CLI must be installed separately in your workspace environment. Each CLI also publishes a [skill](/docs/workspace/skills) that teaches the agent its commands and workflows.
 
-| CLI | Install CLI | Install skill | CDP flag |
-| - | - | - | - |
-| `agent-browser` | `npm install -g agent-browser` | `npx skills add vercel-labs/agent-browser` | `--cdp` |
-| `browser-use` | `pip install browser-use` | `npx skills add browser-use/browser-use --skill browser-use` | `--cdp-url` |
-| `browse-cli` | `npm install -g @browserbasehq/browse-cli` | `npx skills add browserbase/skills` | `--ws` |
+### agent-browser
+
+```bash
+npm install -g agent-browser
+npx skills add vercel-labs/agent-browser
+```
+
+CDP flag: `--cdp`
+
+### browser-use
+
+```bash
+pip install browser-use
+npx skills add browser-use/browser-use --skill browser-use
+```
+
+CDP flag: `--cdp-url`
+
+### browse-cli
+
+```bash
+npm install -g @browserbasehq/browse-cli
+npx skills add browserbase/skills
+```
+
+CDP flag: `--ws`
 
 Set the `cli` option to match the CLI your agent uses:
 

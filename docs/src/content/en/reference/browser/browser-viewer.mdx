@@ -280,28 +280,38 @@ await viewer.injectKeyboardEvent({
 })
 ```
 
-### Tools
-
-#### `getTools()`
-
-Returns an empty tool set. Unlike SDK providers, `BrowserViewer` does not provide agent tools. The agent uses CLI commands through `workspace_execute_command` instead.
-
-```typescript
-const tools = viewer.getTools()
-// => {}
-```
-
-Returns: `Record<string, Tool>`
-
 ## Supported CLIs
 
-| CLI | Config value | CDP flag | Install CLI | Install skill |
-| - | - | - | - | - |
-| [agent-browser](https://www.npmjs.com/package/agent-browser) | `'agent-browser'` | `--cdp` | `npm install -g agent-browser` | `npx skills add vercel-labs/agent-browser` |
-| [browser-use](https://pypi.org/project/browser-use/) | `'browser-use'` | `--cdp-url` | `pip install browser-use` | `npx skills add browser-use/browser-use --skill browser-use` |
-| [browse](https://www.npmjs.com/package/@browserbasehq/browse-cli) | `'browse-cli'` | `--ws` | `npm install -g @browserbasehq/browse-cli` | `npx skills add browserbase/skills` |
-
 Each CLI must be installed separately. Each also publishes a [skill](/docs/workspace/skills) that teaches the agent its commands and workflows. When a CLI command runs through `workspace_execute_command`, Mastra detects it and injects the CDP URL automatically using the correct flag.
+
+Unlike SDK providers, `BrowserViewer` does not provide agent tools. The agent uses CLI commands through `workspace_execute_command` instead.
+
+### [agent-browser](https://www.npmjs.com/package/agent-browser)
+
+Config value: `'agent-browser'` · CDP flag: `--cdp`
+
+```bash
+npm install -g agent-browser
+npx skills add vercel-labs/agent-browser
+```
+
+### [browser-use](https://pypi.org/project/browser-use/)
+
+Config value: `'browser-use'` · CDP flag: `--cdp-url`
+
+```bash
+pip install browser-use
+npx skills add browser-use/browser-use --skill browser-use
+```
+
+### [browse](https://www.npmjs.com/package/@browserbasehq/browse-cli)
+
+Config value: `'browse-cli'` · CDP flag: `--ws`
+
+```bash
+npm install -g @browserbasehq/browse-cli
+npx skills add browserbase/skills
+```
 
 ## Related
 
