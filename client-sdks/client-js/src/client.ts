@@ -140,6 +140,7 @@ import type {
   CreateStoredSkillParams,
   StoredSkillResponse,
   GetSystemPackagesResponse,
+  BuilderSettingsResponse,
   ListScoresResponse as ListScoresResponseOld,
   GetObservationalMemoryParams,
   GetObservationalMemoryResponse,
@@ -1446,6 +1447,19 @@ export class MastraClient extends BaseResource {
    */
   public getSystemPackages(): Promise<GetSystemPackagesResponse> {
     return this.request('/system/packages');
+  }
+
+  // ============================================================================
+  // Editor / Builder
+  // ============================================================================
+
+  /**
+   * Retrieves agent builder settings for UI gating.
+   * Returns feature flags and configuration set by admin.
+   * @returns Promise containing builder settings
+   */
+  public getBuilderSettings(): Promise<BuilderSettingsResponse> {
+    return this.request('/editor/builder/settings');
   }
 
   // ============================================================================

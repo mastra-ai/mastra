@@ -2721,3 +2721,30 @@ export interface ExperimentReviewCounts {
   reviewed: number;
   complete: number;
 }
+
+/**
+ * Agent feature flags for the builder.
+ * Omitted keys default to `false` (blocklist model).
+ */
+export interface BuilderAgentFeatures {
+  tools?: boolean;
+  agents?: boolean;
+  workflows?: boolean;
+  scorers?: boolean;
+  skills?: boolean;
+  memory?: boolean;
+  variables?: boolean;
+}
+
+/**
+ * Response from GET /editor/builder/settings
+ */
+export interface BuilderSettingsResponse {
+  enabled: boolean;
+  features?: {
+    agent?: BuilderAgentFeatures;
+  };
+  configuration?: {
+    agent?: Record<string, unknown>;
+  };
+}

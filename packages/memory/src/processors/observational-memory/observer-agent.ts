@@ -3,6 +3,7 @@ import type { CoreMessage } from '@mastra/core/llm';
 
 import { stripEphemeralAnchorIds } from './anchor-ids';
 import { isTemporalGapMarker } from './date-utils';
+import { safeSlice } from './string-utils';
 import {
   DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS,
   formatToolResultForObserver,
@@ -927,8 +928,8 @@ export function buildObserverHistoryMessage(messages: MastraDBMessage[], options
 /** Truncate a string to maxLen characters, appending a note if truncated. */
 function maybeTruncate(str: string, maxLen?: number): string {
   if (!maxLen || str.length <= maxLen) return str;
-  const truncated = str.slice(0, maxLen);
-  const remaining = str.length - maxLen;
+  const truncated = safeSlice(str, maxLen);
+  const remaining = str.length - truncated.length;
   return `${truncated}\n... [truncated ${remaining} characters]`;
 }
 
@@ -1375,7 +1376,7 @@ export function sanitizeObservationLines(observations: string): string {
   let changed = false;
   for (let i = 0; i < lines.length; i++) {
     if (lines[i]!.length > MAX_OBSERVATION_LINE_CHARS) {
-      lines[i] = lines[i]!.slice(0, MAX_OBSERVATION_LINE_CHARS) + ' … [truncated]';
+      lines[i] = safeSlice(lines[i]!, MAX_OBSERVATION_LINE_CHARS) + ' … [truncated]';
       changed = true;
     }
   }

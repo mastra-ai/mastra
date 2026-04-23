@@ -1,3 +1,14 @@
+import type { SerializedMemoryConfig } from '../../memory/types';
+
+/**
+ * Default values for agents created via the builder.
+ * Used as fallbacks when the user doesn't specify a value.
+ */
+export interface BuilderAgentDefaults extends Record<string, unknown> {
+  /** Default memory configuration for new agents */
+  memory?: SerializedMemoryConfig;
+}
+
 /**
  * Feature toggles for the agent editor surface.
  * Each key controls visibility of that section in the builder UI.
@@ -46,11 +57,10 @@ export interface AgentBuilderOptions {
    * Admin-pinned values applied to every artifact the builder produces.
    * Not overridable by end-users.
    *
-   * Shape is intentionally loose (Record<string, unknown>) while we finalize
-   * the exact configuration options.
+   * Known fields are typed explicitly; additional fields allowed for extensibility.
    */
   configuration?: {
-    agent?: Record<string, unknown>;
+    agent?: BuilderAgentDefaults;
   };
 }
 
