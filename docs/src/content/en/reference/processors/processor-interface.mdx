@@ -404,8 +404,9 @@ processInputStep?(
   },
   {
     name: 'abort',
-    type: '(reason?: string) => never',
-    description: 'Function to abort processing.',
+    type: '(reason?: string, options?: { retry?: boolean; metadata?: unknown }) => never',
+    description:
+      'Function to abort processing. Throws a TripWire error that stops execution. Pass `retry: true` to request the LLM retry the step with feedback.',
     isOptional: false,
   },
   {
@@ -425,7 +426,14 @@ processInputStep?(
 
 #### `ProcessInputStepResult`
 
-The method can return any combination of these properties:
+`processInputStep` can return several shapes:
+
+- **`ProcessInputStepResult` object** — override any combination of the properties below for this step (described next).
+- **`MessageList`** — return the same `messageList` instance to signal you mutated messages in place.
+- **`MastraDBMessage[]`** — return a transformed messages array; replaces the step's messages.
+- **`void` or `undefined`** — return nothing to leave the step unchanged.
+
+The object form can return any combination of these properties:
 
 <PropertiesTable
   content={[
@@ -774,8 +782,9 @@ processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
   },
   {
     name: 'abort',
-    type: '(reason?: string) => never',
-    description: 'Function to abort processing.',
+    type: '(reason?: string, options?: { retry?: boolean; metadata?: unknown }) => never',
+    description:
+      'Function to abort processing. Throws a TripWire error that stops execution and emits a `tripwire` chunk.',
     isOptional: false,
   },
   {
@@ -851,10 +860,29 @@ processOutputStep?(args: ProcessOutputStepArgs): ProcessorMessageResult;
     isOptional: true,
   },
   {
+    name: 'usage',
+    type: 'LanguageModelUsage',
+    description: 'Token usage for the current step (`inputTokens`, `outputTokens`, `totalTokens`).',
+    isOptional: false,
+  },
+  {
     name: 'systemMessages',
     type: 'CoreMessage[]',
     description: 'All system messages for read/modify access.',
-    isOptional: true,
+    isOptional: false,
+  },
+  {
+    name: 'steps',
+    type: 'StepResult[]',
+    description: 'All completed steps so far, including the current step.',
+    isOptional: false,
+  },
+  {
+    name: 'state',
+    type: 'Record<string, unknown>',
+    description:
+      'Per-processor state that persists across all method calls within this request. Shared with processOutputStream and processOutputResult.',
+    isOptional: false,
   },
   {
     name: 'abort',
