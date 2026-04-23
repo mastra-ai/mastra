@@ -112,15 +112,17 @@ async function getRawMessages(
  * Trim messages to the last N user-assistant turn pairs.
  */
 function trimToLastNTurns(messages: MastraDBMessage[], turns: number): MastraDBMessage[] {
-  // Walk backward, counting user messages as turn boundaries
+  // Walk backward, counting user messages as turn boundaries.
+  // When we find the Nth user message, slice from there to include
+  // that turn and everything after it.
   let turnCount = 0;
-  let cutoffIndex = messages.length;
+  let cutoffIndex = 0;
 
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i]!.role === 'user') {
       turnCount++;
-      if (turnCount > turns) {
-        cutoffIndex = i + 1;
+      if (turnCount === turns) {
+        cutoffIndex = i;
         break;
       }
     }
