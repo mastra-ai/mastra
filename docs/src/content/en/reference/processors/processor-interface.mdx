@@ -171,6 +171,15 @@ Use `messages` when you only need to read or map over the current stage's messag
 
 `messages` is always derived from `messageList`, so mutating `messageList` is the canonical way to change the conversation. If you return a new array from `messages`, Mastra replaces the corresponding stage in `messageList` for you.
 
+### Persistence
+
+When memory is enabled, only what ends up in `messageList` after all processors finish is persisted to storage. The two return styles are equivalent for persistence:
+
+- Mutating `messageList` directly (or returning the same `MessageList` instance) — recorded mutations are applied in place, so the saved conversation reflects your changes.
+- Returning a `MastraDBMessage[]` or `{ messages, systemMessages }` — Mastra reconciles the returned array against `messageList` for the current stage, removing missing messages and replacing system messages.
+
+Returning a different `MessageList` instance is an error; always mutate the one passed to your processor.
+
 ### Reading text from a message
 
 `MastraDBMessage.content` is a structured object, not a string. The canonical way to read user or assistant text is `content.parts`:
