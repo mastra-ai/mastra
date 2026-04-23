@@ -193,8 +193,7 @@ export function buildCustomExtensions(servers?: Record<string, CustomLSPServer>)
 }
 
 /**
- * Convert a user-provided `CustomLSPServer` into an internal `LSPServerDef`.
- * Wraps the plain command string into the function signature expected internally.
+ * Convert a public custom server config to an internal server definition.
  */
 function toServerDef(custom: CustomLSPServer): LSPServerDef {
   return {
@@ -311,7 +310,6 @@ export function buildServerDefs(config?: LSPConfig): Record<string, LSPServerDef
     },
   };
 
-  // Merge custom servers — custom definitions override built-ins with the same ID
   if (config?.servers) {
     for (const custom of Object.values(config.servers)) {
       builtins[custom.id] = toServerDef(custom);
@@ -331,7 +329,7 @@ export const BUILTIN_SERVERS: Record<string, LSPServerDef> = buildServerDefs();
  * Get all server definitions that can handle the given file.
  * Filters by language ID match only — the manager resolves the root and checks command availability.
  * Pass `defs` to use config-aware server definitions from `buildServerDefs()`.
- * Pass `customExtensions` to recognise file extensions registered by custom servers.
+ * Pass `customExtensions` to recognize file extensions registered by custom servers.
  */
 export function getServersForFile(
   filePath: string,

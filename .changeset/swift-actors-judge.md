@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added support for custom language server registration via `servers` field in `LSPConfig`. Previously, only built-in languages (TypeScript, JavaScript, Python, Go, and Rust) were supported. Now you can register any language server for any language (PHP, Ruby, Java, Kotlin, Swift, Elixir, etc.) by providing a `CustomLSPServer` definition.
+Added support for custom language server registration with the `servers` field in `LSPConfig`. Previously, LSP inspection only worked with built-in server definitions for TypeScript, JavaScript, Python, Go, and Rust. You can now register additional language servers, such as PHP, Ruby, Java, Kotlin, Swift, or Elixir, by providing a `CustomLSPServer` definition.
 
 **Example:**
 

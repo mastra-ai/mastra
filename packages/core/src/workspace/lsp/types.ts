@@ -12,20 +12,7 @@
 /**
  * User-provided definition for a custom language server.
  *
- * Unlike the internal `LSPServerDef`, the command is a plain string
- * (not a function) — the framework wraps it internally.
- *
- * @example
- * ```typescript
- * const phpServer: CustomLSPServer = {
- *   id: 'phpactor',
- *   name: 'Phpactor Language Server',
- *   languageIds: ['php'],
- *   extensions: ['.php'],
- *   markers: ['composer.json'],
- *   command: 'phpactor language-server',
- * };
- * ```
+ * Unlike `LSPServerDef`, `command` is a plain string. Mastra wraps it internally.
  */
 export interface CustomLSPServer {
   /** Unique identifier for this server (e.g. 'phpactor', 'intelephense'). */
@@ -39,7 +26,7 @@ export interface CustomLSPServer {
 
   /**
    * File extensions (including the dot) that map to this server's language IDs.
-   * Registered into the extension → language ID map so `getLanguageId()` recognises them.
+   * Registered into the extension → language ID map so `getLanguageId()` recognizes them.
    * The first `languageIds` entry is used for each extension.
    */
   extensions: string[];

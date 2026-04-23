@@ -140,9 +140,11 @@ Each custom server definition requires these fields:
 | `id` | Unique identifier for the server |
 | `name` | Human-readable name shown in logs |
 | `languageIds` | Language Server Protocol (LSP) language identifiers this server handles |
-| `extensions` | File extensions (including the dot) that map to this server. Each extension resolves to the first entry in `languageIds` |
+| `extensions` | File extensions, including the dot |
 | `markers` | Files or directories that identify the project root (e.g. `composer.json`, `Gemfile`) |
 | `command` | Full command string to start the server |
+
+When a server has multiple language IDs, Mastra maps each extension to the first entry in `languageIds`.
 
 You can also pass optional `initializationOptions` to send custom settings during the LSP handshake.
 
