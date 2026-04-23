@@ -1,26 +1,55 @@
+import { createTool, clientSdkZod } from '@mastra/client-js';
 import { IconButton, Textarea, Txt } from '@mastra/playground-ui';
 import { useChat } from '@mastra/react';
 import { ArrowLeftIcon, ArrowUpIcon } from 'lucide-react';
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
+
+import { useFormContext } from 'react-hook-form';
 import { useNavigate } from 'react-router';
+
 import { MessageRow } from '../chat-primitives/messages';
+import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 
 interface ConversationPanelProps {
   initialUserMessage?: string;
 }
 
 export const ConversationPanel = ({ initialUserMessage }: ConversationPanelProps) => {
+  const formMethods = useFormContext<AgentBuilderEditFormValues>();
   const hasAlreadySentDevMode = useRef(false);
   const { messages, sendMessage, isRunning } = useChat({
-    agentId: 'agent-builder-agent',
+    agentId: 'builder-agent',
   });
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
+  const agentBuilderTool = useMemo(
+    () =>
+      createTool({
+        id: 'builder-agent-tool',
+        description: 'Modify the entire agent metadata configuration that you are building from a form in a React app',
+        inputSchema: clientSdkZod.object({
+          name: clientSdkZod.string().describe('The name of the agent you created'),
+        }),
+        outputSchema: clientSdkZod.object({
+          success: clientSdkZod.boolean(),
+        }),
+        execute: async inputData => {
+          console.log('CALLLED LOL', inputData);
+          if (inputData.context.name) {
+            formMethods.setValue('name', inputData.context.name);
+          }
+
+          return { success: true };
+        },
+      }),
+    [formMethods],
+  );
+
   const effectEvent = useEffectEvent(() => {
     if (!initialUserMessage) return;
-    void sendMessage({ message: initialUserMessage });
+    void sendMessage({ message: initialUserMessage, clientTools: { agentBuilderTool } });
   });
 
   useEffect(() => {
@@ -41,7 +70,13 @@ export const ConversationPanel = ({ initialUserMessage }: ConversationPanelProps
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    void sendMessage({ message: trimmed });
+
+    void sendMessage({
+      message: trimmed,
+      clientTools: {
+        agentBuilderTool,
+      },
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -50,8 +85,6 @@ export const ConversationPanel = ({ initialUserMessage }: ConversationPanelProps
       e.currentTarget.form?.requestSubmit();
     }
   };
-
-  console.log('lol', messages);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface1 pt-6">

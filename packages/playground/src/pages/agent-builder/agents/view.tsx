@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { AgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { AgentPreviewChat } from '@/domains/agent-builder/components/agent-builder-edit/agent-preview-chat';
-import { BrowserFrame } from '@/domains/agent-builder/components/agent-builder-edit/browser-frame';
+import { BrowserFrame } from '@/domains/agent-builder/components/browser-frame';
 
 import { defaultAgentFixture } from '@/domains/agent-builder/fixtures';
 

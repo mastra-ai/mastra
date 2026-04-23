@@ -50,6 +50,7 @@ import {
   stepLoggerProcessor,
 } from './processors/index';
 import { gatewayAgent } from './agents/gateway';
+import { agentBuilderAgent } from './agents/agent-builder';
 
 const libsqlStore = new LibSQLStore({
   id: 'mastra-storage',
@@ -68,6 +69,7 @@ const storage = new MastraCompositeStore({
 
 const config = {
   agents: {
+    agentBuilderAgent,
     gatewayAgent,
     chefAgent,
     chefAgentResponses,
@@ -132,6 +134,23 @@ export const mastra = new Mastra({
   editor: new MastraEditor({
     toolProviders: {
       composio: new ComposioToolProvider({ apiKey: '' }),
+    },
+    builder: {
+      enabled: true,
+      features: {
+        agent: {
+          tools: true,
+        },
+      },
+      configuration: {
+        agent: {
+          memory: {
+            options: {
+              lastMessages: 10,
+            },
+          },
+        },
+      },
     },
   }),
   observability: new Observability({

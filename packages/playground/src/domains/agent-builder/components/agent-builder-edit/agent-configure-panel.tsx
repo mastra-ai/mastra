@@ -13,6 +13,7 @@ import {
 } from '@mastra/playground-ui';
 import { ChevronRight, FileText, GraduationCap, Plus, RadioIcon, Wrench, X } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
+import { useFormContext } from 'react-hook-form';
 import {
   channelsFixture,
   findModelOption,
@@ -22,6 +23,7 @@ import {
   toolsFixture,
 } from '../../fixtures';
 import type { AgentFixture } from '../../fixtures';
+import type { AgentBuilderEditFormValues } from '../../schemas';
 import { ChannelsDialog } from './dialogs/channels-dialog';
 import { SkillsDialog } from './dialogs/skills-dialog';
 import { SystemPromptDialog } from './dialogs/system-prompt-dialog';
@@ -279,3 +281,21 @@ const ConfigRow = ({ icon, label, description, count, total, onClick, testId }: 
     <ChevronRight className="h-4 w-4 shrink-0 text-neutral3 transition-colors group-hover:text-neutral5" />
   </button>
 );
+
+export const EditableAgentConfigurePanel = (props: AgentConfigurePanelProps) => {
+  const formMethods = useFormContext<AgentBuilderEditFormValues>();
+  const draftName = formMethods.watch('name');
+
+  const setDraftName = (value: string) => formMethods.setValue('name', value);
+
+  return (
+    <AgentConfigurePanel
+      {...props}
+      editable={true}
+      draftName={draftName}
+      draftAvatarUrl={''}
+      onDraftNameChange={setDraftName}
+      onDraftAvatarUrlChange={() => {}}
+    />
+  );
+};

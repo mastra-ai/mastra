@@ -33,15 +33,19 @@ export function AgentBuilderSidebar() {
       <MainSidebar.Nav>
         <MainSidebar.NavSection>
           <MainSidebar.NavList>
-            {links.map(link => (
-              <MainSidebar.NavLink
-                key={link.name}
-                LinkComponent={Link}
-                state={state}
-                link={link}
-                isActive={pathname === link.url}
-              />
-            ))}
+            {links.map(link => {
+              const isActive = pathname.startsWith(link.url);
+
+              return (
+                <MainSidebar.NavLink
+                  key={link.name}
+                  LinkComponent={Link}
+                  state={state}
+                  link={link}
+                  isActive={isActive}
+                />
+              );
+            })}
           </MainSidebar.NavList>
         </MainSidebar.NavSection>
       </MainSidebar.Nav>

@@ -28,6 +28,7 @@ import { StudioIndexRedirect } from './domains/agent-studio/components/studio-in
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/link';
+import AgentBuilderAgents from './pages/agent-builder/agents';
 import AgentBuilderCreate from './pages/agent-builder/agents/create';
 import AgentBuilderAgentEdit from './pages/agent-builder/agents/edit';
 import AgentBuilderAgentView from './pages/agent-builder/agents/view';
@@ -204,7 +205,7 @@ const routes = [
     children: [
       {
         index: true,
-        loader: () => redirect('/agent-builder/agents/create'),
+        loader: () => redirect('/agent-builder/agents'),
       },
       {
         path: 'agents',
@@ -212,7 +213,7 @@ const routes = [
         children: [
           {
             index: true,
-            element: <div>lol</div>,
+            element: <AgentBuilderAgents />,
           },
         ],
       },
