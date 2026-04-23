@@ -410,6 +410,13 @@ processInputStep?(
     isOptional: false,
   },
   {
+    name: 'retryCount',
+    type: 'number',
+    description:
+      'Current retry attempt count from `ProcessorContext`. Starts at `0`; use to cap processor-triggered retries.',
+    isOptional: false,
+  },
+  {
     name: 'tracingContext',
     type: 'TracingContext',
     description: 'Tracing context for observability.',
@@ -703,6 +710,13 @@ processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | 
     isOptional: false,
   },
   {
+    name: 'retryCount',
+    type: 'number',
+    description:
+      'Current retry attempt count from `ProcessorContext`. Starts at `0`; use to cap processor-triggered retries.',
+    isOptional: false,
+  },
+  {
     name: 'messageList',
     type: 'MessageList',
     description: 'MessageList instance for accessing conversation history.',
@@ -785,6 +799,13 @@ processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
     type: '(reason?: string, options?: { retry?: boolean; metadata?: unknown }) => never',
     description:
       'Function to abort processing. Throws a TripWire error that stops execution and emits a `tripwire` chunk.',
+    isOptional: false,
+  },
+  {
+    name: 'retryCount',
+    type: 'number',
+    description:
+      'Current retry attempt count from `ProcessorContext`. Starts at `0`; use to cap processor-triggered retries.',
     isOptional: false,
   },
   {
