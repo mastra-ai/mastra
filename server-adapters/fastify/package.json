@@ -42,7 +42,7 @@
     "@mastra/libsql": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/observability": "workspace:*",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.17",
     "eslint": "^10.2.1",
     "fastify": "^5.8.5",
     "tsup": "^8.5.1",

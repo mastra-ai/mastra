@@ -39,7 +39,7 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.17",
     "eslint": "^10.2.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",

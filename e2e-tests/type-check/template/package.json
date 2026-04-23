@@ -26,8 +26,8 @@
     "openai-v5": "npm:@ai-sdk/openai@^2.0.89"
   },
   "devDependencies": {
-    "vitest": "^4.1.0",
-    "@types/node": "22.19.15",
+    "vitest": "^4.1.4",
+    "@types/node": "22.19.17",
     "typescript": "^5.9.3"
   }
 }
