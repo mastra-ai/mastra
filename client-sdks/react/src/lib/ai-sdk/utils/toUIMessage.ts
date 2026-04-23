@@ -405,55 +405,25 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
     case 'tool-result':
     case 'background-task-completed':
     case 'background-task-failed': {
-      const lastMessage = result[result.length - 1];
-      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+      const isBgTaskEvent = chunk.type === 'background-task-completed' || chunk.type === 'background-task-failed';
 
-      // Find and update the corresponding tool call
-      const parts = [...lastMessage.parts];
-      const toolPartIndex = parts.findIndex(
-        part =>
-          (part.type === 'dynamic-tool' || (typeof part.type === 'string' && part.type.startsWith('tool-'))) &&
-          'toolCallId' in part &&
-          part.toolCallId === chunk.payload.toolCallId,
-      );
+      const location = locateToolPart(result, chunk.payload.toolCallId, isBgTaskEvent);
+      if (!location) return result;
+      const { messageIndex, toolPartIndex } = location;
+      const targetMessage = result[messageIndex];
+      if (!targetMessage || targetMessage.role !== 'assistant') return result;
 
-      if (toolPartIndex === -1) {
-        if (chunk.type !== 'background-task-completed' && chunk.type !== 'background-task-failed') return result;
+      const parts = [...targetMessage.parts];
+      const toolPart = toolPartIndex >= 0 ? parts[toolPartIndex] : undefined;
 
-        const messageIndex = findMessageIndexByToolCallId(result, chunk.payload.toolCallId);
-        if (messageIndex === -1) return result;
-        const messageToUpdate = result[messageIndex];
-        if (!messageToUpdate || messageToUpdate.role !== 'assistant') return result;
-
-        return [
-          ...result.slice(0, messageIndex),
-          {
-            ...messageToUpdate,
-            metadata: {
-              ...messageToUpdate.metadata,
-              mode: metadata.mode,
-              ...(chunk.type === 'background-task-completed' || chunk.type === 'background-task-failed'
-                ? {
-                    runningBackgroundTasksCount: undefined,
-                    backgroundTaskCompletedAt: chunk.payload.completedAt,
-                    backgroundTaskTaskId: chunk.payload.taskId,
-                  }
-                : {}),
-            } as MastraUIMessageMetadata,
-          },
-          ...result.slice(messageIndex + 1),
-        ];
-      }
-
-      const toolPart = parts[toolPartIndex];
       if (
-        toolPart.type === 'dynamic-tool' ||
-        (typeof toolPart.type === 'string' && toolPart.type.startsWith('tool-'))
+        toolPart &&
+        (toolPart.type === 'dynamic-tool' || (typeof toolPart.type === 'string' && toolPart.type.startsWith('tool-')))
       ) {
         const toolName =
           'toolName' in toolPart && typeof toolPart.toolName === 'string'
             ? toolPart.toolName
-            : toolPart.type.startsWith('tool-')
+            : typeof toolPart.type === 'string' && toolPart.type.startsWith('tool-')
               ? toolPart.type.substring(5)
               : '';
 
@@ -515,89 +485,57 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
         }
       }
 
-      return [
-        ...result.slice(0, -1),
-        {
-          ...lastMessage,
-          parts,
-          metadata: {
-            ...lastMessage.metadata,
-            mode: metadata.mode,
-            ...(chunk.type === 'background-task-completed' || chunk.type === 'background-task-failed'
-              ? {
-                  runningBackgroundTasksCount: undefined,
-                  backgroundTaskCompletedAt: chunk.payload.completedAt,
-                  backgroundTaskTaskId: chunk.payload.taskId,
-                }
-              : {}),
-          } as MastraUIMessageMetadata,
-        },
-      ];
+      const nextMessage = {
+        ...targetMessage,
+        parts,
+        metadata: mergeBgTaskMetadata(targetMessage.metadata, metadata.mode, {
+          resetRunningCount: isBgTaskEvent,
+          perTaskEntry: isBgTaskEvent
+            ? {
+                toolCallId: chunk.payload.toolCallId,
+                completedAt: chunk.payload.completedAt,
+                taskId: chunk.payload.taskId,
+              }
+            : undefined,
+        }),
+      };
+
+      return [...result.slice(0, messageIndex), nextMessage, ...result.slice(messageIndex + 1)];
     }
 
     case 'background-task-running': {
-      const lastMessage = result[result.length - 1];
-      if (!lastMessage || lastMessage.role !== 'assistant') return result;
-
-      // Find and update the corresponding tool call
-      const parts = [...lastMessage.parts];
-      const toolPartIndex = parts.findIndex(
-        part =>
-          (part.type === 'dynamic-tool' || (typeof part.type === 'string' && part.type.startsWith('tool-'))) &&
-          'toolCallId' in part &&
-          part.toolCallId === chunk.payload.toolCallId,
-      );
-
-      if (toolPartIndex === -1) {
-        const messageIndex = findMessageIndexByToolCallId(result, chunk.payload.toolCallId);
-        if (messageIndex === -1) return result;
-        const messageToUpdate = result[messageIndex];
-        if (!messageToUpdate || messageToUpdate.role !== 'assistant') return result;
-
-        return [
-          ...result.slice(0, messageIndex),
-          {
-            ...messageToUpdate,
-            metadata: {
-              ...messageToUpdate.metadata,
-              mode: metadata.mode,
-              backgroundTaskStartedAt: chunk.payload.startedAt,
-              backgroundTaskTaskId: chunk.payload.taskId,
-            } as MastraUIMessageMetadata,
-          },
-          ...result.slice(messageIndex + 1),
-        ];
-      }
+      const location = locateToolPart(result, chunk.payload.toolCallId, true);
+      if (!location) return result;
+      const { messageIndex } = location;
+      const targetMessage = result[messageIndex];
+      if (!targetMessage || targetMessage.role !== 'assistant') return result;
 
       return [
-        ...result.slice(0, -1),
+        ...result.slice(0, messageIndex),
         {
-          ...lastMessage,
-          metadata: {
-            ...lastMessage.metadata,
-            mode: metadata.mode,
-            backgroundTaskStartedAt: chunk.payload.startedAt,
-            backgroundTaskTaskId: chunk.payload.taskId,
-          } as MastraUIMessageMetadata,
+          ...targetMessage,
+          metadata: mergeBgTaskMetadata(targetMessage.metadata, metadata.mode, {
+            perTaskEntry: {
+              toolCallId: chunk.payload.toolCallId,
+              startedAt: chunk.payload.startedAt,
+              taskId: chunk.payload.taskId,
+            },
+          }),
         },
+        ...result.slice(messageIndex + 1),
       ];
     }
 
     case 'tool-output':
     case 'background-task-output': {
-      const lastMessage = result[result.length - 1];
-      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+      const isBgTaskOutput = chunk.type === 'background-task-output';
+      const location = locateToolPart(result, chunk.payload.toolCallId, isBgTaskOutput);
+      if (!location || location.toolPartIndex < 0) return result;
+      const { messageIndex, toolPartIndex } = location;
+      const targetMessage = result[messageIndex];
+      if (!targetMessage || targetMessage.role !== 'assistant') return result;
 
-      // Find and update the corresponding tool call
-      const parts = [...lastMessage.parts];
-      const toolPartIndex = parts.findIndex(
-        part =>
-          (part.type === 'dynamic-tool' || (typeof part.type === 'string' && part.type.startsWith('tool-'))) &&
-          'toolCallId' in part &&
-          part.toolCallId === chunk.payload.toolCallId,
-      );
-
-      if (toolPartIndex === -1) return result;
+      const parts = [...targetMessage.parts];
 
       const toolPart = parts[toolPartIndex];
       // Handle dynamic-tool and tool-* part types
@@ -657,11 +595,12 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       }
 
       return [
-        ...result.slice(0, -1),
+        ...result.slice(0, messageIndex),
         {
-          ...lastMessage,
+          ...targetMessage,
           parts,
         },
+        ...result.slice(messageIndex + 1),
       ];
     }
 
@@ -1051,4 +990,92 @@ const findMessageIndexByToolCallId = (messages: MastraUIMessage[], toolCallId: s
     count++;
   }
   return -1;
+};
+
+/**
+ * Locate the message and tool-part that owns `toolCallId`. Prefers the most
+ * recent assistant message; if the call lives on an older message (e.g.
+ * because a continuation turn has already appended a newer assistant reply),
+ * walks back up to 10 messages.
+ *
+ * When `allowMetadataOnlyMatch` is true, also returns the matching message
+ * index even if no tool part is found — callers that only need to stamp
+ * message metadata (e.g. background-task status) can still act on it.
+ */
+const locateToolPart = (
+  messages: MastraUIMessage[],
+  toolCallId: string,
+  allowMetadataOnlyMatch: boolean,
+): { messageIndex: number; toolPartIndex: number } | null => {
+  const lastMessage = messages[messages.length - 1];
+  if (lastMessage && lastMessage.role === 'assistant') {
+    const toolPartIndex = lastMessage.parts.findIndex(
+      part =>
+        (part.type === 'dynamic-tool' || (typeof part.type === 'string' && part.type.startsWith('tool-'))) &&
+        'toolCallId' in part &&
+        (part as any).toolCallId === toolCallId,
+    );
+    if (toolPartIndex !== -1) {
+      return { messageIndex: messages.length - 1, toolPartIndex };
+    }
+  }
+
+  const messageIndex = findMessageIndexByToolCallId(messages, toolCallId);
+  if (messageIndex === -1) return null;
+  const message = messages[messageIndex];
+  if (!message || message.role !== 'assistant') return null;
+  const toolPartIndex = message.parts.findIndex(
+    part =>
+      (part.type === 'dynamic-tool' || (typeof part.type === 'string' && part.type.startsWith('tool-'))) &&
+      'toolCallId' in part &&
+      (part as any).toolCallId === toolCallId,
+  );
+  if (toolPartIndex === -1) {
+    return allowMetadataOnlyMatch ? { messageIndex, toolPartIndex: -1 } : null;
+  }
+  return { messageIndex, toolPartIndex };
+};
+
+/**
+ * Merge background-task metadata onto an existing UI-message metadata object.
+ * Per-toolCallId entries are keyed under `backgroundTasks` so concurrent
+ * background dispatches on the same message don't overwrite each other.
+ */
+const mergeBgTaskMetadata = (
+  existing: MastraUIMessageMetadata | undefined,
+  mode: 'stream' | 'generate' | 'network' | undefined,
+  args: {
+    resetRunningCount?: boolean;
+    perTaskEntry?: {
+      toolCallId: string;
+      startedAt?: Date;
+      completedAt?: Date;
+      taskId: string;
+    };
+  },
+): MastraUIMessageMetadata => {
+  const existingAny = (existing ?? {}) as Record<string, unknown>;
+  const existingBgTasks = (existingAny.backgroundTasks ?? {}) as Record<
+    string,
+    { startedAt?: Date; completedAt?: Date; taskId: string }
+  >;
+
+  const nextBgTasks = { ...existingBgTasks };
+  if (args.perTaskEntry) {
+    const { toolCallId, startedAt, completedAt, taskId } = args.perTaskEntry;
+    const prev = existingBgTasks[toolCallId] ?? { taskId };
+    nextBgTasks[toolCallId] = {
+      ...prev,
+      taskId,
+      ...(startedAt !== undefined ? { startedAt } : {}),
+      ...(completedAt !== undefined ? { completedAt } : {}),
+    };
+  }
+
+  return {
+    ...existingAny,
+    mode,
+    ...(args.resetRunningCount ? { runningBackgroundTasksCount: undefined } : {}),
+    backgroundTasks: nextBgTasks,
+  } as MastraUIMessageMetadata;
 };

@@ -707,9 +707,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       },
                     },
                     {
-                      backgroundTaskStartedAt: params.startedAt,
-                      backgroundTaskCompletedAt: params.completedAt,
-                      backgroundTaskTaskId: params.taskId,
+                      backgroundTasks: {
+                        [params.toolCallId]: {
+                          startedAt: params.startedAt,
+                          completedAt: params.completedAt,
+                          taskId: params.taskId,
+                        },
+                      },
                     },
                   );
 
@@ -784,8 +788,12 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       },
                     },
                     {
-                      backgroundTaskStartedAt: params.startedAt,
-                      backgroundTaskTaskId: params.taskId,
+                      backgroundTasks: {
+                        [params.toolCallId]: {
+                          startedAt: params.startedAt,
+                          taskId: params.taskId,
+                        },
+                      },
                     },
                   );
                 },

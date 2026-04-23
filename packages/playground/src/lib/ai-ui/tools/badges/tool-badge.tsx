@@ -69,13 +69,21 @@ export const ToolBadge = ({
             selectionReason={selectionReason || ''}
             input={agentNetworkInput as string | Record<string, unknown> | undefined}
           />
-        ) : metadata?.backgroundTaskTaskId && metadata?.backgroundTaskStartedAt ? (
-          <BackgroundTaskMetadataDialogTrigger
-            backgroundTaskTaskId={metadata.backgroundTaskTaskId}
-            backgroundTaskStartedAt={metadata.backgroundTaskStartedAt}
-            backgroundTaskCompletedAt={metadata.backgroundTaskCompletedAt}
-          />
-        ) : null
+        ) : (
+          (() => {
+            const bgEntry =
+              (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks
+                ? metadata.backgroundTasks[toolCallId]
+                : undefined;
+            return bgEntry?.taskId && bgEntry?.startedAt ? (
+              <BackgroundTaskMetadataDialogTrigger
+                backgroundTaskTaskId={bgEntry.taskId}
+                backgroundTaskStartedAt={bgEntry.startedAt}
+                backgroundTaskCompletedAt={bgEntry.completedAt}
+              />
+            ) : null;
+          })()
+        )
       }
       initialCollapsed={!!!(toolApprovalMetadata ?? suspendPayload)}
     >

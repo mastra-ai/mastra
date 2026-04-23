@@ -70,13 +70,21 @@ export const WorkflowBadge = ({
             selectionReason={selectionReason ?? ''}
             input={agentNetworkInput as string | Record<string, unknown> | undefined}
           />
-        ) : metadata?.backgroundTaskTaskId && metadata?.backgroundTaskStartedAt ? (
-          <BackgroundTaskMetadataDialogTrigger
-            backgroundTaskTaskId={metadata.backgroundTaskTaskId}
-            backgroundTaskStartedAt={metadata.backgroundTaskStartedAt}
-            backgroundTaskCompletedAt={metadata.backgroundTaskCompletedAt}
-          />
-        ) : null
+        ) : (
+          (() => {
+            const bgEntry =
+              (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks
+                ? metadata.backgroundTasks[toolCallId]
+                : undefined;
+            return bgEntry?.taskId && bgEntry?.startedAt ? (
+              <BackgroundTaskMetadataDialogTrigger
+                backgroundTaskTaskId={bgEntry.taskId}
+                backgroundTaskStartedAt={bgEntry.startedAt}
+                backgroundTaskCompletedAt={bgEntry.completedAt}
+              />
+            ) : null;
+          })()
+        )
       }
     >
       {!isStreaming && !isLoading && (
@@ -135,11 +143,12 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useWorkflowStream = (workflowFullState?: WorkflowRunStreamResult) => {
   const { setResult } = useContext(WorkflowRunContext);
 
   useEffect(() => {
     if (!workflowFullState) return;
     setResult(workflowFullState);
-  }, [workflowFullState]);
+  }, [workflowFullState, setResult]);
 };
