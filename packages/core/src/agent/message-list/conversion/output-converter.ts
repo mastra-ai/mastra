@@ -108,9 +108,31 @@ export function sanitizeV5UIMessages(
   messages: AIV5Type.UIMessage[],
   filterIncompleteToolCalls = false,
 ): AIV5Type.UIMessage[] {
+  // Precompute the index of the last user message AND the index of the last
+  // assistant message. A deferred provider-executed tool call (e.g. Anthropic
+  // non-deterministically defers web_search across steps N→N+1 within the same
+  // run) may legitimately carry `input-available` state ONLY on the most recent
+  // assistant message, AND only if no user turn has followed it. On any earlier
+  // assistant turn (or after a later user message) an unresolved provider-executed
+  // call is an orphan — provider dropped the result chunk (#15668), run aborted
+  // mid-stream (#14148), or a stale call from an earlier step (#14192) — and
+  // must be dropped to keep the tool-call/tool-result invariant.
+  let lastUserIdx = -1;
+  let lastAssistantIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const role = messages[i]!.role;
+    if (role === 'user' && lastUserIdx === -1) lastUserIdx = i;
+    if (role === 'assistant' && lastAssistantIdx === -1) lastAssistantIdx = i;
+    if (lastUserIdx !== -1 && lastAssistantIdx !== -1) break;
+  }
+
   const msgs = messages
-    .map(m => {
+    .map((m, idx) => {
       if (m.parts.length === 0) return false;
+
+      // Deferred-provider-tool behavior is ONLY valid on the most recent assistant
+      // message AND only when no user turn has followed it.
+      const assistantTurnStillOpen = m.role === 'assistant' && idx === lastAssistantIdx && idx > lastUserIdx;
 
       // Filter out streaming states and optionally input-available (which aren't supported by convertToModelMessages)
       const safeParts = m.parts.filter(p => {
@@ -146,8 +168,11 @@ export function sanitizeV5UIMessages(
           if (p.state === 'output-available' || p.state === 'output-error') return true;
           // Provider-executed tools may be deferred by the provider (e.g. Anthropic non-deterministically
           // defers web_search when mixed with client tool calls). Keep these so the provider API sees
-          // the server_tool_use block on the next request.
-          if (p.state === 'input-available' && p.providerExecuted) return true;
+          // the server_tool_use block on the next request — but ONLY on the most recent assistant
+          // message. On any earlier assistant turn an unresolved provider-executed call is an orphan
+          // (provider dropped the result chunk, or the run aborted mid-stream) and must be dropped
+          // to keep the tool-call/tool-result invariant required by provider APIs. See #15668, #14148.
+          if (p.state === 'input-available' && p.providerExecuted && assistantTurnStillOpen) return true;
           return false;
         }
 
