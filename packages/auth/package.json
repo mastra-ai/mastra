@@ -40,7 +40,7 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.2.1",

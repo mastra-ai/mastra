@@ -38,7 +38,7 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.17",
     "playwright-core": "^1.57.0",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",

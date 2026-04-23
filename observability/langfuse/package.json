@@ -42,7 +42,7 @@
     "@mastra/core": "workspace:*",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/sdk-trace-base": "^2.7.0",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.2.1",

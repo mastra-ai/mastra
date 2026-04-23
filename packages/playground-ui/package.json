@@ -122,7 +122,7 @@
     "@tailwindcss/vite": "4.2.2",
     "@testing-library/react": "^16.3.2",
     "@types/json-schema": "^7.0.15",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.17",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.2.0",

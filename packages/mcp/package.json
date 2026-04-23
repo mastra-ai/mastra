@@ -54,7 +54,7 @@
     "@mastra/core": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
     "@mendable/firecrawl-js": "^1.29.3",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "ai": "^5.0.154",

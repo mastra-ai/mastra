@@ -38,7 +38,7 @@
     "@internal/workspace-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/dockerode": "^4.0.1",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.2.1",
