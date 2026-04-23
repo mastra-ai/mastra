@@ -1159,11 +1159,11 @@ export class WordCounter implements Processor {
 
 ## State lifecycle
 
-Every processor receives a `state` object in `processOutputStream`, `processOutputStep`, and `processOutputResult`. State has three important properties:
+Every processor receives a `state` object in `processOutputStream`, `processOutputStep`, `processOutputResult`, and `processAPIError`. State has three important properties:
 
 - **Per-processor**: Each processor gets its own `state` object, keyed by the processor's `id`. Two processors with different ids cannot read or overwrite each other's state.
 - **Per-request**: A fresh state object is created at the start of every `agent.generate()` or `agent.stream()` call. State does not leak between requests or between users.
-- **Shared across methods**: Within one request, the same `state` object is passed to `processOutputStream` (for every chunk), `processOutputStep` (after every LLM step), and `processOutputResult` (once at the end). Accumulate data in `processOutputStream` and read it in `processOutputResult`.
+- **Shared across methods**: Within one request, the same `state` object is passed to `processOutputStream` (for every chunk), `processOutputStep` (after every LLM step), `processOutputResult` (once at the end), and `processAPIError` (when an LLM call fails). Accumulate data in `processOutputStream` and read it in `processOutputResult` or `processAPIError`.
 
 Initialize fields defensively on first access, because `state` starts as an empty object:
 
