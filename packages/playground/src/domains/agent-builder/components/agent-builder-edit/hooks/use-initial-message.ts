@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef } from 'react';
+import { useEffect, useEffectEvent } from 'react';
 
 interface UseInitialMessageArgs {
   initialUserMessage?: string;
@@ -7,19 +7,15 @@ interface UseInitialMessageArgs {
 }
 
 export const useInitialMessage = ({ initialUserMessage, toolsReady, onSend }: UseInitialMessageArgs) => {
-  const hasAlreadySent = useRef(false);
-
   const effectEvent = useEffectEvent(() => {
     if (!initialUserMessage) return;
+
     onSend(initialUserMessage);
   });
 
   useEffect(() => {
     if (!toolsReady) return;
-    if (hasAlreadySent.current) return;
-    hasAlreadySent.current = true;
 
     effectEvent();
-    window.history.replaceState({}, '');
-  }, [toolsReady]);
+  }, [toolsReady, initialUserMessage]);
 };

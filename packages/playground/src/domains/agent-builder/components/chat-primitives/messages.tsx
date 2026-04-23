@@ -1,5 +1,6 @@
 import { Txt } from '@mastra/playground-ui';
 import type { MastraUIMessage } from '@mastra/react';
+import { useState } from 'react';
 import Markdown from 'react-markdown';
 
 export const MessageRow = ({ message }: { message: MastraUIMessage }) => {
@@ -19,7 +20,7 @@ export const MessageRow = ({ message }: { message: MastraUIMessage }) => {
             );
 
           case 'dynamic-tool': {
-            return <ToolExecutionMessage key={key} toolName={part.toolName} />;
+            return <ToolExecutionMessage key={key} />;
           }
         }
       })}
@@ -61,10 +62,64 @@ export const ReasoningMessage = ({ text }: { text: string }) => {
   );
 };
 
-export const ToolExecutionMessage = ({ toolName }: { toolName: string }) => {
+const words = [
+  'loading',
+  'cooking',
+  'processing',
+  'preparing',
+  'building',
+  'rendering',
+  'fetching',
+  'compiling',
+  'generating',
+  'brewing',
+  'mixing',
+  'heating',
+  'baking',
+  'roasting',
+  'simmering',
+  'boiling',
+  'frying',
+  'grilling',
+  'steaming',
+  'toasting',
+  'melting',
+  'blending',
+  'stirring',
+  'whisking',
+  'kneading',
+  'assembling',
+  'crafting',
+  'forging',
+  'shaping',
+  'forming',
+  'spinning',
+  'warming',
+  'igniting',
+  'starting',
+  'booting',
+  'charging',
+  'spooling',
+  'buffering',
+  'calculating',
+  'computing',
+  'decoding',
+  'encoding',
+  'hydrating',
+  'marinating',
+  'infusing',
+  'curing',
+  'plating',
+  'serving',
+  'finishing',
+  'settling',
+];
+
+export const ToolExecutionMessage = () => {
+  const [randomWord] = useState(() => words[Math.floor(Math.random() * words.length)]);
   return (
     <Txt variant="ui-sm" className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%]">
-      {toolName} executing...
+      {randomWord.charAt(0).toUpperCase() + randomWord.slice(1)}...
     </Txt>
   );
 };
