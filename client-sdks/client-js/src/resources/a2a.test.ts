@@ -34,6 +34,20 @@ describe('A2A', () => {
   });
 
   describe('sendStreamingMessage', () => {
+    it('returns a Response type for streaming requests', () => {
+      const a2a = new A2A({ baseUrl: serverUrl }, 'test-agent');
+      const params: MessageSendParams = {
+        message: {
+          messageId: 'msg-1',
+          kind: 'message',
+          role: 'user',
+          parts: [{ kind: 'text', text: 'Hello' }],
+        },
+      };
+
+      expectTypeOf(a2a.sendStreamingMessage(params)).toEqualTypeOf<Promise<Response>>();
+    });
+
     it('should return the raw response for streaming instead of parsing as JSON', async () => {
       // Arrange: Set up server to return streaming response
       const streamingData = [
@@ -287,6 +301,11 @@ describe('A2A', () => {
       expect(receivedBody.method).toBe('tasks/resubscribe');
       expect(receivedBody.params).toEqual({ id: 'task-1' });
       expect(response).toBeInstanceOf(Response);
+    });
+
+    it('resubscribeTask returns a Response type', () => {
+      const a2a = new A2A({ baseUrl: serverUrl }, 'test-agent');
+      expectTypeOf(a2a.resubscribeTask({ id: 'task-1' })).toEqualTypeOf<Promise<Response>>();
     });
 
     it('supports push notification config methods', async () => {

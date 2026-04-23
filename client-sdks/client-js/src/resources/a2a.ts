@@ -8,7 +8,6 @@ import type {
   ListTaskPushNotificationConfigResponse,
   MessageSendParams,
   SendMessageResponse,
-  SendStreamingMessageResponse,
   SetTaskPushNotificationConfigResponse,
   TaskIdParams,
   TaskPushNotificationConfig,
@@ -59,10 +58,10 @@ export class A2A extends BaseResource {
    * Sends a message to an agent to initiate/continue a task and subscribes
    * the client to real-time updates for that task via Server-Sent Events (SSE).
    * @param params - Parameters for the task
-   * @returns A stream of Server-Sent Events. Each SSE `data` field contains a `SendStreamingMessageResponse`
+   * @returns The raw streaming response for the caller to consume as SSE
    */
-  async sendStreamingMessage(params: MessageSendParams): Promise<AsyncIterable<SendStreamingMessageResponse>> {
-    const response = await this.request<AsyncIterable<SendStreamingMessageResponse>>(`/a2a/${this.agentId}`, {
+  async sendStreamingMessage(params: MessageSendParams): Promise<Response> {
+    const response = await this.request<Response>(`/a2a/${this.agentId}`, {
       method: 'POST',
       body: {
         jsonrpc: '2.0',
@@ -115,10 +114,10 @@ export class A2A extends BaseResource {
   /**
    * Resume a task stream for an existing task
    * @param params - Parameters identifying the task to resubscribe to
-   * @returns A stream of Server-Sent Events for the task
+   * @returns The raw streaming response for the caller to consume as SSE
    */
-  async resubscribeTask(params: TaskIdParams): Promise<AsyncIterable<SendStreamingMessageResponse>> {
-    return this.request<AsyncIterable<SendStreamingMessageResponse>>(`/a2a/${this.agentId}`, {
+  async resubscribeTask(params: TaskIdParams): Promise<Response> {
+    return this.request<Response>(`/a2a/${this.agentId}`, {
       method: 'POST',
       body: {
         jsonrpc: '2.0',
