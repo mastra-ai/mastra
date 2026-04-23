@@ -1331,6 +1331,7 @@ export class Harness<TState = {}> {
 
     const operationId = ++this.currentOperationId;
     this.abortController = new AbortController();
+    this.currentTraceId = null;
     const agent = this.getCurrentAgent();
     this.emit({ type: 'agent_start' });
 
