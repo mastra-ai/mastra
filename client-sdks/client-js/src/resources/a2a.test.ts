@@ -1,8 +1,13 @@
 import type { Server } from 'node:http';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { MessageSendParams } from '@mastra/core/a2a';
-import { describe, it, beforeEach, afterEach, expect } from 'vitest';
+import type {
+  CancelTaskResponse,
+  DeleteTaskPushNotificationConfigResponse,
+  ListTaskPushNotificationConfigResponse,
+  MessageSendParams,
+} from '@mastra/core/a2a';
+import { describe, it, beforeEach, afterEach, expect, expectTypeOf } from 'vitest';
 import { A2A } from './a2a';
 
 describe('A2A', () => {
@@ -228,6 +233,122 @@ describe('A2A', () => {
       expect(typeof receivedBody.id).toBe('string');
       expect(receivedBody.method).toBe('message/send');
       expect(receivedBody.params).toEqual(params);
+    });
+  });
+
+  describe('task operations', () => {
+    it('cancelTask returns a CancelTaskResponse type', () => {
+      const a2a = new A2A({ baseUrl: serverUrl }, 'test-agent');
+      expectTypeOf(a2a.cancelTask({ id: 'task-1' })).toEqualTypeOf<Promise<CancelTaskResponse>>();
+    });
+
+    it('cancelTask sends the tasks/cancel JSON-RPC method', async () => {
+      let receivedBody: any;
+
+      server.on('request', (req, res) => {
+        let body = '';
+        req.on('data', chunk => {
+          body += chunk;
+        });
+        req.on('end', () => {
+          receivedBody = JSON.parse(body);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ jsonrpc: '2.0', id: receivedBody.id, result: { kind: 'task', id: 'task-1' } }));
+        });
+      });
+
+      const a2a = new A2A({ baseUrl: serverUrl }, 'test-agent');
+      const response = await a2a.cancelTask({ id: 'task-1' });
+
+      expect(receivedBody.method).toBe('tasks/cancel');
+      expect(receivedBody.params).toEqual({ id: 'task-1' });
+      expect(response).toEqual({ jsonrpc: '2.0', id: receivedBody.id, result: { kind: 'task', id: 'task-1' } });
+    });
+
+    it('resubscribeTask requests a stream using tasks/resubscribe', async () => {
+      let receivedBody: any;
+
+      server.on('request', (req, res) => {
+        let body = '';
+        req.on('data', chunk => {
+          body += chunk;
+        });
+        req.on('end', () => {
+          receivedBody = JSON.parse(body);
+          res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+          res.write(JSON.stringify({ jsonrpc: '2.0', result: { kind: 'status-update', final: true } }) + '\x1E');
+          res.end();
+        });
+      });
+
+      const a2a = new A2A({ baseUrl: serverUrl }, 'test-agent');
+      const response = await a2a.resubscribeTask({ id: 'task-1' });
+
+      expect(receivedBody.method).toBe('tasks/resubscribe');
+      expect(receivedBody.params).toEqual({ id: 'task-1' });
+      expect(response).toBeInstanceOf(Response);
+    });
+
+    it('supports push notification config methods', async () => {
+      const receivedBodies: any[] = [];
+      const responses = [
+        { jsonrpc: '2.0', id: '1', error: { code: -32003, message: 'Push Notification is not supported' } },
+        { jsonrpc: '2.0', id: '2', error: { code: -32003, message: 'Push Notification is not supported' } },
+        { jsonrpc: '2.0', id: '3', error: { code: -32003, message: 'Push Notification is not supported' } },
+      ];
+
+      server.on('request', (req, res) => {
+        let body = '';
+        req.on('data', chunk => {
+          body += chunk;
+        });
+        req.on('end', () => {
+          receivedBodies.push(JSON.parse(body));
+          const response = responses[receivedBodies.length - 1];
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(response));
+        });
+      });
+
+      const a2a = new A2A({ baseUrl: serverUrl }, 'test-agent');
+
+      const listResponse = await a2a.listTaskPushNotificationConfig({
+        id: 'task-1',
+      });
+      const deleteResponse = await a2a.deleteTaskPushNotificationConfig({
+        id: 'task-1',
+        pushNotificationConfigId: 'push-1',
+      });
+      const setResponse = await a2a.setTaskPushNotificationConfig({
+        taskId: 'task-1',
+        pushNotificationConfig: {
+          url: 'https://example.com/push',
+        },
+      });
+
+      expectTypeOf(listResponse).toEqualTypeOf<ListTaskPushNotificationConfigResponse>();
+      expectTypeOf(deleteResponse).toEqualTypeOf<DeleteTaskPushNotificationConfigResponse>();
+
+      expect(receivedBodies.map(body => body.method)).toEqual([
+        'tasks/pushNotificationConfig/list',
+        'tasks/pushNotificationConfig/delete',
+        'tasks/pushNotificationConfig/set',
+      ]);
+      expect(receivedBodies[0].params).toEqual({ id: 'task-1' });
+      expect(receivedBodies[1].params).toEqual({ id: 'task-1', pushNotificationConfigId: 'push-1' });
+      expect(receivedBodies[2].params).toEqual({
+        taskId: 'task-1',
+        pushNotificationConfig: { url: 'https://example.com/push' },
+      });
+
+      for (const response of [listResponse, deleteResponse, setResponse]) {
+        expect(response).toMatchObject({
+          error: {
+            code: -32003,
+            message: 'Push Notification is not supported',
+          },
+        });
+      }
     });
   });
 });
