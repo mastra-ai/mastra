@@ -1,0 +1,126 @@
+---
+title: "BrowserViewer | Browser"
+description: "Use BrowserViewer for CLI-based browser automation with automatic CDP injection and Studio screencast."
+packages:
+  - "@mastra/browser-viewer"
+---
+
+# BrowserViewer
+
+The `@mastra/browser-viewer` package provides browser automation for CLI-based tools like [agent-browser](https://github.com/AugmentCode/agent-browser), [browser-use](https://github.com/browser-use/browser-use), and [browse](https://github.com/AugmentCode/browse). BrowserViewer launches Chrome via Playwright, exposes a Chrome DevTools Protocol (CDP) URL, and automatically injects it into CLI commands run through [workspace tools](/docs/workspace/overview).
+
+## When to use BrowserViewer
+
+Use BrowserViewer when your agent drives a browser through a CLI tool rather than an SDK. BrowserViewer handles:
+
+- Launching and managing Chrome for CLI tools to connect to
+- Automatic CDP URL injection into `workspace_execute_command` calls
+- Live screencast streaming to Studio
+- Thread-scoped browser isolation
+
+For SDK-based browser automation, use [AgentBrowser](/docs/browser/agent-browser) or [Stagehand](/docs/browser/stagehand) instead.
+
+## Quickstart
+
+Install the package:
+
+```bash npm2yarn
+npm install @mastra/browser-viewer
+```
+
+Create a workspace with BrowserViewer and assign it to an agent:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { Agent } from '@mastra/core/agent'
+import { Workspace, LocalSandbox } from '@mastra/core/workspace'
+import { BrowserViewer } from '@mastra/browser-viewer'
+
+const workspace = new Workspace({
+  sandbox: new LocalSandbox({
+    workingDirectory: './workspace',
+  }),
+  browser: new BrowserViewer({
+    cli: 'agent-browser',
+    headless: false,
+  }),
+})
+
+const browserAgent = new Agent({
+  id: 'browser-agent',
+  model: 'openai/gpt-5.4',
+  workspace,
+  instructions: `You are a web automation assistant.
+Use agent-browser commands to navigate and interact with websites.`,
+})
+
+export const mastra = new Mastra({
+  agents: { browserAgent },
+})
+```
+
+When the agent runs a CLI command like `agent-browser open https://example.com`, Mastra automatically launches Chrome, injects the CDP connection, and starts streaming the screencast to Studio.
+
+## How it works
+
+1. The agent calls `workspace_execute_command` with a browser CLI command.
+1. Mastra detects the CLI command and launches Chrome via Playwright (if not already running).
+1. The CDP URL is injected into the command so the CLI connects to the managed browser.
+1. Screencast frames stream from page-level CDP sessions to Studio.
+
+## Supported CLIs
+
+BrowserViewer supports three CLI providers:
+
+| CLI | CDP flag | Description |
+| - | - | - |
+| `agent-browser` | `--cdp` | Accessibility-first browser automation CLI |
+| `browser-use` | `--cdp-url` | Python-based browser automation |
+| `browse-cli` | `--ws` | Browserbase's Stagehand CLI |
+
+Set the `cli` option to tell BrowserViewer which CLI the agent uses:
+
+```typescript
+const viewer = new BrowserViewer({
+  cli: 'browser-use',
+  headless: false,
+})
+```
+
+The CLI tool must be installed separately in the workspace environment.
+
+## Configuration
+
+| Option | Type | Default | Description |
+| - | - | - | - |
+| `cli` | `'agent-browser' \| 'browser-use' \| 'browse-cli'` | Required | Which CLI the agent uses |
+| `headless` | `boolean` | `false` | Run browser in headless mode |
+| `cdpUrl` | `string` | — | Connect to an existing browser instead of launching one |
+| `cdpPort` | `number` | `0` (auto) | Port for Chrome remote debugging |
+| `viewport` | `{ width, height }` | `1280×720` | Browser viewport size |
+| `userDataDir` | `string` | — | Chrome profile directory for persistent state |
+| `executablePath` | `string` | — | Path to a Chrome executable |
+
+## Connecting to an existing browser
+
+To connect to a browser that is already running, pass a `cdpUrl`:
+
+```typescript
+const viewer = new BrowserViewer({
+  cli: 'agent-browser',
+  cdpUrl: 'ws://127.0.0.1:9222/devtools/browser/abc123',
+})
+```
+
+BrowserViewer connects via the CDP endpoint and enables screencast without launching its own browser.
+
+## External CDP connections
+
+When the agent provides its own CDP URL in a command (for example, `browser-use --cdp-url wss://cloud.example.com/session`), BrowserViewer detects this and skips injection. It connects to the external browser for screencast only, without managing the browser lifecycle.
+
+## Related
+
+- [Browser overview](/docs/browser/overview)
+- [AgentBrowser](/docs/browser/agent-browser)
+- [Stagehand](/docs/browser/stagehand)
+- [Workspace overview](/docs/workspace/overview)
