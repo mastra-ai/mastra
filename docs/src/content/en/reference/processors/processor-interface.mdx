@@ -306,8 +306,8 @@ The method can return one of three types:
 Processes input messages at each step of the agentic loop, before they're sent to the LLM. Unlike `processInput` which runs once at the start, this runs at every step including tool call continuations.
 
 ```typescript prettier:false
-processInputStep?(
-  args: ProcessInputStepArgs,
+processInputStep?<TTripwireMetadata = unknown>(
+  args: ProcessInputStepArgs<TTripwireMetadata>,
 ):
   | Promise<ProcessInputStepResult | MessageList | MastraDBMessage[] | void | undefined>
   | ProcessInputStepResult
