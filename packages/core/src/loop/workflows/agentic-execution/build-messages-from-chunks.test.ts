@@ -364,4 +364,21 @@ describe('buildMessagesFromChunks', () => {
     });
     expect(msgs[0]!.content.metadata).toEqual({ modelId: 'gpt-5' });
   });
+
+  it('should prefer configured modelId over API response modelId in metadata', () => {
+    // This test documents that responseModelMetadata should contain the configured
+    // model ID (e.g., 'gpt-5.4'), not the API response model ID (e.g., 'gpt-5.4-2026-03-05').
+    // The caller (buildResponseModelMetadata) is responsible for this preference.
+    const msgs = buildMessagesFromChunks({
+      chunks: [
+        { type: 'text-start', payload: { id: 't1' } },
+        { type: 'text-delta', payload: { id: 't1', text: 'response' } },
+        { type: 'text-end', payload: { id: 't1' } },
+      ],
+      messageId: 'msg-1',
+      responseModelMetadata: { metadata: { modelId: 'gpt-5.4', provider: 'openai.responses' } },
+    });
+    // Verify the configured modelId is preserved in the message metadata
+    expect(msgs[0]!.content.metadata).toEqual({ modelId: 'gpt-5.4', provider: 'openai.responses' });
+  });
 });
