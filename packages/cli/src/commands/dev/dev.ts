@@ -165,11 +165,7 @@ const startServer = async (
     if (currentServerProcess.stdout) {
       currentServerProcess.stdout.on('data', (data: Buffer) => {
         const output = data.toString();
-        if (
-          !output.includes('Studio available') &&
-          !output.includes('👨‍💻') &&
-          !output.includes('Mastra API running on ')
-        ) {
+        if (!output.includes('Studio available') && !output.includes('👨‍💻') && !output.includes('Mastra API running')) {
           process.stdout.write(output);
         }
       });
@@ -178,11 +174,7 @@ const startServer = async (
     if (currentServerProcess.stderr) {
       currentServerProcess.stderr.on('data', (data: Buffer) => {
         const output = data.toString();
-        if (
-          !output.includes('Studio available') &&
-          !output.includes('👨‍💻') &&
-          !output.includes('Mastra API running on ')
-        ) {
+        if (!output.includes('Studio available') && !output.includes('👨‍💻') && !output.includes('Mastra API running')) {
           process.stderr.write(output);
         }
       });
@@ -557,7 +549,22 @@ export async function dev({
     }
   });
 
+  let isShuttingDown = false;
   const handleShutdown = async () => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+
+    const forceExit = setTimeout(() => process.exit(0), 3000);
+    forceExit.unref();
+
+    devLogger.shutdown();
+
+    if (currentServerProcess) {
+      currentServerProcess.kill();
+      await waitForProcessExit(currentServerProcess);
+      currentServerProcess = undefined;
+    }
+
     const analytics = getAnalytics();
     if (analytics && serverStartTime) {
       const durationMs = Date.now() - serverStartTime;
@@ -570,18 +577,13 @@ export async function dev({
       await analytics.shutdown();
     }
 
-    devLogger.shutdown();
-
-    if (currentServerProcess) {
-      currentServerProcess.kill();
-      await waitForProcessExit(currentServerProcess);
-      currentServerProcess = undefined;
-    }
-
     watcher
       .close()
       .catch(() => {})
-      .finally(() => process.exit(0));
+      .finally(() => {
+        clearTimeout(forceExit);
+        process.exit(0);
+      });
   };
 
   const onSignal = () => {

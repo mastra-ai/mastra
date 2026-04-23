@@ -1,5 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import type { AgentModelManagerConfig } from '@mastra/core/agent';
+import type { VersionOverrides } from '@mastra/core/di';
+import { mergeVersionOverrides } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY, parseModelString } from '@mastra/core/llm';
 import type { ProviderConfig, SystemMessage } from '@mastra/core/llm';
@@ -10,6 +12,7 @@ import type {
   OutputProcessorOrWorkflow,
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_VERSIONS_KEY } from '@mastra/core/request-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import type { PublicSchema } from '@mastra/schema-compat/schema';
@@ -59,6 +62,23 @@ import {
   getEffectiveThreadId,
   validateThreadOwnership,
 } from './utils';
+
+/**
+ * Merge incoming version overrides onto a RequestContext.
+ * Reads any existing overrides, shallow-merges per category, and writes back.
+ */
+function stashVersionOverrides(ctx: RequestContext, versions: VersionOverrides | undefined): void {
+  if (!versions) return;
+  const existingRaw = ctx.get(MASTRA_VERSIONS_KEY);
+  const existing =
+    existingRaw && typeof existingRaw === 'object' && !Array.isArray(existingRaw)
+      ? (existingRaw as VersionOverrides)
+      : undefined;
+  const merged = mergeVersionOverrides(existing, versions);
+  if (merged) {
+    ctx.set(MASTRA_VERSIONS_KEY, merged);
+  }
+}
 
 /**
  * Checks if a provider has its required API key environment variable(s) configured.
@@ -142,7 +162,7 @@ interface SerializedToolInput {
 }
 
 function resolveLazySchema(schema: unknown): unknown {
-  if (typeof schema === 'function') {
+  if (typeof schema === 'function' && !('~standard' in schema)) {
     return resolveLazySchema(schema());
   }
   return schema;
@@ -1026,7 +1046,7 @@ export const GENERATE_AGENT_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;
+      const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
 
       validateBody({ messages });
 
@@ -1040,6 +1060,9 @@ export const GENERATE_AGENT_ROUTE = createRoute({
           }
         }
       }
+
+      // Stash version overrides from body onto requestContext for sub-agent resolution
+      stashVersionOverrides(serverRequestContext, versions);
 
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
@@ -1319,7 +1342,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
       // but it interferes with llm providers tool handling, so we remove them
       sanitizeBody(params, ['tools']);
 
-      const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;
+      const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
       validateBody({ messages });
 
       // Merge body's requestContext values into the server's RequestContext instance
@@ -1332,6 +1355,9 @@ export const STREAM_GENERATE_ROUTE = createRoute({
           }
         }
       }
+
+      // Stash version overrides from body onto requestContext for sub-agent resolution
+      stashVersionOverrides(serverRequestContext, versions);
 
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
@@ -1427,6 +1453,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
 
       const streamResult = await agent.approveToolCall({
         ...params,
+        requestContext,
         abortSignal,
       });
 
@@ -1471,6 +1498,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
 
       const streamResult = await agent.declineToolCall({
         ...params,
+        requestContext,
         abortSignal,
       });
 
@@ -1514,6 +1542,7 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
 
       const result = await agent.approveToolCallGenerate({
         ...params,
+        requestContext,
         abortSignal,
       });
 
@@ -1557,6 +1586,7 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
 
       const result = await agent.declineToolCallGenerate({
         ...params,
+        requestContext,
         abortSignal,
       });
 

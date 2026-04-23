@@ -3,16 +3,11 @@ title: 'Mastra Code'
 description: 'Mastra Code is a terminal-based AI coding agent built with Mastra. It provides multi-model support, persistent conversations, coding tools, and a polished TUI.'
 packages:
   - 'mastracode'
-slug: /
 ---
-
-import Steps from '@site/src/components/Steps';
-import StepItem from '@site/src/components/StepItem';
-import YouTube from '@site/src/components/YouTube';
 
 # Mastra Code
 
-Mastra Code is a terminal-based AI coding agent built on Mastra's [Harness](https://mastra.ai/reference/harness/harness-class), [Agent](https://mastra.ai/docs/agents/overview), and [Memory](https://mastra.ai/docs/memory/overview) primitives. It runs in your terminal, connects to 70+ AI models, and provides tools for reading, searching, editing, and executing code.
+Mastra Code is a terminal-based AI coding agent built on Mastra's [Harness](https://mastra.ai/reference/harness/harness-class), [Agent](https://mastra.ai/docs/agents/overview), and [Memory](https://mastra.ai/docs/memory/overview) primitives. It runs in your terminal, connects to thousands of AI models, and provides tools for reading, searching, editing, and executing code.
 
 Mastra Code organizes its capabilities around these areas:
 
@@ -59,9 +54,13 @@ Mastra Code requires Node.js 22.13.0 or later.
   </StepItem>
 
   <StepItem>
-    Set an API key for your preferred provider (e.g. `export ANTHROPIC_API_KEY=sk-ant-...`), or run `/login` to
-    authenticate with an Anthropic or OpenAI subscription. See
-    [Configuration](/configuration#authentication) for all supported providers.
+    On your first startup, Mastra Code starts an onboarding wizard to help you connect and choose your models. You can always rerun this with the `/setup` command.
+
+    In the first step, log in to Anthropic or OpenAI through OAuth. Alternatively, skip this step to later authenticate with an API key. Next, choose models for each mode (you can later switch models with `/models`). When you select a model from the model selector that doesn't have an API key configured, Mastra Code prompts you to enter one.
+
+    By default, Mastra Code uses `google/gemini-2.5-flash` for its Observational Memory models. In the next step, you can choose a different model or continue using Gemini Flash. You can later switch this setting with the `/om` command.
+
+    In the last step, choose whether you want to run in "YOLO" mode or not. You're all set up with Mastra Code!
   </StepItem>
 
   <StepItem>
@@ -78,15 +77,27 @@ Mastra Code provides built-in slash commands for managing sessions and settings:
 | `/new` | Start a new conversation thread |
 | `/clone` | Clone the current thread (with optional rename) |
 | `/threads` | List all threads for this project |
-| `/models` | Select a different AI model |
-| `/mode` | Switch between Build, Plan, and Fast modes |
-| `/cost` | Show token usage for the current conversation |
-| `/login` | Authenticate with OAuth providers |
-| `/logout` | Log out from a provider |
+| `/thread` | Show current thread info |
+| `/name` | Rename the current thread |
+| `/models` | Switch model pack |
+| `/mode` | Switch or list modes |
+| `/permissions` | Configure tool approval permissions |
 | `/settings` | Open the settings panel |
-| `/theme` | Switch color theme (auto, dark, or light) |
-| `/sandbox` | Add external directories to the allowed path list |
-| `/diff` | Show files modified in the current session |
+| `/om` | Configure Observational Memory |
+| `/skills` | List available skills |
+| `/cost` | Show token usage and costs |
+| `/diff` | Show modified files or git diff |
+| `/sandbox` | Manage sandbox allowed paths |
+| `/review` | Review a GitHub pull request |
+| `/report-issue` | Open or browse mastracode issues |
+| `/login` | Authenticate with OAuth provider |
+| `/logout` | Log out from an OAuth provider |
+| `/setup` | Run the setup wizard |
+| `/theme` | Switch color theme (auto/dark/light) |
+| `/browser` | Configure browser automation |
+| `/update` | Check for and install updates |
+| `/hooks` | Show/reload configured hooks |
+| `/mcp` | Show/reload MCP connections |
 | `/help` | Show available commands |
 | `/exit` | Exit the TUI |
 

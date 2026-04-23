@@ -1,4 +1,4 @@
-import { TraceStatus } from '@mastra/core/storage';
+import { TraceStatus } from '@internal-temp/core/index';
 import type { ListTracesResponse, SpanRecord } from '@mastra/core/storage';
 import {
   Button,
@@ -426,7 +426,7 @@ export function AgentTracesPanel({
     refetchInterval: query => (is403ForbiddenError(query.state.error) ? false : 3000),
   });
 
-  const traces: TraceSpan[] = tracesData ?? [];
+  const traces = useMemo<TraceSpan[]>(() => tracesData ?? [], [tracesData]);
 
   // Client-side search filter
   const filteredTraces = useMemo(() => {
@@ -448,10 +448,10 @@ export function AgentTracesPanel({
     }
   }, [isEndOfListInView, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  // Selected trace detail query
-  const { data: selectedTrace, isLoading: isSelectedTraceLoading } = useQuery({
-    queryKey: ['agent-trace', selectedTraceId],
-    queryFn: () => client.getTrace(selectedTraceId!),
+  // Selected trace detail query (lightweight — only fetch fields needed for timeline)
+  const { data: selectedTraceLight, isLoading: isSelectedTraceLoading } = useQuery({
+    queryKey: ['agent-trace-light', selectedTraceId],
+    queryFn: () => client.getTraceLight(selectedTraceId!),
     enabled: Boolean(selectedTraceId),
     refetchInterval: 3000,
   });
@@ -676,7 +676,7 @@ export function AgentTracesPanel({
           setDialogIsOpen(true);
         },
       }),
-    [displayTraces, selectedTraceId],
+    [buildTraceUrl, displayTraces, navigate, selectedTraceId],
   );
 
   const toPreviousTrace = useMemo(
@@ -690,7 +690,7 @@ export function AgentTracesPanel({
           setDialogIsOpen(true);
         },
       }),
-    [displayTraces, selectedTraceId],
+    [buildTraceUrl, displayTraces, navigate, selectedTraceId],
   );
 
   const gridColumns = scorerActive ? GRID_COLUMNS_WITH_SCORE : GRID_COLUMNS;
@@ -846,9 +846,8 @@ export function AgentTracesPanel({
 
       {selectedTraceId && dialogIsOpen && (
         <TraceDialog
-          traceSpans={selectedTrace?.spans}
+          traceSpans={selectedTraceLight?.spans}
           traceId={selectedTraceId}
-          traceDetails={selectedTrace?.spans?.find((s: SpanRecord) => s.traceId === selectedTraceId && !s.parentSpanId)}
           isOpen={dialogIsOpen}
           onClose={() => {
             navigate(buildTraceUrl());

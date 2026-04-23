@@ -1,24 +1,28 @@
-import type { SpanRecord } from '@mastra/core/storage';
-import { Button, ButtonWithTooltip, DataKeysAndValues, DataPanel, Icon, ButtonsGroup } from '@mastra/playground-ui';
-import { format } from 'date-fns';
-import { CircleGaugeIcon, ChevronsDownUpIcon, ChevronsUpDownIcon, SaveIcon } from 'lucide-react';
+import { Button, ButtonWithTooltip, DataPanel, Icon, ButtonsGroup, truncateString } from '@mastra/playground-ui';
+import { CircleGaugeIcon, ChevronsDownUpIcon, ChevronsUpDownIcon, Link2Icon, SaveIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
-import { useTraceSpans } from '../hooks/use-trace-spans';
+import { useTraceLightSpans } from '../hooks/use-trace-light-spans';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
+import { TraceKeysAndValues } from './trace-keys-and-values';
 import { TraceTimeline } from './trace-timeline';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
+import { Link } from '@/lib/link';
+
+export type TraceDataPanelPlacement = 'traces-list' | 'trace-page';
 
 export interface TraceDataPanelProps {
   traceId: string;
   onClose: () => void;
-  onSpanSelect?: (span: SpanRecord | undefined) => void;
+  onSpanSelect?: (spanId: string | undefined) => void;
   onEvaluateTrace?: () => void;
   initialSpanId?: string | null;
   onPrevious?: () => void;
   onNext?: () => void;
   collapsed?: boolean;
   onCollapsedChange?: (collapsed: boolean) => void;
+  placement: TraceDataPanelPlacement;
+  timelineChartWidth?: 'wide' | 'default';
 }
 
 export function TraceDataPanel({
@@ -31,30 +35,41 @@ export function TraceDataPanel({
   onNext,
   collapsed: controlledCollapsed,
   onCollapsedChange,
+  placement,
+  timelineChartWidth = 'default',
 }: TraceDataPanelProps) {
+  const isOnTracePage = placement === 'trace-page';
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const collapsed = controlledCollapsed ?? internalCollapsed;
   const setCollapsed = onCollapsedChange ?? setInternalCollapsed;
 
   const contentRef = useRef<HTMLDivElement>(null);
-  const { data: traceData, isLoading } = useTraceSpans(traceId);
+  const { data: traceLight, isLoading } = useTraceLightSpans(traceId);
+  const spans = traceLight?.spans;
   const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(initialSpanId ?? undefined);
 
   // Sync selected span when initialSpanId or trace data changes
   useEffect(() => {
-    if (initialSpanId && traceData?.spans) {
-      const span = traceData.spans.find(s => s.spanId === initialSpanId);
-      if (span) {
-        setSelectedSpanId(initialSpanId);
-        onSpanSelect?.(span);
-        return;
-      }
+    // No span requested: clear immediately.
+    if (!initialSpanId) {
+      setSelectedSpanId(undefined);
+      onSpanSelect?.(undefined);
+      return;
     }
-    // Clear stale selection when initialSpanId is null/missing or span not found
-    setSelectedSpanId(undefined);
-    onSpanSelect?.(undefined);
+    // Span requested: wait for trace data before deciding so an in-flight
+    // fetch doesn't wipe a URL-provided selection.
+    if (!spans) return;
+
+    const found = spans.find(s => s.spanId === initialSpanId);
+    if (found) {
+      setSelectedSpanId(initialSpanId);
+      onSpanSelect?.(initialSpanId);
+    } else {
+      setSelectedSpanId(undefined);
+      onSpanSelect?.(undefined);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialSpanId, traceData?.spans]);
+  }, [initialSpanId, spans]);
 
   // Scroll the selected span into view within the timeline
   useEffect(() => {
@@ -63,7 +78,7 @@ export function TraceDataPanel({
     el?.scrollIntoView({ block: 'nearest' });
   }, [selectedSpanId]);
 
-  const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(traceData?.spans ?? []), [traceData?.spans]);
+  const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(spans ?? []), [spans]);
 
   const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>([]);
 
@@ -73,43 +88,57 @@ export function TraceDataPanel({
     }
   }, [hierarchicalSpans]);
 
-  const rootSpan = useMemo(() => traceData?.spans?.find(s => s.parentSpanId == null), [traceData?.spans]);
+  const rootSpan = useMemo(() => spans?.find(s => s.parentSpanId == null), [spans]);
   const [datasetDialogOpen, setDatasetDialogOpen] = useState(false);
 
   const handleSpanClick = (id: string) => {
     const newId = selectedSpanId === id ? undefined : id;
     setSelectedSpanId(newId);
-    const span = newId ? traceData?.spans?.find(s => s.spanId === newId) : undefined;
-    onSpanSelect?.(span);
+    onSpanSelect?.(newId);
   };
-
-  const KV = DataKeysAndValues;
 
   return (
     <>
       <DataPanel collapsed={collapsed}>
         <DataPanel.Header>
-          <DataPanel.Heading>
-            Trace <b># {traceId}</b>
-          </DataPanel.Heading>
-          <ButtonsGroup className="ml-auto shrink-0">
-            {onCollapsedChange && (
-              <ButtonWithTooltip
-                size="md"
-                tooltipContent={collapsed ? 'Expand panel' : 'Collapse panel'}
-                onClick={() => setCollapsed(!collapsed)}
-              >
-                {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
-              </ButtonWithTooltip>
-            )}
-            <DataPanel.NextPrevNav
-              onPrevious={onPrevious}
-              onNext={onNext}
-              previousLabel="Previous trace"
-              nextLabel="Next trace"
-            />
-            <DataPanel.CloseButton onClick={onClose} />
-          </ButtonsGroup>
+          {isOnTracePage ? (
+            <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
+          ) : (
+            <>
+              <DataPanel.Heading>
+                Trace <b># {truncateString(traceId, 12)}</b>
+              </DataPanel.Heading>
+              <ButtonsGroup className="ml-auto shrink-0">
+                {onCollapsedChange && (
+                  <ButtonWithTooltip
+                    size="md"
+                    tooltipContent={collapsed ? 'Expand panel' : 'Collapse panel'}
+                    onClick={() => setCollapsed(!collapsed)}
+                  >
+                    {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
+                  </ButtonWithTooltip>
+                )}
+                <DataPanel.NextPrevNav
+                  onPrevious={onPrevious}
+                  onNext={onNext}
+                  previousLabel="Previous trace"
+                  nextLabel="Next trace"
+                />
+                {!isOnTracePage && (
+                  <ButtonWithTooltip
+                    as={Link}
+                    href={`/traces/${traceId}`}
+                    size="md"
+                    tooltipContent="Open trace page"
+                    aria-label="Open trace page"
+                  >
+                    <Link2Icon />
+                  </ButtonWithTooltip>
+                )}
+                <DataPanel.CloseButton onClick={onClose} />
+              </ButtonsGroup>
+            </>
+          )}
         </DataPanel.Header>
 
         {!collapsed &&
@@ -119,59 +148,26 @@ export function TraceDataPanel({
             <DataPanel.NoData>No spans found for this trace.</DataPanel.NoData>
           ) : (
             <DataPanel.Content ref={contentRef}>
-              {rootSpan && (
-                <KV className="mb-6" numOfCol={2}>
-                  {rootSpan.entityId && (
-                    <>
-                      <KV.Key>Entity Id</KV.Key>
-                      <KV.Value>{rootSpan.entityName || rootSpan.entityId}</KV.Value>
-                    </>
-                  )}
-                  {rootSpan.entityType && (
-                    <>
-                      <KV.Key>Entity Type</KV.Key>
-                      <KV.Value>{rootSpan.entityType}</KV.Value>
-                    </>
-                  )}
-                  <KV.Key>Status</KV.Key>
-                  <KV.Value>{(rootSpan.attributes?.status as string) || '-'}</KV.Value>
-                  {rootSpan.startedAt && rootSpan.endedAt && (
-                    <>
-                      <KV.Key>Duration</KV.Key>
-                      <KV.Value>{`${(new Date(rootSpan.endedAt).getTime() - new Date(rootSpan.startedAt).getTime()).toLocaleString()}ms`}</KV.Value>
-                    </>
-                  )}
-                  {rootSpan.startedAt && (
-                    <>
-                      <KV.Key>Started at</KV.Key>
-                      <KV.Value>{format(new Date(rootSpan.startedAt), 'MMM dd, h:mm:ss.SSS aaa')}</KV.Value>
-                    </>
-                  )}
-                  {rootSpan.endedAt && (
-                    <>
-                      <KV.Key>Ended at</KV.Key>
-                      <KV.Value>{format(new Date(rootSpan.endedAt), 'MMM dd, h:mm:ss.SSS aaa')}</KV.Value>
-                    </>
-                  )}
-                </KV>
-              )}
+              {!isOnTracePage && rootSpan && <TraceKeysAndValues rootSpan={rootSpan} className="mb-6" />}
 
-              <div className="mb-6 flex justify-between items-center gap-4">
-                {onEvaluateTrace && (
-                  <Button size="sm" onClick={onEvaluateTrace}>
+              {!isOnTracePage && (
+                <div className="mb-6 flex justify-between items-center gap-4">
+                  {onEvaluateTrace && (
+                    <Button size="sm" onClick={onEvaluateTrace}>
+                      <Icon>
+                        <CircleGaugeIcon />
+                      </Icon>
+                      Evaluate Trace
+                    </Button>
+                  )}
+                  <Button size="sm" onClick={() => setDatasetDialogOpen(true)}>
                     <Icon>
-                      <CircleGaugeIcon />
+                      <SaveIcon />
                     </Icon>
-                    Evaluate Trace
+                    Save as Dataset Item
                   </Button>
-                )}
-                <Button size="sm" onClick={() => setDatasetDialogOpen(true)}>
-                  <Icon>
-                    <SaveIcon />
-                  </Icon>
-                  Save as Dataset Item
-                </Button>
-              </div>
+                </div>
+              )}
 
               <TraceTimeline
                 hierarchicalSpans={hierarchicalSpans}
@@ -179,13 +175,14 @@ export function TraceDataPanel({
                 selectedSpanId={selectedSpanId}
                 expandedSpanIds={expandedSpanIds}
                 setExpandedSpanIds={setExpandedSpanIds}
+                chartWidth={timelineChartWidth}
               />
             </DataPanel.Content>
           ))}
       </DataPanel>
 
       <TraceAsItemDialog
-        traceDetails={rootSpan}
+        rootSpanId={rootSpan?.spanId}
         traceId={traceId}
         isOpen={datasetDialogOpen}
         onClose={() => setDatasetDialogOpen(false)}

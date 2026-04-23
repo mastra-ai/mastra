@@ -67,6 +67,7 @@ function getMockLogEvent(overrides: Partial<LogEvent['log']> = {}): LogEvent {
   return {
     type: 'log',
     log: {
+      logId: 'log-cloud-test',
       timestamp: new Date('2026-04-06T12:00:00.000Z'),
       traceId: 'trace-log-123',
       spanId: 'span-log-123',
@@ -88,6 +89,7 @@ function getMockMetricEvent(overrides: Partial<MetricEvent['metric']> = {}): Met
   return {
     type: 'metric',
     metric: {
+      metricId: 'metric-cloud-test',
       timestamp: new Date('2026-04-06T12:01:00.000Z'),
       traceId: 'trace-metric-123',
       spanId: 'span-metric-123',
@@ -109,6 +111,7 @@ function getMockScoreEvent(overrides: Partial<ScoreEvent['score']> = {}): ScoreE
   return {
     type: 'score',
     score: {
+      scoreId: 'score-cloud-test',
       timestamp: new Date('2026-04-06T12:02:00.000Z'),
       traceId: 'trace-score-123',
       spanId: 'span-score-123',
@@ -131,6 +134,7 @@ function getMockFeedbackEvent(overrides: Partial<FeedbackEvent['feedback']> = {}
   return {
     type: 'feedback',
     feedback: {
+      feedbackId: 'feedback-cloud-test',
       timestamp: new Date('2026-04-06T12:03:00.000Z'),
       traceId: 'trace-feedback-123',
       spanId: 'span-feedback-123',
@@ -899,6 +903,26 @@ describe('CloudExporter', () => {
     beforeEach(() => {
       vi.clearAllMocks();
       mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200 }));
+    });
+
+    it('should default to observability.mastra.ai when no endpoint override is configured', async () => {
+      const derivedExporter = new CloudExporter({
+        accessToken: testJWT,
+      });
+
+      await derivedExporter.onMetricEvent(getMockMetricEvent());
+      await derivedExporter.flush();
+
+      expect(mockFetchWithRetry).toHaveBeenCalledWith(
+        'https://observability.mastra.ai/ai/metrics/publish',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.any(String),
+        }),
+        3,
+      );
+
+      await derivedExporter.shutdown();
     });
 
     it('should upload logs, metrics, scores, and feedback to their derived endpoints', async () => {

@@ -1,7 +1,9 @@
-import { Container } from '@mariozechner/pi-tui';
+import { Container, Text } from '@mariozechner/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SystemReminderComponent } from '../../components/system-reminder.js';
+import { TemporalGapComponent } from '../../components/temporal-gap.js';
+import { UserMessageComponent } from '../../components/user-message.js';
 import type { TUIState } from '../../state.js';
 import { handleMessageUpdate } from '../message.js';
 import type { EventHandlerContext } from '../types.js';
@@ -31,6 +33,7 @@ describe('handleMessageUpdate system reminders', () => {
       allToolComponents: [],
       allSlashCommandComponents: [],
       allSystemReminderComponents: [],
+      messageComponentsById: new Map(),
       pendingSubagents: new Map(),
       hideThinkingBlock: false,
       toolOutputExpanded: false,
@@ -104,5 +107,69 @@ describe('handleMessageUpdate system reminders', () => {
 
     handleMessageUpdate(ctx, secondMessage);
     expect(state.chatContainer.children).toHaveLength(2);
+  });
+
+  it('inserts temporal-gap reminders before the preceded user message', () => {
+    const previousMessage = new Text('previous', 0, 0);
+    const userMessage = new Text('user', 0, 0);
+    const streamingMessage = new Text('streaming', 0, 0);
+
+    state.chatContainer.addChild(previousMessage);
+    state.chatContainer.addChild(userMessage);
+    state.chatContainer.addChild(streamingMessage);
+    state.messageComponentsById.set('user-1', userMessage);
+    state.streamingComponent = streamingMessage as unknown as TUIState['streamingComponent'];
+
+    handleMessageUpdate(
+      ctx,
+      createAssistantMessage([
+        {
+          type: 'system_reminder',
+          reminderType: 'temporal-gap',
+          message: '1 hour later — 04/20/2026, 03:35 PM PDT',
+          gapText: '1 hour later',
+          precedesMessageId: 'user-1',
+        } as never,
+      ]),
+    );
+
+    expect(state.chatContainer.children).toHaveLength(4);
+    expect(state.chatContainer.children[1]).toBeInstanceOf(TemporalGapComponent);
+    expect((state.chatContainer.children[1] as TemporalGapComponent).render(80).join('\n')).toContain(
+      '⏳ 1 hour later',
+    );
+    expect(state.chatContainer.children[2]).toBe(userMessage);
+    expect(state.chatContainer.children[3]).toBe(streamingMessage);
+  });
+
+  it('falls back to the latest rendered user message when a streamed temporal-gap anchor id is not mapped yet', () => {
+    const earlierUserMessage = new UserMessageComponent('earlier user');
+    const optimisticUserMessage = new UserMessageComponent('optimistic user');
+    const streamingMessage = new Text('streaming', 0, 0);
+
+    state.chatContainer.addChild(earlierUserMessage);
+    state.chatContainer.addChild(optimisticUserMessage);
+    state.chatContainer.addChild(streamingMessage);
+    state.messageComponentsById.set('older-user-id', earlierUserMessage);
+    state.streamingComponent = streamingMessage as unknown as TUIState['streamingComponent'];
+
+    handleMessageUpdate(
+      ctx,
+      createAssistantMessage([
+        {
+          type: 'system_reminder',
+          reminderType: 'temporal-gap',
+          message: '30 minutes later — 04/20/2026, 03:35 PM PDT',
+          gapText: '30 minutes later',
+          precedesMessageId: 'actual-user-id-from-core',
+        } as never,
+      ]),
+    );
+
+    expect(state.chatContainer.children).toHaveLength(4);
+    expect(state.chatContainer.children[0]).toBe(earlierUserMessage);
+    expect(state.chatContainer.children[1]).toBeInstanceOf(TemporalGapComponent);
+    expect(state.chatContainer.children[2]).toBe(optimisticUserMessage);
+    expect(state.chatContainer.children[3]).toBe(streamingMessage);
   });
 });

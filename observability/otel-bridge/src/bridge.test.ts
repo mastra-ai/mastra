@@ -9,10 +9,32 @@
 
 import type { CreateSpanOptions } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
-import { describe, expect, it } from 'vitest';
+import { isSpanContextValid, trace } from '@opentelemetry/api';
+import { tracing } from '@opentelemetry/sdk-node';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { OtelBridge } from './bridge.js';
 
+// OTEL invalid (no-op) IDs, returned when no SDK / tracer provider is registered
+const INVALID_SPAN_ID = '0000000000000000';
+const INVALID_TRACE_ID = '00000000000000000000000000000000';
+
 describe('OtelBridge', () => {
+  // Register a real (in-memory) tracer provider for tests that need the bridge
+  // to produce valid span contexts. Without this, the OTEL API falls back to a
+  // no-op tracer whose spans carry all-zero IDs (see issue #15589 regression
+  // tests below).
+  let tracerProvider: tracing.BasicTracerProvider;
+
+  beforeAll(() => {
+    tracerProvider = new tracing.BasicTracerProvider();
+    trace.setGlobalTracerProvider(tracerProvider);
+  });
+
+  afterAll(async () => {
+    await tracerProvider.shutdown();
+    trace.disable();
+  });
+
   describe('createSpan', () => {
     it('should return spanIds with valid format when creating root span', () => {
       const bridge = new OtelBridge();
@@ -31,6 +53,10 @@ describe('OtelBridge', () => {
       // OTEL span IDs are 16 hex chars, trace IDs are 32 hex chars
       expect(result?.spanId).toMatch(/^[0-9a-f]{16}$/);
       expect(result?.traceId).toMatch(/^[0-9a-f]{32}$/);
+      // The all-zero IDs also match the hex regex above, so assert explicitly
+      // that we got a valid (non-no-op) span context.
+      expect(result?.spanId).not.toBe(INVALID_SPAN_ID);
+      expect(result?.traceId).not.toBe(INVALID_TRACE_ID);
 
       bridge.shutdown();
     });
@@ -44,6 +70,95 @@ describe('OtelBridge', () => {
       expect(result).toBeUndefined();
 
       bridge.shutdown();
+    });
+
+    // Regression tests for https://github.com/mastra-ai/mastra/issues/15589
+    //
+    // When no OTEL SDK / tracer provider is registered, `trace.getTracer(...)`
+    // returns a no-op tracer whose spans have INVALID_SPAN_ID / INVALID_TRACE_ID.
+    // The bridge must NOT hand those zero IDs back to core — doing so causes all
+    // spans to collapse onto the same ID, which breaks TrackingExporter's
+    // parent-matching queue and pegs CPU at ~100% via setImmediate reschedules.
+    describe('when no OTEL SDK is registered', () => {
+      // Tear down the suite-level provider so the OTEL API falls back to its
+      // no-op tracer, exactly reproducing a user who forgot to wire up sdk-node.
+      beforeAll(() => {
+        trace.disable();
+      });
+
+      afterAll(() => {
+        trace.setGlobalTracerProvider(tracerProvider);
+      });
+
+      it('should return undefined (not zero IDs) so core can generate valid IDs', () => {
+        // In this test environment, no SDK / tracer provider is registered,
+        // so the OTEL API is in its no-op state. This mirrors a real user
+        // who configures OtelBridge without also wiring up @opentelemetry/sdk-node.
+        const bridge = new OtelBridge();
+
+        const options: CreateSpanOptions<SpanType.AGENT_RUN> = {
+          type: SpanType.AGENT_RUN,
+          name: 'test-agent',
+          attributes: { agentId: 'test' },
+        };
+
+        const result = bridge.createSpan(options);
+
+        // Expected: bridge detects invalid span context and returns undefined,
+        // letting DefaultSpan fall through to its own ID generator.
+        expect(result).toBeUndefined();
+
+        bridge.shutdown();
+      });
+
+      it('should not return the invalid (all-zero) OTEL span/trace IDs', () => {
+        const bridge = new OtelBridge();
+
+        const options: CreateSpanOptions<SpanType.AGENT_RUN> = {
+          type: SpanType.AGENT_RUN,
+          name: 'test-agent',
+          attributes: { agentId: 'test' },
+        };
+
+        const result = bridge.createSpan(options);
+
+        // If the bridge does return something, it must be a valid span context.
+        if (result) {
+          expect(result.spanId).not.toBe(INVALID_SPAN_ID);
+          expect(result.traceId).not.toBe(INVALID_TRACE_ID);
+          expect(
+            isSpanContextValid({
+              spanId: result.spanId,
+              traceId: result.traceId,
+              traceFlags: 0,
+            }),
+          ).toBe(true);
+        }
+
+        bridge.shutdown();
+      });
+
+      it('should consistently return undefined across multiple createSpan calls', () => {
+        // With the bug, every span shared spanId "0000000000000000" and
+        // traceId "00...00", which is what caused TrackingExporter to
+        // infinite-loop trying to match children to parents. The fix makes
+        // every call return undefined so core generates unique IDs itself.
+        const bridge = new OtelBridge();
+
+        const options: CreateSpanOptions<SpanType.AGENT_RUN> = {
+          type: SpanType.AGENT_RUN,
+          name: 'test-agent',
+          attributes: { agentId: 'test' },
+        };
+
+        const a = bridge.createSpan(options);
+        const b = bridge.createSpan(options);
+
+        expect(a).toBeUndefined();
+        expect(b).toBeUndefined();
+
+        bridge.shutdown();
+      });
     });
   });
 

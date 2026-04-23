@@ -3,6 +3,9 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { MastraError } from '../../error';
+import type { IMastraLogger } from '../../logger';
+import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
@@ -1653,9 +1656,16 @@ describe('savePerStep should persist messages during step execution (issue #1398
           (part as any).toolInvocation?.state === 'result',
       ) as any;
 
+    const persistedAssistantText = assistantMessages
+      .flatMap(message => message.content.parts ?? [])
+      .filter(part => part.type === 'text')
+      .map(part => part.text)
+      .join('');
+
     expect(toolResultPart).toBeDefined();
     expect(toolResultPart.toolInvocation.result).toEqual(rawResult);
     expect(toolResultPart.providerMetadata?.mastra?.modelOutput).toEqual(modelOutput);
+    expect(persistedAssistantText).toContain('Response after tool');
   });
 
   it('should persist messages from completed steps when stream is aborted', async () => {
@@ -1883,6 +1893,92 @@ describe('AGENT_RUN span must be ended on LLM errors', () => {
       expect(agentRunSpan).toBeDefined();
       expect(agentRunSpan.error).toHaveBeenCalled();
       expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endSpan: true });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('should synthesize a MastraError when the stream finishes with finishReason error but no error payload', async () => {
+    const { spy, getAgentRunSpan } = await mockGetOrCreateSpan();
+
+    try {
+      const logger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+        getTransports: vi.fn().mockReturnValue(new Map()),
+        listLogs: vi.fn().mockResolvedValue({ logs: [], total: 0, page: 1, perPage: 10, hasMore: false }),
+        listLogsByRunId: vi.fn().mockResolvedValue({ logs: [], total: 0, page: 1, perPage: 10, hasMore: false }),
+      } satisfies IMastraLogger;
+      const mastra = new Mastra({ logger });
+
+      const errorFinishModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [],
+          finishReason: 'error',
+          usage: { inputTokens: 10, outputTokens: 0, totalTokens: 10 },
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'gemini-2.5-flash',
+              timestamp: new Date(0),
+            },
+            {
+              type: 'finish',
+              finishReason: 'error',
+              usage: { inputTokens: 10, outputTokens: 0, totalTokens: 10 },
+            },
+          ]),
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'test-finish-reason-error-without-payload',
+        name: 'Test Finish Reason Error Without Payload',
+        model: errorFinishModel,
+        instructions: 'You are a helpful assistant.',
+        mastra,
+      });
+
+      const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+
+      await output.consumeStream();
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const agentRunSpan = getAgentRunSpan();
+      expect(agentRunSpan).toBeDefined();
+      expect(agentRunSpan.error).toHaveBeenCalled();
+      expect(agentRunSpan.error.mock.calls[0][0]).toMatchObject({ endSpan: true });
+      expect(agentRunSpan.error.mock.calls[0][0].error).toBeInstanceOf(MastraError);
+      expect(agentRunSpan.error.mock.calls[0][0].error.message).toBe(
+        'Agent stream finished with finishReason "error" but no error payload was provided',
+      );
+      expect(logger.error).toHaveBeenCalledWith(
+        'Error in agent stream',
+        expect.objectContaining({
+          error: expect.any(MastraError),
+          modelId: 'mock-model-id',
+          provider: 'mock-provider',
+          runId: expect.any(String),
+        }),
+      );
+      const loggedError = (logger.error as ReturnType<typeof vi.fn>).mock.calls[0][1]?.error;
+      expect(loggedError).toBeInstanceOf(MastraError);
+      expect(loggedError).not.toBeUndefined();
+      expect(loggedError.message).toBe(
+        'Agent stream finished with finishReason "error" but no error payload was provided',
+      );
     } finally {
       spy.mockRestore();
     }
