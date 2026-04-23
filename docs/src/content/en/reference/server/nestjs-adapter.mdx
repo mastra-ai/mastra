@@ -30,9 +30,9 @@ npm install @mastra/nestjs@latest
 ## Usage example
 
 ```typescript title="src/app.module.ts"
-import { Module } from "@nestjs/common";
-import { MastraModule } from "@mastra/nestjs";
-import { mastra } from "./mastra";
+import { Module } from '@nestjs/common'
+import { MastraModule } from '@mastra/nestjs'
+import { mastra } from './mastra'
 
 @Module({
   imports: [
@@ -51,15 +51,15 @@ export class AppModule {}
 :::
 
 ```typescript title="src/main.ts"
-import { NestFactory } from "@nestjs/core";
-import { AppModule } from "./app.module";
+import { NestFactory } from '@nestjs/core'
+import { AppModule } from './app.module'
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  await app.listen(3000);
+  const app = await NestFactory.create(AppModule)
+  await app.listen(3000)
 }
 
-bootstrap();
+bootstrap()
 ```
 
 By default, Mastra routes mount under `/api`. Use `prefix` to change it.
@@ -68,97 +68,97 @@ By default, Mastra routes mount under `/api`. Use `prefix` to change it.
 
 <PropertiesTable
   content={[
-    {
-      name: "mastra",
-      type: "Mastra",
-      description: "Mastra instance",
-      isOptional: false,
-    },
-    {
-      name: "prefix",
-      type: "string",
-      description: "Route path prefix (e.g., `/api/v2`)",
-      isOptional: true,
-      defaultValue: "`/api`",
-    },
-    {
-      name: "rateLimitOptions",
-      type: "{ enabled?: boolean; defaultLimit?: number; windowMs?: number; generateLimit?: number }",
-      description: "Rate limiting config (enabled by default)",
-      isOptional: true,
-    },
-    {
-      name: "shutdownOptions",
-      type: "{ timeoutMs?: number; notifyClients?: boolean }",
-      description: "Graceful shutdown configuration",
-      isOptional: true,
-    },
-    {
-      name: "bodyLimitOptions",
-      type: "{ maxSize?: number; maxFileSize?: number; tempDir?: string; allowedMimeTypes?: string[] }",
-      description: "Request body size limits",
-      isOptional: true,
-    },
-    {
-      name: "streamOptions",
-      type: "{ redact?: boolean; heartbeatMs?: number }",
-      description: "Streaming configuration",
-      isOptional: true,
-    },
-    {
-      name: "tracingOptions",
-      type: "{ enabled?: boolean; serviceName?: string }",
-      description: "OpenTelemetry tracing configuration",
-      isOptional: true,
-    },
-    {
-      name: "contextOptions",
-      type: "{ strict?: boolean; logWarnings?: boolean }",
-      description: "Request context parsing config",
-      isOptional: true,
-    },
-    {
-      name: "customRouteAuthConfig",
-      type: "Map<string, boolean>",
-      description: "Per-route auth overrides. Keys are `METHOD:PATH`.",
-      isOptional: true,
-    },
-    {
-      name: "tools",
-      type: "Record<string, Tool>",
-      description: "Registered tools for the server",
-      isOptional: true,
-    },
-    {
-      name: "taskStore",
-      type: "InMemoryTaskStore",
-      description: "Task store for A2A (Agent-to-Agent) operations",
-      isOptional: true,
-    },
-    {
-      name: "mcpOptions",
-      type: "{ serverless?: boolean; sessionIdGenerator?: () => string }",
-      description: "MCP transport options",
-      isOptional: true,
-    },
-    {
-      name: "auth",
-      type: "{ enabled?: boolean; allowQueryApiKey?: boolean }",
-      description:
-        "Enable Mastra token auth. Disabled by default — most NestJS apps use their own auth guards. Query-string `apiKey` auth is opt-in for backward compatibility.",
-      isOptional: true,
-      defaultValue: "`{ enabled: false }`",
-    },
-  ]}
+  {
+    name: 'mastra',
+    type: 'Mastra',
+    description: 'Mastra instance',
+    isOptional: false,
+  },
+  {
+    name: 'prefix',
+    type: 'string',
+    description: 'Route path prefix (e.g., `/api/v2`)',
+    isOptional: true,
+    defaultValue: '`/api`',
+  },
+  {
+    name: 'rateLimitOptions',
+    type: '{ enabled?: boolean; defaultLimit?: number; windowMs?: number; generateLimit?: number }',
+    description: 'Rate limiting config (enabled by default)',
+    isOptional: true,
+  },
+  {
+    name: 'shutdownOptions',
+    type: '{ timeoutMs?: number; notifyClients?: boolean }',
+    description: 'Graceful shutdown configuration',
+    isOptional: true,
+  },
+  {
+    name: 'bodyLimitOptions',
+    type: '{ maxSize?: number; maxFileSize?: number; tempDir?: string; allowedMimeTypes?: string[] }',
+    description: 'Request body size limits',
+    isOptional: true,
+  },
+  {
+    name: 'streamOptions',
+    type: '{ redact?: boolean; heartbeatMs?: number }',
+    description: 'Streaming configuration',
+    isOptional: true,
+  },
+  {
+    name: 'tracingOptions',
+    type: '{ enabled?: boolean; serviceName?: string }',
+    description: 'OpenTelemetry tracing configuration',
+    isOptional: true,
+  },
+  {
+    name: 'contextOptions',
+    type: '{ strict?: boolean; logWarnings?: boolean }',
+    description: 'Request context parsing config',
+    isOptional: true,
+  },
+  {
+    name: 'customRouteAuthConfig',
+    type: 'Map<string, boolean>',
+    description: 'Per-route auth overrides. Keys are `METHOD:PATH`.',
+    isOptional: true,
+  },
+  {
+    name: 'tools',
+    type: 'Record<string, Tool>',
+    description: 'Registered tools for the server',
+    isOptional: true,
+  },
+  {
+    name: 'taskStore',
+    type: 'InMemoryTaskStore',
+    description: 'Task store for A2A (Agent-to-Agent) operations',
+    isOptional: true,
+  },
+  {
+    name: 'mcpOptions',
+    type: '{ serverless?: boolean; sessionIdGenerator?: () => string }',
+    description: 'MCP transport options',
+    isOptional: true,
+  },
+  {
+    name: 'auth',
+    type: '{ enabled?: boolean; allowQueryApiKey?: boolean }',
+    description:
+      'Enable Mastra token auth. Disabled by default — most NestJS apps use their own auth guards. Query-string `apiKey` auth is opt-in for backward compatibility.',
+    isOptional: true,
+    defaultValue: '`{ enabled: false }`',
+  },
+]}
 />
 
 ## Async registration
 
 ```typescript title="src/app.module.ts"
-import { Module } from "@nestjs/common";
-import { ConfigModule, ConfigService } from "@nestjs/config";
-import { MastraModule } from "@mastra/nestjs";
-import { Mastra } from "@mastra/core/mastra";
+import { Module } from '@nestjs/common'
+import { ConfigModule, ConfigService } from '@nestjs/config'
+import { MastraModule } from '@mastra/nestjs'
+import { Mastra } from '@mastra/core/mastra'
 
 @Module({
   imports: [
@@ -169,13 +169,13 @@ import { Mastra } from "@mastra/core/mastra";
         mastra: new Mastra({
           agents: {
             greeter: {
-              name: "greeter",
-              description: "Greets the user",
-              model: config.get("MASTRA_MODEL", "openai/gpt-4o-mini"),
+              name: 'greeter',
+              description: 'Greets the user',
+              model: config.get('MASTRA_MODEL', 'openai/gpt-4o-mini'),
             },
           },
         }),
-        prefix: config.get("MASTRA_PREFIX", "/api"),
+        prefix: config.get('MASTRA_PREFIX', '/api'),
       }),
       inject: [ConfigService],
     }),
@@ -189,9 +189,9 @@ export class AppModule {}
 Use the `MASTRA` token or `MastraService` in your services:
 
 ```typescript
-import { Injectable, Inject } from "@nestjs/common";
-import { MASTRA, MastraService } from "@mastra/nestjs";
-import type { Mastra } from "@mastra/core/mastra";
+import { Injectable, Inject } from '@nestjs/common'
+import { MASTRA, MastraService } from '@mastra/nestjs'
+import type { Mastra } from '@mastra/core/mastra'
 
 @Injectable()
 export class AgentService {

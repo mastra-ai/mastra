@@ -61,9 +61,9 @@ npm install @mastra/nestjs@latest
 Open `src/app.module.ts` and register `MastraModule`:
 
 ```typescript title="src/app.module.ts"
-import { Module } from "@nestjs/common";
-import { MastraModule } from "@mastra/nestjs";
-import { mastra } from "./mastra";
+import { Module } from '@nestjs/common'
+import { MastraModule } from '@mastra/nestjs'
+import { mastra } from './mastra'
 
 @Module({
   imports: [
@@ -106,23 +106,23 @@ The module exports two ways to access Mastra from your NestJS services: the `Mas
 `MastraService` is an injectable wrapper with convenience methods for common operations:
 
 ```typescript title="src/agent.service.ts"
-import { Injectable } from "@nestjs/common";
-import { MastraService } from "@mastra/nestjs";
+import { Injectable } from '@nestjs/common'
+import { MastraService } from '@mastra/nestjs'
 
 @Injectable()
 export class AgentService {
   constructor(private readonly mastraService: MastraService) {}
 
   async chat(agentId: string, message: string) {
-    const agent = this.mastraService.getAgent(agentId);
+    const agent = this.mastraService.getAgent(agentId)
     return agent.generate({
-      messages: [{ role: "user", content: message }],
-    });
+      messages: [{ role: 'user', content: message }],
+    })
   }
 
   async runWorkflow(workflowId: string, input: Record<string, unknown>) {
-    const workflow = this.mastraService.getWorkflow(workflowId);
-    return workflow.start({ inputData: input });
+    const workflow = this.mastraService.getWorkflow(workflowId)
+    return workflow.start({ inputData: input })
   }
 }
 ```
@@ -140,17 +140,17 @@ export class AgentService {
 If you need the `Mastra` instance directly (e.g., to access storage, memory, or other core APIs), inject it with the `MASTRA` token:
 
 ```typescript title="src/memory.service.ts"
-import { Injectable, Inject } from "@nestjs/common";
-import { MASTRA } from "@mastra/nestjs";
-import type { Mastra } from "@mastra/core/mastra";
+import { Injectable, Inject } from '@nestjs/common'
+import { MASTRA } from '@mastra/nestjs'
+import type { Mastra } from '@mastra/core/mastra'
 
 @Injectable()
 export class MemoryService {
   constructor(@Inject(MASTRA) private readonly mastra: Mastra) {}
 
   async getThreadMessages(threadId: string) {
-    const memory = this.mastra.getMemory();
-    return memory?.getMessages({ threadId });
+    const memory = this.mastra.getMemory()
+    return memory?.getMessages({ threadId })
   }
 }
 ```
@@ -163,7 +163,7 @@ You now have a working Mastra agent running inside NestJS. To extend the project
 
 - [Agents overview](/docs/agents/overview)
 - [Using tools](/docs/agents/using-tools)
-- [Agent memory](/docs/agents/agent-memory)
+- [Agent memory](/docs/memory/overview)
 
 For details on the NestJS integration:
 
