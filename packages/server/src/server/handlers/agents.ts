@@ -162,7 +162,7 @@ interface SerializedToolInput {
 }
 
 function resolveLazySchema(schema: unknown): unknown {
-  if (typeof schema === 'function') {
+  if (typeof schema === 'function' && !('~standard' in schema)) {
     return resolveLazySchema(schema());
   }
   return schema;

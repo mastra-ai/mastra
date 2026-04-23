@@ -1098,6 +1098,314 @@ Instructions for the new skill.`;
     });
   });
 
+  describe('maybeRefresh SKILL.md file mtime detection', () => {
+    /**
+     * Helper to mock stat with separate mtimes for directories vs files.
+     * This simulates the real filesystem behavior where editing a file's content
+     * updates the file's mtime but not its parent directory's mtime.
+     */
+    function mockSplitMtimeStat(filesystem: MockSkillSource, getDirMtime: () => Date, getFileMtime: () => Date) {
+      (filesystem.stat as ReturnType<typeof vi.fn>).mockImplementation(
+        async (path: string): Promise<SkillSourceStat> => {
+          const exists = await filesystem.exists(path);
+          if (!exists) {
+            throw new Error(`ENOENT: no such file or directory, stat '${path}'`);
+          }
+          const isFile = path.endsWith('.md');
+          const mtime = isFile ? getFileMtime() : getDirMtime();
+          return {
+            name: path.split('/').pop() || path,
+            type: isFile ? ('file' as const) : ('directory' as const),
+            size: 0,
+            createdAt: mtime,
+            modifiedAt: mtime,
+          };
+        },
+      );
+    }
+
+    it('should detect SKILL.md content changes even when directory mtime unchanged', async () => {
+      vi.useFakeTimers();
+      try {
+        // Separate mtimes for directories vs files
+        const dirMtime = new Date(Date.now() - 10000); // Old, never changes
+        let fileMtime = new Date(Date.now() - 10000); // Starts old, will be updated
+
+        const filesMap: Record<string, string> = {
+          'skills/test-skill/SKILL.md': `---
+name: bad-name
+description: A test skill with invalid name
+---
+# Test Skill
+Instructions here.`,
+        };
+
+        const filesystem = createMockFilesystem(filesMap);
+        mockSplitMtimeStat(
+          filesystem,
+          () => dirMtime,
+          () => fileMtime,
+        );
+
+        const skills = new WorkspaceSkillsImpl({
+          source: filesystem,
+          skills: ['skills'],
+          validateOnLoad: true,
+          checkSkillFileMtime: true, // Enable opt-in file mtime detection
+        });
+
+        // Initial discovery - skill has invalid name, should not be loaded
+        const initialList = await skills.list();
+        expect(initialList).toHaveLength(0);
+
+        // Advance past the staleness check cooldown
+        vi.advanceTimersByTime(WorkspaceSkillsImpl.STALENESS_CHECK_COOLDOWN + 100);
+
+        // Fix the SKILL.md content (only file mtime changes, not directory)
+        const fixedSkillMd = `---
+name: test-skill
+description: A test skill with valid name
+---
+# Test Skill
+Instructions here.`;
+        await filesystem.writeFile('skills/test-skill/SKILL.md', fixedSkillMd);
+
+        // Update only the file mtime, directory stays old
+        fileMtime = new Date(Date.now() + 1000);
+
+        // maybeRefresh should detect the file change and reload
+        await skills.maybeRefresh();
+        const afterRefresh = await skills.list();
+
+        // With checkSkillFileMtime: true, SKILL.md file changes are detected
+        expect(afterRefresh).toHaveLength(1);
+        expect(afterRefresh[0]!.name).toBe('test-skill');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should detect SKILL.md content updates for existing valid skills', async () => {
+      vi.useFakeTimers();
+      try {
+        const dirMtime = new Date(Date.now() - 10000);
+        let fileMtime = new Date(Date.now() - 10000);
+
+        const filesMap: Record<string, string> = {
+          'skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        };
+
+        const filesystem = createMockFilesystem(filesMap);
+        mockSplitMtimeStat(
+          filesystem,
+          () => dirMtime,
+          () => fileMtime,
+        );
+
+        const skills = new WorkspaceSkillsImpl({
+          source: filesystem,
+          skills: ['skills'],
+          checkSkillFileMtime: true, // Enable opt-in file mtime detection
+        });
+
+        // Initial discovery
+        const initialList = await skills.list();
+        expect(initialList).toHaveLength(1);
+        expect(initialList[0]!.description).toBe('A test skill for unit testing');
+
+        const initialReadFileCalls = (filesystem.readFile as ReturnType<typeof vi.fn>).mock.calls.length;
+
+        // Advance past cooldown
+        vi.advanceTimersByTime(WorkspaceSkillsImpl.STALENESS_CHECK_COOLDOWN + 100);
+
+        // Update SKILL.md content (description change)
+        const updatedSkillMd = `---
+name: test-skill
+description: Updated description for the skill
+---
+# Test Skill
+Updated instructions.`;
+        await filesystem.writeFile('skills/test-skill/SKILL.md', updatedSkillMd);
+
+        // Only file mtime changes
+        fileMtime = new Date(Date.now() + 1000);
+
+        await skills.maybeRefresh();
+        const afterRefreshCalls = (filesystem.readFile as ReturnType<typeof vi.fn>).mock.calls.length;
+
+        // Should have re-read the file
+        expect(afterRefreshCalls).toBeGreaterThan(initialReadFileCalls);
+
+        const afterRefresh = await skills.list();
+        expect(afterRefresh).toHaveLength(1);
+        expect(afterRefresh[0]!.description).toBe('Updated description for the skill');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should detect new agent-created skills via directory mtime change (checkSkillFileMtime not required)', async () => {
+      vi.useFakeTimers();
+      try {
+        let dirMtime = new Date(Date.now() - 10000);
+        let fileMtime = new Date(Date.now() - 10000);
+
+        const filesMap: Record<string, string> = {
+          'skills/test-skill/SKILL.md': VALID_SKILL_MD, // name: test-skill matches directory
+        };
+
+        const filesystem = createMockFilesystem(filesMap);
+        mockSplitMtimeStat(
+          filesystem,
+          () => dirMtime,
+          () => fileMtime,
+        );
+
+        // Note: checkSkillFileMtime is NOT enabled - directory mtime detection should still work
+        const skills = new WorkspaceSkillsImpl({
+          source: filesystem,
+          skills: ['skills'],
+        });
+
+        // Initial discovery
+        const initialList = await skills.list();
+        expect(initialList).toHaveLength(1);
+
+        // Advance past cooldown
+        vi.advanceTimersByTime(WorkspaceSkillsImpl.STALENESS_CHECK_COOLDOWN + 100);
+
+        // Agent creates a new skill by writing files directly
+        const newSkillMd = `---
+name: agent-created-skill
+description: A skill created by the agent
+---
+# Agent Created Skill
+This skill was created programmatically.`;
+        await filesystem.writeFile('skills/agent-created-skill/SKILL.md', newSkillMd);
+
+        // Creating new directory updates parent directory mtime - this triggers refresh
+        dirMtime = new Date(Date.now() + 1000);
+        fileMtime = new Date(Date.now() + 1000);
+
+        await skills.maybeRefresh();
+        const afterRefresh = await skills.list();
+
+        expect(afterRefresh).toHaveLength(2);
+        expect(afterRefresh.map(s => s.name).sort()).toEqual(['agent-created-skill', 'test-skill']);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should NOT detect SKILL.md file changes by default (checkSkillFileMtime: false)', async () => {
+      vi.useFakeTimers();
+      try {
+        const dirMtime = new Date(Date.now() - 10000);
+        let fileMtime = new Date(Date.now() - 10000);
+
+        const filesMap: Record<string, string> = {
+          'skills/test-skill/SKILL.md': `---
+name: bad-name
+description: A test skill with invalid name
+---
+# Test Skill
+Instructions here.`,
+        };
+
+        const filesystem = createMockFilesystem(filesMap);
+        mockSplitMtimeStat(
+          filesystem,
+          () => dirMtime,
+          () => fileMtime,
+        );
+
+        // Default: checkSkillFileMtime is false
+        const skills = new WorkspaceSkillsImpl({
+          source: filesystem,
+          skills: ['skills'],
+          validateOnLoad: true,
+        });
+
+        // Initial discovery - skill has invalid name
+        const initialList = await skills.list();
+        expect(initialList).toHaveLength(0);
+
+        vi.advanceTimersByTime(WorkspaceSkillsImpl.STALENESS_CHECK_COOLDOWN + 100);
+
+        // Fix the SKILL.md content (only file mtime changes)
+        const fixedSkillMd = `---
+name: test-skill
+description: A test skill with valid name
+---
+# Test Skill
+Instructions here.`;
+        await filesystem.writeFile('skills/test-skill/SKILL.md', fixedSkillMd);
+        fileMtime = new Date(Date.now() + 1000);
+
+        // Without checkSkillFileMtime, this should NOT detect the change
+        await skills.maybeRefresh();
+        const afterRefresh = await skills.list();
+
+        // Still 0 because file mtime change was not detected
+        expect(afterRefresh).toHaveLength(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should detect SKILL.md changes for direct skill paths (e.g., **/SKILL.md glob)', async () => {
+      vi.useFakeTimers();
+      try {
+        // Separate mtimes for directories vs files
+        const dirMtime = new Date(Date.now() - 10000); // Old, never changes
+        let fileMtime = new Date(Date.now() - 10000); // Starts old, will be updated
+
+        const filesMap: Record<string, string> = {
+          'skills/my-skill/SKILL.md': VALID_SKILL_MD,
+        };
+
+        const filesystem = createMockFilesystem(filesMap);
+        mockSplitMtimeStat(
+          filesystem,
+          () => dirMtime,
+          () => fileMtime,
+        );
+
+        // Direct skill path (simulates glob that resolved directly to a skill directory)
+        const skills = new WorkspaceSkillsImpl({
+          source: filesystem,
+          skills: ['skills/my-skill'], // Direct skill path
+          validateOnLoad: false,
+          checkSkillFileMtime: true,
+        });
+
+        // Initial discovery
+        const initialList = await skills.list();
+        expect(initialList).toHaveLength(1);
+        expect(initialList[0]!.description).toBe('A test skill for unit testing');
+
+        // Advance past the staleness check cooldown
+        vi.advanceTimersByTime(WorkspaceSkillsImpl.STALENESS_CHECK_COOLDOWN + 100);
+
+        // Update the skill content (only file mtime changes, not directory)
+        const updatedSkillMd = VALID_SKILL_MD.replace('A test skill for unit testing', 'An updated skill description');
+        await filesystem.writeFile('skills/my-skill/SKILL.md', updatedSkillMd);
+
+        // Update only the file mtime, directory stays old
+        fileMtime = new Date(Date.now() + 1000);
+
+        // maybeRefresh should detect the SKILL.md mtime change via direct skill path check
+        await skills.maybeRefresh();
+        const afterRefresh = await skills.list();
+
+        expect(afterRefresh).toHaveLength(1);
+        expect(afterRefresh[0]!.description).toBe('An updated skill description');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   describe('read-only mode (SkillSource)', () => {
     // Create a mock read-only source (no write methods)
     function createMockReadOnlySource(files: Record<string, string | Buffer> = {}) {
