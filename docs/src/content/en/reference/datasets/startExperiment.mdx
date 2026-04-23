@@ -22,12 +22,22 @@ const mastra = new Mastra({
 
 const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
-// Run against a registered agent with scorers
+// Run against a registered agent with a flat scorer list
 const summary = await dataset.startExperiment({
   targetType: 'agent',
   targetId: 'my-agent',
   scorers: ['accuracy', 'relevancy'],
   maxConcurrency: 10,
+})
+
+// Or pass the same categorised shape accepted by runEvals
+const summary2 = await dataset.startExperiment({
+  targetType: 'agent',
+  targetId: 'my-agent',
+  scorers: {
+    agent: [accuracyScorer],
+    trajectory: [toolOrderScorer],
+  },
 })
 
 console.log(`${summary.succeededCount}/${summary.totalItems} succeeded`)
@@ -52,9 +62,10 @@ console.log(`Status: ${summary.status}`)
   },
   {
     name: 'scorers',
-    type: '(MastraScorer | string)[]',
+    type: '(MastraScorer | string)[] | AgentScorerConfig | WorkflowScorerConfig',
     isOptional: true,
-    description: 'Scorers to evaluate each result. Pass `MastraScorer` instances or registered scorer IDs.',
+    description:
+      'Scorers to evaluate each result. Accepts a flat array of `MastraScorer` instances or registered scorer IDs, or the same categorised config shape used by `runEvals` (`AgentScorerConfig` / `WorkflowScorerConfig`). Trajectory scorers (`type: "trajectory"`) automatically receive a pre-extracted `Trajectory` as their output regardless of which form is used.',
   },
   {
     name: 'name',

@@ -1,5 +1,11 @@
 import { MastraError } from '../../error/index.js';
+import type { MastraScorer } from '../../evals/base';
 import type { Mastra } from '../../mastra';
+import type { DatasetRecord } from '../../storage/types';
+import { executeTarget } from './executor';
+import type { Target, ExecutionResult } from './executor';
+import { resolveScorers, runScorersForItem } from './scorer';
+import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
 
 /** Unified item shape used within experiment execution (bridges inline + versioned data) */
 type ExperimentItem = {
@@ -10,11 +16,6 @@ type ExperimentItem = {
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 };
-import type { DatasetRecord } from '../../storage/types';
-import { executeTarget } from './executor';
-import type { Target, ExecutionResult } from './executor';
-import { resolveScorers, runScorersForItem } from './scorer';
-import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
 
 // Re-export types and helpers
 export type {
@@ -222,11 +223,30 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     throw err; // unreachable, but satisfies TS control flow
   }
 
+  // Normalize categorized scorer config (AgentScorerConfig | WorkflowScorerConfig) to a flat
+  // array so the existing merge/dedup/resolve logic below is unchanged.
+  // Trajectory dispatch is handled per-scorer in runScorerSafe based on scorer.type.
+  const flatScorerInput: (MastraScorer<any, any, any, any> | string)[] | undefined = (() => {
+    if (!scorerInput) return undefined;
+    if (Array.isArray(scorerInput)) return scorerInput;
+    // Categorized shape — flatten all buckets into one array
+    const flat: (MastraScorer<any, any, any, any> | string)[] = [];
+    if ('agent' in scorerInput && scorerInput.agent) flat.push(...scorerInput.agent);
+    if ('workflow' in scorerInput && scorerInput.workflow) flat.push(...scorerInput.workflow);
+    if ('trajectory' in scorerInput && scorerInput.trajectory) flat.push(...scorerInput.trajectory);
+    if ('steps' in scorerInput && scorerInput.steps) {
+      for (const stepScorers of Object.values(scorerInput.steps)) {
+        flat.push(...stepScorers);
+      }
+    }
+    return flat;
+  })();
+
   // Merge dataset-attached scorers with explicitly provided scorers, then deduplicate
-  let mergedScorerInput = scorerInput;
+  let mergedScorerInput = flatScorerInput;
   const datasetScorerIds = datasetRecord?.scorerIds ?? [];
   if (datasetScorerIds.length > 0) {
-    mergedScorerInput = [...(scorerInput ?? []), ...datasetScorerIds];
+    mergedScorerInput = [...(flatScorerInput ?? []), ...datasetScorerIds];
   }
   if (mergedScorerInput && mergedScorerInput.length > 0) {
     const seen = new Set<string>();
