@@ -5740,23 +5740,36 @@ export class Agent<
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
     const bgManager = this.#mastra?.backgroundTaskManager;
-    const hasMemory = !!streamOptions?.memory || !!this.#memory;
 
     const { maxIdleMs: _maxIdleMs, ...restStreamOptions } = streamOptions ?? {};
 
+    // Resolve memory the same way #execute does — honour requestContext-scoped
+    // overrides AND let getMemory() decide whether a real MastraMemory backend
+    // exists. That way request-context-scoped turns subscribe to the correct
+    // bg-task stream and we don't enter continuation mode when there is no
+    // backend to persist the tool result.
+    const requestContext = restStreamOptions?.requestContext || new RequestContext();
+    const memory = await this.getMemory({ requestContext });
+    const threadIdFromContext = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+    const resourceIdFromContext = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+    const threadIdFromArgs =
+      typeof restStreamOptions?.memory?.thread === 'string'
+        ? restStreamOptions.memory.thread
+        : restStreamOptions?.memory?.thread?.id;
+
+    // RequestContext-scoped keys win over caller-supplied memory args
+    // (matches #execute semantics).
+    const threadId = threadIdFromContext ?? threadIdFromArgs;
+    const resourceId = resourceIdFromContext ?? restStreamOptions?.memory?.resource;
+
     // Without a background task manager or memory, there's no continuation to
     // orchestrate — fall through to a plain stream with no wrapping.
-    if (!bgManager || !hasMemory) {
+    if (!bgManager || !memory) {
       return this.stream(messages, restStreamOptions as any) as Promise<MastraModelOutput<OUTPUT>>;
     }
 
     const agent = this;
     const maxIdleMs = _maxIdleMs ?? 5 * 60_000;
-    const threadId =
-      typeof restStreamOptions?.memory?.thread === 'string'
-        ? restStreamOptions.memory.thread
-        : restStreamOptions?.memory?.thread?.id;
-    const resourceId = restStreamOptions?.memory?.resource;
 
     // Continuation calls reuse the memory thread but drop one-shot hooks.
     // `_skipBgTaskWait` prevents the inner loop from redundantly waiting for
