@@ -8,12 +8,13 @@ type UseTraceFeedbackProps = {
 
 export const useTraceFeedback = ({ traceId = '', page }: UseTraceFeedbackProps) => {
   const client = useMastraClient();
+  const pageNumber = page ?? 0;
   return useQuery({
-    queryKey: ['trace-feedback', traceId, page],
+    queryKey: ['trace-feedback', traceId, pageNumber],
     queryFn: () =>
       client.listFeedback({
         filters: { traceId },
-        pagination: { page: page || 0, perPage: 10 },
+        pagination: { page: pageNumber, perPage: 10 },
       }),
     enabled: !!traceId,
     refetchInterval: 3000,
