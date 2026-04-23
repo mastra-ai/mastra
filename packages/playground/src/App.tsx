@@ -20,10 +20,10 @@ declare global {
   }
 }
 
-import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { useMemo } from 'react';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
+import { AgentBuilderRootLayout } from './domains/agent-builder/layout/agent-builder-root-layout';
 import { StudioIndexRedirect } from './domains/agent-studio/components/studio-index-redirect';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
@@ -94,6 +94,7 @@ import { MinimalLayout } from '@/components/minimal-layout';
 import { AgentBuilderEditionLayout, AgentBuilderLayout } from '@/domains/agent-builder/layout/agent-builder-layout';
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import { createFetchWithRefresh } from '@/domains/auth/hooks/fetch-with-refresh';
+
 import { PlaygroundConfigGuard } from '@/domains/configuration/components/playground-config-guard';
 import { StudioConfigProvider, useStudioConfig } from '@/domains/configuration/context/studio-config-context';
 import { LinkComponentProvider } from '@/lib/framework';
@@ -177,19 +178,6 @@ const MinimalRootLayout = () => {
   );
 };
 
-const AgentBuilderRootLayout = () => {
-  const navigate = useNavigate();
-  const frameworkNavigate = (path: string) => navigate(path, { viewTransition: true });
-
-  return (
-    <TooltipProvider>
-      <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
-        <Outlet />
-      </LinkComponentProvider>
-    </TooltipProvider>
-  );
-};
-
 // Determine platform status at module level for route configuration
 const isMastraPlatform = Boolean(window.MASTRA_CLOUD_API_ENDPOINT);
 const isExperimentalFeatures = coreFeatures.has('datasets');
@@ -212,7 +200,7 @@ const routes = [
   { path: '/signup', element: <SignUp /> },
   {
     path: '/agent-builder',
-    element: <AgentBuilderRootLayout />,
+    element: <AgentBuilderRootLayout paths={paths} />,
     children: [
       {
         index: true,
@@ -238,11 +226,6 @@ const routes = [
         ],
       },
     ],
-  },
-
-  {
-    element: <AgentBuilderRootLayout />,
-    children: [],
   },
   {
     element: <MinimalRootLayout />,
