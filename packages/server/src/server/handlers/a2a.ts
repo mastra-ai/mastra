@@ -11,7 +11,7 @@ import type { Agent } from '@mastra/core/agent';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod/v4';
-import { convertToCoreMessage, normalizeError, createSuccessResponse, createErrorResponse } from '../a2a/protocol';
+import { convertToCoreMessage, normalizeError, createSuccessResponse } from '../a2a/protocol';
 import type { InMemoryTaskStore } from '../a2a/store';
 import { applyUpdateToTask, createTaskContext, loadOrCreateTask } from '../a2a/tasks';
 import {
@@ -43,6 +43,34 @@ const messageSendParamsSchema = z.object({
     metadata: z.record(z.string(), z.any()).optional(),
   }),
 });
+
+function createAgentCardDefaults(): Pick<
+  AgentCard,
+  | 'protocolVersion'
+  | 'additionalInterfaces'
+  | 'supportsAuthenticatedExtendedCard'
+  | 'security'
+  | 'securitySchemes'
+  | 'capabilities'
+  | 'defaultInputModes'
+  | 'defaultOutputModes'
+> {
+  return {
+    protocolVersion: '0.3',
+    additionalInterfaces: [],
+    supportsAuthenticatedExtendedCard: false,
+    security: [],
+    securitySchemes: {},
+    capabilities: {
+      streaming: true,
+      pushNotifications: false,
+      stateTransitionHistory: false,
+      extensions: [],
+    },
+    defaultInputModes: ['text/plain'],
+    defaultOutputModes: ['text/plain'],
+  };
+}
 
 export async function getAgentCardByIdHandler({
   mastra,
@@ -78,13 +106,7 @@ export async function getAgentCardByIdHandler({
     url: executionUrl,
     provider,
     version,
-    capabilities: {
-      streaming: true, // All agents support streaming
-      pushNotifications: false,
-      stateTransitionHistory: false,
-    },
-    defaultInputModes: ['text'],
-    defaultOutputModes: ['text'],
+    ...createAgentCardDefaults(),
     // Convert agent tools to skills format for A2A protocol
     skills: Object.entries(tools).map(([toolId, tool]) => ({
       id: toolId,
@@ -258,7 +280,22 @@ export async function* handleMessageStream({
   logger?: IMastraLogger;
   requestContext: RequestContext;
 }) {
-  yield createSuccessResponse(requestId, {
+  validateMessageSendParams(params);
+
+  const { message, metadata } = params;
+  const { contextId } = message;
+  const taskId = message.taskId || crypto.randomUUID();
+
+  let currentData = await loadOrCreateTask({
+    taskId,
+    taskStore,
+    agentId,
+    message,
+    contextId,
+    metadata,
+  });
+
+  currentData = applyUpdateToTask(currentData, {
     state: 'working',
     message: {
       messageId: crypto.randomUUID(),
@@ -268,26 +305,125 @@ export async function* handleMessageStream({
     },
   });
 
-  let result;
-  try {
-    result = await handleMessageSend({
-      requestId,
-      params,
-      taskStore,
-      agent,
-      agentId,
-      requestContext,
-      logger,
-    });
-  } catch (err) {
-    if (!(err instanceof MastraA2AError)) {
-      throw err;
-    }
+  await taskStore.save({ agentId, data: currentData });
 
-    result = createErrorResponse(requestId, err.toJSONRPCError());
+  yield createSuccessResponse(requestId, currentData);
+
+  try {
+    const resourceId = (metadata?.resourceId as string) ?? (message.metadata?.resourceId as string) ?? agentId;
+    const result = await agent.generate([convertToCoreMessage(message)], {
+      runId: taskId,
+      requestContext,
+      ...(contextId ? { threadId: contextId, resourceId } : {}),
+    });
+
+    currentData = applyUpdateToTask(currentData, {
+      state: 'completed',
+      message: {
+        messageId: crypto.randomUUID(),
+        role: 'agent',
+        parts: [
+          {
+            kind: 'text',
+            text: result.text,
+          },
+        ],
+        kind: 'message',
+      },
+    });
+
+    currentData.metadata = {
+      ...currentData.metadata,
+      execution: {
+        toolCalls: result.toolCalls,
+        toolResults: result.toolResults,
+        usage: result.usage,
+        finishReason: result.finishReason,
+      },
+    };
+
+    await taskStore.save({ agentId, data: currentData });
+  } catch (handlerError) {
+    currentData = applyUpdateToTask(currentData, {
+      state: 'failed',
+      message: {
+        messageId: crypto.randomUUID(),
+        role: 'agent',
+        parts: [
+          {
+            kind: 'text',
+            text: `Handler failed: ${handlerError instanceof Error ? handlerError.message : String(handlerError)}`,
+          },
+        ],
+        kind: 'message',
+      },
+    });
+
+    try {
+      await taskStore.save({ agentId, data: currentData });
+    } catch (saveError) {
+      // @ts-expect-error saveError is an unknown error
+      logger?.error(`Failed to save task ${currentData.id} after handler error:`, saveError?.message);
+    }
   }
 
-  yield result;
+  yield createSuccessResponse(requestId, {
+    kind: 'status-update',
+    taskId: currentData.id,
+    contextId: currentData.contextId,
+    status: currentData.status,
+    final: true,
+  });
+}
+
+export async function* handleTaskResubscribe({
+  requestId,
+  taskStore,
+  agentId,
+  taskId,
+}: {
+  requestId: string;
+  taskStore: InMemoryTaskStore;
+  agentId: string;
+  taskId: string;
+}) {
+  const task = await taskStore.load({ agentId, taskId });
+
+  if (!task) {
+    throw MastraA2AError.taskNotFound(taskId);
+  }
+
+  const finalStates: TaskState[] = ['completed', 'failed', 'canceled'];
+
+  yield createSuccessResponse(requestId, {
+    kind: 'status-update',
+    taskId: task.id,
+    contextId: task.contextId,
+    status: task.status,
+    final: finalStates.includes(task.status.state),
+  });
+}
+
+function getTaskIdFromParams(
+  params: MessageSendParams | TaskQueryParams | TaskIdParams | Record<string, unknown> | undefined,
+) {
+  if (!params || typeof params !== 'object') {
+    return undefined;
+  }
+
+  if ('id' in params && typeof params.id === 'string') {
+    return params.id;
+  }
+
+  if ('taskId' in params && typeof params.taskId === 'string') {
+    return params.taskId;
+  }
+
+  if ('message' in params && params.message && typeof params.message === 'object' && 'taskId' in params.message) {
+    return typeof params.message.taskId === 'string' ? params.message.taskId : undefined;
+  }
+
+  return undefined;
 }
 
 export async function handleTaskCancel({
@@ -360,8 +496,18 @@ export async function getAgentExecutionHandler({
   requestId: string;
   requestContext: RequestContext;
   agentId: string;
-  method: 'message/send' | 'message/stream' | 'tasks/get' | 'tasks/cancel';
-  params: MessageSendParams | TaskQueryParams | TaskIdParams;
+  method:
+    | 'message/send'
+    | 'message/stream'
+    | 'tasks/get'
+    | 'tasks/cancel'
+    | 'tasks/resubscribe'
+    | 'tasks/pushNotificationConfig/set'
+    | 'tasks/pushNotificationConfig/get'
+    | 'tasks/pushNotificationConfig/list'
+    | 'tasks/pushNotificationConfig/delete'
+    | 'agent/getAuthenticatedExtendedCard';
+  params?: MessageSendParams | TaskQueryParams | TaskIdParams | Record<string, unknown>;
   taskStore: InMemoryTaskStore;
   logger?: IMastraLogger;
 }): Promise<any> {
@@ -370,9 +516,7 @@ export async function getAgentExecutionHandler({
   let taskId: string | undefined; // For error context
 
   try {
-    // Attempt to get task ID early for error context. Cast params to any to access id.
-    // Proper validation happens within specific handlers.
-    taskId = 'id' in params ? params.id : params.message?.taskId || 'No task ID provided';
+    taskId = getTaskIdFromParams(params);
 
     // 2. Route based on method
     switch (method) {
@@ -403,7 +547,7 @@ export async function getAgentExecutionHandler({
           requestId,
           taskStore,
           agentId,
-          taskId,
+          taskId: taskId || 'No task ID provided',
         });
 
         return result;
@@ -413,11 +557,25 @@ export async function getAgentExecutionHandler({
           requestId,
           taskStore,
           agentId,
-          taskId,
+          taskId: taskId || 'No task ID provided',
         });
 
         return result;
       }
+      case 'tasks/resubscribe':
+        return await handleTaskResubscribe({
+          requestId,
+          taskStore,
+          agentId,
+          taskId: taskId || 'No task ID provided',
+        });
+      case 'tasks/pushNotificationConfig/set':
+      case 'tasks/pushNotificationConfig/get':
+      case 'tasks/pushNotificationConfig/list':
+      case 'tasks/pushNotificationConfig/delete':
+        throw MastraA2AError.pushNotificationNotSupported();
+      case 'agent/getAuthenticatedExtendedCard':
+        throw MastraA2AError.extendedAgentCardNotConfigured();
       default:
         throw MastraA2AError.methodNotFound(method);
     }
@@ -465,13 +623,7 @@ export const GET_AGENT_CARD_ROUTE = createRoute({
       url: executionUrl,
       provider,
       version,
-      capabilities: {
-        streaming: true,
-        pushNotifications: false,
-        stateTransitionHistory: false,
-      },
-      defaultInputModes: ['text'],
-      defaultOutputModes: ['text'],
+      ...createAgentCardDefaults(),
       skills: Object.entries(tools).map(([toolId, tool]) => ({
         id: toolId,
         name: toolId,
@@ -496,7 +648,8 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
   tags: ['Agent-to-Agent'],
   requiresAuth: true,
   handler: async ({ mastra, agentId, requestContext, taskStore, ...bodyParams }) => {
-    const { id: requestId, method, params } = bodyParams;
+    const { id: requestId, method } = bodyParams;
+    const params = 'params' in bodyParams ? bodyParams.params : undefined;
 
     return await getAgentExecutionHandler({
       requestId: String(requestId),

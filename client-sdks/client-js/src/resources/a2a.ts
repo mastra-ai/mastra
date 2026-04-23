@@ -1,10 +1,17 @@
 import type {
   AgentCard,
+  CancelTaskResponse,
+  DeleteTaskPushNotificationConfigParams,
+  DeleteTaskPushNotificationConfigResponse,
   GetTaskResponse,
+  ListTaskPushNotificationConfigParams,
+  ListTaskPushNotificationConfigResponse,
   MessageSendParams,
   SendMessageResponse,
   SendStreamingMessageResponse,
-  Task,
+  SetTaskPushNotificationConfigResponse,
+  TaskIdParams,
+  TaskPushNotificationConfig,
   TaskQueryParams,
 } from '@mastra/core/a2a';
 import type { ClientOptions } from '../types';
@@ -93,13 +100,88 @@ export class A2A extends BaseResource {
    * @param params - Parameters identifying the task to cancel
    * @returns Promise containing the task response
    */
-  async cancelTask(params: TaskQueryParams): Promise<Task> {
-    return this.request(`/a2a/${this.agentId}`, {
+  async cancelTask(params: TaskIdParams): Promise<CancelTaskResponse> {
+    return this.request<CancelTaskResponse>(`/a2a/${this.agentId}`, {
       method: 'POST',
       body: {
         jsonrpc: '2.0',
         id: crypto.randomUUID(),
         method: 'tasks/cancel',
+        params,
+      },
+    });
+  }
+
+  /**
+   * Resume a task stream for an existing task
+   * @param params - Parameters identifying the task to resubscribe to
+   * @returns A stream of Server-Sent Events for the task
+   */
+  async resubscribeTask(params: TaskIdParams): Promise<AsyncIterable<SendStreamingMessageResponse>> {
+    return this.request<AsyncIterable<SendStreamingMessageResponse>>(`/a2a/${this.agentId}`, {
+      method: 'POST',
+      body: {
+        jsonrpc: '2.0',
+        id: crypto.randomUUID(),
+        method: 'tasks/resubscribe',
+        params,
+      },
+      stream: true,
+    });
+  }
+
+  /**
+   * Set push notification config for a task
+   * @param params - Push notification configuration for the task
+   * @returns Promise containing the JSON-RPC response
+   */
+  async setTaskPushNotificationConfig(
+    params: TaskPushNotificationConfig,
+  ): Promise<SetTaskPushNotificationConfigResponse> {
+    return this.request<SetTaskPushNotificationConfigResponse>(`/a2a/${this.agentId}`, {
+      method: 'POST',
+      body: {
+        jsonrpc: '2.0',
+        id: crypto.randomUUID(),
+        method: 'tasks/pushNotificationConfig/set',
+        params,
+      },
+    });
+  }
+
+  /**
+   * List push notification configs for a task
+   * @param params - Parameters identifying the task
+   * @returns Promise containing the JSON-RPC response
+   */
+  async listTaskPushNotificationConfig(
+    params: ListTaskPushNotificationConfigParams,
+  ): Promise<ListTaskPushNotificationConfigResponse> {
+    return this.request<ListTaskPushNotificationConfigResponse>(`/a2a/${this.agentId}`, {
+      method: 'POST',
+      body: {
+        jsonrpc: '2.0',
+        id: crypto.randomUUID(),
+        method: 'tasks/pushNotificationConfig/list',
+        params,
+      },
+    });
+  }
+
+  /**
+   * Delete a push notification config for a task
+   * @param params - Parameters identifying the config to delete
+   * @returns Promise containing the JSON-RPC response
+   */
+  async deleteTaskPushNotificationConfig(
+    params: DeleteTaskPushNotificationConfigParams,
+  ): Promise<DeleteTaskPushNotificationConfigResponse> {
+    return this.request<DeleteTaskPushNotificationConfigResponse>(`/a2a/${this.agentId}`, {
+      method: 'POST',
+      body: {
+        jsonrpc: '2.0',
+        id: crypto.randomUUID(),
+        method: 'tasks/pushNotificationConfig/delete',
         params,
       },
     });

@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryTaskStore } from '../a2a/store';
 import {
   getAgentCardByIdHandler,
+  getAgentExecutionHandler,
   handleTaskGet,
   handleMessageSend,
   handleMessageStream,
@@ -80,24 +81,30 @@ describe('A2A Handler', () => {
       });
       expect(agentCard).toMatchInlineSnapshot(`
         {
+          "additionalInterfaces": [],
           "capabilities": {
+            "extensions": [],
             "pushNotifications": false,
             "stateTransitionHistory": false,
             "streaming": true,
           },
           "defaultInputModes": [
-            "text",
+            "text/plain",
           ],
           "defaultOutputModes": [
-            "text",
+            "text/plain",
           ],
           "description": "test instructions",
           "name": "test-agent",
+          "protocolVersion": "0.3",
           "provider": {
             "organization": "Mastra",
             "url": "https://mastra.ai",
           },
+          "security": [],
+          "securitySchemes": {},
           "skills": [],
+          "supportsAuthenticatedExtendedCard": false,
           "url": "/a2a/test-agent",
           "version": "1.0",
         }
@@ -900,13 +907,29 @@ describe('A2A Handler', () => {
         id: 'test-request-id',
         jsonrpc: '2.0',
         result: {
-          message: {
-            messageId: expect.any(String),
-            kind: 'message',
-            role: 'agent',
-            parts: [{ kind: 'text', text: 'Generating response...' }],
+          artifacts: [],
+          contextId: expect.any(String),
+          history: [
+            {
+              kind: 'message',
+              messageId: 'test-message-id',
+              parts: [{ kind: 'text', text: 'Hello, agent!' }],
+              role: 'user',
+            },
+          ],
+          id: expect.any(String),
+          kind: 'task',
+          metadata: undefined,
+          status: {
+            message: {
+              kind: 'message',
+              messageId: expect.any(String),
+              parts: [{ kind: 'text', text: 'Generating response...' }],
+              role: 'agent',
+            },
+            state: 'working',
+            timestamp: '2025-05-08T11:47:38.458Z',
           },
-          state: 'working',
         },
       });
 
@@ -915,17 +938,9 @@ describe('A2A Handler', () => {
         id: 'test-request-id',
         jsonrpc: '2.0',
         result: {
-          artifacts: [],
-          id: expect.any(String),
-          contextId: expect.any(String),
-          metadata: {
-            execution: {
-              toolCalls: undefined,
-              toolResults: undefined,
-              usage: undefined,
-              finishReason: undefined,
-            },
-          },
+          contextId: first.value?.result.contextId,
+          final: true,
+          kind: 'status-update',
           status: {
             message: {
               messageId: expect.any(String),
@@ -941,20 +956,7 @@ describe('A2A Handler', () => {
             state: 'completed',
             timestamp: '2025-05-08T11:47:38.458Z',
           },
-          history: [
-            {
-              kind: 'message',
-              messageId: 'test-message-id',
-              parts: [
-                {
-                  kind: 'text',
-                  text: 'Hello, agent!',
-                },
-              ],
-              role: 'user',
-            },
-          ],
-          kind: 'task',
+          taskId: first.value?.result.id,
         },
       });
       expect(second.done).toBe(false);
@@ -995,10 +997,13 @@ describe('A2A Handler', () => {
         id: requestId,
         jsonrpc: '2.0',
         result: {
-          state: 'working',
-          message: {
-            role: 'agent',
-            parts: [{ kind: 'text', text: 'Generating response...' }],
+          kind: 'task',
+          status: {
+            state: 'working',
+            message: {
+              role: 'agent',
+              parts: [{ kind: 'text', text: 'Generating response...' }],
+            },
           },
         },
       });
@@ -1007,8 +1012,15 @@ describe('A2A Handler', () => {
       expect(second.value).toMatchObject({
         id: requestId,
         jsonrpc: '2.0',
-        error: {
-          message: errorMessage,
+        result: {
+          final: true,
+          kind: 'status-update',
+          status: {
+            state: 'failed',
+            message: {
+              parts: [{ kind: 'text', text: `Handler failed: ${errorMessage}` }],
+            },
+          },
         },
       });
       expect(second.done).toBe(false);
@@ -1242,6 +1254,136 @@ describe('A2A Handler', () => {
           taskId: nonExistentTaskId,
         }),
       ).rejects.toThrow(MastraA2AError.taskNotFound(nonExistentTaskId));
+    });
+  });
+
+  describe('getAgentExecutionHandler', () => {
+    let mockMastra: Mastra;
+    let mockTaskStore: InMemoryTaskStore;
+
+    beforeEach(() => {
+      const mockAgent = new MockAgent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test instructions',
+        model: openai('gpt-4o'),
+      });
+
+      mockMastra = createMockMastra({
+        'test-agent': mockAgent,
+      });
+      mockTaskStore = new InMemoryTaskStore();
+    });
+
+    it('returns push notification not supported for new push config methods', async () => {
+      const methods = [
+        {
+          method: 'tasks/pushNotificationConfig/set',
+          params: { taskId: 'task-1', pushNotificationConfig: { url: 'https://example.com' } },
+        },
+        { method: 'tasks/pushNotificationConfig/get', params: { id: 'task-1' } },
+        { method: 'tasks/pushNotificationConfig/list', params: { id: 'task-1' } },
+        { method: 'tasks/pushNotificationConfig/delete', params: { id: 'task-1', pushNotificationConfigId: 'push-1' } },
+      ] as const;
+
+      for (const entry of methods) {
+        const result = await getAgentExecutionHandler({
+          requestId: 'test-request-id',
+          mastra: mockMastra,
+          agentId: 'test-agent',
+          requestContext: new RequestContext(),
+          method: entry.method as any,
+          params: entry.params as any,
+          taskStore: mockTaskStore,
+        });
+
+        expect(result).toMatchObject({
+          error: {
+            code: -32003,
+            message: 'Push Notification is not supported',
+          },
+          id: 'test-request-id',
+          jsonrpc: '2.0',
+        });
+      }
+    });
+
+    it('returns authenticated extended card not configured for agent/getAuthenticatedExtendedCard', async () => {
+      const result = await getAgentExecutionHandler({
+        requestId: 'test-request-id',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'agent/getAuthenticatedExtendedCard' as any,
+        params: undefined as any,
+        taskStore: mockTaskStore,
+      });
+
+      expect(result).toMatchObject({
+        error: {
+          code: -32007,
+          message: 'Extended agent card is not configured',
+        },
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+      });
+    });
+
+    it('resubscribes to an existing terminal task as a final status update event', async () => {
+      const task: Task = {
+        id: 'task-1',
+        contextId: 'context-1',
+        status: {
+          state: 'completed',
+          message: {
+            messageId: 'message-1',
+            kind: 'message',
+            role: 'agent',
+            parts: [{ kind: 'text', text: 'Done!' }],
+          },
+          timestamp: '2025-05-08T11:47:38.458Z',
+        },
+        artifacts: [],
+        metadata: undefined,
+        kind: 'task',
+      };
+
+      await mockTaskStore.save({ agentId: 'test-agent', data: task });
+
+      const result = await getAgentExecutionHandler({
+        requestId: 'test-request-id',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/resubscribe' as any,
+        params: { id: 'task-1' } as any,
+        taskStore: mockTaskStore,
+      });
+
+      const first = await result.next();
+      expect(first.value).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: {
+          contextId: 'context-1',
+          final: true,
+          kind: 'status-update',
+          status: {
+            message: {
+              kind: 'message',
+              messageId: 'message-1',
+              parts: [{ kind: 'text', text: 'Done!' }],
+              role: 'agent',
+            },
+            state: 'completed',
+            timestamp: '2025-05-08T11:47:38.458Z',
+          },
+          taskId: 'task-1',
+        },
+      });
+
+      const done = await result.next();
+      expect(done.done).toBe(true);
     });
   });
 });
