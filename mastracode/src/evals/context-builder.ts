@@ -6,16 +6,12 @@
  * trajectory scorers (Trajectory).
  */
 
-import type { Harness } from '@mastra/core/harness';
 import type { MastraDBMessage } from '@mastra/core/agent';
-import type {
-  ScorerRunInputForAgent,
-  ScorerRunOutputForAgent,
-  Trajectory,
-} from '@mastra/core/evals';
+import { extractTrajectoryFromTrace } from '@mastra/core/evals';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, Trajectory } from '@mastra/core/evals';
+import type { Harness } from '@mastra/core/harness';
 import type { CoreMessage, CoreSystemMessage } from '@mastra/core/llm';
 import type { MastraCompositeStore } from '@mastra/core/storage';
-import { extractTrajectoryFromTrace } from '@mastra/core/evals';
 
 export type MastraCodeEvalContext = {
   /** Scorer-compatible agent input (messages, system prompt, etc.) */

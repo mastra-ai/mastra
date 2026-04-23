@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { describe, it, expect } from 'vitest';
 import { createOutcomeScorer } from '../outcome';
 
 /**
@@ -112,10 +112,7 @@ describe('Outcome Scorer', () => {
     });
 
     it('uses the last build command result', async () => {
-      const msgs = [
-        makeMsg('assistant', [cmd('tsc --noEmit', 1)]),
-        makeMsg('assistant', [cmd('tsc --noEmit', 0)]),
-      ];
+      const msgs = [makeMsg('assistant', [cmd('tsc --noEmit', 1)]), makeMsg('assistant', [cmd('tsc --noEmit', 0)])];
       const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
       expect(reason).toContain('Build/typecheck passed');
     });
@@ -135,9 +132,11 @@ describe('Outcome Scorer', () => {
     });
 
     it('infers test pass from output text when no exit code', async () => {
-      const msgs = [makeMsg('assistant', [
-        { toolName: 'execute_command', args: { command: 'vitest run' }, result: '5 tests passed ✓' },
-      ])];
+      const msgs = [
+        makeMsg('assistant', [
+          { toolName: 'execute_command', args: { command: 'vitest run' }, result: '5 tests passed ✓' },
+        ]),
+      ];
       const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
       expect(reason).toContain('Tests passed (inferred)');
     });
@@ -145,29 +144,29 @@ describe('Outcome Scorer', () => {
 
   describe('tool errors', () => {
     it('scores 1.0 when no tool errors', async () => {
-      const msgs = [makeMsg('assistant', [
-        tool('view', { path: 'a.ts' }),
-        tool('string_replace_lsp', { path: 'a.ts' }),
-      ])];
+      const msgs = [
+        makeMsg('assistant', [tool('view', { path: 'a.ts' }), tool('string_replace_lsp', { path: 'a.ts' })]),
+      ];
       const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
       expect(reason).toContain('No tool errors');
     });
 
     it('excludes benign error tools from penalty', async () => {
       // Only benign error tools (search_content, find_files) — no non-benign tools present
-      const msgs = [makeMsg('assistant', [
-        errorTool('search_content', { pattern: 'foo' }),
-        errorTool('find_files', { path: '.' }),
-      ])];
+      const msgs = [
+        makeMsg('assistant', [errorTool('search_content', { pattern: 'foo' }), errorTool('find_files', { path: '.' })]),
+      ];
       const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
       expect(reason).toContain('All tool calls are benign-error tools');
     });
 
     it('penalizes non-benign tool errors', async () => {
-      const msgs = [makeMsg('assistant', [
-        errorTool('string_replace_lsp', { path: 'a.ts' }),
-        tool('string_replace_lsp', { path: 'a.ts' }),
-      ])];
+      const msgs = [
+        makeMsg('assistant', [
+          errorTool('string_replace_lsp', { path: 'a.ts' }),
+          tool('string_replace_lsp', { path: 'a.ts' }),
+        ]),
+      ];
       const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
       expect(reason).toContain('tools errored');
     });
@@ -175,21 +174,25 @@ describe('Outcome Scorer', () => {
 
   describe('stuck loops', () => {
     it('detects consecutive identical calls', async () => {
-      const msgs = [makeMsg('assistant', [
-        errorTool('string_replace_lsp', { path: 'a.ts', old_string: 'x' }),
-        errorTool('string_replace_lsp', { path: 'a.ts', old_string: 'x' }),
-        errorTool('string_replace_lsp', { path: 'a.ts', old_string: 'x' }),
-      ])];
+      const msgs = [
+        makeMsg('assistant', [
+          errorTool('string_replace_lsp', { path: 'a.ts', old_string: 'x' }),
+          errorTool('string_replace_lsp', { path: 'a.ts', old_string: 'x' }),
+          errorTool('string_replace_lsp', { path: 'a.ts', old_string: 'x' }),
+        ]),
+      ];
       const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
       expect(reason).toContain('consecutive identical calls');
     });
 
     it('no loop detection when calls are varied', async () => {
-      const msgs = [makeMsg('assistant', [
-        tool('view', { path: 'a.ts' }),
-        tool('string_replace_lsp', { path: 'a.ts' }),
-        tool('view', { path: 'b.ts' }),
-      ])];
+      const msgs = [
+        makeMsg('assistant', [
+          tool('view', { path: 'a.ts' }),
+          tool('string_replace_lsp', { path: 'a.ts' }),
+          tool('view', { path: 'b.ts' }),
+        ]),
+      ];
       const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
       expect(reason).toContain('No stuck loops');
     });
@@ -217,10 +220,7 @@ describe('Outcome Scorer', () => {
     });
 
     it('scores 1.0 when no regression', async () => {
-      const msgs = [
-        makeMsg('assistant', [cmd('tsc --noEmit', 0)]),
-        makeMsg('assistant', [cmd('tsc --noEmit', 0)]),
-      ];
+      const msgs = [makeMsg('assistant', [cmd('tsc --noEmit', 0)]), makeMsg('assistant', [cmd('tsc --noEmit', 0)])];
       const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
       expect(reason).toContain('No regressions');
     });
@@ -234,11 +234,13 @@ describe('Outcome Scorer', () => {
     });
 
     it('penalizes ask_user calls', async () => {
-      const msgs = [makeMsg('assistant', [
-        tool('ask_user', { question: 'what color?' }),
-        tool('ask_user', { question: 'which file?' }),
-        tool('view', { path: 'a.ts' }),
-      ])];
+      const msgs = [
+        makeMsg('assistant', [
+          tool('ask_user', { question: 'what color?' }),
+          tool('ask_user', { question: 'which file?' }),
+          tool('view', { path: 'a.ts' }),
+        ]),
+      ];
       const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
       expect(reason).toContain('2 ask_user calls');
     });
@@ -247,10 +249,9 @@ describe('Outcome Scorer', () => {
   describe('N/A dimensions', () => {
     it('excludes non-applicable dimensions from weighted average', async () => {
       // Session with only edit calls — no build, no tests
-      const msgs = [makeMsg('assistant', [
-        tool('view', { path: 'a.ts' }),
-        tool('string_replace_lsp', { path: 'a.ts' }),
-      ])];
+      const msgs = [
+        makeMsg('assistant', [tool('view', { path: 'a.ts' }), tool('string_replace_lsp', { path: 'a.ts' })]),
+      ];
       const { score, reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
       // Build and Tests should be N/A, excluded from average
       expect(reason).toContain('N/A — excluded from average');
@@ -261,25 +262,31 @@ describe('Outcome Scorer', () => {
 
   describe('getExitCode parsing', () => {
     it('parses exit code from object with exitCode field', async () => {
-      const msgs = [makeMsg('assistant', [
-        { toolName: 'execute_command', args: { command: 'tsc --noEmit' }, result: { exitCode: 2 } },
-      ])];
+      const msgs = [
+        makeMsg('assistant', [
+          { toolName: 'execute_command', args: { command: 'tsc --noEmit' }, result: { exitCode: 2 } },
+        ]),
+      ];
       const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
       expect(reason).toContain('Build failed (exit 2)');
     });
 
     it('parses exit code from string with "exit code N" pattern', async () => {
-      const msgs = [makeMsg('assistant', [
-        { toolName: 'execute_command', args: { command: 'tsc --noEmit' }, result: 'Process exited with code 1' },
-      ])];
+      const msgs = [
+        makeMsg('assistant', [
+          { toolName: 'execute_command', args: { command: 'tsc --noEmit' }, result: 'Process exited with code 1' },
+        ]),
+      ];
       const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
       expect(reason).toContain('Build failed (exit 1)');
     });
 
     it('returns ambiguous score when exit code unknown', async () => {
-      const msgs = [makeMsg('assistant', [
-        { toolName: 'execute_command', args: { command: 'tsc --noEmit' }, result: 'some output...' },
-      ])];
+      const msgs = [
+        makeMsg('assistant', [
+          { toolName: 'execute_command', args: { command: 'tsc --noEmit' }, result: 'some output...' },
+        ]),
+      ];
       const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
       expect(reason).toContain('outcome unclear');
     });

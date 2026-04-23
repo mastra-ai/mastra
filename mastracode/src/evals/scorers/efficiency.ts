@@ -107,8 +107,13 @@ function scoreRedundancy(calls: ExtractedToolCall[]): { score: number; ratio: nu
 
   const ratio = redundantCount / mutationCalls.length;
   const acceptable = THRESHOLDS.redundancyAcceptableRate;
-  const score = ratio <= acceptable ? 1 : Math.max(0, 1 - (ratio - acceptable) * THRESHOLDS.redundancyPenaltyMultiplier);
-  return { score, ratio, detail: `${redundantCount}/${mutationCalls.length} redundant mutations (${(ratio * 100).toFixed(0)}%)` };
+  const score =
+    ratio <= acceptable ? 1 : Math.max(0, 1 - (ratio - acceptable) * THRESHOLDS.redundancyPenaltyMultiplier);
+  return {
+    score,
+    ratio,
+    detail: `${redundantCount}/${mutationCalls.length} redundant mutations (${(ratio * 100).toFixed(0)}%)`,
+  };
 }
 
 /**
@@ -128,7 +133,7 @@ function scoreTurnCount(turns: number): { score: number; detail: string } {
   }
 
   const midPenalty = (15 - normalMax) * penaltyPerTurn;
-  const score = Math.max(0, (1 - midPenalty) - (turns - 15) * extendedPenalty);
+  const score = Math.max(0, 1 - midPenalty - (turns - 15) * extendedPenalty);
   return { score, detail: `${turns} turns (extended session)` };
 }
 
@@ -287,8 +292,12 @@ export function createEfficiencyScorer() {
 
       parts.push(`Redundancy (${pct(WEIGHTS.redundancy)}): ${p.redundancy.detail} [${p.redundancy.score}]`);
       parts.push(`Turn count (${pct(WEIGHTS.turnCount)}): ${p.turnCount.detail} [${p.turnCount.score}]`);
-      parts.push(`Retry efficiency (${pct(WEIGHTS.retryEfficiency)}): ${p.retryEfficiency.detail} [${p.retryEfficiency.score}]`);
-      parts.push(`Read-before-edit (${pct(WEIGHTS.readBeforeEdit)}): ${p.readBeforeEdit.detail} [${p.readBeforeEdit.score}]`);
+      parts.push(
+        `Retry efficiency (${pct(WEIGHTS.retryEfficiency)}): ${p.retryEfficiency.detail} [${p.retryEfficiency.score}]`,
+      );
+      parts.push(
+        `Read-before-edit (${pct(WEIGHTS.readBeforeEdit)}): ${p.readBeforeEdit.detail} [${p.readBeforeEdit.score}]`,
+      );
 
       return parts.join('\n');
     });

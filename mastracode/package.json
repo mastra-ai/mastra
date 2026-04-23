@@ -68,13 +68,11 @@
     "@mastra/libsql": "workspace:*",
     "@mastra/mcp": "workspace:*",
     "@mastra/memory": "workspace:*",
-
     "@mastra/observability": "workspace:*",
     "@mastra/pg": "workspace:*",
     "@mastra/stagehand": "workspace:*",
     "@mastra/tavily": "workspace:*",
     "ai": "^6.0.116",
-
     "chalk": "^5.5.0",
     "cli-highlight": "^2.1.11",
     "execa": "^9.6.1",

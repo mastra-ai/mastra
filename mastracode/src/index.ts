@@ -30,6 +30,7 @@ import { createDynamicTools } from './agents/tools.js';
 
 import { getDynamicWorkspace } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
+import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
 import { HookManager } from './hooks/index.js';
 import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
@@ -62,7 +63,6 @@ import {
 import type { StorageConfig } from './utils/project.js';
 import { createStorage, createVectorStore } from './utils/storage-factory.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
-import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
 
 const PROVIDER_TO_OAUTH_ID: Record<string, string> = {
   anthropic: 'anthropic',
@@ -118,8 +118,6 @@ export function createAuthStorage() {
   setOpenAIAuthStorage(authStorage);
   return authStorage;
 }
-
-
 
 /**
  * Resolve cloud observability credentials for the CloudExporter.

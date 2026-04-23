@@ -101,7 +101,8 @@ function scoreBuild(execResults: ExtractedToolCall[]): DimensionResult {
 
   const exitCode = getExitCode(last.result);
   if (exitCode === 0) return { score: 1, detail: 'Build/typecheck passed', applicable: true };
-  if (exitCode !== null && exitCode !== 0) return { score: 0, detail: `Build failed (exit ${exitCode})`, applicable: true };
+  if (exitCode !== null && exitCode !== 0)
+    return { score: 0, detail: `Build failed (exit ${exitCode})`, applicable: true };
 
   // Fallback: check result text for TS errors
   const text = typeof last.result === 'string' ? last.result : JSON.stringify(last.result ?? '');
@@ -124,7 +125,8 @@ function scoreTests(execResults: ExtractedToolCall[]): DimensionResult {
 
   const exitCode = getExitCode(last.result);
   if (exitCode === 0) return { score: 1, detail: 'Tests passed', applicable: true };
-  if (exitCode !== null && exitCode !== 0) return { score: 0, detail: `Tests failed (exit ${exitCode})`, applicable: true };
+  if (exitCode !== null && exitCode !== 0)
+    return { score: 0, detail: `Tests failed (exit ${exitCode})`, applicable: true };
 
   const text = typeof last.result === 'string' ? last.result : JSON.stringify(last.result ?? '');
   if (/\d+ (?:tests? )?passed|✓|PASS/i.test(text) && !/\bfail(?:ed|ure)?\b|\berror\b/i.test(text)) {
@@ -153,7 +155,11 @@ function scoreToolErrors(results: ExtractedToolCall[]): DimensionResult {
   if (rate === 0) return { score: 1, detail: 'No tool errors', applicable: true };
 
   const score = Math.max(0, 1 - rate * THRESHOLDS.toolErrorPenaltyMultiplier);
-  return { score, detail: `${errors.length}/${nonBenign.length} tools errored (${(rate * 100).toFixed(0)}%)`, applicable: true };
+  return {
+    score,
+    detail: `${errors.length}/${nonBenign.length} tools errored (${(rate * 100).toFixed(0)}%)`,
+    applicable: true,
+  };
 }
 
 /**
@@ -244,7 +250,9 @@ function scoreRegression(execResults: ExtractedToolCall[]): DimensionResult {
   const persistentCount = regressions.filter(r => !r.recovered).length;
   const recoveredCount = regressions.filter(r => r.recovered).length;
   const score = Math.max(0, 1 - persistentCount * 0.5 - recoveredCount * 0.1);
-  const details = regressions.map(r => `${r.label} ${r.recovered ? 'regressed then recovered' : 'regressed (persisted)'}`);
+  const details = regressions.map(
+    r => `${r.label} ${r.recovered ? 'regressed then recovered' : 'regressed (persisted)'}`,
+  );
   return { score, detail: details.join('; '), applicable: true };
 }
 
@@ -266,10 +274,7 @@ function scoreAutonomy(results: ExtractedToolCall[]): DimensionResult {
  * Compute weighted average of only applicable dimensions.
  * Returns null if no dimensions are applicable.
  */
-function weightedAverage(
-  dimensions: Record<string, DimensionResult>,
-  weights: Record<string, number>,
-): number | null {
+function weightedAverage(dimensions: Record<string, DimensionResult>, weights: Record<string, number>): number | null {
   let totalWeight = 0;
   let weightedSum = 0;
 
@@ -301,7 +306,16 @@ export function createOutcomeScorer() {
       // H1: Empty sessions or sessions with no tool calls → score 0
       if (totalCalls < THRESHOLDS.minToolCalls) {
         const empty: DimensionResult = { score: 0, detail: 'No tool calls', applicable: false };
-        return { empty: true as const, build: empty, tests: empty, toolErrors: empty, loops: empty, regression: empty, autonomy: empty, totalCalls };
+        return {
+          empty: true as const,
+          build: empty,
+          tests: empty,
+          toolErrors: empty,
+          loops: empty,
+          regression: empty,
+          autonomy: empty,
+          totalCalls,
+        };
       }
 
       const execResults = allResults.filter(r => r.toolName === 'execute_command');
@@ -322,7 +336,14 @@ export function createOutcomeScorer() {
       if (p.empty) return 0;
 
       const score = weightedAverage(
-        { build: p.build, tests: p.tests, toolErrors: p.toolErrors, loops: p.loops, regression: p.regression, autonomy: p.autonomy },
+        {
+          build: p.build,
+          tests: p.tests,
+          toolErrors: p.toolErrors,
+          loops: p.loops,
+          regression: p.regression,
+          autonomy: p.autonomy,
+        },
         WEIGHTS,
       );
 

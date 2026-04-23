@@ -27,10 +27,7 @@ function isToolInvocationPart(part: MastraMessagePart): part is MastraMessagePar
 
 function isCompleted(inv: { state: string }): boolean {
   return (
-    inv.state === 'result' ||
-    inv.state === 'error' ||
-    inv.state === 'output-error' ||
-    inv.state === 'output-denied'
+    inv.state === 'result' || inv.state === 'error' || inv.state === 'output-error' || inv.state === 'output-denied'
   );
 }
 
