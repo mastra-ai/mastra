@@ -5957,7 +5957,18 @@ export class Agent<
     // to feed the combined stream.
     isProcessing = true;
     resetIdleTimer();
-    const first = (await agent.stream(messages, initialStreamOpts)) as MastraModelOutput<OUTPUT>;
+    let first: MastraModelOutput<OUTPUT>;
+    try {
+      first = (await agent.stream(messages, initialStreamOpts)) as MastraModelOutput<OUTPUT>;
+    } catch (err) {
+      // The outer machinery — bg reader, idle timer, controller — was
+      // started above. If the first stream() call rejects, nothing will
+      // feed the outer controller but the background subscription would
+      // keep running. Tear everything down before rethrowing so the caller
+      // isn't left with orphaned resources.
+      forceClose();
+      throw err;
+    }
 
     // Kick off piping in the background so we can return the wrapped result
     // immediately. The consumer can read from combinedStream while we're
