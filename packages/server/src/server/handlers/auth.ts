@@ -75,6 +75,13 @@ export function getPublicOrigin(request: Request): string {
   if (forwardedHost) {
     return `https://${forwardedHost}`;
   }
+
+  const host = request.headers.get('host');
+  if (host) {
+    const proto = request.headers.get('x-forwarded-proto') ?? 'https';
+    return `${proto}://${host}`;
+  }
+
   return new URL(request.url).origin;
 }
 
