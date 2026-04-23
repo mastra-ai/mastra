@@ -1128,6 +1128,9 @@ export class MastraClient extends BaseResource {
         searchParams.set('orderBy[direction]', params.orderBy.direction);
       }
     }
+    if (params?.status) {
+      searchParams.set('status', params.status);
+    }
     if (params?.authorId) {
       searchParams.set('authorId', params.authorId);
     }

@@ -25,62 +25,62 @@ export default function AgentBuilderAgentView() {
   });
   return (
     <FormProvider {...formMethods}>
-    <div className="flex flex-1 min-w-0 flex-col h-full bg-surface1">
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-6 pt-4">
-        <div className="justify-self-start">
-          <IconButton
-            tooltip="Agents list"
-            className="rounded-full"
-            onClick={() => navigate(`/agent-builder/agents`)}
-          >
-            <ArrowLeftIcon />
-          </IconButton>
+      <div className="flex flex-1 min-w-0 flex-col h-full bg-surface1">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-6 pt-4">
+          <div className="justify-self-start">
+            <IconButton
+              tooltip="Agents list"
+              className="rounded-full"
+              onClick={() => navigate(`/agent-builder/agents`)}
+            >
+              <ArrowLeftIcon />
+            </IconButton>
+          </div>
+          <AgentBuilderBreadcrumb className="justify-self-center" />
+          <div />
         </div>
-        <AgentBuilderBreadcrumb className="justify-self-center" />
-        <div />
-      </div>
-      <div className="flex flex-1 min-h-0 min-w-0 flex-col px-6 pb-6 pt-4">
-      <BrowserFrame className={cn('grid relative agent-builder-panel-grid', gridClass)}>
-        <div className="h-full w-full overflow-hidden grid grid-rows-[auto_1fr]">
-          <div className="flex gap-2 items-center pl-6 pt-6 pr-6 justify-between">
-            <div className="flex gap-2 items-center">
-              <IconButton
-                tooltip="Edit agent"
-                className="rounded-full"
-                onClick={() => navigate(`/agent-builder/agents/${id}/edit`, { viewTransition: true })}
-              >
-                <PencilIcon />
-              </IconButton>
+        <div className="flex flex-1 min-h-0 min-w-0 flex-col px-6 pb-6 pt-4">
+          <BrowserFrame className={cn('grid relative agent-builder-panel-grid', gridClass)}>
+            <div className="h-full w-full overflow-hidden grid grid-rows-[auto_1fr]">
+              <div className="flex gap-2 items-center pl-6 pt-6 pr-6 justify-between">
+                <div className="flex gap-2 items-center">
+                  <IconButton
+                    tooltip="Edit agent"
+                    className="rounded-full"
+                    onClick={() => navigate(`/agent-builder/agents/${id}/edit`, { viewTransition: true })}
+                  >
+                    <PencilIcon />
+                  </IconButton>
+                </div>
+                {!expanded && (
+                  <IconButton tooltip="Expand" className="rounded-full" onClick={() => setExpanded(true)}>
+                    <Columns2 />
+                  </IconButton>
+                )}
+              </div>
+
+              <AgentPreviewChat agent={defaultAgentFixture} />
             </div>
-            {!expanded && (
-              <IconButton tooltip="Expand" className="rounded-full" onClick={() => setExpanded(true)}>
-                <Columns2 />
-              </IconButton>
-            )}
-          </div>
 
-          <AgentPreviewChat agent={defaultAgentFixture} />
+            <div className="h-full min-w-0 overflow-hidden" aria-hidden={!expanded}>
+              <div
+                className={cn(
+                  'agent-builder-panel-slide h-full w-[380px] overflow-y-auto pr-6 pb-6 pt-6',
+                  expanded ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0 pointer-events-none',
+                )}
+                style={expanded ? { viewTransitionName: 'agent-builder-configure-panel' } : undefined}
+              >
+                <AgentConfigurePanel
+                  agent={defaultAgentFixture}
+                  onAgentChange={() => {}}
+                  editable={false}
+                  onClose={() => setExpanded(false)}
+                />
+              </div>
+            </div>
+          </BrowserFrame>
         </div>
-
-        <div className="h-full min-w-0 overflow-hidden" aria-hidden={!expanded}>
-          <div
-            className={cn(
-              'agent-builder-panel-slide h-full w-[380px] overflow-y-auto pr-6 pb-6 pt-6',
-              expanded ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0 pointer-events-none',
-            )}
-            style={expanded ? { viewTransitionName: 'agent-builder-configure-panel' } : undefined}
-          >
-            <AgentConfigurePanel
-              agent={defaultAgentFixture}
-              onAgentChange={() => {}}
-              editable={false}
-              onClose={() => setExpanded(false)}
-            />
-          </div>
-        </div>
-      </BrowserFrame>
       </div>
-    </div>
     </FormProvider>
   );
 }
