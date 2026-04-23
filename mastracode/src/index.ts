@@ -227,10 +227,15 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     // Force an early connection attempt so the lock error surfaces now, not mid-session.
     await observabilityDuckDB.db.getConnection();
     observabilityDomain = observabilityDuckDB.observability;
-  } catch {
-    // Lock held by another process — skip DuckDB observability for this session.
-    observabilityWarning =
-      'Observability unavailable — another MastraCode instance holds the database lock. Traces, scores, and feedback will not be recorded in this session.';
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const isLockError = /lock|locked|busy/i.test(message);
+    if (isLockError) {
+      observabilityWarning =
+        'Observability unavailable — another MastraCode instance holds the database lock. Traces, scores, and feedback will not be recorded in this session.';
+    } else {
+      observabilityWarning = `Observability unavailable — DuckDB initialization failed: ${message}`;
+    }
   }
 
   // Compose the main storage with the DuckDB observability domain (if available)
