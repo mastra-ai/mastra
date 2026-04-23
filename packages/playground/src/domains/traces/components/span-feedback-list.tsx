@@ -106,7 +106,10 @@ export function SpanFeedbackList({ feedbackData, isLoadingFeedbackData, onPageCh
           currentPage={feedbackData?.pagination?.page || 0}
           hasMore={feedbackData?.pagination?.hasMore}
           onNextPage={() => onPageChange?.((feedbackData?.pagination?.page || 0) + 1)}
-          onPrevPage={() => onPageChange?.((feedbackData?.pagination?.page || 0) - 1)}
+          onPrevPage={() => {
+            const currentPage = feedbackData?.pagination?.page || 0;
+            if (currentPage > 0) onPageChange?.(currentPage - 1);
+          }}
         />
       </EntryList>
       <FeedbackDialog
