@@ -59,8 +59,9 @@ export async function migrate({
       logger.info('');
       logger.info('Detected candidate entrypoints under the selected root:');
       for (const candidate of candidates) {
-        const suggestedDir = relative(process.cwd(), candidate).replace(/[\\/]index\.(ts|js)$/u, '');
-        const suggestedRoot = relative(process.cwd(), toDetectedProjectRoot(candidate)) || '.';
+        const rootBase = toDetectedProjectRoot(candidate);
+        const suggestedDir = relative(rootBase, candidate).replace(/[\\/]index\.(ts|js)$/u, '');
+        const suggestedRoot = relative(process.cwd(), rootBase) || '.';
         logger.info(`  - ${candidate}`);
         logger.info(pc.dim(`    Example: npx mastra migrate --dir ${suggestedDir} --root ${suggestedRoot}`));
       }
