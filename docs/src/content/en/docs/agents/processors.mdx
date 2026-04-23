@@ -235,7 +235,7 @@ The return value of `processOutputStream` controls how chunks are handled:
 
 - `return part` - emits the chunk
 - `return null` - suppresses the chunk (nothing is emitted)
-- `return undefined` - skips processing (no emit, continue pipeline)
+- `return undefined` - skips processing and passes the original chunk through unchanged
 
 #### Using writer with suppression
 

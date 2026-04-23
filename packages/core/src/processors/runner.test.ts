@@ -156,8 +156,10 @@ describe('ProcessorRunner', () => {
 
       messageList.add([createMessage('original', 'user')], 'user');
 
-      await expect(runner.runInputProcessors(messageList)).rejects.toThrow(TripWire);
-      await expect(runner.runInputProcessors(messageList)).rejects.toThrow('Test abort reason');
+      const promise = runner.runInputProcessors(messageList);
+
+      await expect(promise).rejects.toThrow(TripWire);
+      await expect(promise).rejects.toThrow('Test abort reason');
     });
 
     it('should abort with default message when no reason provided', async () => {
@@ -181,8 +183,10 @@ describe('ProcessorRunner', () => {
 
       messageList.add([createMessage('test', 'user')], 'user');
 
-      await expect(runner.runInputProcessors(messageList)).rejects.toThrow(TripWire);
-      await expect(runner.runInputProcessors(messageList)).rejects.toThrow('Tripwire triggered by processor1');
+      const promise = runner.runInputProcessors(messageList);
+
+      await expect(promise).rejects.toThrow(TripWire);
+      await expect(promise).rejects.toThrow('Tripwire triggered by processor1');
     });
 
     it('should not execute subsequent processors after tripwire', async () => {
@@ -548,6 +552,29 @@ describe('ProcessorRunner', () => {
       expect((assistantMessage!.content[1] as TextPart).text).toBe('message from processor 1');
       expect((assistantMessage!.content[2] as TextPart).text).toBe('message from processor 3');
     });
+
+    it('should throw if processOutputResult throws', async () => {
+      const outputProcessors: Processor[] = [
+        {
+          id: 'boom',
+          processOutputResult: async () => {
+            throw new Error('fail');
+          },
+        },
+      ];
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('hi', 'assistant')], 'response');
+
+      await expect(runner.runOutputProcessors(messageList)).rejects.toThrow('fail');
+    });
   });
 
   describe('Stream Processing', () => {
@@ -718,7 +745,7 @@ describe('ProcessorRunner', () => {
       expect(result.blocked).toBe(false);
     });
 
-    it('should ignore undefined output from processor', async () => {
+    it('should passthrough original chunk when processor returns undefined', async () => {
       const outputProcessors: Processor[] = [
         {
           id: 'undefined-processor',
@@ -747,7 +774,12 @@ describe('ProcessorRunner', () => {
         processorStates,
       );
 
-      expect(result.part).toBeUndefined();
+      expect(result.part).toEqual({
+        type: 'text-delta',
+        payload: { text: 'hello', id: '1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      });
       expect(result.blocked).toBe(false);
     });
 
@@ -983,6 +1015,42 @@ describe('ProcessorRunner', () => {
         processorStates,
       );
       expect(result.part?.type === 'text-delta' ? result.part?.payload.text : '').toBe('HELLO WORLD');
+    });
+
+    it('should isolate state between concurrent processPart calls', async () => {
+      const processor: Processor = {
+        id: 'stateful',
+        processOutputStream: async ({ part, state }) => {
+          const current = typeof state.count === 'number' ? state.count : 0;
+          state.count = current + 1;
+          return part;
+        },
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors: [processor],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const run = async () => {
+        const localStates = new Map();
+        await runner.processPart(
+          {
+            type: 'text-delta',
+            payload: { text: 'a', id: '1' },
+            runId: crypto.randomUUID(),
+            from: ChunkFrom.AGENT,
+          },
+          localStates,
+        );
+        return localStates;
+      };
+
+      const [s1, s2] = await Promise.all([run(), run()]);
+
+      expect(s1).not.toBe(s2);
     });
   });
 
@@ -2539,7 +2607,7 @@ describe('ProcessorRunner', () => {
       const all = await result.get.all.aiV5.prompt();
 
       const systemMessages = all.filter(m => m.role === 'system');
-      expect(systemMessages.length).toBeGreaterThan(0);
+      expect(systemMessages).toHaveLength(2);
     });
 
     it('should maintain correct order with async processors', async () => {
@@ -2576,6 +2644,123 @@ describe('ProcessorRunner', () => {
       await runner.runInputProcessors(messageList);
 
       expect(order).toEqual(['p1', 'p2']);
+    });
+
+    it('should handle invalid processor return shape safely', async () => {
+      const processors: Processor[] = [
+        {
+          id: 'bad',
+          processInput: async () => {
+            return { foo: 'bar' } as any;
+          },
+        },
+      ];
+
+      const runner = new ProcessorRunner({
+        inputProcessors: processors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('test')], 'user');
+
+      await expect(runner.runInputProcessors(messageList)).rejects.toThrow();
+    });
+
+    it('should handle processor returning empty array', async () => {
+      const processors: Processor[] = [
+        {
+          id: 'wipe',
+          processInput: async () => {
+            return [];
+          },
+        },
+      ];
+
+      const runner = new ProcessorRunner({
+        inputProcessors: processors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('hello')], 'user');
+
+      const result = await runner.runInputProcessors(messageList);
+      const messages = await result.get.all.prompt();
+
+      expect(messages).toHaveLength(0);
+    });
+
+    it('should correctly handle mix of in-place mutation and returned array across processors', async () => {
+      const processors: Processor[] = [
+        {
+          id: 'mutator',
+          processInput: async ({ messages }) => {
+            messages.push(createMessage('mutated'));
+            return messages;
+          },
+        },
+        {
+          id: 'replacer',
+          processInput: async ({ messages }) => {
+            return [...messages, createMessage('replaced')];
+          },
+        },
+      ];
+
+      const runner = new ProcessorRunner({
+        inputProcessors: processors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('original')], 'user');
+
+      const result = await runner.runInputProcessors(messageList);
+      const messages = await result.get.all.prompt();
+
+      expect(messages.map(m => (m.content[0] as TextPart).text)).toEqual(['original', 'mutated', 'replaced']);
+    });
+
+    it('should handle processors mixing array and object return types', async () => {
+      const processors: Processor[] = [
+        {
+          id: 'array-return',
+          processInput: async ({ messages }) => {
+            return [...messages, createMessage('from array')];
+          },
+        },
+        {
+          id: 'object-return',
+          processInput: async ({ messages, systemMessages }) => {
+            return {
+              messages: [...messages, createMessage('from object')],
+              systemMessages,
+            };
+          },
+        },
+      ];
+
+      const runner = new ProcessorRunner({
+        inputProcessors: processors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('start')], 'user');
+
+      const result = await runner.runInputProcessors(messageList);
+      const messages = await result.get.all.prompt();
+
+      expect(messages.map(m => (m.content[0] as TextPart).text)).toEqual(['start', 'from array', 'from object']);
     });
   });
 });
