@@ -1,4 +1,4 @@
-import { Avatar, EmptyState, IconButton, Textarea, Txt, cn } from '@mastra/playground-ui';
+import { Avatar, EmptyState, IconButton, Skeleton, Textarea, Txt, cn } from '@mastra/playground-ui';
 import type { MastraUIMessage } from '@mastra/react';
 import { ArrowUpIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -7,9 +7,10 @@ import type { AgentFixture } from '../../fixtures';
 
 interface AgentPreviewChatProps {
   agent: AgentFixture;
+  isLoading?: boolean;
 }
 
-export const AgentPreviewChat = ({ agent }: AgentPreviewChatProps) => {
+export const AgentPreviewChat = ({ agent, isLoading = false }: AgentPreviewChatProps) => {
   const [messages, setMessages] = useState<MastraUIMessage[]>([]);
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -37,6 +38,27 @@ export const AgentPreviewChat = ({ agent }: AgentPreviewChatProps) => {
       e.currentTarget.form?.requestSubmit();
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex h-full min-h-0 flex-col" data-testid="agent-preview-chat-loading">
+        <div className="flex-1 min-h-0 overflow-hidden px-8 py-6">
+          <div className="flex h-full items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <Skeleton className="h-16 w-16 rounded-full" />
+              <Skeleton className="h-5 w-48" />
+              <Skeleton className="h-4 w-64" />
+            </div>
+          </div>
+        </div>
+        <div className="shrink-0 px-6 pb-6">
+          <div className="mx-auto w-full max-w-2xl">
+            <Skeleton className="h-[72px] w-full rounded-xl" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col">

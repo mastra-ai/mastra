@@ -1,13 +1,14 @@
-import { Breadcrumb, Crumb } from '@mastra/playground-ui';
+import { Breadcrumb, Crumb, Skeleton } from '@mastra/playground-ui';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { Link } from 'react-router';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 
 export interface AgentBuilderBreadcrumbProps {
   className?: string;
+  isLoading?: boolean;
 }
 
-export const AgentBuilderBreadcrumb = ({ className }: AgentBuilderBreadcrumbProps) => {
+export const AgentBuilderBreadcrumb = ({ className, isLoading = false }: AgentBuilderBreadcrumbProps) => {
   const { control } = useFormContext<AgentBuilderEditFormValues>();
   const name = useWatch({ control, name: 'name' });
   const displayName = name && name.trim() ? name : 'Untitled';
@@ -19,7 +20,11 @@ export const AgentBuilderBreadcrumb = ({ className }: AgentBuilderBreadcrumbProp
           Agents
         </Crumb>
         <Crumb as="span" isCurrent>
-          {displayName}
+          {isLoading ? (
+            <Skeleton className="inline-block h-4 w-24 align-middle" data-testid="agent-builder-breadcrumb-skeleton" />
+          ) : (
+            displayName
+          )}
         </Crumb>
       </Breadcrumb>
     </div>

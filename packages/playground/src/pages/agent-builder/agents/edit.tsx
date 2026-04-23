@@ -72,6 +72,7 @@ export default function AgentBuilderAgentEdit() {
     void navigate(`/agent-builder/agents`, { viewTransition: true });
   };
   const handleSave = formMethods.handleSubmit(handleSaveSuccess);
+  const isLoading = isStoredAgentLoading || isPending;
 
   const [expanded, setExpanded] = useState(true);
   const navigate = useNavigate();
@@ -91,7 +92,7 @@ export default function AgentBuilderAgentEdit() {
               <ArrowLeftIcon />
             </IconButton>
           </div>
-          <AgentBuilderBreadcrumb className="justify-self-center" />
+          <AgentBuilderBreadcrumb className="justify-self-center" isLoading={isLoading} />
           <div className="justify-self-end" />
         </div>
         <div className="flex flex-1 min-h-0">
@@ -124,7 +125,7 @@ export default function AgentBuilderAgentEdit() {
                   )}
                 </div>
 
-                <AgentPreviewChat agent={agent} />
+                <AgentPreviewChat agent={agent} isLoading={isLoading} />
               </div>
 
               <div className="h-full min-w-0 overflow-hidden" aria-hidden={!expanded}>
@@ -142,7 +143,7 @@ export default function AgentBuilderAgentEdit() {
                     availableTools={availableTools}
                     onSave={handleSave}
                     isSaving={isSaving}
-                    isLoading={isStoredAgentLoading}
+                    isLoading={isLoading}
                   />
                 </div>
               </div>

@@ -23,8 +23,9 @@ export default function AgentBuilderAgentView() {
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
   const gridClass = expanded ? 'grid-cols-[1fr_380px]' : 'grid-cols-[1fr_0px]';
-  const { data: storedAgent, isLoading } = useStoredAgent(id);
-  const { data: toolsData } = useTools();
+  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id);
+  const { data: toolsData, isPending: isToolsPending } = useTools();
+  const isLoading = isStoredAgentLoading || isToolsPending;
 
   const availableTools = useMemo<AvailableTool[]>(
     () =>
@@ -83,7 +84,7 @@ export default function AgentBuilderAgentView() {
               <ArrowLeftIcon />
             </IconButton>
           </div>
-          <AgentBuilderBreadcrumb className="justify-self-center" />
+          <AgentBuilderBreadcrumb className="justify-self-center" isLoading={isLoading} />
           <div />
         </div>
         <div className="flex flex-1 min-h-0 min-w-0 flex-col px-6 pb-6 pt-4">
@@ -106,7 +107,7 @@ export default function AgentBuilderAgentView() {
                 )}
               </div>
 
-              <AgentPreviewChat agent={agent} />
+              <AgentPreviewChat agent={agent} isLoading={isLoading} />
             </div>
 
             <div className="h-full min-w-0 overflow-hidden" aria-hidden={!expanded}>
