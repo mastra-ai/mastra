@@ -489,13 +489,13 @@ export class SearchEngine {
 
     if (!this.#vectorIndexReady) {
       // Some backends (e.g. LibSQLVector) require createIndex before upsert.
-      // createIndex is expected to be idempotent; failures are surfaced via upsert.
+      // createIndex is expected to be idempotent; we ignore errors here and let
+      // upsert determine whether the index is actually usable.
       try {
         await vectorStore.createIndex({ indexName, dimension: embedding.length });
       } catch {
-        // Already exists or not required by this backend — upsert will surface any real issue.
+        // Already exists, temporarily unavailable, or not required by backend.
       }
-      this.#vectorIndexReady = true;
     }
 
     await vectorStore.upsert({
@@ -510,6 +510,10 @@ export class SearchEngine {
       ],
       ids: [doc.id],
     });
+
+    // Mark index as ready only after a successful upsert so createIndex is retried
+    // on subsequent writes if the previous attempt did not produce a usable index.
+    this.#vectorIndexReady = true;
   }
 
   /**

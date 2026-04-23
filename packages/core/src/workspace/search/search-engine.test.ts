@@ -208,6 +208,38 @@ Line 3`;
       expect(store.upsert).toHaveBeenCalledTimes(1);
     });
 
+    it('should retry createIndex on next write if previous createIndex/upsert path failed', async () => {
+      let createAttempts = 0;
+      let indexCreated = false;
+
+      const store: any = {
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+        createIndex: vi.fn(async () => {
+          createAttempts += 1;
+          if (createAttempts === 1) {
+            throw new Error('temporary create failure');
+          }
+          indexCreated = true;
+        }),
+        upsert: vi.fn(async () => {
+          if (!indexCreated) {
+            throw new Error('no such table');
+          }
+        }),
+      };
+
+      const localEngine = new SearchEngine({
+        vector: { vectorStore: store, embedder: mockEmbedder, indexName: 'test-index' },
+      });
+
+      await expect(localEngine.index({ id: 'doc1', content: 'Hello world' })).rejects.toThrow('no such table');
+      await expect(localEngine.index({ id: 'doc2', content: 'Another doc' })).resolves.toBeUndefined();
+
+      expect(store.createIndex).toHaveBeenCalledTimes(2);
+      expect(store.upsert).toHaveBeenCalledTimes(2);
+    });
+
     it('should search vector store', async () => {
       mockVectorStore.query.mockResolvedValue([
         { id: 'doc1', score: 0.95, metadata: { id: 'doc1', text: 'Hello world' } },
