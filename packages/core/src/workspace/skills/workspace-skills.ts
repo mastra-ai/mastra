@@ -855,6 +855,23 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
             continue;
           }
 
+          // If this directory is itself a skill root, check its SKILL.md mtime.
+          // This covers direct skill paths and file-level glob expansions (e.g., **/SKILL.md).
+          if (this.#checkSkillFileMtime) {
+            const directSkillFilePath = this.#joinPath(pathToCheck, 'SKILL.md');
+            try {
+              const directSkillFileStat = await this.#source.stat(directSkillFilePath);
+              if (
+                directSkillFileStat.type === 'file' &&
+                directSkillFileStat.modifiedAt.getTime() > this.#lastDiscoveryTime
+              ) {
+                return true;
+              }
+            } catch {
+              // Not a direct skill dir (or SKILL.md unavailable), continue to subdirectory scan.
+            }
+          }
+
           // Also check subdirectories (skill directories) for changes
           const entries = await this.#source.readdir(pathToCheck);
           for (const entry of entries) {
@@ -873,7 +890,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
                 const skillFilePath = this.#joinPath(entryPath, 'SKILL.md');
                 try {
                   const skillFileStat = await this.#source.stat(skillFilePath);
-                  if (skillFileStat.modifiedAt.getTime() > this.#lastDiscoveryTime) {
+                  if (skillFileStat.type === 'file' && skillFileStat.modifiedAt.getTime() > this.#lastDiscoveryTime) {
                     return true;
                   }
                 } catch {
