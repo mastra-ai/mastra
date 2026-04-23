@@ -160,16 +160,16 @@ Most processor methods receive both `messages` and `messageList`. They point to 
 
 ### `messages` vs `messageList`
 
-- `messages`: A plain array of `MastraDBMessage` objects, scoped to the current stage. For `processInput` and `processInputStep` this excludes system messages. For `processOutputResult` and `processOutputStep` this includes the latest LLM response. Treat this array as a read-only snapshot.
+- `messages`: A plain array of `MastraDBMessage` objects, scoped to the current stage. For `processInput` and `processInputStep` this excludes system messages. For `processOutputResult` and `processOutputStep` this includes the latest LLM response. The array is backed by `messageList`, so editing a message's `content.parts` in place is visible to downstream processors and to persistence.
 - `messageList`: The live `MessageList` instance backing the run. It exposes filtered views (input, response, remembered, all), multiple output formats (db, ui, core), and methods for mutating the conversation.
 
-Use `messages` when you only need to read or map over the current stage's messages. Use `messageList` when you need to:
+Use `messages` when you only need to read, map over, or lightly edit fields on the current stage's messages. Use `messageList` when you need to:
 
 - Read messages from another stage, for example input messages while processing output.
-- Add, remove, or replace messages in place.
+- Add, remove, or replace whole messages.
 - Convert to another format such as UI or core messages for a third-party API.
 
-`messages` is always derived from `messageList`, so mutating `messageList` is the canonical way to change the conversation. If you return a new array from `messages`, Mastra replaces the corresponding stage in `messageList` for you.
+`messages` is always derived from `messageList`, so mutating `messageList` is the canonical way to add, remove, or reorder messages. For in-place edits to a message's content (for example, rewriting `content.parts`), mutating `messages` directly is equivalent. If you return a new array from `messages`, Mastra reconciles it against `messageList` for the current stage.
 
 ### Persistence
 
