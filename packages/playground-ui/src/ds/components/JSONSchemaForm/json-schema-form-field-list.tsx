@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { cn } from '@/lib/utils';
 import { useJSONSchemaForm } from './json-schema-form-context';
 import { useJSONSchemaFormNestedContext } from './json-schema-form-nested-context';
 import type { SchemaField } from './types';

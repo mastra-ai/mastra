@@ -54,7 +54,7 @@ Once registered, it can be called from workflows, tools, or other agents, and ha
 
 :::tip
 
-Use [Studio](/docs/getting-started/studio) to test your agent with different messages, inspect tool calls and responses, and debug agent behavior.
+Use [Studio](/docs/studio/overview) to test your agent with different messages, inspect tool calls and responses, and debug agent behavior.
 
 :::
 
@@ -71,8 +71,10 @@ After registration, retrieve your agent with [`mastra.getAgentById()`](/referenc
 When referencing an agent from your Mastra instance, use `mastra.getAgentById()` to ensure it has access to shared services such as instance-level storage, logging, and agent registry. A directly imported agent can still work with its own local configuration, but it won't have access to those shared services.
 
 <Tabs>
-  <TabItem value="generate" label="Generate">
+  <TabItem value="generate" label=".generate()">
     Returns the full response after all tool calls and steps complete. The result includes `text`, `toolCalls`, `toolResults`, `steps`, and token `usage` statistics.
+
+    See the [`Agent.generate()` reference](/reference/agents/generate) for the response shape, including tool call and tool result payloads.
 
     ```ts
     const agent = mastra.getAgentById('test-agent')
@@ -81,8 +83,10 @@ When referencing an agent from your Mastra instance, use `mastra.getAgentById()`
     ```
   </TabItem>
 
-  <TabItem value="stream" label="Stream">
+  <TabItem value="stream" label=".stream()">
     Returns a stream you can consume as tokens arrive. The result exposes `textStream` for incremental output and promises for `toolCalls`, `toolResults`, `steps`, and token `usage` that resolve when the stream finishes.
+
+    See the [`MastraModelOutput` reference](/reference/streaming/agents/MastraModelOutput) for the stream shape, including tool call and tool result payloads.
 
     ```ts
     const agent = mastra.getAgentById('test-agent')
@@ -111,9 +115,10 @@ Once your agent is running, use this table to find the right page for what you w
 | Keep your agent safe | [Guardrails](/docs/agents/guardrails) |
 | Swap instructions or models based on request context | [Dynamic configuration](/docs/server/request-context) |
 | Add speech-to-text or text-to-speech | [Voice](/docs/agents/adding-voice) |
+| Connect to Slack, Discord, or Telegram | [Channels](/docs/agents/channels) |
 
 ## Multi-agent systems
 
-A multi-agent system uses multiple agents to solve a task that is too broad or too specialized for a single agent. Instead of building one agent with dozens of tools and a long instruction set, you split responsibilities across focused agents and let a coordinator bring results together.
+A multi-agent system uses multiple agents to solve a task that's too broad or too specialized for a single agent. Instead of building one agent with dozens of tools and a long instruction set, you split responsibilities across focused agents and let a coordinator bring results together.
 
 Read the [conceptual overview of multi-agent systems](/guides/concepts/multi-agent-systems) to learn how you can apply different patterns with Mastra.

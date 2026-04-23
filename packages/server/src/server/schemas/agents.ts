@@ -1,4 +1,4 @@
-import z from 'zod';
+import { z } from 'zod/v4';
 import { tracingOptionsSchema, coreMessageSchema, messageResponseSchema } from './common';
 import { defaultOptionsSchema } from './default-options';
 
@@ -222,6 +222,18 @@ export const agentExecutionBodySchema = z
 
     // Request Context (handler-specific field - merged with server's requestContext)
     requestContext: z.record(z.string(), z.any()).optional(),
+
+    // Version overrides for sub-agents (and future primitives)
+    versions: z
+      .object({
+        agents: z
+          .record(
+            z.string(),
+            z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
+          )
+          .optional(),
+      })
+      .optional(),
 
     // Execution Control
     maxSteps: z.number().optional(),

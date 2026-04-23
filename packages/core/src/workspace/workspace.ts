@@ -31,6 +31,7 @@
  */
 
 import * as path from 'node:path';
+import type { MastraBrowser } from '../browser';
 import type { IMastraLogger } from '../logger';
 import type { RequestContext } from '../request-context';
 import type { MastraVector } from '../vector';
@@ -47,8 +48,8 @@ import type { LSPConfig } from './lsp/types';
 import type { WorkspaceSandbox, OnMountHook } from './sandbox';
 import { LocalSandbox } from './sandbox/local-sandbox';
 import { MastraSandbox } from './sandbox/mastra-sandbox';
-import { SearchEngine } from './search';
 import type { BM25Config, Embedder, SearchOptions, SearchResult, IndexDocument } from './search';
+import { SearchEngine, splitIntoChunks } from './search';
 import type { WorkspaceSkills, SkillsResolver, SkillSource } from './skills';
 import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
 import type { WorkspaceToolsConfig } from './tools';
@@ -164,6 +165,35 @@ export interface WorkspaceConfig<
   onMount?: OnMountHook;
 
   // ---------------------------------------------------------------------------
+  // Browser Configuration
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Browser provider for web automation.
+   *
+   * Must be a `MastraBrowser` instance with `providerType: 'cli'` (e.g., `BrowserViewer`).
+   * SDK providers (`AgentBrowser`, `StagehandBrowser`) are not supported here —
+   * use `Agent.browser` for SDK providers.
+   *
+   * The browser is launched via Playwright and exposes a CDP URL that CLI tools
+   * (`agent-browser`, `browser-use`, `browse-cli`) can connect to.
+   *
+   * @example
+   * ```typescript
+   * import { BrowserViewer } from '@mastra/browser-viewer';
+   *
+   * const workspace = new Workspace({
+   *   sandbox: new LocalSandbox({ cwd: './workspace' }),
+   *   browser: new BrowserViewer({
+   *     cli: 'agent-browser',
+   *     headless: false,
+   *   }),
+   * });
+   * ```
+   */
+  browser?: MastraBrowser;
+
+  // ---------------------------------------------------------------------------
   // Search Configuration
   // ---------------------------------------------------------------------------
 
@@ -247,6 +277,20 @@ export interface WorkspaceConfig<
    * ```
    */
   skillSource?: SkillSource;
+
+  /**
+   * Check SKILL.md file mtime in addition to directory mtime for staleness detection.
+   *
+   * When enabled, allows hot-reload detection of in-place SKILL.md edits
+   * (e.g., fixing a validation error or updating a skill description).
+   *
+   * Trade-off: This doubles the stat() calls per skill during staleness checks.
+   * Recommended for local development only. Not recommended for cloud storage
+   * backends (S3, etc.) where stat() calls have higher latency.
+   *
+   * @default false
+   */
+  checkSkillFileMtime?: boolean;
 
   // ---------------------------------------------------------------------------
   // LSP Configuration
@@ -412,10 +456,12 @@ export class Workspace<
   private _status: WorkspaceStatus = 'pending';
   private readonly _fs?: WorkspaceFilesystem;
   private readonly _sandbox?: WorkspaceSandbox;
+  private readonly _browser?: MastraBrowser;
   private readonly _config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>;
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
   private _lsp?: LSPManager;
+  private _logger?: IMastraLogger;
 
   constructor(config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>) {
     this.id = config.id ?? this.generateId();
@@ -456,6 +502,19 @@ export class Workspace<
       }
     } else {
       this._fs = config.filesystem;
+    }
+
+    // Validate and store browser provider
+    if (config.browser) {
+      if (config.browser.providerType !== 'cli') {
+        throw new WorkspaceError(
+          `Workspace.browser requires a CLI provider (providerType: 'cli'), but got '${config.browser.providerType}'. ` +
+            `SDK providers should be used with Agent.browser instead.`,
+          'INVALID_CONFIG',
+          this.id,
+        );
+      }
+      this._browser = config.browser;
     }
 
     // Validate vector search config - embedder is required with vectorStore
@@ -571,6 +630,15 @@ export class Workspace<
   }
 
   /**
+   * The browser provider (if configured).
+   *
+   * Returns the MastraBrowser instance (must be a CLI provider like BrowserViewer).
+   */
+  get browser(): MastraBrowser | undefined {
+    return this._browser;
+  }
+
+  /**
    * Get the per-tool configuration for this workspace.
    * Returns undefined if no tools config was provided.
    */
@@ -615,7 +683,7 @@ export class Workspace<
    * @example
    * ```typescript
    * const skills = await workspace.skills?.list();
-   * const skill = await workspace.skills?.get('brand-guidelines');
+   * const skill = await workspace.skills?.get('skills/brand-guidelines');
    * const results = await workspace.skills?.search('brand colors');
    * ```
    */
@@ -635,6 +703,7 @@ export class Workspace<
         skills: this._config.skills!,
         searchEngine: this._searchEngine,
         validateOnLoad: true,
+        checkSkillFileMtime: this._config.checkSkillFileMtime,
       });
     }
 
@@ -789,16 +858,44 @@ export class Workspace<
 
   /**
    * Index a single file for search. Skips files that can't be read as text.
+   * Large files are automatically split into chunks to stay within embedding
+   * model token limits.
    */
   private async indexFileForSearch(filePath: string): Promise<void> {
+    let content: string;
     try {
-      const content = await this._fs!.readFile(filePath, { encoding: 'utf-8' });
-      await this._searchEngine!.index({
-        id: filePath,
-        content: content as string,
-      });
+      content = (await this._fs!.readFile(filePath, { encoding: 'utf-8' })) as string;
     } catch {
-      // Skip files that can't be read as text
+      // Skip files that can't be read as text (e.g. binary files, invalid UTF-8)
+      return;
+    }
+
+    // Clear stale single-doc/chunked entries from previous indexing passes.
+    await this._searchEngine!.removeSource(filePath);
+
+    const chunks = splitIntoChunks(content);
+
+    if (chunks.length === 1) {
+      try {
+        await this._searchEngine!.index({ id: filePath, content });
+      } catch (error) {
+        this._logger?.warn(`Failed to index file "${filePath}" for search`, { error });
+      }
+      return;
+    }
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i]!;
+      try {
+        await this._searchEngine!.index({
+          id: `${filePath}#chunk-${i}`,
+          content: chunk.content,
+          startLineOffset: chunk.startLine,
+          metadata: { sourceFile: filePath },
+        });
+      } catch (error) {
+        this._logger?.warn(`Failed to index chunk ${i} of file "${filePath}" for search`, { error });
+      }
     }
   }
 
@@ -841,6 +938,10 @@ export class Workspace<
         await callLifecycle(this._sandbox, 'start');
       }
 
+      // Note: Browser is NOT launched here - it's launched lazily in execute-command
+      // when a browser CLI command is detected. This matches SDK provider behavior
+      // and enables thread-scoped browsers.
+
       // Auto-index files if autoIndexPaths is configured
       if (this._searchEngine && this._config.autoIndexPaths && this._config.autoIndexPaths.length > 0) {
         await this.rebuildSearchIndex(this._config.autoIndexPaths ?? []);
@@ -868,6 +969,15 @@ export class Workspace<
           // LSP shutdown errors are non-blocking
         }
         this._lsp = undefined;
+      }
+
+      // Close browser before sandbox
+      if (this._browser) {
+        try {
+          await this._browser.close();
+        } catch {
+          // Browser close errors are non-blocking
+        }
       }
 
       if (this._sandbox) {
@@ -1038,6 +1148,8 @@ export class Workspace<
    * @internal
    */
   __setLogger(logger: IMastraLogger): void {
+    this._logger = logger;
+
     // Propagate logger to filesystem provider if it extends MastraFilesystem
     if (this._fs instanceof MastraFilesystem) {
       this._fs.__setLogger(logger);

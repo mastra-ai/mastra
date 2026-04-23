@@ -125,6 +125,11 @@ export class Tool<
   requireApproval?: boolean;
 
   /**
+   * Enables strict tool input generation for providers that support it.
+   */
+  strict?: boolean;
+
+  /**
    * Provider-specific options passed to the model when this tool is used.
    * Keys are provider names (e.g., 'anthropic', 'openai'), values are provider-specific configs.
    * @example
@@ -237,6 +242,7 @@ export class Tool<
     this.requestContextSchema = opts.requestContextSchema;
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
+    this.strict = opts.strict;
     this.providerOptions = opts.providerOptions;
     this.toModelOutput = opts.toModelOutput;
     this.inputExamples = opts.inputExamples;
@@ -303,11 +309,21 @@ export class Tool<
 
           if (isAgentExecution && !baseContext.agent) {
             // Reorganize agent context - nest agent-specific properties under 'agent' key
-            const { toolCallId, messages, suspend, resumeData, threadId, resourceId, writableStream, ...rest } =
-              baseContext;
+            const {
+              agentId,
+              toolCallId,
+              messages,
+              suspend,
+              resumeData,
+              threadId,
+              resourceId,
+              writableStream,
+              ...rest
+            } = baseContext;
             organizedContext = {
               ...rest,
               agent: {
+                agentId: agentId || '',
                 toolCallId,
                 messages,
                 suspend,
@@ -342,6 +358,7 @@ export class Tool<
               agent: baseContext.agent
                 ? {
                     ...baseContext.agent,
+                    agentId: baseContext.agent.agentId ?? '',
                     suspend: (args: any, suspendOptions?: SuspendOptions) => {
                       suspendData = args;
                       return baseContext.agent?.suspend?.(args, suspendOptions);

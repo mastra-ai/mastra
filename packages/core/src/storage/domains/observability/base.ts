@@ -18,10 +18,25 @@ import type {
   GetMetricLabelValuesArgs,
   GetMetricLabelValuesResponse,
 } from './discovery';
-import type { BatchCreateFeedbackArgs, CreateFeedbackArgs, ListFeedbackArgs, ListFeedbackResponse } from './feedback';
+import type {
+  BatchCreateFeedbackArgs,
+  CreateFeedbackArgs,
+  ListFeedbackArgs,
+  ListFeedbackResponse,
+  GetFeedbackAggregateArgs,
+  GetFeedbackAggregateResponse,
+  GetFeedbackBreakdownArgs,
+  GetFeedbackBreakdownResponse,
+  GetFeedbackTimeSeriesArgs,
+  GetFeedbackTimeSeriesResponse,
+  GetFeedbackPercentilesArgs,
+  GetFeedbackPercentilesResponse,
+} from './feedback';
 import type { BatchCreateLogsArgs, ListLogsArgs, ListLogsResponse } from './logs';
 import type {
   BatchCreateMetricsArgs,
+  ListMetricsArgs,
+  ListMetricsResponse,
   GetMetricAggregateArgs,
   GetMetricAggregateResponse,
   GetMetricBreakdownArgs,
@@ -31,7 +46,20 @@ import type {
   GetMetricPercentilesArgs,
   GetMetricPercentilesResponse,
 } from './metrics';
-import type { BatchCreateScoresArgs, CreateScoreArgs, ListScoresArgs, ListScoresResponse } from './scores';
+import type {
+  BatchCreateScoresArgs,
+  CreateScoreArgs,
+  ListScoresArgs,
+  ListScoresResponse,
+  GetScoreAggregateArgs,
+  GetScoreAggregateResponse,
+  GetScoreBreakdownArgs,
+  GetScoreBreakdownResponse,
+  GetScoreTimeSeriesArgs,
+  GetScoreTimeSeriesResponse,
+  GetScorePercentilesArgs,
+  GetScorePercentilesResponse,
+} from './scores';
 import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -43,6 +71,7 @@ import type {
   GetSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
+  GetTraceLightResponse,
   ListTracesArgs,
   ListTracesResponse,
   UpdateSpanArgs,
@@ -94,6 +123,18 @@ export class ObservabilityStorage extends StorageDomain {
   }
 
   /**
+   * Reports the tracing strategy currently in effect for this attached observability store.
+   *
+   * Single-strategy stores can rely on the default implementation. Multi-strategy stores
+   * should override this getter only when they can determine the actual configured mode
+   * from storage-owned configuration, not exporter state.
+   */
+  public get runtimeTracingStrategy(): TracingStorageStrategy | undefined {
+    const supportedStrategies = this.observabilityStrategy.supported;
+    return supportedStrategies.length === 1 ? supportedStrategies[0] : undefined;
+  }
+
+  /**
    * Creates a single Span record in the storage provider.
    */
   async createSpan(_args: CreateSpanArgs): Promise<void> {
@@ -107,6 +148,10 @@ export class ObservabilityStorage extends StorageDomain {
 
   /**
    * Updates a single Span with partial data. Primarily used for realtime trace creation.
+   *
+   * @deprecated This method only works with stores that support span updates,
+   * It will be removed in the future. Instead try to add all data to a span before
+   * ending it.
    */
   async updateSpan(_args: UpdateSpanArgs): Promise<void> {
     throw new MastraError({
@@ -150,6 +195,19 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support getting traces',
+    });
+  }
+
+  /**
+   * Retrieves a lightweight trace with only the fields needed for timeline rendering.
+   * Excludes heavy fields: input, output, attributes, metadata, tags, links.
+   */
+  async getTraceLight(_args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_TRACE_LIGHT_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support getting lightweight traces',
     });
   }
 
@@ -242,6 +300,15 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support batch creating metrics',
+    });
+  }
+
+  async listMetrics(_args: ListMetricsArgs): Promise<ListMetricsResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_LIST_METRICS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support listing metrics',
     });
   }
 
@@ -397,6 +464,42 @@ export class ObservabilityStorage extends StorageDomain {
     });
   }
 
+  async getScoreAggregate(_args: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_SCORE_AGGREGATE_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support score aggregation',
+    });
+  }
+
+  async getScoreBreakdown(_args: GetScoreBreakdownArgs): Promise<GetScoreBreakdownResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_SCORE_BREAKDOWN_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support score breakdown',
+    });
+  }
+
+  async getScoreTimeSeries(_args: GetScoreTimeSeriesArgs): Promise<GetScoreTimeSeriesResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_SCORE_TIME_SERIES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support score time series',
+    });
+  }
+
+  async getScorePercentiles(_args: GetScorePercentilesArgs): Promise<GetScorePercentilesResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_SCORE_PERCENTILES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support score percentiles',
+    });
+  }
+
   // ============================================================================
   // Feedback
   // ============================================================================
@@ -434,6 +537,42 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support listing feedback',
+    });
+  }
+
+  async getFeedbackAggregate(_args: GetFeedbackAggregateArgs): Promise<GetFeedbackAggregateResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_FEEDBACK_AGGREGATE_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support feedback aggregation',
+    });
+  }
+
+  async getFeedbackBreakdown(_args: GetFeedbackBreakdownArgs): Promise<GetFeedbackBreakdownResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_FEEDBACK_BREAKDOWN_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support feedback breakdown',
+    });
+  }
+
+  async getFeedbackTimeSeries(_args: GetFeedbackTimeSeriesArgs): Promise<GetFeedbackTimeSeriesResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_FEEDBACK_TIME_SERIES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support feedback time series',
+    });
+  }
+
+  async getFeedbackPercentiles(_args: GetFeedbackPercentilesArgs): Promise<GetFeedbackPercentilesResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_FEEDBACK_PERCENTILES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support feedback percentiles',
     });
   }
 }

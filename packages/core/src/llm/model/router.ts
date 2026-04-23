@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
-import { createOpenAI } from '@ai-sdk/openai-v5';
+import { createOpenAI } from '@ai-sdk/openai-v6';
 import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 import type { StreamTransport } from '../../stream/types';
@@ -10,6 +10,7 @@ import { parseModelRouterId } from './gateway-resolver.js';
 import type { GatewayLanguageModel, MastraModelGateway } from './gateways/base.js';
 import { findGatewayForModel } from './gateways/index.js';
 
+import { MastraGateway } from './gateways/mastra.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
 import { createOpenAIWebSocketFetch } from './openai-websocket-fetch.js';
@@ -69,7 +70,11 @@ function getStaticProvidersByGateway(name: string) {
   return Object.fromEntries(Object.entries(PROVIDER_REGISTRY).filter(([_provider, config]) => config.gateway === name));
 }
 
-export const defaultGateways = [new NetlifyGateway(), new ModelsDevGateway(getStaticProvidersByGateway(`models.dev`))];
+export const defaultGateways = [
+  new NetlifyGateway(),
+  new MastraGateway(),
+  new ModelsDevGateway(getStaticProvidersByGateway(`models.dev`)),
+];
 
 /**
  * @deprecated Use defaultGateways instead. This export will be removed in a future version.
@@ -93,6 +98,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
 
   readonly modelId: string;
   readonly provider: string;
+  readonly gatewayId: string;
 
   private config: OpenAICompatibleConfig & { routerId: string };
   private gateway: MastraModelGateway;
@@ -140,7 +146,12 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     };
 
     // Resolve gateway once using the normalized ID
-    this.gateway = findGatewayForModel(normalizedConfig.id, [...(customGateways || []), ...defaultGateways]);
+    // Merge custom gateways with defaults, deduplicating by gateway id (custom takes precedence)
+    const allGateways = customGateways?.length
+      ? [...customGateways, ...defaultGateways.filter(dg => !customGateways.some(cg => cg.id === dg.id))]
+      : defaultGateways;
+    this.gateway = findGatewayForModel(normalizedConfig.id, allGateways);
+    this.gatewayId = this.gateway.id;
     // Extract provider from id if present
     // Gateway ID is used as prefix (except for models.dev which is a provider registry)
     const gatewayPrefix = this.gateway.id === 'models.dev' ? undefined : this.gateway.id;
@@ -231,6 +242,26 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
   /** @internal */
   _getStreamTransport(): StreamTransport | undefined {
     return this.#lastStreamTransport;
+  }
+
+  /**
+   * Custom serialization for tracing/observability spans.
+   * Excludes `config` (holds apiKey, headers, url) and `gateway`
+   * (may hold proxy credentials or cached tokens) so they cannot leak
+   * into telemetry backends.
+   */
+  serializeForSpan(): {
+    specificationVersion: 'v2';
+    modelId: string;
+    provider: string;
+    gatewayId: string;
+  } {
+    return {
+      specificationVersion: this.specificationVersion,
+      modelId: this.modelId,
+      provider: this.provider,
+      gatewayId: this.gatewayId,
+    };
   }
 
   private setStreamTransport({

@@ -1,3 +1,4 @@
+import { APICallError } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
@@ -29,6 +30,9 @@ type IterationData = {
     warnings: [];
     isContinued: boolean;
   };
+  processorRetryCount?: number;
+  fallbackModelIndex?: number;
+  processorRetryFeedback?: string;
 };
 
 describe('createLLMExecutionStep gateway provider tools', () => {
@@ -100,13 +104,11 @@ describe('createLLMExecutionStep gateway provider tools', () => {
   });
 
   it('should infer providerExecuted for gateway tools and not merge streamed results onto toolCalls', async () => {
-    const executeSpy = vi.fn();
     const tools = {
       perplexitySearch: {
         type: 'provider' as const,
         id: 'gateway.perplexity_search',
         args: {},
-        execute: executeSpy,
       },
     };
 
@@ -241,7 +243,6 @@ describe('createLLMExecutionStep gateway provider tools', () => {
 
     expect(toolResult).toEqual(toolCallById['call-1']);
     expect(toolResult.result).toBeUndefined();
-    expect(executeSpy).not.toHaveBeenCalled();
   });
 
   it('merges model config headers with explicit modelSettings headers and lets modelSettings override duplicates', async () => {
@@ -412,6 +413,8 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(doStream.mock.calls[0]?.[0]?.headers).toEqual({
       authorization: 'Bearer model-token',
       'x-custom-header': 'settings-value',
+      'x-thread-id': 'thread-123',
+      'x-resource-id': 'resource-456',
     });
   });
 
@@ -467,6 +470,8 @@ describe('createLLMExecutionStep gateway provider tools', () => {
       },
       _internal: {
         generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
       },
       logger: {
         error: vi.fn(),
@@ -481,6 +486,364 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     await llmExecutionStep.execute(createExecuteParams(input));
 
     expect(doStream).toHaveBeenCalledOnce();
-    expect(doStream.mock.calls[0]?.[0]?.headers).toBeUndefined();
+    expect(doStream.mock.calls[0]?.[0]?.headers).toEqual({
+      'x-thread-id': 'thread-123',
+      'x-resource-id': 'resource-456',
+    });
+  });
+
+  it('stamps step-start.model from the processor-updated model', async () => {
+    const initialDoStream = vi.fn(async () => ({
+      stream: convertArrayToReadableStream([]),
+      request: {},
+      response: { headers: undefined },
+      warnings: [],
+    }));
+    const overrideDoStream = vi.fn(async () => ({
+      stream: convertArrayToReadableStream([
+        {
+          type: 'response-metadata',
+          id: 'resp-override',
+          modelId: 'override-model-id',
+          timestamp: new Date(0),
+        },
+        {
+          type: 'text-start',
+          id: 'text-1',
+        },
+        {
+          type: 'text-delta',
+          id: 'text-1',
+          delta: 'hello from override model',
+        },
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: testUsage,
+        },
+      ]),
+      request: {},
+      response: {
+        headers: undefined,
+      },
+      warnings: [],
+    }));
+    const overrideModel = {
+      specificationVersion: 'v2' as const,
+      provider: 'override-provider',
+      modelId: 'override-model-id',
+      supportedUrls: {},
+      doGenerate: vi.fn(),
+      doStream: overrideDoStream,
+    };
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'initial-provider',
+            modelId: 'initial-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: initialDoStream,
+          } as any,
+        },
+      ],
+      inputProcessors: [
+        {
+          id: 'override-model',
+          processInputStep: vi.fn(async () => ({
+            model: overrideModel as any,
+          })),
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const firstInput = createIterationInput();
+    firstInput.stepResult.isContinued = false;
+
+    await llmExecutionStep.execute(createExecuteParams(firstInput));
+
+    const secondInput = createIterationInput();
+    secondInput.stepResult.isContinued = false;
+    secondInput.output.steps = [{} as any];
+
+    await llmExecutionStep.execute(createExecuteParams(secondInput));
+
+    expect(initialDoStream).not.toHaveBeenCalled();
+    expect(overrideDoStream).toHaveBeenCalledTimes(2);
+
+    const assistantMessage = messageList.get.all
+      .db()
+      .find(message => message.role === 'assistant' && message.content.parts.some(part => part.type === 'step-start'));
+    const stepStartPart = assistantMessage?.content.parts.find(part => part.type === 'step-start');
+
+    expect(stepStartPart).toMatchObject({
+      type: 'step-start',
+      model: 'override-provider/override-model-id',
+    });
+  });
+
+  it('preserves fallback model index when processAPIError requests a retry', async () => {
+    const firstModelStream = vi.fn(async () => {
+      throw new APICallError({
+        message: 'primary failed',
+        url: 'https://primary.example.com/v1/messages',
+        requestBodyValues: {},
+        statusCode: 503,
+        isRetryable: true,
+      });
+    });
+    const secondModelStream = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new APICallError({
+          message: 'secondary needs processor retry',
+          url: 'https://secondary.example.com/v1/messages',
+          requestBodyValues: {},
+          statusCode: 400,
+          isRetryable: false,
+        }),
+      )
+      .mockResolvedValue({
+        stream: convertArrayToReadableStream([
+          {
+            type: 'response-metadata',
+            id: 'resp-1',
+            modelId: 'secondary-model',
+            timestamp: new Date(0),
+          },
+          {
+            type: 'text-delta',
+            textDelta: 'Recovered on secondary model',
+          },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: testUsage,
+          },
+        ]),
+        request: {},
+        response: {
+          headers: undefined,
+        },
+        warnings: [],
+      });
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      maxProcessorRetries: 1,
+      errorProcessors: [
+        {
+          id: 'retry-secondary-api-error',
+          processAPIError: vi.fn(async ({ error }) => ({
+            retry: error.message === 'secondary needs processor retry',
+          })),
+        },
+      ],
+      models: [
+        {
+          id: 'primary-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'primary-model',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: firstModelStream,
+          } as any,
+        },
+        {
+          id: 'secondary-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'secondary-model',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: secondModelStream,
+          } as any,
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const retryResult = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    expect(retryResult.stepResult.reason).toBe('retry');
+    expect(retryResult.fallbackModelIndex).toBe(1);
+    expect(firstModelStream).toHaveBeenCalledTimes(1);
+    expect(secondModelStream).toHaveBeenCalledTimes(1);
+    expect(retryResult.messages.nonUser).toEqual([]);
+    expect(retryResult.stepResult.isContinued).toBe(true);
+
+    const retryInput = createIterationInput();
+    retryInput.processorRetryCount = retryResult.processorRetryCount;
+    retryInput.fallbackModelIndex = retryResult.fallbackModelIndex;
+
+    await llmExecutionStep.execute(createExecuteParams(retryInput));
+
+    expect(secondModelStream).toHaveBeenCalledTimes(2);
+    expect(firstModelStream).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-stamps MODEL_GENERATION span attributes when a fallback model takes over', async () => {
+    const primaryStream = vi.fn(async () => {
+      throw new APICallError({
+        message: 'primary down',
+        url: 'https://primary.example.com/v1/messages',
+        requestBodyValues: {},
+        statusCode: 503,
+        isRetryable: true,
+      });
+    });
+    const secondaryStream = vi.fn(async () => ({
+      stream: convertArrayToReadableStream([
+        {
+          type: 'response-metadata',
+          id: 'resp-secondary',
+          modelId: 'secondary-model',
+          timestamp: new Date(0),
+        },
+        {
+          type: 'text-delta',
+          textDelta: 'from secondary',
+        },
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: testUsage,
+        },
+      ]),
+      request: {},
+      response: { headers: undefined },
+      warnings: [],
+    }));
+
+    const modelSpanTracker = {
+      getTracingContext: vi.fn(() => ({})),
+      reportGenerationError: vi.fn(),
+      endGeneration: vi.fn(),
+      updateGeneration: vi.fn(),
+      wrapStream: vi.fn(<T>(stream: T) => stream),
+      startStep: vi.fn(),
+    };
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      modelSpanTracker: modelSpanTracker as any,
+      models: [
+        {
+          id: 'primary-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'primary-provider',
+            modelId: 'primary-model',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: primaryStream,
+          } as any,
+        },
+        {
+          id: 'secondary-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'secondary-provider',
+            modelId: 'secondary-model',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: secondaryStream,
+          } as any,
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const input = createIterationInput();
+    input.stepResult.isContinued = false;
+
+    await llmExecutionStep.execute(createExecuteParams(input));
+
+    expect(primaryStream).toHaveBeenCalledTimes(1);
+    expect(secondaryStream).toHaveBeenCalledTimes(1);
+    expect(modelSpanTracker.updateGeneration).toHaveBeenCalledWith({
+      name: `llm: 'secondary-model'`,
+      attributes: {
+        model: 'secondary-model',
+        provider: 'secondary-provider',
+      },
+    });
   });
 });

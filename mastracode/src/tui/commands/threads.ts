@@ -1,23 +1,9 @@
 import { Spacer } from '@mariozechner/pi-tui';
-import type { HarnessMessage } from '@mastra/core/harness';
 import { ThreadLockError } from '../../utils/thread-lock.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { ThreadSelectorComponent } from '../components/thread-selector.js';
 import { askCloneName, confirmClone, resetUIAfterClone } from './clone.js';
 import type { SlashCommandContext } from './types.js';
-
-function extractTextContent(message: HarnessMessage): string {
-  return message.content
-    .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-    .map(c => c.text)
-    .join(' ')
-    .trim();
-}
-
-function truncatePreview(text: string, maxLength = 50): string {
-  if (text.length <= maxLength) return text;
-  return text.slice(0, maxLength - 3) + '...';
-}
 
 export function showThreadLockPrompt(
   ctx: SlashCommandContext,
@@ -126,41 +112,9 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
         state.attemptedThreadPreviewIds = attemptedThreadIds;
       },
       getMessagePreviews: async (threadIds: string[]) => {
-        const uncachedThreadIds = threadIds.filter(
-          threadId => !state.threadPreviewCache.has(threadId) && !state.attemptedThreadPreviewIds.has(threadId),
-        );
-
-        if (uncachedThreadIds.length === 0) {
-          return new Map(
-            threadIds.flatMap(threadId => {
-              const preview = state.threadPreviewCache.get(threadId)?.preview;
-              return preview ? [[threadId, preview] as const] : [];
-            }),
-          );
-        }
-
-        const firstUserMessages = await state.harness.getFirstUserMessagesForThreads({ threadIds: uncachedThreadIds });
-        const previews = new Map<string, string>();
-
-        for (const threadId of uncachedThreadIds) {
-          state.attemptedThreadPreviewIds.add(threadId);
-        }
-
-        for (const [threadId, message] of firstUserMessages.entries()) {
-          const text = extractTextContent(message);
-          if (text) {
-            const preview = truncatePreview(text);
-            previews.set(threadId, preview);
-            const thread = threadById.get(threadId);
-            if (thread) {
-              state.threadPreviewCache.set(threadId, { preview, updatedAt: thread.updatedAt.getTime() });
-            }
-          }
-        }
-
         return new Map(
           threadIds.flatMap(threadId => {
-            const preview = previews.get(threadId) ?? state.threadPreviewCache.get(threadId)?.preview;
+            const preview = state.threadPreviewCache.get(threadId)?.preview;
             return preview ? [[threadId, preview] as const] : [];
           }),
         );
@@ -191,6 +145,9 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
 
         state.chatContainer.clear();
         state.allToolComponents = [];
+        state.allSystemReminderComponents = [];
+        state.messageComponentsById.clear();
+        state.allShellComponents = [];
         state.pendingTools.clear();
         await ctx.renderExistingMessages();
 

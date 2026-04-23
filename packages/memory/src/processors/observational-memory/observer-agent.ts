@@ -1,6 +1,9 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 
+import { stripEphemeralAnchorIds } from './anchor-ids';
+import { isTemporalGapMarker } from './date-utils';
+import { safeSlice } from './string-utils';
 import {
   DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS,
   formatToolResultForObserver,
@@ -532,14 +535,31 @@ type ObserverInputAttachmentPart =
       experimental_providerMetadata?: unknown;
     };
 
+interface ObserverFormattedLine {
+  date: string;
+  time: string;
+  title: string;
+  body: string;
+}
+
 interface ObserverFormattedMessage {
-  text: string;
+  lines: ObserverFormattedLine[];
   attachments: ObserverInputAttachmentPart[];
 }
 
 interface ObserverAttachmentCounter {
   nextImageId: number;
   nextFileId: number;
+}
+
+interface ObserverFormattingContext {
+  previousDate?: string;
+  previousTime?: string;
+}
+
+interface ObserverFormattedOutput {
+  text: string;
+  context: ObserverFormattingContext;
 }
 
 const OBSERVER_IMAGE_FILE_EXTENSIONS = new Set([
@@ -556,12 +576,17 @@ const OBSERVER_IMAGE_FILE_EXTENSIONS = new Set([
   'avif',
 ]);
 
-function formatObserverTimestamp(createdAt: MastraDBMessage['createdAt']): string {
+function formatObserverDate(createdAt?: Date): string {
   return createdAt
-    ? new Date(createdAt).toLocaleString('en-US', {
-        year: 'numeric',
+    ? `${createdAt.toLocaleDateString('en-US', {
         month: 'short',
-        day: 'numeric',
+      })} ${createdAt.getDate()} ${createdAt.getFullYear()}`
+    : '';
+}
+
+function formatObserverTime(createdAt?: Date): string {
+  return createdAt
+    ? createdAt.toLocaleTimeString('en-US', {
         hour: 'numeric',
         minute: '2-digit',
         hour12: true,
@@ -670,6 +695,85 @@ function formatObserverAttachmentPlaceholder(part: ObserverAttachmentPart, count
   return label ? `[${attachmentType} #${attachmentId}: ${label}]` : `[${attachmentType} #${attachmentId}]`;
 }
 
+function formatObserverPartLine(title: string, body: string, time: string, previousTime?: string): string {
+  const timeLabel = time && time !== previousTime ? `(${time})` : '';
+
+  if (!title) {
+    return timeLabel ? `${timeLabel}: ${body}` : body;
+  }
+
+  return `${title}${timeLabel ? ` ${timeLabel}` : ''}: ${body}`;
+}
+
+function normalizeObserverCreatedAt(createdAt: unknown): Date | undefined {
+  if (createdAt instanceof Date) {
+    // Invalid Date objects still satisfy `instanceof Date`, so reject them explicitly.
+    if (Number.isNaN(createdAt.getTime())) {
+      return undefined;
+    }
+    return createdAt;
+  }
+
+  if (typeof createdAt === 'number' || typeof createdAt === 'string') {
+    const date = new Date(createdAt);
+    if (Number.isNaN(date.getTime())) {
+      return undefined;
+    }
+    return date;
+  }
+
+  return undefined;
+}
+
+function formatObserverLines(
+  lines: ObserverFormattedLine[],
+  context: ObserverFormattingContext = {},
+): ObserverFormattedOutput {
+  const output: string[] = [];
+  let previousDate = context.previousDate;
+  let previousTime = context.previousTime;
+
+  for (const line of lines) {
+    if (line.date && line.date !== previousDate) {
+      output.push(`${line.date}:`);
+      previousDate = line.date;
+      previousTime = undefined;
+    }
+
+    output.push(formatObserverPartLine(line.title, line.body, line.time, previousTime));
+    previousTime = line.time || previousTime;
+  }
+
+  return {
+    text: output.join('\n'),
+    context: { previousDate, previousTime },
+  };
+}
+
+function getTemporalGapMarkerText(msg: MastraDBMessage): string | undefined {
+  const metadata =
+    typeof msg.content === 'object' && msg.content && 'metadata' in msg.content
+      ? (msg.content.metadata as { gapText?: unknown; reminderType?: unknown; systemReminder?: unknown })
+      : undefined;
+
+  if (metadata?.reminderType === 'temporal-gap' && typeof metadata.gapText === 'string') {
+    return metadata.gapText;
+  }
+
+  if (
+    typeof metadata?.systemReminder === 'object' &&
+    metadata.systemReminder &&
+    'type' in metadata.systemReminder &&
+    metadata.systemReminder.type === 'temporal-gap' &&
+    'gapText' in metadata.systemReminder &&
+    typeof metadata.systemReminder.gapText === 'string'
+  ) {
+    return metadata.systemReminder.gapText;
+  }
+
+  return undefined;
+}
+
 function formatObserverMessage(
   msg: MastraDBMessage,
   counter: ObserverAttachmentCounter,
@@ -677,89 +781,142 @@ function formatObserverMessage(
 ): ObserverFormattedMessage {
   const maxLen = options?.maxPartLength;
   const maxToolResultTokens = options?.maxToolResultTokens ?? DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS;
-  const timestamp = formatObserverTimestamp(msg.createdAt);
   const role = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
-  const timestampStr = timestamp ? ` (${timestamp})` : '';
   const attachments: ObserverInputAttachmentPart[] = [];
+  const messageCreatedAt = normalizeObserverCreatedAt(msg.createdAt);
 
-  let content = '';
-  if (typeof msg.content === 'string') {
-    content = maybeTruncate(msg.content, maxLen);
+  let lines: ObserverFormattedLine[] = [];
+
+  const temporalGapText = isTemporalGapMarker(msg) ? getTemporalGapMarkerText(msg) : undefined;
+
+  const pushLine = (title: string, body: string, createdAt?: unknown) => {
+    if (!body) {
+      return;
+    }
+
+    const normalizedCreatedAt = normalizeObserverCreatedAt(createdAt) ?? messageCreatedAt;
+    lines.push({
+      date: formatObserverDate(normalizedCreatedAt),
+      time: formatObserverTime(normalizedCreatedAt),
+      title,
+      body,
+    });
+  };
+
+  if (temporalGapText) {
+    pushLine('', temporalGapText, messageCreatedAt);
+  } else if (typeof msg.content === 'string') {
+    pushLine(role, maybeTruncate(msg.content, maxLen), messageCreatedAt);
   } else if (msg.content?.parts && Array.isArray(msg.content.parts) && msg.content.parts.length > 0) {
-    content = msg.content.parts
-      .map(part => {
-        if (part.type === 'text') return maybeTruncate(part.text, maxLen);
-        if (part.type === 'tool-invocation') {
-          const inv = part.toolInvocation;
-          if (inv.state === 'result') {
-            const { value: resultForObserver } = resolveToolResultValue(
-              part as { providerMetadata?: Record<string, any> },
-              inv.result,
-            );
-            const resultStr = formatToolResultForObserver(resultForObserver, { maxTokens: maxToolResultTokens });
-            return `[Tool Result: ${inv.toolName}]\n${maybeTruncate(resultStr, maxLen)}`;
-          }
-          const argsStr = JSON.stringify(inv.args, null, 2);
-          return `[Tool Call: ${inv.toolName}]\n${maybeTruncate(argsStr, maxLen)}`;
+    msg.content.parts.forEach(part => {
+      const partCreatedAt = normalizeObserverCreatedAt((part as { createdAt?: unknown }).createdAt) ?? messageCreatedAt;
+
+      if (part.type === 'text') {
+        pushLine(role, maybeTruncate(part.text, maxLen), partCreatedAt);
+        return;
+      }
+
+      if (part.type === 'tool-invocation') {
+        const inv = part.toolInvocation;
+        if (inv.state === 'result') {
+          const { value: resultForObserver } = resolveToolResultValue(
+            part as { providerMetadata?: Record<string, any> },
+            inv.result,
+          );
+          pushLine(
+            `Tool Result ${inv.toolName}`,
+            maybeTruncate(formatToolResultForObserver(resultForObserver, { maxTokens: maxToolResultTokens }), maxLen),
+            partCreatedAt,
+          );
+          return;
         }
 
-        const partType = (part as { type?: string }).type;
-        if (partType === 'reasoning') {
-          // Include reasoning content only when it's not obscured/encrypted
-          const reasoning = (part as { reasoning?: string }).reasoning;
-          if (reasoning) return maybeTruncate(reasoning, maxLen);
-          return '';
+        pushLine(`Tool Call ${inv.toolName}`, maybeTruncate(JSON.stringify(inv.args, null, 2), maxLen), partCreatedAt);
+        return;
+      }
+
+      const partType = (part as { type?: string }).type;
+      if (partType === 'reasoning') {
+        const reasoning = (part as { reasoning?: string }).reasoning;
+        if (!reasoning) {
+          return;
         }
-        if (partType === 'image' || partType === 'file') {
-          const attachment = part as ObserverAttachmentPart;
-          const inputAttachment = toObserverInputAttachmentPart(attachment);
-          if (inputAttachment) {
-            attachments.push(inputAttachment);
-          }
-          return formatObserverAttachmentPlaceholder(attachment, counter);
+        pushLine('Reasoning', maybeTruncate(reasoning, maxLen), partCreatedAt);
+        return;
+      }
+
+      if (partType === 'image' || partType === 'file') {
+        const attachment = part as ObserverAttachmentPart;
+        const inputAttachment = toObserverInputAttachmentPart(attachment);
+        if (inputAttachment) {
+          attachments.push(inputAttachment);
         }
-        if (partType?.startsWith('data-')) return '';
-        return '';
-      })
-      .filter(Boolean)
-      .join('\n');
+        pushLine(
+          partType === 'image' ? 'Image' : 'File',
+          formatObserverAttachmentPlaceholder(attachment, counter),
+          partCreatedAt,
+        );
+      }
+    });
   } else if (msg.content?.content) {
-    content = maybeTruncate(msg.content.content, maxLen);
+    pushLine(role, maybeTruncate(msg.content.content, maxLen), messageCreatedAt);
   }
 
-  // Skip messages that produced no visible content (e.g. only data-* or encrypted reasoning parts)
-  if (!content && attachments.length === 0) {
-    return { text: '', attachments };
+  if (lines.length === 0 && attachments.length === 0) {
+    return { lines: [], attachments };
   }
 
   return {
-    text: `**${role}${timestampStr}:**\n${content}`,
+    lines,
     attachments,
   };
 }
 
 export function formatMessagesForObserver(messages: MastraDBMessage[], options?: ObserverFormatOptions): string {
   const counter = { nextImageId: 1, nextFileId: 1 };
-  return messages
-    .map(msg => formatObserverMessage(msg, counter, options).text)
-    .filter(Boolean)
-    .join('\n\n---\n\n');
+  const sections: string[] = [];
+  let context: ObserverFormattingContext = {};
+
+  for (const message of messages) {
+    const formatted = formatObserverMessage(message, counter, options);
+    if (formatted.lines.length === 0) {
+      continue;
+    }
+
+    const rendered = formatObserverLines(formatted.lines, context);
+    if (!rendered.text) {
+      continue;
+    }
+
+    sections.push(rendered.text);
+    context = rendered.context;
+  }
+
+  return sections.join('\n');
+}
+
+function appendFormattedObserverMessage(
+  content: any[],
+  formatted: ObserverFormattedMessage,
+  context: ObserverFormattingContext,
+): ObserverFormattingContext {
+  const rendered = formatObserverLines(formatted.lines, context);
+  if (rendered.text) {
+    content.push({ type: 'text', text: rendered.text });
+  }
+  content.push(...formatted.attachments);
+  return rendered.context;
 }
 
 export function buildObserverHistoryMessage(messages: MastraDBMessage[], options?: ObserverFormatOptions): CoreMessage {
   const counter = { nextImageId: 1, nextFileId: 1 };
   const content: any[] = [{ type: 'text', text: '## New Message History to Observe\n\n' }];
 
-  let visibleCount = 0;
+  let context: ObserverFormattingContext = {};
   messages.forEach(message => {
     const formatted = formatObserverMessage(message, counter, options);
-    if (!formatted.text && formatted.attachments.length === 0) return;
-    if (visibleCount > 0) {
-      content.push({ type: 'text', text: '\n\n---\n\n' });
-    }
-    content.push({ type: 'text', text: formatted.text });
-    content.push(...formatted.attachments);
-    visibleCount++;
+    if (formatted.lines.length === 0 && formatted.attachments.length === 0) return;
+    context = appendFormattedObserverMessage(content, formatted, context);
   });
 
   return {
@@ -771,8 +928,8 @@ export function buildObserverHistoryMessage(messages: MastraDBMessage[], options
 /** Truncate a string to maxLen characters, appending a note if truncated. */
 function maybeTruncate(str: string, maxLen?: number): string {
   if (!maxLen || str.length <= maxLen) return str;
-  const truncated = str.slice(0, maxLen);
-  const remaining = str.length - maxLen;
+  const truncated = safeSlice(str, maxLen);
+  const remaining = str.length - truncated.length;
   return `${truncated}\n... [truncated ${remaining} characters]`;
 }
 
@@ -816,19 +973,16 @@ export function buildMultiThreadObserverHistoryMessage(
     if (!messages || messages.length === 0) return;
 
     const threadContent: any[] = [];
-    let visibleCount = 0;
+    let context: ObserverFormattingContext = {};
+    let hasVisibleContent = false;
     messages.forEach(message => {
       const formatted = formatObserverMessage(message, counter, options);
-      if (!formatted.text && formatted.attachments.length === 0) return;
-      if (visibleCount > 0) {
-        threadContent.push({ type: 'text', text: '\n\n---\n\n' });
-      }
-      threadContent.push({ type: 'text', text: formatted.text });
-      threadContent.push(...formatted.attachments);
-      visibleCount++;
+      if (formatted.lines.length === 0 && formatted.attachments.length === 0) return;
+      context = appendFormattedObserverMessage(threadContent, formatted, context);
+      hasVisibleContent = true;
     });
 
-    if (visibleCount === 0) return;
+    if (!hasVisibleContent) return;
 
     content.push({ type: 'text', text: `<thread id="${threadId}">\n` });
     content.push(...threadContent);
@@ -1222,7 +1376,7 @@ export function sanitizeObservationLines(observations: string): string {
   let changed = false;
   for (let i = 0; i < lines.length; i++) {
     if (lines[i]!.length > MAX_OBSERVATION_LINE_CHARS) {
-      lines[i] = lines[i]!.slice(0, MAX_OBSERVATION_LINE_CHARS) + ' … [truncated]';
+      lines[i] = safeSlice(lines[i]!, MAX_OBSERVATION_LINE_CHARS) + ' … [truncated]';
       changed = true;
     }
   }
@@ -1319,7 +1473,7 @@ export function extractCurrentTask(observations: string): string | null {
  * The full format is preserved in storage for analysis.
  */
 export function optimizeObservationsForContext(observations: string): string {
-  let optimized = observations;
+  let optimized = stripEphemeralAnchorIds(observations);
 
   // Remove 🟡 and 🟢 emojis (keep 🔴 for critical items)
   optimized = optimized.replace(/🟡\s*/g, '');

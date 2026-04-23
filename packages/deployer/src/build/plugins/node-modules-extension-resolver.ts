@@ -4,7 +4,7 @@ import nodeResolve from '@rollup/plugin-node-resolve';
 import type { Plugin } from 'rollup';
 import type { PackageJson } from 'type-fest';
 import { getPackageRootPath } from '../package-info';
-import { getPackageName, isBuiltinModule } from '../utils';
+import { getPackageName, isExternalProtocolImport, isBareModuleSpecifier } from '../utils';
 
 /**
  * Check if a package has an exports field in its package.json.
@@ -34,8 +34,8 @@ export function nodeModulesExtensionResolver(): Plugin {
   return {
     name: 'node-modules-extension-resolver',
     async resolveId(id, importer, options) {
-      // Skip relative imports, absolute paths, no importer, or builtin modules
-      if (!importer || id.startsWith('.') || id.startsWith('/') || isBuiltinModule(id) || isAbsolute(id)) {
+      // Only bare package imports are relevant here.
+      if (!importer || !isBareModuleSpecifier(id) || isExternalProtocolImport(id) || isAbsolute(id)) {
         return null;
       }
 

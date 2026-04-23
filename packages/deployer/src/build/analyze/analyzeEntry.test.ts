@@ -159,6 +159,29 @@ describe('analyzeEntry', () => {
     expect(lodashDep?.exports).toEqual(['*']);
   });
 
+  it('should ignore protocol imports like cloudflare:workers and node builtins', async () => {
+    const entryWithProtocolImport = `
+      import { env } from 'cloudflare:workers';
+      import { readFile } from 'node:fs/promises';
+      import { Mastra } from '@mastra/core/mastra';
+
+      export const binding = env.TEST_BINDING;
+      export const fileReader = readFile;
+      export const mastra = new Mastra({});
+    `;
+
+    const result = await analyzeEntry({ entry: entryWithProtocolImport, isVirtualFile: true }, '', {
+      logger: noopLogger,
+      sourcemapEnabled: false,
+      workspaceMap: new Map(),
+      projectRoot: process.cwd(),
+    });
+
+    expect(result.dependencies.has('cloudflare:workers')).toBe(false);
+    expect(result.dependencies.has('node:fs/promises')).toBe(false);
+    expect(result.dependencies.has('@mastra/core/mastra')).toBe(true);
+  });
+
   it('should generate sourcemaps when enabled', async () => {
     const entryAsString = await readFile(join(import.meta.dirname, '__fixtures__', 'default', 'entry.ts'), 'utf-8');
 

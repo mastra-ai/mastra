@@ -2,11 +2,21 @@ export class ScoreAccumulator {
   private flatScores: Record<string, number[]> = {};
   private workflowScores: Record<string, number[]> = {};
   private stepScores: Record<string, Record<string, number[]>> = {};
+  private agentScores: Record<string, number[]> = {};
+  private trajectoryScores: Record<string, number[]> = {};
 
   addScores(scorerResults: Record<string, any>) {
-    const isTargetWorkflowAndHasStepScores = 'steps' in scorerResults;
-    if (isTargetWorkflowAndHasStepScores) {
-      this.addNestedScores(scorerResults);
+    const isWorkflowScores = 'steps' in scorerResults || 'workflow' in scorerResults;
+    const isAgentScores = 'agent' in scorerResults;
+    const hasTrajectory = 'trajectory' in scorerResults;
+
+    // Routing priority: workflow configs take precedence (they may also include
+    // trajectory scores), then agent configs (agent or trajectory-only), then
+    // flat scores for simple scorer arrays.
+    if (isWorkflowScores) {
+      this.addWorkflowScores(scorerResults);
+    } else if (isAgentScores || hasTrajectory) {
+      this.addAgentScores(scorerResults);
     } else {
       this.addFlatScores(scorerResults);
     }
@@ -21,7 +31,7 @@ export class ScoreAccumulator {
     }
   }
 
-  private addNestedScores(scorerResults: Record<string, any>) {
+  private addWorkflowScores(scorerResults: Record<string, any>) {
     if ('workflow' in scorerResults && scorerResults.workflow) {
       for (const [scorerName, result] of Object.entries(scorerResults.workflow)) {
         if (!this.workflowScores[scorerName]) {
@@ -42,6 +52,36 @@ export class ScoreAccumulator {
           }
           this.stepScores[stepId][scorerName].push((result as { score: number }).score);
         }
+      }
+    }
+
+    // Trajectory scores can come from workflow scorer configs too
+    if ('trajectory' in scorerResults && scorerResults.trajectory) {
+      for (const [scorerName, result] of Object.entries(scorerResults.trajectory)) {
+        if (!this.trajectoryScores[scorerName]) {
+          this.trajectoryScores[scorerName] = [];
+        }
+        this.trajectoryScores[scorerName].push((result as { score: number }).score);
+      }
+    }
+  }
+
+  private addAgentScores(scorerResults: Record<string, any>) {
+    if ('agent' in scorerResults && scorerResults.agent) {
+      for (const [scorerName, result] of Object.entries(scorerResults.agent)) {
+        if (!this.agentScores[scorerName]) {
+          this.agentScores[scorerName] = [];
+        }
+        this.agentScores[scorerName].push((result as { score: number }).score);
+      }
+    }
+
+    if ('trajectory' in scorerResults && scorerResults.trajectory) {
+      for (const [scorerName, result] of Object.entries(scorerResults.trajectory)) {
+        if (!this.trajectoryScores[scorerName]) {
+          this.trajectoryScores[scorerName] = [];
+        }
+        this.trajectoryScores[scorerName].push((result as { score: number }).score);
       }
     }
   }
@@ -82,6 +122,22 @@ export class ScoreAccumulator {
         for (const [scorerName, scoreArray] of Object.entries(stepScorers)) {
           result.steps[stepId][scorerName] = this.getAverageScore(scoreArray);
         }
+      }
+    }
+
+    // Add agent scores
+    if (Object.keys(this.agentScores).length > 0) {
+      result.agent = {};
+      for (const [scorerName, scoreArray] of Object.entries(this.agentScores)) {
+        result.agent[scorerName] = this.getAverageScore(scoreArray);
+      }
+    }
+
+    // Add trajectory scores
+    if (Object.keys(this.trajectoryScores).length > 0) {
+      result.trajectory = {};
+      for (const [scorerName, scoreArray] of Object.entries(this.trajectoryScores)) {
+        result.trajectory[scorerName] = this.getAverageScore(scoreArray);
       }
     }
 

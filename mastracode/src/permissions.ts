@@ -42,6 +42,7 @@ const TOOL_CATEGORY_MAP: Record<string, ToolCategory> = {
   [MC_TOOLS.VIEW]: 'read',
   [MC_TOOLS.SEARCH_CONTENT]: 'read',
   [MC_TOOLS.FIND_FILES]: 'read',
+  [MC_TOOLS.LSP_INSPECT]: 'read',
   web_search: 'read',
   'web-search': 'read',
   web_extract: 'read',

@@ -11,6 +11,7 @@ import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
 import { MC_TOOLS } from '../../tool-names.js';
 import { BOX_INDENT, getTermWidth, theme, mastra } from '../theme.js';
+import { truncateAnsi } from './ansi.js';
 import { ErrorDisplayComponent } from './error-display.js';
 import type { IToolExecutionComponent, ToolResult } from './tool-execution-interface.js';
 import { ToolValidationErrorComponent, parseValidationErrors } from './tool-validation-error.js';
@@ -209,6 +210,9 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         break;
       case MC_TOOLS.FIND_FILES:
         this.renderListFilesEnhanced();
+        break;
+      case MC_TOOLS.LSP_INSPECT:
+        this.renderLspInspectEnhanced();
         break;
       case MC_TOOLS.GET_PROCESS_OUTPUT:
       case MC_TOOLS.KILL_PROCESS:
@@ -915,6 +919,227 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     }
   }
 
+  private renderLspInspectEnhanced(): void {
+    const border = (char: string) => theme.bold(theme.fg('toolBorderSuccess', char));
+    const status = this.getStatusIndicator();
+    const termWidth = getTermWidth();
+    const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
+    const argsObj = this.args as { path?: string; line?: number; match?: string } | undefined;
+    const path_ = argsObj?.path;
+    const line = argsObj?.line;
+    const match = argsObj?.match;
+
+    // Build args summary for footer
+    const argsSummary = [
+      path_ ? shortenPath(path_.replace(process.cwd() + '/', '')) : null,
+      line ? `L${line}` : null,
+      match ? truncateAnsi(match.replace(/<<</g, '‹‹‹'), 40) : null,
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    if (!this.result || this.isPartial) {
+      const footerText = `${theme.bold(theme.fg('toolTitle', 'lsp_inspect'))}${argsSummary ? ' ' + theme.fg('toolArgs', argsSummary) : ''}${status}`;
+      this.contentBox.addChild(new Text(border('╭──'), 0, 0));
+      this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
+      return;
+    }
+
+    // Extract raw text from result
+    const rawText = this.result.content
+      .filter(c => c.type === 'text' && c.text)
+      .map(c => c.text!)
+      .join('\n');
+
+    if (this.result.isError || !rawText.trim()) {
+      const footerText = `${theme.bold(theme.fg('toolTitle', 'lsp_inspect'))}${argsSummary ? ' ' + theme.fg('toolArgs', argsSummary) : ''}${status}`;
+      const output = this.getFormattedOutput();
+      this.contentBox.addChild(new Text(border('╭──'), 0, 0));
+      if (output) {
+        this.contentBox.addChild(new Text(border('│') + ' ' + theme.fg('error', output), 0, 0));
+      }
+      this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
+      return;
+    }
+
+    // Parse lsp_inspect result
+    let parsed: {
+      hover?: { value: string; kind: string };
+      diagnostics?: Array<{ severity: string; message: string; source: string | null }>;
+      definition?: Array<{ location: string; preview: string | null }>;
+      implementation?: string[];
+      error?: string;
+    };
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      // Fall back to generic rendering if not valid JSON
+      this.renderGenericToolEnhanced();
+      return;
+    }
+
+    if (parsed.error) {
+      const footerText = `${theme.bold(theme.fg('toolTitle', 'lsp_inspect'))}${argsSummary ? ' ' + theme.fg('toolArgs', argsSummary) : ''}${status}`;
+      this.contentBox.addChild(new Text(border('╭──'), 0, 0));
+      this.contentBox.addChild(new Text(border('│') + ' ' + theme.fg('error', parsed.error), 0, 0));
+      this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
+      return;
+    }
+
+    const footerText = `${theme.bold(theme.fg('toolTitle', 'lsp_inspect'))}${argsSummary ? ' ' + theme.fg('toolArgs', argsSummary) : ''}${status}`;
+
+    this.contentBox.addChild(new Text(border('╭──'), 0, 0));
+
+    // Render hover content
+    if (parsed.hover) {
+      const hoverValue = parsed.hover.value || '';
+      const hoverLines = hoverValue.split('\n').filter(line => line.trim() !== '');
+      if (hoverLines.length > 0) {
+        this.contentBox.addChild(new Text(border('│') + ' ' + theme.fg('toolArgs', 'hover:'), 0, 0));
+      }
+      for (const line of hoverLines) {
+        const truncated = truncateAnsi(line, maxLineWidth - 2);
+        const prefix = border('│') + ' ';
+        this.contentBox.addChild(new Text(prefix + theme.fg('text', truncated), 0, 0));
+      }
+    }
+
+    // Render line diagnostics
+    if (parsed.diagnostics && parsed.diagnostics.length > 0) {
+      this.contentBox.addChild(new Text(border('│'), 0, 0));
+      this.contentBox.addChild(new Text(border('│') + ' ' + theme.fg('toolArgs', 'diagnostics:'), 0, 0));
+
+      for (const diagnostic of parsed.diagnostics) {
+        const label = diagnostic.source ? `${diagnostic.severity} (${diagnostic.source})` : diagnostic.severity;
+        const diagLine = `${label}: ${diagnostic.message}`;
+        this.contentBox.addChild(
+          new Text(
+            border('│') +
+              ' ' +
+              theme.fg(diagnostic.severity === 'error' ? 'error' : 'text', truncateAnsi(diagLine, maxLineWidth - 2)),
+            0,
+            0,
+          ),
+        );
+      }
+    }
+
+    // Render definition entries
+    if (parsed.definition && parsed.definition.length > 0) {
+      // Add blank line before definition section for visual separation
+      this.contentBox.addChild(new Text(border('│'), 0, 0));
+      this.contentBox.addChild(new Text(border('│') + ' ' + theme.fg('toolArgs', 'definition:'), 0, 0));
+
+      for (const def of parsed.definition) {
+        const location = def.location || '';
+        const preview = def.preview || '';
+        // Parse location: "$cwd/path:Lline:Cchar" or just "path:Lline:Cchar"
+        const parsedLoc = this.parseLspLocation(location);
+        const displayLoc = parsedLoc
+          ? fileLink(
+              theme.fg('toolOutput', parsedLoc.shortPath + ':' + parsedLoc.lineCol),
+              parsedLoc.absPath,
+              parsedLoc.line,
+            )
+          : theme.fg('toolOutput', location);
+
+        const defLine = border('│') + ' ' + displayLoc;
+        this.contentBox.addChild(new Text(truncateAnsi(defLine, maxLineWidth), 0, 0));
+
+        if (preview) {
+          const previewLine = border('│') + '   ' + theme.fg('text', truncateAnsi(preview, maxLineWidth - 3));
+          this.contentBox.addChild(new Text(previewLine, 0, 0));
+        }
+      }
+    }
+
+    // Render implementation entries
+    if (parsed.implementation && parsed.implementation.length > 0) {
+      const implCount = parsed.implementation.length;
+      const implLabel = implCount === 1 ? 'implementation:' : `implementations (${implCount}):`;
+
+      // Add blank line before implementation section for visual separation
+      this.contentBox.addChild(new Text(border('│'), 0, 0));
+
+      // Show first few implementations inline, collapse rest
+      const maxShow = this.expanded ? parsed.implementation.length : 5;
+      const shown = parsed.implementation.slice(0, maxShow);
+      const remaining = parsed.implementation.length - maxShow;
+
+      this.contentBox.addChild(new Text(border('│') + ' ' + theme.fg('toolArgs', implLabel), 0, 0));
+
+      for (const loc of shown) {
+        const parsedLoc = this.parseLspLocation(loc);
+        const displayLoc = parsedLoc
+          ? fileLink(
+              theme.fg('toolOutput', parsedLoc.shortPath + ':' + parsedLoc.lineCol),
+              parsedLoc.absPath,
+              parsedLoc.line,
+            )
+          : theme.fg('toolOutput', loc);
+        const implLine = border('│') + ' ' + displayLoc;
+        this.contentBox.addChild(new Text(truncateAnsi(implLine, maxLineWidth), 0, 0));
+      }
+
+      if (remaining > 0 && !this.expanded) {
+        const moreLine = border('│') + ' ' + theme.fg('toolOutput', `... ${remaining} more (ctrl+e to expand)`);
+        this.contentBox.addChild(new Text(moreLine, 0, 0));
+      }
+    }
+
+    // Show message if no results found
+    if (!parsed.hover && !parsed.diagnostics?.length && !parsed.definition?.length && !parsed.implementation?.length) {
+      this.contentBox.addChild(
+        new Text(
+          border('│') + ' ' + theme.fg('muted', 'No hover, diagnostics, definition, or implementation results'),
+          0,
+          0,
+        ),
+      );
+    }
+
+    this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
+  }
+
+  /**
+   * Parse an LSP location string like "$cwd/path:Lline:Cchar" into components.
+   */
+  private parseLspLocation(
+    location: string,
+  ): { absPath: string; shortPath: string; line: number; lineCol: string } | null {
+    // Match patterns like:
+    // - "$cwd/packages/core/src/foo.ts:L10:C5"
+    // - "/absolute/path/to/file.ts:L1:C1"
+    // - "path/to/file.ts:L10:C5"
+    const match = location.match(/^(.+?):L(\d+):C(\d+)$/);
+    if (!match) return null;
+
+    const rawPath = match[1]!;
+    const line = parseInt(match[2]!, 10);
+    const lineCol = `L${match[2]}:C${match[3]}`;
+
+    // Resolve to absolute path
+    let absPath: string;
+    let shortPath: string;
+    if (rawPath.startsWith('$cwd/')) {
+      absPath = process.cwd() + '/' + rawPath.slice(5);
+      shortPath = rawPath.slice(5); // Strip $cwd/ prefix
+    } else if (rawPath.startsWith('~')) {
+      absPath = os.homedir() + rawPath.slice(1);
+      shortPath = shortenPath(absPath);
+    } else if (rawPath.startsWith('/')) {
+      absPath = rawPath;
+      shortPath = absPath.startsWith(process.cwd() + '/')
+        ? absPath.slice(process.cwd().length + 1)
+        : shortenPath(absPath);
+    } else {
+      absPath = process.cwd() + '/' + rawPath;
+      shortPath = rawPath;
+    }
+
+    return { absPath, shortPath, line, lineCol };
+  }
+
   private renderTaskWriteEnhanced(): void {
     const argsObj = this.args as { tasks?: TaskItem[] } | undefined;
     const tasks = argsObj?.tasks;
@@ -1311,19 +1536,8 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     try {
       const { content } = extractContent(errorText);
       error = content;
-
-      // Try to create an Error object with better structure
-      const errorMatch = content.match(/^([A-Z][a-zA-Z]*Error):\s*(.+)$/m);
-      if (errorMatch) {
-        const err = new Error(errorMatch[2]!);
-        err.name = errorMatch[1]!;
-        // Try to extract stack trace
-        const stackMatch = content.match(/\n\s+at\s+.+/g);
-        if (stackMatch) {
-          err.stack = `${err.name}: ${err.message}\n${stackMatch.join('\n')}`;
-        }
-        error = err;
-      }
+      const parsed = parseErrorFromContent(content);
+      if (parsed) error = parsed;
     } catch {
       // Keep as string
     }
@@ -1443,42 +1657,23 @@ function highlightCode(content: string, path: string, startLine?: number): strin
     return codeLines.join('\n');
   }
 }
-/** Truncate a string with ANSI codes to a visible width.
- *  Handles both SGR sequences (\x1b[...m) and OSC 8 hyperlinks (\x1b]8;...;\x07).
+/** Parse a `Name: message\n  at ...` error string into an Error object.
+ *  Returns null if the content does not look like a JavaScript Error.
+ *  Preserves the behaviour of the original `/^([A-Z][a-zA-Z]*Error):\s*(.+)$/m`
+ *  pattern (same captures for well-formed inputs) while using bounded
+ *  quantifiers and `[ \t]` separators to avoid the polynomial backtracking
+ *  CodeQL flagged on pathological inputs.
+ *  Exported for unit testing.
  */
-function truncateAnsi(str: string, maxWidth: number): string {
-  const ansiRegex = /\x1b\[[0-9;]*m|\x1b\]8;[^\x07]*\x07/g;
-  let visibleLength = 0;
-  let result = '';
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = ansiRegex.exec(str)) !== null) {
-    // Add text before this ANSI code
-    const textBefore = str.slice(lastIndex, match.index);
-    const remaining = maxWidth - visibleLength;
-    if (textBefore.length <= remaining) {
-      result += textBefore;
-      visibleLength += textBefore.length;
-    } else {
-      result += textBefore.slice(0, remaining - 1) + '…';
-      result += '\x1b]8;;\x07\x1b[0m'; // Close any open hyperlink + reset styles
-      return result;
-    }
-    // Add the ANSI code (doesn't count toward visible length)
-    result += match[0];
-    lastIndex = match.index + match[0].length;
+export function parseErrorFromContent(content: string): Error | null {
+  const errorMatch = content.match(/^([A-Z][A-Za-z]{0,64}Error):[ \t]*(.{1,8192})$/m);
+  if (!errorMatch) return null;
+  const err = new Error(errorMatch[2]!);
+  err.name = errorMatch[1]!;
+  // Stack frames are always space/tab-indented — never vertical whitespace.
+  const stackMatch = content.match(/\n[ \t]+at[ \t]+.+/g);
+  if (stackMatch) {
+    err.stack = `${err.name}: ${err.message}\n${stackMatch.join('\n')}`;
   }
-
-  // Add remaining text after last ANSI code
-  const remaining = str.slice(lastIndex);
-  const spaceLeft = maxWidth - visibleLength;
-  if (remaining.length <= spaceLeft) {
-    result += remaining;
-  } else {
-    result += remaining.slice(0, spaceLeft - 1) + '…';
-    result += '\x1b]8;;\x07\x1b[0m'; // Close hyperlink + reset
-  }
-
-  return result;
+  return err;
 }

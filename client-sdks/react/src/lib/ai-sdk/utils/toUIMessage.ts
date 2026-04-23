@@ -243,6 +243,41 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       ];
     }
 
+    case 'background-task-progress': {
+      const lastMessage = result[result.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+
+      return [
+        ...result.slice(0, -1),
+        {
+          ...lastMessage,
+          metadata: {
+            mode: metadata.mode,
+            ...lastMessage.metadata,
+            runningBackgroundTasksCount: chunk.payload.runningCount,
+          } as MastraUIMessageMetadata,
+        },
+      ];
+    }
+
+    case 'background-task-failed':
+    case 'background-task-completed': {
+      const lastMessage = result[result.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+
+      return [
+        ...result.slice(0, -1),
+        {
+          ...lastMessage,
+          metadata: {
+            mode: metadata.mode,
+            ...lastMessage.metadata,
+            runningBackgroundTasksCount: undefined,
+          } as MastraUIMessageMetadata,
+        },
+      ];
+    }
+
     case 'text-delta': {
       const lastMessage = result[result.length - 1];
       if (!lastMessage || lastMessage.role !== 'assistant') return result;
@@ -436,7 +471,17 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
             if (isWorkflow) {
               output = (chunk.payload.result as any)?.result;
             } else if (isAgent) {
-              output = (parts[toolPartIndex] as any).output ?? chunk.payload.result;
+              const existingOutput = (parts[toolPartIndex] as any).output;
+              // Merge streaming childMessages with the backend result (which has
+              // subAgentToolResults, text, subAgentThreadId, etc.)
+              output = existingOutput
+                ? {
+                    ...(chunk.payload.result as any),
+                    childMessages: existingOutput.childMessages?.length
+                      ? existingOutput.childMessages
+                      : (chunk.payload.result as any)?.childMessages,
+                  }
+                : chunk.payload.result;
             } else {
               output = chunk.payload.result;
             }

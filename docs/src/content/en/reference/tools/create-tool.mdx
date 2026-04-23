@@ -34,6 +34,34 @@ export const tool = createTool({
 })
 ```
 
+## Example with strict tool inputs
+
+Set `strict: true` when you want Mastra to ask supported model providers to generate tool arguments that exactly match the tool schema.
+
+```typescript title="src/mastra/tools/weather-tool.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const weatherTool = createTool({
+  id: 'get-weather',
+  description: 'Get weather for a city',
+  strict: true,
+  inputSchema: z.object({
+    city: z.string(),
+    units: z.enum(['metric', 'imperial']),
+  }),
+  execute: async ({ city, units }) => {
+    return {
+      city,
+      units,
+      forecast: 'sunny',
+    }
+  },
+})
+```
+
+Mastra forwards `strict: true` to model adapters that support strict tool calling. On adapters that do not support strict tool calling, Mastra ignores this option.
+
 ## Example with `toModelOutput`
 
 Use `toModelOutput` when your tool should return rich internal data to your app, but the model should receive either a simplified value or multimodal content.
@@ -146,6 +174,13 @@ export const weatherTool = createTool({
     isOptional: true,
   },
   {
+    name: 'strict',
+    type: 'boolean',
+    description:
+      'When true, Mastra enables strict tool input generation on model adapters that support it. This helps supported providers return arguments that match the tool schema more closely.',
+    isOptional: true,
+  },
+  {
     name: 'toModelOutput',
     type: '(output: TSchemaOut) => unknown',
     description:
@@ -236,7 +271,53 @@ export const weatherTool = createTool({
                     name: 'agent',
                     type: 'AgentToolExecutionContext',
                     isOptional: true,
-                    description: 'Agent-specific context (messages, suspend, resumeData, etc.)',
+                    description: 'Agent-specific context, available when the tool is executed by an agent.',
+                    properties: [
+                      {
+                        name: 'agentId',
+                        type: 'string',
+                        description: 'The ID of the agent executing this tool.',
+                      },
+                      {
+                        name: 'toolCallId',
+                        type: 'string',
+                        description: 'Unique identifier for this tool call.',
+                      },
+                      {
+                        name: 'messages',
+                        type: 'CoreMessage[]',
+                        description: 'All messages in the current conversation.',
+                      },
+                      {
+                        name: 'suspend',
+                        type: '(payload, options?) => Promise<void>',
+                        description: 'Suspends tool execution, returning a payload to the caller.',
+                      },
+                      {
+                        name: 'resumeData',
+                        type: 'TResume',
+                        isOptional: true,
+                        description: 'Data provided when resuming a previously suspended tool.',
+                      },
+                      {
+                        name: 'threadId',
+                        type: 'string',
+                        isOptional: true,
+                        description: 'Thread ID for memory-enabled agents.',
+                      },
+                      {
+                        name: 'resourceId',
+                        type: 'string',
+                        isOptional: true,
+                        description: 'Resource ID for memory-enabled agents.',
+                      },
+                      {
+                        name: 'writableStream',
+                        type: 'WritableStream<any>',
+                        isOptional: true,
+                        description: 'Original WritableStream from the AI SDK for streaming tool outputs.',
+                      },
+                    ],
                   },
                   {
                     name: 'workflow',

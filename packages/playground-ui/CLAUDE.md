@@ -10,7 +10,6 @@ On every change to this package, you MUST ALWAYS follow these instructions:
 - use `react-best-practices` skill
 - use `tailwind-best-practices` skill
 
-
 ## Commands
 
 ### Local Commands (run from `packages/playground-ui`)
@@ -54,4 +53,3 @@ On every change to this package, you MUST ALWAYS follow these instructions:
 - Prioritize design system tokens for consistency
 - Minimize side effects and state management
 - Use TanStack Query for all server state
-

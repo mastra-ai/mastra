@@ -140,7 +140,7 @@ The SQLite database is stored in your system's application data directory:
 
 For **Anthropic** models, mastracode supports two authentication methods:
 
-1. **Claude Max OAuth (primary)** — Use `/login` to authenticate with a Claude Pro/Max subscription. This is the recommended approach.
+1. **Claude Max OAuth (primary)** — Use `/login` to authenticate with a Claude Pro/Max subscription.
 2. **API key (fallback)** — Set the `ANTHROPIC_API_KEY` environment variable for direct API access. This is used when not logged in via OAuth.
 
 When both are available, Claude Max OAuth takes priority.
@@ -161,6 +161,16 @@ Use `/custom-providers` to manage OpenAI-compatible providers with:
 Once saved, provider models appear in existing selectors like `/models` and `/subagents` and can be selected like built-in models.
 
 Custom providers are stored in `settings.json` in the same app data directory. If you save an API key, it is stored locally in plaintext, so use a machine/user profile you trust.
+
+### macOS sleep prevention
+
+On macOS, Mastra Code starts the built-in `caffeinate` utility while the agent is actively running, then stops it as soon as the run completes, errors, aborts, or the TUI exits. Idle sessions do not keep your machine awake.
+
+To disable this behavior, set `MASTRACODE_DISABLE_CAFFEINATE=1` before launching Mastra Code:
+
+```bash
+export MASTRACODE_DISABLE_CAFFEINATE=1
+```
 
 ### Plan persistence
 

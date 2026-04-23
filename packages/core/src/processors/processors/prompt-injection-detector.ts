@@ -1,5 +1,5 @@
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import z from 'zod/v4';
+import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
@@ -10,6 +10,8 @@ import type { ObservabilityContext } from '../../observability';
 import type { PublicSchema } from '../../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { Processor } from '../index';
+import { selectMessagesToCheck } from './message-selection';
+import type { LastMessageOnlyOption } from './message-selection';
 
 /**
  * Individual detection category score
@@ -32,7 +34,7 @@ export interface PromptInjectionResult {
 /**
  * Configuration options for PromptInjectionDetector
  */
-export interface PromptInjectionOptions {
+export interface PromptInjectionOptions extends LastMessageOnlyOption {
   /** Model configuration for the detection agent */
   model: MastraModelConfig;
 
@@ -109,6 +111,7 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
   private threshold: number;
   private strategy: 'block' | 'warn' | 'filter' | 'rewrite';
   private includeScores: boolean;
+  private lastMessageOnly: boolean;
   private structuredOutputOptions?: PromptInjectionOptions['structuredOutputOptions'];
   private providerOptions?: ProviderOptions;
 
@@ -127,6 +130,7 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
     this.threshold = options.threshold ?? 0.7; // Higher default threshold for security
     this.strategy = options.strategy || 'block';
     this.includeScores = options.includeScores ?? false;
+    this.lastMessageOnly = options.lastMessageOnly ?? false;
     this.structuredOutputOptions = options.structuredOutputOptions;
     this.providerOptions = options.providerOptions;
 
@@ -154,9 +158,15 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
 
       const results: PromptInjectionResult[] = [];
       const processedMessages: MastraDBMessage[] = [];
+      const messagesToCheck = selectMessagesToCheck(messages, this.lastMessageOnly);
+      const checkedMessageIds = new Set(messagesToCheck.map(message => message.id));
 
       // Evaluate each message
       for (const message of messages) {
+        if (!checkedMessageIds.has(message.id)) {
+          processedMessages.push(message);
+          continue;
+        }
         const textContent = this.extractTextContent(message);
         if (!textContent.trim()) {
           // No text content to analyze

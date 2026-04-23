@@ -1,6 +1,6 @@
 import type { ValidationErrorHook } from '@mastra/core/server';
-import { z } from 'zod';
-import type { ZodObject, ZodRawShape, ZodTypeAny } from 'zod';
+import type { ZodRawShape, ZodTypeAny } from 'zod/v4';
+import { z, ZodObject, ZodOptional, ZodNullable, ZodArray, ZodRecord } from 'zod/v4';
 import { generateRouteOpenAPI } from '../openapi-utils';
 import type { InferParams, ResponseType, RouteSchemas, ServerRoute, ServerRouteHandler } from './index';
 
@@ -79,50 +79,21 @@ export function jsonQueryParam<T extends ZodTypeAny>(schema: T): z.ZodType<z.inf
 }
 
 /**
- * Gets the type name from a Zod schema's internal definition.
- * Works across zod v3 and v4 by checking _def.typeName (v3) and _def.type (v4).
- */
-function getZodTypeName(schema: ZodTypeAny): string | undefined {
-  const schemaAny = schema as any;
-  const def = schemaAny?._def ?? schemaAny?.def;
-  return def?.typeName ?? def?.type;
-}
-
-/**
  * Checks if a Zod schema represents a complex type that needs JSON parsing from query strings.
  * Complex types: arrays, objects, records (these can't be represented as simple strings)
  * Simple types: strings, numbers, booleans, enums (can use z.coerce for conversion)
- *
- * Uses _def.typeName string comparison instead of instanceof to support both zod v3 and v4,
- * since instanceof checks fail across different zod versions in bundled code.
  */
 function isComplexType(schema: ZodTypeAny): boolean {
   // Unwrap all optional/nullable layers to check the inner type
   // Note: .partial() can create nested optionals (e.g., ZodOptional<ZodOptional<ZodObject>>)
   let inner: ZodTypeAny = schema;
-  let typeName = getZodTypeName(inner);
 
-  while (
-    typeName === 'ZodOptional' ||
-    typeName === 'ZodNullable' ||
-    typeName === 'optional' ||
-    typeName === 'nullable'
-  ) {
-    // Access innerType from internals to avoid version-specific method differences
-    const innerDef = (inner as any)._def ?? (inner as any).def;
-    inner = innerDef.innerType;
-    typeName = getZodTypeName(inner);
+  while (inner instanceof ZodOptional || inner instanceof ZodNullable) {
+    inner = inner.unwrap() as ZodTypeAny;
   }
 
   // Complex types that need JSON parsing
-  return (
-    typeName === 'ZodArray' ||
-    typeName === 'ZodRecord' ||
-    typeName === 'ZodObject' ||
-    typeName === 'array' ||
-    typeName === 'record' ||
-    typeName === 'object'
-  );
+  return inner instanceof ZodArray || inner instanceof ZodRecord || inner instanceof ZodObject;
 }
 
 /**

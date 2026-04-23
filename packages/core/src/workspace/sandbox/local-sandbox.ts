@@ -196,7 +196,7 @@ export class LocalSandbox extends MastraSandbox {
    * Status management is handled by the base class.
    */
   async start(): Promise<void> {
-    this.logger.debug('[LocalSandbox] Starting sandbox', {
+    this.logger.debug('Starting sandbox', {
       workingDirectory: this.workingDirectory,
       isolation: this.isolation,
     });
@@ -247,7 +247,7 @@ export class LocalSandbox extends MastraSandbox {
       }
     }
 
-    this.logger.debug('[LocalSandbox] Sandbox started', { workingDirectory: this.workingDirectory });
+    this.logger.debug('Sandbox started', { workingDirectory: this.workingDirectory });
   }
 
   /**
@@ -256,7 +256,7 @@ export class LocalSandbox extends MastraSandbox {
    * Status management is handled by the base class.
    */
   async stop(): Promise<void> {
-    this.logger.debug('[LocalSandbox] Stopping sandbox', { workingDirectory: this.workingDirectory });
+    this.logger.debug('Stopping sandbox', { workingDirectory: this.workingDirectory });
 
     // Unmount all active mounts (best-effort)
     for (const mountPath of [...this._activeMountPaths]) {
@@ -274,7 +274,7 @@ export class LocalSandbox extends MastraSandbox {
    * Status management is handled by the base class.
    */
   async destroy(): Promise<void> {
-    this.logger.debug('[LocalSandbox] Destroying sandbox', { workingDirectory: this.workingDirectory });
+    this.logger.debug('Destroying sandbox', { workingDirectory: this.workingDirectory });
 
     // Kill all background processes
     const procs = await this.processes.list();
@@ -396,13 +396,13 @@ export class LocalSandbox extends MastraSandbox {
     // Resolve virtual mount path to host filesystem path
     const hostPath = this.resolveHostPath(mountPath);
 
-    this.logger.debug(`[LocalSandbox] Mounting "${mountPath}" → "${hostPath}"...`);
+    this.logger.debug('Mounting', { mountPath, hostPath });
 
     // Get mount config
     const config = filesystem.getMountConfig?.() as FilesystemMountConfig | undefined;
     if (!config) {
       const error = `Filesystem "${filesystem.id}" does not provide a mount config`;
-      this.logger.error(`[LocalSandbox] ${error}`);
+      this.logger.error('Filesystem does not provide a mount config', { filesystemId: filesystem.id });
       this.mounts.set(mountPath, { filesystem, state: 'error', error });
       return { success: false, mountPath, error };
     }
@@ -410,9 +410,11 @@ export class LocalSandbox extends MastraSandbox {
     // Check if already mounted with matching config
     const existingMount = await this.checkExistingMount(hostPath, config);
     if (existingMount === 'matching') {
-      this.logger.debug(
-        `[LocalSandbox] Detected existing mount for ${filesystem.provider} ("${filesystem.id}") at "${hostPath}" with correct config, skipping`,
-      );
+      this.logger.debug('Detected existing mount with correct config, skipping', {
+        provider: filesystem.provider,
+        filesystemId: filesystem.id,
+        hostPath,
+      });
       this.mounts.set(mountPath, { filesystem, state: 'mounted', config });
       this._activeMountPaths.add(mountPath);
       this.addMountPathToIsolation(hostPath);
@@ -420,15 +422,15 @@ export class LocalSandbox extends MastraSandbox {
     } else if (existingMount === 'foreign') {
       // Something is already mounted/symlinked here but we didn't create it — refuse to touch it
       const error = `Cannot mount at ${hostPath}: path is already occupied by an existing mount or symlink that was not created by Mastra. Unmount it manually or use a different mount path.`;
-      this.logger.error(`[LocalSandbox] ${error}`);
+      this.logger.error('Mount path occupied by foreign mount or symlink', { hostPath });
       this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
       return { success: false, mountPath, error };
     } else if (existingMount === 'mismatched') {
-      this.logger.debug(`[LocalSandbox] Config mismatch on our mount, unmounting to re-mount with new config...`);
+      this.logger.debug('Config mismatch on our mount, unmounting to re-mount with new config');
       await this.unmount(mountPath);
     }
 
-    this.logger.debug(`[LocalSandbox] Config type: ${config.type}`);
+    this.logger.debug('Mount config type', { type: config.type });
 
     // Reject unsupported types early — before any filesystem work
     if (config.type !== 'local') {
@@ -444,7 +446,7 @@ export class LocalSandbox extends MastraSandbox {
       const entries = await fs.readdir(hostPath);
       if (entries.length > 0) {
         const error = `Cannot mount at ${hostPath}: directory exists and is not empty. Mounting would hide existing files. Use a different path or empty the directory first.`;
-        this.logger.error(`[LocalSandbox] ${error}`);
+        this.logger.error('Cannot mount at non-empty directory', { hostPath });
         this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
         return { success: false, mountPath, error };
       }
@@ -454,7 +456,7 @@ export class LocalSandbox extends MastraSandbox {
       const code = err instanceof Error && 'code' in err ? (err as NodeJS.ErrnoException).code : undefined;
       if (code === 'ENOTDIR') {
         const error = `Cannot mount at ${hostPath}: path is a regular file. Use a different mount path or remove the file first.`;
-        this.logger.error(`[LocalSandbox] ${error}`);
+        this.logger.error('Cannot mount at path that is a regular file', { hostPath });
         this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
         return { success: false, mountPath, error };
       }
@@ -466,12 +468,14 @@ export class LocalSandbox extends MastraSandbox {
     try {
       await fs.mkdir(path.dirname(hostPath), { recursive: true });
       await fs.symlink(localConfig.basePath, hostPath);
-      this.logger.debug(`[LocalSandbox] Symlinked local mount ${hostPath} → ${localConfig.basePath}`);
+      this.logger.debug('Symlinked local mount', { hostPath, basePath: localConfig.basePath });
     } catch (error) {
-      this.logger.error(
-        `[LocalSandbox] Error mounting "${filesystem.provider}" (${filesystem.id}) at "${hostPath}":`,
+      this.logger.error('Error mounting filesystem', {
+        provider: filesystem.provider,
+        filesystemId: filesystem.id,
+        hostPath,
         error,
-      );
+      });
       this.mounts.set(mountPath, { filesystem, state: 'error', config, error: String(error) });
 
       return { success: false, mountPath, error: String(error) };
@@ -487,7 +491,7 @@ export class LocalSandbox extends MastraSandbox {
     // Dynamically add host path to isolation allowlist
     this.addMountPathToIsolation(hostPath);
 
-    this.logger.debug(`[LocalSandbox] Mounted ${mountPath} → ${hostPath}`);
+    this.logger.debug('Mounted', { mountPath, hostPath });
     return { success: true, mountPath };
   }
 
@@ -500,7 +504,7 @@ export class LocalSandbox extends MastraSandbox {
 
     const hostPath = this.resolveHostPath(mountPath);
 
-    this.logger.debug(`[LocalSandbox] Unmounting ${mountPath} (${hostPath})...`);
+    this.logger.debug('Unmounting', { mountPath, hostPath });
 
     // Check if it's a symlink — symlinks are just unlinked, not FUSE-unmounted
     let isSymlink = false;
@@ -527,9 +531,9 @@ export class LocalSandbox extends MastraSandbox {
     if (isSymlink) {
       try {
         await fs.unlink(hostPath);
-        this.logger.debug(`[LocalSandbox] Unmounted and removed symlink ${hostPath}`);
+        this.logger.debug('Unmounted and removed symlink', { hostPath });
       } catch {
-        this.logger.debug(`[LocalSandbox] Could not remove symlink ${hostPath}`);
+        this.logger.debug('Could not remove symlink', { hostPath });
       }
     }
   }
@@ -555,7 +559,7 @@ export class LocalSandbox extends MastraSandbox {
       await fs.mkdir(MARKER_DIR, { recursive: true });
       await fs.writeFile(markerFilePath, markerContent, 'utf-8');
     } catch {
-      this.logger.debug(`[LocalSandbox] Warning: Could not write marker file at ${markerFilePath}`);
+      this.logger.debug('Could not write marker file', { markerFilePath });
     }
   }
 
@@ -628,9 +632,7 @@ export class LocalSandbox extends MastraSandbox {
       }
 
       const newConfigHash = this.mounts.computeConfigHash(newConfig);
-      this.logger.debug(
-        `[LocalSandbox] Marker check — stored hash: "${parsed.configHash}", new config hash: "${newConfigHash}"`,
-      );
+      this.logger.debug('Marker check', { storedHash: parsed.configHash, newConfigHash });
 
       if (parsed.path === hostPath && parsed.configHash === newConfigHash) {
         return 'matching';

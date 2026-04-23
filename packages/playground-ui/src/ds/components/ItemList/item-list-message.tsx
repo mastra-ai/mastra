@@ -1,5 +1,5 @@
-import { cn } from '@/lib/utils';
 import { InfoIcon, TriangleAlertIcon } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export type ItemListMessageProps = {
   children?: React.ReactNode;

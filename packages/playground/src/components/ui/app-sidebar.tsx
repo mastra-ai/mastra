@@ -1,41 +1,42 @@
 import {
   AgentIcon,
-  AuthStatus,
-  GithubIcon,
+  LogoWithoutText,
+  MainSidebar,
   McpServerIcon,
+  SettingsIcon,
   ToolsIcon,
   WorkflowIcon,
-  MainSidebar,
   useMainSidebar,
-  LogoWithoutText,
-  SettingsIcon,
-  MastraVersionFooter,
-  useMastraPlatform,
-  useIsCmsAvailable,
-  useAuthCapabilities,
-  isAuthenticated,
-  usePermissions,
 } from '@mastra/playground-ui';
 import type { NavLink, NavSection } from '@mastra/playground-ui';
 import {
-  GaugeIcon,
   EyeIcon,
-  PackageIcon,
   GlobeIcon,
   BookIcon,
   FileTextIcon,
-  EarthIcon,
-  CloudUploadIcon,
-  MessagesSquareIcon,
   FolderIcon,
   Cpu,
+  BarChart3Icon,
+  LogsIcon,
   DatabaseIcon,
+  FlaskConical,
+  GaugeIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
+import { AuthStatus } from '@/domains/auth/components/auth-status';
+import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import { isAuthenticated } from '@/domains/auth/types';
+import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
+import { MastraVersionFooter } from '@/domains/configuration/components/mastra-version-footer';
+import { useLinkComponent } from '@/lib/framework';
+import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 
 type SidebarLink = NavLink & {
   requiredPermission?: string;
   requiredAnyPermission?: string[];
+  requiresExperimentalFeatures?: boolean;
+  activePaths?: string[];
 };
 
 type SidebarSection = Omit<NavSection, 'links'> & {
@@ -44,14 +45,16 @@ type SidebarSection = Omit<NavSection, 'links'> & {
 
 const mainNavigation: SidebarSection[] = [
   {
-    key: 'main',
-
+    key: 'primitives',
+    title: 'Primitives',
+    href: '/primitives',
     links: [
       {
         name: 'Agents',
         url: '/agents',
         icon: <AgentIcon />,
         isOnMastraPlatform: true,
+        indent: true,
         requiredPermission: 'agents:read',
       },
       {
@@ -59,12 +62,14 @@ const mainNavigation: SidebarSection[] = [
         url: '/prompts',
         icon: <FileTextIcon />,
         isOnMastraPlatform: true,
+        indent: true,
       },
       {
         name: 'Workflows',
         url: '/workflows',
         icon: <WorkflowIcon />,
         isOnMastraPlatform: true,
+        indent: true,
         requiredPermission: 'workflows:read',
       },
       {
@@ -72,6 +77,7 @@ const mainNavigation: SidebarSection[] = [
         url: '/processors',
         icon: <Cpu />,
         isOnMastraPlatform: false,
+        indent: true,
         requiredPermission: 'processors:read',
       },
       {
@@ -79,6 +85,7 @@ const mainNavigation: SidebarSection[] = [
         url: '/mcps',
         icon: <McpServerIcon />,
         isOnMastraPlatform: true,
+        indent: true,
         requiredPermission: 'mcps:read',
       },
       {
@@ -86,20 +93,15 @@ const mainNavigation: SidebarSection[] = [
         url: '/tools',
         icon: <ToolsIcon />,
         isOnMastraPlatform: true,
+        indent: true,
         requiredPermission: 'tools:read',
-      },
-      {
-        name: 'Scorers',
-        url: '/scorers',
-        icon: <GaugeIcon />,
-        isOnMastraPlatform: true,
-        requiredPermission: 'scorers:read',
       },
       {
         name: 'Workspaces',
         url: '/workspaces',
         icon: <FolderIcon />,
         isOnMastraPlatform: true,
+        indent: true,
         requiredPermission: 'workspaces:read',
       },
       {
@@ -107,44 +109,75 @@ const mainNavigation: SidebarSection[] = [
         url: '/request-context',
         icon: <GlobeIcon />,
         isOnMastraPlatform: true,
+        indent: true,
       },
     ],
   },
   {
-    key: 'observability',
-    separator: true,
+    key: 'evaluation',
+    title: 'Evaluation',
+    href: '/evaluation',
     links: [
       {
-        name: 'Observability',
-        url: '/observability',
-        icon: <EyeIcon />,
+        name: 'Scorers',
+        url: '/scorers',
+        icon: <GaugeIcon />,
         isOnMastraPlatform: true,
-        requiredPermission: 'observability:read',
+        indent: true,
+        requiredPermission: 'scorers:read',
       },
       {
         name: 'Datasets',
         url: '/datasets',
         icon: <DatabaseIcon />,
-        isOnMastraPlatform: false,
-        requiredPermission: 'datasets:read',
+        isOnMastraPlatform: true,
+        indent: true,
+        requiredAnyPermission: ['datasets:read'],
+      },
+      {
+        name: 'Experiments',
+        url: '/experiments',
+        icon: <FlaskConical />,
+        isOnMastraPlatform: true,
+        indent: true,
+        requiredAnyPermission: ['datasets:read'],
       },
     ],
   },
   {
-    key: 'Templates',
-    separator: true,
+    key: 'observability',
+    title: 'Observability',
+    href: '/observability-overview',
     links: [
       {
-        name: 'Templates',
-        url: '/templates',
-        icon: <PackageIcon />,
-        isOnMastraPlatform: false,
+        name: 'Metrics',
+        url: '/metrics',
+        icon: <BarChart3Icon />,
+        isOnMastraPlatform: true,
+        indent: true,
+        requiredPermission: 'observability:read',
+      },
+      {
+        name: 'Traces',
+        url: '/observability',
+        activePaths: ['/traces'],
+        icon: <EyeIcon />,
+        isOnMastraPlatform: true,
+        indent: true,
+        requiredPermission: 'observability:read',
+      },
+      {
+        name: 'Logs',
+        url: '/logs',
+        icon: <LogsIcon />,
+        isOnMastraPlatform: true,
+        indent: true,
+        requiredPermission: 'observability:read',
       },
     ],
   },
-
   {
-    key: 'Settings',
+    key: 'bottom',
     separator: true,
     links: [
       {
@@ -153,40 +186,15 @@ const mainNavigation: SidebarSection[] = [
         icon: <SettingsIcon />,
         isOnMastraPlatform: false,
       },
+      {
+        name: 'Resources',
+        url: '/resources',
+        icon: <BookIcon />,
+        isOnMastraPlatform: true,
+      },
     ],
   },
 ];
-
-const secondNavigation: SidebarSection = {
-  key: 'others',
-  title: 'Other links',
-  links: [
-    {
-      name: 'Mastra APIs',
-      url: '/swagger-ui',
-      icon: <EarthIcon />,
-      isOnMastraPlatform: false,
-    },
-    {
-      name: 'Documentation',
-      url: 'https://mastra.ai/en/docs',
-      icon: <BookIcon />,
-      isOnMastraPlatform: true,
-    },
-    {
-      name: 'Github',
-      url: 'https://github.com/mastra-ai/mastra',
-      icon: <GithubIcon />,
-      isOnMastraPlatform: true,
-    },
-    {
-      name: 'Community',
-      url: 'https://discord.gg/BTYqqHKUrf',
-      icon: <MessagesSquareIcon />,
-      isOnMastraPlatform: true,
-    },
-  ],
-};
 
 declare global {
   interface Window {
@@ -195,14 +203,20 @@ declare global {
   }
 }
 
+function getIsLinkActive(link: SidebarLink, pathname: string): boolean {
+  // Exact match or sub-path match (with / boundary to avoid /observability matching /observability-overview)
+  const matches = (url: string) => pathname === url || pathname.startsWith(url + '/');
+  if (matches(link.url)) return true;
+  return link.activePaths?.some(matches) ?? false;
+}
+
 export function AppSidebar() {
+  const { Link } = useLinkComponent();
   const { state } = useMainSidebar();
 
   const location = useLocation();
   const pathname = location.pathname;
 
-  const hideCloudCta = window?.MASTRA_HIDE_CLOUD_CTA === 'true';
-  const showTemplates = window?.MASTRA_TEMPLATES === 'true';
   const { isMastraPlatform } = useMastraPlatform();
   const { data: authCapabilities } = useAuthCapabilities();
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
@@ -273,61 +287,52 @@ export function AppSidebar() {
       </div>
 
       <MainSidebar.Nav>
-        {mainNavigation
-          .filter(section => (section.key === 'Templates' ? showTemplates : true))
-          .map(section => {
-            const filteredLinks = section.links.filter(filterSidebarLink);
-            const showSeparator = filteredLinks.length > 0 && section?.separator;
+        {mainNavigation.map(section => {
+          const filteredLinks = section.links.filter(filterSidebarLink);
+          const showSeparator = filteredLinks.length > 0 && section?.separator;
 
-            return (
-              <MainSidebar.NavSection key={section.key}>
-                {section?.title ? (
-                  <MainSidebar.NavHeader state={state}>{section.title}</MainSidebar.NavHeader>
-                ) : (
-                  <>{showSeparator && <MainSidebar.NavSeparator />}</>
-                )}
-                <MainSidebar.NavList>
-                  {filteredLinks.map(link => {
-                    const isActive = pathname.startsWith(link.url);
-                    return <MainSidebar.NavLink key={link.name} state={state} link={link} isActive={isActive} />;
-                  })}
-                </MainSidebar.NavList>
-              </MainSidebar.NavSection>
-            );
-          })}
+          const anySubLinkActive = filteredLinks.some(link => getIsLinkActive(link, pathname));
+          const isHeaderActive = !!(section.href && pathname === section.href && !anySubLinkActive);
+
+          return (
+            <MainSidebar.NavSection key={section.key}>
+              {section?.title ? (
+                <MainSidebar.NavHeader LinkComponent={Link} state={state} href={section.href} isActive={isHeaderActive}>
+                  {section.title}
+                </MainSidebar.NavHeader>
+              ) : (
+                <>{showSeparator && <MainSidebar.NavSeparator />}</>
+              )}
+              <MainSidebar.NavList>
+                {filteredLinks.map(link => {
+                  const isActive = getIsLinkActive(link, pathname);
+                  return (
+                    <MainSidebar.NavLink
+                      key={link.name}
+                      LinkComponent={Link}
+                      state={state}
+                      link={link}
+                      isActive={isActive}
+                    />
+                  );
+                })}
+              </MainSidebar.NavList>
+            </MainSidebar.NavSection>
+          );
+        })}
       </MainSidebar.Nav>
 
       <MainSidebar.Bottom>
-        <MainSidebar.Nav>
-          <MainSidebar.NavSection>
-            <MainSidebar.NavSeparator />
-            <MainSidebar.NavList>
-              {secondNavigation.links.filter(filterSidebarLink).map(link => {
-                return <MainSidebar.NavLink key={link.name} link={link} state={state} />;
-              })}
-
-              {!hideCloudCta && !isMastraPlatform ? (
-                <MainSidebar.NavLink
-                  link={{
-                    name: 'Share',
-                    url: 'https://mastra.ai/cloud',
-                    icon: <CloudUploadIcon />,
-                    variant: 'featured',
-                    tooltipMsg: "You're running Mastra Studio locally. Want your team to collaborate?",
-                    isOnMastraPlatform: false,
-                  }}
-                  state={state}
-                />
-              ) : null}
-            </MainSidebar.NavList>
-          </MainSidebar.NavSection>
-        </MainSidebar.Nav>
         {state !== 'collapsed' && (
           <>
             <MainSidebar.NavSeparator />
             <MastraVersionFooter collapsed={false} />
           </>
         )}
+        <MainSidebar.NavSeparator />
+        <div className="flex justify-end pb-3">
+          <MainSidebar.Trigger />
+        </div>
       </MainSidebar.Bottom>
     </MainSidebar>
   );

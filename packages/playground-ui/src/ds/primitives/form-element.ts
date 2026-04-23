@@ -7,15 +7,15 @@ export const formElementSizes = {
 
 // Enhanced focus states with glow effect and smooth transition
 export const formElementFocus =
-  'focus:outline-none focus:ring-1 focus:ring-accent1 focus:shadow-focus-ring transition-shadow duration-normal';
+  'focus:outline-hidden focus:ring-1 focus:ring-accent1 focus:shadow-focus-ring transition-shadow duration-normal';
 export const formElementFocusWithin =
-  'focus-within:outline-none focus-within:ring-1 focus-within:ring-accent1 focus-within:shadow-focus-ring transition-shadow duration-normal';
+  'focus-within:outline-hidden focus-within:ring-1 focus-within:ring-accent1 focus-within:shadow-focus-ring transition-shadow duration-normal';
 export const formElementRadius = 'rounded-md';
 
 export const sharedFormElementStyle =
   'bg-surface2 border-2 border-border1 text-neutral5 hover:text-neutral6 hover:border-border2 rounded-lg';
 export const sharedFormElementFocusStyle =
-  'outline-none focus-visible:outline-none focus-visible:border-accent1 focus-visible:ring-1 focus-visible:ring-accent1/40';
+  'outline-hidden focus-visible:outline-hidden focus-visible:border-accent1 focus-visible:ring-1 focus-visible:ring-accent1/40';
 export const sharedFormElementDisabledStyle = 'disabled:opacity-50 disabled:cursor-not-allowed';
 
 // Common transition utilities for form elements

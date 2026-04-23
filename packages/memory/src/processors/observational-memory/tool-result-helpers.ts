@@ -1,5 +1,7 @@
 import { estimateTokenCount } from 'tokenx';
 
+import { safeSlice } from './string-utils';
+
 const ENCRYPTED_CONTENT_KEY = 'encryptedContent';
 const ENCRYPTED_CONTENT_REDACTION_THRESHOLD = 256;
 
@@ -91,9 +93,8 @@ export function truncateStringByTokens(text: string, maxTokens: number): string 
   }
 
   const buildCandidate = (sliceEnd: number) => {
-    const visible = text.slice(0, sliceEnd);
-    const omittedChars = text.length - sliceEnd;
-    return `${visible}\n... [truncated ~${totalTokens - estimateTokenCount(visible)} tokens / ${omittedChars} characters]`;
+    const visible = safeSlice(text, sliceEnd);
+    return `${visible}\n... [truncated ~${totalTokens - estimateTokenCount(visible)} tokens]`;
   };
 
   let low = 0;

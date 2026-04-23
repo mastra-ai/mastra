@@ -19,7 +19,7 @@ import { createTool } from '@mastra/core/tools';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 
-import { Memory } from '../../../..';
+import { Memory } from '../../../index';
 
 // =============================================================================
 // Mock Model: Multi-step execution via tool call
@@ -470,6 +470,9 @@ describe('Mock OM Agent Integration', () => {
     expect(subRecord!.activeObservations).toContain('User asked for help');
   });
 
+  // TODO: processInputStep is not called by v5 execution engine for generate() — needs investigation.
+  // On main, OM implements Processor directly; in our refactored architecture, ObservationalMemoryProcessor
+  // is a separate class. The v5 execution engine's processor discovery may not find it.
   it('should insert a message boundary with a date matching the observed messages', async () => {
     // Create a model that supports multiple generate calls (alternating tool-call / text).
     // The shared createMockOmModel only fires a tool call on the very first call,
@@ -559,5 +562,212 @@ describe('Mock OM Agent Integration', () => {
     const lastObserved = new Date(secondRecord!.lastObservedAt!);
     // lastObservedAt should be close to the boundary date (within a few seconds)
     expect(Math.abs(lastObserved.getTime() - boundaryDate.getTime())).toBeLessThan(5000);
+  });
+
+  // ===========================================================================
+  // Message ordering regressions (agent-level)
+  // ===========================================================================
+
+  describe('Message ordering regressions', () => {
+    async function getMessages(threadId: string) {
+      const memoryStore = await store.getStore('memory');
+      const result = await memoryStore!.listMessages({
+        threadId,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        perPage: false,
+      });
+      return result.messages;
+    }
+
+    it('A — all messages persisted in correct order after multi-step generate', async () => {
+      const threadId = 'test-thread-order-a';
+      await agent.generate('Tell me something useful.', {
+        memory: { thread: threadId, resource: 'test-resource' },
+      });
+
+      const messages = await getMessages(threadId);
+
+      // Should have at least user + assistant messages
+      expect(messages.length).toBeGreaterThanOrEqual(2);
+
+      // User message should come before assistant
+      const userIdx = messages.findIndex(m => m.role === 'user');
+      const assistantIdx = messages.findIndex(m => m.role === 'assistant');
+      expect(userIdx).toBeGreaterThanOrEqual(0);
+      expect(assistantIdx).toBeGreaterThan(userIdx);
+
+      // All IDs unique
+      const ids = messages.map(m => m.id);
+      expect(new Set(ids).size).toBe(ids.length);
+
+      // createdAt monotonically non-decreasing
+      for (let i = 1; i < messages.length; i++) {
+        expect(new Date(messages[i]!.createdAt).getTime()).toBeGreaterThanOrEqual(
+          new Date(messages[i - 1]!.createdAt).getTime(),
+        );
+      }
+    });
+
+    it('B — no duplicate messages with buffering enabled', async () => {
+      const bufferStore = new InMemoryStore();
+      const bufferMemory = new Memory({
+        storage: bufferStore,
+        options: {
+          observationalMemory: {
+            enabled: true,
+            observation: {
+              model: createMockObserverModel() as any,
+              messageTokens: 20,
+              bufferTokens: 15,
+            },
+            reflection: {
+              model: createMockReflectorModel() as any,
+              observationTokens: 50000,
+            },
+          },
+        },
+      });
+      const bufferAgent = new Agent({
+        id: 'test-om-buffer-agent',
+        name: 'Buffer Agent',
+        instructions: 'You are a helpful assistant. Always use the test tool first.',
+        model: createMockOmModel(longResponseText) as any,
+        tools: { test: omTriggerTool },
+        memory: bufferMemory,
+      });
+
+      const threadId = 'test-thread-order-b';
+      await bufferAgent.generate('Help me with this task.', {
+        memory: { thread: threadId, resource: 'test-resource' },
+      });
+
+      const memoryStore = await bufferStore.getStore('memory');
+      const result = await memoryStore!.listMessages({
+        threadId,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        perPage: false,
+      });
+      const messages = result.messages;
+
+      // No duplicate IDs
+      const ids = messages.map(m => m.id);
+      expect(new Set(ids).size).toBe(ids.length);
+    });
+
+    it('C — second turn loads full context and maintains order', async () => {
+      const threadId = 'test-thread-order-c';
+      const memOpts = { thread: threadId, resource: 'test-resource' };
+
+      await agent.generate('First message', { memory: memOpts });
+      await agent.generate('Second message', { memory: memOpts });
+
+      const messages = await getMessages(threadId);
+
+      // Both user messages should be present
+      const userMsgs = messages.filter(m => m.role === 'user');
+      expect(userMsgs.length).toBeGreaterThanOrEqual(2);
+
+      // Chronological order
+      for (let i = 1; i < messages.length; i++) {
+        expect(new Date(messages[i]!.createdAt).getTime()).toBeGreaterThanOrEqual(
+          new Date(messages[i - 1]!.createdAt).getTime(),
+        );
+      }
+
+      // All IDs unique
+      const ids = messages.map(m => m.id);
+      expect(new Set(ids).size).toBe(ids.length);
+    });
+
+    it('D — message ordering survives sealing across turns', async () => {
+      const bufferStore = new InMemoryStore();
+      const bufferMemory = new Memory({
+        storage: bufferStore,
+        options: {
+          observationalMemory: {
+            enabled: true,
+            observation: {
+              model: createMockObserverModel() as any,
+              messageTokens: 20,
+              bufferTokens: 15,
+            },
+            reflection: {
+              model: createMockReflectorModel() as any,
+              observationTokens: 50000,
+            },
+          },
+        },
+      });
+
+      let genCount = 0;
+      const multiCallModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          genCount++;
+          if (genCount % 2 === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 50, outputTokens: 20, totalTokens: 70 },
+              text: '',
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: `call-${genCount}`,
+                  toolName: 'test',
+                  input: JSON.stringify({ action: 'trigger' }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+            text: longResponseText,
+            content: [{ type: 'text' as const, text: longResponseText }],
+            warnings: [],
+          };
+        },
+      });
+
+      const bufferAgent = new Agent({
+        id: 'test-om-seal-agent',
+        name: 'Seal Agent',
+        instructions: 'You are a helpful assistant. Always use the test tool first.',
+        model: multiCallModel as any,
+        tools: { test: omTriggerTool },
+        memory: bufferMemory,
+      });
+
+      const threadId = 'test-thread-order-d';
+      const memOpts = { thread: threadId, resource: 'test-resource' };
+
+      await bufferAgent.generate('Turn 1 message', { memory: memOpts });
+      await bufferAgent.generate('Turn 2 message', { memory: memOpts });
+
+      const memoryStore = await bufferStore.getStore('memory');
+      const result = await memoryStore!.listMessages({
+        threadId,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        perPage: false,
+      });
+      const messages = result.messages;
+
+      // Chronological order
+      for (let i = 1; i < messages.length; i++) {
+        expect(new Date(messages[i]!.createdAt).getTime()).toBeGreaterThanOrEqual(
+          new Date(messages[i - 1]!.createdAt).getTime(),
+        );
+      }
+
+      // No duplicate IDs
+      const ids = messages.map(m => m.id);
+      expect(new Set(ids).size).toBe(ids.length);
+
+      // Both user messages should be present
+      const userMsgs = messages.filter(m => m.role === 'user');
+      expect(userMsgs.length).toBeGreaterThanOrEqual(2);
+    });
   });
 });

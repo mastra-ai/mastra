@@ -34,7 +34,7 @@ export function MainHeaderRoot({
       {children}
     </header>
   ) : (
-    <header className={cn('grid gap-2 pt-8 pb-8', className)}>
+    <header className={cn('grid gap-2 pt-8 pb-8 ', className)}>
       <h1
         className={cn(
           'text-neutral6 text-xl font-normal flex items-center gap-2',

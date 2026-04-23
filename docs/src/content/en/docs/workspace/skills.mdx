@@ -134,6 +134,29 @@ The agent has three skill tools:
 
 This design is stateless — there is no activation state to track. If the skill instructions leave the conversation context (due to context window limits or compaction), the agent can call `skill` again to reload them.
 
+## Same-named skills
+
+When multiple skill directories contain a skill with the same name, all of them are discovered and listed. The agent sees every skill in its system message, along with each skill's path and source type, so it can tell them apart.
+
+When the agent activates a skill by name, tie-breaking determines which one is returned:
+
+1. **Source-type priority**: local skills take precedence over managed (`.mastra/`) skills, which take precedence over external (`node_modules/`) skills.
+1. **Unresolvable conflicts throw**: if two skills share the same name _and_ the same source type (for example, two local skills both named `brand-guidelines`), `get()` throws an error. Rename one or move it to a different source type to resolve the conflict.
+1. **Path escape hatch**: the agent can pass a skill's full path instead of its name to activate a specific skill, bypassing tie-breaking entirely.
+
+```typescript title="Example: local skill shadows an external package skill"
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  skills: [
+    'node_modules/@myorg/skills', // external: provides "brand-guidelines"
+    '/skills', // local: also provides "brand-guidelines"
+  ],
+})
+
+// get('brand-guidelines') returns the local copy (local > external)
+// get('node_modules/@myorg/skills/brand-guidelines') returns the external copy
+```
+
 ## Skill search
 
 If BM25 or vector search is enabled on the workspace, skills are automatically indexed. Agents can search across skill content to find relevant instructions.
@@ -168,9 +191,9 @@ const workspace = new Workspace({
 
 `VersionedSkillSource` accepts three parameters:
 
-- **`versionTree`** (`SkillVersionTree`) — A manifest mapping relative file paths to blob entries (`{ entries: Record<string, { blobHash, size, mimeType?, encoding? }> }`).
-- **`blobStore`** (`BlobStore`) — A content-addressable blob store instance that holds the actual file contents referenced by hash.
-- **`versionCreatedAt`** (`Date`) — The timestamp when this skill version was published. Used as the modification time for all files in the version.
+- **`versionTree`** (`SkillVersionTree`): A manifest mapping relative file paths to blob entries (`{ entries: Record<string, { blobHash, size, mimeType?, encoding? }> }`).
+- **`blobStore`** (`BlobStore`): A content-addressable blob store instance that holds the actual file contents referenced by hash.
+- **`versionCreatedAt`** (`Date`): The timestamp when this skill version was published. Used as the modification time for all files in the version.
 
 When `skillSource` is provided, it's used instead of the workspace filesystem for skill discovery.
 

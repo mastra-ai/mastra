@@ -1,6 +1,7 @@
 import type { ListTracesArgs, ListTracesResponse } from '@mastra/core/storage';
-import { useInView, useInfiniteQuery, is403ForbiddenError } from '@mastra/playground-ui';
+import { useInView, is403ForbiddenError } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
+import { useInfiniteQuery, keepPreviousData } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
 const fetchTracesFn = async ({
@@ -80,6 +81,7 @@ export const useTraces = ({ filters }: TracesFilters) => {
     initialPageParam: 0,
     getNextPageParam: getTracesNextPageParam,
     select: selectUniqueTraces,
+    placeholderData: keepPreviousData,
     retry: false,
     // Disable polling on 403 to prevent flickering
     refetchInterval: query => (is403ForbiddenError(query.state.error) ? false : 3000),

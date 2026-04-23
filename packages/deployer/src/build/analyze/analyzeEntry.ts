@@ -9,13 +9,13 @@ import { resolveModule } from 'local-pkg';
 import { rollup } from 'rollup';
 import type { OutputChunk, Plugin, SourceMap } from 'rollup';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
-import { isNodeBuiltin } from '../isNodeBuiltin';
 import { getPackageRootPath } from '../package-info';
 import { esbuild } from '../plugins/esbuild';
+import { protocolExternalResolver } from '../plugins/protocol-external-resolver';
 import { removeDeployer } from '../plugins/remove-deployer';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
 import type { DependencyMetadata } from '../types';
-import { getPackageName, slash } from '../utils';
+import { getPackageName, isBareModuleSpecifier, slash } from '../utils';
 import { DEPS_TO_IGNORE } from './constants';
 
 /**
@@ -44,6 +44,7 @@ function getInputPlugins(
   plugins.push(
     ...[
       tsConfigPaths(),
+      protocolExternalResolver(),
       {
         name: 'custom-alias-resolver',
         resolveId(id: string) {
@@ -108,7 +109,7 @@ async function captureDependenciesToOptimize(
   }
 
   for (const [dependency, bindings] of Object.entries(output.importedBindings)) {
-    if (isNodeBuiltin(dependency) || dependency.startsWith('#')) {
+    if (!isBareModuleSpecifier(dependency)) {
       continue;
     }
 
@@ -176,7 +177,7 @@ async function captureDependenciesToOptimize(
           paths: [importerPath],
         });
         if (!resolvedPath) {
-          logger.warn(`Could not resolve path for workspace dependency ${dep}`);
+          logger.warn('Could not resolve path for workspace dependency', { dep });
           continue;
         }
 
@@ -206,7 +207,7 @@ async function captureDependenciesToOptimize(
           }
         }
       } catch (err) {
-        logger.error(`Failed to resolve or analyze dependency ${dep}: ${(err as Error).message}`);
+        logger.error('Failed to resolve or analyze dependency', { dep, error: (err as Error).message });
       }
     }
 
@@ -224,7 +225,7 @@ async function captureDependenciesToOptimize(
   const dynamicImports = output.dynamicImports.filter(d => !DEPS_TO_IGNORE.includes(d));
   if (dynamicImports.length) {
     for (const dynamicImport of dynamicImports) {
-      if (!depsToOptimize.has(dynamicImport) && !isNodeBuiltin(dynamicImport)) {
+      if (!depsToOptimize.has(dynamicImport) && isBareModuleSpecifier(dynamicImport)) {
         // Try to resolve version for dynamic imports as well
         const pkgName = getPackageName(dynamicImport);
         let version: string | undefined;

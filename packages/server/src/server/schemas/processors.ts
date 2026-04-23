@@ -1,4 +1,4 @@
-import z from 'zod';
+import { z } from 'zod/v4';
 
 // Path parameter schemas
 export const processorIdPathParams = z.object({

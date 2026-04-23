@@ -7,7 +7,7 @@ import {
   MockLanguageModelV3,
 } from '@internal/ai-v6/test';
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';

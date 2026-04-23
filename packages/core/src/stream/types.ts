@@ -11,11 +11,11 @@ import type {
   LanguageModelRequestMetadata,
   LogProbs as LanguageModelV1LogProbs,
 } from '@internal/ai-sdk-v4';
-import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
+import type { CallSettings, ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
-import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { MastraLanguageModel, SharedProviderOptions } from '../llm/model/shared.types';
 import type { ScorerResult } from '../loop';
 import type { ObservabilityContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
@@ -220,6 +220,7 @@ interface FinishPayload<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
     request?: LanguageModelRequestMetadata;
     [key: string]: unknown;
   };
+  providerMetadata?: ProviderMetadata;
   messages: {
     all: ModelMessage[];
     user: ModelMessage[];
@@ -372,6 +373,34 @@ interface IsTaskCompletePayload {
   maxIterationReached: boolean;
   /** Whether to suppress the completion feedback message */
   suppressFeedback: boolean;
+}
+
+export interface BackgroundTaskStartedPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+}
+
+export interface BackgroundTaskResultPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  result: unknown;
+  runId: string;
+}
+
+export interface BackgroundTaskFailedPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  error: { message: string };
+}
+
+export interface BackgroundTaskProgressPayload {
+  taskIds: string[];
+  runningCount: number;
+  elapsedMs: number;
 }
 
 // Network-specific payload interfaces
@@ -683,7 +712,23 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'step-output'; payload: StepOutputPayload })
   | (BaseChunkType & { type: 'watch'; payload: WatchPayload })
   | (BaseChunkType & { type: 'tripwire'; payload: TripwirePayload })
-  | (BaseChunkType & { type: 'is-task-complete'; payload: IsTaskCompletePayload });
+  | (BaseChunkType & { type: 'is-task-complete'; payload: IsTaskCompletePayload })
+  | (BaseChunkType & {
+      type: 'background-task-started';
+      payload: BackgroundTaskStartedPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-completed';
+      payload: BackgroundTaskResultPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-failed';
+      payload: BackgroundTaskFailedPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-progress';
+      payload: BackgroundTaskProgressPayload;
+    });
 
 export type WorkflowStreamEvent =
   | (BaseChunkType & {
@@ -822,6 +867,8 @@ export type ModelManagerModelConfig = {
   maxRetries: number;
   id: string;
   headers?: Record<string, string>;
+  modelSettings?: Omit<CallSettings, 'abortSignal' | 'maxRetries' | 'headers'>;
+  providerOptions?: SharedProviderOptions;
 };
 
 /**

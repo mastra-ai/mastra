@@ -19,6 +19,20 @@ import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { ObservationalMemory } from '../observational-memory';
+import { ObservationalMemoryProcessor } from '../processor';
+import type { MemoryContextProvider } from '../processor';
+
+const noopMemoryProvider: MemoryContextProvider = {
+  getContext: async () => ({
+    systemMessage: undefined,
+    messages: [],
+    hasObservations: false,
+    omRecord: null,
+    continuationMessage: undefined,
+    otherThreadsContext: undefined,
+  }),
+  persistMessages: async () => {},
+};
 import { TokenCounter } from '../token-counter';
 
 // =============================================================================
@@ -91,7 +105,7 @@ function createAbort() {
 }
 
 function mockCallObserver(target: ObservationalMemory) {
-  return vi.spyOn(target as any, 'callObserver').mockResolvedValue({
+  return vi.spyOn(target.observer, 'call').mockResolvedValue({
     observations: '* User discussed topic X\n* Assistant explained Y',
     usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
   });
@@ -114,6 +128,7 @@ function createRequestContext(threadId: string, resourceId: string): RequestCont
 describe('Mid-Loop Observation', () => {
   let storage: InMemoryMemory;
   let om: ObservationalMemory;
+  let processor: ObservationalMemoryProcessor;
   const threadId = 'test-thread-123';
   const resourceId = 'test-resource';
   const tokenCounter = new TokenCounter();
@@ -147,6 +162,7 @@ describe('Mid-Loop Observation', () => {
         observationTokens: 50000, // High to prevent reflection
       },
     });
+    processor = new ObservationalMemoryProcessor(om, noopMemoryProvider);
 
     mockCallObserver(om);
   });
@@ -201,7 +217,7 @@ describe('Mid-Loop Observation', () => {
       }
 
       // Step 0: Initialize the record (no observation yet)
-      await om.processInputStep({
+      await processor.processInputStep({
         messageList,
         messages: messageList.get.all.db(),
         requestContext,
@@ -216,7 +232,7 @@ describe('Mid-Loop Observation', () => {
       });
 
       // Step 1: Should trigger observation since threshold is exceeded
-      await om.processInputStep({
+      await processor.processInputStep({
         messageList,
         messages: messageList.get.all.db(),
         requestContext,
@@ -261,7 +277,7 @@ describe('Mid-Loop Observation', () => {
       }
 
       // Step 0: Should NOT trigger observation (only initializes record)
-      await om.processInputStep({
+      await processor.processInputStep({
         messageList,
         messages: messageList.get.all.db(),
         requestContext,
@@ -301,6 +317,7 @@ describe('Mid-Loop Observation', () => {
           observationTokens: 50000, // High to prevent reflection
         },
       });
+      const processorWithBuffering = new ObservationalMemoryProcessor(omWithBuffering, noopMemoryProvider);
 
       mockCallObserver(omWithBuffering);
 
@@ -322,7 +339,7 @@ describe('Mid-Loop Observation', () => {
         messageList.add(msg, 'memory');
       }
 
-      await omWithBuffering.processInputStep({
+      await processorWithBuffering.processInputStep({
         messageList,
         messages: messageList.get.all.db(),
         requestContext,
@@ -364,7 +381,7 @@ describe('Mid-Loop Observation', () => {
         messageList.add(msg, 'memory');
       }
 
-      await omWithBuffering.processInputStep({
+      await processorWithBuffering.processInputStep({
         messageList,
         messages: messageList.get.all.db(),
         requestContext,
@@ -393,6 +410,87 @@ describe('Mid-Loop Observation', () => {
       // The key assertion is that activation happened (above checks).
       // The bug we're fixing is that activation was DEFERRED to step 0 of next turn,
       // which would have left activeObservations empty after step 1.
+    });
+
+    it('should rotate the active response message id only when OM seals a buffered chunk', async () => {
+      const persistMessages = vi.fn(async () => {});
+      const memoryProvider: MemoryContextProvider = {
+        ...noopMemoryProvider,
+        persistMessages,
+      };
+      const omWithBuffering = new ObservationalMemory({
+        storage,
+        scope: 'thread',
+        observation: {
+          model: createMockObserverModel(),
+          messageTokens: 1000,
+          bufferTokens: 200,
+          bufferActivation: 0.8,
+        },
+        reflection: {
+          model: createMockObserverModel(),
+          observationTokens: 50000,
+        },
+      });
+      const processorWithBuffering = new ObservationalMemoryProcessor(omWithBuffering, memoryProvider);
+      const requestContext = createRequestContext(threadId, resourceId);
+      const state: Record<string, unknown> = {};
+      const messageList = new MessageList({ threadId, resourceId });
+      const rotateResponseMessageId = vi.fn(() => 'rotated-response-id');
+
+      for (let i = 0; i < 10; i++) {
+        messageList.add(
+          createTestMessage(
+            `Warmup ${i}: `.padEnd(200, 'x'),
+            i % 2 === 0 ? 'user' : 'assistant',
+            `warmup-${i}`,
+            new Date(Date.now() - (100 - i) * 1000),
+          ),
+          'memory',
+        );
+      }
+
+      await processorWithBuffering.processInputStep({
+        messageList,
+        messages: messageList.get.all.db(),
+        requestContext,
+        stepNumber: 0,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: createMockObserverModel() as any,
+        retryCount: 0,
+        abort: createAbort(),
+        abortSignal: new AbortController().signal,
+        rotateResponseMessageId,
+      });
+
+      for (let i = 0; i < 20; i++) {
+        if (persistMessages.mock.calls.length > 0) break;
+        await new Promise(r => setTimeout(r, 100));
+      }
+
+      expect(persistMessages).toHaveBeenCalled();
+      expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
+
+      const rotateCallsAfterBufferedStep = rotateResponseMessageId.mock.calls.length;
+
+      await processorWithBuffering.processInputStep({
+        messageList,
+        messages: messageList.get.all.db(),
+        requestContext,
+        stepNumber: 1,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: createMockObserverModel() as any,
+        retryCount: 0,
+        abort: createAbort(),
+        abortSignal: new AbortController().signal,
+        rotateResponseMessageId,
+      });
+
+      expect(rotateResponseMessageId).toHaveBeenCalledTimes(rotateCallsAfterBufferedStep);
     });
   });
 });

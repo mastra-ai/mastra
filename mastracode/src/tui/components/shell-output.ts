@@ -4,53 +4,11 @@
  */
 
 import { Container, Spacer, Text } from '@mariozechner/pi-tui';
-import stripAnsi from 'strip-ansi';
 import { getTermWidth, theme } from '../theme.js';
+import { truncateAnsi } from './ansi.js';
 
 const MAX_LINES = 200;
-
-/** Truncate a string with ANSI codes to a visible width.
- *  Handles both SGR sequences (\x1b[...m) and OSC 8 hyperlinks (\x1b]8;...;\x07).
- */
-function truncateAnsi(str: string, maxWidth: number): string {
-  const plain = stripAnsi(str);
-  if (plain.length <= maxWidth) return str;
-
-  const ansiRegex = /\x1b\[[0-9;]*m|\x1b\]8;[^\x07]*\x07/g;
-  let visibleLength = 0;
-  let result = '';
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = ansiRegex.exec(str)) !== null) {
-    // Add text before this ANSI code
-    const textBefore = str.slice(lastIndex, match.index);
-    const remaining = maxWidth - visibleLength;
-    if (textBefore.length <= remaining) {
-      result += textBefore;
-      visibleLength += textBefore.length;
-    } else {
-      result += textBefore.slice(0, remaining - 1) + '…';
-      result += '\x1b]8;;\x07\x1b[0m'; // Close any open hyperlink + reset styles
-      return result;
-    }
-    // Add the ANSI code (doesn't count toward visible length)
-    result += match[0];
-    lastIndex = match.index + match[0].length;
-  }
-
-  // Add remaining text after last ANSI code
-  const remainingText = str.slice(lastIndex);
-  const spaceLeft = maxWidth - visibleLength;
-  if (remainingText.length <= spaceLeft) {
-    result += remainingText;
-  } else {
-    result += remainingText.slice(0, spaceLeft - 1) + '…';
-    result += '\x1b]8;;\x07\x1b[0m'; // Close hyperlink + reset
-  }
-
-  return result;
-}
+const COLLAPSED_LINES = 20;
 
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
@@ -64,6 +22,7 @@ export class ShellStreamComponent extends Container {
   private trailingPartial = '';
   private exitCode?: number;
   private startTime = Date.now();
+  private expanded = false;
 
   constructor(command: string) {
     super();
@@ -81,6 +40,15 @@ export class ShellStreamComponent extends Container {
       this.lines = this.lines.slice(-MAX_LINES);
     }
     this.rebuild();
+  }
+
+  setExpanded(expanded: boolean): void {
+    this.expanded = expanded;
+    this.rebuild();
+  }
+
+  isExpanded(): boolean {
+    return this.expanded;
   }
 
   finish(exitCode: number): void {
@@ -127,10 +95,21 @@ export class ShellStreamComponent extends Container {
     while (displayLines.length > 0 && displayLines[0] === '') displayLines.shift();
 
     if (displayLines.length > 0) {
-      const borderedLines = displayLines.map(line => {
-        const truncated = truncateAnsi(line, maxLineWidth);
-        return border('│') + ' ' + truncated;
+      const maxVisible = this.expanded ? MAX_LINES : COLLAPSED_LINES;
+      const truncated = displayLines.length > maxVisible;
+      const visibleLines = truncated ? displayLines.slice(-maxVisible) : displayLines;
+
+      const borderedLines = visibleLines.map(line => {
+        const truncatedLine = truncateAnsi(line, maxLineWidth);
+        return border('│') + ' ' + truncatedLine;
       });
+
+      if (truncated) {
+        const remaining = displayLines.length - maxVisible;
+        const action = this.expanded ? 'collapse' : 'expand';
+        borderedLines.push(border('│') + ' ' + theme.fg('muted', `... ${remaining} more lines (Ctrl+E to ${action})`));
+      }
+
       const displayOutput = borderedLines.join('\n');
       if (displayOutput.trim()) {
         this.addChild(new Text(displayOutput, 0, 0));
