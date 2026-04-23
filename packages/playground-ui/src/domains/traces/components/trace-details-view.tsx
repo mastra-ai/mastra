@@ -1,38 +1,35 @@
-import { DataDetailsPanel, useTraceLightSpans } from '@mastra/playground-ui';
+import type { LightSpanRecord } from '@mastra/core/storage';
 import { useEffect, useMemo, useState } from 'react';
+import { getAllSpanIds } from '../hooks/get-all-span-ids';
+import { formatHierarchicalSpans } from './format-hierarchical-spans';
+import { TraceTimeline } from './trace-timeline';
+import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
 
-import { formatHierarchicalSpans } from './trace/format-hierarchical-spans';
-import { getAllSpanIds } from './trace/get-descendant-ids';
-import { TraceTimeline } from './trace/trace-timeline';
-
-export interface TraceDetailsProps {
+export interface TraceDetailsViewProps {
   traceId: string;
+  /** Lightweight spans for the trace. Caller fetches via useTraceLightSpans. */
+  spans: LightSpanRecord[] | undefined;
+  isLoading?: boolean;
   onClose: () => void;
+  /** Called when the user clicks a span in the timeline. Toggling a selected span off passes undefined. */
   onSpanSelect?: (spanId: string | undefined) => void;
-  initialSpanId?: string | null;
+  /** Fully controlled selection — the span to highlight. Pass whatever the parent's source of truth is. */
+  selectedSpanId?: string | null;
 }
 
-export function TraceDetails({ traceId, onClose, onSpanSelect, initialSpanId }: TraceDetailsProps) {
-  const { data: traceLight, isLoading } = useTraceLightSpans(traceId);
-  const spans = traceLight?.spans;
-  const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(initialSpanId ?? undefined);
-
-  // Sync selected span when initialSpanId or trace data changes
-  useEffect(() => {
-    if (initialSpanId && spans) {
-      const found = spans.find(s => s.spanId === initialSpanId);
-      if (found) {
-        setSelectedSpanId(initialSpanId);
-        onSpanSelect?.(initialSpanId);
-        return;
-      }
-    }
-    // Clear stale selection when initialSpanId is null/missing or span not found
-    setSelectedSpanId(undefined);
-    onSpanSelect?.(undefined);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialSpanId, spans]);
-
+/**
+ * Compact trace panel using `DataDetailsPanel` (popover-style). Renders the timeline only —
+ * no trace header KV, no evaluate/save actions. Use this for inline trace inspection from a
+ * list page (e.g. the Logs page). For the full-width trace view, use `TraceDataPanelView`.
+ */
+export function TraceDetailsView({
+  traceId,
+  spans,
+  isLoading,
+  onClose,
+  onSpanSelect,
+  selectedSpanId,
+}: TraceDetailsViewProps) {
   const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(spans ?? []), [spans]);
 
   const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>([]);
@@ -44,9 +41,7 @@ export function TraceDetails({ traceId, onClose, onSpanSelect, initialSpanId }: 
   }, [hierarchicalSpans]);
 
   const handleSpanClick = (id: string) => {
-    const newId = selectedSpanId === id ? undefined : id;
-    setSelectedSpanId(newId);
-    onSpanSelect?.(newId);
+    onSpanSelect?.(selectedSpanId === id ? undefined : id);
   };
 
   return (
@@ -67,7 +62,7 @@ export function TraceDetails({ traceId, onClose, onSpanSelect, initialSpanId }: 
           <TraceTimeline
             hierarchicalSpans={hierarchicalSpans}
             onSpanClick={handleSpanClick}
-            selectedSpanId={selectedSpanId}
+            selectedSpanId={selectedSpanId ?? undefined}
             expandedSpanIds={expandedSpanIds}
             setExpandedSpanIds={setExpandedSpanIds}
           />

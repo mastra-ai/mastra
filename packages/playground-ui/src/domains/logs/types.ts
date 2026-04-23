@@ -40,7 +40,7 @@ export interface LogRecord {
   environment?: string | null;
   source?: string | null;
   serviceName?: string | null;
-  scope?: string | null;
+  scope?: Record<string, unknown> | null;
 
   // Experimentation
   experimentId?: string | null;

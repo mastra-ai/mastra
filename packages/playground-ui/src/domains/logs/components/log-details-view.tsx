@@ -1,8 +1,12 @@
-import { Button, ButtonWithTooltip, CopyButton, DataDetailsPanel, cn, ButtonsGroup } from '@mastra/playground-ui';
 import { format } from 'date-fns';
 import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, ChevronsDownUpIcon, ChevronsUpDownIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import type { LogRecord } from '../types';
+import { Button, ButtonWithTooltip } from '@/ds/components/Button';
+import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { CopyButton } from '@/ds/components/CopyButton';
+import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
+import { cn } from '@/lib/utils';
 
 const KV = DataDetailsPanel.KeyValueList;
 
@@ -10,7 +14,7 @@ function toDate(value: Date | string): Date {
   return value instanceof Date ? value : new Date(value);
 }
 
-export interface LogDetailsProps {
+export interface LogDetailsViewProps {
   log: LogRecord;
   onClose: () => void;
   onTraceClick?: (traceId: string) => void;
@@ -21,7 +25,7 @@ export interface LogDetailsProps {
   onCollapsedChange?: (collapsed: boolean) => void;
 }
 
-export function LogDetails({
+export function LogDetailsView({
   log,
   onClose,
   onTraceClick,
@@ -30,7 +34,7 @@ export function LogDetails({
   onNext,
   collapsed: controlledCollapsed,
   onCollapsedChange,
-}: LogDetailsProps) {
+}: LogDetailsViewProps) {
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const collapsed = controlledCollapsed ?? internalCollapsed;
   const setCollapsed = onCollapsedChange ?? setInternalCollapsed;
