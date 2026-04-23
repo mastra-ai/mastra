@@ -39,6 +39,7 @@ import {
   getCustomProviderId,
   loadSettings,
   MEMORY_GATEWAY_PROVIDER,
+  OBSERVABILITY_AUTH_PREFIX,
   resolveModelDefaults,
   resolveOmModel,
   saveSettings,
@@ -116,6 +117,31 @@ export function createAuthStorage() {
   setAuthStorage(authStorage);
   setOpenAIAuthStorage(authStorage);
   return authStorage;
+}
+
+
+
+/**
+ * Resolve cloud observability credentials for the CloudExporter.
+ * Priority: per-resource settings > environment variables > disabled.
+ */
+function resolveCloudObservabilityConfig(
+  settings: ReturnType<typeof loadSettings>,
+  authStorage: AuthStorage,
+  resourceId: string,
+): { accessToken?: string; projectId?: string } {
+  const resourceConfig = settings.observability.resources[resourceId];
+  if (resourceConfig) {
+    const token = authStorage.getStoredApiKey(`${OBSERVABILITY_AUTH_PREFIX}${resourceId}`);
+    if (token) {
+      return { accessToken: token, projectId: resourceConfig.projectId };
+    }
+  }
+  // Fall back to environment variables for backwards compatibility
+  return {
+    accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN,
+    projectId: process.env.MASTRA_PROJECT_ID,
+  };
 }
 
 export async function createMastraCode(config?: MastraCodeConfig) {
@@ -263,10 +289,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         ],
         exporters: [
           new DefaultExporter({ strategy: 'event-sourced' }),
-          new CloudExporter({
-            accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN,
-            projectId: process.env.MASTRA_PROJECT_ID,
-          }),
+          new CloudExporter(resolveCloudObservabilityConfig(globalSettings, authStorage, project.resourceId)),
         ],
       },
     },

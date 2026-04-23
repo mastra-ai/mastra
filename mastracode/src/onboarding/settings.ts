@@ -173,7 +173,24 @@ export interface GlobalSettings {
   lsp?: LSPConfig;
   // Browser automation configuration
   browser: BrowserSettings;
+  // Cloud observability configuration (per-resource project IDs; tokens stored in auth.json)
+  observability: ObservabilitySettings;
 }
+
+export interface ObservabilityResourceConfig {
+  /** Cloud project ID for this resource */
+  projectId: string;
+  /** When this config was created */
+  configuredAt: string;
+}
+
+export interface ObservabilitySettings {
+  /** Per-resource cloud project configs, keyed by resourceId */
+  resources: Record<string, ObservabilityResourceConfig>;
+}
+
+/** Auth key prefix for observability tokens stored per-resource in auth.json */
+export const OBSERVABILITY_AUTH_PREFIX = 'observability:';
 
 export const STORAGE_DEFAULTS: StorageSettings = {
   backend: 'libsql',
@@ -218,6 +235,7 @@ const DEFAULTS: GlobalSettings = {
     viewport: { width: 1280, height: 720 },
     stagehand: { env: 'LOCAL' },
   },
+  observability: { resources: {} },
 };
 
 const THINKING_LEVEL_VALUES: ThinkingLevelSetting[] = ['off', 'low', 'medium', 'high', 'xhigh'];
@@ -358,6 +376,28 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
   };
 }
 
+const VALID_PROJECT_ID = /^[a-zA-Z0-9_-]+$/;
+
+function parseObservabilitySettings(raw: unknown): ObservabilitySettings {
+  if (!raw || typeof raw !== 'object') return { resources: {} };
+  const obj = raw as Record<string, unknown>;
+  const rawResources = obj.resources;
+  if (!rawResources || typeof rawResources !== 'object') return { resources: {} };
+  const resources: Record<string, ObservabilityResourceConfig> = {};
+  for (const [key, val] of Object.entries(rawResources as Record<string, unknown>)) {
+    if (val && typeof val === 'object') {
+      const v = val as Record<string, unknown>;
+      if (typeof v.projectId === 'string' && VALID_PROJECT_ID.test(v.projectId)) {
+        resources[key] = {
+          projectId: v.projectId,
+          configuredAt: typeof v.configuredAt === 'string' ? v.configuredAt : new Date().toISOString(),
+        };
+      }
+    }
+  }
+  return { resources };
+}
+
 /**
  * One-time migration: move model-related data from auth.json to settings.json.
  * Reads `_modelRanks`, `_modeModelId_*`, `_subagentModelId*` from auth.json,
@@ -400,6 +440,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
         lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
         browser: parseBrowserSettings(raw.browser),
+        observability: parseObservabilitySettings(raw.observability),
       };
     } catch {
       settings = structuredClone(DEFAULTS);
@@ -518,6 +559,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
       lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
       browser: parseBrowserSettings(raw.browser),
+      observability: parseObservabilitySettings(raw.observability),
     };
 
     // Migrate legacy omModelId → omModelOverride
