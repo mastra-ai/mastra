@@ -65,6 +65,7 @@ describe('Agent.streamUntilIdle', () => {
   });
 
   afterEach(async () => {
+    await mastra.backgroundTaskManager?.shutdown();
     const bgStore = await storage.getStore('backgroundTasks');
     await bgStore?.dangerouslyClearAll();
   });
