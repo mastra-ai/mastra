@@ -21,6 +21,10 @@ interface MigrationResult {
   message: string;
 }
 
+function quoteShellArg(value: string): string {
+  return `"${value.replace(/(["\\$`])/gu, '\\$1')}"`;
+}
+
 export async function migrate({
   dir,
   root,
@@ -63,7 +67,11 @@ export async function migrate({
         const suggestedDir = relative(rootBase, candidate).replace(/[\\/]index\.(ts|js)$/u, '');
         const suggestedRoot = relative(process.cwd(), rootBase) || '.';
         logger.info(`  - ${candidate}`);
-        logger.info(pc.dim(`    Example: npx mastra migrate --dir ${suggestedDir} --root ${suggestedRoot}`));
+        logger.info(
+          pc.dim(
+            `    Example: npx mastra migrate --dir ${quoteShellArg(suggestedDir)} --root ${quoteShellArg(suggestedRoot)}`,
+          ),
+        );
       }
     }
 
