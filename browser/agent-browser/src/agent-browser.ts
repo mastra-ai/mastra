@@ -1298,9 +1298,7 @@ export class AgentBrowser extends MastraBrowser {
   ): Promise<{ success: true; result: unknown; hint: string } | BrowserToolError> {
     try {
       const page = await this.getPage(threadId);
-      // Wrap script in an async function to allow return statements
-      const wrappedScript = `(async () => { ${input.script} })()`;
-      const result = await page.evaluate(wrappedScript);
+      const result = await page.evaluate(input.script);
 
       return {
         success: true,
