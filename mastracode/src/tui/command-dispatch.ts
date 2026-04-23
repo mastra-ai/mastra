@@ -205,6 +205,11 @@ async function handleCustomSlashCommand(
       state.chatContainer.addChild(slashComp);
       state.ui.requestRender();
 
+      if (state.pendingNewThread) {
+        await state.harness.createThread();
+        state.pendingNewThread = false;
+      }
+
       // Wrap in <slash-command> tags so the assistant sees the full
       // content but addUserMessage won't double-render it.
       const wrapped = `<slash-command name="${command.name}">\n${processedContent.trim()}\n</slash-command>`;
