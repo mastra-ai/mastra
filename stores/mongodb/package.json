@@ -31,9 +31,9 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@lukeed/uuid": "^2.0.1",
     "cloudflare": "^5.2.0",
-    "mongodb": "^7.1.0",
-    "uuid": "^13.0.0"
+    "mongodb": "^7.1.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
