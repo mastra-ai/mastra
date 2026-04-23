@@ -5,16 +5,22 @@ import Markdown from 'react-markdown';
 export const MessageRow = ({ message }: { message: MastraUIMessage }) => {
   return (
     <>
-      {message.parts.map(part => {
+      {message.parts.map((part, index) => {
+        const key = `${message.id}-${index}`;
         switch (part.type) {
           case 'text':
-            return <Txtmessage txt={part.text} role={message.role} />;
+            return <Txtmessage key={key} txt={part.text} role={message.role} />;
 
           case 'reasoning':
-            return <ReasoningMessage reasoning={part.text} />;
+            return part.state === 'streaming' ? (
+              <ReasoningMessage key={key} text="Reasoning..." />
+            ) : (
+              <ReasoningMessage key={key} text="Finished reasoning" />
+            );
 
-          case 'dynamic-tool':
-            break;
+          case 'dynamic-tool': {
+            return <ToolExecutionMessage key={key} toolName={part.toolName} />;
+          }
         }
       })}
     </>
@@ -47,10 +53,18 @@ export const Txtmessage = ({ txt, role }: { txt: string; role: MastraUIMessage['
   return null;
 };
 
-export const ReasoningMessage = ({ reasoning }: { reasoning: string }) => {
+export const ReasoningMessage = ({ text }: { text: string }) => {
   return (
     <Txt variant="ui-sm" className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%]">
-      {reasoning}
+      {text}
+    </Txt>
+  );
+};
+
+export const ToolExecutionMessage = ({ toolName }: { toolName: string }) => {
+  return (
+    <Txt variant="ui-sm" className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%]">
+      {toolName} executing...
     </Txt>
   );
 };

@@ -9,7 +9,7 @@ const memory = new Memory({
   },
 });
 
-export const agentBuilderAgent = new Agent({
+export const builderAgent = new Agent({
   id: 'builder-agent',
   name: 'Agent Builder Agent',
   description: 'An agent that can build agents',

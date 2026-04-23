@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import { Txt } from '../Txt';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -18,6 +20,10 @@ const sizeClasses: Record<AvatarSize, string> = {
 };
 
 export const Avatar = ({ src, name, size = 'sm', interactive = false }: AvatarProps) => {
+  const [didError, setDidError] = useState(false);
+  const initial = name.trim()[0]?.toUpperCase() ?? 'A';
+  const showImage = Boolean(src) && !didError;
+
   return (
     <div
       className={cn(
@@ -27,11 +33,16 @@ export const Avatar = ({ src, name, size = 'sm', interactive = false }: AvatarPr
         interactive && 'cursor-pointer hover:scale-105 hover:border-neutral2 hover:shadow-sm',
       )}
     >
-      {src ? (
-        <img src={src} alt={name} className="h-full w-full object-cover" />
+      {showImage ? (
+        <img
+          src={src}
+          alt={name}
+          className="h-full w-full object-cover"
+          onError={() => setDidError(true)}
+        />
       ) : (
         <Txt variant="ui-md" className="text-center text-neutral4">
-          {name[0].toUpperCase()}
+          {initial}
         </Txt>
       )}
     </div>

@@ -32,7 +32,6 @@ export function AgentBuilderSidebar() {
           <MainSidebar.NavList>
             {links.map(link => {
               const isActive = pathname.startsWith(link.url);
-              console.log('lool', isActive, pathname, link.url);
 
               return (
                 <MainSidebar.NavLink

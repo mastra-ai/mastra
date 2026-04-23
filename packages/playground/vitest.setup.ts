@@ -15,3 +15,8 @@ if (typeof globalThis.window !== 'undefined' && !window.matchMedia) {
     }),
   });
 }
+
+// jsdom does not implement Element.prototype.scrollTo
+if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollTo) {
+  Element.prototype.scrollTo = () => {};
+}

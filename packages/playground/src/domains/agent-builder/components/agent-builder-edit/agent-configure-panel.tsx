@@ -1,33 +1,19 @@
-import {
-  Avatar,
-  Button,
-  FieldBlock,
-  IconButton,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  TextFieldBlock,
-  Txt,
-} from '@mastra/playground-ui';
-import { ChevronRight, FileText, GraduationCap, Plus, RadioIcon, Wrench, X } from 'lucide-react';
+import { Avatar, IconButton, TextFieldBlock, Txt } from '@mastra/playground-ui';
+import { ChevronRight, FileText, GraduationCap, Plus, Wrench, X } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
-import { useFormContext } from 'react-hook-form';
-import {
-  channelsFixture,
-  findModelOption,
-  getModelOptionKey,
-  modelOptionsFixture,
-  skillsFixture,
-  toolsFixture,
-} from '../../fixtures';
+import { useFormContext, useWatch } from 'react-hook-form';
+import { skillsFixture } from '../../fixtures';
 import type { AgentFixture } from '../../fixtures';
+import { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
 import type { AgentBuilderEditFormValues } from '../../schemas';
-import { ChannelsDialog } from './dialogs/channels-dialog';
 import { SkillsDialog } from './dialogs/skills-dialog';
 import { SystemPromptDialog } from './dialogs/system-prompt-dialog';
 import { ToolsDialog } from './dialogs/tools-dialog';
+
+export interface AvailableTool {
+  id: string;
+  description?: string;
+}
 
 interface AgentConfigurePanelProps {
   agent: AgentFixture;
@@ -35,9 +21,12 @@ interface AgentConfigurePanelProps {
   editable?: boolean;
   draftName?: string;
   draftAvatarUrl?: string;
+  draftInstructions?: string;
   onDraftNameChange?: (next: string) => void;
   onDraftAvatarUrlChange?: (next: string) => void;
+  onDraftInstructionsChange?: (next: string) => void;
   onClose: () => void;
+  availableTools?: AvailableTool[];
 }
 
 export const AgentConfigurePanel = ({
@@ -46,14 +35,17 @@ export const AgentConfigurePanel = ({
   editable = true,
   draftName = agent.name,
   draftAvatarUrl = agent.avatarUrl ?? '',
+  draftInstructions = agent.systemPrompt,
   onDraftNameChange = () => {},
   onDraftAvatarUrlChange = () => {},
+  onDraftInstructionsChange = () => {},
   onClose = () => {},
+  availableTools = [],
 }: AgentConfigurePanelProps) => {
+  const features = useBuilderAgentFeatures();
   const [systemPromptOpen, setSystemPromptOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false);
-  const [channelsOpen, setChannelsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleAvatarFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -67,35 +59,17 @@ export const AgentConfigurePanel = ({
     e.target.value = '';
   };
 
-  const activeToolsCount = useMemo(() => toolsFixture.filter(t => t.enabled).length, []);
+  const { control } = useFormContext<AgentBuilderEditFormValues>();
+  const toolsMap = useWatch({ control, name: 'tools' });
+  const activeToolsCount = useMemo(
+    () => Object.values(toolsMap ?? {}).filter(Boolean).length,
+    [toolsMap],
+  );
+  const totalToolsCount = availableTools.length;
   const activeSkillsCount = useMemo(() => skillsFixture.filter(s => s.enabled).length, []);
-  const activeChannelsCount = useMemo(() => channelsFixture.filter(c => c.enabled).length, []);
-
-  const trimmedDraftUrl = draftAvatarUrl.trim() || undefined;
-  const isDirty = draftName.trim() !== agent.name || trimmedDraftUrl !== agent.avatarUrl;
-
-  const handleSave = () => {
-    onAgentChange({
-      ...agent,
-      name: draftName.trim() || agent.name,
-      avatarUrl: trimmedDraftUrl,
-    });
-  };
-
-  const modelValue = getModelOptionKey({
-    providerId: agent.modelProviderId,
-    providerName: '',
-    modelId: agent.modelId,
-    label: '',
-  });
-
-  const handleModelChange = (value: string) => {
-    const option = findModelOption(value);
-    if (!option) return;
-    onAgentChange({ ...agent, modelProviderId: option.providerId, modelId: option.modelId });
-  };
 
   const handleSystemPromptSave = (nextPrompt: string) => {
+    onDraftInstructionsChange(nextPrompt);
     onAgentChange({ ...agent, systemPrompt: nextPrompt });
     setSystemPromptOpen(false);
   };
@@ -156,93 +130,55 @@ export const AgentConfigurePanel = ({
           </div>
         )}
 
-        <div className="px-6">
-          <FieldBlock.Layout layout="vertical">
-            <FieldBlock.Column>
-              <FieldBlock.Label name="agent-model">Model</FieldBlock.Label>
-              <Select value={modelValue} onValueChange={handleModelChange} disabled={!editable}>
-                <SelectTrigger id="input-agent-model" size="md" data-testid="agent-preview-model-trigger">
-                  <SelectValue placeholder="Select a model" />
-                </SelectTrigger>
-                <SelectContent>
-                  {modelOptionsFixture.map(option => {
-                    const key = getModelOptionKey(option);
-                    return (
-                      <SelectItem key={key} value={key}>
-                        <span className="text-neutral3">{option.providerName}</span>
-                        <span className="mx-1 text-neutral2">/</span>
-                        <span className="text-neutral6">{option.label}</span>
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-            </FieldBlock.Column>
-          </FieldBlock.Layout>
-        </div>
-
         <div className="flex flex-col">
           <ConfigRow
             icon={<FileText className="h-4 w-4" />}
             label="Instructions"
-            description={agent.systemPrompt}
+            description={draftInstructions}
             onClick={() => setSystemPromptOpen(true)}
             testId="agent-preview-edit-system-prompt"
           />
-          <ConfigRow
-            icon={<Wrench className="h-4 w-4" />}
-            label="Tools"
-            description="External actions your agent can take"
-            count={activeToolsCount}
-            total={toolsFixture.length}
-            onClick={() => setToolsOpen(true)}
-            testId="agent-preview-tools-button"
-          />
-          <ConfigRow
-            icon={<GraduationCap className="h-4 w-4" />}
-            label="Skills"
-            description="Reusable knowledge and behaviors"
-            count={activeSkillsCount}
-            total={skillsFixture.length}
-            onClick={() => setSkillsOpen(true)}
-            testId="agent-preview-skills-button"
-          />
-          <ConfigRow
-            icon={<RadioIcon className="h-4 w-4" />}
-            label="Channels"
-            description="Where this agent can be reached"
-            count={activeChannelsCount}
-            total={channelsFixture.length}
-            onClick={() => setChannelsOpen(true)}
-            testId="agent-preview-channels-button"
-          />
+          {features.tools && (
+            <ConfigRow
+              icon={<Wrench className="h-4 w-4" />}
+              label="Tools"
+              description="External actions your agent can take"
+              count={activeToolsCount}
+              total={totalToolsCount}
+              onClick={() => setToolsOpen(true)}
+              testId="agent-preview-tools-button"
+            />
+          )}
+          {features.skills && (
+            <ConfigRow
+              icon={<GraduationCap className="h-4 w-4" />}
+              label="Skills"
+              description="Reusable knowledge and behaviors"
+              count={activeSkillsCount}
+              total={skillsFixture.length}
+              onClick={() => setSkillsOpen(true)}
+              testId="agent-preview-skills-button"
+            />
+          )}
         </div>
       </div>
-
-      {editable && (
-        <div className="shrink-0 border-t border-border1 px-6 py-4">
-          <Button
-            variant="default"
-            className="w-full"
-            onClick={handleSave}
-            disabled={!isDirty}
-            data-testid="agent-configure-save"
-          >
-            Save
-          </Button>
-        </div>
-      )}
 
       <SystemPromptDialog
         open={systemPromptOpen}
         onOpenChange={setSystemPromptOpen}
-        prompt={agent.systemPrompt}
+        prompt={draftInstructions}
         onSave={handleSystemPromptSave}
         editable={editable}
       />
-      <ToolsDialog open={toolsOpen} onOpenChange={setToolsOpen} editable={editable} />
-      <SkillsDialog open={skillsOpen} onOpenChange={setSkillsOpen} editable={editable} />
-      <ChannelsDialog open={channelsOpen} onOpenChange={setChannelsOpen} editable={editable} />
+      {features.tools && (
+        <ToolsDialog
+          open={toolsOpen}
+          onOpenChange={setToolsOpen}
+          editable={editable}
+          availableTools={availableTools}
+        />
+      )}
+      {features.skills && <SkillsDialog open={skillsOpen} onOpenChange={setSkillsOpen} editable={editable} />}
     </div>
   );
 };
@@ -285,8 +221,10 @@ const ConfigRow = ({ icon, label, description, count, total, onClick, testId }: 
 export const EditableAgentConfigurePanel = (props: AgentConfigurePanelProps) => {
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
   const draftName = formMethods.watch('name');
+  const draftInstructions = formMethods.watch('instructions') ?? '';
 
   const setDraftName = (value: string) => formMethods.setValue('name', value);
+  const setDraftInstructions = (value: string) => formMethods.setValue('instructions', value);
 
   return (
     <AgentConfigurePanel
@@ -294,8 +232,10 @@ export const EditableAgentConfigurePanel = (props: AgentConfigurePanelProps) => 
       editable={true}
       draftName={draftName}
       draftAvatarUrl={''}
+      draftInstructions={draftInstructions}
       onDraftNameChange={setDraftName}
       onDraftAvatarUrlChange={() => {}}
+      onDraftInstructionsChange={setDraftInstructions}
     />
   );
 };

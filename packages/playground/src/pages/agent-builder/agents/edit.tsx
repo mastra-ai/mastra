@@ -1,15 +1,23 @@
 import { cn, IconButton } from '@mastra/playground-ui';
+import { MastraReactProvider } from '@mastra/react';
 import { Columns2, EyeIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { useLocation, useNavigate, useParams } from 'react-router';
+import { useBuilderAgentFeatures } from '@/domains/agent-builder';
 import { EditableAgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { AgentPreviewChat } from '@/domains/agent-builder/components/agent-builder-edit/agent-preview-chat';
-import { BrowserFrame } from '@/domains/agent-builder/components/browser-frame';
 import { ConversationPanel } from '@/domains/agent-builder/components/agent-builder-edit/conversation-panel';
+import { BrowserFrame } from '@/domains/agent-builder/components/browser-frame';
 import { defaultAgentFixture } from '@/domains/agent-builder/fixtures';
 import type { AgentFixture } from '@/domains/agent-builder/fixtures';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
+import { useTools } from '@/domains/tools/hooks/use-all-tools';
+
+interface AvailableTool {
+  id: string;
+  description?: string;
+}
 
 type LocationState = { userMessage?: string } | null;
 
@@ -19,14 +27,29 @@ export default function AgentBuilderAgentEdit() {
   const formMethods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {
       name: '',
+      instructions: '',
+      tools: {},
+      skills: [],
     },
   });
   const state = (location.state as LocationState) ?? null;
   const [agent, setAgent] = useState<AgentFixture>(defaultAgentFixture);
+  const features = useBuilderAgentFeatures();
+  const { data: toolsData, isPending } = useTools();
+
+  const availableTools = useMemo<AvailableTool[]>(
+    () =>
+      toolsData
+        ? Object.entries(toolsData).map(([id, tool]) => ({
+            id,
+            description: (tool as { description?: string }).description,
+          }))
+        : [],
+    [toolsData],
+  );
 
   const [expanded, setExpanded] = useState(true);
   const navigate = useNavigate();
-  const previewAgent = { ...agent, name: '', avatarUrl: 'lol' };
 
   const gridClass = expanded ? 'grid-cols-[1fr_380px]' : 'grid-cols-[1fr_0px]';
 
@@ -34,7 +57,14 @@ export default function AgentBuilderAgentEdit() {
     <FormProvider {...formMethods}>
       <div className="flex flex-1 min-h-0 h-full bg-surface1">
         <div className="flex w-[40ch] shrink-0 flex-col bg-surface1 py-6 px-6">
-          <ConversationPanel initialUserMessage={state?.userMessage} />
+          <MastraReactProvider baseUrl="http://localhost:4112">
+            <ConversationPanel
+              initialUserMessage={state?.userMessage}
+              features={features}
+              availableTools={availableTools}
+              toolsReady={!isPending}
+            />
+          </MastraReactProvider>
         </div>
         <div className="flex flex-1 min-w-0 flex-col py-6 pr-6">
           <BrowserFrame className={cn('grid relative agent-builder-panel-grid', gridClass)}>
@@ -55,7 +85,7 @@ export default function AgentBuilderAgentEdit() {
                 )}
               </div>
 
-              <AgentPreviewChat agent={previewAgent} />
+              <AgentPreviewChat agent={agent} />
             </div>
 
             <div className="h-full min-w-0 overflow-hidden" aria-hidden={!expanded}>
@@ -70,6 +100,7 @@ export default function AgentBuilderAgentEdit() {
                   agent={agent}
                   onAgentChange={setAgent}
                   onClose={() => setExpanded(false)}
+                  availableTools={availableTools}
                 />
               </div>
             </div>
