@@ -8,7 +8,15 @@ export default function AgentBuilderCreate() {
   return (
     <>
       <div className="absolute top-6 left-6 z-10">
-        <IconButton onClick={() => navigate('/agent-builder/agents')} className="rounded-full" tooltip="Agents list">
+        <IconButton
+          onClick={() =>
+            navigate('/agent-builder/agents', {
+              viewTransition: true,
+            })
+          }
+          className="rounded-full"
+          tooltip="Agents list"
+        >
           <ArrowLeftIcon />
         </IconButton>
       </div>

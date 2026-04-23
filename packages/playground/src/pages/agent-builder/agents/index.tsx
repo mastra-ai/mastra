@@ -25,6 +25,8 @@ export default function AgentBuilderAgentsPage() {
   const [search, setSearch] = useState('');
   const { Link: FrameworkLink } = useLinkComponent();
 
+  const agents = data?.agents ?? [];
+
   const body = (() => {
     if (isLoading) {
       return <AgentBuilderListSkeleton />;
@@ -51,8 +53,6 @@ export default function AgentBuilderAgentsPage() {
         </div>
       );
     }
-
-    const agents = data?.agents ?? [];
 
     if (agents.length === 0) {
       return (
@@ -84,11 +84,13 @@ export default function AgentBuilderAgentsPage() {
             </PageHeader.Title>
             <PageHeader.Description>Agents you've created in Agent Builder.</PageHeader.Description>
           </PageHeader>
-          <div className="shrink-0">
-            <Button as={FrameworkLink} to="/agent-builder/agents/create" variant="primary">
-              <PlusIcon /> New agent
-            </Button>
-          </div>
+          {agents.length > 0 && (
+            <div className="shrink-0">
+              <Button as={FrameworkLink} to="/agent-builder/agents/create" variant="primary">
+                <PlusIcon /> New agent
+              </Button>
+            </div>
+          )}
         </div>
         <div className="max-w-120">
           <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or description" />

@@ -1,13 +1,10 @@
 import { AgentIcon, LogoWithoutText, MainSidebar, useMainSidebar } from '@mastra/playground-ui';
 import type { NavLink } from '@mastra/playground-ui';
-import { BookIcon, FolderIcon } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { useLinkComponent } from '@/lib/framework';
 
 const links: NavLink[] = [
-  { name: 'Projects', url: '#', icon: <FolderIcon />, isOnMastraPlatform: true },
-  { name: 'Agents', url: '#', icon: <AgentIcon />, isOnMastraPlatform: true },
-  { name: 'Library', url: '#', icon: <BookIcon />, isOnMastraPlatform: true },
+  { name: 'Agents', url: '/agent-builder/agents', icon: <AgentIcon />, isOnMastraPlatform: true },
 ];
 
 export function AgentBuilderSidebar() {
@@ -35,6 +32,7 @@ export function AgentBuilderSidebar() {
           <MainSidebar.NavList>
             {links.map(link => {
               const isActive = pathname.startsWith(link.url);
+              console.log('lool', isActive, pathname, link.url);
 
               return (
                 <MainSidebar.NavLink
