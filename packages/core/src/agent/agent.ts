@@ -5719,13 +5719,22 @@ export class Agent<
    * - If the agent has no memory configured, this falls through to a plain
    *   `stream()` call since continuation requires memory.
    *
+   * Return shape: `streamUntilIdle` returns a `MastraModelOutput` that looks
+   * like the one from `stream()` — *only* `fullStream` spans the initial
+   * turn **and** any auto-continuations. Aggregate properties (`text`,
+   * `toolCalls`, `toolResults`, `finishReason`, `messageList`,
+   * `getFullOutput()`) still resolve against the **first turn's** internal
+   * buffer. If you need an aggregate view across continuations, consume
+   * `fullStream` yourself and accumulate — or follow up with `agent.generate`
+   * once the stream closes.
+   *
    * @example
    * ```typescript
    * const stream = await agent.streamUntilIdle('Research solana for me', {
    *   memory: { thread: 't1', resource: 'u1' },
    * });
    *
-   * for await (const chunk of stream) {
+   * for await (const chunk of stream.fullStream) {
    *   // chunks from the initial turn AND any continuation turns
    *   // triggered by background task completions flow through here
    * }
