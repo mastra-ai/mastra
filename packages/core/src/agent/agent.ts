@@ -1412,7 +1412,6 @@ export class Agent<
         getMostRecentUserMessage: this.getMostRecentUserMessage.bind(this),
         genTitle: this.genTitle.bind(this),
         resolveTitleGenerationConfig: this.resolveTitleGenerationConfig.bind(this),
-        saveStepMessages: this.saveStepMessages.bind(this),
         convertInstructionsToString: this.#convertInstructionsToString.bind(this),
         tracingPolicy: this.#options?.tracingPolicy,
         resolvedVersionId: this.toRawConfig()?.resolvedVersionId as string | undefined,
@@ -4530,47 +4529,6 @@ export class Agent<
     return tools;
   }
 
-  /**
-   * Adds response messages from a step to the MessageList and schedules persistence.
-   * This is used for incremental saving: after each agent step, messages are added to a save queue
-   * and a debounced save operation is triggered to avoid redundant writes.
-   *
-   * @param result - The step result containing response messages.
-   * @param messageList - The MessageList instance for the current thread.
-   * @param threadId - The thread ID.
-   * @param memoryConfig - The memory configuration for saving.
-   * @param runId - (Optional) The run ID for logging.
-   * @internal
-   */
-  private async saveStepMessages({
-    result,
-    messageList,
-    runId,
-  }: {
-    result: any;
-    messageList: MessageList;
-    runId?: string;
-  }) {
-    try {
-      // Prefer dbMessages (MastraDBMessage[] with original IDs) over response.messages
-      // (ModelMessage[] without IDs) to avoid generating new IDs during format conversion
-      const stepResponseMessages = result.response.dbMessages?.length
-        ? result.response.dbMessages
-        : result.response.messages;
-      if (stepResponseMessages?.length) {
-        messageList.add(stepResponseMessages, 'response');
-      }
-      // Message saving is now handled by MessageHistory output processor
-    } catch (e) {
-      this.logger.error('Error adding messages on step finish', {
-        agent: this.name,
-        error: e,
-        runId,
-      });
-      throw e;
-    }
-  }
-
   async #runScorers({
     messageList,
     runId,
@@ -5013,7 +4971,6 @@ export class Agent<
         '_agentNetworkAppend' in this
           ? Boolean((this as unknown as { _agentNetworkAppend: unknown })._agentNetworkAppend)
           : undefined,
-      saveStepMessages: this.saveStepMessages.bind(this),
       convertTools: this.convertTools.bind(this),
       getMemoryMessages: this.getMemoryMessages.bind(this),
       runInputProcessors: this.__runInputProcessors.bind(this),
