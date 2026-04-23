@@ -403,6 +403,56 @@ describe('sanitizeV5UIMessages — orphaned provider-executed tool calls (issue 
     // Belt-and-suspenders: the stale id must not have leaked through at all.
     expect(orphanCallIds).not.toContain('srvtoolu_stale');
   });
+
+  it('keeps a deferred provider call on the last surviving assistant when a trailing assistant sanitizes away', () => {
+    const user: AIV5Type.UIMessage = {
+      id: 'u1',
+      role: 'user',
+      parts: [{ type: 'text', text: 'search for recent news about X' }],
+    };
+
+    const assistantWithDeferredProviderCall: AIV5Type.UIMessage = {
+      id: 'a1',
+      role: 'assistant',
+      parts: [
+        makeToolPart({
+          type: 'tool-web_search_20250305',
+          toolCallId: 'srvtoolu_deferred',
+          state: 'input-available',
+          input: { query: 'X' },
+          providerExecuted: true,
+        }),
+      ],
+    };
+
+    const trailingAssistantThatSanitizesAway: AIV5Type.UIMessage = {
+      id: 'a2',
+      role: 'assistant',
+      parts: [
+        makeToolPart({
+          type: 'tool-get_info',
+          toolCallId: 'client_streaming',
+          state: 'input-streaming',
+          input: { query: 'ignore me' },
+        }),
+      ],
+    };
+
+    const result = sanitizeV5UIMessages(
+      [user, assistantWithDeferredProviderCall, trailingAssistantThatSanitizesAway],
+      true,
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result[1]?.id).toBe('a1');
+    expect(result[1]?.parts).toEqual([
+      expect.objectContaining({
+        toolCallId: 'srvtoolu_deferred',
+        state: 'input-available',
+        providerExecuted: true,
+      }),
+    ]);
+  });
 });
 
 describe('addStartStepPartsForAIV5 — client/provider tool splitting', () => {
