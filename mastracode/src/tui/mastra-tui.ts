@@ -418,7 +418,12 @@ export class MastraTUI {
     }
 
     if (event.type === 'error' && 'error' in event && !event.retryable) {
-      this.lastStreamError = event.error?.message || String(event.error);
+      // Only capture errors that look like stream/agent failures, not OM or tool errors
+      const msg = event.error?.message || String(event.error);
+      const isOmError = /observational memory/i.test(msg);
+      if (!isOmError) {
+        this.lastStreamError = msg;
+      }
     }
 
     try {
