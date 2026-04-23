@@ -175,6 +175,11 @@ function scoreRetryEfficiency(calls: ExtractedToolCall[]): { score: number; deta
         consecutiveFailures = 0;
       }
     }
+    // Count unrecovered retry chains (failures at end of group with no success)
+    if (consecutiveFailures > 0) {
+      totalRetryChains++;
+      if (consecutiveFailures >= threshold) excessiveRetries++;
+    }
   }
 
   if (totalRetryChains === 0) return { score: 1, detail: 'No retry chains' };
