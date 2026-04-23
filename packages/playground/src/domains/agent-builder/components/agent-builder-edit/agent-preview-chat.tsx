@@ -1,15 +1,16 @@
 import { Avatar, EmptyState, IconButton, Textarea, Txt, cn } from '@mastra/playground-ui';
+import type { MastraUIMessage } from '@mastra/react';
 import { ArrowUpIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { buildPreviewConversation, buildPreviewReply } from '../../fixtures';
-import type { AgentFixture, BuilderMessage } from '../../fixtures';
+
+import type { AgentFixture } from '../../fixtures';
 
 interface AgentPreviewChatProps {
   agent: AgentFixture;
 }
 
 export const AgentPreviewChat = ({ agent }: AgentPreviewChatProps) => {
-  const [messages, setMessages] = useState<BuilderMessage[]>(() => buildPreviewConversation());
+  const [messages, setMessages] = useState<MastraUIMessage[]>([]);
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -26,7 +27,7 @@ export const AgentPreviewChat = ({ agent }: AgentPreviewChatProps) => {
     if (trimmed.length === 0) return;
 
     const userId = `preview-user-${Date.now()}`;
-    setMessages(prev => [...prev, { id: userId, role: 'user', content: trimmed }, buildPreviewReply(trimmed)]);
+    setMessages(prev => [...prev, { id: userId, role: 'user', parts: [{ type: 'text', text: trimmed }] }]);
     setDraft('');
   };
 
@@ -92,7 +93,7 @@ export const AgentPreviewChat = ({ agent }: AgentPreviewChatProps) => {
 };
 
 interface PreviewBubbleProps {
-  message: BuilderMessage;
+  message: MastraUIMessage;
   agent: AgentFixture;
 }
 

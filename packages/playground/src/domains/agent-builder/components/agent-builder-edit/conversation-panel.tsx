@@ -1,19 +1,35 @@
 import { IconButton, Textarea, Txt, cn } from '@mastra/playground-ui';
+import type { MastraUIMessage } from '@mastra/react';
+import { useChat } from '@mastra/react';
 import { ArrowLeftIcon, ArrowUpIcon } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { buildInitialConversation } from '../../fixtures';
-import type { BuilderMessage } from '../../fixtures';
 
 interface ConversationPanelProps {
   initialUserMessage?: string;
 }
 
 export const ConversationPanel = ({ initialUserMessage }: ConversationPanelProps) => {
-  const [messages, setMessages] = useState<BuilderMessage[]>(() => buildInitialConversation(initialUserMessage));
+  const hasAlreadySentDevMode = useRef(false);
+  const { messages, sendMessage, isRunning } = useChat({
+    agentId: 'agent-builder-agent',
+  });
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+
+  const effectEvent = useEffectEvent(() => {
+    if (!initialUserMessage) return;
+    void sendMessage({ message: initialUserMessage });
+  });
+
+  useEffect(() => {
+    window.history.replaceState({}, '');
+    if (hasAlreadySentDevMode.current) return;
+    effectEvent();
+
+    hasAlreadySentDevMode.current = true;
+  }, []);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -23,28 +39,9 @@ export const ConversationPanel = ({ initialUserMessage }: ConversationPanelProps
 
   const trimmed = draft.trim();
 
-  const sendMessage = (content: string) => {
-    const text = content.trim();
-    if (text.length === 0) return;
-
-    const userId = `user-${Date.now()}`;
-    const assistantId = `assistant-${Date.now()}`;
-
-    setMessages(prev => [
-      ...prev,
-      { id: userId, role: 'user', content: text },
-      {
-        id: assistantId,
-        role: 'assistant',
-        content: "Done — I've updated the agent. Want to tune anything else?",
-      },
-    ]);
-    setDraft('');
-  };
-
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    sendMessage(trimmed);
+    void sendMessage({ message: trimmed });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -53,6 +50,8 @@ export const ConversationPanel = ({ initialUserMessage }: ConversationPanelProps
       e.currentTarget.form?.requestSubmit();
     }
   };
+
+  console.log('lol', messages);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface1 pt-6">
@@ -109,14 +108,14 @@ export const ConversationPanel = ({ initialUserMessage }: ConversationPanelProps
   );
 };
 
-const MessageRow = ({ message }: { message: BuilderMessage }) => {
+const MessageRow = ({ message }: { message: MastraUIMessage }) => {
   const isUser = message.role === 'user';
 
   if (isUser) {
     return (
       <div className="rounded-md bg-surface3 px-3 py-2">
         <Txt variant="ui-sm" className="whitespace-pre-wrap leading-relaxed text-neutral6">
-          {message.content}
+          {JSON.stringify(message.parts)}
         </Txt>
       </div>
     );
@@ -125,7 +124,7 @@ const MessageRow = ({ message }: { message: BuilderMessage }) => {
   return (
     <div className="px-1">
       <Txt variant="ui-sm" className={cn('whitespace-pre-wrap leading-relaxed text-neutral4')}>
-        {message.content}
+        {JSON.stringify(message.parts)}
       </Txt>
     </div>
   );

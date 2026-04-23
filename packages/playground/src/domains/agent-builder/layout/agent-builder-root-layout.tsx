@@ -12,6 +12,11 @@ export interface AgentBuilderRootLayoutProps {
   paths: LinkComponentProviderProps['paths'];
 }
 
+export function buildAgentBuilderLoginRedirect(pathname: string, search = '', hash = '') {
+  const redirectPath = `${pathname}${search}${hash}`;
+  return `/login?redirect=${encodeURIComponent(redirectPath)}`;
+}
+
 export const AgentBuilderRootLayout = ({ paths }: AgentBuilderRootLayoutProps) => {
   const location = useLocation();
   const { data: authCapabilities, isLoading } = useAuthCapabilities();
@@ -25,9 +30,12 @@ export const AgentBuilderRootLayout = ({ paths }: AgentBuilderRootLayoutProps) =
   }
 
   if (authCapabilities?.enabled && !isAuthenticated(authCapabilities)) {
-    const redirectPath = `${location.pathname}${location.search}${location.hash}`;
-
-    return <Navigate to={`/login?redirect=${encodeURIComponent(redirectPath)}`} replace />;
+    return (
+      <Navigate
+        to={buildAgentBuilderLoginRedirect(location.pathname, location.search, location.hash)}
+        replace
+      />
+    );
   }
 
   return <AgentBuilderPermissionsGuard paths={paths} />;
