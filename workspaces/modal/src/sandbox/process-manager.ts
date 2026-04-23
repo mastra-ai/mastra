@@ -228,10 +228,7 @@ export class ModalProcessManager extends SandboxProcessManager<ModalSandbox> {
 // =============================================================================
 
 /** Reads chunks from a stream until done or cancelled. */
-async function drainReader(
-  reader: ReadableStreamDefaultReader<string>,
-  emit: (chunk: string) => void,
-): Promise<void> {
+async function drainReader(reader: ReadableStreamDefaultReader<string>, emit: (chunk: string) => void): Promise<void> {
   try {
     while (true) {
       const { done, value } = await reader.read();

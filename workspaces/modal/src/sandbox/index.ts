@@ -283,6 +283,7 @@ export class ModalSandbox extends MastraSandbox {
 
   private handleSandboxDead(): void {
     this._sb = null;
+    this.status = 'stopped';
   }
 
   /** @internal Retries fn() once after restarting if the sandbox is dead. */

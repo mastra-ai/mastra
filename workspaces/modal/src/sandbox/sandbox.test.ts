@@ -50,6 +50,7 @@ vi.mock('modal', async () => {
 });
 
 // Import after mock registration
+// eslint-disable-next-line import/order
 import { ClientClosedError, NotFoundError } from 'modal';
 import { ModalSandbox } from './index';
 
@@ -82,7 +83,7 @@ function makeProcess(exitCode: number, stdoutChunks: string[] = [], stderrChunks
 
 /** Creates a mock ContainerProcess whose stdout never finishes, until cancel() is called. */
 function makeHangingProcess(): {
-  proc: ReturnType<typeof makeMockSb>;
+  proc: ReturnType<typeof _makeMockSb>;
   cancelStdout: () => void;
 } {
   let resolveCancelFn: (() => void) | null = null;
@@ -107,12 +108,12 @@ function makeHangingProcess(): {
     stderr: { getReader: () => makeReader([]) },
     wait: vi.fn().mockReturnValue(new Promise(() => {})), // Never resolves
   };
-  
+
   return { proc, cancelStdout: () => resolveCancelFn?.() };
 }
 
 // Silence TS for test helper
-function makeMockSb() {
+function _makeMockSb() {
   return {} as ReturnType<typeof makeProcess>;
 }
 
@@ -235,7 +236,6 @@ describe('ModalSandbox lifecycle', () => {
       expect.objectContaining({ timeoutMs: 120_000 }),
     );
   });
-
 });
 
 // ---------------------------------------------------------------------------
@@ -414,10 +414,7 @@ describe('ModalProcessManager', () => {
     const sandbox = await startedSandbox();
     await sandbox.processes.spawn('pwd', { cwd: '/app' });
 
-    expect(mockSandbox.exec).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ workdir: '/app' }),
-    );
+    expect(mockSandbox.exec).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ workdir: '/app' }));
   });
 
   it('spawn() passes per-spawn timeout as timeoutMs', async () => {
@@ -427,10 +424,7 @@ describe('ModalProcessManager', () => {
     const sandbox = await startedSandbox();
     await sandbox.processes.spawn('sleep 1', { timeout: 5000 });
 
-    expect(mockSandbox.exec).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ timeoutMs: 5000 }),
-    );
+    expect(mockSandbox.exec).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ timeoutMs: 5000 }));
   });
 
   it('kill() sets exitCode to 137 and returns true', async () => {
