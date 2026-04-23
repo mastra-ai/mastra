@@ -278,6 +278,20 @@ export interface WorkspaceConfig<
    */
   skillSource?: SkillSource;
 
+  /**
+   * Check SKILL.md file mtime in addition to directory mtime for staleness detection.
+   *
+   * When enabled, allows hot-reload detection of in-place SKILL.md edits
+   * (e.g., fixing a validation error or updating a skill description).
+   *
+   * Trade-off: This doubles the stat() calls per skill during staleness checks.
+   * Recommended for local development only. Not recommended for cloud storage
+   * backends (S3, etc.) where stat() calls have higher latency.
+   *
+   * @default false
+   */
+  checkSkillFileMtime?: boolean;
+
   // ---------------------------------------------------------------------------
   // LSP Configuration
   // ---------------------------------------------------------------------------
@@ -689,6 +703,7 @@ export class Workspace<
         skills: this._config.skills!,
         searchEngine: this._searchEngine,
         validateOnLoad: true,
+        checkSkillFileMtime: this._config.checkSkillFileMtime,
       });
     }
 
