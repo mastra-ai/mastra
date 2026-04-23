@@ -1298,14 +1298,7 @@ export class AgentBrowser extends MastraBrowser {
   ): Promise<{ success: true; result: unknown; hint: string } | BrowserToolError> {
     try {
       const page = await this.getPage(threadId);
-      // If the script already has a return statement, treat it as a function
-      // body. Otherwise treat it as an expression and add an implicit return
-      // so that bare expressions like `document.body.innerText` produce a value.
-      const hasReturn = /\breturn\b/.test(input.script);
-      const wrappedScript = hasReturn
-        ? `(async () => { ${input.script} })()`
-        : `(async () => { return (${input.script}); })()`;
-      const result = await page.evaluate(wrappedScript);
+      const result = await page.evaluate(input.script);
 
       return {
         success: true,

@@ -43,53 +43,61 @@ describe('browser_evaluate', () => {
     await browser.close();
   });
 
-  it('evaluates script and returns number result', async () => {
+  it('passes script directly to page.evaluate', async () => {
     mockPage.evaluate.mockResolvedValue(42);
 
-    const result = await browser.evaluate({ script: 'return 1 + 41' });
+    await browser.evaluate({ script: '1 + 41' });
+
+    expect(mockPage.evaluate).toHaveBeenCalledWith('1 + 41');
+  });
+
+  it('returns number result', async () => {
+    mockPage.evaluate.mockResolvedValue(42);
+
+    const result = await browser.evaluate({ script: '1 + 41' });
 
     expect(result.success).toBe(true);
     if (result.success) expect(result.result).toBe(42);
   });
 
-  it('evaluates script and returns string result', async () => {
+  it('returns string result', async () => {
     mockPage.evaluate.mockResolvedValue('Hello World');
 
-    const result = await browser.evaluate({ script: 'return "Hello World"' });
+    const result = await browser.evaluate({ script: '"Hello World"' });
 
     expect(result.success).toBe(true);
     if (result.success) expect(result.result).toBe('Hello World');
   });
 
-  it('evaluates script and returns object result', async () => {
+  it('returns object result', async () => {
     const obj = { name: 'John', age: 30 };
     mockPage.evaluate.mockResolvedValue(obj);
 
-    const result = await browser.evaluate({ script: 'return { name: "John", age: 30 }' });
+    const result = await browser.evaluate({ script: '({ name: "John", age: 30 })' });
 
     expect(result.success).toBe(true);
     if (result.success) expect(result.result).toEqual(obj);
   });
 
-  it('evaluates script and returns array result', async () => {
+  it('returns array result', async () => {
     mockPage.evaluate.mockResolvedValue([1, 2, 3]);
 
-    const result = await browser.evaluate({ script: 'return [1, 2, 3]' });
+    const result = await browser.evaluate({ script: '[1, 2, 3]' });
 
     expect(result.success).toBe(true);
     if (result.success) expect(result.result).toEqual([1, 2, 3]);
   });
 
-  it('evaluates script and returns null', async () => {
+  it('returns null', async () => {
     mockPage.evaluate.mockResolvedValue(null);
 
-    const result = await browser.evaluate({ script: 'return null' });
+    const result = await browser.evaluate({ script: 'null' });
 
     expect(result.success).toBe(true);
     if (result.success) expect(result.result).toBeNull();
   });
 
-  it('evaluates script and returns undefined', async () => {
+  it('returns undefined for side-effect scripts', async () => {
     mockPage.evaluate.mockResolvedValue(undefined);
 
     const result = await browser.evaluate({ script: 'console.log("hi")' });
@@ -101,7 +109,7 @@ describe('browser_evaluate', () => {
   it('returns error for syntax errors', async () => {
     mockPage.evaluate.mockRejectedValue(new Error('SyntaxError'));
 
-    const result = await browser.evaluate({ script: 'return {' });
+    const result = await browser.evaluate({ script: '{invalid' });
 
     expect(result.success).toBe(false);
   });
@@ -109,7 +117,7 @@ describe('browser_evaluate', () => {
   it('returns error for runtime errors', async () => {
     mockPage.evaluate.mockRejectedValue(new Error('ReferenceError: x is not defined'));
 
-    const result = await browser.evaluate({ script: 'return x' });
+    const result = await browser.evaluate({ script: 'x' });
 
     expect(result.success).toBe(false);
   });
@@ -122,19 +130,10 @@ describe('browser_evaluate', () => {
     expect(result.success).toBe(false);
   });
 
-  it('handles async scripts', async () => {
-    mockPage.evaluate.mockResolvedValue('resolved');
-
-    const result = await browser.evaluate({ script: 'return await Promise.resolve("resolved")' });
-
-    expect(result.success).toBe(true);
-    if (result.success) expect(result.result).toBe('resolved');
-  });
-
   it('returns hint about taking snapshot', async () => {
     mockPage.evaluate.mockResolvedValue(true);
 
-    const result = await browser.evaluate({ script: 'return true' });
+    const result = await browser.evaluate({ script: 'true' });
 
     expect(result.success).toBe(true);
     if (result.success) expect(result.hint).toContain('snapshot');
@@ -146,95 +145,5 @@ describe('browser_evaluate', () => {
     const result = await browser.evaluate({ script: '' });
 
     expect(result.success).toBe(true);
-  });
-
-  describe('script wrapping', () => {
-    // These tests use a realistic mock that actually evaluates the wrapped
-    // script string, so they verify the wrapping logic produces correct JS.
-    function useRealisticEvaluate() {
-      mockPage.evaluate.mockImplementation((script: string) => {
-        const fn = new Function(`return ${script}`) as () => Promise<unknown>;
-        return fn();
-      });
-    }
-
-    it('returns result from bare expression scripts', async () => {
-      // Models commonly send bare expressions like document.body.innerText
-      // These must produce a return value, not undefined.
-      // We use JSON.stringify here to simulate an expression with method calls,
-      // since document.body isn't available in the Node test environment.
-      useRealisticEvaluate();
-
-      const result = await browser.evaluate({ script: 'JSON.stringify({ a: 1 })' });
-
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.result).toBe('{"a":1}');
-      }
-    });
-
-    it('returns result from expression with property access', async () => {
-      useRealisticEvaluate();
-
-      const result = await browser.evaluate({ script: '1 + 41' });
-
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.result).toBe(42);
-      }
-    });
-
-    it('returns result from scripts with explicit return', async () => {
-      useRealisticEvaluate();
-
-      const result = await browser.evaluate({ script: 'return 42' });
-
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.result).toBe(42);
-      }
-    });
-
-    it('handles multi-statement scripts with explicit return', async () => {
-      useRealisticEvaluate();
-
-      const result = await browser.evaluate({ script: 'const x = 1; const y = 2; return x + y' });
-
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.result).toBe(3);
-      }
-    });
-
-    it('handles async expression scripts', async () => {
-      useRealisticEvaluate();
-
-      const result = await browser.evaluate({ script: 'await Promise.resolve("hello")' });
-
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.result).toBe('hello');
-      }
-    });
-
-    it('handles scripts that are just a string literal', async () => {
-      useRealisticEvaluate();
-
-      const result = await browser.evaluate({ script: '"hello world"' });
-
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.result).toBe('hello world');
-      }
-    });
-
-    it('handles void/side-effect scripts without return', async () => {
-      useRealisticEvaluate();
-
-      const result = await browser.evaluate({ script: 'console.log("hi")' });
-
-      expect(result.success).toBe(true);
-      // Side-effect-only scripts returning undefined is acceptable
-    });
   });
 });
