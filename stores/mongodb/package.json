@@ -33,7 +33,7 @@
   "dependencies": {
     "cloudflare": "^5.2.0",
     "mongodb": "^7.1.0",
-    "uuid": "^13.0.0"
+    "uuid": "^14.0.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
