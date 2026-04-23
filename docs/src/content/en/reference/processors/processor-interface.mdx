@@ -306,7 +306,15 @@ The method can return one of three types:
 Processes input messages at each step of the agentic loop, before they're sent to the LLM. Unlike `processInput` which runs once at the start, this runs at every step including tool call continuations.
 
 ```typescript prettier:false
-processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
+processInputStep?(
+  args: ProcessInputStepArgs,
+):
+  | Promise<ProcessInputStepResult | MessageList | MastraDBMessage[] | void | undefined>
+  | ProcessInputStepResult
+  | MessageList
+  | MastraDBMessage[]
+  | void
+  | undefined;
 ```
 
 #### Execution order in the agentic loop
@@ -1165,7 +1173,7 @@ await writer.custom({
   type: 'data-moderation',
   runId,
   from: 'AGENT',
-  payload: { level: 'warn', reason: 'Possibly unsafe' },
+  data: { level: 'warn', reason: 'Possibly unsafe' },
 })
 ```
 
@@ -1179,7 +1187,7 @@ class ModerationCollector implements Processor {
   async processOutputStream({ part, state }) {
     if (part.type === 'data-moderation') {
       state.warnings ??= []
-      state.warnings.push(part.payload)
+      state.warnings.push(part.data)
     }
     return part
   }

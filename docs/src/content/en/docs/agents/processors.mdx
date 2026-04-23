@@ -102,8 +102,11 @@ const agent = new Agent({
   name: 'support-agent',
   model: 'openai/gpt-5',
   instructions: '...',
-  inputProcessors: [new ModerationProcessor({ model: 'openai/gpt-4.1-nano' })],
-  outputProcessors: [new TokenLimiter(4000)],
+  inputProcessors: [
+    new TokenLimiter(4000),
+    new ModerationProcessor({ model: 'openai/gpt-4.1-nano' }),
+  ],
+  outputProcessors: [new ModerationProcessor({ model: 'openai/gpt-4.1-nano' })],
   errorProcessors: [new PrefillErrorHandler()],
 })
 ```
@@ -117,7 +120,7 @@ Each array also accepts a function that returns an array, so processors can be b
 ```typescript
 new Agent({
   // ...
-  outputProcessors: ({ requestContext }) => {
+  inputProcessors: ({ requestContext }) => {
     const limit = requestContext.get('tokenLimit') ?? 4000
     return [new TokenLimiter(limit)]
   },
@@ -130,7 +133,7 @@ new Agent({
 
 ```typescript
 await agent.stream('Summarize this', {
-  outputProcessors: [new TokenLimiter(2000)],
+  inputProcessors: [new TokenLimiter(2000)],
   maxProcessorRetries: 5,
 })
 ```
