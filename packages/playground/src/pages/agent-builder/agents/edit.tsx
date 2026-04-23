@@ -1,10 +1,11 @@
 import { cn, IconButton } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
-import { Columns2, EyeIcon } from 'lucide-react';
+import { ArrowLeftIcon, Columns2, EyeIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
+import { AgentBuilderBreadcrumb } from '@/domains/agent-builder/components/agent-builder-edit/agent-builder-breadcrumb';
 import { EditableAgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { AgentPreviewChat } from '@/domains/agent-builder/components/agent-builder-edit/agent-preview-chat';
 import { ConversationPanel } from '@/domains/agent-builder/components/agent-builder-edit/conversation-panel';
@@ -55,8 +56,22 @@ export default function AgentBuilderAgentEdit() {
 
   return (
     <FormProvider {...formMethods}>
-      <div className="flex flex-1 min-h-0 h-full bg-surface1">
-        <div className="flex w-[40ch] shrink-0 flex-col bg-surface1 py-6 px-6">
+      <div className="flex flex-col h-full bg-surface1">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-6 pt-4">
+          <div className="justify-self-start">
+            <IconButton
+              tooltip="Agents list"
+              className="rounded-full"
+              onClick={() => navigate(`/agent-builder/agents`)}
+            >
+              <ArrowLeftIcon />
+            </IconButton>
+          </div>
+          <AgentBuilderBreadcrumb className="justify-self-center" />
+          <div />
+        </div>
+        <div className="flex flex-1 min-h-0">
+        <div className="flex w-[40ch] shrink-0 flex-col bg-surface1 pt-4 pb-6 px-6">
           <MastraReactProvider baseUrl="http://localhost:4112">
             <ConversationPanel
               initialUserMessage={state?.userMessage}
@@ -66,7 +81,7 @@ export default function AgentBuilderAgentEdit() {
             />
           </MastraReactProvider>
         </div>
-        <div className="flex flex-1 min-w-0 flex-col py-6 pr-6">
+        <div className="flex flex-1 min-w-0 flex-col pt-4 pb-6 pr-6">
           <BrowserFrame className={cn('grid relative agent-builder-panel-grid', gridClass)}>
             <div className="h-full w-full overflow-hidden grid grid-rows-[auto_1fr]">
               <div className="flex gap-2 items-center pl-6 pt-6 pr-6 justify-between">
@@ -105,6 +120,7 @@ export default function AgentBuilderAgentEdit() {
               </div>
             </div>
           </BrowserFrame>
+        </div>
         </div>
       </div>
     </FormProvider>

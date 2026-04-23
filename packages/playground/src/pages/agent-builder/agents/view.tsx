@@ -3,6 +3,7 @@ import { ArrowLeftIcon, Columns2, PencilIcon } from 'lucide-react';
 import { useState } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router';
+import { AgentBuilderBreadcrumb } from '@/domains/agent-builder/components/agent-builder-edit/agent-builder-breadcrumb';
 import { AgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { AgentPreviewChat } from '@/domains/agent-builder/components/agent-builder-edit/agent-preview-chat';
 import { BrowserFrame } from '@/domains/agent-builder/components/browser-frame';
@@ -24,18 +25,25 @@ export default function AgentBuilderAgentView() {
   });
   return (
     <FormProvider {...formMethods}>
-    <div className="flex flex-1 min-w-0 flex-col p-6 h-full bg-surface1">
+    <div className="flex flex-1 min-w-0 flex-col h-full bg-surface1">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-6 pt-4">
+        <div className="justify-self-start">
+          <IconButton
+            tooltip="Agents list"
+            className="rounded-full"
+            onClick={() => navigate(`/agent-builder/agents`)}
+          >
+            <ArrowLeftIcon />
+          </IconButton>
+        </div>
+        <AgentBuilderBreadcrumb className="justify-self-center" />
+        <div />
+      </div>
+      <div className="flex flex-1 min-h-0 min-w-0 flex-col px-6 pb-6 pt-4">
       <BrowserFrame className={cn('grid relative agent-builder-panel-grid', gridClass)}>
         <div className="h-full w-full overflow-hidden grid grid-rows-[auto_1fr]">
           <div className="flex gap-2 items-center pl-6 pt-6 pr-6 justify-between">
             <div className="flex gap-2 items-center">
-              <IconButton
-                tooltip="Aents list"
-                className="rounded-full"
-                onClick={() => navigate(`/agent-builder/agents`)}
-              >
-                <ArrowLeftIcon />
-              </IconButton>
               <IconButton
                 tooltip="Edit agent"
                 className="rounded-full"
@@ -71,6 +79,7 @@ export default function AgentBuilderAgentView() {
           </div>
         </div>
       </BrowserFrame>
+      </div>
     </div>
     </FormProvider>
   );
