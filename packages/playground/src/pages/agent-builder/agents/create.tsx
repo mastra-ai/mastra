@@ -1,11 +1,12 @@
 import { EmptyState } from '@mastra/playground-ui';
 import { AlertTriangle, LockIcon, Settings } from 'lucide-react';
 
+import { AgentBuilderForm } from '@/domains/builder/components/agent-builder-form';
 import { useBuilderAgentAccess } from '@/domains/builder/hooks/use-builder-agent-access';
 
 /**
- * Agent Builder create page shell.
- * Phase 3 will add the actual form implementation.
+ * Agent Builder create page.
+ * Shows config-driven form for creating agents.
  */
 export default function AgentBuilderCreatePage() {
   const { isLoading, denialReason, agentFeatures } = useBuilderAgentAccess();
@@ -50,12 +51,14 @@ export default function AgentBuilderCreatePage() {
     );
   }
 
-  // Phase 3 will replace this with actual form
-  return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold mb-4">Create Agent</h1>
-      <p className="text-muted-foreground mb-4">Agent Builder form will be implemented in Phase 3.</p>
-      <pre className="bg-muted p-4 rounded text-sm">{JSON.stringify({ agentFeatures }, null, 2)}</pre>
-    </div>
-  );
+  // Build visible sections from agent features
+  const visibleSections = {
+    tools: agentFeatures?.tools ?? false,
+    memory: agentFeatures?.memory ?? false,
+    skills: agentFeatures?.skills ?? false,
+    workflows: agentFeatures?.workflows ?? false,
+    agents: agentFeatures?.agents ?? false,
+  };
+
+  return <AgentBuilderForm visibleSections={visibleSections} />;
 }

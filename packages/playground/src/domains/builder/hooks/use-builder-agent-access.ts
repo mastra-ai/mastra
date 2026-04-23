@@ -3,6 +3,16 @@ import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export type DenialReason = 'permission-denied' | 'not-configured' | 'error' | null;
 
+export interface AgentFeatureFlags {
+  tools?: boolean;
+  agents?: boolean;
+  workflows?: boolean;
+  scorers?: boolean;
+  skills?: boolean;
+  memory?: boolean;
+  variables?: boolean;
+}
+
 export interface UseBuilderAgentAccessResult {
   /** Loading state (false if skipped due to missing permissions) */
   isLoading: boolean;
@@ -19,7 +29,7 @@ export interface UseBuilderAgentAccessResult {
   /** Final access decision: all checks pass */
   canAccessAgentBuilder: boolean;
   /** Agent feature flags from builder config */
-  agentFeatures: Record<string, unknown> | undefined;
+  agentFeatures: AgentFeatureFlags | undefined;
 }
 
 /**
@@ -74,6 +84,6 @@ export function useBuilderAgentAccess(): UseBuilderAgentAccessResult {
     hasAgentFeature,
     hasRequiredPermissions,
     canAccessAgentBuilder,
-    agentFeatures: builderSettings?.features?.agent as Record<string, unknown> | undefined,
+    agentFeatures: builderSettings?.features?.agent as AgentFeatureFlags | undefined,
   };
 }
