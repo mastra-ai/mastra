@@ -1385,5 +1385,106 @@ describe('A2A Handler', () => {
       const done = await result.next();
       expect(done.done).toBe(true);
     });
+
+    it('keeps the stream open for non-terminal tasks until a later update is saved', async () => {
+      const task: Task = {
+        id: 'task-1',
+        contextId: 'context-1',
+        status: {
+          state: 'working',
+          message: {
+            messageId: 'message-1',
+            kind: 'message',
+            role: 'agent',
+            parts: [{ kind: 'text', text: 'Still working...' }],
+          },
+          timestamp: '2025-05-08T11:47:38.458Z',
+        },
+        artifacts: [],
+        metadata: undefined,
+        kind: 'task',
+      };
+
+      await mockTaskStore.save({ agentId: 'test-agent', data: task });
+
+      const result = await getAgentExecutionHandler({
+        requestId: 'test-request-id',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/resubscribe' as any,
+        params: { id: 'task-1' } as any,
+        taskStore: mockTaskStore,
+      });
+
+      const first = await result.next();
+      expect(first.value).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: {
+          contextId: 'context-1',
+          final: false,
+          kind: 'status-update',
+          status: {
+            message: {
+              kind: 'message',
+              messageId: 'message-1',
+              parts: [{ kind: 'text', text: 'Still working...' }],
+              role: 'agent',
+            },
+            state: 'working',
+            timestamp: '2025-05-08T11:47:38.458Z',
+          },
+          taskId: 'task-1',
+        },
+      });
+
+      const secondPromise = result.next();
+      await expect(Promise.race([secondPromise.then(() => 'resolved'), Promise.resolve('pending')])).resolves.toBe(
+        'pending',
+      );
+
+      await mockTaskStore.save({
+        agentId: 'test-agent',
+        data: {
+          ...task,
+          status: {
+            state: 'completed',
+            message: {
+              messageId: 'message-2',
+              kind: 'message',
+              role: 'agent',
+              parts: [{ kind: 'text', text: 'Done!' }],
+            },
+            timestamp: '2025-05-08T11:48:38.458Z',
+          },
+        },
+      });
+
+      const second = await secondPromise;
+      expect(second.value).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: {
+          contextId: 'context-1',
+          final: true,
+          kind: 'status-update',
+          status: {
+            message: {
+              kind: 'message',
+              messageId: 'message-2',
+              parts: [{ kind: 'text', text: 'Done!' }],
+              role: 'agent',
+            },
+            state: 'completed',
+            timestamp: '2025-05-08T11:48:38.458Z',
+          },
+          taskId: 'task-1',
+        },
+      });
+
+      const done = await result.next();
+      expect(done.done).toBe(true);
+    });
   });
 });

@@ -387,21 +387,39 @@ export async function* handleTaskResubscribe({
   agentId: string;
   taskId: string;
 }) {
-  const task = await taskStore.load({ agentId, taskId });
+  let task = await taskStore.load({ agentId, taskId });
 
   if (!task) {
     throw MastraA2AError.taskNotFound(taskId);
   }
 
   const finalStates: TaskState[] = ['completed', 'failed', 'canceled'];
+  let currentVersion = taskStore.getVersion({ agentId, taskId });
 
-  yield createSuccessResponse(requestId, {
-    kind: 'status-update',
-    taskId: task.id,
-    contextId: task.contextId,
-    status: task.status,
-    final: finalStates.includes(task.status.state),
-  });
+  while (true) {
+    const isFinal = finalStates.includes(task.status.state);
+
+    yield createSuccessResponse(requestId, {
+      kind: 'status-update',
+      taskId: task.id,
+      contextId: task.contextId,
+      status: task.status,
+      final: isFinal,
+    });
+
+    if (isFinal) {
+      return;
+    }
+
+    const nextUpdate = await taskStore.waitForNextUpdate({
+      agentId,
+      taskId,
+      afterVersion: currentVersion,
+    });
+
+    task = nextUpdate.task;
+    currentVersion = nextUpdate.version;
+  }
 }
 
 function getTaskIdFromParams(
