@@ -760,11 +760,11 @@ export class ProcessorRunner {
               });
               controller.close();
               break;
-            } else if (processedPart !== null) {
-              // Send processed part only if it's not null (which indicates don't emit)
+            } else if (processedPart != null) {
+              // Send processed part only if it's not null/undefined (which indicates don't emit)
               controller.enqueue(processedPart);
             }
-            // If processedPart is null, don't emit anything for this part
+            // If processedPart is null/undefined, don't emit anything for this part
           }
         } catch (error) {
           controller.error(error);
