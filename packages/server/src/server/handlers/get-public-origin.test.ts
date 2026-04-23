@@ -82,18 +82,17 @@ describe('getPublicOrigin — reverse proxy header resolution', () => {
     expect(getPublicOrigin(request)).toBe('https://api.example.com');
   });
 
-  it('should default to HTTPS when Host present but X-Forwarded-Proto absent', () => {
+  it('should use request.url protocol when Host header lacks X-Forwarded-Proto', () => {
     const headers = new Headers({
       host: 'example.com:8443',
     });
     const request = new Request('http://example.com:8443/api/auth/sso/callback', { headers });
 
-    // Host without X-Forwarded-Proto is ambiguous (could be direct HTTP or proxy without proto header)
-    // Fall back to request.url scheme
+    // Host without X-Forwarded-Proto: proto comes from request.url, host from header
     expect(getPublicOrigin(request)).toBe('http://example.com:8443');
   });
 
-  it('should fall back to request.url when Host is present but X-Forwarded-Proto is absent', () => {
+  it('should merge request.url protocol with Host header when X-Forwarded-Proto absent', () => {
     // AWS ALB with Preserve Host Header ON but no X-Forwarded-Proto header
     // Proto comes from request.url, host from the header
     const headers = new Headers({
@@ -101,7 +100,7 @@ describe('getPublicOrigin — reverse proxy header resolution', () => {
     });
     const request = new Request('https://internal-host/api/auth/sso/callback', { headers });
 
-    // Host without X-Forwarded-Proto: use proto from request.url + host header
+    // Host without X-Forwarded-Proto: proto from request.url (https) + host header (example.com)
     expect(getPublicOrigin(request)).toBe('https://example.com');
   });
 
@@ -112,5 +111,22 @@ describe('getPublicOrigin — reverse proxy header resolution', () => {
     const request = new Request('http://internal:3000/some-path', { headers });
 
     expect(getPublicOrigin(request)).toBe('https://api.example.com');
+  });
+
+  it('should fall back to request.url.origin when no proxy headers present', () => {
+    // Local development or direct access: no proxy headers at all
+    const headers = new Headers();
+    const request = new Request('http://localhost:3000/api/auth/sso/callback', { headers });
+
+    // No headers: preserve full request.url origin
+    expect(getPublicOrigin(request)).toBe('http://localhost:3000');
+  });
+
+  it('should preserve HTTPS in request.url fallback', () => {
+    // Local HTTPS server without proxy headers
+    const headers = new Headers();
+    const request = new Request('https://localhost:8443/api/auth/sso/login', { headers });
+
+    expect(getPublicOrigin(request)).toBe('https://localhost:8443');
   });
 });
