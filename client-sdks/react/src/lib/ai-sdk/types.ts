@@ -41,6 +41,9 @@ export type MastraUIMessageMetadata = {
           suspendPayload: any;
         };
       };
+      backgroundTaskStartedAt?: Date;
+      backgroundTaskCompletedAt?: Date;
+      backgroundTaskTaskId?: string;
     }
   | {
       mode: 'stream';
@@ -65,6 +68,9 @@ export type MastraUIMessageMetadata = {
           suspendPayload: any;
         };
       };
+      backgroundTaskStartedAt?: Date;
+      backgroundTaskCompletedAt?: Date;
+      backgroundTaskTaskId?: string;
     }
   | {
       mode: 'network';

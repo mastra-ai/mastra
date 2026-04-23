@@ -260,24 +260,6 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       ];
     }
 
-    case 'background-task-failed':
-    case 'background-task-completed': {
-      const lastMessage = result[result.length - 1];
-      if (!lastMessage || lastMessage.role !== 'assistant') return result;
-
-      return [
-        ...result.slice(0, -1),
-        {
-          ...lastMessage,
-          metadata: {
-            mode: metadata.mode,
-            ...lastMessage.metadata,
-            runningBackgroundTasksCount: undefined,
-          } as MastraUIMessageMetadata,
-        },
-      ];
-    }
-
     case 'text-delta': {
       const lastMessage = result[result.length - 1];
       if (!lastMessage || lastMessage.role !== 'assistant') return result;
@@ -420,7 +402,9 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
     }
 
     case 'tool-error':
-    case 'tool-result': {
+    case 'tool-result':
+    case 'background-task-completed':
+    case 'background-task-failed': {
       const lastMessage = result[result.length - 1];
       if (!lastMessage || lastMessage.role !== 'assistant') return result;
 
@@ -433,68 +417,101 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
           part.toolCallId === chunk.payload.toolCallId,
       );
 
-      if (toolPartIndex !== -1) {
-        const toolPart = parts[toolPartIndex];
-        if (
-          toolPart.type === 'dynamic-tool' ||
-          (typeof toolPart.type === 'string' && toolPart.type.startsWith('tool-'))
-        ) {
-          const toolName =
-            'toolName' in toolPart && typeof toolPart.toolName === 'string'
-              ? toolPart.toolName
-              : toolPart.type.startsWith('tool-')
-                ? toolPart.type.substring(5)
-                : '';
+      if (toolPartIndex === -1) {
+        if (chunk.type !== 'background-task-completed' && chunk.type !== 'background-task-failed') return result;
 
-          const toolCallId = (toolPart as any).toolCallId;
+        const messageIndex = findMessageIndexByToolCallId(result, chunk.payload.toolCallId);
+        if (messageIndex === -1) return result;
+        const messageToUpdate = result[messageIndex];
+        if (!messageToUpdate || messageToUpdate.role !== 'assistant') return result;
 
-          if ((chunk.type === 'tool-result' && chunk.payload.isError) || chunk.type === 'tool-error') {
-            const error = chunk.type === 'tool-error' ? chunk.payload.error : chunk.payload.result;
-            parts[toolPartIndex] = {
-              type: 'dynamic-tool',
-              toolName,
-              toolCallId,
-              state: 'output-error',
-              input: (toolPart as any).input,
-              errorText:
-                typeof error === 'string'
-                  ? error
-                  : error instanceof Error
-                    ? error.message
-                    : ((error as any)?.message ?? String(error)),
-              callProviderMetadata: chunk.payload.providerMetadata,
-            };
-          } else {
-            const isWorkflow = Boolean((chunk.payload.result as any)?.result?.steps);
-            const isAgent = chunk?.from === 'AGENT';
-            let output;
-            if (isWorkflow) {
-              output = (chunk.payload.result as any)?.result;
-            } else if (isAgent) {
-              const existingOutput = (parts[toolPartIndex] as any).output;
-              // Merge streaming childMessages with the backend result (which has
-              // subAgentToolResults, text, subAgentThreadId, etc.)
-              output = existingOutput
+        return [
+          ...result.slice(0, messageIndex),
+          {
+            ...messageToUpdate,
+            metadata: {
+              ...messageToUpdate.metadata,
+              mode: metadata.mode,
+              ...(chunk.type === 'background-task-completed' || chunk.type === 'background-task-failed'
                 ? {
-                    ...(chunk.payload.result as any),
-                    childMessages: existingOutput.childMessages?.length
-                      ? existingOutput.childMessages
-                      : (chunk.payload.result as any)?.childMessages,
+                    runningBackgroundTasksCount: undefined,
+                    backgroundTaskCompletedAt: chunk.payload.completedAt,
+                    backgroundTaskTaskId: chunk.payload.taskId,
                   }
-                : chunk.payload.result;
-            } else {
-              output = chunk.payload.result;
-            }
-            parts[toolPartIndex] = {
-              type: 'dynamic-tool',
-              toolName,
-              toolCallId,
-              state: 'output-available',
-              input: (toolPart as any).input,
-              output,
-              callProviderMetadata: chunk.payload.providerMetadata,
-            };
+                : {}),
+            } as MastraUIMessageMetadata,
+          },
+          ...result.slice(messageIndex + 1),
+        ];
+      }
+
+      const toolPart = parts[toolPartIndex];
+      if (
+        toolPart.type === 'dynamic-tool' ||
+        (typeof toolPart.type === 'string' && toolPart.type.startsWith('tool-'))
+      ) {
+        const toolName =
+          'toolName' in toolPart && typeof toolPart.toolName === 'string'
+            ? toolPart.toolName
+            : toolPart.type.startsWith('tool-')
+              ? toolPart.type.substring(5)
+              : '';
+
+        const toolCallId = (toolPart as any).toolCallId;
+
+        if (
+          ((chunk.type === 'tool-result' || chunk.type === 'background-task-completed') && chunk.payload.isError) ||
+          chunk.type === 'tool-error' ||
+          chunk.type === 'background-task-failed'
+        ) {
+          const error =
+            chunk.type === 'tool-error' || chunk.type === 'background-task-failed'
+              ? chunk.payload.error
+              : chunk.payload.result;
+          parts[toolPartIndex] = {
+            type: 'dynamic-tool',
+            toolName,
+            toolCallId,
+            state: 'output-error',
+            input: (toolPart as any).input,
+            errorText:
+              typeof error === 'string'
+                ? error
+                : error instanceof Error
+                  ? error.message
+                  : ((error as any)?.message ?? String(error)),
+            callProviderMetadata: (chunk.payload as any).providerMetadata,
+          };
+        } else {
+          const isWorkflow = Boolean((chunk.payload.result as any)?.result?.steps);
+          const isAgent = chunk?.from === 'AGENT';
+          let output;
+          if (isWorkflow) {
+            output = (chunk.payload.result as any)?.result;
+          } else if (isAgent) {
+            const existingOutput = (parts[toolPartIndex] as any).output;
+            // Merge streaming childMessages with the backend result (which has
+            // subAgentToolResults, text, subAgentThreadId, etc.)
+            output = existingOutput
+              ? {
+                  ...(chunk.payload.result as any),
+                  childMessages: existingOutput.childMessages?.length
+                    ? existingOutput.childMessages
+                    : (chunk.payload.result as any)?.childMessages,
+                }
+              : chunk.payload.result;
+          } else {
+            output = chunk.payload.result;
           }
+          parts[toolPartIndex] = {
+            type: 'dynamic-tool',
+            toolName,
+            toolCallId,
+            state: 'output-available',
+            input: (toolPart as any).input,
+            output,
+            callProviderMetadata: (chunk.payload as any).providerMetadata,
+          };
         }
       }
 
@@ -503,11 +520,22 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
         {
           ...lastMessage,
           parts,
+          metadata: {
+            ...lastMessage.metadata,
+            mode: metadata.mode,
+            ...(chunk.type === 'background-task-completed' || chunk.type === 'background-task-failed'
+              ? {
+                  runningBackgroundTasksCount: undefined,
+                  backgroundTaskCompletedAt: chunk.payload.completedAt,
+                  backgroundTaskTaskId: chunk.payload.taskId,
+                }
+              : {}),
+          } as MastraUIMessageMetadata,
         },
       ];
     }
 
-    case 'tool-output': {
+    case 'background-task-running': {
       const lastMessage = result[result.length - 1];
       if (!lastMessage || lastMessage.role !== 'assistant') return result;
 
@@ -520,64 +548,111 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
           part.toolCallId === chunk.payload.toolCallId,
       );
 
-      if (toolPartIndex !== -1) {
-        const toolPart = parts[toolPartIndex];
-        // Handle dynamic-tool and tool-* part types
-        if (
-          toolPart.type === 'dynamic-tool' ||
-          (typeof toolPart.type === 'string' && toolPart.type.startsWith('tool-'))
+      if (toolPartIndex === -1) {
+        const messageIndex = findMessageIndexByToolCallId(result, chunk.payload.toolCallId);
+        if (messageIndex === -1) return result;
+        const messageToUpdate = result[messageIndex];
+        if (!messageToUpdate || messageToUpdate.role !== 'assistant') return result;
+
+        return [
+          ...result.slice(0, messageIndex),
+          {
+            ...messageToUpdate,
+            metadata: {
+              ...messageToUpdate.metadata,
+              mode: metadata.mode,
+              backgroundTaskStartedAt: chunk.payload.startedAt,
+              backgroundTaskTaskId: chunk.payload.taskId,
+            } as MastraUIMessageMetadata,
+          },
+          ...result.slice(messageIndex + 1),
+        ];
+      }
+
+      return [
+        ...result.slice(0, -1),
+        {
+          ...lastMessage,
+          metadata: {
+            ...lastMessage.metadata,
+            mode: metadata.mode,
+            backgroundTaskStartedAt: chunk.payload.startedAt,
+            backgroundTaskTaskId: chunk.payload.taskId,
+          } as MastraUIMessageMetadata,
+        },
+      ];
+    }
+
+    case 'tool-output':
+    case 'background-task-output': {
+      const lastMessage = result[result.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+
+      // Find and update the corresponding tool call
+      const parts = [...lastMessage.parts];
+      const toolPartIndex = parts.findIndex(
+        part =>
+          (part.type === 'dynamic-tool' || (typeof part.type === 'string' && part.type.startsWith('tool-'))) &&
+          'toolCallId' in part &&
+          part.toolCallId === chunk.payload.toolCallId,
+      );
+
+      if (toolPartIndex === -1) return result;
+
+      const toolPart = parts[toolPartIndex];
+      // Handle dynamic-tool and tool-* part types
+      if (
+        toolPart.type === 'dynamic-tool' ||
+        (typeof toolPart.type === 'string' && toolPart.type.startsWith('tool-'))
+      ) {
+        // Extract toolName, toolCallId, input from different part structures
+        const toolName =
+          'toolName' in toolPart && typeof toolPart.toolName === 'string'
+            ? toolPart.toolName
+            : typeof toolPart.type === 'string' && toolPart.type.startsWith('tool-')
+              ? toolPart.type.substring(5)
+              : '';
+        const toolCallId = (toolPart as any).toolCallId;
+        const input = (toolPart as any).input;
+        const payloadOutput =
+          chunk.type === 'background-task-output' ? chunk.payload.payload.payload.output : chunk.payload.result;
+
+        // Handle workflow-related output chunks
+        if (payloadOutput?.type?.startsWith('workflow-')) {
+          // Get existing workflow state from the output field
+          const existingWorkflowState =
+            ((toolPart as any).output as WorkflowStreamResult<any, any, any, any>) ||
+            ({} as WorkflowStreamResult<any, any, any, any>);
+
+          // Use the mapWorkflowStreamChunkToWatchResult pattern for accumulation
+          const updatedWorkflowState = mapWorkflowStreamChunkToWatchResult(existingWorkflowState, payloadOutput);
+
+          parts[toolPartIndex] = {
+            type: 'dynamic-tool',
+            toolName,
+            toolCallId,
+            state: 'input-streaming',
+            input,
+            output: updatedWorkflowState as any,
+          };
+        } else if (
+          payloadOutput?.from === 'AGENT' ||
+          (payloadOutput?.from === 'USER' && payloadOutput?.payload?.output?.type?.startsWith('workflow-'))
         ) {
-          // Extract toolName, toolCallId, input from different part structures
-          const toolName =
-            'toolName' in toolPart && typeof toolPart.toolName === 'string'
-              ? toolPart.toolName
-              : typeof toolPart.type === 'string' && toolPart.type.startsWith('tool-')
-                ? toolPart.type.substring(5)
-                : '';
-          const toolCallId = (toolPart as any).toolCallId;
-          const input = (toolPart as any).input;
+          return toUIMessageFromAgent(payloadOutput, conversation, metadata, toolCallId, toolName);
+        } else {
+          // Handle regular tool output
+          const currentOutput = ((toolPart as any).output as any) || [];
+          const existingOutput = Array.isArray(currentOutput) ? currentOutput : [];
 
-          // Handle workflow-related output chunks
-          if (chunk.payload.output?.type?.startsWith('workflow-')) {
-            // Get existing workflow state from the output field
-            const existingWorkflowState =
-              ((toolPart as any).output as WorkflowStreamResult<any, any, any, any>) ||
-              ({} as WorkflowStreamResult<any, any, any, any>);
-
-            // Use the mapWorkflowStreamChunkToWatchResult pattern for accumulation
-            const updatedWorkflowState = mapWorkflowStreamChunkToWatchResult(
-              existingWorkflowState,
-              chunk.payload.output,
-            );
-
-            parts[toolPartIndex] = {
-              type: 'dynamic-tool',
-              toolName,
-              toolCallId,
-              state: 'input-streaming',
-              input,
-              output: updatedWorkflowState as any,
-            };
-          } else if (
-            chunk.payload.output?.from === 'AGENT' ||
-            (chunk.payload.output?.from === 'USER' &&
-              chunk.payload.output?.payload?.output?.type?.startsWith('workflow-'))
-          ) {
-            return toUIMessageFromAgent(chunk.payload.output, conversation, metadata, toolCallId, toolName);
-          } else {
-            // Handle regular tool output
-            const currentOutput = ((toolPart as any).output as any) || [];
-            const existingOutput = Array.isArray(currentOutput) ? currentOutput : [];
-
-            parts[toolPartIndex] = {
-              type: 'dynamic-tool',
-              toolName,
-              toolCallId,
-              state: 'input-streaming',
-              input,
-              output: [...existingOutput, chunk.payload.output] as any,
-            };
-          }
+          parts[toolPartIndex] = {
+            type: 'dynamic-tool',
+            toolName,
+            toolCallId,
+            state: 'input-streaming',
+            input,
+            output: [...existingOutput, payloadOutput] as any,
+          };
         }
       }
 
@@ -954,4 +1029,26 @@ const toUIMessageFromAgent = (
       parts,
     },
   ];
+};
+
+const findMessageIndexByToolCallId = (messages: MastraUIMessage[], toolCallId: string): number => {
+  let count = 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    //go 10 messages back only, if after, you don't see return -1
+    const maxMessagesBack = 10;
+    if (count > maxMessagesBack) {
+      return -1;
+    }
+    const message = messages[i];
+    if (message.role !== 'assistant') {
+      continue;
+    }
+    for (const part of message.parts) {
+      if (part.type === 'dynamic-tool' && (part as any).toolCallId === toolCallId) {
+        return i;
+      }
+    }
+    count++;
+  }
+  return -1;
 };

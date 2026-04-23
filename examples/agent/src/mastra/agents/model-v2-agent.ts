@@ -364,31 +364,31 @@ export const supervisorAgent = new Agent({
     },
 
     //Iteration Hooks - Monitor progress after each iteration
-    onIterationComplete: async context => {
-      console.log(`\n${'='.repeat(60)}`);
-      console.log(`🔄 Iteration ${context.iteration}${context.maxIterations ? `/${context.maxIterations}` : ''}`);
-      console.log(`📊 Status: ${context.isFinal ? 'FINAL ✅' : 'CONTINUING ⏳'}`);
-      console.log(`🏁 Finish Reason: ${context.finishReason}`);
-      console.log(`🔧 Tool Calls: ${context.toolCalls.map(tc => tc.name).join(', ') || 'None'}`);
-      console.log(`📝 Response Length: ${context.text.length} chars`);
-      console.log(`${'='.repeat(60)}\n`);
+    // onIterationComplete: async context => {
+    //   console.log(`\n${'='.repeat(60)}`);
+    //   console.log(`🔄 Iteration ${context.iteration}${context.maxIterations ? `/${context.maxIterations}` : ''}`);
+    //   console.log(`📊 Status: ${context.isFinal ? 'FINAL ✅' : 'CONTINUING ⏳'}`);
+    //   console.log(`🏁 Finish Reason: ${context.finishReason}`);
+    //   console.log(`🔧 Tool Calls: ${context.toolCalls.map(tc => tc.name).join(', ') || 'None'}`);
+    //   console.log(`📝 Response Length: ${context.text.length} chars`);
+    //   console.log(`${'='.repeat(60)}\n`);
 
-      // Provide feedback to guide the agent
-      if (context.iteration === 3 && !context.text.includes('recommendation')) {
-        return {
-          continue: true,
-          feedback: 'Good progress! Please include specific recommendations in your response.',
-        };
-      }
+    //   // Provide feedback to guide the agent
+    //   if (context.iteration === 3 && !context.text.includes('recommendation')) {
+    //     return {
+    //       continue: true,
+    //       feedback: 'Good progress! Please include specific recommendations in your response.',
+    //     };
+    //   }
 
-      // Stop early if we have a comprehensive response
-      if (context.text.length > 500 && context.text.includes('recommendation')) {
-        console.log('✅ Response is comprehensive, stopping early');
-        return { continue: false };
-      }
+    //   // Stop early if we have a comprehensive response
+    //   if (context.text.length > 500 && context.text.includes('recommendation')) {
+    //     console.log('✅ Response is comprehensive, stopping early');
+    //     return { continue: false };
+    //   }
 
-      return { continue: true };
-    },
+    //   return { continue: true };
+    // },
 
     // Delegation Hooks - Control subagent execution
     delegation: {
@@ -567,12 +567,6 @@ You can handle both at the same time — start a background research while answe
       cryptoResearchTool: true,
     },
     waitTimeoutMs: 10000,
-    onTaskComplete: async task => {
-      console.log(`Tool ${task.toolName} completed, result: ${JSON.stringify(task.result)}`);
-    },
-    onTaskFailed: async task => {
-      console.log(`Tool ${task.toolName} failed, error: ${JSON.stringify(task.error)}`);
-    },
   },
 });
 

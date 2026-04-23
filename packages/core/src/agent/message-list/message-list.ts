@@ -707,7 +707,10 @@ export class MessageList {
    *
    * @returns true if the tool call was found and updated, false otherwise.
    */
-  public updateToolInvocation(inputPart: Extract<MastraMessagePart, { type: 'tool-invocation' }>): boolean {
+  public updateToolInvocation(
+    inputPart: Extract<MastraMessagePart, { type: 'tool-invocation' }>,
+    metadata?: Record<string, unknown>,
+  ): boolean {
     if (!inputPart.toolInvocation?.toolCallId) {
       return false;
     }
@@ -741,6 +744,11 @@ export class MessageList {
             ...(originalPart.providerMetadata !== undefined && inputPartWithMeta.providerMetadata === undefined
               ? { providerMetadata: originalPart.providerMetadata }
               : {}),
+          };
+
+          msg.content.metadata = {
+            ...(msg.content.metadata ?? {}),
+            ...(metadata ?? {}),
           };
 
           // Move the message to the response source so it gets

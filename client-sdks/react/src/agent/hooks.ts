@@ -234,7 +234,7 @@ export const useChat = ({
 
     const runId = uuid();
 
-    const response = await agent.stream(coreUserMessages, {
+    const response = await agent.streamUntilIdle(coreUserMessages, {
       runId,
       maxSteps,
       modelSettings: {

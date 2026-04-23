@@ -3,6 +3,7 @@ import { Button, CodeEditor, WorkflowIcon } from '@mastra/playground-ui';
 
 import type { MastraUIMessage } from '@mastra/react';
 import { useContext, useEffect } from 'react';
+import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import { BadgeWrapper } from './badge-wrapper';
 import { LoadingBadge } from './loading-badge';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
@@ -64,12 +65,18 @@ export const WorkflowBadge = ({
       title={workflow.name}
       initialCollapsed={false}
       extraInfo={
-        metadata?.mode === 'network' && (
+        metadata?.mode === 'network' ? (
           <NetworkChoiceMetadataDialogTrigger
             selectionReason={selectionReason ?? ''}
             input={agentNetworkInput as string | Record<string, unknown> | undefined}
           />
-        )
+        ) : metadata?.backgroundTaskTaskId && metadata?.backgroundTaskStartedAt ? (
+          <BackgroundTaskMetadataDialogTrigger
+            backgroundTaskTaskId={metadata.backgroundTaskTaskId}
+            backgroundTaskStartedAt={metadata.backgroundTaskStartedAt}
+            backgroundTaskCompletedAt={metadata.backgroundTaskCompletedAt}
+          />
+        ) : null
       }
     >
       {!isStreaming && !isLoading && (

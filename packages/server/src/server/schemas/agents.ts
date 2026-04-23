@@ -288,6 +288,9 @@ export const agentExecutionLegacyBodySchema = agentExecutionBodySchema.extend({
   threadId: z.string().optional(),
 });
 
+export const streamUntilIdleBodySchema = agentExecutionBodySchema.extend({
+  maxIdleMs: z.number().optional(),
+});
 /**
  * Body schema for tool execute endpoint
  * Simple schema - tool validates its own input data

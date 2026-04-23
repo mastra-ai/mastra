@@ -423,16 +423,42 @@ export class Agent<
    */
   private async deriveSubAgentBackgroundConfig(
     subAgent: Agent<any, any, any, any>,
-    _requestContext: RequestContext,
+    requestContext: RequestContext,
   ): Promise<ToolBackgroundConfig | undefined> {
     const subAgentBgConfig = subAgent.getBackgroundTasksConfig?.();
+    try {
+      // Opt-out: sub-agent explicitly disabled background tasks
+      if (subAgentBgConfig?.disabled === true) {
+        return undefined;
+      }
 
-    // Opt-out: sub-agent explicitly disabled background tasks
-    if (subAgentBgConfig?.disabled === true) {
-      return undefined;
+      // 1. Sub-agent has its own backgroundTasks config that enables tools
+      if (subAgentBgConfig?.tools) {
+        if (subAgentBgConfig.tools === 'all') {
+          return { enabled: true, waitTimeoutMs: subAgentBgConfig.waitTimeoutMs };
+        }
+        const hasEnabledTool = Object.values(subAgentBgConfig.tools).some(t => {
+          if (typeof t === 'boolean') return t;
+          return t?.enabled === true;
+        });
+        if (hasEnabledTool) {
+          return { enabled: true, waitTimeoutMs: subAgentBgConfig.waitTimeoutMs };
+        }
+      }
+
+      // 2. Any of the sub-agent's tools has background.enabled === true
+      const subAgentTools = await subAgent.convertTools({ requestContext, methodType: 'generate' });
+      if (subAgentTools && typeof subAgentTools === 'object') {
+        for (const tool of Object.values(subAgentTools)) {
+          const bg = (tool as any)?.background as ToolBackgroundConfig | undefined;
+          if (bg?.enabled === true) {
+            return { enabled: true, waitTimeoutMs: subAgentBgConfig?.waitTimeoutMs };
+          }
+        }
+      }
+    } catch {
+      // If anything fails (e.g., dynamic tools throw), skip background derivation
     }
-
-    // Default: delegate to this sub-agent as a background task
     return {
       enabled: true,
       waitTimeoutMs: subAgentBgConfig?.waitTimeoutMs,
@@ -4882,6 +4908,7 @@ export class Agent<
             backgroundTaskManager: this.#mastra?.backgroundTaskManager,
             agentBackgroundConfig: this.#backgroundTasks,
           }),
+      skipBgTaskWait: options._skipBgTaskWait,
     });
 
     const run = await executionWorkflow.createRun();
@@ -5508,6 +5535,319 @@ export class Agent<
     }
 
     return result.result;
+  }
+
+  /**
+   * Streams the agent's response and keeps the stream open until all
+   * background tasks dispatched during this turn (and any triggered by
+   * follow-up turns) complete. When a background task finishes, its tool
+   * result is injected into memory by the tool-call-step's `onResult` hook,
+   * and this method re-enters the agentic loop via `agent.stream([], ...)`
+   * so the LLM can process the result immediately — without waiting for a
+   * new user message.
+   *
+   * Invariants:
+   * - Only one inner LLM stream runs at a time (a completion arriving
+   *   mid-turn is queued and processed after the current turn ends).
+   * - When there are no running background tasks and no queued completions,
+   *   the outer stream closes.
+   * - If the agent has no memory configured, this falls through to a plain
+   *   `stream()` call since continuation requires memory.
+   *
+   * @example
+   * ```typescript
+   * const stream = await agent.streamUntilIdle('Research solana for me', {
+   *   memory: { thread: 't1', resource: 'u1' },
+   * });
+   *
+   * for await (const chunk of stream) {
+   *   // chunks from the initial turn AND any continuation turns
+   *   // triggered by background task completions flow through here
+   * }
+   * ```
+   */
+  async streamUntilIdle<OUTPUT = TOutput>(
+    messages: MessageListInput,
+    streamOptions?: AgentExecutionOptionsBase<any> & {
+      structuredOutput?: PublicStructuredOutputOptions<any>;
+      /** Close the outer stream after this many ms of idleness. Default: 5 minutes. */
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
+  ): Promise<MastraModelOutput<OUTPUT>> {
+    const bgManager = this.#mastra?.backgroundTaskManager;
+    const hasMemory = !!streamOptions?.memory || !!this.#memory;
+
+    const { maxIdleMs: _maxIdleMs, ...restStreamOptions } = streamOptions ?? {};
+
+    // Without a background task manager or memory, there's no continuation to
+    // orchestrate — fall through to a plain stream with no wrapping.
+    if (!bgManager || !hasMemory) {
+      return this.stream(messages, restStreamOptions as any) as Promise<MastraModelOutput<OUTPUT>>;
+    }
+
+    const agent = this;
+    const maxIdleMs = _maxIdleMs ?? 5 * 60_000;
+    const threadId =
+      typeof restStreamOptions?.memory?.thread === 'string'
+        ? restStreamOptions.memory.thread
+        : restStreamOptions?.memory?.thread?.id;
+    const resourceId = restStreamOptions?.memory?.resource;
+
+    // Continuation calls reuse the memory thread but drop one-shot hooks.
+    // `_skipBgTaskWait` prevents the inner loop from redundantly waiting for
+    // running bg tasks — this outer method already handles that.
+    //
+    // We also inject an ephemeral user prompt via `context` (built per-turn
+    // in `buildContinuationOpts` below) so the LLM has an explicit directive
+    // naming which tool-call IDs just completed. This stops it from
+    // re-processing tool results that were already handled on a prior
+    // continuation, and stops it from mimicking the prior assistant ack
+    // text (which tends to cause re-dispatch with gpt-4o-class models).
+    // `context` messages are visible to the LLM but NOT persisted to memory.
+    const baseContinuationOpts = {
+      ...(restStreamOptions ?? {}),
+      onFinish: undefined,
+      _skipBgTaskWait: true,
+    } as any;
+
+    const buildContinuationOpts = (completions: Array<Record<string, unknown>>) => {
+      const entries = completions
+        .map(chunk => {
+          const payload = (chunk as { payload?: Record<string, unknown> }).payload ?? {};
+          return {
+            toolCallId: payload.toolCallId as string | undefined,
+            toolName: payload.toolName as string | undefined,
+            type: (chunk as { type?: string }).type,
+          };
+        })
+        .filter(e => !!e.toolCallId);
+
+      const idList = entries
+        .map(e => (e.toolName ? `${e.toolCallId} (${e.toolName})` : e.toolCallId))
+        .join(', ');
+
+      const directive =
+        `Background task(s) you previously dispatched have completed. ` +
+        `Process ONLY these tool-call IDs (their results are now in the conversation): ${idList}. ` +
+        `Do NOT re-process earlier tool results that were already handled on a prior turn, ` +
+        `and do NOT call the same tool again — the result is already available. ` +
+        `Use these result(s) to answer the user's original question; if multiple completed, summarize all of them.`;
+
+      return {
+        ...baseContinuationOpts,
+        context: [
+          ...(restStreamOptions?.context ?? []),
+          { role: 'user' as const, content: directive },
+        ],
+      };
+    };
+
+    const initialStreamOpts = {
+      ...(restStreamOptions ?? {}),
+      _skipBgTaskWait: true,
+    } as any;
+
+    const runningTaskIds = new Set<string>();
+    const pendingCompletions: Array<Record<string, unknown>> = [];
+    let isProcessing = false;
+    let closed = false;
+    let idleTimer: ReturnType<typeof setTimeout> | undefined;
+    let outerController!: ReadableStreamDefaultController<any>;
+
+    const outerAbort = new AbortController();
+
+    const forceClose = () => {
+      if (closed) return;
+      closed = true;
+      if (idleTimer) clearTimeout(idleTimer);
+      outerAbort.abort();
+      try {
+        outerController.close();
+      } catch {
+        // already closed
+      }
+    };
+
+    // External abort fires → close the outer stream immediately, even if bg
+    // tasks are still running (they'll continue in the background — their
+    // results land in memory and will be picked up on the next turn).
+    streamOptions?.abortSignal?.addEventListener('abort', forceClose);
+
+    const tryClose = () => {
+      if (closed) return;
+      if (isProcessing) return;
+      if (runningTaskIds.size > 0) return;
+      if (pendingCompletions.length > 0) return;
+      forceClose();
+    };
+
+    const resetIdleTimer = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(forceClose, maxIdleMs);
+    };
+
+    // Pipe chunks from an inner stream into the outer, tracking any new
+    // background-task-started chunks so we know what to wait for.
+    const pipeInner = async (inner: ReadableStream<any>) => {
+      const reader = inner.getReader();
+      try {
+        while (true) {
+          if (outerAbort.signal.aborted) break;
+          const { done, value } = await reader.read();
+          if (done) break;
+          resetIdleTimer();
+          try {
+            outerController.enqueue(value);
+          } catch {
+            break;
+          }
+          if (value && typeof value === 'object' && (value as any).type === 'background-task-started') {
+            const taskId = (value as any).payload?.taskId;
+            if (taskId) runningTaskIds.add(taskId);
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    };
+
+    const processIfIdle = async () => {
+      if (isProcessing || closed || pendingCompletions.length === 0) return;
+      isProcessing = true;
+      try {
+        // Tool results are already in memory (onResult wrote them) — just
+        // re-invoke the LLM so it can process whatever's new. Snapshot the
+        // completions we're about to process so the continuation directive
+        // names exactly those tool-call IDs (not any that arrive mid-turn).
+        const batch = pendingCompletions.splice(0, pendingCompletions.length);
+        const inner = await (agent.stream as any)([], buildContinuationOpts(batch));
+        await pipeInner(inner.fullStream);
+      } catch (err) {
+        try {
+          outerController.error(err);
+        } catch {
+          // already closed
+        }
+      } finally {
+        isProcessing = false;
+        if (pendingCompletions.length > 0) {
+          void processIfIdle();
+        } else {
+          tryClose();
+        }
+      }
+    };
+
+    // --- Outer combined stream ---
+    const combinedStream = new ReadableStream<any>({
+      start(controller) {
+        outerController = controller;
+      },
+      cancel() {
+        closed = true;
+        outerAbort.abort();
+        if (idleTimer) clearTimeout(idleTimer);
+      },
+    });
+
+    // Subscribe to background task events — drives continuations.
+    const bgStream = bgManager.stream({
+      agentId: agent.id,
+      threadId,
+      resourceId,
+      abortSignal: outerAbort.signal,
+    });
+    const bgReader = bgStream.getReader();
+    const TERMINAL_BG_CHUNKS = new Set([
+      'background-task-completed',
+      'background-task-failed',
+      'background-task-cancelled',
+    ]);
+    void (async () => {
+      try {
+        while (true) {
+          if (outerAbort.signal.aborted) break;
+          const { done, value } = await bgReader.read();
+          if (done) break;
+          const chunk = value as { type?: string; payload?: Record<string, unknown> };
+          if (!chunk || typeof chunk !== 'object' || typeof chunk.type !== 'string') continue;
+
+          const taskId = (chunk.payload as { taskId?: string } | undefined)?.taskId;
+          resetIdleTimer();
+
+          // Forward bg chunks to the outer stream so consumers see task
+          // lifecycle events inline with agent chunks (started, progress,
+          // running, output, completed/failed/cancelled).
+          try {
+            outerController.enqueue(chunk);
+          } catch {
+            // outer closed
+            break;
+          }
+
+          // Drive the state machine from the chunk type.
+          if (!taskId) continue;
+          if (chunk.type === 'background-task-running') {
+            runningTaskIds.add(taskId);
+          } else if (TERMINAL_BG_CHUNKS.has(chunk.type)) {
+            runningTaskIds.delete(taskId);
+            pendingCompletions.push(chunk);
+            void processIfIdle();
+          }
+          // background-task-output / background-task-progress are just
+          // informational — keep the idle timer fresh (done above) but don't
+          // touch the running set or queue a continuation.
+        }
+      } catch {
+        // bg stream ended
+      } finally {
+        bgReader.releaseLock();
+      }
+    })();
+
+    // --- Initial turn ---
+    // We need the MastraModelOutput object to return, so run stream() and
+    // await the result. Its internal fullStream getter is what we consume
+    // to feed the combined stream.
+    isProcessing = true;
+    resetIdleTimer();
+    const first = (await agent.stream(messages, initialStreamOpts)) as MastraModelOutput<OUTPUT>;
+
+    // Kick off piping in the background so we can return the wrapped result
+    // immediately. The consumer can read from combinedStream while we're
+    // still piping.
+    void (async () => {
+      try {
+        await pipeInner(first.fullStream as ReadableStream<any>);
+      } catch (err) {
+        try {
+          outerController.error(err);
+        } catch {
+          // already closed
+        }
+      }
+      isProcessing = false;
+      if (pendingCompletions.length > 0) {
+        void processIfIdle();
+      } else {
+        tryClose();
+      }
+    })();
+
+    // Wrap the first turn's MastraModelOutput so `fullStream` returns our
+    // combined stream (initial + continuations) while `text`, `finishReason`,
+    // `toolCalls`, etc. still work — they resolve against the first turn's
+    // internal event buffer, which gets populated as we consume its fullStream.
+    return new Proxy(first, {
+      get(target, prop) {
+        if (prop === 'fullStream') return combinedStream;
+        // Read target's own property with `this === target` so any internal
+        // getters (e.g. `#getDelayedPromise`) don't recurse through the proxy
+        // and hit our overridden fullStream.
+        const value = Reflect.get(target, prop, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    }) as MastraModelOutput<OUTPUT>;
   }
 
   /**

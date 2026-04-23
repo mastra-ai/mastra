@@ -1,5 +1,6 @@
 import { CodeEditor, ToolsIcon } from '@mastra/playground-ui';
 import type { MastraUIMessage } from '@mastra/react';
+import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import { BadgeWrapper } from './badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
@@ -63,12 +64,18 @@ export const ToolBadge = ({
       icon={<ToolsIcon className="text-accent6" />}
       title={toolName}
       extraInfo={
-        metadata?.mode === 'network' && (
+        metadata?.mode === 'network' ? (
           <NetworkChoiceMetadataDialogTrigger
             selectionReason={selectionReason || ''}
             input={agentNetworkInput as string | Record<string, unknown> | undefined}
           />
-        )
+        ) : metadata?.backgroundTaskTaskId && metadata?.backgroundTaskStartedAt ? (
+          <BackgroundTaskMetadataDialogTrigger
+            backgroundTaskTaskId={metadata.backgroundTaskTaskId}
+            backgroundTaskStartedAt={metadata.backgroundTaskStartedAt}
+            backgroundTaskCompletedAt={metadata.backgroundTaskCompletedAt}
+          />
+        ) : null
       }
       initialCollapsed={!!!(toolApprovalMetadata ?? suspendPayload)}
     >
