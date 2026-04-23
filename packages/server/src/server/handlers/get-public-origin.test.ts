@@ -26,6 +26,7 @@ describe('getPublicOrigin — reverse proxy header resolution', () => {
   it('should use Host header when X-Forwarded-Host absent (AWS ALB)', () => {
     const headers = new Headers({
       host: 'example.com',
+      'x-forwarded-proto': 'https',
     });
     const request = new Request('http://example.com/some-path', { headers });
 
@@ -37,16 +38,19 @@ describe('getPublicOrigin — reverse proxy header resolution', () => {
       host: 'example.com',
       'x-forwarded-proto': 'http',
     });
-    const request = new Request('http://example.com/some-path', { headers });
+    const request = new Request('https://example.com/some-path', { headers });
 
     expect(getPublicOrigin(request)).toBe('http://example.com');
   });
 
-  it('should fall back to request.url when no headers present', () => {
-    const headers = new Headers();
-    const request = new Request('http://localhost:3000/some-path', { headers });
+  it('should fall back to request.url when Host is present but X-Forwarded-Proto is absent', () => {
+    const headers = new Headers({
+      host: 'example.com',
+    });
+    const request = new Request('http://example.com/some-path', { headers });
 
-    expect(getPublicOrigin(request)).toBe('http://localhost:3000');
+    // Host without X-Forwarded-Proto: fallback to request.url scheme
+    expect(getPublicOrigin(request)).toBe('http://example.com');
   });
 
   it('should preserve port in X-Forwarded-Host', () => {
@@ -84,7 +88,21 @@ describe('getPublicOrigin — reverse proxy header resolution', () => {
     });
     const request = new Request('http://example.com:8443/api/auth/sso/callback', { headers });
 
-    expect(getPublicOrigin(request)).toBe('https://example.com:8443');
+    // Host without X-Forwarded-Proto is ambiguous (could be direct HTTP or proxy without proto header)
+    // Fall back to request.url scheme
+    expect(getPublicOrigin(request)).toBe('http://example.com:8443');
+  });
+
+  it('should fall back to request.url when Host is present but X-Forwarded-Proto is absent', () => {
+    // AWS ALB with Preserve Host Header ON but no X-Forwarded-Proto header
+    // Proto comes from request.url, host from the header
+    const headers = new Headers({
+      host: 'example.com',
+    });
+    const request = new Request('https://internal-host/api/auth/sso/callback', { headers });
+
+    // Host without X-Forwarded-Proto: use proto from request.url + host header
+    expect(getPublicOrigin(request)).toBe('https://example.com');
   });
 
   it('should trim whitespace in comma-separated X-Forwarded-Host', () => {

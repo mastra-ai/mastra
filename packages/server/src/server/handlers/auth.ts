@@ -69,6 +69,13 @@ function getAuthProvider(mastra: any): MastraAuthProvider | null {
  * X-Forwarded-Host tells us the real public hostname.
  * Always uses https when behind a proxy — Knative's queue-proxy overwrites
  * X-Forwarded-Proto based on the internal HTTP connection, so it's unreliable.
+ *
+ * Priority:
+ * 1. X-Forwarded-Host (traditional reverse proxy) → always HTTPS
+ * 2. Host header with X-Forwarded-Proto (AWS ALB, some proxies) → respect proto
+ * 3. Host header alone → ambiguous; could be direct HTTP or proxy without proto header
+ *    Fallback to request.url to preserve the actual scheme
+ * 4. No headers → fallback to request.url
  */
 export function getPublicOrigin(request: Request): string {
   const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
@@ -78,7 +85,8 @@ export function getPublicOrigin(request: Request): string {
 
   const host = request.headers.get('host');
   if (host) {
-    const proto = request.headers.get('x-forwarded-proto') ?? 'https';
+    const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
+    const proto = forwardedProto || new URL(request.url).protocol.replace(':', '');
     return `${proto}://${host}`;
   }
 
