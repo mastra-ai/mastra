@@ -123,7 +123,6 @@
     "@mastra/core": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
     "@types/node": "22.19.15",
-    "@vercel/oidc": "^3.0.0",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.2.1",

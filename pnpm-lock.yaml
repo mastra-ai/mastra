@@ -2603,10 +2603,6 @@ importers:
         version: 5.9.3
 
   packages/_vendored/ai_v5:
-    dependencies:
-      '@vercel/oidc':
-        specifier: ^3.0.0
-        version: 3.2.0
     devDependencies:
       '@ai-sdk/gateway':
         specifier: 2.0.35
@@ -2668,9 +2664,6 @@ importers:
 
   packages/_vendored/ai_v6:
     dependencies:
-      '@vercel/oidc':
-        specifier: ^3.0.0
-        version: 3.2.0
       zod:
         specifier: ^3.25.76 || ^4.0.0
         version: 3.25.76
@@ -3084,9 +3077,6 @@ importers:
       '@standard-schema/spec':
         specifier: ^1.1.0
         version: 1.1.0
-      '@vercel/oidc':
-        specifier: ^3.0.0
-        version: 3.2.0
       ajv:
         specifier: ^8.18.0
         version: 8.18.0
@@ -3650,9 +3640,6 @@ importers:
 
   packages/fastembed:
     dependencies:
-      '@vercel/oidc':
-        specifier: ^3.0.0
-        version: 3.2.0
       fastembed:
         specifier: ^2.1.0
         version: 2.1.0
@@ -3949,9 +3936,6 @@ importers:
       '@mastra/schema-compat':
         specifier: workspace:*
         version: link:../schema-compat
-      '@vercel/oidc':
-        specifier: ^3.0.0
-        version: 3.2.0
       async-mutex:
         specifier: ^0.5.0
         version: 0.5.0
@@ -4663,9 +4647,6 @@ importers:
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
-      '@vercel/oidc':
-        specifier: ^3.0.0
-        version: 3.2.0
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.5(vitest@4.1.5)
