@@ -5773,9 +5773,7 @@ export class Agent<
         })
         .filter(e => !!e.toolCallId);
 
-      const idList = entries
-        .map(e => (e.toolName ? `${e.toolCallId} (${e.toolName})` : e.toolCallId))
-        .join(', ');
+      const idList = entries.map(e => (e.toolName ? `${e.toolCallId} (${e.toolName})` : e.toolCallId)).join(', ');
 
       const directive =
         `Background task(s) you previously dispatched have completed. ` +
@@ -5786,10 +5784,7 @@ export class Agent<
 
       return {
         ...baseContinuationOpts,
-        context: [
-          ...(restStreamOptions?.context ?? []),
-          { role: 'user' as const, content: directive },
-        ],
+        context: [...(restStreamOptions?.context ?? []), { role: 'user' as const, content: directive }],
       };
     };
 

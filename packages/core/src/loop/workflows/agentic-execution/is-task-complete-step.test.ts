@@ -67,10 +67,7 @@ describe('isTaskCompleteStep — working memory skip', () => {
   it('runs scorers when a non-working-memory tool is also called', async () => {
     const step = createIsTaskCompleteStep(baseParams() as any);
 
-    await executeStep(
-      step,
-      makeInput({ toolCalls: [{ toolName: 'updateWorkingMemory' }, { toolName: 'searchWeb' }] }),
-    );
+    await executeStep(step, makeInput({ toolCalls: [{ toolName: 'updateWorkingMemory' }, { toolName: 'searchWeb' }] }));
 
     expect(runScorersSpy).toHaveBeenCalled();
   });
