@@ -57,7 +57,13 @@
     "typescript": "catalog:"
   },
   "peerDependencies": {
+    "@vercel/oidc": "^3.0.0",
     "zod": "^3.25.76 || ^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@vercel/oidc": {
+      "optional": true
+    }
   },
   "homepage": "https://mastra.ai",
   "repository": {

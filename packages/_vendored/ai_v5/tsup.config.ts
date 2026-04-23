@@ -94,6 +94,7 @@ export default defineConfig({
   },
   metafile: true,
   sourcemap: true,
+  external: ['@vercel/oidc'],
   onSuccess: async () => {
     const { copyAIDtsFiles } = await import('./scripts/copy-ai-dts-files.js');
     const dtsFiles = await copyAIDtsFiles();
@@ -114,9 +115,6 @@ export default defineConfig({
 
       await fixExportBugInDtsFile(dtsFile);
     }
-  },
-  banner: {
-    js: `import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);`,
   },
   env: {
     NODE_ENV: 'production',
