@@ -766,7 +766,8 @@ const response = await agent.generate('Help me organize my day', {
             name: 'savePerStep',
             type: 'boolean',
             isOptional: true,
-            description: 'Save messages incrementally after each generation step completes (default: false).',
+            description:
+              'Save messages incrementally after each generation step completes (default: false). Disabled internally when observational memory is enabled.',
           },
           {
             name: 'providerOptions',
