@@ -8,6 +8,18 @@ import { ZodError } from 'zod';
 import { MASTRA, MASTRA_OPTIONS } from '../constants';
 import type { MastraModuleOptions } from '../mastra.module';
 
+function isZodErrorLike(error: unknown): error is ZodError {
+  return (
+    error instanceof ZodError ||
+    (typeof error === 'object' &&
+      error !== null &&
+      'name' in error &&
+      (error as { name?: unknown }).name === 'ZodError' &&
+      'issues' in error &&
+      Array.isArray((error as { issues?: unknown }).issues))
+  );
+}
+
 export interface RouteMatch {
   route: ServerRoute;
   pathParams: Record<string, string>;
@@ -167,7 +179,7 @@ export class RouteHandlerService {
       try {
         validatedPathParams = await route.pathParamSchema.parseAsync(params.pathParams);
       } catch (error) {
-        if (error instanceof ZodError) {
+        if (isZodErrorLike(error)) {
           throw new ValidationError('Invalid path parameters', error);
         }
         throw error;
@@ -179,7 +191,7 @@ export class RouteHandlerService {
       try {
         validatedQueryParams = await route.queryParamSchema.parseAsync(params.queryParams);
       } catch (error) {
-        if (error instanceof ZodError) {
+        if (isZodErrorLike(error)) {
           throw new ValidationError('Invalid query parameters', error);
         }
         throw error;
@@ -191,7 +203,7 @@ export class RouteHandlerService {
       try {
         validatedBody = await route.bodySchema.parseAsync(params.body);
       } catch (error) {
-        if (error instanceof ZodError) {
+        if (isZodErrorLike(error)) {
           throw new ValidationError('Invalid request body', error);
         }
         throw error;

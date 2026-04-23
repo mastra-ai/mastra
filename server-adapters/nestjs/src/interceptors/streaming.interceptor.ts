@@ -61,6 +61,9 @@ export class StreamingInterceptor implements NestInterceptor {
           case 'mcp-sse':
             return from(this.handleMcpSse(context, handlerResult));
           case 'json':
+            if (handlerResult.data === null) {
+              return from(this.handleJsonNull(context));
+            }
             return of(handlerResult.data);
           default:
             return of(result);
@@ -96,6 +99,14 @@ export class StreamingInterceptor implements NestInterceptor {
     }
 
     return responseType;
+  }
+
+  private async handleJsonNull(context: ExecutionContext): Promise<void> {
+    const response = context.switchToHttp().getResponse<Response>();
+    if (!response.headersSent) {
+      response.type('application/json');
+      response.send('null');
+    }
   }
 
   /**

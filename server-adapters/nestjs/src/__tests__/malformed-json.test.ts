@@ -70,7 +70,7 @@ describe('Malformed JSON Body Handling', () => {
       expect(response.status).toBe(201);
     });
 
-    it('should handle empty body gracefully', async () => {
+    it('should handle an empty JSON object body gracefully', async () => {
       const response = await executeExpressRequest(expressApp, {
         method: 'POST',
         path: '/test',

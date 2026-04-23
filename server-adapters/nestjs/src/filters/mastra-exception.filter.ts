@@ -13,6 +13,18 @@ interface NormalizedError {
   issues?: Array<{ field?: string; path?: string[]; message: string }>;
 }
 
+function isZodErrorLike(exception: unknown): exception is ZodError {
+  return (
+    exception instanceof ZodError ||
+    (typeof exception === 'object' &&
+      exception !== null &&
+      'name' in exception &&
+      (exception as { name?: unknown }).name === 'ZodError' &&
+      'issues' in exception &&
+      Array.isArray((exception as { issues?: unknown }).issues))
+  );
+}
+
 /**
  * Global exception filter that normalizes all errors to a consistent format.
  *
@@ -109,7 +121,7 @@ export class MastraExceptionFilter implements ExceptionFilter {
     }
 
     // Zod validation error
-    if (exception instanceof ZodError) {
+    if (isZodErrorLike(exception)) {
       const formatted = formatZodError(exception, 'request');
       return {
         status: HttpStatus.BAD_REQUEST,
@@ -193,10 +205,16 @@ export class MastraExceptionFilter implements ExceptionFilter {
         return 'FORBIDDEN';
       case 404:
         return 'NOT_FOUND';
+      case 405:
+        return 'METHOD_NOT_ALLOWED';
+      case 408:
+        return 'REQUEST_TIMEOUT';
       case 409:
         return 'CONFLICT';
       case 413:
         return 'PAYLOAD_TOO_LARGE';
+      case 422:
+        return 'UNPROCESSABLE_ENTITY';
       case 429:
         return 'RATE_LIMIT_EXCEEDED';
       case 500:
