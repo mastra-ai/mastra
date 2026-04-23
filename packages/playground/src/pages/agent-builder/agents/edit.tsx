@@ -84,7 +84,7 @@ export default function AgentBuilderAgentEdit() {
         </div>
         <div className="flex flex-1 min-h-0">
           <div className="flex w-[40ch] shrink-0 flex-col bg-surface1 pt-4 pb-6 px-6">
-            <MastraReactProvider baseUrl="http://localhost:4112">
+            <MastraReactProvider baseUrl="http://localhost:4111">
               <ConversationPanel
                 initialUserMessage={state?.userMessage}
                 features={features}

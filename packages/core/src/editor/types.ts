@@ -182,6 +182,7 @@ export interface IEditorAgentNamespace {
       newName?: string;
       metadata?: Record<string, unknown>;
       authorId?: string;
+      visibility?: 'private' | 'public';
       requestContext?: RequestContext;
     },
   ): Promise<StorageResolvedAgentType>;

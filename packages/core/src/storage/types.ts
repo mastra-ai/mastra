@@ -437,6 +437,18 @@ export interface StorageAgentSnapshotType {
  * Thin agent record type containing only metadata fields.
  * All configuration lives in version snapshots (StorageAgentSnapshotType).
  */
+/**
+ * Visibility of a stored agent.
+ * - `private`: only the owner (or admins) can read the record.
+ * - `public`: any authenticated caller with `agents:read` can read the record.
+ */
+export type StorageAgentVisibility = 'private' | 'public';
+
+export const STORAGE_AGENT_VISIBILITY_VALUES = [
+  'private',
+  'public',
+] as const satisfies readonly StorageAgentVisibility[];
+
 export interface StorageAgentType {
   /** Unique, immutable identifier */
   id: string;
@@ -446,6 +458,12 @@ export interface StorageAgentType {
   activeVersionId?: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /**
+   * Visibility of the stored agent. `private` limits access to the owner / admins;
+   * `public` allows any authenticated caller with `agents:read` to read.
+   * May be undefined for legacy records created before visibility was introduced.
+   */
+  visibility?: StorageAgentVisibility;
   /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
   createdAt: Date;
@@ -471,6 +489,8 @@ export type StorageCreateAgentInput = {
   id: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /** Visibility of the stored agent (defaults to 'private' when an authorId is set) */
+  visibility?: StorageAgentVisibility;
   /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
 } & StorageAgentSnapshotType;
@@ -485,6 +505,8 @@ export type StorageUpdateAgentInput = {
   id: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /** Visibility of the stored agent */
+  visibility?: StorageAgentVisibility;
   /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
   /** FK to agent_versions.id - the currently active version */
@@ -513,6 +535,10 @@ export type StorageListAgentsInput = {
    * Only agents with matching authorId will be returned.
    */
   authorId?: string;
+  /**
+   * Filter agents by visibility (exact match).
+   */
+  visibility?: StorageAgentVisibility;
   /**
    * Filter agents by metadata key-value pairs.
    * All specified key-value pairs must match (AND logic).

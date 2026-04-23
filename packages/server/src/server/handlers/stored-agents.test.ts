@@ -452,7 +452,6 @@ describe('Stored Agents Handlers', () => {
         description: 'A newly created agent',
         instructions: 'Be creative',
         model: { name: 'gpt-4', provider: 'openai' },
-        authorId: 'user123',
         metadata: { created: 'test' },
         tools: ['tool1'],
         defaultOptions: {
@@ -471,6 +470,7 @@ describe('Stored Agents Handlers', () => {
         agent: expect.objectContaining({
           id: 'new-agent',
           name: 'New Agent',
+          visibility: 'private',
         }),
       });
     });

@@ -326,7 +326,18 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     return !excludePaths.some((excluded: string) => path === excluded || path.startsWith(excluded + '/'));
   }
 
-  private static readonly RESERVED_CONTEXT_KEYS = new Set([MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY]);
+  // Keys that must never be populated from client-supplied request bodies or params.
+  // These are authoritative values set by the auth middleware from the verified token
+  // (user, userPermissions, userRoles) or server-derived (MASTRA_RESOURCE_ID_KEY,
+  // MASTRA_THREAD_ID_KEY). Accepting them from the body would let a client spoof
+  // identity or permissions on routes without auth/RBAC configured.
+  private static readonly RESERVED_CONTEXT_KEYS = new Set([
+    MASTRA_RESOURCE_ID_KEY,
+    MASTRA_THREAD_ID_KEY,
+    'user',
+    'userPermissions',
+    'userRoles',
+  ]);
 
   protected mergeRequestContext({
     paramsRequestContext,
