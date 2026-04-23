@@ -99,16 +99,54 @@ async function processOutputStream<OUTPUT = undefined>({
   const collectedChunks: CollectedChunk[] = [];
 
   for await (const chunk of outputStream._getBaseStream()) {
-    // Stop processing chunks if the abort signal has fired.
-    // Some LLM providers continue streaming data after abort (e.g. due to buffering),
-    // so we must check the signal on each iteration to avoid accumulating the full
-    // response into the messageList after the caller has disconnected.
-    if (options?.abortSignal?.aborted) {
-      break;
-    }
-
     if (!chunk) {
       continue;
+    }
+
+    // Stop processing outward-facing chunks once the abort signal has fired.
+    // Some LLM providers continue streaming data after abort (e.g. due to buffering),
+    // so we check the signal on each iteration to avoid accumulating the full
+    // response into the messageList after the caller has disconnected.
+    // We still absorb already-buffered metadata/text into runState so onAbort can
+    // report partial text that was generated before cancellation.
+    if (options?.abortSignal?.aborted) {
+      switch (chunk.type) {
+        case 'response-metadata':
+          runState.setState({
+            responseMetadata: {
+              id: chunk.payload.id,
+              timestamp: chunk.payload.timestamp,
+              modelId: chunk.payload.modelId,
+              headers: chunk.payload.headers,
+            },
+          });
+          continue;
+        case 'text-start':
+          if (chunk.payload.providerMetadata) {
+            runState.setState({
+              providerOptions: chunk.payload.providerMetadata,
+            });
+          }
+          continue;
+        case 'text-delta': {
+          const textDeltasFromState = runState.state.textDeltas;
+          textDeltasFromState.push(chunk.payload.text);
+          runState.setState({
+            textDeltas: textDeltasFromState,
+            isStreaming: true,
+          });
+          continue;
+        }
+        case 'error':
+          if (isAbortError(chunk.payload.error)) {
+            break;
+          }
+          break;
+        default:
+          break;
+      }
+
+      break;
     }
 
     if (!transportSet && transportRef && transportResolver) {
@@ -897,8 +935,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             }
 
             if (isAbortError(error) && options?.abortSignal?.aborted) {
+              const partialText = runState.state.textDeltas?.join('') ?? '';
               await options?.onAbort?.({
                 steps: inputData?.output?.steps ?? [],
+                text: partialText,
               });
 
               safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
@@ -988,8 +1028,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // The model may not have thrown an AbortError (e.g. it continued streaming despite abort),
           // so this handles the case where processOutputStream completed normally via `break`.
           if (options?.abortSignal?.aborted) {
+            const partialText = runState.state.textDeltas?.join('') ?? '';
             await options?.onAbort?.({
               steps: inputData?.output?.steps ?? [],
+              text: partialText,
             });
 
             safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });

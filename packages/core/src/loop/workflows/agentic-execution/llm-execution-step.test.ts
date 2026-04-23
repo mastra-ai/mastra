@@ -846,4 +846,157 @@ describe('createLLMExecutionStep gateway provider tools', () => {
       },
     });
   });
+
+  describe('onAbort callback', () => {
+    it('receives partial text accumulated before abort signal fires', async () => {
+      const abortController = new AbortController();
+      const onAbortMock = vi.fn();
+      let pullCalls = 0;
+
+      const llmExecutionStep = createLLMExecutionStep({
+        agentId: 'test-agent',
+        messageId: 'msg-0',
+        runId: 'test-run',
+        startTimestamp: Date.now(),
+        methodType: 'stream',
+        controller,
+        outputWriter: vi.fn(),
+        messageList,
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: {
+              specificationVersion: 'v2' as const,
+              provider: 'mock-provider',
+              modelId: 'mock-model-id',
+              supportedUrls: {},
+              doGenerate: vi.fn(),
+              doStream: vi.fn(async () => ({
+                stream: new ReadableStream({
+                  pull(ctrl) {
+                    switch (pullCalls++) {
+                      case 0:
+                        ctrl.enqueue({
+                          type: 'response-metadata',
+                          id: 'resp-1',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(0),
+                        });
+                        break;
+                      case 1:
+                        ctrl.enqueue({ type: 'text-start', id: 'text-1' });
+                        break;
+                      case 2:
+                        ctrl.enqueue({ type: 'text-delta', id: 'text-1', delta: 'Hello ' });
+                        break;
+                      case 3:
+                        ctrl.enqueue({ type: 'text-delta', id: 'text-1', delta: 'world' });
+                        break;
+                      case 4:
+                        abortController.abort();
+                        ctrl.error(new DOMException('The user aborted a request.', 'AbortError'));
+                        break;
+                    }
+                  },
+                }),
+                request: {},
+                response: { headers: undefined },
+                warnings: [],
+              })),
+            } as any,
+          },
+        ],
+        tools: {},
+        options: { abortSignal: abortController.signal, onAbort: onAbortMock },
+        streamState: { serialize: vi.fn(), deserialize: vi.fn() },
+        _internal: { generateId: () => 'generated-id' },
+        logger: { error: vi.fn(), warn: vi.fn(), debug: vi.fn() } as any,
+      } as unknown as OuterLLMRun<{}>);
+
+      const input = createIterationInput();
+      input.stepResult.isContinued = false;
+
+      await llmExecutionStep.execute(createExecuteParams(input));
+
+      expect(onAbortMock).toHaveBeenCalledOnce();
+      expect(onAbortMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: 'Hello world',
+          steps: [],
+        }),
+      );
+    });
+
+    it('receives empty text when stream aborts before any text-delta', async () => {
+      const abortController = new AbortController();
+      const onAbortMock = vi.fn();
+      let pullCalls = 0;
+
+      const llmExecutionStep = createLLMExecutionStep({
+        agentId: 'test-agent',
+        messageId: 'msg-0',
+        runId: 'test-run',
+        startTimestamp: Date.now(),
+        methodType: 'stream',
+        controller,
+        outputWriter: vi.fn(),
+        messageList,
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: {
+              specificationVersion: 'v2' as const,
+              provider: 'mock-provider',
+              modelId: 'mock-model-id',
+              supportedUrls: {},
+              doGenerate: vi.fn(),
+              doStream: vi.fn(async () => ({
+                stream: new ReadableStream({
+                  pull(ctrl) {
+                    switch (pullCalls++) {
+                      case 0:
+                        ctrl.enqueue({
+                          type: 'response-metadata',
+                          id: 'resp-1',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(0),
+                        });
+                        break;
+                      case 1:
+                        abortController.abort();
+                        ctrl.error(new DOMException('The user aborted a request.', 'AbortError'));
+                        break;
+                    }
+                  },
+                }),
+                request: {},
+                response: { headers: undefined },
+                warnings: [],
+              })),
+            } as any,
+          },
+        ],
+        tools: {},
+        options: { abortSignal: abortController.signal, onAbort: onAbortMock },
+        streamState: { serialize: vi.fn(), deserialize: vi.fn() },
+        _internal: { generateId: () => 'generated-id' },
+        logger: { error: vi.fn(), warn: vi.fn(), debug: vi.fn() } as any,
+      } as unknown as OuterLLMRun<{}>);
+
+      const input = createIterationInput();
+      input.stepResult.isContinued = false;
+
+      await llmExecutionStep.execute(createExecuteParams(input));
+
+      expect(onAbortMock).toHaveBeenCalledOnce();
+      expect(onAbortMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: '',
+          steps: [],
+        }),
+      );
+    });
+  });
 });

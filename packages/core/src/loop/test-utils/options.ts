@@ -8112,6 +8112,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           [
             {
               "steps": [],
+              "text": "Hello",
             },
           ]
         `);
@@ -8201,7 +8202,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 },
                 "output": {
                   "steps": [],
-                  "text": "",
+                  "text": "Hello",
                   "toolCalls": [],
                   "usage": {
                     "inputTokens": 0,
@@ -8815,7 +8816,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 },
                 "output": {
                   "steps": [],
-                  "text": "",
+                  "text": "Hello",
                   "toolCalls": [],
                   "usage": {
                     "inputTokens": 3,
