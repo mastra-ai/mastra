@@ -171,6 +171,43 @@ Line 3`;
       });
     });
 
+    it('should call createIndex once before the first upsert with the embedding dimension', async () => {
+      const mockCreateIndex = vi.fn(async () => {});
+      const store: any = {
+        upsert: vi.fn(async () => {}),
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+        createIndex: mockCreateIndex,
+      };
+      const localEngine = new SearchEngine({
+        vector: { vectorStore: store, embedder: mockEmbedder, indexName: 'test-index' },
+      });
+
+      await localEngine.index({ id: 'doc1', content: 'Hello world' });
+      await localEngine.index({ id: 'doc2', content: 'Another doc' });
+
+      expect(mockCreateIndex).toHaveBeenCalledTimes(1);
+      expect(mockCreateIndex).toHaveBeenCalledWith({ indexName: 'test-index', dimension: 3 });
+      expect(store.upsert).toHaveBeenCalledTimes(2);
+    });
+
+    it('should still upsert when createIndex throws (index already exists)', async () => {
+      const store: any = {
+        upsert: vi.fn(async () => {}),
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+        createIndex: vi.fn(async () => {
+          throw new Error('index already exists');
+        }),
+      };
+      const localEngine = new SearchEngine({
+        vector: { vectorStore: store, embedder: mockEmbedder, indexName: 'test-index' },
+      });
+
+      await expect(localEngine.index({ id: 'doc1', content: 'Hello world' })).resolves.toBeUndefined();
+      expect(store.upsert).toHaveBeenCalledTimes(1);
+    });
+
     it('should search vector store', async () => {
       mockVectorStore.query.mockResolvedValue([
         { id: 'doc1', score: 0.95, metadata: { id: 'doc1', text: 'Hello world' } },

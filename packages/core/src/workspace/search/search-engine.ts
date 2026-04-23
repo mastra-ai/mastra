@@ -231,6 +231,9 @@ export class SearchEngine {
   /** Whether vector index has been built (for lazy mode) */
   #vectorIndexBuilt: boolean = false;
 
+  /** Whether createIndex has been attempted on the vector store */
+  #vectorIndexReady: boolean = false;
+
   constructor(config: SearchEngineConfig = {}) {
     // Initialize BM25 if configured
     if (config.bm25 !== undefined) {
@@ -483,6 +486,17 @@ export class SearchEngine {
     const { vectorStore, embedder, indexName } = this.#vectorConfig;
 
     const embedding = await embedder(doc.content);
+
+    if (!this.#vectorIndexReady) {
+      // Some backends (e.g. LibSQLVector) require createIndex before upsert.
+      // createIndex is expected to be idempotent; failures are surfaced via upsert.
+      try {
+        await vectorStore.createIndex({ indexName, dimension: embedding.length });
+      } catch {
+        // Already exists or not required by this backend — upsert will surface any real issue.
+      }
+      this.#vectorIndexReady = true;
+    }
 
     await vectorStore.upsert({
       indexName,
