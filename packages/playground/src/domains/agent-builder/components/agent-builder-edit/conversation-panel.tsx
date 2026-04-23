@@ -1,9 +1,9 @@
-import { IconButton, Textarea, Txt, cn } from '@mastra/playground-ui';
-import type { MastraUIMessage } from '@mastra/react';
+import { IconButton, Textarea, Txt } from '@mastra/playground-ui';
 import { useChat } from '@mastra/react';
 import { ArrowLeftIcon, ArrowUpIcon } from 'lucide-react';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { MessageRow } from '../chat-primitives/messages';
 
 interface ConversationPanelProps {
   initialUserMessage?: string;
@@ -104,28 +104,6 @@ export const ConversationPanel = ({ initialUserMessage }: ConversationPanelProps
           </div>
         </div>
       </form>
-    </div>
-  );
-};
-
-const MessageRow = ({ message }: { message: MastraUIMessage }) => {
-  const isUser = message.role === 'user';
-
-  if (isUser) {
-    return (
-      <div className="rounded-md bg-surface3 px-3 py-2">
-        <Txt variant="ui-sm" className="whitespace-pre-wrap leading-relaxed text-neutral6">
-          {JSON.stringify(message.parts)}
-        </Txt>
-      </div>
-    );
-  }
-
-  return (
-    <div className="px-1">
-      <Txt variant="ui-sm" className={cn('whitespace-pre-wrap leading-relaxed text-neutral4')}>
-        {JSON.stringify(message.parts)}
-      </Txt>
     </div>
   );
 };
