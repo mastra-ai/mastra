@@ -92,9 +92,9 @@ const workspace = new Workspace({
   lsp: {
     diagnosticTimeout: 4000,
     initTimeout: 8000,
-    disableServers: ['pyright'],
+    disableServers: ['eslint'],
     binaryOverrides: {
-      typescript: '/custom/path/to/typescript-language-server',
+      typescript: '/custom/path/to/typescript-language-server --stdio',
     },
     searchPaths: ['/opt/homebrew/bin'],
   },
@@ -140,7 +140,7 @@ Each custom server definition requires these fields:
 | `id` | Unique identifier for the server |
 | `name` | Human-readable name shown in logs |
 | `languageIds` | Language Server Protocol (LSP) language identifiers this server handles |
-| `extensions` | File extensions (including the dot) that map to this server's language |
+| `extensions` | File extensions (including the dot) that map to this server. Each extension resolves to the first entry in `languageIds` |
 | `markers` | Files or directories that identify the project root (e.g. `composer.json`, `Gemfile`) |
 | `command` | Full command string to start the server |
 
