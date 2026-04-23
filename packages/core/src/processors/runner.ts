@@ -99,10 +99,11 @@ export class ProcessorState<OUTPUT = undefined> {
 
   /** Track outgoing chunk (after processor transformation) */
   addOutputPart(part: ChunkType<OUTPUT> | null | undefined): void {
-    if (!part) return;
+    if (part === undefined) return;
+
     this.outputChunkCount++;
-    // Extract text from text-delta chunks for accumulated text
-    if (part.type === 'text-delta') {
+
+    if (part && part.type === 'text-delta') {
       this.outputAccumulatedText += part.payload.text;
     }
   }
@@ -561,7 +562,10 @@ export class ProcessorRunner {
       for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
         // Handle workflows for stream processing
         if (isProcessorWorkflow(processorOrWorkflow)) {
-          if (!processedPart) continue;
+          if (processedPart === undefined) continue;
+          if (processedPart === null) {
+            continue;
+          }
 
           // Get or create state for this workflow
           const workflowId = processorOrWorkflow.id;
@@ -613,7 +617,11 @@ export class ProcessorRunner {
 
         const processor = processorOrWorkflow;
         try {
-          if (processor.processOutputStream && processedPart) {
+          if (processor.processOutputStream && processedPart !== undefined) {
+            if (processedPart === undefined) continue;
+            if (processedPart === null) {
+              continue;
+            }
             // Get or create state for this processor
             let state = processorStates.get(processor.id);
             if (!state) {
@@ -760,8 +768,7 @@ export class ProcessorRunner {
               });
               controller.close();
               break;
-            } else if (processedPart !== null) {
-              // Send processed part only if it's not null (which indicates don't emit)
+            } else if (processedPart !== null && processedPart !== undefined) {
               controller.enqueue(processedPart);
             }
             // If processedPart is null, don't emit anything for this part
@@ -883,40 +890,22 @@ export class ProcessorRunner {
             processableMessages = messageList.get.input.db();
           }
         } else if (this.isProcessInputResultWithSystemMessages(result)) {
-          // Processor returned { messages, systemMessages } - handle both
           mutations = messageList.stopRecording();
 
-          // Replace system messages with the modified ones
           messageList.replaceAllSystemMessages(result.systemMessages);
 
-          // Handle regular messages
-          const regularMessages = result.messages;
-          if (regularMessages) {
-            const deletedIds = inputIds.filter(i => !regularMessages.some(m => m.id === i));
-            if (deletedIds.length) {
-              messageList.removeByIds(deletedIds);
-            }
+          // delete removed messages
+          const deletedIds = inputIds.filter(i => !result.messages.some(m => m.id === i));
+          if (deletedIds.length) {
+            messageList.removeByIds(deletedIds);
+          }
 
-            // Separate any new system messages from other messages (backward compat)
-            const newSystemMessages = regularMessages.filter(m => m.role === 'system');
-            const nonSystemMessages = regularMessages.filter(m => m.role !== 'system');
+          // ONLY non-system messages
+          const nonSystemMessages = result.messages.filter(m => m.role !== 'system');
 
-            // Add any new system messages from the messages array
-            for (const sysMsg of newSystemMessages) {
-              const systemText =
-                (sysMsg.content.content as string | undefined) ??
-                sysMsg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
-                '';
-              messageList.addSystem(systemText);
-            }
-
-            // Add non-system messages normally
-            if (nonSystemMessages.length > 0) {
-              for (const message of nonSystemMessages) {
-                messageList.removeByIds([message.id]);
-                messageList.add(message, check.getSource(message) || 'input');
-              }
-            }
+          for (const message of nonSystemMessages) {
+            messageList.removeByIds([message.id]);
+            messageList.add(message, check.getSource(message) || 'input');
           }
 
           processableMessages = messageList.get.input.db();

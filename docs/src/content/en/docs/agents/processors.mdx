@@ -229,6 +229,35 @@ export class StreamFilter implements Processor {
 
 To also receive custom `data-*` chunks emitted by tools via `writer.custom()`, set `processDataParts = true` on your processor. This lets you inspect, modify, or block tool-emitted data chunks before they reach the client.
 
+### processOutputStream behavior
+
+The return value of `processOutputStream` controls how chunks are handled:
+
+- `return part` - emits the chunk
+- `return null` - suppresses the chunk (nothing is emitted)
+- `return undefined` - skips processing (no emit, continue pipeline)
+
+#### Using writer with suppression
+
+You can inject custom output while suppressing the original chunk:
+
+```ts
+export async function processOutputStream({ part, writer }) {
+  if (part.type === 'tool-call') {
+    await writer?.custom({
+      type: 'text-delta',
+      payload: { text: '\n*Checking weather...*\n' },
+    })
+
+    return null
+  }
+
+  return part
+}
+```
+
+Returning `null` after `writer.custom(...)` does not stop the stream. Processing continues normally.
+
 ### Validate each response
 
 The `processOutputStep()` method runs after each LLM step, allowing you to validate the response and optionally request a retry:

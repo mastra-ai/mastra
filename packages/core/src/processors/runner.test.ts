@@ -717,6 +717,72 @@ describe('ProcessorRunner', () => {
       expect(result.part?.type === 'text-delta' ? result.part?.payload.text : '').toBe('original text');
       expect(result.blocked).toBe(false);
     });
+
+    it('should ignore undefined output from processor', async () => {
+      const outputProcessors: Processor[] = [
+        {
+          id: 'undefined-processor',
+          processOutputStream: async () => {
+            return undefined; // simulate undefined return
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const processorStates = new Map();
+
+      const result = await runner.processPart(
+        {
+          type: 'text-delta',
+          payload: { text: 'hello', id: '1' },
+          runId: '1',
+          from: ChunkFrom.AGENT,
+        },
+        processorStates,
+      );
+
+      expect(result.part).toBeUndefined();
+      expect(result.blocked).toBe(false);
+    });
+
+    it('should suppress null output from processor', async () => {
+      const outputProcessors: Processor[] = [
+        {
+          id: 'null-processor',
+          processOutputStream: async () => {
+            return null;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const processorStates = new Map();
+
+      const result = await runner.processPart(
+        {
+          type: 'text-delta',
+          payload: { text: 'hello', id: '1' },
+          runId: '1',
+          from: ChunkFrom.AGENT,
+        },
+        processorStates,
+      );
+
+      expect(result.part).toBe(null);
+      expect(result.blocked).toBe(false);
+    });
   });
 
   describe('Stateful Stream Processing', () => {
@@ -1080,6 +1146,51 @@ describe('ProcessorRunner', () => {
       expect(chunks[0]).toEqual({ type: 'text-delta', payload: { text: 'HELLO' } });
       expect(chunks[1]).toEqual({ type: 'tool-call', toolCallId: '123' });
       expect(chunks[2]).toEqual({ type: 'finish' });
+    });
+
+    it('should not emit null chunks into stream', async () => {
+      const outputProcessors: Processor[] = [
+        {
+          id: 'null-filter',
+          processOutputStream: async ({ part }) => {
+            if (part.type === 'text-delta') {
+              return null; // filter everything
+            }
+            return part;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const mockStream = {
+        fullStream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'text-delta', payload: { text: 'hello' } });
+            controller.enqueue({ type: 'finish' });
+            controller.close();
+          },
+        }),
+      };
+
+      const processedStream = await runner.runOutputProcessorsForStream(mockStream as any);
+      const reader = processedStream.getReader();
+
+      const chunks: ChunkType[] = [];
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+
+      // Only finish should remain
+      expect(chunks).toEqual([{ type: 'finish' }]);
     });
   });
 
@@ -2313,6 +2424,158 @@ describe('ProcessorRunner', () => {
       // Should swallow the error and return retry: false
       expect(result).toEqual({ retry: false });
       expect(mockLogger.error).toHaveBeenCalled();
+    });
+  });
+
+  describe('Missing edge cases (final coverage)', () => {
+    it('should throw if processInput throws an error', async () => {
+      const inputProcessors: Processor[] = [
+        {
+          id: 'error-processor',
+          processInput: async () => {
+            throw new Error('boom');
+          },
+        },
+      ];
+
+      const runner = new ProcessorRunner({
+        inputProcessors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('test')], 'user');
+
+      await expect(runner.runInputProcessors(messageList)).rejects.toThrow('boom');
+    });
+
+    it('should return original messages when no input processors', async () => {
+      const runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('hello')], 'user');
+
+      const result = await runner.runInputProcessors(messageList);
+      const messages = await result.get.all.prompt();
+
+      expect(messages).toHaveLength(1);
+    });
+
+    it('should stop at first abort even if multiple processors abort', async () => {
+      const processors: Processor[] = [
+        {
+          id: 'p1',
+          processInput: async ({ abort }) => {
+            abort('first');
+            return [];
+          },
+        },
+        {
+          id: 'p2',
+          processInput: async ({ abort }) => {
+            abort('second');
+            return [];
+          },
+        },
+      ];
+
+      const runner = new ProcessorRunner({
+        inputProcessors: processors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('test')], 'user');
+
+      await expect(runner.runInputProcessors(messageList)).rejects.toThrow('first');
+    });
+
+    it('should correctly merge messages and systemMessages when both are returned', async () => {
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.addSystem('original system');
+      messageList.add([createMessage('hello')], 'input');
+
+      const processors: Processor[] = [
+        {
+          id: 'mixed',
+          processInput: async ({ messages, systemMessages }) => {
+            return {
+              messages: [...messages, createMessage('new user')],
+              systemMessages: [
+                ...(systemMessages || []),
+                {
+                  role: 'system',
+                  content: {
+                    format: 2,
+                    parts: [{ type: 'text', text: 'added system' }],
+                  },
+                  id: `msg-${Math.random()}`,
+                  createdAt: new Date(),
+                  threadId: 'test-thread',
+                },
+              ],
+            } as any;
+          },
+        },
+      ];
+
+      const runner = new ProcessorRunner({
+        inputProcessors: processors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const result = await runner.runInputProcessors(messageList);
+      const all = await result.get.all.aiV5.prompt();
+
+      const systemMessages = all.filter(m => m.role === 'system');
+      expect(systemMessages.length).toBeGreaterThan(0);
+    });
+
+    it('should maintain correct order with async processors', async () => {
+      const order: string[] = [];
+
+      const processors: Processor[] = [
+        {
+          id: 'p1',
+          processInput: async ({ messages }) => {
+            await new Promise(r => setTimeout(r, 20));
+            order.push('p1');
+            return messages;
+          },
+        },
+        {
+          id: 'p2',
+          processInput: async ({ messages }) => {
+            order.push('p2');
+            return messages;
+          },
+        },
+      ];
+
+      const runner = new ProcessorRunner({
+        inputProcessors: processors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('test')], 'user');
+
+      await runner.runInputProcessors(messageList);
+
+      expect(order).toEqual(['p1', 'p2']);
     });
   });
 });
