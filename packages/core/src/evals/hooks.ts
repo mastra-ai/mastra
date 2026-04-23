@@ -57,7 +57,13 @@ export function runScorer({
   // are skipped to keep the payload lightweight and safe.
   const safeContext: Record<string, any> = {};
   if (requestContext) {
-    const flatten = (obj: Record<string, unknown>, prefix?: string) => {
+    const MAX_DEPTH = 8;
+    const visited = new WeakSet<object>();
+    const flatten = (obj: Record<string, unknown>, prefix?: string, depth = 0) => {
+      if (depth > MAX_DEPTH) return;
+      if (visited.has(obj)) return;
+      visited.add(obj);
+
       const entries: Iterable<[string, unknown]> =
         typeof (obj as any).entries === 'function' ? (obj as any).entries() : Object.entries(obj);
       for (const [key, value] of entries) {
@@ -65,7 +71,7 @@ export function runScorer({
         if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
           safeContext[flatKey] = value;
         } else if (value && typeof value === 'object' && !Array.isArray(value)) {
-          flatten(value as Record<string, unknown>, flatKey);
+          flatten(value as Record<string, unknown>, flatKey, depth + 1);
         }
       }
     };
