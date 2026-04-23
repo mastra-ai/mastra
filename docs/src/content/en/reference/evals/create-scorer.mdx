@@ -98,7 +98,7 @@ const scorer = createScorer({
   },
   {
     name: 'prepareRun',
-    type: '(run: ScorerRun) => ScorerRun',
+    type: '(run: ScorerRun) => ScorerRun | Promise<ScorerRun>',
     isOptional: true,
     description:
       "Transform the scorer run data before the pipeline executes. Use this to filter messages, limit context size, or drop fields the scorer doesn't need. The [`filterRun()`](/reference/evals/filter-run) utility creates this function from declarative options. Can be async.",
