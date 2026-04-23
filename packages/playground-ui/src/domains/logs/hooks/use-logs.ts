@@ -1,8 +1,8 @@
 import type { ListLogsArgs, ListLogsResponse } from '@mastra/core/storage';
-import { useInView } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import { useInView } from '@/hooks/use-in-view';
 
 const LOGS_PER_PAGE = 20;
 

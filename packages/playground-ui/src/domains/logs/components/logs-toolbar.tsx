@@ -1,5 +1,7 @@
-import type { PropertyFilterField, PropertyFilterToken } from '@mastra/playground-ui';
-import { PropertyFilterActions, PropertyFilterApplied, cn } from '@mastra/playground-ui';
+import { PropertyFilterActions } from '@/ds/components/PropertyFilter/property-filter-actions';
+import { PropertyFilterApplied } from '@/ds/components/PropertyFilter/property-filter-applied';
+import type { PropertyFilterField, PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
+import { cn } from '@/lib/utils';
 
 export interface LogsToolbarProps {
   onClear?: () => void;
