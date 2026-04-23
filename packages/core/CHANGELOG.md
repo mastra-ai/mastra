@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.27.0-alpha.2
+
+### Patch Changes
+
+- Fixed interaction between savePerStep and observational memory that caused message duplication. The saveStepMessages method redundantly re-added response messages to the message list on every step, duplicating them. Additionally, savePerStep is now force-disabled when observational memory is enabled, since OM handles its own per-step persistence and the two features conflict. ([#15652](https://github.com/mastra-ai/mastra/pull/15652))
+
 ## 1.27.0-alpha.1
 
 ### Minor Changes
