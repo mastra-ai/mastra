@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { InternalMastraMCPClient } from './client';
 import { MCPClient } from './configuration';
 
 let clientId = 0;
@@ -88,5 +89,33 @@ describe('MCPClient tool discovery retries', () => {
     expect(internalClient.tools).toHaveBeenCalledTimes(2);
     expect(reconnectSpy).toHaveBeenCalledTimes(1);
     expect(reconnectSpy).toHaveBeenCalledWith('weather');
+  });
+
+  it('forwards per-server capabilities into InternalMastraMCPClient', async () => {
+    const customCapabilities = {
+      elicitation: {
+        supportedContentTypes: ['text/uri-list', 'application/vnd.mastra.form+json'],
+      },
+    } as any;
+
+    const connectSpy = vi.spyOn(InternalMastraMCPClient.prototype, 'connect').mockResolvedValue(true);
+
+    const client = new MCPClient({
+      id: `configuration-test-${++clientId}`,
+      servers: {
+        weather: {
+          url: new URL('http://localhost:1234/sse'),
+          capabilities: customCapabilities,
+        },
+      },
+    });
+
+    clients.push(client);
+
+    const internalClient = await (client as any).getConnectedClientForServer('weather');
+    const capabilities = (internalClient as any).client._options?.capabilities;
+
+    expect(connectSpy).toHaveBeenCalledTimes(1);
+    expect(capabilities).toMatchObject(customCapabilities);
   });
 });

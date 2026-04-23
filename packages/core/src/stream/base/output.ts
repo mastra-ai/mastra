@@ -339,12 +339,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                */
               if (!processorStates.has(STRUCTURED_OUTPUT_PROCESSOR_NAME)) {
                 const processorIndex = processorRunner.outputProcessors.findIndex(
-                  p => p.name === STRUCTURED_OUTPUT_PROCESSOR_NAME,
+                  p => p.id === STRUCTURED_OUTPUT_PROCESSOR_NAME,
                 );
                 // Only create the state if the processor actually exists in the list
                 if (processorIndex !== -1) {
+                  const structuredOutputProcessor = processorRunner.outputProcessors[processorIndex];
                   const structuredOutputProcessorState = new ProcessorState<OUTPUT>({
-                    processorName: STRUCTURED_OUTPUT_PROCESSOR_NAME,
+                    processorName: structuredOutputProcessor?.name ?? STRUCTURED_OUTPUT_PROCESSOR_NAME,
                     tracingContext: options.tracingContext,
                     processorIndex,
                     createSpan: true,
@@ -801,6 +802,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 ...(self.#usageCount.cachedInputTokens !== undefined && {
                   cachedInputTokens: self.#usageCount.cachedInputTokens,
                 }),
+                ...(self.#usageCount.raw !== undefined && {
+                  raw: self.#usageCount.raw,
+                }),
               };
 
               try {
@@ -1252,6 +1256,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     if (usage.cachedInputTokens !== undefined) {
       this.#usageCount.cachedInputTokens = (this.#usageCount.cachedInputTokens ?? 0) + usage.cachedInputTokens;
     }
+    // raw is provider-specific and not summable; keep the latest step's raw
+    if (usage.raw !== undefined) {
+      this.#usageCount.raw = usage.raw;
+    }
   }
 
   populateUsageCount(usage: Partial<LanguageModelUsage>) {
@@ -1274,6 +1282,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     }
     if (usage.cachedInputTokens !== undefined && this.#usageCount.cachedInputTokens === undefined) {
       this.#usageCount.cachedInputTokens = usage.cachedInputTokens;
+    }
+    if (usage.raw !== undefined && this.#usageCount.raw === undefined) {
+      this.#usageCount.raw = usage.raw;
     }
   }
 
@@ -1538,6 +1549,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       totalTokens: total,
       reasoningTokens: this.#usageCount.reasoningTokens,
       cachedInputTokens: this.#usageCount.cachedInputTokens,
+      ...(this.#usageCount.raw !== undefined && { raw: this.#usageCount.raw }),
     };
   }
 

@@ -109,6 +109,34 @@ export interface Root {
 }
 
 /**
+ * Context passed to `requireToolApproval` when it's a function.
+ * Provides information about the tool call and the current execution environment.
+ */
+export interface RequireToolApprovalContext {
+  /** Name of the tool being called */
+  toolName: string;
+  /** Arguments the LLM is passing to the tool */
+  args: Record<string, unknown>;
+  /** Request-scoped context (e.g., user info, auth data) as a plain object */
+  requestContext?: Record<string, unknown>;
+}
+
+/**
+ * Function type for dynamic tool approval logic.
+ * Return `true` to require approval, `false` to allow execution.
+ */
+export type RequireToolApprovalFn = (ctx: RequireToolApprovalContext) => boolean | Promise<boolean>;
+
+/**
+ * Whether tools from this server require explicit user approval before execution.
+ *
+ * - `true`: All tools from this server require approval.
+ * - `false` or omitted: No approval required (default).
+ * - Function: Called per tool invocation to dynamically decide.
+ */
+export type RequireToolApproval = boolean | RequireToolApprovalFn;
+
+/**
  * Base options common to all MCP server definitions.
  */
 export type BaseServerOptions = {
@@ -122,6 +150,27 @@ export type BaseServerOptions = {
   enableServerLogs?: boolean;
   /** Whether to enable progress tracking (default: false) */
   enableProgressTracking?: boolean;
+  /**
+   * Whether tools from this server require explicit user approval before execution.
+   *
+   * - `true`: All tools require approval before running.
+   * - `false` or omitted: Tools run without approval (default).
+   * - Function: Called per tool invocation with context to dynamically decide.
+   *
+   * @example
+   * ```typescript
+   * // Require approval for all tools
+   * requireToolApproval: true
+   *
+   * // Dynamic approval based on tool name or args
+   * requireToolApproval: ({ toolName, args }) => {
+   *   if (toolName === 'list_repos') return false;
+   *   if (toolName === 'delete_repo') return true;
+   *   return false;
+   * }
+   * ```
+   */
+  requireToolApproval?: RequireToolApproval;
   /**
    * List of filesystem roots to expose to the MCP server.
    *

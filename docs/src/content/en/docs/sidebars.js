@@ -303,9 +303,6 @@ const sidebars = {
     {
       type: 'category',
       label: 'Workspaces',
-      customProps: {
-        tags: ['new'],
-      },
       items: [
         {
           type: 'doc',
@@ -678,30 +675,20 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Mastra Cloud',
+      label: 'Mastra Platform',
       customProps: {
-        tags: ['beta'],
+        tags: ['new'],
       },
       items: [
         {
           type: 'doc',
-          id: 'mastra-cloud/overview',
+          id: 'mastra-platform/overview',
           label: 'Overview',
         },
         {
           type: 'doc',
-          id: 'mastra-cloud/setup',
-          label: 'Setup',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/deployment',
-          label: 'Deployment',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/observability',
-          label: 'Observability',
+          id: 'mastra-platform/configuration',
+          label: 'Configuration',
         },
       ],
     },

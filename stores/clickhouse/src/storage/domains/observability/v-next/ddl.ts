@@ -60,13 +60,16 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   entityType         LowCardinality(Nullable(String)),
   entityId           Nullable(String),
   entityName         Nullable(String),
+  entityVersionId    Nullable(String),
 
   -- Parent entity
+  parentEntityVersionId Nullable(String),
   parentEntityType   LowCardinality(Nullable(String)),
   parentEntityId     Nullable(String),
   parentEntityName   Nullable(String),
 
   -- Root entity
+  rootEntityVersionId Nullable(String),
   rootEntityType     LowCardinality(Nullable(String)),
   rootEntityId       Nullable(String),
   rootEntityName     Nullable(String),
@@ -128,13 +131,16 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   entityType         LowCardinality(Nullable(String)),
   entityId           Nullable(String),
   entityName         Nullable(String),
+  entityVersionId    Nullable(String),
 
   -- Parent entity
+  parentEntityVersionId Nullable(String),
   parentEntityType   LowCardinality(Nullable(String)),
   parentEntityId     Nullable(String),
   parentEntityName   Nullable(String),
 
   -- Root entity
+  rootEntityVersionId Nullable(String),
   rootEntityType     LowCardinality(Nullable(String)),
   rootEntityId       Nullable(String),
   rootEntityName     Nullable(String),
@@ -191,7 +197,7 @@ WHERE parentSpanId IS NULL
 `;
 
 // ---------------------------------------------------------------------------
-// metric_events — append-only MergeTree
+// metric_events — ReplacingMergeTree with metricId dedup
 // ---------------------------------------------------------------------------
 
 export const METRIC_EVENTS_DDL = `
@@ -200,6 +206,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_METRIC_EVENTS} (
   timestamp          DateTime64(3, 'UTC'),
 
   -- IDs
+  metricId           String,
   traceId            Nullable(String),
   spanId             Nullable(String),
   experimentId       Nullable(String),
@@ -208,9 +215,12 @@ CREATE TABLE IF NOT EXISTS ${TABLE_METRIC_EVENTS} (
   entityType         LowCardinality(Nullable(String)),
   entityId           Nullable(String),
   entityName         Nullable(String),
+  entityVersionId    Nullable(String),
+  parentEntityVersionId Nullable(String),
   parentEntityType   LowCardinality(Nullable(String)),
   parentEntityId     Nullable(String),
   parentEntityName   Nullable(String),
+  rootEntityVersionId Nullable(String),
   rootEntityType     LowCardinality(Nullable(String)),
   rootEntityId       Nullable(String),
   rootEntityName     Nullable(String),
@@ -244,13 +254,13 @@ CREATE TABLE IF NOT EXISTS ${TABLE_METRIC_EVENTS} (
   metadata           Nullable(String),
   scope              Nullable(String)
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
-ORDER BY (name, timestamp)
+ORDER BY (name, timestamp, metricId)
 `;
 
 // ---------------------------------------------------------------------------
-// log_events — append-only MergeTree
+// log_events — ReplacingMergeTree with logId dedup
 // ---------------------------------------------------------------------------
 
 export const LOG_EVENTS_DDL = `
@@ -259,6 +269,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_LOG_EVENTS} (
   timestamp          DateTime64(3, 'UTC'),
 
   -- IDs
+  logId              String,
   traceId            Nullable(String),
   spanId             Nullable(String),
   experimentId       Nullable(String),
@@ -267,9 +278,12 @@ CREATE TABLE IF NOT EXISTS ${TABLE_LOG_EVENTS} (
   entityType         LowCardinality(Nullable(String)),
   entityId           Nullable(String),
   entityName         Nullable(String),
+  entityVersionId    Nullable(String),
+  parentEntityVersionId Nullable(String),
   parentEntityType   LowCardinality(Nullable(String)),
   parentEntityId     Nullable(String),
   parentEntityName   Nullable(String),
+  rootEntityVersionId Nullable(String),
   rootEntityType     LowCardinality(Nullable(String)),
   rootEntityId       Nullable(String),
   rootEntityName     Nullable(String),
@@ -298,14 +312,13 @@ CREATE TABLE IF NOT EXISTS ${TABLE_LOG_EVENTS} (
   metadata           Nullable(String),
   scope              Nullable(String)
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
-ORDER BY (timestamp, traceId)
-SETTINGS allow_nullable_key = 1
+ORDER BY (timestamp, logId)
 `;
 
 // ---------------------------------------------------------------------------
-// score_events — append-only MergeTree
+// score_events — ReplacingMergeTree with scoreId dedup
 // ---------------------------------------------------------------------------
 
 export const SCORE_EVENTS_DDL = `
@@ -314,6 +327,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
   timestamp          DateTime64(3, 'UTC'),
 
   -- IDs
+  scoreId            String,
   traceId            Nullable(String),
   spanId             Nullable(String),
   experimentId       Nullable(String),
@@ -323,9 +337,12 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
   entityType         LowCardinality(Nullable(String)),
   entityId           Nullable(String),
   entityName         Nullable(String),
+  entityVersionId    Nullable(String),
+  parentEntityVersionId Nullable(String),
   parentEntityType   LowCardinality(Nullable(String)),
   parentEntityId     Nullable(String),
   parentEntityName   Nullable(String),
+  rootEntityVersionId Nullable(String),
   rootEntityType     LowCardinality(Nullable(String)),
   rootEntityId       Nullable(String),
   rootEntityName     Nullable(String),
@@ -360,14 +377,14 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
   metadata           Nullable(String),
   scope              Nullable(String)
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
-ORDER BY (traceId, timestamp)
+ORDER BY (traceId, timestamp, scoreId)
 SETTINGS allow_nullable_key = 1
 `;
 
 // ---------------------------------------------------------------------------
-// feedback_events — append-only MergeTree
+// feedback_events — ReplacingMergeTree with feedbackId dedup
 // ---------------------------------------------------------------------------
 
 export const FEEDBACK_EVENTS_DDL = `
@@ -376,6 +393,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS} (
   timestamp          DateTime64(3, 'UTC'),
 
   -- IDs
+  feedbackId         String,
   traceId            Nullable(String),
   spanId             Nullable(String),
   experimentId       Nullable(String),
@@ -384,9 +402,12 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS} (
   entityType         LowCardinality(Nullable(String)),
   entityId           Nullable(String),
   entityName         Nullable(String),
+  entityVersionId    Nullable(String),
+  parentEntityVersionId Nullable(String),
   parentEntityType   LowCardinality(Nullable(String)),
   parentEntityId     Nullable(String),
   parentEntityName   Nullable(String),
+  rootEntityVersionId Nullable(String),
   rootEntityType     LowCardinality(Nullable(String)),
   rootEntityId       Nullable(String),
   rootEntityName     Nullable(String),
@@ -425,9 +446,9 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS} (
   metadata           Nullable(String),
   scope              Nullable(String)
 )
-ENGINE = MergeTree
+ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
-ORDER BY (traceId, timestamp)
+ORDER BY (traceId, timestamp, feedbackId)
 SETTINGS allow_nullable_key = 1
 `;
 
@@ -553,6 +574,38 @@ export const ALL_MV_DDL = [TRACE_ROOTS_MV_DDL];
 
 /** Discovery-specific refreshable MVs — created separately from core MVs. */
 export const DISCOVERY_MV_DDL = [DISCOVERY_VALUES_MV_DDL, DISCOVERY_PAIRS_MV_DDL];
+
+/**
+ * Additive migrations for existing ClickHouse databases.
+ * ClickHouse's `CREATE TABLE IF NOT EXISTS` skips if the table already exists,
+ * so new columns must be added explicitly via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
+ */
+export const ALL_MIGRATIONS = [
+  // Span events
+  `ALTER TABLE ${TABLE_SPAN_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_SPAN_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_SPAN_EVENTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
+  // Trace roots
+  `ALTER TABLE ${TABLE_TRACE_ROOTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_TRACE_ROOTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_TRACE_ROOTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
+  // Metrics
+  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
+  // Logs
+  `ALTER TABLE ${TABLE_LOG_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_LOG_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_LOG_EVENTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
+  // Scores
+  `ALTER TABLE ${TABLE_SCORE_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_SCORE_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_SCORE_EVENTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
+  // Feedback
+  `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
+  `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
+];
 
 export const ALL_DDL = [...ALL_TABLE_DDL, ...ALL_MV_DDL, ...DISCOVERY_MV_DDL];
 

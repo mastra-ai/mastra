@@ -10,7 +10,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { getLLMTestMode } from '@internal/llm-recorder';
-import { agentGenerate, setupDummyApiKeys, shouldSkipLLMTest } from '@internal/test-utils';
+import { agentGenerate, setupDummyApiKeys } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { LibSQLStore } from '@mastra/libsql';
@@ -32,17 +32,10 @@ const createTestThread = (title: string, metadata = {}) => ({
   updatedAt: new Date(),
 });
 
-export function getWorkingMemoryAdditiveTests(
-  model: MastraModelConfig,
-  options?: {
-    /** Recording name for LLM replay (e.g., 'memory-integration-tests-src-working-memory') */
-    recordingName?: string;
-  },
-) {
+export function getWorkingMemoryAdditiveTests(model: MastraModelConfig) {
   const modelName = typeof model === 'string' ? model : (model as any).modelId || 'unknown';
-  const skipLLM = shouldSkipLLMTest(MODE, 'openai', options?.recordingName);
 
-  describe.skipIf(skipLLM)(`Working Memory Additive Updates (${modelName})`, () => {
+  describe(`Working Memory Additive Updates (${modelName})`, () => {
     let memory: Memory;
     let storage: LibSQLStore;
     let agent: Agent;

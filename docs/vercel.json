@@ -412,22 +412,22 @@
     },
     {
       "source": "/docs/deployment/mastra-cloud/overview",
-      "destination": "/docs/mastra-cloud/overview",
+      "destination": "/docs/mastra-platform/overview",
       "permanent": true
     },
     {
       "source": "/docs/deployment/mastra-cloud/setting-up",
-      "destination": "/docs/mastra-cloud/setup",
+      "destination": "/docs/mastra-platform/overview",
       "permanent": true
     },
     {
       "source": "/docs/deployment/mastra-cloud/dashboard",
-      "destination": "/docs/mastra-cloud/overview",
+      "destination": "/docs/mastra-platform/overview",
       "permanent": true
     },
     {
       "source": "/docs/deployment/mastra-cloud/observability",
-      "destination": "/docs/mastra-cloud/observability",
+      "destination": "/docs/mastra-platform/overview",
       "permanent": true
     },
     {
@@ -517,12 +517,12 @@
     },
     {
       "source": "/docs/mastra-cloud/setting-up",
-      "destination": "/docs/mastra-cloud/setup",
+      "destination": "/docs/mastra-platform/overview",
       "permanent": true
     },
     {
       "source": "/docs/mastra-cloud/dashboard",
-      "destination": "/docs/mastra-cloud/overview",
+      "destination": "/docs/mastra-platform/overview",
       "permanent": true
     },
     {
@@ -677,7 +677,7 @@
     },
     {
       "source": "/docs/mastra-cloud/studio",
-      "destination": "/docs/mastra-cloud/overview",
+      "destination": "/docs/mastra-platform/overview",
       "permanent": true
     },
     {
@@ -698,6 +698,26 @@
     {
       "source": "/reference/core/getStoredAgentById",
       "destination": "/reference",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/overview",
+      "destination": "/docs/mastra-platform/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/setup",
+      "destination": "/docs/mastra-platform/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/deployment",
+      "destination": "/docs/mastra-platform/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/observability",
+      "destination": "/docs/mastra-platform/overview",
       "permanent": true
     }
   ]

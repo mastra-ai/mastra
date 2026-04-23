@@ -1,15 +1,21 @@
 import {
-  MetricsDashboard,
-  DateRangeSelector,
-  MetricsProvider,
-  MainHeader,
-  isValidPreset,
   ButtonWithTooltip,
+  ErrorState,
+  NoDataPageLayout,
+  PageHeader,
+  PageLayout,
+  PermissionDenied,
+  SessionExpired,
+  is401UnauthorizedError,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
-import type { DatePreset } from '@mastra/playground-ui';
 import { BarChart3Icon, BookIcon } from 'lucide-react';
 import { useCallback } from 'react';
 import { useSearchParams } from 'react-router';
+import { MetricsProvider, useAgentRunsKpiMetrics, isValidPreset } from '@/domains/metrics/components';
+import { DateRangeSelector } from '@/domains/metrics/components/date-range-selector';
+import { MetricsDashboard } from '@/domains/metrics/components/metrics-dashboard';
+import type { DatePreset } from '@/domains/metrics/hooks/use-metrics';
 
 const PERIOD_PARAM = 'period';
 
@@ -38,14 +44,50 @@ export default function Metrics() {
 
   return (
     <MetricsProvider initialPreset={initialPreset} onPresetChange={handlePresetChange}>
-      <div className="w-full  px-[3vw] mx-auto grid h-full grid-rows-[auto_1fr] overflow-y-auto">
-        <MainHeader withMargins={false} className="mt-6 mb-4">
-          <MainHeader.Column>
-            <MainHeader.Title>
-              <BarChart3Icon /> Metrics
-            </MainHeader.Title>
-          </MainHeader.Column>
-          <MainHeader.Column className="flex justify-end gap-2">
+      <MetricsContent />
+    </MetricsProvider>
+  );
+}
+
+function MetricsContent() {
+  const { error } = useAgentRunsKpiMetrics();
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <NoDataPageLayout title="Metrics" icon={<BarChart3Icon />}>
+        <SessionExpired />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <NoDataPageLayout title="Metrics" icon={<BarChart3Icon />}>
+        <PermissionDenied resource="metrics" />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <NoDataPageLayout title="Metrics" icon={<BarChart3Icon />}>
+        <ErrorState title="Failed to load metrics" message={error.message} />
+      </NoDataPageLayout>
+    );
+  }
+
+  return (
+    <PageLayout width="wide" height="full">
+      <PageLayout.TopArea className="sticky top-0 z-100 bg-surface1 ">
+        <PageLayout.Row>
+          <PageLayout.Column>
+            <PageHeader>
+              <PageHeader.Title>
+                <BarChart3Icon /> Metrics
+              </PageHeader.Title>
+            </PageHeader>
+          </PageLayout.Column>
+          <PageLayout.Column className="flex justify-end gap-2">
             <DateRangeSelector />
             <ButtonWithTooltip
               as="a"
@@ -56,11 +98,11 @@ export default function Metrics() {
             >
               <BookIcon />
             </ButtonWithTooltip>
-          </MainHeader.Column>
-        </MainHeader>
+          </PageLayout.Column>
+        </PageLayout.Row>
+      </PageLayout.TopArea>
 
-        <MetricsDashboard />
-      </div>
-    </MetricsProvider>
+      <MetricsDashboard />
+    </PageLayout>
   );
 }

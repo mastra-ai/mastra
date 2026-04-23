@@ -454,20 +454,6 @@ console.log(result.success) // true
 
 Both `Agent` (code-defined) and `StoredAgent` instances have methods for managing configuration versions. See the [Editor overview](/docs/editor/overview#versioning) for an introduction to version management.
 
-### Server endpoints
-
-Version management is also available through the stored agents REST API:
-
-| Method | Endpoint | Description |
-| - | - | - |
-| `GET` | `/stored/agents/:agentId/versions` | List all versions. |
-| `POST` | `/stored/agents/:agentId/versions` | Create a new version. |
-| `GET` | `/stored/agents/:agentId/versions/:versionId` | Get a specific version. |
-| `POST` | `/stored/agents/:agentId/versions/:versionId/activate` | Set the active version. |
-| `POST` | `/stored/agents/:agentId/versions/:versionId/restore` | Restore a version (creates a new copy). |
-| `DELETE` | `/stored/agents/:agentId/versions/:versionId` | Delete a version. |
-| `GET` | `/stored/agents/:agentId/versions/compare?from=<id>&to=<id>` | Compare two versions. |
-
 ### Getting an agent with a specific version
 
 Pass a version identifier when getting an agent:

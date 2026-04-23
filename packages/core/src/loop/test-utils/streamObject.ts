@@ -428,6 +428,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             {
               "inputTokens": 3,
               "outputTokens": 10,
+              "raw": {
+                "cachedInputTokens": undefined,
+                "inputTokens": 3,
+                "outputTokens": 10,
+                "reasoningTokens": undefined,
+                "totalTokens": 13,
+              },
               "totalTokens": 13,
             }
           `);
@@ -878,6 +885,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       "format": 2,
                       "metadata": {
                         "modelId": "mock-model-id",
+                        "provider": "mock-provider",
                         "structuredOutput": {
                           "content": "Hello, world!",
                         },
@@ -926,6 +934,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "metadata": {
                       "createdAt": 2024-01-01T00:00:00.001Z,
                       "modelId": "mock-model-id",
+                      "provider": "mock-provider",
                       "structuredOutput": {
                         "content": "Hello, world!",
                       },
@@ -981,6 +990,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                           "format": 2,
                           "metadata": {
                             "modelId": "mock-model-id",
+                            "provider": "mock-provider",
                             "structuredOutput": {
                               "content": "Hello, world!",
                             },
@@ -1029,6 +1039,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         "metadata": {
                           "createdAt": 2024-01-01T00:00:00.001Z,
                           "modelId": "mock-model-id",
+                          "provider": "mock-provider",
                           "structuredOutput": {
                             "content": "Hello, world!",
                           },
@@ -1059,6 +1070,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
+                    "raw": {
+                      "cachedInputTokens": undefined,
+                      "inputTokens": 3,
+                      "outputTokens": 10,
+                      "reasoningTokens": undefined,
+                      "totalTokens": 13,
+                    },
                     "totalTokens": 13,
                   },
                   "warnings": [],
@@ -1071,12 +1089,26 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
+                "raw": {
+                  "cachedInputTokens": undefined,
+                  "inputTokens": 3,
+                  "outputTokens": 10,
+                  "reasoningTokens": undefined,
+                  "totalTokens": 13,
+                },
                 "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "usage": {
                 "inputTokens": 3,
                 "outputTokens": 10,
+                "raw": {
+                  "cachedInputTokens": undefined,
+                  "inputTokens": 3,
+                  "outputTokens": 10,
+                  "reasoningTokens": undefined,
+                  "totalTokens": 13,
+                },
                 "totalTokens": 13,
               },
               "warnings": [],
@@ -1176,6 +1208,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       "format": 2,
                       "metadata": {
                         "modelId": "mock-model-id",
+                        "provider": "mock-provider",
                       },
                       "parts": [
                         {
@@ -1221,6 +1254,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "metadata": {
                       "createdAt": 2024-01-01T00:00:00.001Z,
                       "modelId": "mock-model-id",
+                      "provider": "mock-provider",
                     },
                     "parts": [
                       {
@@ -1269,6 +1303,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                           "format": 2,
                           "metadata": {
                             "modelId": "mock-model-id",
+                            "provider": "mock-provider",
                           },
                           "parts": [
                             {
@@ -1314,6 +1349,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         "metadata": {
                           "createdAt": 2024-01-01T00:00:00.001Z,
                           "modelId": "mock-model-id",
+                          "provider": "mock-provider",
                         },
                         "parts": [
                           {
@@ -1341,6 +1377,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
+                    "raw": {
+                      "cachedInputTokens": undefined,
+                      "inputTokens": 3,
+                      "outputTokens": 10,
+                      "reasoningTokens": undefined,
+                      "totalTokens": 13,
+                    },
                     "totalTokens": 13,
                   },
                   "warnings": [],
@@ -1353,12 +1396,26 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
+                "raw": {
+                  "cachedInputTokens": undefined,
+                  "inputTokens": 3,
+                  "outputTokens": 10,
+                  "reasoningTokens": undefined,
+                  "totalTokens": 13,
+                },
                 "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "usage": {
                 "inputTokens": 3,
                 "outputTokens": 10,
+                "raw": {
+                  "cachedInputTokens": undefined,
+                  "inputTokens": 3,
+                  "outputTokens": 10,
+                  "reasoningTokens": undefined,
+                  "totalTokens": 13,
+                },
                 "totalTokens": 13,
               },
               "warnings": [],
@@ -1458,6 +1515,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       "format": 2,
                       "metadata": {
                         "modelId": "mock-model-id",
+                        "provider": "mock-provider",
                       },
                       "parts": [
                         {
@@ -1503,6 +1561,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "metadata": {
                       "createdAt": 2024-01-01T00:00:00.001Z,
                       "modelId": "mock-model-id",
+                      "provider": "mock-provider",
                     },
                     "parts": [
                       {
@@ -1551,6 +1610,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                           "format": 2,
                           "metadata": {
                             "modelId": "mock-model-id",
+                            "provider": "mock-provider",
                           },
                           "parts": [
                             {
@@ -1596,6 +1656,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         "metadata": {
                           "createdAt": 2024-01-01T00:00:00.001Z,
                           "modelId": "mock-model-id",
+                          "provider": "mock-provider",
                         },
                         "parts": [
                           {
@@ -1623,6 +1684,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
+                    "raw": {
+                      "cachedInputTokens": undefined,
+                      "inputTokens": 3,
+                      "outputTokens": 10,
+                      "reasoningTokens": undefined,
+                      "totalTokens": 13,
+                    },
                     "totalTokens": 13,
                   },
                   "warnings": [],
@@ -1635,12 +1703,26 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
+                "raw": {
+                  "cachedInputTokens": undefined,
+                  "inputTokens": 3,
+                  "outputTokens": 10,
+                  "reasoningTokens": undefined,
+                  "totalTokens": 13,
+                },
                 "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "usage": {
                 "inputTokens": 3,
                 "outputTokens": 10,
+                "raw": {
+                  "cachedInputTokens": undefined,
+                  "inputTokens": 3,
+                  "outputTokens": 10,
+                  "reasoningTokens": undefined,
+                  "totalTokens": 13,
+                },
                 "totalTokens": 13,
               },
               "warnings": [],

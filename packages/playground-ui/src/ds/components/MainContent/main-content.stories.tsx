@@ -17,7 +17,10 @@ type Story = StoryObj<typeof MainContentLayout>;
 export const Default: Story = {
   render: () => (
     <MainContentLayout className="h-[400px] bg-surface1">
-      <PageHeader title="Page Title" description="This is the page description" />
+      <PageHeader>
+        <PageHeader.Title>Page Title</PageHeader.Title>
+        <PageHeader.Description>This is the page description</PageHeader.Description>
+      </PageHeader>
       <MainContentContent>
         <div className="p-4">
           <p className="text-neutral5">Main content area</p>
@@ -30,7 +33,9 @@ export const Default: Story = {
 export const Centered: Story = {
   render: () => (
     <MainContentLayout className="h-[400px] bg-surface1">
-      <PageHeader title="Empty State" />
+      <PageHeader>
+        <PageHeader.Title>Empty State</PageHeader.Title>
+      </PageHeader>
       <MainContentContent isCentered>
         <div className="text-center">
           <p className="text-neutral5 text-lg">No items found</p>
@@ -44,7 +49,9 @@ export const Centered: Story = {
 export const Divided: Story = {
   render: () => (
     <MainContentLayout className="h-[400px] bg-surface1">
-      <PageHeader title="Split View" />
+      <PageHeader>
+        <PageHeader.Title>Split View</PageHeader.Title>
+      </PageHeader>
       <MainContentContent isDivided>
         <div className="p-4 border-r border-border1">
           <p className="text-neutral5">Left column content</p>
@@ -60,7 +67,9 @@ export const Divided: Story = {
 export const WithLeftServiceColumn: Story = {
   render: () => (
     <MainContentLayout className="h-[400px] bg-surface1">
-      <PageHeader title="With Navigation" />
+      <PageHeader>
+        <PageHeader.Title>With Navigation</PageHeader.Title>
+      </PageHeader>
       <MainContentContent hasLeftServiceColumn>
         <div className="p-2 border-r border-border1 bg-surface2">
           <p className="text-neutral3 text-sm">Nav</p>
@@ -76,7 +85,9 @@ export const WithLeftServiceColumn: Story = {
 export const DividedWithServiceColumn: Story = {
   render: () => (
     <MainContentLayout className="h-[400px] bg-surface1">
-      <PageHeader title="Three Column Layout" />
+      <PageHeader>
+        <PageHeader.Title>Three Column Layout</PageHeader.Title>
+      </PageHeader>
       <MainContentContent isDivided hasLeftServiceColumn>
         <div className="p-2 border-r border-border1 bg-surface2">
           <p className="text-neutral3 text-sm">Nav</p>

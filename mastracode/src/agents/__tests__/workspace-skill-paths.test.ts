@@ -1,12 +1,13 @@
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { allowedSkillPaths, skillPaths } from '../workspace.js';
 
 describe('workspace skill path definitions', () => {
   const cwd = process.cwd();
   const home = os.homedir();
 
-  const expectedPaths = [
+  const expectedSkillPaths = [
     path.join(cwd, '.mastracode', 'skills'),
     path.join(cwd, '.claude', 'skills'),
     path.join(cwd, '.agents', 'skills'),
@@ -15,18 +16,24 @@ describe('workspace skill path definitions', () => {
     path.join(home, '.agents', 'skills'),
   ];
 
-  it('includes project-local and global skill directories as candidates', async () => {
+  it('uses the six base skill directories for workspace discovery', () => {
+    expect(skillPaths).toEqual(expectedSkillPaths);
+  });
+
+  it('uses the same skill directories for allowed paths', () => {
+    expect(allowedSkillPaths).toBe(skillPaths);
+  });
+
+  it('wires the base skill directories into workspace discovery and allowed paths', async () => {
     const fs = await import('node:fs');
     const source = fs.readFileSync(path.join(cwd, 'src/agents/workspace.ts'), 'utf-8');
 
-    for (const dir of ['.mastracode', '.claude', '.agents']) {
-      expect(source).toContain(`process.cwd(), '${dir}', 'skills'`);
-      expect(source).toContain(`os.homedir(), '${dir}', 'skills'`);
-    }
+    expect(source).toContain('const allowedPaths = [...allowedSkillPaths');
+    expect(source).toContain('...(skillPaths.length > 0 ? { skills: skillPaths } : {}),');
   });
 
-  it('expected paths are well-formed absolute paths', () => {
-    for (const p of expectedPaths) {
+  it('exposes well-formed absolute skill paths', () => {
+    for (const p of skillPaths) {
       expect(path.isAbsolute(p)).toBe(true);
       expect(p).toMatch(/skills$/);
     }
