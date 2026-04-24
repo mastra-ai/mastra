@@ -476,9 +476,9 @@ const response = await agent.generate('Help me organize my day', {
                 parameters: [
                   {
                     name: 'schema',
-                    type: 'z.ZodSchema<S>',
+                    type: 'StandardJSONSchemaV1',
                     isOptional: false,
-                    description: 'Zod schema defining the expected output structure.',
+                    description: 'Standard JSON Schema defining the expected output structure.',
                   },
                 ],
               },

@@ -163,14 +163,14 @@ export const weatherTool = createTool({
   },
   {
     name: 'inputSchema',
-    type: 'Zod schema',
-    description: "A Zod schema defining the expected input parameters for the tool's `execute` function.",
+    type: 'StandardJSONSchemaV1',
+    description: "A Standard JSON Schema defining the expected input parameters for the tool's `execute` function.",
     isOptional: true,
   },
   {
     name: 'outputSchema',
-    type: 'Zod schema',
-    description: "A Zod schema defining the expected output structure of the tool's `execute` function.",
+    type: 'StandardJSONSchemaV1',
+    description: "A Standard JSON Schema defining the expected output structure of the tool's `execute` function.",
     isOptional: true,
   },
   {
@@ -189,16 +189,16 @@ export const weatherTool = createTool({
   },
   {
     name: 'suspendSchema',
-    type: 'Zod schema',
+    type: 'StandardJSONSchemaV1',
     description:
-      'A Zod schema defining the structure of the payload passed to `suspend()`. This payload is returned to the client when the tool suspends execution.',
+      'A Standard JSON Schema defining the structure of the payload passed to `suspend()`. This payload is returned to the client when the tool suspends execution.',
     isOptional: true,
   },
   {
     name: 'resumeSchema',
-    type: 'Zod schema',
+    type: 'StandardJSONSchemaV1',
     description:
-      'A Zod schema defining the expected structure of `resumeData` when the tool is resumed. Used by the agent to extract data from user messages when `autoResumeSuspendedTools` is enabled.',
+      'A Standard JSON Schema defining the expected structure of `resumeData` when the tool is resumed. Used by the agent to extract data from user messages when `autoResumeSuspendedTools` is enabled.',
     isOptional: true,
   },
   {
@@ -217,9 +217,9 @@ export const weatherTool = createTool({
   },
   {
     name: 'requestContextSchema',
-    type: 'Zod schema',
+    type: 'StandardJSONSchemaV1',
     description:
-      'A Zod schema for validating request context values. When provided, the context is validated before execute() runs, returning an error object if validation fails.',
+      'A Standard JSON Schema for validating request context values. When provided, the context is validated before execute() runs, returning an error object if validation fails.',
     isOptional: true,
   },
   {
