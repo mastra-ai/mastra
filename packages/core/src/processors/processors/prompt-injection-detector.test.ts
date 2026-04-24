@@ -750,12 +750,9 @@ describe('PromptInjectionDetector', () => {
       expect(schemaJson).not.toContain('maximum');
     });
 
-    it('should normalize scores to the 0-1 range at runtime', async () => {
+    it('should reject scores outside the 0-1 range at runtime', async () => {
       const model = setupMockModel({
-        categories: [
-          { type: 'injection', score: 1.2 },
-          { type: 'jailbreak', score: -0.2 },
-        ],
+        categories: [{ type: 'injection', score: 1.2 }],
         reason: 'Attack detected',
       });
       const detector = new PromptInjectionDetector({ model, strategy: 'warn', includeScores: true });
@@ -763,8 +760,10 @@ describe('PromptInjectionDetector', () => {
 
       await detector.processInput({ messages: [createTestMessage('Test message', 'user')], abort: vi.fn() as any });
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('injection: 1'));
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('jailbreak: 0'));
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[PromptInjectionDetector] Detection agent failed, allowing content:',
+        expect.any(Error),
+      );
 
       consoleSpy.mockRestore();
     });

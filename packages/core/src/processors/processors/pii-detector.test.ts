@@ -1168,7 +1168,7 @@ describe('PIIDetector', () => {
       expect(schemaJson).not.toContain('maximum');
     });
 
-    it('should clamp scores above 1 at runtime', async () => {
+    it('should reject scores outside the 0-1 range at runtime', async () => {
       const model = setupMockModel({
         categories: [{ type: 'email', score: 1.2 }],
         detections: null,
@@ -1176,29 +1176,33 @@ describe('PIIDetector', () => {
       const detector = new PIIDetector({ model, strategy: 'warn', threshold: 1.1 });
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      const result = await detector.processInput({
+      await detector.processInput({
         messages: [createTestMessage('Hello world')],
         abort: vi.fn() as any,
       });
 
-      expect(result).toHaveLength(1);
-      expect(consoleSpy).not.toHaveBeenCalledWith(expect.stringContaining('PII detected'));
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[PIIDetector] Detection agent failed, allowing content:',
+        expect.any(Error),
+      );
 
       consoleSpy.mockRestore();
     });
 
-    it('should clamp scores below 0 at runtime', async () => {
+    it('should reject confidence values outside the 0-1 range at runtime', async () => {
       const model = setupMockModel({
-        categories: [{ type: 'email', score: -0.2 }],
-        detections: null,
+        categories: null,
+        detections: [{ type: 'email', value: 'test@example.com', confidence: -0.2, start: 0, end: 16 }],
       });
       const detector = new PIIDetector({ model, strategy: 'warn', threshold: 0 });
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       await detector.processInput({ messages: [createTestMessage('Hello world')], abort: vi.fn() as any });
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('PII detected'));
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Types: email'));
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[PIIDetector] Detection agent failed, allowing content:',
+        expect.any(Error),
+      );
 
       consoleSpy.mockRestore();
     });

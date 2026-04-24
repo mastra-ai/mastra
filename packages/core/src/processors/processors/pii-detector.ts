@@ -15,7 +15,13 @@ import type { Processor } from '../index';
 import { selectMessagesToCheck } from './message-selection';
 import type { LastMessageOnlyOption } from './message-selection';
 
-const normalizeScore = (score: number) => Math.max(0, Math.min(1, score));
+const validateScore = (score: number) => {
+  if (score < 0 || score > 1) {
+    throw new Error(`Expected score to be between 0 and 1, received ${score}`);
+  }
+
+  return score;
+};
 
 /**
  * PII categories for detection and redaction
@@ -353,12 +359,12 @@ export class PIIDetector implements Processor<'pii-detector'> {
         categories:
           result.categories?.map(category => ({
             ...category,
-            score: normalizeScore(category.score),
+            score: validateScore(category.score),
           })) ?? null,
         detections:
           result.detections?.map(detection => ({
             ...detection,
-            confidence: normalizeScore(detection.confidence),
+            confidence: validateScore(detection.confidence),
           })) ?? null,
       };
 

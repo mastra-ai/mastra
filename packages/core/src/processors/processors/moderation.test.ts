@@ -728,13 +728,10 @@ describe('ModerationProcessor', () => {
       expect(schemaJson).not.toContain('maximum');
     });
 
-    it('should normalize scores to the 0-1 range at runtime', async () => {
+    it('should reject scores outside the 0-1 range at runtime', async () => {
       const model = setupMockModel({
         object: {
-          category_scores: [
-            { category: 'hate', score: 1.2 },
-            { category: 'harassment', score: -0.2 },
-          ],
+          category_scores: [{ category: 'hate', score: 1.2 }],
           reason: 'Flagged content',
         },
       });
@@ -743,8 +740,10 @@ describe('ModerationProcessor', () => {
 
       await moderator.processInput({ messages: [createTestMessage('Flagged content')], abort: vi.fn() as any });
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('hate: 1'));
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('harassment: 0'));
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[ModerationProcessor] Agent moderation failed, allowing content:',
+        expect.any(Error),
+      );
 
       consoleSpy.mockRestore();
     });
