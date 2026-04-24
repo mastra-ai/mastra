@@ -241,8 +241,8 @@ export function toAISdkStream(
     return agentReadable.pipeThrough(
       AgentStreamToAISDKV6Transformer<any>({
         lastMessageId: options.lastMessageId,
-        sendStart: options.sendStart,
-        sendFinish: options.sendFinish,
+        sendStart: options.sendStart ?? true,
+        sendFinish: options.sendFinish ?? true,
         sendReasoning: options.sendReasoning,
         sendSources: options.sendSources,
         messageMetadata: options.messageMetadata,
@@ -280,8 +280,8 @@ export function toAISdkStream(
   return agentReadable.pipeThrough(
     AgentStreamToAISDKTransformer<any>({
       lastMessageId: options.lastMessageId,
-      sendStart: options.sendStart,
-      sendFinish: options.sendFinish,
+      sendStart: options.sendStart ?? true,
+      sendFinish: options.sendFinish ?? true,
       sendReasoning: options.sendReasoning,
       sendSources: options.sendSources,
       messageMetadata: options.messageMetadata,
