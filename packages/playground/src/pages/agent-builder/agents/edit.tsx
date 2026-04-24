@@ -3,12 +3,13 @@ import { MastraReactProvider } from '@mastra/react';
 import { MessageSquareIcon, SaveIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { FormProvider, useForm, useFormContext } from 'react-hook-form';
-import { useLocation, useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
 import { EditableAgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import type { ActiveDetail, AgentConfig } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { ConversationPanel } from '@/domains/agent-builder/components/agent-builder-edit/conversation-panel';
 import type { AvailableWorkspace } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-agent-builder-tool';
+import { useStarterUserMessage } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-starter-user-message';
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
 import { useSaveAgent } from '@/domains/agent-builder/hooks/use-save-agent';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
@@ -23,8 +24,6 @@ interface AvailableTool {
 }
 
 type ToolsData = NonNullable<ReturnType<typeof useTools>['data']>;
-
-type LocationState = { userMessage?: string } | null;
 
 const extractWorkspaceId = (workspace: StoredAgent['workspace']): string | undefined => {
   if (
@@ -41,10 +40,12 @@ const extractWorkspaceId = (workspace: StoredAgent['workspace']): string | undef
 
 export default function AgentBuilderAgentEdit() {
   const { id } = useParams<{ id: string }>();
-  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id);
+  const initialUserMessage = useStarterUserMessage();
+  const fromStarter = initialUserMessage !== undefined;
+  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id, { enabled: !fromStarter });
   const { data: toolsData, isPending: isToolsPending } = useTools();
   const { data: workspacesData } = useWorkspaces();
-  const isReady = Boolean(id) && !isStoredAgentLoading && !isToolsPending;
+  const isReady = Boolean(id) && (fromStarter || !isStoredAgentLoading) && !isToolsPending;
 
   const availableWorkspaces = useMemo<AvailableWorkspace[]>(
     () => (workspacesData?.workspaces ?? []).map(ws => ({ id: ws.id, name: ws.name })),
@@ -58,6 +59,8 @@ export default function AgentBuilderAgentEdit() {
       toolsData={toolsData}
       availableWorkspaces={availableWorkspaces}
       isReady={isReady}
+      initialUserMessage={initialUserMessage}
+      fromStarter={fromStarter}
     />
   );
 }
@@ -68,9 +71,19 @@ interface PageProps {
   toolsData: ToolsData | undefined;
   availableWorkspaces: AvailableWorkspace[];
   isReady: boolean;
+  initialUserMessage: string | undefined;
+  fromStarter: boolean;
 }
 
-const AgentBuilderAgentEditPage = ({ id, storedAgent, toolsData, availableWorkspaces, isReady }: PageProps) => {
+const AgentBuilderAgentEditPage = ({
+  id,
+  storedAgent,
+  toolsData,
+  availableWorkspaces,
+  isReady,
+  initialUserMessage,
+  fromStarter,
+}: PageProps) => {
   const formMethods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {
       name: storedAgent?.name ?? '',
@@ -92,6 +105,8 @@ const AgentBuilderAgentEditPage = ({ id, storedAgent, toolsData, availableWorksp
           storedAgent={storedAgent}
           toolsData={toolsData ?? {}}
           availableWorkspaces={availableWorkspaces}
+          initialUserMessage={initialUserMessage}
+          fromStarter={fromStarter}
         />
       )}
     </FormProvider>
@@ -124,6 +139,8 @@ interface AgentBuilderAgentEditReadyProps {
   storedAgent: StoredAgent | null | undefined;
   toolsData: ToolsData;
   availableWorkspaces: AvailableWorkspace[];
+  initialUserMessage: string | undefined;
+  fromStarter: boolean;
 }
 
 const AgentBuilderAgentEditReady = ({
@@ -131,11 +148,11 @@ const AgentBuilderAgentEditReady = ({
   storedAgent,
   toolsData,
   availableWorkspaces,
+  initialUserMessage,
+  fromStarter,
 }: AgentBuilderAgentEditReadyProps) => {
-  const location = useLocation();
   const navigate = useNavigate();
   const features = useBuilderAgentFeatures();
-  const state = (location.state as LocationState) ?? null;
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
 
   const availableTools = useMemo<AvailableTool[]>(
@@ -195,7 +212,8 @@ const AgentBuilderAgentEditReady = ({
       chat={
         <MastraReactProvider baseUrl="http://localhost:4112">
           <ConversationPanel
-            initialUserMessage={state?.userMessage}
+            initialUserMessage={initialUserMessage}
+            isFreshThread={fromStarter}
             features={features}
             availableTools={availableTools}
             availableWorkspaces={availableWorkspaces}

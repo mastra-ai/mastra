@@ -60,10 +60,10 @@ export const AgentBuilderStarter = () => {
   };
 
   return (
-    <div className="relative flex min-h-full flex-col items-center justify-center bg-surface1 px-6 py-24">
-      <div className="flex w-full max-w-3xl flex-col gap-12">
+    <div className="starter-aurora flex min-h-full flex-col items-center justify-center bg-surface1 px-6 py-24">
+      <div className="relative z-10 flex w-full max-w-3xl flex-col gap-12">
         <h1
-          className="text-center font-serif text-neutral6"
+          className="starter-heading text-center font-serif text-neutral6"
           style={{ fontSize: 'clamp(1.875rem, 3.5vw, 2.5rem)', lineHeight: 1.1, letterSpacing: '-0.015em' }}
         >
           What should we build today?
@@ -71,7 +71,7 @@ export const AgentBuilderStarter = () => {
 
         <form onSubmit={handleSubmit}>
           <div
-            className="rounded-2xl border border-border1 bg-surface2 transition-colors duration-normal ease-out-custom focus-within:border-neutral3"
+            className="starter-prompt rounded-2xl border border-border1 bg-surface2 transition-colors duration-normal ease-out-custom focus-within:border-neutral3"
             style={{ viewTransitionName: 'agent-builder-prompt' }}
           >
             <Textarea
@@ -103,7 +103,7 @@ export const AgentBuilderStarter = () => {
         </form>
 
         <div className="flex flex-wrap justify-center gap-2">
-          {EXAMPLES.map(example => {
+          {EXAMPLES.map((example, i) => {
             const Icon = example.icon;
             return (
               <button
@@ -111,7 +111,8 @@ export const AgentBuilderStarter = () => {
                 type="button"
                 onClick={() => handleExampleClick(example.prompt)}
                 data-testid={`agent-builder-starter-example-${example.title.toLowerCase().replace(/\s+/g, '-')}`}
-                className="group inline-flex items-center gap-2 rounded-full border border-border1 bg-transparent px-4 py-2 text-ui-sm text-neutral4 transition-colors duration-normal ease-out-custom hover:border-border2 hover:bg-surface2 hover:text-neutral6"
+                style={{ animationDelay: `${280 + i * 40}ms` }}
+                className="starter-chip group inline-flex items-center gap-2 rounded-full border border-border1 bg-transparent px-4 py-2 text-ui-sm text-neutral4 transition-colors duration-normal ease-out-custom hover:border-border2 hover:bg-surface2 hover:text-neutral6"
               >
                 <Icon className="h-3.5 w-3.5 text-neutral3 transition-colors group-hover:text-neutral5" />
                 {example.title}

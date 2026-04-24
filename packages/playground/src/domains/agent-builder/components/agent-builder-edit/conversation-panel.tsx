@@ -15,6 +15,7 @@ import { useAgentMessages } from '@/hooks/use-agent-messages';
 
 interface ConversationPanelProps {
   initialUserMessage?: string;
+  isFreshThread?: boolean;
   features: ReturnType<typeof useBuilderAgentFeatures>;
   availableTools?: AvailableTool[];
   availableWorkspaces?: AvailableWorkspace[];
@@ -26,6 +27,7 @@ const BUILDER_AGENT_ID = 'builder-agent';
 
 export const ConversationPanel = ({
   initialUserMessage,
+  isFreshThread = false,
   features,
   availableTools = [],
   availableWorkspaces = [],
@@ -35,7 +37,7 @@ export const ConversationPanel = ({
   const { data, isLoading: isConversationLoading } = useAgentMessages({
     agentId: BUILDER_AGENT_ID,
     threadId: agentId,
-    memory: true,
+    memory: !isFreshThread,
   });
 
   // Stable empty array per agentId: stays the same reference across re-renders
