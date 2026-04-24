@@ -51,6 +51,13 @@ import { processMastraNetworkStream, processMastraStream } from '../utils/proces
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
 
+type ResumeStreamParams<OUTPUT extends {}> = StreamParamsBaseWithoutMessages<OUTPUT> & {
+  messages?: MessageListInput;
+  runId: string;
+  toolCallId?: string;
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
+};
+
 type ToolCallRespondFn<OUTPUT> = (
   messages: MessageListInput,
   options: StreamParamsBaseWithoutMessages<OUTPUT> & {
@@ -1322,8 +1329,11 @@ export class Agent extends BaseResource {
     const threadId = processedParams.threadId ?? (typeof thread === 'string' ? thread : thread?.id);
     const resourceId = processedParams.resourceId ?? resource;
 
-    const requestBody =
-      route === 'resume-stream' ? (({ messages: _messages, ...body }) => body)(processedParams) : processedParams;
+    let requestBody = processedParams;
+    if (route === 'resume-stream') {
+      const { messages: _messages, ...resumeStreamBody } = processedParams;
+      requestBody = resumeStreamBody;
+    }
 
     const response: Response = await this.request(`/agents/${this.agentId}/${route}`, {
       method: 'POST',
@@ -1886,11 +1896,7 @@ export class Agent extends BaseResource {
    */
   async resumeStream<OUTPUT extends {}>(
     resumeData: JSONValue,
-    options: StreamParamsBaseWithoutMessages<OUTPUT> & {
-      runId: string;
-      toolCallId?: string;
-      structuredOutput?: StructuredOutputOptions<OUTPUT>;
-    },
+    options: ResumeStreamParams<OUTPUT>,
   ): Promise<
     Response & {
       processDataStream: ({

@@ -511,6 +511,7 @@ describe('Agent Routes Authorization', () => {
 
     mastra = new Mastra({
       agents: { 'test-agent': mockAgent },
+      storage,
       logger: false,
     });
   });
@@ -731,6 +732,27 @@ describe('Agent Routes Authorization', () => {
   });
 
   describe('RESUME_STREAM_ROUTE', () => {
+    async function persistAgenticLoopRun({ runId, resourceId }: { runId: string; resourceId?: string }) {
+      const workflowsStore = await storage.getStore('workflows');
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName: 'agentic-loop',
+        runId,
+        resourceId,
+        snapshot: {
+          runId,
+          status: 'suspended',
+          value: {},
+          context: {},
+          activePaths: [],
+          activeStepsPath: {},
+          serializedStepGraph: [],
+          suspendedPaths: {},
+          resumeLabels: {},
+          waitingPaths: {},
+        },
+      });
+    }
+
     it('should return 400 when runId is missing', async () => {
       const requestContext = createContextWithReservedKeys({});
 
@@ -770,6 +792,25 @@ describe('Agent Routes Authorization', () => {
       ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
     });
 
+    it('should return 403 when runId belongs to a different resource', async () => {
+      await persistAgenticLoopRun({ runId: 'resume-run-owned-by-b', resourceId: 'user-b' });
+
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      await expect(
+        RESUME_STREAM_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          runId: 'resume-run-owned-by-b',
+          resumeData: { step: 'next' },
+        } as any),
+      ).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: workflow run belongs to a different resource' }),
+      );
+    });
+
     it('should override client-provided resource with context value', async () => {
       await mockMemory.createThread({
         threadId: 'resume-thread-owned-by-a',
@@ -799,6 +840,42 @@ describe('Agent Routes Authorization', () => {
       } as any);
 
       expect(capturedOptions.memory.resource).toBe('user-a');
+    });
+
+    it('should use reserved requestContext memory keys when body memory is omitted', async () => {
+      await mockMemory.createThread({
+        threadId: 'resume-thread-from-context',
+        resourceId: 'user-a',
+        title: 'Thread A',
+      });
+      await persistAgenticLoopRun({ runId: 'resume-run-from-context', resourceId: 'user-a' });
+
+      const requestContext = createContextWithReservedKeys({
+        resourceId: 'user-a',
+        threadId: 'resume-thread-from-context',
+      });
+
+      let capturedOptions: any;
+      vi.spyOn(mockAgent, 'resumeStream').mockImplementation(async (_resumeData, options) => {
+        capturedOptions = options;
+        return { fullStream: new ReadableStream() } as any;
+      });
+
+      await RESUME_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        runId: 'resume-run-from-context',
+        resumeData: { step: 'next' },
+      } as any);
+
+      expect(capturedOptions.memory).toMatchObject({
+        resource: 'user-a',
+        thread: 'resume-thread-from-context',
+      });
+      expect(capturedOptions.requestContext).toBe(requestContext);
+      expect(capturedOptions.runId).toBe('resume-run-from-context');
     });
 
     it('should pass resumeData, runId, and toolCallId to agent.resumeStream()', async () => {

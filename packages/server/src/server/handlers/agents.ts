@@ -62,6 +62,7 @@ import {
   getEffectiveResourceId,
   getEffectiveThreadId,
   validateThreadOwnership,
+  validateRunOwnership,
 } from './utils';
 
 /**
@@ -1558,26 +1559,29 @@ export const RESUME_STREAM_ROUTE = createRoute({
       stashVersionOverrides(serverRequestContext, versions);
 
       let authorizedMemoryOption = memoryOption;
-      if (memoryOption) {
-        const clientThreadId = typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
+      const clientThreadId = typeof memoryOption?.thread === 'string' ? memoryOption.thread : memoryOption?.thread?.id;
+      const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption?.resource);
+      const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
-        const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption.resource);
-        const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
-
-        if (effectiveThreadId && effectiveResourceId) {
-          const memoryInstance = await agent.getMemory({ requestContext: serverRequestContext });
-          if (memoryInstance) {
-            const thread = await memoryInstance.getThreadById({ threadId: effectiveThreadId });
-            await validateThreadOwnership(thread, effectiveResourceId);
-          }
+      if (effectiveThreadId && effectiveResourceId) {
+        const memoryInstance = await agent.getMemory({ requestContext: serverRequestContext });
+        if (memoryInstance) {
+          const thread = await memoryInstance.getThreadById({ threadId: effectiveThreadId });
+          await validateThreadOwnership(thread, effectiveResourceId);
         }
+      }
 
+      if (memoryOption || effectiveResourceId || effectiveThreadId) {
         authorizedMemoryOption = {
           ...memoryOption,
-          resource: effectiveResourceId ?? memoryOption.resource,
-          thread: effectiveThreadId ?? memoryOption.thread,
-        };
+          ...(effectiveResourceId ? { resource: effectiveResourceId } : {}),
+          ...(effectiveThreadId ? { thread: effectiveThreadId } : {}),
+        } as NonNullable<typeof authorizedMemoryOption>;
       }
+
+      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+      const workflowRun = await workflowsStore?.getWorkflowRunById({ workflowName: 'agentic-loop', runId });
+      await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined));
 
       const { structuredOutput, ...restOptions } = rest;
 
