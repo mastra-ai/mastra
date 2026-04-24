@@ -5,7 +5,6 @@ import path from 'node:path';
 import util from 'node:util';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
-import prettier from 'prettier';
 
 import { DepsService } from '../../services/service.deps.js';
 import { getPackageManagerAddCommand } from '../../utils/package-manager.js';
@@ -113,12 +112,7 @@ The [Mastra platform](https://projects.mastra.ai) provides two products for depl
 
 Learn more in the [Mastra platform documentation](https://mastra.ai/docs/mastra-platform/overview).`;
 
-  const formattedContent = await prettier.format(content, {
-    parser: 'markdown',
-    singleQuote: true,
-  });
-
-  await fs.writeFile(readmePath, formattedContent);
+  await fs.writeFile(readmePath, content);
 };
 
 async function installMastraDependency(
