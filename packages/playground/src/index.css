@@ -217,6 +217,15 @@ html::-webkit-scrollbar-thumb:hover {
   }
 }
 
+@keyframes shimmer-text {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
 div[class^='language-'],
 pre[class^='language-'],
 code[class^='language-'] {

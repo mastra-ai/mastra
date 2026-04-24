@@ -27,7 +27,12 @@ type ToolsData = NonNullable<ReturnType<typeof useTools>['data']>;
 type LocationState = { userMessage?: string } | null;
 
 const extractWorkspaceId = (workspace: StoredAgent['workspace']): string | undefined => {
-  if (workspace && typeof workspace === 'object' && 'type' in workspace && (workspace as { type: string }).type === 'id') {
+  if (
+    workspace &&
+    typeof workspace === 'object' &&
+    'type' in workspace &&
+    (workspace as { type: string }).type === 'id'
+  ) {
     const id = (workspace as { workspaceId?: unknown }).workspaceId;
     return typeof id === 'string' ? id : undefined;
   }

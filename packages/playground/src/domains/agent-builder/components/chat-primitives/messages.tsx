@@ -2,6 +2,7 @@ import { Skeleton, Txt } from '@mastra/playground-ui';
 import type { MastraUIMessage } from '@mastra/react';
 import { useState } from 'react';
 import Markdown from 'react-markdown';
+import { Shimmer } from './shimmer';
 
 export const MessageRow = ({ message }: { message: MastraUIMessage }) => {
   return (
@@ -14,7 +15,7 @@ export const MessageRow = ({ message }: { message: MastraUIMessage }) => {
 
           case 'reasoning':
             return part.state === 'streaming' ? (
-              <ReasoningMessage key={key} text="Reasoning..." />
+              <ReasoningMessage key={key} text="Reasoning..." streaming />
             ) : (
               <ReasoningMessage key={key} text="Finished reasoning" />
             );
@@ -54,10 +55,10 @@ export const Txtmessage = ({ txt, role }: { txt: string; role: MastraUIMessage['
   return null;
 };
 
-export const ReasoningMessage = ({ text }: { text: string }) => {
+export const ReasoningMessage = ({ text, streaming = false }: { text: string; streaming?: boolean }) => {
   return (
     <Txt variant="ui-md" className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%]">
-      {text}
+      {streaming ? <Shimmer>{text}</Shimmer> : text}
     </Txt>
   );
 };

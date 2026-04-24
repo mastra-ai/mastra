@@ -41,7 +41,7 @@ export const AgentChatPanel = ({ agentId }: AgentChatPanelProps) => {
 
   return (
     <div className="flex h-full min-h-0 flex-col px-6 pt-6">
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto pb-4">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto pb-6 px-6">
         {isConversationLoading && messages.length === 0 ? (
           <MessagesSkeleton testId="agent-builder-agent-chat-messages-skeleton" />
         ) : showEmptyState ? (
