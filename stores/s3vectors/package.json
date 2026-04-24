@@ -32,7 +32,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@aws-sdk/client-s3vectors": "^3.1032.0",
-    "uuid": "^13.0.0"
+    "uuid": "^14.0.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

@@ -80,7 +80,7 @@
     "tailwindcss": "^4.2.2",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
-    "vite": "^7.3.1",
+    "vite": "^8.0.0",
     "vitest": "catalog:",
     "zod": "^3.25.76"
   },

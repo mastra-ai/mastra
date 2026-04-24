@@ -20,7 +20,7 @@
     "tsc-files": "^1.1.4",
     "turbo": "^2.9.6",
     "typescript": "catalog:",
-    "vite": "^7.3.1",
+    "vite": "^8.0.0",
     "vitest": "catalog:",
     "zod": "catalog:"
   },
