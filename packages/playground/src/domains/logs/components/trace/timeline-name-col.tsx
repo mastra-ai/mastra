@@ -1,1 +1,1 @@
-export { TimelineNameCol } from '@/domains/traces/components/timeline-name-col';
+export { TimelineNameCol } from '@mastra/playground-ui';

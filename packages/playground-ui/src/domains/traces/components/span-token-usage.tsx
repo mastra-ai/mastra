@@ -1,6 +1,6 @@
 import type { InputTokenDetails, OutputTokenDetails } from '@mastra/core/observability';
-import { cn } from '@mastra/playground-ui';
 import { ArrowRightIcon, ArrowRightToLineIcon, CoinsIcon } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 // V5 format (AI SDK v5)
 type V5TokenUsage = {

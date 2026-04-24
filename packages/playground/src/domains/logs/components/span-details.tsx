@@ -1,7 +1,6 @@
-import { DataDetailsPanel } from '@mastra/playground-ui';
+import { DataDetailsPanel, useSpanDetail } from '@mastra/playground-ui';
 import { format } from 'date-fns';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
-import { useSpanDetail } from '@/domains/traces/hooks/use-span-detail';
 
 const KV = DataDetailsPanel.KeyValueList;
 

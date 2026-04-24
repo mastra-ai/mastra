@@ -147,6 +147,7 @@ export { usePlaygroundStore, useIsDarkMode, type PlaygroundTheme } from './store
 
 // Domains
 export * from './domains/metrics';
+export * from './domains/traces';
 
 // DS Types
 export type { LinkComponent, LinkComponentProps } from './ds/types/link-component';

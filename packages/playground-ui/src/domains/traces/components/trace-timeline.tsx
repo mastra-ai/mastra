@@ -1,9 +1,10 @@
-import { Spinner, cn } from '@mastra/playground-ui';
 import type { Dispatch, SetStateAction } from 'react';
 import { useMemo } from 'react';
 import type { UISpan } from '../types';
 import { spanTypePrefixes, getSpanTypeUi } from './shared';
 import { TraceTimelineSpan } from './trace-timeline-span';
+import { Spinner } from '@/ds/components/Spinner';
+import { cn } from '@/lib/utils';
 
 type TraceTimelineProps = {
   hierarchicalSpans: UISpan[];
