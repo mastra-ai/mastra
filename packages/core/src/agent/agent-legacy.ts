@@ -165,8 +165,6 @@ export interface AgentLegacyCapabilities {
     instructions?: DynamicArgument<string>;
     minMessages?: number;
   };
-  /** Save step messages */
-  saveStepMessages(args: { result: any; messageList: MessageList; runId: string }): Promise<void>;
   /** Convert instructions to string */
   convertInstructionsToString(instructions: AgentInstructions): string;
   /** Options for tracing policy */
@@ -834,12 +832,6 @@ export class AgentLegacyHandler {
                 });
                 threadCreatedByStep = true;
               }
-
-              await this.capabilities.saveStepMessages({
-                result: props,
-                messageList,
-                runId,
-              });
             }
 
             return onStepFinish?.({ ...props, runId });

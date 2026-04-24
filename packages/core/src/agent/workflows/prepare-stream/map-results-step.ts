@@ -76,7 +76,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
       requestContext,
       messageList: memoryData.messageList,
       onStepFinish: async (props: any) => {
-        if (options.savePerStep && !memoryConfig?.readOnly) {
+        // When OM is enabled saving per step corrupts things because OM handles its own saving
+        const shouldSavePerStep = options.savePerStep && !memoryConfig?.observationalMemory;
+        if (shouldSavePerStep && !memoryConfig?.readOnly) {
           if (!memoryData.threadExists && !threadCreatedByStep && memory && memoryData.thread) {
             await memory.createThread({
               threadId: memoryData.thread?.id,
@@ -88,12 +90,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
             threadCreatedByStep = true;
           }
-
-          await capabilities.saveStepMessages({
-            result: props,
-            messageList: memoryData.messageList!,
-            runId,
-          });
 
           if (saveQueueManager && memoryData.thread?.id) {
             await saveQueueManager.flushMessages(memoryData.messageList!, memoryData.thread.id, memoryConfig);

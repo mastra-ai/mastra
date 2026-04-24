@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
-import { ContentBlocks } from './content-blocks';
-import { ContentBlock } from './content-block';
 import { useState } from 'react';
+import { ContentBlock } from './content-block';
+import { ContentBlocks } from './content-blocks';
 
 let nextId = 0;
 

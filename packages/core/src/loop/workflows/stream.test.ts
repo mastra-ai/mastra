@@ -6,7 +6,7 @@ import type { ChunkType } from '../../stream/types';
 
 // Capture the outputWriter passed to createAgenticLoopWorkflow so we can
 // invoke it directly in tests without spinning up a real agentic loop.
-let capturedOutputWriter: ((chunk: ChunkType) => Promise<void>) | undefined;
+let capturedOutputWriter: ((chunk: ChunkType, options?: { messageId?: string }) => Promise<void>) | undefined;
 
 vi.mock('./agentic-loop', () => ({
   createAgenticLoopWorkflow: (params: any) => {
@@ -18,12 +18,15 @@ vi.mock('./agentic-loop', () => ({
       createRun: vi.fn().mockResolvedValue({
         start: vi.fn().mockImplementation(async () => {
           // Simulate the agentic loop emitting a data-* chunk
-          await capturedOutputWriter!({
-            type: 'data-moderation',
-            data: { flagged: true },
-            runId: 'run-1',
-            from: ChunkFrom.AGENT,
-          } as ChunkType);
+          await capturedOutputWriter!(
+            {
+              type: 'data-moderation',
+              data: { flagged: true },
+              runId: 'run-1',
+              from: ChunkFrom.AGENT,
+            } as ChunkType,
+            { messageId: 'rotated-msg' },
+          );
 
           return {
             status: 'success',
@@ -83,8 +86,9 @@ describe('workflowLoopStream', () => {
     expect(receivedWriter).toBeDefined();
     expect(typeof receivedWriter!.custom).toBe('function');
 
-    // Verify the data-* chunk was emitted
+    // Verify the data-* chunk was emitted and persisted with the supplied response message id.
     const dataChunk = chunks.find(c => c.type === 'data-moderation');
     expect(dataChunk).toBeDefined();
+    expect(messageList.get.response.db().map(message => message.id)).toEqual(['rotated-msg']);
   });
 });

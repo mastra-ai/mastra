@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Badge } from './Badge';
 import { Check, AlertCircle, Info as InfoIcon } from 'lucide-react';
+import { Badge } from './Badge';
 
 const meta: Meta<typeof Badge> = {
   title: 'Elements/Badge',

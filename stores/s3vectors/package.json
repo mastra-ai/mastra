@@ -1,6 +1,6 @@
 {
   "name": "@mastra/s3vectors",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Amazon S3 Vectors store provider for Mastra",
   "type": "module",
   "files": [
@@ -32,7 +32,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@aws-sdk/client-s3vectors": "^3.1032.0",
-    "uuid": "^13.0.0"
+    "@lukeed/uuid": "^2.0.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
