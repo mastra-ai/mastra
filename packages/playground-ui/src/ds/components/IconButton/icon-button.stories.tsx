@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { IconButton } from './IconButton';
-import { TooltipProvider } from '../Tooltip';
 import { Settings, Plus, Trash } from 'lucide-react';
+import { TooltipProvider } from '../Tooltip';
+import { IconButton } from './IconButton';
 
 const meta: Meta<typeof IconButton> = {
   title: 'Elements/IconButton',

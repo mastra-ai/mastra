@@ -8770,6 +8770,79 @@ describe('Full Async Buffering Flow', () => {
     expect(observerCalls.length).toBeGreaterThan(0);
   });
 
+  it('should persist buffering markers on observed assistant messages instead of data-only DB messages', async () => {
+    const { storage, om, threadId, resourceId } = await setupAsyncBufferingScenario({
+      messageTokens: 10000,
+      bufferTokens: 300,
+      bufferActivation: 1,
+      reflectionObservationTokens: 50000,
+      messageCount: 4,
+    });
+
+    const stored = await storage.listMessages({
+      threadId,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      perPage: false,
+    });
+    const messages = stored.messages;
+    const streamedMarkers: Array<{ type: string; transient?: boolean }> = [];
+
+    const writer = {
+      custom: async (part: { type: string; data?: unknown; transient?: boolean }) => {
+        streamedMarkers.push(part);
+        if (part.type.startsWith('data-') && !part.transient) {
+          await storage.saveMessages({
+            messages: [
+              {
+                id: `writer-${streamedMarkers.length}`,
+                role: 'assistant' as const,
+                content: { format: 2 as const, parts: [part as any] },
+                type: 'text',
+                createdAt: new Date(Date.UTC(2025, 0, 1, 10, streamedMarkers.length)),
+                threadId,
+                resourceId,
+              },
+            ],
+          });
+        }
+      },
+    };
+
+    const result = await om.buffer({
+      threadId,
+      resourceId,
+      messages,
+      pendingTokens: 1000,
+      writer,
+    });
+
+    expect(result.buffered).toBe(true);
+    expect(streamedMarkers.some(marker => marker.type === 'data-om-buffering-start')).toBe(true);
+    expect(streamedMarkers.some(marker => marker.type === 'data-om-buffering-end')).toBe(true);
+    expect(streamedMarkers.every(marker => marker.transient === true)).toBe(true);
+
+    const after = await storage.listMessages({
+      threadId,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      perPage: false,
+    });
+    const dataOnlyMessages = after.messages.filter(
+      message =>
+        message.role === 'assistant' &&
+        message.content.parts.length > 0 &&
+        message.content.parts.every(part => part.type.startsWith('data-')),
+    );
+    expect(dataOnlyMessages).toHaveLength(0);
+
+    const assistantWithMarkers = after.messages.find(
+      message =>
+        message.role === 'assistant' &&
+        message.content.parts.some(part => part.type === 'data-om-buffering-start') &&
+        message.content.parts.some(part => part.type === 'data-om-buffering-end'),
+    );
+    expect(assistantWithMarkers).toBeDefined();
+  });
+
   it('should activate buffered observations when threshold is reached', async () => {
     // Phase 1: Start with few messages so buffering triggers (below threshold)
     // 10 messages × ~200 tokens = ~2000 tokens, threshold = 5000
@@ -14764,6 +14837,21 @@ describe('Observer output threadTitle propagation', () => {
     const mockWriter = {
       custom: async (part: any) => {
         capturedParts.push(part);
+        if (part.type.startsWith('data-') && !part.transient) {
+          await storage.saveMessages({
+            messages: [
+              {
+                id: `writer-${capturedParts.length}`,
+                role: 'assistant' as const,
+                content: { format: 2 as const, parts: [part] },
+                type: 'text',
+                createdAt: new Date(Date.UTC(2025, 0, 1, 10, capturedParts.length)),
+                threadId,
+                resourceId,
+              },
+            ],
+          });
+        }
       },
     };
 
@@ -14858,6 +14946,27 @@ describe('Observer output threadTitle propagation', () => {
     });
     expect(threadUpdatePart?.data.cycleId).toEqual(expect.any(String));
     expect(threadUpdatePart?.data.timestamp).toEqual(expect.any(String));
+    expect(capturedParts.every(part => part.transient === true)).toBe(true);
+
+    const after = await storage.listMessages({
+      threadId,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      perPage: false,
+    });
+    const dataOnlyMessages = after.messages.filter(
+      message =>
+        message.role === 'assistant' &&
+        message.content.parts.length > 0 &&
+        message.content.parts.every(part => part.type.startsWith('data-')),
+    );
+    expect(dataOnlyMessages).toHaveLength(0);
+    expect(
+      after.messages.some(message =>
+        message.content.parts.some(
+          part => part.type === 'data-om-thread-update' && (part.data as any)?.newTitle === 'React Dashboard Project',
+        ),
+      ),
+    ).toBe(true);
   });
 
   it('should persist threadTitle from activated buffered chunks to thread record', async () => {

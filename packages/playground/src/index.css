@@ -2,6 +2,7 @@
 
 /* Scan playground-ui package for Tailwind classes */
 @source '../../node_modules/@mastra/playground-ui';
+@custom-variant dark (&:is(.dark *));
 
 @font-face {
   font-family: 'TasaExplorer';

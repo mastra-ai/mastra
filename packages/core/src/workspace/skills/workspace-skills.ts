@@ -67,6 +67,13 @@ export interface WorkspaceSkillsImplConfig {
   searchEngine?: SkillSearchEngine;
   /** Validate skills on load (default: true) */
   validateOnLoad?: boolean;
+  /**
+   * Check SKILL.md file mtime in addition to directory mtime for staleness detection.
+   * Enables detection of in-place file edits (e.g., fixing validation errors).
+   * Increases stat calls - recommended for local development only.
+   * Default: false
+   */
+  checkSkillFileMtime?: boolean;
 }
 
 /**
@@ -77,6 +84,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   readonly #skillsResolver: SkillsResolver;
   readonly #searchEngine?: SkillSearchEngine;
   readonly #validateOnLoad: boolean;
+  readonly #checkSkillFileMtime: boolean;
 
   /** Map of skill name -> array of candidates (supports same-named skills from different sources) */
   #skills: Map<string, InternalSkill[]> = new Map();
@@ -104,6 +112,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     this.#skillsResolver = config.skills;
     this.#searchEngine = config.searchEngine;
     this.#validateOnLoad = config.validateOnLoad ?? true;
+    this.#checkSkillFileMtime = config.checkSkillFileMtime ?? false;
   }
 
   // ===========================================================================
@@ -637,15 +646,28 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
         this.#globDirCache.set(skillsPath, [...dirs]);
         this.#globResolveTimes.set(skillsPath, Date.now());
 
-        for (const entry of resolved) {
-          if (entry.type === 'file') {
-            // File match (e.g., **/SKILL.md) — load as direct skill
-            await this.#discoverDirectSkill(entry.path, source);
-          } else {
-            // Directory match — try as direct skill first, then scan subdirectories
-            const isDirect = await this.#discoverDirectSkill(entry.path, source);
-            if (!isDirect) {
-              await this.#discoverSkillsInPath(entry.path, source);
+        // Process glob-resolved entries in parallel (independent discoveries)
+        const results = await Promise.allSettled(
+          resolved.map(async entry => {
+            if (entry.type === 'file') {
+              // File match (e.g., **/SKILL.md) — load as direct skill
+              await this.#discoverDirectSkill(entry.path, source);
+            } else {
+              // Directory match — try as direct skill first, then scan subdirectories
+              const isDirect = await this.#discoverDirectSkill(entry.path, source);
+              if (!isDirect) {
+                await this.#discoverSkillsInPath(entry.path, source);
+              }
+            }
+          }),
+        );
+
+        for (const [index, result] of results.entries()) {
+          const entry = resolved[index];
+          if (entry && result.status === 'rejected') {
+            const error = result.reason;
+            if (error instanceof Error) {
+              console.error(`[WorkspaceSkills] Failed to load skill from ${entry.path}:`, error.message);
             }
           }
         }
@@ -693,25 +715,31 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     try {
       const entries = await this.#source.readdir(skillsPath);
 
-      for (const entry of entries) {
-        if (entry.type !== 'directory') continue;
+      // Process all skill directories in parallel (each is independent)
+      const results = await Promise.allSettled(
+        entries
+          .filter(entry => entry.type === 'directory')
+          .map(async entry => {
+            const entryPath = this.#joinPath(skillsPath, entry.name);
+            const skillFilePath = this.#joinPath(entryPath, 'SKILL.md');
 
-        const entryPath = this.#joinPath(skillsPath, entry.name);
-        const skillFilePath = this.#joinPath(entryPath, 'SKILL.md');
-
-        if (await this.#source.exists(skillFilePath)) {
-          try {
-            const skill = await this.#parseSkillFile(skillFilePath, entry.name, source);
-
-            // Add to candidates array (replace if same path exists, otherwise append)
-            this.#addToSkillsMap(skill);
-
-            // Index the skill content for search
-            await this.#indexSkill(skill);
-          } catch (error) {
-            if (error instanceof Error) {
-              console.error(`[WorkspaceSkills] Failed to load skill from ${skillFilePath}:`, error.message);
+            if (await this.#source.exists(skillFilePath)) {
+              const skill = await this.#parseSkillFile(skillFilePath, entry.name, source);
+              return skill;
             }
+            return null;
+          }),
+      );
+
+      // Apply results sequentially to preserve overwrite semantics
+      for (const result of results) {
+        if (result.status === 'fulfilled' && result.value) {
+          this.#addToSkillsMap(result.value);
+          await this.#indexSkill(result.value);
+        } else if (result.status === 'rejected') {
+          const error = result.reason;
+          if (error instanceof Error) {
+            console.error(`[WorkspaceSkills] Failed to load skill from ${skillsPath}:`, error.message);
           }
         }
       }
@@ -846,19 +874,58 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
             continue;
           }
 
-          // Also check subdirectories (skill directories) for changes
-          const entries = await this.#source.readdir(pathToCheck);
-          for (const entry of entries) {
-            if (entry.type !== 'directory') continue;
-
-            const entryPath = this.#joinPath(pathToCheck, entry.name);
+          // If this directory is itself a skill root, check its SKILL.md mtime.
+          // This covers direct skill paths and file-level glob expansions (e.g., **/SKILL.md).
+          if (this.#checkSkillFileMtime) {
+            const directSkillFilePath = this.#joinPath(pathToCheck, 'SKILL.md');
             try {
-              const entryStat = await this.#source.stat(entryPath);
-              if (entryStat.modifiedAt.getTime() > this.#lastDiscoveryTime) {
+              const directSkillFileStat = await this.#source.stat(directSkillFilePath);
+              if (
+                directSkillFileStat.type === 'file' &&
+                directSkillFileStat.modifiedAt.getTime() > this.#lastDiscoveryTime
+              ) {
                 return true;
               }
             } catch {
-              // Couldn't stat entry, skip it
+              // Not a direct skill dir (or SKILL.md unavailable), continue to subdirectory scan.
+            }
+          }
+
+          // Also check subdirectories (skill directories) for changes — in parallel
+          const entries = await this.#source.readdir(pathToCheck);
+          const dirEntries = entries.filter(entry => entry.type === 'directory');
+
+          if (dirEntries.length > 0) {
+            const statResults = await Promise.all(
+              dirEntries.map(async entry => {
+                const entryPath = this.#joinPath(pathToCheck, entry.name);
+                try {
+                  const entryStat = await this.#source.stat(entryPath);
+                  if (entryStat.modifiedAt.getTime() > this.#lastDiscoveryTime) {
+                    return true;
+                  }
+
+                  // Optionally check SKILL.md file mtime - editing file content may not update directory mtime.
+                  // This doubles stat calls per skill, so it's opt-in for local development scenarios.
+                  if (this.#checkSkillFileMtime) {
+                    const skillFilePath = this.#joinPath(entryPath, 'SKILL.md');
+                    try {
+                      const skillFileStat = await this.#source.stat(skillFilePath);
+                      return (
+                        skillFileStat.type === 'file' && skillFileStat.modifiedAt.getTime() > this.#lastDiscoveryTime
+                      );
+                    } catch {
+                      // SKILL.md doesn't exist or can't be stat'd, skip
+                    }
+                  }
+                } catch {
+                  // Couldn't stat entry, skip it
+                }
+                return false;
+              }),
+            );
+            if (statResults.some(stale => stale)) {
+              return true;
             }
           }
         } catch {
@@ -903,10 +970,12 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       }
     }
 
-    // Discover reference, script, and asset files
-    const references = await this.#discoverFilesInSubdir(skillPath, 'references');
-    const scripts = await this.#discoverFilesInSubdir(skillPath, 'scripts');
-    const assets = await this.#discoverFilesInSubdir(skillPath, 'assets');
+    // Discover reference, script, and asset files (parallel — independent subdirs)
+    const [references, scripts, assets] = await Promise.all([
+      this.#discoverFilesInSubdir(skillPath, 'references'),
+      this.#discoverFilesInSubdir(skillPath, 'scripts'),
+      this.#discoverFilesInSubdir(skillPath, 'assets'),
+    ]);
 
     // Build indexable content (instructions + references)
     const indexableContent = await this.#buildIndexableContent(body, skillPath, references);
@@ -1000,15 +1069,21 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   async #buildIndexableContent(instructions: string, skillPath: string, references: string[]): Promise<string> {
     const parts = [instructions];
 
-    for (const refPath of references) {
-      const fullPath = this.#joinPath(skillPath, 'references', refPath);
-      try {
-        const rawContent = await this.#source.readFile(fullPath);
-        const content = typeof rawContent === 'string' ? rawContent : rawContent.toString('utf-8');
-        parts.push(content);
-      } catch {
-        // Skip files that can't be read
-      }
+    // Read all reference files in parallel (independent reads, order preserved by map)
+    const refContents = await Promise.all(
+      references.map(async refPath => {
+        const fullPath = this.#joinPath(skillPath, 'references', refPath);
+        try {
+          const rawContent = await this.#source.readFile(fullPath);
+          return typeof rawContent === 'string' ? rawContent : rawContent.toString('utf-8');
+        } catch {
+          return null; // Skip files that can't be read
+        }
+      }),
+    );
+
+    for (const content of refContents) {
+      if (content !== null) parts.push(content);
     }
 
     return parts.join('\n\n');
@@ -1058,24 +1133,26 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       },
     });
 
-    // Index each reference file separately
-    for (const refPath of skill.references) {
-      const fullPath = this.#joinPath(skill.path, 'references', refPath);
-      try {
-        const rawContent = await this.#source.readFile(fullPath);
-        const content = typeof rawContent === 'string' ? rawContent : rawContent.toString('utf-8');
-        await this.#searchEngine.index({
-          id: `skill:${skill.path}:${refPath}`,
-          content,
-          metadata: {
-            skillPath: skill.path,
-            source: `references/${refPath}`,
-          },
-        });
-      } catch {
-        // Skip files that can't be read
-      }
-    }
+    // Index each reference file in parallel (independent reads + index calls)
+    await Promise.all(
+      skill.references.map(async refPath => {
+        const fullPath = this.#joinPath(skill.path, 'references', refPath);
+        try {
+          const rawContent = await this.#source.readFile(fullPath);
+          const content = typeof rawContent === 'string' ? rawContent : rawContent.toString('utf-8');
+          await this.#searchEngine!.index({
+            id: `skill:${skill.path}:${refPath}`,
+            content,
+            metadata: {
+              skillPath: skill.path,
+              source: `references/${refPath}`,
+            },
+          });
+        } catch {
+          // Skip files that can't be read
+        }
+      }),
+    );
   }
 
   /**

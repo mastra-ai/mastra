@@ -22,7 +22,6 @@ export type AgentCapabilities = {
   generateMessageId: Mastra['generateId'];
   mastra?: Mastra;
   _agentNetworkAppend?: boolean;
-  saveStepMessages: Agent['saveStepMessages'];
   convertTools: Agent['convertTools'];
   runInputProcessors: Agent['__runInputProcessors'];
   executeOnFinish: (args: AgentExecuteOnFinishOptions) => Promise<void>;

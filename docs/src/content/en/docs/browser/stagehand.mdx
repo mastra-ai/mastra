@@ -39,6 +39,7 @@ const browser = new StagehandBrowser({
 
 export const stagehandAgent = new Agent({
   id: 'stagehand-agent',
+  name: 'Stagehand Agent',
   model: 'openai/gpt-5.4',
   browser,
   instructions: `You are a web automation assistant.

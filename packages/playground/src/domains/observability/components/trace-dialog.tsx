@@ -11,6 +11,7 @@ import {
   getShortId,
   Icon,
   cn,
+  useSpanDetail,
 } from '@mastra/playground-ui';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import {
@@ -33,7 +34,6 @@ import { TraceAsItemDialog } from './trace-as-item-dialog';
 import { TraceTimeline } from './trace-timeline';
 import { TraceTimelineTools } from './trace-timeline-tools';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
-import { useSpanDetail } from '@/domains/traces/hooks/use-span-detail';
 import { useLinkComponent } from '@/lib/framework';
 
 type TraceDialogProps = {

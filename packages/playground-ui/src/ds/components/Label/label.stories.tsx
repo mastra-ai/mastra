@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Label } from './label';
 import { Input } from '../Input';
+import { Label } from './label';
 
 const meta: Meta<typeof Label> = {
   title: 'Elements/Label',
