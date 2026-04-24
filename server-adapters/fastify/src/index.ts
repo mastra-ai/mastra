@@ -678,8 +678,14 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           }
         }
 
+        // Strip the prefix from the URL before forwarding to the internal Hono
+        // sub-app, which has routes registered at their original (un-prefixed) paths.
+        let routeUrl = request.url;
+        if (prefix && routeUrl.startsWith(prefix)) {
+          routeUrl = routeUrl.slice(prefix.length) || '/';
+        }
         const response = await this.handleCustomRouteRequest(
-          `http://${request.headers.host}${request.url}`,
+          `http://${request.headers.host}${routeUrl}`,
           request.method,
           request.headers as Record<string, string | string[] | undefined>,
           request.body,

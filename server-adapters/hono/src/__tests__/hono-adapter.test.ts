@@ -850,4 +850,39 @@ describe('Hono Server Adapter', () => {
       expect(data.customKey).toBe('safe-value');
     });
   });
+
+  describe('Custom Route Prefix', () => {
+    let context: AdapterTestContext;
+
+    beforeEach(async () => {
+      context = await createDefaultTestContext();
+    });
+
+    it('should apply prefix to custom API routes', async () => {
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+        prefix: '/api',
+        customApiRoutes: [
+          {
+            method: 'GET' as const,
+            path: '/chat',
+            handler: async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+          },
+        ],
+      });
+
+      await adapter.init();
+
+      // Custom route should be reachable at the prefixed path
+      const prefixed = await app.request(new Request('http://localhost/api/chat', { method: 'GET' }));
+      expect(prefixed.status).toBe(200);
+
+      // Custom route should NOT be reachable at the bare path
+      const bare = await app.request(new Request('http://localhost/chat', { method: 'GET' }));
+      expect(bare.status).toBe(404);
+    });
+  });
 });

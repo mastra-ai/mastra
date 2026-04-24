@@ -595,4 +595,45 @@ describe('Fastify Server Adapter', () => {
       await response.json();
     });
   });
+
+  describe('Custom Route Prefix', () => {
+    let context: AdapterTestContext;
+
+    beforeEach(async () => {
+      context = await createDefaultTestContext();
+    });
+
+    it('should apply prefix to custom API routes', async () => {
+      const app = Fastify();
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+        prefix: '/api',
+        customApiRoutes: [
+          {
+            method: 'GET' as const,
+            path: '/chat',
+            handler: async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+          },
+        ],
+      });
+
+      await adapter.init();
+
+      const address = await app.listen({ port: 0 });
+
+      try {
+        // Custom route should be reachable at the prefixed path
+        const prefixed = await fetch(`${address}/api/chat`);
+        expect(prefixed.status).toBe(200);
+
+        // Custom route should NOT be reachable at the bare path
+        const bare = await fetch(`${address}/chat`);
+        expect(bare.status).toBe(404);
+      } finally {
+        await app.close();
+      }
+    });
+  });
 });
