@@ -26,9 +26,11 @@ interface AgentConfigurePanelProps {
   onAgentChange: (next: AgentConfig) => void;
   editable?: boolean;
   draftName?: string;
+  draftDescription?: string;
   draftAvatarUrl?: string;
   draftInstructions?: string;
   onDraftNameChange?: (next: string) => void;
+  onDraftDescriptionChange?: (next: string) => void;
   onDraftAvatarUrlChange?: (next: string) => void;
   onDraftInstructionsChange?: (next: string) => void;
   availableTools?: AvailableTool[];
@@ -40,9 +42,11 @@ export const AgentConfigurePanel = ({
   onAgentChange,
   editable = true,
   draftName = agent.name,
+  draftDescription = agent.description ?? '',
   draftAvatarUrl = agent.avatarUrl ?? '',
   draftInstructions = agent.systemPrompt,
   onDraftNameChange = () => {},
+  onDraftDescriptionChange = () => {},
   onDraftAvatarUrlChange = () => {},
   onDraftInstructionsChange = () => {},
   availableTools = [],
@@ -84,50 +88,67 @@ export const AgentConfigurePanel = ({
     <div className="flex h-full flex-col border border-border1 bg-surface2 rounded-3xl overflow-hidden">
       <div className="flex-1 flex flex-col gap-6 py-6 overflow-y-auto">
         {editable ? (
-          <div className="flex items-center gap-4 px-6">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="group relative h-avatar-lg w-avatar-lg shrink-0 overflow-hidden rounded-full border border-border1 bg-surface3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral3"
-              aria-label="Upload avatar"
-              data-testid="agent-configure-avatar-trigger"
-            >
-              {draftAvatarUrl ? (
-                <img src={draftAvatarUrl} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <span className="flex h-full w-full items-center justify-center text-ui-md text-neutral4">
-                  {(draftName[0] ?? 'A').toUpperCase()}
+          <div className="flex flex-col gap-3 px-6">
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="group relative h-avatar-lg w-avatar-lg shrink-0 overflow-hidden rounded-full border border-border1 bg-surface3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral3"
+                aria-label="Upload avatar"
+                data-testid="agent-configure-avatar-trigger"
+              >
+                {draftAvatarUrl ? (
+                  <img src={draftAvatarUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="flex h-full w-full items-center justify-center text-ui-md text-neutral4">
+                    {(draftName[0] ?? 'A').toUpperCase()}
+                  </span>
+                )}
+                <span className="absolute inset-0 flex items-center justify-center rounded-full bg-surface4 opacity-0 transition-opacity group-hover:opacity-100">
+                  <Plus className="h-5 w-5 text-neutral5" />
                 </span>
-              )}
-              <span className="absolute inset-0 flex items-center justify-center rounded-full bg-surface4 opacity-0 transition-opacity group-hover:opacity-100">
-                <Plus className="h-5 w-5 text-neutral5" />
-              </span>
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleAvatarFile}
-              className="hidden"
-              data-testid="agent-configure-avatar-input"
-            />
-            <div className="min-w-0 flex-1">
-              <TextFieldBlock
-                name="agent-name"
-                label="Name"
-                value={draftName}
-                placeholder="My agent"
-                onChange={e => onDraftNameChange(e.target.value)}
-                testId="agent-configure-name"
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarFile}
+                className="hidden"
+                data-testid="agent-configure-avatar-input"
               />
+              <div className="min-w-0 flex-1">
+                <TextFieldBlock
+                  name="agent-name"
+                  label="Name"
+                  value={draftName}
+                  placeholder="My agent"
+                  onChange={e => onDraftNameChange(e.target.value)}
+                  testId="agent-configure-name"
+                />
+              </div>
             </div>
+            <TextFieldBlock
+              name="agent-description"
+              label="Description"
+              value={draftDescription}
+              placeholder="What is this agent for?"
+              onChange={e => onDraftDescriptionChange(e.target.value)}
+              testId="agent-configure-description"
+            />
           </div>
         ) : (
-          <div className="flex items-center gap-3 px-6">
-            <Avatar name={agent.name} size="lg" src={agent.avatarUrl} />
-            <Txt variant="ui-md" className="min-w-0 flex-1 truncate font-medium text-neutral6">
-              {agent.name}
-            </Txt>
+          <div className="flex flex-col gap-1 px-6">
+            <div className="flex items-center gap-3">
+              <Avatar name={agent.name} size="lg" src={agent.avatarUrl} />
+              <Txt variant="ui-md" className="min-w-0 flex-1 truncate font-medium text-neutral6">
+                {agent.name}
+              </Txt>
+            </div>
+            {agent.description && (
+              <Txt variant="ui-sm" className="text-neutral3" data-testid="agent-configure-description-view">
+                {agent.description}
+              </Txt>
+            )}
           </div>
         )}
 
@@ -244,9 +265,11 @@ const AgentConfigurePanelSkeleton = () => (
 export const EditableAgentConfigurePanel = (props: AgentConfigurePanelProps) => {
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
   const draftName = formMethods.watch('name');
+  const draftDescription = formMethods.watch('description') ?? '';
   const draftInstructions = formMethods.watch('instructions') ?? '';
 
   const setDraftName = (value: string) => formMethods.setValue('name', value);
+  const setDraftDescription = (value: string) => formMethods.setValue('description', value);
   const setDraftInstructions = (value: string) => formMethods.setValue('instructions', value);
 
   return (
@@ -254,9 +277,11 @@ export const EditableAgentConfigurePanel = (props: AgentConfigurePanelProps) => 
       {...props}
       editable={true}
       draftName={draftName}
+      draftDescription={draftDescription}
       draftAvatarUrl={''}
       draftInstructions={draftInstructions}
       onDraftNameChange={setDraftName}
+      onDraftDescriptionChange={setDraftDescription}
       onDraftAvatarUrlChange={() => {}}
       onDraftInstructionsChange={setDraftInstructions}
     />

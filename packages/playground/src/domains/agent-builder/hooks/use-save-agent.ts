@@ -47,10 +47,13 @@ export const useSaveAgent = ({ agentId, mode, availableTools = [], onSuccess }: 
           ? { type: 'id', workspaceId: values.workspaceId }
           : undefined;
 
+      const description = values.description?.trim() ? values.description.trim() : undefined;
+
       try {
         if (mode === 'edit') {
           const params: UpdateStoredAgentParams = {
             name: values.name,
+            description,
             instructions: values.instructions,
             tools: toolsOrUndefined,
             skills: skillsOrUndefined,
@@ -65,6 +68,7 @@ export const useSaveAgent = ({ agentId, mode, availableTools = [], onSuccess }: 
         const params: CreateStoredAgentParams = {
           id: agentId,
           name: values.name,
+          description,
           instructions: values.instructions,
           model: { provider: 'google', name: 'gemini-2.5-flash' },
           tools: toolsOrUndefined,

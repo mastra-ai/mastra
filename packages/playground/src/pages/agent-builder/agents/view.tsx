@@ -25,15 +25,7 @@ export default function AgentBuilderAgentView() {
   const { data: toolsData, isPending: isToolsPending } = useTools();
   const isReady = Boolean(id) && !isStoredAgentLoading && !isToolsPending;
 
-  return (
-    <AgentBuilderAgentViewPage
-      key={isReady ? 'ready' : 'loading'}
-      id={id}
-      storedAgent={storedAgent}
-      toolsData={toolsData}
-      isReady={isReady}
-    />
-  );
+  return <AgentBuilderAgentViewPage id={id} storedAgent={storedAgent} toolsData={toolsData} isReady={isReady} />;
 }
 
 interface PageProps {
@@ -44,7 +36,12 @@ interface PageProps {
 }
 
 const extractWorkspaceId = (workspace: StoredAgent['workspace']): string | undefined => {
-  if (workspace && typeof workspace === 'object' && 'type' in workspace && (workspace as { type: string }).type === 'id') {
+  if (
+    workspace &&
+    typeof workspace === 'object' &&
+    'type' in workspace &&
+    (workspace as { type: string }).type === 'id'
+  ) {
     const wsId = (workspace as { workspaceId?: unknown }).workspaceId;
     return typeof wsId === 'string' ? wsId : undefined;
   }
@@ -59,6 +56,7 @@ const AgentBuilderAgentViewPage = ({ id, storedAgent, toolsData, isReady }: Page
       tools: Object.fromEntries(Object.keys(storedAgent?.tools ?? {}).map(k => [k, true])),
       skills: Object.keys(storedAgent?.skills ?? {}),
       workspaceId: extractWorkspaceId(storedAgent?.workspace),
+      description: storedAgent?.description ?? '',
     },
   });
 
@@ -112,6 +110,7 @@ const AgentBuilderAgentViewReady = ({ id, storedAgent, toolsData }: AgentBuilder
     () => ({
       id: storedAgent?.id ?? id ?? '',
       name: storedAgent?.name ?? '',
+      description: storedAgent?.description ?? '',
       systemPrompt: typeof storedAgent?.instructions === 'string' ? storedAgent.instructions : '',
     }),
     [storedAgent, id],

@@ -34,6 +34,21 @@ describe('AgentBuilderEditFormSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('accepts an optional description', () => {
+    const withDescription = AgentBuilderEditFormSchema.safeParse({
+      name: 'My agent',
+      description: 'Helps with research tasks',
+      instructions: 'Do things',
+    });
+    expect(withDescription.success).toBe(true);
+
+    const without = AgentBuilderEditFormSchema.safeParse({
+      name: 'My agent',
+      instructions: 'Do things',
+    });
+    expect(without.success).toBe(true);
+  });
+
   it('accepts an optional workspaceId', () => {
     const withId = AgentBuilderEditFormSchema.safeParse({
       name: 'My agent',

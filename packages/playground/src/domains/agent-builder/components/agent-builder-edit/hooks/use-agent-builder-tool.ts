@@ -37,6 +37,12 @@ export const useAgentBuilderTool = ({
 
     const shape: Record<string, z.ZodType> = {
       name: z.string(),
+      description: z
+        .string()
+        .optional()
+        .describe(
+          'A short, human-readable summary of what this agent does. Shown to users when browsing agents. Keep it concise (one sentence).',
+        ),
       instructions: z.string(),
     };
     if (features.tools) {
@@ -69,7 +75,7 @@ export const useAgentBuilderTool = ({
         'Id of the workspace to attach to the agent. Only use ids from the available workspaces list in this tool description.',
       );
 
-    const descriptionParts = ['name', 'instructions'];
+    const descriptionParts = ['name', 'description', 'instructions'];
     if (features.tools) descriptionParts.push('tools');
     if (features.skills) descriptionParts.push('skills');
     descriptionParts.push('workspaceId');
@@ -102,6 +108,9 @@ export const useAgentBuilderTool = ({
       execute: async (inputData: any) => {
         if (typeof inputData?.name === 'string') {
           formMethods.setValue('name', inputData.name);
+        }
+        if (typeof inputData?.description === 'string') {
+          formMethods.setValue('description', inputData.description);
         }
         if (typeof inputData?.instructions === 'string') {
           formMethods.setValue('instructions', inputData.instructions);

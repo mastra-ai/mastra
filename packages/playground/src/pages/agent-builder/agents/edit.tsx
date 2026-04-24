@@ -53,7 +53,6 @@ export default function AgentBuilderAgentEdit() {
 
   return (
     <AgentBuilderAgentEditPage
-      key={isReady ? 'ready' : 'loading'}
       id={id}
       storedAgent={storedAgent}
       toolsData={toolsData}
@@ -75,6 +74,7 @@ const AgentBuilderAgentEditPage = ({ id, storedAgent, toolsData, availableWorksp
   const formMethods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {
       name: storedAgent?.name ?? '',
+      description: storedAgent?.description ?? '',
       instructions: typeof storedAgent?.instructions === 'string' ? storedAgent.instructions : '',
       tools: Object.fromEntries(Object.keys(storedAgent?.tools ?? {}).map(k => [k, true])),
       skills: Object.keys(storedAgent?.skills ?? {}),
