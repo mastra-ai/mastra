@@ -69,7 +69,6 @@ export type ChannelToolEndContext = ChannelToolStartContext & {
 type StatusCapableAdapter = Adapter & {
   setStatus?: (threadId: string, text: string) => Promise<void> | void;
   clearStatus?: (threadId: string) => Promise<void> | void;
-  setAssistantStatus?: (threadId: string, text: string) => Promise<void> | void;
 };
 
 /** Per-adapter configuration. */
@@ -1160,10 +1159,6 @@ export class AgentChannels {
     const setAdapterStatus = async (text: string) => {
       if (typeof statusAdapter.setStatus === 'function') {
         await statusAdapter.setStatus(sdkThread.id, text);
-        return;
-      }
-      if (typeof statusAdapter.setAssistantStatus === 'function') {
-        await statusAdapter.setAssistantStatus(sdkThread.id, text);
       }
     };
 
@@ -1174,10 +1169,6 @@ export class AgentChannels {
       }
       if (typeof statusAdapter.setStatus === 'function') {
         await statusAdapter.setStatus(sdkThread.id, '');
-        return;
-      }
-      if (typeof statusAdapter.setAssistantStatus === 'function') {
-        await statusAdapter.setAssistantStatus(sdkThread.id, '');
       }
     };
 

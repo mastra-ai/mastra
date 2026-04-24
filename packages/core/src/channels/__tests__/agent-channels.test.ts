@@ -441,6 +441,31 @@ describe('AgentChannels', () => {
       ).resolves.toBeUndefined();
     });
 
+    it('does not call Slack-specific assistant status methods from core', async () => {
+      const adapter = {
+        ...createMockAdapter('slack'),
+        setAssistantStatus: vi.fn().mockResolvedValue(undefined),
+      };
+      const onToolStart = vi.fn(async ({ channel }: any) => {
+        const handle = await channel.status.set('Reading file…');
+        await handle.clear();
+      });
+      const channels = new AgentChannels({ adapters: { slack: { adapter, onToolStart } } });
+
+      await (channels as any).consumeAgentStream(
+        {
+          fullStream: chunks({
+            type: 'tool-call',
+            payload: { toolName: 'read_file', toolCallId: 'call-1', args: { path: 'README.md' } },
+          }),
+        },
+        createThread(),
+        'slack',
+      );
+
+      expect(adapter.setAssistantStatus).not.toHaveBeenCalled();
+    });
+
     it('prevents stale status handles from clearing newer statuses', async () => {
       const adapter = {
         ...createMockAdapter('slack'),

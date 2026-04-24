@@ -206,6 +206,7 @@ export const supportAgent = new Agent({
   channels: {
     adapters: {
       slack: {
+        // Status updates no-op unless the adapter implements Mastra status methods.
         adapter: createSlackAdapter(),
         onToolStart: async ({ toolCallId, displayName, channel }) => {
           toolStatuses.set(toolCallId, await channel.status.set(`Running ${displayName}…`))
@@ -220,7 +221,7 @@ export const supportAgent = new Agent({
 })
 ```
 
-`channel.status` is best-effort. Adapters that support status map it to the platform capability, such as assistant status or typing indicators. Adapters without status support no-op. Mastra clears channel status when the stream finishes or errors.
+`channel.status` is best-effort. Visible status requires the adapter to implement Mastra status methods such as `setStatus(threadId, text)` and `clearStatus(threadId)`. Adapters without these methods no-op. For Slack assistant status, use a Slack adapter version or wrapper that implements these methods. Mastra core does not call Slack-specific status methods directly. Mastra clears channel status when the stream finishes or errors.
 
 ### `ChannelToolStartContext`
 
@@ -302,12 +303,14 @@ export const supportAgent = new Agent({
   {
     name: 'set',
     type: '(text: string) => Promise<ChannelStatusHandle>',
-    description: 'Set the active channel status and return a handle that can clear that status if it is still active.',
+    description:
+      'Set the active channel status through an adapter that implements `setStatus(threadId, text)` and return a handle that can clear that status if it is still active.',
   },
   {
     name: 'clear',
     type: '() => Promise<void>',
-    description: 'Clear the active channel status.',
+    description:
+      'Clear the active channel status through `clearStatus(threadId)` when the adapter implements it. If only `setStatus` exists, Mastra clears by setting an empty status.',
   },
 ]}
 />
