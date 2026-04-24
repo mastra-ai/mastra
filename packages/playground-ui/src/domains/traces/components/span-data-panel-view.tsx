@@ -318,9 +318,7 @@ function SpanDataPanelContent({
       <Tabs defaultTab="details" value={activeTab} onValueChange={onTabChange}>
         <TabList>
           <Tab value="details">Details</Tab>
-          {scoringTabSlot && (
-            <Tab value="scoring">Scoring {scoringTabBadge != null && <>({scoringTabBadge})</>}</Tab>
-          )}
+          {scoringTabSlot && <Tab value="scoring">Scoring {scoringTabBadge != null && <>({scoringTabBadge})</>}</Tab>}
           {feedbackTabSlot && (
             <Tab value="feedback">Feedback {feedbackTabBadge != null && <>({feedbackTabBadge})</>}</Tab>
           )}
