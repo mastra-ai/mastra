@@ -238,6 +238,38 @@ describe('DatadogBridge', () => {
       expect(mockTrace).not.toHaveBeenCalled();
     });
 
+    it('propagates trace-level user and session context from the root span to descendants', () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+
+      const rootResult = bridge.createSpan(
+        createMockSpanOptions({
+          name: 'root',
+          metadata: {
+            userId: 'user-123',
+            sessionId: 'session-456',
+          },
+        }),
+      )!;
+
+      bridge.createSpan(
+        createMockSpanOptions({
+          name: 'child',
+          parent: {
+            id: rootResult.spanId,
+            traceId: rootResult.traceId,
+            isInternal: false,
+            metadata: {},
+            getParentSpanId: () => undefined,
+          } as any,
+        }),
+      );
+
+      expect(llmobsRegistrations[1]?.options).toMatchObject({
+        userId: 'user-123',
+        sessionId: 'session-456',
+      });
+    });
+
     it('uses the parent dd span when creating a child span', () => {
       const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
 
@@ -531,6 +563,33 @@ describe('DatadogBridge', () => {
           tags: { tenantId: 'tenant-123' },
         }),
       );
+    });
+
+    it('releases stored trace context after the last span in a trace finishes', async () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+
+      const rootResult = bridge.createSpan(
+        createMockSpanOptions({
+          name: 'root',
+          metadata: {
+            userId: 'user-123',
+            sessionId: 'session-456',
+          },
+        }),
+      )!;
+
+      await bridge.exportTracingEvent(
+        createTracingEvent(
+          TracingEventType.SPAN_ENDED,
+          createMockSpan({
+            id: rootResult.spanId,
+            traceId: rootResult.traceId,
+          }),
+        ),
+      );
+
+      expect(bridge['traceContext'].size).toBe(0);
+      expect(bridge['openSpanCounts'].size).toBe(0);
     });
   });
 

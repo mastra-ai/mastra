@@ -41,12 +41,18 @@ type LLMObsTagger = {
       parent?: any;
       kind: DatadogSpanKind;
       name: string;
+      userId?: string;
       sessionId?: string;
       modelName?: string;
       modelProvider?: string;
     },
   ) => void;
 };
+
+interface TraceContext {
+  userId?: string;
+  sessionId?: string;
+}
 
 type LifecycleLogger = Pick<DatadogBridge['logger'], 'debug' | 'info' | 'warn' | 'error'>;
 
@@ -168,6 +174,8 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
 
   private config: Required<Pick<DatadogBridgeConfig, 'mlApp' | 'site'>> & DatadogBridgeConfig;
   private ddSpanMap = new Map<string, any>();
+  private traceContext = new Map<string, TraceContext>();
+  private openSpanCounts = new Map<string, number>();
 
   constructor(config: DatadogBridgeConfig = {}) {
     super(config);
@@ -291,8 +299,10 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
       const parentContext = parentDdSpan?.context?.() as { toSpanId?: (hex?: boolean) => string } | undefined;
       const parentSpanId = parentContext?.toSpanId?.(true) ?? externalParentId;
 
+      this.captureTraceContext(traceId, options);
+      this.openSpanCounts.set(traceId, (this.openSpanCounts.get(traceId) ?? 0) + 1);
       this.ddSpanMap.set(spanId, ddSpan);
-      this.registerLlmObsSpan(ddSpan, options, parentDdSpan);
+      this.registerLlmObsSpan(ddSpan, traceId, options, parentDdSpan);
 
       this.logger.debug(
         `[DatadogBridge.createSpan] Created APM span [spanId=${spanId}] [traceId=${traceId}] ` +
@@ -397,7 +407,12 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
     }
   }
 
-  private registerLlmObsSpan(ddSpan: any, options: CreateSpanOptions<SpanType>, parentDdSpan?: any): void {
+  private registerLlmObsSpan(
+    ddSpan: any,
+    traceId: string,
+    options: CreateSpanOptions<SpanType>,
+    parentDdSpan?: any,
+  ): void {
     const tagger = this.getLlmObsTagger();
     if (!tagger) {
       this.logger.debug('[DatadogBridge] Skipping LLMObs registration because no tagger is available', {
@@ -414,18 +429,14 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
         options.parent?.type === SpanTypeEnum.MODEL_GENERATION
           ? (options.parent.attributes as ModelGenerationAttributes | undefined)
           : undefined;
-      const sessionId =
-        typeof options.metadata?.sessionId === 'string'
-          ? options.metadata.sessionId
-          : typeof options.parent?.metadata?.sessionId === 'string'
-            ? options.parent.metadata.sessionId
-            : undefined;
+      const traceCtx = this.resolveTraceContext(traceId, options);
 
       tagger.registerLLMObsSpan(ddSpan, {
         parent: parentDdSpan,
         kind,
         name: options.name,
-        sessionId,
+        userId: traceCtx.userId,
+        sessionId: traceCtx.sessionId,
         ...(kind === 'llm' && (ownAttrs?.model ?? inheritedModelAttrs?.model)
           ? { modelName: ownAttrs?.model ?? inheritedModelAttrs?.model }
           : {}),
@@ -438,7 +449,8 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
         spanType: options.type,
         kind,
         hasParent: Boolean(parentDdSpan),
-        sessionId,
+        userId: traceCtx.userId,
+        sessionId: traceCtx.sessionId,
       });
     } catch (error) {
       this.logger.warn('[DatadogBridge] Failed to register LLMObs span', {
@@ -532,6 +544,7 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
       });
     } finally {
       this.ddSpanMap.delete(span.id);
+      this.releaseTraceContext(span.traceId);
       this.logger.debug('[DatadogBridge] Removed dd span from bridge map', {
         spanId: span.id,
         spanName: span.name,
@@ -543,6 +556,37 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
 
   private previewOpenSpanIds(limit = 8): string[] {
     return Array.from(this.ddSpanMap.keys()).slice(0, limit);
+  }
+
+  private captureTraceContext(traceId: string, options: CreateSpanOptions<SpanType>): void {
+    const existing = this.traceContext.get(traceId);
+    const next: TraceContext = {
+      userId: firstString(options.metadata?.userId, options.parent?.metadata?.userId, existing?.userId),
+      sessionId: firstString(options.metadata?.sessionId, options.parent?.metadata?.sessionId, existing?.sessionId),
+    };
+
+    if (next.userId || next.sessionId) {
+      this.traceContext.set(traceId, next);
+    }
+  }
+
+  private resolveTraceContext(traceId: string, options: CreateSpanOptions<SpanType>): TraceContext {
+    const stored = this.traceContext.get(traceId);
+    return {
+      userId: firstString(options.metadata?.userId, options.parent?.metadata?.userId, stored?.userId),
+      sessionId: firstString(options.metadata?.sessionId, options.parent?.metadata?.sessionId, stored?.sessionId),
+    };
+  }
+
+  private releaseTraceContext(traceId: string): void {
+    const nextCount = (this.openSpanCounts.get(traceId) ?? 1) - 1;
+    if (nextCount > 0) {
+      this.openSpanCounts.set(traceId, nextCount);
+      return;
+    }
+
+    this.openSpanCounts.delete(traceId);
+    this.traceContext.delete(traceId);
   }
 
   private buildAnnotations(span: AnyExportedSpan): Record<string, any> {
@@ -677,6 +721,8 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
       }
     }
     this.ddSpanMap.clear();
+    this.openSpanCounts.clear();
+    this.traceContext.clear();
 
     await this.flush();
 
@@ -690,6 +736,15 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
 
     await super.shutdown();
   }
+}
+
+function firstString(...values: Array<unknown>): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string') {
+      return value;
+    }
+  }
+  return undefined;
 }
 
 function fillRandomBytes(bytes: Uint8Array): void {
