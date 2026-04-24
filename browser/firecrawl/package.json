@@ -45,14 +45,12 @@
     "playwright-core": "^1.57.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
-    "vitest": "catalog:",
-    "zod": "catalog:"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "@mastra/agent-browser": ">=0.2.0 <1.0.0",
     "@mastra/core": ">=1.22.0-0 <2.0.0-0",
-    "agent-browser": ">=0.19.0",
-    "zod": "^3.25.0 || ^4.0.0"
+    "agent-browser": ">=0.19.0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

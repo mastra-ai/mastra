@@ -56,7 +56,15 @@ export class FirecrawlAgentBrowserThreadManager extends AgentBrowserThreadManage
 
       if (!createRes.success || !createRes.id || !createRes.cdpUrl) {
         const msg = createRes.error ?? 'Firecrawl browser session creation failed';
-        throw new Error(`Firecrawl browser(): ${msg}`);
+        const err = new Error(`Firecrawl browser(): ${msg}`);
+        if (createRes.id) {
+          try {
+            await this.firecrawl.deleteBrowser(createRes.id);
+          } catch (cleanupErr) {
+            this.logger?.warn?.(`Firecrawl deleteBrowser(${createRes.id}) after failed browser(): ${cleanupErr}`);
+          }
+        }
+        throw err;
       }
 
       session.firecrawlSessionId = createRes.id;

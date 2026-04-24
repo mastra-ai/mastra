@@ -20,7 +20,6 @@ export async function resolveCdpWebSocketUrl(
 
     try {
       const response = await fetch(versionUrl, { signal: controller.signal });
-      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error(
@@ -36,11 +35,12 @@ export async function resolveCdpWebSocketUrl(
       logger?.debug?.(`Resolved WebSocket URL: ${data.webSocketDebuggerUrl}`);
       return data.webSocketDebuggerUrl;
     } catch (error) {
-      clearTimeout(timeoutId);
       if (error instanceof Error && error.name === 'AbortError') {
         throw new Error(`Timeout resolving WebSocket URL from ${versionUrl} (10s)`);
       }
       throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 

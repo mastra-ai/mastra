@@ -53,7 +53,7 @@ export class FirecrawlBrowser extends AgentBrowser {
     this.sessionOpts = sessionOpts;
   }
 
-  override async doLaunch(): Promise<void> {
+  protected override async doLaunch(): Promise<void> {
     const scope = this.threadManager.getScope();
     if (scope === 'thread') {
       await super.doLaunch();
@@ -71,30 +71,55 @@ export class FirecrawlBrowser extends AgentBrowser {
 
     if (!createRes.success || !createRes.id || !createRes.cdpUrl) {
       const msg = createRes.error ?? 'Firecrawl browser session creation failed';
-      throw new Error(`Firecrawl browser(): ${msg}`);
+      const err = new Error(`Firecrawl browser(): ${msg}`);
+      if (createRes.id) {
+        try {
+          await this.firecrawl.deleteBrowser(createRes.id);
+        } catch (cleanupErr) {
+          this.logger?.warn?.(`Firecrawl deleteBrowser(${createRes.id}) after failed browser(): ${cleanupErr}`);
+        }
+      }
+      throw err;
     }
 
-    this.sharedFirecrawlSessionId = createRes.id;
+    const sessionId = createRes.id;
     this.sharedManager = new BrowserManager();
 
-    const localConfig = this.config as AgentBrowserConfig;
-    const wsUrl = await resolveCdpWebSocketUrl(createRes.cdpUrl, this.logger);
+    try {
+      const localConfig = this.config as AgentBrowserConfig;
+      const wsUrl = await resolveCdpWebSocketUrl(createRes.cdpUrl, this.logger);
 
-    const launchOptions: BrowserLaunchOptions = {
-      headless: localConfig.headless ?? true,
-      viewport: localConfig.viewport,
-      profile: localConfig.profile,
-      executablePath: localConfig.executablePath,
-      storageState: localConfig.storageState,
-      cdpUrl: wsUrl,
-    };
+      const launchOptions: BrowserLaunchOptions = {
+        headless: localConfig.headless ?? true,
+        viewport: localConfig.viewport,
+        profile: localConfig.profile,
+        executablePath: localConfig.executablePath,
+        storageState: localConfig.storageState,
+        cdpUrl: wsUrl,
+      };
 
-    await this.sharedManager.launch(launchOptions);
-    this.threadManager.setSharedManager(this.sharedManager);
-    this.setupCloseListenerForSharedScope(this.sharedManager);
+      await this.sharedManager.launch(launchOptions);
+      this.threadManager.setSharedManager(this.sharedManager);
+      this.setupCloseListenerForSharedScope(this.sharedManager);
+      this.sharedFirecrawlSessionId = sessionId;
+    } catch (launchErr) {
+      try {
+        await this.sharedManager.close();
+      } catch (closeErr) {
+        this.logger?.warn?.(`BrowserManager.close() after failed shared launch: ${closeErr}`);
+      }
+      try {
+        await this.firecrawl.deleteBrowser(sessionId);
+      } catch (delErr) {
+        this.logger?.warn?.(`Firecrawl deleteBrowser(${sessionId}) after failed shared launch: ${delErr}`);
+      }
+      this.sharedManager = null;
+      this.sharedFirecrawlSessionId = undefined;
+      throw launchErr;
+    }
   }
 
-  override async doClose(): Promise<void> {
+  protected override async doClose(): Promise<void> {
     const sid = this.sharedFirecrawlSessionId;
     await super.doClose();
     if (sid) {
