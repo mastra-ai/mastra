@@ -693,15 +693,18 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         await this.writeCustomRouteResponse(response, reply.raw);
       };
 
+      const prefix = this.prefix ?? '';
+      const fullPath = `${prefix}${route.path}`;
+
       if (route.method === 'ALL') {
         const methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] as const;
         for (const method of methods) {
-          this.app.route({ method, url: route.path, handler: fastifyHandler });
+          this.app.route({ method, url: fullPath, handler: fastifyHandler });
         }
       } else {
         this.app.route({
           method: route.method as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
-          url: route.path,
+          url: fullPath,
           handler: fastifyHandler,
         });
       }
