@@ -68,10 +68,11 @@ export class BrowserViewer extends MastraBrowser {
 
     // Build base config (exclude CLI-specific options)
     // Use type assertion because BrowserConfig is a discriminated union
-    const { cli: _cli, cdpPort: _cdpPort, userDataDir: _userDataDir, ...baseConfig } = config;
+    const { cli: _cli, cdpPort: _cdpPort, ...baseConfig } = config;
 
     super({
       ...baseConfig,
+      headless: config.headless ?? true,
       scope: effectiveScope,
     } as any);
 

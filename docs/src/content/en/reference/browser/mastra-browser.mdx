@@ -56,9 +56,9 @@ export const browserAgent = new Agent({
   {
     name: 'timeout',
     type: 'number',
-    description: 'Default timeout in milliseconds for browser operations.',
+    description:
+      'Default timeout in milliseconds. Each provider defines its own semantics and default. See the provider reference for details.',
     isOptional: true,
-    defaultValue: '10000',
   },
   {
     name: 'cdpUrl',

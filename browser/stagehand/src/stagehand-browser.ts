@@ -55,9 +55,10 @@ export class StagehandBrowser extends MastraBrowser {
   private tabChangeDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(config: StagehandBrowserConfig = {}) {
-    super(config);
+    const resolvedConfig = { ...config, headless: config.headless ?? true };
+    super(resolvedConfig);
     this.id = `stagehand-${Date.now()}`;
-    this.stagehandConfig = config;
+    this.stagehandConfig = resolvedConfig;
 
     // Default to 'shared' when cdpUrl is provided (connecting to existing browser)
     // Default to 'thread' otherwise (launching new browsers per thread)

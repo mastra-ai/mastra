@@ -55,7 +55,7 @@ export class AgentBrowser extends MastraBrowser {
   declare protected threadManager: AgentBrowserThreadManager;
 
   constructor(config: BrowserConfig = {}) {
-    super(config);
+    super({ ...config, headless: config.headless ?? true });
     this.id = `agent-browser-${Date.now()}`;
     if (config.timeout) {
       this.defaultTimeout = config.timeout;
