@@ -1355,13 +1355,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // isContinued should be true if:
       // - shouldRetry is true (processor requested retry)
       // - OR there are non-provider-executed tool calls to process (some LLMs return finishReason 'stop' even with tool calls)
+      //   BUT NOT when finishReason is 'length' — truncated tool calls have partial/invalid args
+      //   and retrying with the same max_tokens would produce the same truncation (see #15717)
       // - OR finishReason indicates more work (e.g., tool-use)
       // Provider-executed tools (e.g. web_search) are handled server-side — the response already
       // contains both the tool execution and the text output, so no additional loop iteration is needed.
       const hasPendingToolCalls = toolCalls && toolCalls.some(tc => !tc.providerExecuted);
       const shouldContinue =
         shouldRetry ||
-        (!tripwireTriggered && (hasPendingToolCalls || !['stop', 'error', 'length'].includes(finishReason)));
+        (!tripwireTriggered &&
+          ((hasPendingToolCalls && finishReason !== 'length') ||
+            !['stop', 'error', 'length'].includes(finishReason)));
 
       // Reset retry count after a successful non-retry step; only consecutive retries carry forward.
       const nextProcessorRetryCount = shouldRetry ? currentProcessorRetryCount + 1 : 0;

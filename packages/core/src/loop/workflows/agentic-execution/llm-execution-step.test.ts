@@ -1083,3 +1083,151 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(assistantMessage?.content.metadata?.provider).toBe('openai');
   });
 });
+
+describe('finishReason length with pending tool calls', () => {
+  let controller: ReadableStreamDefaultController;
+  let messageList: MessageList;
+  let bail: Mock;
+
+  const createIterationInput = (): IterationData => ({
+    messageId: 'msg-0',
+    messages: {
+      all: messageList.get.all.aiV5.model(),
+      user: messageList.get.input.aiV5.model(),
+      nonUser: messageList.get.response.aiV5.model(),
+    },
+    output: {
+      usage: testUsage,
+      steps: [],
+    },
+    metadata: {},
+    stepResult: {
+      reason: 'stop',
+      warnings: [],
+      isContinued: true,
+    },
+  });
+
+  const createExecuteParams = (
+    inputData: IterationData,
+  ): ExecuteFunctionParams<{}, IterationData, any, any, any, any> => ({
+    runId: 'test-run',
+    workflowId: 'test-workflow',
+    mastra: {} as any,
+    requestContext: new RequestContext(),
+    state: {},
+    setState: vi.fn(),
+    retryCount: 1,
+    tracingContext: {} as any,
+    getInitData: vi.fn(),
+    getStepResult: vi.fn(),
+    suspend: vi.fn(),
+    bail,
+    abort: vi.fn(),
+    engine: 'default' as any,
+    abortSignal: new AbortController().signal,
+    writer: new ToolStream({
+      emit: vi.fn(),
+    }).getWriter(controller),
+    inputData,
+    validateSchemas: false,
+    [PUBSUB_SYMBOL]: {} as any,
+    [STREAM_FORMAT_SYMBOL]: undefined,
+  });
+
+  beforeEach(() => {
+    controller = {
+      enqueue: vi.fn(),
+      desiredSize: 1,
+      close: vi.fn(),
+      error: vi.fn(),
+    } as unknown as ReadableStreamDefaultController;
+
+    messageList = new MessageList();
+    messageList.add({ role: 'user', content: 'Generate a large structured output' }, 'input');
+
+    bail = vi.fn(data => data);
+  });
+
+  it('should stop the loop when finishReason is length even with pending tool calls (#15717)', async () => {
+    const tools = {
+      generateReport: {
+        description: 'Generate a report',
+        parameters: { type: 'object' as const, properties: { query: { type: 'string' as const } } },
+        execute: vi.fn(),
+      },
+    };
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: vi.fn(async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'response-metadata',
+                  id: 'resp-1',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-1',
+                  toolName: 'generateReport',
+                  input: '{"query":"truncated...',
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'length',
+                  usage: testUsage,
+                },
+              ]),
+              request: {},
+              response: {
+                headers: undefined,
+              },
+              warnings: [],
+            })),
+          } as any,
+        },
+      ],
+      tools,
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<typeof tools>);
+
+    const input = createIterationInput();
+    const result = await llmExecutionStep.execute(createExecuteParams(input));
+
+    // When finishReason is 'length', the loop should stop even if there are
+    // pending tool calls, because those tool calls were truncated by max_tokens
+    // and retrying with the same parameters would produce the same truncation.
+    expect(result.stepResult.isContinued).toBe(false);
+    expect(result.stepResult.reason).toBe('length');
+  });
+});
