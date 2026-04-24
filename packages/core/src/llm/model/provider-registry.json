@@ -959,7 +959,7 @@
       "url": "https://api.deepseek.com",
       "apiKeyEnvVar": "DEEPSEEK_API_KEY",
       "name": "DeepSeek",
-      "models": ["deepseek-chat", "deepseek-reasoner"],
+      "models": ["deepseek-chat", "deepseek-reasoner", "deepseek-v4-flash", "deepseek-v4-pro"],
       "docUrl": "https://api-docs.deepseek.com/quick_start/pricing",
       "gateway": "models.dev"
     },
@@ -5526,7 +5526,7 @@
       "MiniMax-M2.7-highspeed"
     ],
     "perplexity": ["sonar", "sonar-deep-research", "sonar-pro", "sonar-reasoning-pro"],
-    "deepseek": ["deepseek-chat", "deepseek-reasoner"],
+    "deepseek": ["deepseek-chat", "deepseek-reasoner", "deepseek-v4-flash", "deepseek-v4-pro"],
     "llama": [
       "cerebras-llama-4-maverick-17b-128e-instruct",
       "cerebras-llama-4-scout-17b-16e-instruct",
