@@ -1136,11 +1136,35 @@ export class MessageList {
           }
           // If no new parts, don't add anything (the sealed message already has all the content)
         } else if (existingIsAtOrBeforeSealedBoundary) {
-          messageV2.id = this.generateMessageId?.({ idType: 'message', source: 'memory' }) ?? randomUUID();
-          if (messageV2.createdAt <= existingMessage.createdAt) {
-            messageV2.createdAt = new Date(existingMessage.createdAt.getTime() + 1);
+          // Existing message lives at or before a sealed boundary. Don't replace it
+          // in place (that would mutate content behind a seal), and don't duplicate
+          // the pre-seal prefix into a fresh assistant message. Append only the
+          // delta — parts beyond what the existing message already holds.
+          const existingParts = existingMessage.content?.parts || [];
+          const incomingParts = messageV2.content.parts;
+          const existingPartCount = existingParts.length;
+
+          let newParts: typeof incomingParts;
+          if (incomingParts.length <= existingPartCount) {
+            if (messagesAreEqual(existingMessage, messageV2)) {
+              // Stale accumulated snapshot, ignore.
+              return this;
+            }
+            // Fresh parts flushed independently under the same id (e.g. a text
+            // flush) — treat them all as new rather than replaying the prefix.
+            newParts = incomingParts;
+          } else {
+            newParts = incomingParts.slice(existingPartCount);
           }
-          this.messages.push(messageV2);
+
+          if (newParts.length > 0) {
+            messageV2.id = this.generateMessageId?.({ idType: 'message', source: 'memory' }) ?? randomUUID();
+            messageV2.content.parts = newParts;
+            if (messageV2.createdAt <= existingMessage.createdAt) {
+              messageV2.createdAt = new Date(existingMessage.createdAt.getTime() + 1);
+            }
+            this.messages.push(messageV2);
+          }
         } else {
           const isExistingFromMemory = this.memoryMessages.has(existingMessage);
           const shouldMergeIntoExisting = MessageMerger.shouldMerge(

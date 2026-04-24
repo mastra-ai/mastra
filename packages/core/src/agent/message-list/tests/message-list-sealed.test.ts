@@ -420,4 +420,84 @@ describe('MessageList sealed message handling', () => {
     expect(newAssistant).toBeDefined();
     expect((newAssistant?.content.parts[0] as { text?: string })?.text).toBe('new content after boundary');
   });
+
+  it('should append only the delta when re-emitting a message from before the sealed boundary as an accumulated snapshot', () => {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+
+    // Original pre-seal assistant message with a text part and a tool-invocation part
+    messageList.add(
+      {
+        id: 'old-assistant',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'old response' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: { toolCallId: 'call-1', toolName: 'view', state: 'result', args: {}, result: 'ok' },
+            } as MastraMessagePart,
+          ],
+        },
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      } as MastraDBMessage,
+      'response',
+    );
+
+    // Seal boundary after the assistant message
+    messageList.add(
+      {
+        id: 'sealed-boundary',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'data-om-observation-end',
+              data: { observedAt: new Date('2024-01-01T00:00:01.000Z').toISOString() },
+              metadata: { mastra: { sealedAt: 1 } },
+            } as MastraMessagePart,
+          ],
+          metadata: { mastra: { sealed: true } },
+        },
+        createdAt: new Date('2024-01-01T00:00:01.000Z'),
+      } as MastraDBMessage,
+      'memory',
+    );
+
+    // Replay old-assistant as an accumulated snapshot: original two parts plus a new text part
+    messageList.add(
+      {
+        id: 'old-assistant',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'old response' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: { toolCallId: 'call-1', toolName: 'view', state: 'result', args: {}, result: 'ok' },
+            } as MastraMessagePart,
+            { type: 'text', text: 'post-seal continuation' },
+          ],
+        },
+        createdAt: new Date('2024-01-01T00:00:02.000Z'),
+      } as MastraDBMessage,
+      'response',
+    );
+
+    const allMessages = messageList.get.all.db();
+
+    const oldAssistant = allMessages.find(message => message.id === 'old-assistant');
+    expect(oldAssistant?.content.parts).toHaveLength(2);
+    expect((oldAssistant?.content.parts[0] as { text?: string })?.text).toBe('old response');
+
+    const newAssistant = allMessages.find(
+      message => message.id !== 'old-assistant' && message.id !== 'sealed-boundary' && message.role === 'assistant',
+    );
+    expect(newAssistant).toBeDefined();
+    // Only the new suffix should be appended — no replay of the pre-seal text or tool call
+    expect(newAssistant?.content.parts).toHaveLength(1);
+    expect((newAssistant?.content.parts[0] as { text?: string })?.text).toBe('post-seal continuation');
+  });
 });
