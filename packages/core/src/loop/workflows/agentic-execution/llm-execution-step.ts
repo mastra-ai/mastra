@@ -472,7 +472,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
               // Create a ProcessorStreamWriter from outputWriter if available
               const inputStepWriter: ProcessorStreamWriter | undefined = outputWriter
-                ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
+                ? {
+                    custom: async (data: { type: string }) =>
+                      outputWriter(data as ChunkType, { messageId: currentStep.messageId }),
+                  }
                 : undefined;
 
               const processInputStepResult = await processorRunner.runProcessInputStep({
@@ -939,7 +942,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               const canRetryError =
                 maxErrorProcessorRetries !== undefined && currentRetryCount < maxErrorProcessorRetries;
               const apiErrorWriter: ProcessorStreamWriter | undefined = outputWriter
-                ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
+                ? {
+                    custom: async (data: { type: string }) =>
+                      outputWriter(data as ChunkType, { messageId: currentMessageId }),
+                  }
                 : undefined;
 
               const errorResult = await processorRunner.runProcessAPIError({
@@ -1069,7 +1075,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         });
 
         const apiErrorWriter2: ProcessorStreamWriter | undefined = outputWriter
-          ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
+          ? {
+              custom: async (data: { type: string }) =>
+                outputWriter(data as ChunkType, { messageId: currentMessageId }),
+            }
           : undefined;
 
         const errorResult = await processorRunner.runProcessAPIError({
@@ -1204,7 +1213,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
           // Create a ProcessorStreamWriter from outputWriter if available
           const processorWriter: ProcessorStreamWriter | undefined = outputWriter
-            ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
+            ? {
+                custom: async (data: { type: string }) =>
+                  outputWriter(data as ChunkType, { messageId: outputStream.messageId }),
+              }
             : undefined;
 
           await processorRunner.runProcessOutputStep({

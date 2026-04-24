@@ -847,6 +847,82 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     });
   });
 
+  it('passes the rotated response message id to processor custom data writers', async () => {
+    const outputWriter = vi.fn(async () => {});
+    const doStream = vi.fn(async () => ({
+      stream: convertArrayToReadableStream([
+        { type: 'response-metadata', id: 'resp-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+        { type: 'text-start', id: 'text-1' },
+        { type: 'text-delta', id: 'text-1', delta: 'Hello!' },
+        { type: 'text-end', id: 'text-1' },
+        { type: 'finish', finishReason: 'stop', usage: testUsage },
+      ]),
+      request: {},
+      response: { headers: undefined },
+      warnings: [],
+    }));
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter,
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      inputProcessors: [
+        {
+          id: 'rotate-and-emit-data',
+          processInputStep: vi.fn(async ({ writer, rotateResponseMessageId }) => {
+            rotateResponseMessageId?.();
+            await writer?.custom({ type: 'data-om-status', data: { status: 'complete' } });
+            return {};
+          }),
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'rotated-response-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const input = createIterationInput();
+    input.stepResult.isContinued = false;
+
+    await llmExecutionStep.execute(createExecuteParams(input));
+
+    expect(outputWriter).toHaveBeenCalledWith(
+      { type: 'data-om-status', data: { status: 'complete' } },
+      { messageId: 'rotated-response-id' },
+    );
+  });
+
   it('should use configured modelId in message metadata instead of API response modelId', async () => {
     const configuredModelId = 'gpt-5.4';
     const apiResponseModelId = 'gpt-5.4-2026-03-05'; // Versioned model ID returned by API
