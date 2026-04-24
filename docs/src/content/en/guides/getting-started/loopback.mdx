@@ -1,0 +1,122 @@
+---
+title: "LoopBack | Frameworks"
+description: "Get started with Mastra and LoopBack 4"
+---
+
+# Integrate Mastra in your LoopBack 4 project
+
+In this guide, you'll build a tool-calling AI agent using Mastra and LoopBack 4. Using the [LoopBack server adapter](/reference/server/loopback-adapter), you can expose your agents as HTTP endpoints inside a native LoopBack application without mounting a separate Express sub-application.
+
+## Before you begin
+
+- You'll need an API key from a supported [model provider](/models). If you don't have a preference, use [OpenAI](/models/providers/openai).
+- Install Node.js `v22.13.0` or later.
+- Install or create a LoopBack 4 application.
+
+## Create a new LoopBack app (optional)
+
+If you already have a LoopBack app, skip to the next step.
+
+Run the LoopBack CLI to create a new project:
+
+```bash npm2yarn
+npx @loopback/cli@latest
+```
+
+Choose an empty application or the project shape that matches your use case.
+
+## Initialize Mastra
+
+Inside your LoopBack project directory, run [`mastra init`](/reference/cli/mastra#mastra-init).
+
+When prompted, choose a provider such as OpenAI and enter your key.
+
+```bash
+npx mastra@latest init
+```
+
+This creates a `src/mastra` folder with an example weather agent and the following files:
+
+- `index.ts` - Mastra config, including memory
+- `tools/weather-tool.ts` - a tool to fetch weather for a given location
+- `agents/weather-agent.ts` - a weather agent with a prompt that uses the tool
+
+You'll pass the `src/mastra/index.ts` file to the LoopBack server adapter in the next step.
+
+## Add server adapter
+
+Install the LoopBack server adapter and required LoopBack packages:
+
+```bash npm2yarn
+npm install @mastra/loopback@latest @loopback/core @loopback/rest
+```
+
+Open your LoopBack entry file and register the adapter with the existing `RestApplication`:
+
+```typescript title="src/index.ts"
+import { RestApplication } from '@loopback/rest'
+import { Mastra } from '@mastra/core'
+import { LoopbackMastraServer } from '@mastra/loopback'
+import { mastra } from './mastra'
+
+export async function main() {
+  const app = new RestApplication()
+
+  const server = new LoopbackMastraServer({
+    app,
+    mastra,
+    config: {
+      prefix: '/api/mastra',
+      openapiPath: '/openapi.json',
+    },
+  })
+
+  await server.init()
+  await app.start()
+
+  return app
+}
+```
+
+The `LoopbackMastraServer` registers Mastra routes as native LoopBack routes. It also preserves LoopBack request-scoped dependency injection so Mastra routes, tools, and agents can resolve LoopBack services and repositories during a request.
+
+## Test your agent
+
+By default, Mastra's endpoints are added under the configured prefix and use your agent or workflow IDs. If you use the `weather-agent` created by `mastra init`, the generate endpoint is available at `/api/mastra/agents/weather-agent/generate`.
+
+Start your LoopBack server:
+
+```bash
+npm start
+```
+
+In a separate terminal window, use `curl` to ask the weather agent:
+
+```bash
+curl -X POST http://localhost:3000/api/mastra/agents/weather-agent/generate -H "Content-Type: application/json" -d "{\"messages\":[{\"role\":\"user\",\"content\":\"What is the weather like in Seoul?\"}]}"
+```
+
+## Resolve LoopBack bindings from Mastra
+
+The adapter injects a LoopBack bridge into Mastra `RequestContext` under the `loopback` key. Use it to resolve request-scoped LoopBack bindings from routes, tools, and agents.
+
+```typescript title="src/mastra/routes/customer.ts"
+const loopback = requestContext.get('loopback')
+const customerService = await loopback.resolve('services.CustomerService')
+const customer = await customerService.findById('customer-1')
+```
+
+This allows Mastra to reuse your existing LoopBack services, repositories, and other DI-managed bindings.
+
+## Next steps
+
+From here, you can extend the project with your own tools and logic:
+
+- Learn more about [agents](/docs/agents/overview)
+- Give your agent its own [tools](/docs/agents/using-tools)
+- Add [memory](/docs/memory/overview) to your agent
+
+When you're ready, read more about how Mastra integrates with LoopBack:
+
+- [Server Adapters](/docs/server/server-adapters)
+- [LoopBack adapter reference](/reference/server/loopback-adapter)

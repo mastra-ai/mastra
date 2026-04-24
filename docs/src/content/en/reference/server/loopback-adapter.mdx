@@ -1,0 +1,238 @@
+---
+title: "Reference: LoopBack adapter | Server"
+description: "API reference for the @mastra/loopback server adapter."
+packages:
+  - "@mastra/loopback"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# LoopBack adapter
+
+The `@mastra/loopback` package provides a server adapter for running Mastra with [LoopBack 4](https://loopback.io/doc/en/lb4/).
+
+:::info
+
+For general adapter concepts such as initialization flow and route registration, see [Server Adapters](/docs/server/server-adapters).
+
+:::
+
+## Installation
+
+Install the LoopBack adapter and required LoopBack packages:
+
+```bash npm2yarn
+npm install @mastra/loopback@latest @loopback/core @loopback/rest
+```
+
+## Usage example
+
+The following example demonstrates how to attach Mastra to a native LoopBack `RestApplication`.
+
+```typescript title="src/index.ts"
+import { RestApplication } from '@loopback/rest'
+import { LoopbackMastraServer } from '@mastra/loopback'
+import { mastra } from './mastra'
+
+const app = new RestApplication()
+
+const server = new LoopbackMastraServer({
+  app,
+  mastra,
+  config: {
+    prefix: '/api/mastra',
+    openapiPath: '/openapi.json',
+  },
+})
+
+await server.init()
+await app.start()
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'app',
+    type: 'RestApplication',
+    description: 'LoopBack RestApplication instance.',
+    isOptional: false,
+  },
+  {
+    name: 'mastra',
+    type: 'Mastra',
+    description: 'Mastra instance.',
+    isOptional: false,
+  },
+  {
+    name: 'config',
+    type: 'LoopbackMastraConfig',
+    description: 'Adapter configuration object.',
+    isOptional: true,
+    properties: [
+      {
+        name: 'prefix',
+        type: 'string',
+        description: 'Route path prefix for Mastra endpoints.',
+        isOptional: true,
+        defaultValue: "'/api' inherited from Mastra server defaults",
+      },
+      {
+        name: 'openapiPath',
+        type: 'string',
+        description: 'Path to serve the OpenAPI specification.',
+        isOptional: true,
+      },
+      {
+        name: 'enableAuth',
+        type: 'boolean',
+        description: 'Legacy switch for adapter-managed auth hooks. Prefer `auth.enabled`.',
+        isOptional: true,
+      },
+      {
+        name: 'authResolver',
+        type: '(input) => MastraAuthContext | undefined',
+        description: 'Legacy auth-context resolver. Prefer `auth.resolveContext`.',
+        isOptional: true,
+      },
+      {
+        name: 'auth',
+        type: 'LoopbackAuthConfig',
+        description: 'Configurable auth and authorization composition.',
+        isOptional: true,
+        properties: [
+          {
+            name: 'enabled',
+            type: 'boolean',
+            description: 'Enable adapter-managed auth hooks.',
+            isOptional: true,
+          },
+          {
+            name: 'authorize',
+            type: '(input) => { status: number; error: string } | null | undefined',
+            description: 'Custom authorizer for request-time access checks.',
+            isOptional: true,
+          },
+          {
+            name: 'authorizeMode',
+            type: "'before' | 'after' | 'replace'",
+            description: 'How custom authorization composes with Mastra route auth.',
+            isOptional: true,
+            defaultValue: "'after'",
+          },
+          {
+            name: 'resolveContext',
+            type: '(input) => MastraAuthContext | undefined',
+            description: 'Map framework-specific auth state into Mastra auth context.',
+            isOptional: true,
+          },
+          {
+            name: 'resolveContextMode',
+            type: "'before' | 'after' | 'replace'",
+            description: 'How custom auth-context resolution composes with default extraction.',
+            isOptional: true,
+            defaultValue: "'before'",
+          },
+          {
+            name: 'extractContext',
+            type: '(requestContext) => MastraAuthContext | undefined',
+            description: 'Extract auth state from Mastra RequestContext.',
+            isOptional: true,
+          },
+        ],
+      },
+      {
+        name: 'mcp',
+        type: '{ enabled?: boolean; serverless?: boolean }',
+        description: 'MCP transport options.',
+        isOptional: true,
+      },
+    ],
+  },
+]}
+/>
+
+## Resolve LoopBack bindings from Mastra
+
+The adapter injects a LoopBack bridge into Mastra `RequestContext` under the `loopback` key.
+
+```typescript
+const loopback = requestContext.get('loopback')
+const customerService = await loopback.resolve('services.CustomerService')
+```
+
+The bridge exposes:
+
+- `app`
+- `context`
+- `request`
+- `response`
+- `resolve(binding)`
+- `resolveSync(binding)`
+- `isBound(binding)`
+
+Use this bridge to access request-scoped LoopBack services, repositories, and other bindings from Mastra routes, tools, and agents.
+
+## Custom routes
+
+Mastra `apiRoutes` are registered as native LoopBack routes.
+
+```typescript title="src/mastra/index.ts"
+import { registerApiRoute } from '@mastra/core/server'
+
+mastra.setServer({
+  apiRoutes: [
+    registerApiRoute('/customer/:id', {
+      method: 'GET',
+      handler: async c => {
+        const requestContext = c.get('requestContext')
+        const loopback = requestContext.get('loopback')
+        const customerService = await loopback.resolve('services.CustomerService')
+
+        return c.json(customerService.findById(c.req.param('id')))
+      },
+      openapi: {
+        summary: 'Get customer by id',
+      },
+    }),
+  ],
+})
+```
+
+## Auth configuration
+
+The adapter lets you compose custom authorization with Mastra route auth.
+
+```typescript title="src/index.ts"
+const server = new LoopbackMastraServer({
+  app,
+  mastra,
+  config: {
+    prefix: '/api/mastra',
+    auth: {
+      authorizeMode: 'after',
+      authorize: async input => {
+        return input.getHeader('x-tenant-id')
+          ? null
+          : { status: 403, error: 'Tenant header required' }
+      },
+      resolveContextMode: 'replace',
+      resolveContext: async input => ({
+        userId: input.headers['x-user-id'] as string | undefined,
+      }),
+    },
+  },
+})
+```
+
+Supported composition modes:
+
+- `authorizeMode`: `before`, `after`, `replace`
+- `resolveContextMode`: `before`, `after`, `replace`
+
+## Related
+
+- [Server Adapters](/docs/server/server-adapters): Shared adapter concepts
+- [Custom Adapters](/docs/server/custom-adapters): Build your own adapter
+- [MastraServer Reference](/reference/server/mastra-server): Full API reference
