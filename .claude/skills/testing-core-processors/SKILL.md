@@ -24,9 +24,22 @@ const model = new MockLanguageModelV2({
     callCount++;
     receivedPrompts.push(JSON.parse(JSON.stringify(prompt)));
     if (callCount === 1) {
-      throw new APICallError({ message: '...', url: '...', requestBodyValues: {}, statusCode: 400, responseBody: '...', isRetryable: false });
+      throw new APICallError({
+        message: '...',
+        url: '...',
+        requestBodyValues: {},
+        statusCode: 400,
+        responseBody: '...',
+        isRetryable: false,
+      });
     }
-    return { rawCall: { rawPrompt: null, rawSettings: {} }, finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 }, content: [{ type: 'text', text: 'response' }], warnings: [] };
+    return {
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      content: [{ type: 'text', text: 'response' }],
+      warnings: [],
+    };
   },
   doStream: async ({ prompt }) => {
     // Same error logic as doGenerate
@@ -91,5 +104,6 @@ pnpm test:core
 ## Devin Secrets Needed
 
 None for mock-based integration tests. For live API tests:
+
 - `ANTHROPIC_API_KEY` — for testing against real Anthropic API
 - `OPENROUTER_API_KEY` — for testing provider switching scenarios
