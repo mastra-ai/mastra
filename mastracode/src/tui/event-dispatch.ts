@@ -137,7 +137,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       }
       // Clear per-thread ephemeral state from the global harness state
       // so it doesn't leak into the newly switched thread.
-      await state.harness.setState({ tasks: [], activePlan: null, sandboxAllowedPaths: [] } as any);
+      await state.harness.setState({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
         state.ui.requestRender();
@@ -156,7 +156,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
         state.editor.escapeEnabled = tState.escapeAsCancel;
       }
       // Clear per-thread ephemeral state so new threads start clean.
-      await state.harness.setState({ tasks: [], activePlan: null, sandboxAllowedPaths: [] } as any);
+      await state.harness.setState({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
       }
