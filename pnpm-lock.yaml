@@ -2347,6 +2347,9 @@ importers:
       '@vitest/eslint-plugin':
         specifier: ^1.6.16
         version: 1.6.16(@typescript-eslint/eslint-plugin@8.57.1(@typescript-eslint/parser@8.57.1(eslint@10.2.1(jiti@2.6.1))(typescript@5.9.3))(eslint@10.2.1(jiti@2.6.1))(typescript@5.9.3))(eslint@10.2.1(jiti@2.6.1))(typescript@5.9.3)(vitest@4.1.5)
+      eslint-plugin-depend:
+        specifier: ^1.5.0
+        version: 1.5.0(eslint@10.2.1(jiti@2.6.1))
       eslint-plugin-import-x:
         specifier: ^4.16.2
         version: 4.16.2(@typescript-eslint/utils@8.58.2(eslint@10.2.1(jiti@2.6.1))(typescript@5.9.3))(eslint@10.2.1(jiti@2.6.1))
@@ -3294,12 +3297,6 @@ importers:
       commander:
         specifier: ^14.0.3
         version: 14.0.3
-      execa:
-        specifier: ^9.6.1
-        version: 9.6.1
-      fs-extra:
-        specifier: ^11.3.4
-        version: 11.3.4
       pino:
         specifier: ^10.3.1
         version: 10.3.1
@@ -3309,6 +3306,9 @@ importers:
       posthog-node:
         specifier: ^5.28.2
         version: 5.28.3(rxjs@7.8.1)
+      tinyexec:
+        specifier: ^1.1.1
+        version: 1.1.1
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -3322,9 +3322,6 @@ importers:
       '@rollup/plugin-node-resolve':
         specifier: 16.0.3
         version: 16.0.3(rollup@4.60.2)
-      '@types/fs-extra':
-        specifier: ^11.0.4
-        version: 11.0.4
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -18679,6 +18676,11 @@ packages:
       unrs-resolver:
         optional: true
 
+  eslint-plugin-depend@1.5.0:
+    resolution: {integrity: sha512-i3UeLYmclf1Icp35+6W7CR4Bp2PIpDgBuf/mpmXK5UeLkZlvYJ21VuQKKHHAIBKRTPivPGX/gZl5JGno1o9Y0A==}
+    peerDependencies:
+      eslint: '>=8.40.0'
+
   eslint-plugin-import-x@4.16.2:
     resolution: {integrity: sha512-rM9K8UBHcWKpzQzStn1YRN2T5NvdeIfSVoKu/lKF41znQXHAUcBbYXe5wd6GNjZjTrP7viQ49n1D83x/2gYgIw==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
@@ -21492,6 +21494,9 @@ packages:
 
   module-details-from-path@1.0.4:
     resolution: {integrity: sha512-EGWKgxALGMgzvxYF1UyGTy0HXX/2vHLkw6+NvDKW2jypWbHpjQuj4UMcqQWXHERJhVGKikolT06G3bcKe4fi7w==}
+
+  module-replacements@2.11.0:
+    resolution: {integrity: sha512-j5sNQm3VCpQQ7nTqGeOZtoJtV3uKERgCBm9QRhmGRiXiqkf7iRFOkfxdJRZWLkqYY8PNf4cDQF/WfXUYLENrRA==}
 
   mongodb-connection-string-url@7.0.0:
     resolution: {integrity: sha512-irhhjRVLE20hbkRl4zpAYLnDMM+zIZnp0IDB9akAFFUZp/3XdOfwwddc7y6cNvF2WCEtfTYRwYbIfYa2kVY0og==}
@@ -40563,6 +40568,13 @@ snapshots:
     optionalDependencies:
       unrs-resolver: 1.11.1
 
+  eslint-plugin-depend@1.5.0(eslint@10.2.1(jiti@2.6.1)):
+    dependencies:
+      empathic: 2.0.0
+      eslint: 10.2.1(jiti@2.6.1)
+      module-replacements: 2.11.0
+      semver: 7.7.4
+
   eslint-plugin-import-x@4.16.2(@typescript-eslint/utils@8.58.2(eslint@10.2.1(jiti@2.6.1))(typescript@5.9.3))(eslint@10.2.1(jiti@2.6.1)):
     dependencies:
       '@package-json/types': 0.0.12
@@ -44355,6 +44367,8 @@ snapshots:
   modern-tar@0.7.6: {}
 
   module-details-from-path@1.0.4: {}
+
+  module-replacements@2.11.0: {}
 
   mongodb-connection-string-url@7.0.0:
     dependencies:
