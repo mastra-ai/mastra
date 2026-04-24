@@ -6,6 +6,9 @@ import {
   formatCompletionFeedback,
   runStreamCompletionScorers,
   formatStreamCompletionFeedback,
+  runDefaultCompletionCheck,
+  generateFinalResult,
+  generateStructuredFinalResult,
 } from './validation';
 
 // Helper to create a mock scorer
@@ -776,5 +779,118 @@ describe('formatStreamCompletionFeedback', () => {
 
     expect(feedback).toContain('Score: 1 ✅');
     expect(feedback).not.toContain('Reason:');
+  });
+});
+
+describe('validation memory context forwarding', () => {
+  function createMockAgentStream(object: Record<string, unknown>) {
+    return {
+      objectStream: (async function* () {
+        yield object;
+      })(),
+      getFullOutput: vi.fn().mockResolvedValue({ object }),
+    };
+  }
+
+  it('forwards thread-scoped memory context to runDefaultCompletionCheck', async () => {
+    const stream = createMockAgentStream({
+      isComplete: true,
+      completionReason: 'done',
+      finalResult: 'final',
+    });
+    const agent = {
+      stream: vi.fn().mockResolvedValue(stream),
+    } as any;
+
+    await runDefaultCompletionCheck(
+      agent,
+      createMockContext({
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      }),
+    );
+
+    expect(agent.stream).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        memory: {
+          thread: 'thread-123',
+          resource: 'resource-456',
+          options: {
+            readOnly: true,
+            workingMemory: {
+              enabled: false,
+            },
+          },
+        },
+      }),
+    );
+  });
+
+  it('falls back to runId/networkName when generateFinalResult has no explicit memory IDs', async () => {
+    const stream = createMockAgentStream({
+      finalResult: 'final',
+    });
+    const agent = {
+      stream: vi.fn().mockResolvedValue(stream),
+    } as any;
+
+    await generateFinalResult(
+      agent,
+      createMockContext({
+        runId: 'run-fallback',
+        networkName: 'network-fallback',
+      }),
+    );
+
+    expect(agent.stream).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        memory: {
+          thread: 'run-fallback',
+          resource: 'network-fallback',
+          options: {
+            readOnly: true,
+            workingMemory: {
+              enabled: false,
+            },
+          },
+        },
+      }),
+    );
+  });
+
+  it('forwards memory context to generateStructuredFinalResult', async () => {
+    const stream = createMockAgentStream({
+      summary: 'structured',
+    });
+    const agent = {
+      stream: vi.fn().mockResolvedValue(stream),
+    } as any;
+
+    await generateStructuredFinalResult(
+      agent,
+      createMockContext({
+        threadId: 'thread-structured',
+        resourceId: 'resource-structured',
+      }),
+      { schema: { type: 'object', properties: {} } } as any,
+    );
+
+    expect(agent.stream).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        memory: {
+          thread: 'thread-structured',
+          resource: 'resource-structured',
+          options: {
+            readOnly: true,
+            workingMemory: {
+              enabled: false,
+            },
+          },
+        },
+      }),
+    );
   });
 });
