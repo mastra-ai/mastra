@@ -629,18 +629,16 @@ export const writeAPIKey = async ({ provider, apiKey }: { provider: LLMProvider;
 };
 
 /**
- * Append a Mastra Observe `MASTRA_CLOUD_ACCESS_TOKEN` entry to the project's
- * `.env` file.
+ * Append Mastra Observe credentials to the project's `.env` file.
  *
  * The generated `src/mastra/index.ts` template already registers a
  * `CloudExporter` which no-ops unless `MASTRA_CLOUD_ACCESS_TOKEN` is set, so
  * enabling Observe is a pure env-var concern from the scaffolder's side.
  *
- * TODO(PLTFRM-861/862): Once the create-project and mint-token APIs are
- * available, sign the user in, create a project, and write the real token
- * here instead of a placeholder.
+ * When called with no token, writes empty placeholders so the user can paste
+ * a key minted manually from the dashboard.
  */
-export const writeObserveEnv = async ({ token }: { token?: string } = {}) => {
+export const writeObserveEnv = async ({ token, endpoint }: { token?: string; endpoint?: string } = {}) => {
   const envFilePath = path.join(process.cwd(), '.env');
   const lines = [
     '',
@@ -648,6 +646,7 @@ export const writeObserveEnv = async ({ token }: { token?: string } = {}) => {
     '# Create a project and paste your access token below to send traces to',
     '# the hosted Mastra Studio.',
     `MASTRA_CLOUD_ACCESS_TOKEN=${token ?? ''}`,
+    `MASTRA_CLOUD_TRACES_ENDPOINT=${endpoint ?? ''}`,
     '',
   ];
   await fs.appendFile(envFilePath, lines.join('\n'));
@@ -990,6 +989,20 @@ export const checkForPkgJson = async () => {
     );
 
     process.exit(1);
+  }
+};
+
+/**
+ * Read the `name` field from the project's `package.json`, returning `undefined`
+ * if the file is missing or unparseable.
+ */
+export const readPackageName = async (): Promise<string | undefined> => {
+  try {
+    const raw = await fs.readFile(path.join(process.cwd(), 'package.json'), 'utf8');
+    const parsed = JSON.parse(raw) as { name?: unknown };
+    return typeof parsed.name === 'string' && parsed.name.trim().length > 0 ? parsed.name : undefined;
+  } catch {
+    return undefined;
   }
 };
 

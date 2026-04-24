@@ -2,6 +2,41 @@ import * as p from '@clack/prompts';
 import { fetchOrgs } from './api.js';
 import { getToken, getCurrentOrgId, setCurrentOrgId } from './credentials.js';
 
+/**
+ * Resolve the current org, auto-selecting if only one exists.
+ * If multiple orgs exist and none is currently set, prompts the user.
+ */
+export async function resolveCurrentOrg(token: string): Promise<{ orgId: string; orgName: string }> {
+  const currentOrgId = await getCurrentOrgId();
+  const orgs = await fetchOrgs(token);
+
+  if (currentOrgId) {
+    const match = orgs.find(o => o.id === currentOrgId);
+    if (match) return { orgId: match.id, orgName: match.name };
+  }
+
+  if (orgs.length === 1) {
+    return { orgId: orgs[0]!.id, orgName: orgs[0]!.name };
+  }
+
+  if (orgs.length === 0) {
+    throw new Error('No organizations found.');
+  }
+
+  const selected = await p.select({
+    message: 'Select an organization',
+    options: orgs.map(o => ({ value: o.id, label: `${o.name} (${o.id})` })),
+  });
+
+  if (p.isCancel(selected)) {
+    p.cancel('Cancelled.');
+    process.exit(0);
+  }
+
+  const org = orgs.find(o => o.id === selected)!;
+  return { orgId: org.id, orgName: org.name };
+}
+
 export async function listOrgsAction() {
   const token = await getToken();
   const currentOrgId = await getCurrentOrgId();
