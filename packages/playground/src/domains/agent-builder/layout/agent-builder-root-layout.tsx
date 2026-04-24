@@ -12,7 +12,7 @@ export interface AgentBuilderRootLayoutProps {
   paths: LinkComponentProviderProps['paths'];
 }
 
-export function buildAgentBuilderLoginRedirect(pathname: string, search = '', hash = '') {
+function buildAgentBuilderLoginRedirect(pathname: string, search = '', hash = '') {
   const redirectPath = `${pathname}${search}${hash}`;
   return `/login?redirect=${encodeURIComponent(redirectPath)}`;
 }

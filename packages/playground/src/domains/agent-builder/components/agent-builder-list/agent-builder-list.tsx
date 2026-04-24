@@ -1,5 +1,5 @@
-import { AgentIcon, EmptyState } from '@mastra/playground-ui';
 import type { StoredAgentResponse } from '@mastra/client-js';
+import { AgentIcon, EmptyState } from '@mastra/playground-ui';
 import { SearchIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLinkComponent } from '@/lib/framework';
