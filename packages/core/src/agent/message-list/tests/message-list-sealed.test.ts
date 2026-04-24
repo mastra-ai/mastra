@@ -500,4 +500,76 @@ describe('MessageList sealed message handling', () => {
     expect(newAssistant?.content.parts).toHaveLength(1);
     expect((newAssistant?.content.parts[0] as { text?: string })?.text).toBe('post-seal continuation');
   });
+
+  it('should keep the whole incoming payload when it is longer than existing but not an accumulated prefix', () => {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+
+    // Pre-seal assistant message with a single text part
+    messageList.add(
+      {
+        id: 'old-assistant',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'old response' }],
+        },
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      } as MastraDBMessage,
+      'response',
+    );
+
+    // Seal boundary after the assistant message
+    messageList.add(
+      {
+        id: 'sealed-boundary',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'data-om-observation-end',
+              data: { observedAt: new Date('2024-01-01T00:00:01.000Z').toISOString() },
+              metadata: { mastra: { sealedAt: 1 } },
+            } as MastraMessagePart,
+          ],
+          metadata: { mastra: { sealed: true } },
+        },
+        createdAt: new Date('2024-01-01T00:00:01.000Z'),
+      } as MastraDBMessage,
+      'memory',
+    );
+
+    // Longer incoming under the same id but the first part does NOT match the existing text.
+    // This is NOT an accumulated snapshot — we must keep the whole payload.
+    messageList.add(
+      {
+        id: 'old-assistant',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'unrelated first' },
+            { type: 'text', text: 'unrelated second' },
+          ],
+        },
+        createdAt: new Date('2024-01-01T00:00:02.000Z'),
+      } as MastraDBMessage,
+      'response',
+    );
+
+    const allMessages = messageList.get.all.db();
+
+    const oldAssistant = allMessages.find(message => message.id === 'old-assistant');
+    expect(oldAssistant?.content.parts).toHaveLength(1);
+    expect((oldAssistant?.content.parts[0] as { text?: string })?.text).toBe('old response');
+
+    const newAssistant = allMessages.find(
+      message => message.id !== 'old-assistant' && message.id !== 'sealed-boundary' && message.role === 'assistant',
+    );
+    expect(newAssistant).toBeDefined();
+    // Both parts of the incoming payload should be preserved since it wasn't a prefix match
+    expect(newAssistant?.content.parts).toHaveLength(2);
+    expect((newAssistant?.content.parts[0] as { text?: string })?.text).toBe('unrelated first');
+    expect((newAssistant?.content.parts[1] as { text?: string })?.text).toBe('unrelated second');
+  });
 });

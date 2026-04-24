@@ -471,13 +471,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               const stepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
 
               // Create a ProcessorStreamWriter from outputWriter if available.
-              // Preserve any processor-supplied options (e.g. a future `transient`
-              // flag) and only inject the rotated response message id if the
-              // processor didn't already specify one.
+              // Forward any processor-supplied options (e.g. a future `transient`
+              // flag) and override messageId so the step always owns the
+              // response id for persisted data-* chunks.
               const inputStepWriter: ProcessorStreamWriter | undefined = outputWriter
                 ? {
                     custom: async (data: { type: string }, options?: { messageId?: string }) =>
-                      outputWriter(data as ChunkType, { messageId: currentStep.messageId, ...options }),
+                      outputWriter(data as ChunkType, { ...options, messageId: currentStep.messageId }),
                   }
                 : undefined;
 
@@ -947,7 +947,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               const apiErrorWriter: ProcessorStreamWriter | undefined = outputWriter
                 ? {
                     custom: async (data: { type: string }, options?: { messageId?: string }) =>
-                      outputWriter(data as ChunkType, { messageId: currentMessageId, ...options }),
+                      outputWriter(data as ChunkType, { ...options, messageId: currentMessageId }),
                   }
                 : undefined;
 
@@ -1084,7 +1084,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         const apiErrorWriter2: ProcessorStreamWriter | undefined = outputWriter
           ? {
               custom: async (data: { type: string }, options?: { messageId?: string }) =>
-                outputWriter(data as ChunkType, { messageId: currentMessageId, ...options }),
+                outputWriter(data as ChunkType, { ...options, messageId: currentMessageId }),
             }
           : undefined;
 
@@ -1222,12 +1222,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           const outputStepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
 
           // Create a ProcessorStreamWriter from outputWriter if available.
-          // Preserve any processor-supplied options and only inject the current
-          // response message id if the processor didn't already specify one.
+          // Forward any processor-supplied options and override messageId so
+          // the step always owns the response id for persisted data-* chunks.
           const processorWriter: ProcessorStreamWriter | undefined = outputWriter
             ? {
                 custom: async (data: { type: string }, options?: { messageId?: string }) =>
-                  outputWriter(data as ChunkType, { messageId: outputStream.messageId, ...options }),
+                  outputWriter(data as ChunkType, { ...options, messageId: outputStream.messageId }),
               }
             : undefined;
 

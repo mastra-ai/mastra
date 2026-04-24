@@ -1136,25 +1136,40 @@ export class MessageList {
           }
           // If no new parts, don't add anything (the sealed message already has all the content)
         } else if (existingIsAtOrBeforeSealedBoundary) {
-          // Existing message lives at or before a sealed boundary. Don't replace it
-          // in place (that would mutate content behind a seal), and don't duplicate
-          // the pre-seal prefix into a fresh assistant message. Append only the
-          // delta — parts beyond what the existing message already holds.
+          // Existing message lives at or before a sealed boundary. We can't
+          // replace it in place (that would mutate content behind a seal), but
+          // we also don't want to duplicate the pre-seal prefix if the incoming
+          // payload is an accumulated snapshot from the stale response id.
+          //
+          // Only strip a prefix when we can verify it — i.e. the existing
+          // parts match the first N parts of the incoming payload exactly. If
+          // they don't, keep the whole incoming payload as a fresh message
+          // so we don't silently drop unrelated content the caller emitted
+          // under the same id.
           const existingParts = existingMessage.content?.parts || [];
           const incomingParts = messageV2.content.parts;
-          const existingPartCount = existingParts.length;
 
           let newParts: typeof incomingParts;
-          if (incomingParts.length <= existingPartCount) {
+          if (incomingParts.length <= existingParts.length) {
             if (messagesAreEqual(existingMessage, messageV2)) {
-              // Stale accumulated snapshot, ignore.
+              // Stale accumulated snapshot — ignore.
               return this;
             }
-            // Fresh parts flushed independently under the same id (e.g. a text
-            // flush) — treat them all as new rather than replaying the prefix.
+            // Shorter / different incoming under the same id — keep it all
+            // rather than truncating.
             newParts = incomingParts;
+          } else if (
+            existingParts.length > 0 &&
+            CacheKeyGenerator.fromDBParts(existingParts) ===
+              CacheKeyGenerator.fromDBParts(incomingParts.slice(0, existingParts.length))
+          ) {
+            // Accumulated snapshot: incoming starts with existingParts verbatim.
+            // Append only the suffix so we don't replay the pre-seal prefix.
+            newParts = incomingParts.slice(existingParts.length);
           } else {
-            newParts = incomingParts.slice(existingPartCount);
+            // Longer incoming but prefix doesn't match existing — this isn't
+            // an accumulated snapshot, so keep the whole payload.
+            newParts = incomingParts;
           }
 
           if (newParts.length > 0) {
