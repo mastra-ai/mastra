@@ -4402,7 +4402,7 @@ importers:
         specifier: ^0.5.2
         version: 0.5.2(eslint@10.2.1(jiti@2.6.1))
       eslint-plugin-storybook:
-        specifier: 10.3.5
+        specifier: ^10.3.5
         version: 10.3.5(eslint@10.2.1(jiti@2.6.1))(storybook@10.3.5(@testing-library/dom@10.4.1)(bufferutil@4.1.0)(prettier@3.8.3)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(typescript@5.9.3)
       jsdom:
         specifier: ^26.1.0
