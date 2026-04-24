@@ -882,7 +882,7 @@ export type ProviderModelsMap = {
     'MiniMax-M2.7-highspeed',
   ];
   readonly perplexity: readonly ['sonar', 'sonar-deep-research', 'sonar-pro', 'sonar-reasoning-pro'];
-  readonly deepseek: readonly ['deepseek-chat', 'deepseek-reasoner'];
+  readonly deepseek: readonly ['deepseek-chat', 'deepseek-reasoner', 'deepseek-v4-flash', 'deepseek-v4-pro'];
   readonly llama: readonly [
     'cerebras-llama-4-maverick-17b-128e-instruct',
     'cerebras-llama-4-scout-17b-16e-instruct',
