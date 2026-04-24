@@ -425,7 +425,8 @@ export abstract class MastraBrowser extends MastraBase {
 
   /**
    * Whether the browser is running in headless mode.
-   * Each provider resolves its own default before calling super().
+   * Defaults to true. Providers and thread managers should read this
+   * instead of applying their own fallback.
    */
   get headless(): boolean {
     return this.config.headless ?? true;

@@ -55,10 +55,9 @@ export class StagehandBrowser extends MastraBrowser {
   private tabChangeDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(config: StagehandBrowserConfig = {}) {
-    const resolvedConfig = { ...config, headless: config.headless ?? true };
-    super(resolvedConfig);
+    super(config);
     this.id = `stagehand-${Date.now()}`;
-    this.stagehandConfig = resolvedConfig;
+    this.stagehandConfig = config;
 
     // Default to 'shared' when cdpUrl is provided (connecting to existing browser)
     // Default to 'thread' otherwise (launching new browsers per thread)
@@ -179,7 +178,7 @@ export class StagehandBrowser extends MastraBrowser {
       const wsUrl = await this.resolveWebSocketUrl(resolvedUrl);
       stagehandOptions.localBrowserLaunchOptions = {
         cdpUrl: wsUrl,
-        headless: config.headless,
+        headless: this.headless,
         viewport: config.viewport,
         userDataDir: config.profile,
         executablePath: config.executablePath,
@@ -187,7 +186,7 @@ export class StagehandBrowser extends MastraBrowser {
       };
     } else if (config.env !== 'BROWSERBASE') {
       stagehandOptions.localBrowserLaunchOptions = {
-        headless: config.headless,
+        headless: this.headless,
         viewport: config.viewport,
         userDataDir: config.profile,
         executablePath: config.executablePath,

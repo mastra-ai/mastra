@@ -72,7 +72,6 @@ export class BrowserViewer extends MastraBrowser {
 
     super({
       ...baseConfig,
-      headless: config.headless ?? true,
       scope: effectiveScope,
     } as any);
 
@@ -83,7 +82,7 @@ export class BrowserViewer extends MastraBrowser {
     // Initialize thread manager
     this.threadManager = new BrowserViewerThreadManager({
       scope: effectiveScope,
-      browserConfig: config,
+      browserConfig: { ...config, headless: this.headless },
       logger: this.logger,
       onSessionCreated: session => {
         // Notify listeners so screencast can start for this thread
