@@ -113,6 +113,23 @@ export interface HarnessSubagent {
    * tools are visible.
    */
   allowedWorkspaceTools?: string[];
+
+  /**
+   * Default "forked" mode for this subagent type. When `true`, invocations
+   * inherit the parent agent's conversation context: the parent thread is
+   * cloned and the subagent runs on the fork with the parent agent's
+   * instructions and tools, preserving prompt-cache prefix.
+   *
+   * The parent's `instructions`, `tools`, `allowedHarnessTools`,
+   * `allowedWorkspaceTools`, and `defaultModelId` fields on the definition
+   * are ignored when a run is forked — the parent agent is used as-is.
+   *
+   * Callers can override per-invocation by passing `forked` in the tool
+   * input. Forked subagents require memory to be configured on the Harness.
+   *
+   * @default false
+   */
+  forked?: boolean;
 }
 
 /**

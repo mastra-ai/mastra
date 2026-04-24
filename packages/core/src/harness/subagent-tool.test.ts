@@ -502,3 +502,285 @@ describe('createSubagentTool allowedWorkspaceTools filtering', () => {
     expect(result.activeTools).toHaveLength(5);
   });
 });
+
+describe('createSubagentTool forked subagent behavior', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function makeParentAgent(text = 'forked result') {
+    const parentStream = vi.fn().mockResolvedValue(createMockStreamResponse(text));
+    const parentAgent = { stream: parentStream } as any;
+    return { parentAgent, parentStream };
+  }
+
+  it('forks: clones the parent thread and streams on the parent agent when forked=true', async () => {
+    const { parentAgent, parentStream } = makeParentAgent('forked output');
+    const cloneThreadForFork = vi.fn().mockResolvedValue({ id: 'forked-thread-1', resourceId: 'parent-resource-1' });
+
+    const tool = createSubagentTool({
+      subagents,
+      resolveModel,
+      fallbackModelId: 'test-model',
+      getParentAgent: () => parentAgent,
+      cloneThreadForFork,
+    });
+
+    const requestContext = new RequestContext();
+    const harnessCtx: Partial<HarnessRequestContext> = {
+      emitEvent: vi.fn(),
+      threadId: 'parent-thread-1',
+      resourceId: 'parent-resource-1',
+    };
+    requestContext.set('harness', harnessCtx);
+
+    const result = await (tool as any).execute(
+      { agentType: 'explore', task: 'Dig deeper', forked: true },
+      { requestContext, agent: { toolCallId: 'tc-fork-1' } },
+    );
+
+    expect(result.isError).toBe(false);
+
+    // Parent thread is cloned with the parent's threadId.
+    expect(cloneThreadForFork).toHaveBeenCalledTimes(1);
+    expect(cloneThreadForFork).toHaveBeenCalledWith({
+      sourceThreadId: 'parent-thread-1',
+      resourceId: 'parent-resource-1',
+      title: expect.stringContaining('Fork:'),
+    });
+
+    // Parent agent's stream is used — no fresh Agent is constructed for the fork.
+    expect(parentStream).toHaveBeenCalledTimes(1);
+    expect(mockStream).not.toHaveBeenCalled();
+
+    const [taskArg, streamOpts] = parentStream.mock.calls[0]!;
+    expect(taskArg).toBe('Dig deeper');
+    // Memory option points at the cloned thread so history is inherited
+    // without polluting the parent thread.
+    expect(streamOpts.memory).toEqual({ thread: 'forked-thread-1', resource: 'parent-resource-1' });
+
+    // Subagent request context points at the fork (not null/'' like non-forked).
+    const subagentHarness = streamOpts.requestContext.get('harness') as Partial<HarnessRequestContext>;
+    expect(subagentHarness.threadId).toBe('forked-thread-1');
+    expect(subagentHarness.resourceId).toBe('parent-resource-1');
+  });
+
+  it('forks by default when the subagent definition sets forked=true', async () => {
+    const { parentAgent, parentStream } = makeParentAgent('default fork');
+    const cloneThreadForFork = vi.fn().mockResolvedValue({ id: 'forked-thread-default', resourceId: 'rid' });
+
+    const subagentsWithDefault: HarnessSubagent[] = [
+      {
+        id: 'collab',
+        name: 'Collab',
+        description: 'Always runs as a fork.',
+        instructions: 'You are a collab subagent.',
+        forked: true,
+      },
+    ];
+
+    const tool = createSubagentTool({
+      subagents: subagentsWithDefault,
+      resolveModel,
+      fallbackModelId: 'test-model',
+      getParentAgent: () => parentAgent,
+      cloneThreadForFork,
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set('harness', { emitEvent: vi.fn(), threadId: 'p-thread', resourceId: 'rid' });
+
+    const result = await (tool as any).execute(
+      // Note: `forked` is omitted — should fall through to the definition default.
+      { agentType: 'collab', task: 'Collaborate' },
+      { requestContext, agent: { toolCallId: 'tc-fork-default' } },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(cloneThreadForFork).toHaveBeenCalledTimes(1);
+    expect(parentStream).toHaveBeenCalledTimes(1);
+    expect(mockStream).not.toHaveBeenCalled();
+  });
+
+  it('per-invocation forked=false overrides a definition default of forked=true', async () => {
+    const { parentAgent, parentStream } = makeParentAgent('should not run');
+    const cloneThreadForFork = vi.fn();
+
+    const subagentsWithDefault: HarnessSubagent[] = [
+      {
+        id: 'collab',
+        name: 'Collab',
+        description: 'Defaults to fork.',
+        instructions: 'Collab.',
+        tools: { view: { id: 'view' } as any },
+        forked: true,
+      },
+    ];
+
+    mockStream.mockResolvedValue(createMockStreamResponse('non-forked result'));
+
+    const tool = createSubagentTool({
+      subagents: subagentsWithDefault,
+      resolveModel,
+      fallbackModelId: 'test-model',
+      getParentAgent: () => parentAgent,
+      cloneThreadForFork,
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set('harness', { emitEvent: vi.fn(), threadId: 'p-thread', resourceId: 'rid' });
+
+    const result = await (tool as any).execute(
+      { agentType: 'collab', task: 'Do it isolated', forked: false },
+      { requestContext, agent: { toolCallId: 'tc-fork-override' } },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(cloneThreadForFork).not.toHaveBeenCalled();
+    expect(parentStream).not.toHaveBeenCalled();
+    // Falls back to the regular non-forked path, which constructs a fresh Agent.
+    expect(mockStream).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns an error when forked=true but no parent agent is available', async () => {
+    const cloneThreadForFork = vi.fn().mockResolvedValue({ id: 'forked-thread', resourceId: 'rid' });
+
+    const tool = createSubagentTool({
+      subagents,
+      resolveModel,
+      fallbackModelId: 'test-model',
+      // getParentAgent omitted — simulates a harness without a current agent.
+      cloneThreadForFork,
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set('harness', { emitEvent: vi.fn(), threadId: 'p-thread', resourceId: 'rid' });
+
+    const result = await (tool as any).execute(
+      { agentType: 'explore', task: 'Fork', forked: true },
+      { requestContext, agent: { toolCallId: 'tc-fork-no-parent' } },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content).toMatch(/parent agent/i);
+    expect(cloneThreadForFork).not.toHaveBeenCalled();
+  });
+
+  it('returns an error when forked=true but there is no active parent thread', async () => {
+    const { parentAgent } = makeParentAgent();
+    const cloneThreadForFork = vi.fn();
+
+    const tool = createSubagentTool({
+      subagents,
+      resolveModel,
+      fallbackModelId: 'test-model',
+      getParentAgent: () => parentAgent,
+      cloneThreadForFork,
+    });
+
+    const requestContext = new RequestContext();
+    // harnessCtx without threadId
+    requestContext.set('harness', { emitEvent: vi.fn(), resourceId: 'rid' });
+
+    const result = await (tool as any).execute(
+      { agentType: 'explore', task: 'Fork', forked: true },
+      { requestContext, agent: { toolCallId: 'tc-fork-no-thread' } },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content).toMatch(/parent thread/i);
+    expect(cloneThreadForFork).not.toHaveBeenCalled();
+  });
+
+  it('returns an error when forked=true but cloneThreadForFork is not wired up (memory missing)', async () => {
+    const { parentAgent } = makeParentAgent();
+
+    const tool = createSubagentTool({
+      subagents,
+      resolveModel,
+      fallbackModelId: 'test-model',
+      getParentAgent: () => parentAgent,
+      // cloneThreadForFork intentionally omitted to simulate no memory configured.
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set('harness', { emitEvent: vi.fn(), threadId: 'p-thread', resourceId: 'rid' });
+
+    const result = await (tool as any).execute(
+      { agentType: 'explore', task: 'Fork', forked: true },
+      { requestContext, agent: { toolCallId: 'tc-fork-no-memory' } },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content).toMatch(/memory/i);
+  });
+
+  it('propagates a cloneThreadForFork failure as an error result (does not throw)', async () => {
+    const { parentAgent, parentStream } = makeParentAgent();
+    const cloneThreadForFork = vi.fn().mockRejectedValue(new Error('storage offline'));
+
+    const tool = createSubagentTool({
+      subagents,
+      resolveModel,
+      fallbackModelId: 'test-model',
+      getParentAgent: () => parentAgent,
+      cloneThreadForFork,
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set('harness', { emitEvent: vi.fn(), threadId: 'p-thread', resourceId: 'rid' });
+
+    const result = await (tool as any).execute(
+      { agentType: 'explore', task: 'Fork', forked: true },
+      { requestContext, agent: { toolCallId: 'tc-fork-clone-fail' } },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content).toMatch(/storage offline/);
+    expect(parentStream).not.toHaveBeenCalled();
+  });
+
+  it('non-forked path is unchanged: strips threadId/resourceId and constructs a fresh Agent', async () => {
+    // Sanity check that wiring fork helpers does NOT affect the default path.
+    const { parentAgent, parentStream } = makeParentAgent();
+    const cloneThreadForFork = vi.fn();
+
+    mockStream.mockResolvedValue(createMockStreamResponse('isolated'));
+
+    const tool = createSubagentTool({
+      subagents,
+      resolveModel,
+      fallbackModelId: 'test-model',
+      getParentAgent: () => parentAgent,
+      cloneThreadForFork,
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set('harness', {
+      emitEvent: vi.fn(),
+      threadId: 'p-thread',
+      resourceId: 'rid',
+    });
+
+    const result = await (tool as any).execute(
+      { agentType: 'explore', task: 'Isolate' }, // no forked flag
+      { requestContext, agent: { toolCallId: 'tc-non-fork' } },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(parentStream).not.toHaveBeenCalled();
+    expect(cloneThreadForFork).not.toHaveBeenCalled();
+    expect(mockStream).toHaveBeenCalledTimes(1);
+
+    const streamOpts = mockStream.mock.calls[0]![1];
+    const harness = streamOpts.requestContext.get('harness') as Partial<HarnessRequestContext>;
+    expect(harness.threadId).toBeNull();
+    expect(harness.resourceId).toBe('');
+    // memory option is NOT set for non-forked runs
+    expect(streamOpts.memory).toBeUndefined();
+  });
+});

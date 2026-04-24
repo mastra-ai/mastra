@@ -2964,11 +2964,35 @@ export class Harness<TState = {}> {
     // Auto-create subagent tool if subagent definitions are configured
     if (this.config.subagents?.length && this.config.resolveModel) {
       const currentMode = this.getCurrentMode();
+      const hasMemory = Boolean(this.config.memory);
       builtInTools.subagent = createSubagentTool({
         subagents: this.config.subagents,
         resolveModel: this.config.resolveModel,
         harnessTools: resolvedHarnessTools,
         fallbackModelId: currentMode?.defaultModelId,
+        // Resolved lazily so forked subagents see the current mode's agent
+        // even if the mode switches between tool-call scheduling and execution.
+        getParentAgent: () => {
+          try {
+            return this.getCurrentAgent();
+          } catch {
+            return undefined;
+          }
+        },
+        // Only wired up when memory is configured. Clones at the memory layer
+        // (not via Harness.cloneThread) so the parent thread stays the active
+        // thread while the forked subagent runs on the clone.
+        cloneThreadForFork: hasMemory
+          ? async ({ sourceThreadId, resourceId, title }) => {
+              const memory = await this.resolveMemory();
+              const result = await memory.cloneThread({
+                sourceThreadId,
+                resourceId: resourceId ?? this.resourceId,
+                title,
+              });
+              return { id: result.thread.id, resourceId: result.thread.resourceId };
+            }
+          : undefined,
       });
     }
 
