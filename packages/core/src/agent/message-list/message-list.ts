@@ -763,6 +763,57 @@ export class MessageList {
         }
       }
     }
+    // Fallback: match by toolName for provider-executed tools whose toolCallId may differ
+    // between call and result chunks (e.g. Google AI SDK server tools like file_search).
+    const inputToolName = inputPart.toolInvocation.toolName;
+    if (inputToolName) {
+      for (let m = this.messages.length - 1; m >= 0; m--) {
+        const msg = this.messages[m]!;
+        if (msg.role !== 'assistant' || !msg.content?.parts) continue;
+
+        for (let i = 0; i < msg.content.parts.length; i++) {
+          const part = msg.content.parts[i];
+          if (part?.type !== 'tool-invocation') continue;
+          const partWithMeta = part as typeof part & { providerExecuted?: boolean };
+          if (
+            partWithMeta.providerExecuted === true &&
+            part.toolInvocation?.toolName === inputToolName &&
+            part.toolInvocation?.state === 'call'
+          ) {
+            const originalPart = part as typeof part & { providerExecuted?: boolean; providerMetadata?: unknown };
+            const inputPartWithMeta = inputPart as typeof inputPart & {
+              providerExecuted?: boolean;
+              providerMetadata?: unknown;
+            };
+
+            msg.content.parts[i] = {
+              ...inputPart,
+              toolInvocation: {
+                ...inputPart.toolInvocation,
+                args: part.toolInvocation.args,
+              },
+              ...(originalPart.providerExecuted !== undefined && inputPartWithMeta.providerExecuted === undefined
+                ? { providerExecuted: originalPart.providerExecuted }
+                : {}),
+              ...(originalPart.providerMetadata !== undefined && inputPartWithMeta.providerMetadata === undefined
+                ? { providerMetadata: originalPart.providerMetadata }
+                : {}),
+            };
+
+            if (!this.stateManager.isResponseMessage(msg)) {
+              this.stateManager.removeMessage(msg);
+              this.stateManager.addToSource(msg, 'response');
+            }
+
+            this.logger?.debug?.(
+              `updateToolInvocation: matched provider-executed tool by toolName="${inputToolName}" (toolCallId mismatch: expected="${part.toolInvocation.toolCallId}", got="${toolCallId}")`,
+            );
+            return true;
+          }
+        }
+      }
+    }
+
     this.logger?.warn(`updateToolInvocation: no matching tool call found for toolCallId=${toolCallId}`);
     return false;
   }

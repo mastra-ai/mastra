@@ -542,6 +542,125 @@ describe('MessageList.updateToolInvocation', () => {
     expect(part.providerExecuted).toBe(false);
   });
 
+  it('should match provider-executed tool result by toolName when toolCallId mismatches', () => {
+    const messageList = new MessageList();
+
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'tc-call-id',
+          toolName: 'file_search',
+          args: { query: 'test' },
+        },
+        providerExecuted: true,
+      } as any,
+    ]);
+    messageList.add(msg, 'response');
+
+    const updated = messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'tc-different-id',
+        toolName: 'file_search',
+        args: {},
+        result: { content: [{ type: 'text', text: 'found it' }] },
+      },
+    });
+
+    expect(updated).toBe(true);
+
+    const part = msg.content.parts[0] as any;
+    expect(part.toolInvocation.state).toBe('result');
+    expect(part.toolInvocation.result).toEqual({ content: [{ type: 'text', text: 'found it' }] });
+    expect(part.toolInvocation.args).toEqual({ query: 'test' });
+  });
+
+  it('should not use toolName fallback for client-executed tools', () => {
+    const warnFn = vi.fn();
+    const messageList = new MessageList({ logger: { warn: warnFn } as any });
+
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'tc-call-id',
+          toolName: 'my_tool',
+          args: { x: 1 },
+        },
+        // no providerExecuted or providerExecuted: false
+      } as any,
+    ]);
+    messageList.add(msg, 'response');
+
+    const updated = messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'tc-different-id',
+        toolName: 'my_tool',
+        args: {},
+        result: 'done',
+      },
+    });
+
+    expect(updated).toBe(false);
+    expect(warnFn).toHaveBeenCalled();
+  });
+
+  it('should match correct tool when multiple pending provider-executed calls exist', () => {
+    const messageList = new MessageList();
+
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'tc-a',
+          toolName: 'file_search',
+          args: { query: 'first' },
+        },
+        providerExecuted: true,
+      } as any,
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'tc-b',
+          toolName: 'google_search',
+          args: { query: 'second' },
+        },
+        providerExecuted: true,
+      } as any,
+    ]);
+    messageList.add(msg, 'response');
+
+    const updated = messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'tc-mismatched',
+        toolName: 'google_search',
+        args: {},
+        result: { data: 'search results' },
+      },
+    });
+
+    expect(updated).toBe(true);
+
+    const parts = msg.content.parts;
+    // file_search should still be pending
+    expect((parts[0] as any).toolInvocation.state).toBe('call');
+    expect((parts[0] as any).toolInvocation.toolName).toBe('file_search');
+    // google_search should be resolved
+    expect((parts[1] as any).toolInvocation.state).toBe('result');
+    expect((parts[1] as any).toolInvocation.toolName).toBe('google_search');
+    expect((parts[1] as any).toolInvocation.result).toEqual({ data: 'search results' });
+  });
+
   it('should allow result to override providerMetadata from original call', () => {
     const messageList = new MessageList();
 
