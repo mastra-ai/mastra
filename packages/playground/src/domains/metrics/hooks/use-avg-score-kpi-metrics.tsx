@@ -6,10 +6,10 @@ import { useMetricsFilters } from './use-metrics-filters';
 /** Avg Score — average score across all scorers via aggregate API */
 export function useAvgScoreKpiMetrics() {
   const client = useMastraClient();
-  const { datePreset, customRange, timestamp } = useMetricsFilters();
+  const { timestamp, filterKey } = useMetricsFilters();
 
   return useQuery({
-    queryKey: ['metrics', 'avg-score-kpi', datePreset, customRange],
+    queryKey: ['metrics', 'avg-score-kpi', filterKey],
     queryFn: async () => {
       const scorersMap = await client.listScorers();
       const scorerIds = Object.keys(scorersMap ?? {});

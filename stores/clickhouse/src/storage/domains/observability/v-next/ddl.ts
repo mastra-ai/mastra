@@ -252,7 +252,15 @@ CREATE TABLE IF NOT EXISTS ${TABLE_METRIC_EVENTS} (
   -- Information-only JSON payloads
   costMetadata       Nullable(String),
   metadata           Nullable(String),
-  scope              Nullable(String)
+  scope              Nullable(String),
+
+  -- Skip indexes for common high-cardinality drill-in filters.
+  -- Granularity 4 trades a little index size for faster ID lookups on
+  -- timestamp-bounded queries without affecting the sort-key scan path.
+  INDEX idx_threadId threadId TYPE bloom_filter(0.01) GRANULARITY 4,
+  INDEX idx_resourceId resourceId TYPE bloom_filter(0.01) GRANULARITY 4,
+  INDEX idx_userId userId TYPE bloom_filter(0.01) GRANULARITY 4,
+  INDEX idx_organizationId organizationId TYPE bloom_filter(0.01) GRANULARITY 4
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
@@ -605,7 +613,20 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} ADD COLUMN IF NOT EXISTS entityVersionId Nullable(String)`,
   `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} ADD COLUMN IF NOT EXISTS parentEntityVersionId Nullable(String)`,
   `ALTER TABLE ${TABLE_FEEDBACK_EVENTS} ADD COLUMN IF NOT EXISTS rootEntityVersionId Nullable(String)`,
+  // Metric skip indexes (idempotent; only apply to new parts until MATERIALIZE INDEX is run).
+  // For existing tables with large partitions, run `MATERIALIZE INDEX` manually during a
+  // maintenance window — it rewrites part data and can be expensive.
+  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD INDEX IF NOT EXISTS idx_threadId threadId TYPE bloom_filter(0.01) GRANULARITY 4`,
+  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD INDEX IF NOT EXISTS idx_resourceId resourceId TYPE bloom_filter(0.01) GRANULARITY 4`,
+  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD INDEX IF NOT EXISTS idx_userId userId TYPE bloom_filter(0.01) GRANULARITY 4`,
+  `ALTER TABLE ${TABLE_METRIC_EVENTS} ADD INDEX IF NOT EXISTS idx_organizationId organizationId TYPE bloom_filter(0.01) GRANULARITY 4`,
 ];
+
+/**
+ * Names of bloom_filter skip indexes added to `metric_events` for high-cardinality ID filters.
+ * Consumers can use this to detect whether existing parts still need `MATERIALIZE INDEX`.
+ */
+export const METRIC_SKIP_INDEX_NAMES = ['idx_threadId', 'idx_resourceId', 'idx_userId', 'idx_organizationId'] as const;
 
 export const ALL_DDL = [...ALL_TABLE_DDL, ...ALL_MV_DDL, ...DISCOVERY_MV_DDL];
 

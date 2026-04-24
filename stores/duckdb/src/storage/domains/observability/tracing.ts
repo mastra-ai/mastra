@@ -15,6 +15,7 @@ import type {
   SpanRecord,
 } from '@mastra/core/storage';
 import { toTraceSpans } from '@mastra/core/storage';
+import { parseFieldKey } from '@mastra/core/utils';
 import type { DuckDBConnection } from '../../db/index';
 import { buildWhereClause, buildOrderByClause, buildPaginationClause } from './filters';
 import { v, jsonV, parseJson, parseJsonArray, toDate, toDateOrNull } from './helpers';
@@ -181,10 +182,149 @@ function rowToSpanRecord(row: Record<string, unknown>): SpanRecord {
   };
 }
 
-function buildHasChildErrorClause(hasChildError: boolean | undefined): string {
+function buildHasChildErrorClause(hasChildError: boolean | undefined, rootAlias: string): string {
   if (hasChildError === undefined) return '';
-  const base = `SELECT 1 FROM reconstructed_spans c WHERE c.traceId = root_spans.traceId AND c.spanId != root_spans.spanId AND c.error IS NOT NULL`;
+  // Run directly against raw span_events so we never pay for full-table reconstruction.
+  const base = `SELECT 1 FROM span_events c WHERE c.traceId = ${rootAlias}.traceId AND c.spanId != ${rootAlias}.spanId AND c.error IS NOT NULL`;
   return hasChildError ? `EXISTS (${base})` : `NOT EXISTS (${base})`;
+}
+
+// ============================================================================
+// listTraces filter classification
+// ============================================================================
+
+/**
+ * Root-only filter keys: these describe the root span itself and are checked
+ * against the start row directly.
+ */
+const ROOT_FILTER_KEYS = new Set(['traceId', 'spanId', 'parentSpanId', 'name', 'spanType', 'source']);
+
+/**
+ * Membership filter keys: these describe any span in the trace. They resolve
+ * as `EXISTS (SELECT 1 FROM span_events m WHERE m.traceId = root.traceId AND
+ * <membership predicate>)` so a trace matches if any of its spans does.
+ *
+ * Values here do not change between start/end events of a given span, so the
+ * EXISTS can run against raw events without reconstruction.
+ */
+const MEMBERSHIP_FILTER_KEYS = new Set([
+  'entityType',
+  'entityId',
+  'entityName',
+  'entityVersionId',
+  'experimentId',
+  'userId',
+  'organizationId',
+  'resourceId',
+  'runId',
+  'sessionId',
+  'threadId',
+  'requestId',
+  'environment',
+  'serviceName',
+  'tags',
+]);
+
+function partitionListTracesFilters(filters: Record<string, unknown>): {
+  root: Record<string, unknown>;
+  membership: Record<string, unknown>;
+  postAgg: Record<string, unknown>;
+  hasChildError: boolean | undefined;
+} {
+  const root: Record<string, unknown> = {};
+  const membership: Record<string, unknown> = {};
+  const postAgg: Record<string, unknown> = {};
+  let hasChildError: boolean | undefined;
+
+  for (const [key, value] of Object.entries(filters)) {
+    if (value === undefined || value === null) continue;
+
+    if (key === 'hasChildError') {
+      if (typeof value === 'boolean') hasChildError = value;
+      continue;
+    }
+
+    if (key === 'startedAt') {
+      // startedAt == min(timestamp) on the start row, so a startedAt range is
+      // exactly the start-row timestamp range. Pushable to the prefilter.
+      root.timestamp = value;
+      continue;
+    }
+
+    if (key === 'endedAt') {
+      // endedAt lives on the end event and can only be checked after reconstruct.
+      postAgg.endedAt = value;
+      // As a safe over-approximation, apply `endedAt.end` as an upper bound on
+      // the start-row timestamp so we never scan events created strictly after
+      // the requested window. (A span that started after `endedAt.end` can't
+      // have ended before it.)
+      const dateRange = value as { end?: Date; endExclusive?: boolean };
+      if (dateRange?.end) {
+        const existing = root.timestamp as { start?: Date; end?: Date } | undefined;
+        root.timestamp = {
+          ...(existing ?? {}),
+          end: dateRange.end,
+          endExclusive: dateRange.endExclusive,
+        };
+      }
+      continue;
+    }
+
+    if (ROOT_FILTER_KEYS.has(key)) {
+      root[key] = value;
+      continue;
+    }
+
+    if (MEMBERSHIP_FILTER_KEYS.has(key)) {
+      membership[key] = value;
+      continue;
+    }
+
+    // Everything else (status, tags, metadata, scope, labels, ...) runs after
+    // span reconstruction.
+    postAgg[key] = value;
+  }
+
+  return { root, membership, postAgg, hasChildError };
+}
+
+/**
+ * Build an EXISTS subquery that asserts the trace contains at least one span
+ * matching the given membership predicate. Date range from the prefilter is
+ * passed in so the subquery stays pruned.
+ */
+function buildMembershipExists(
+  rootAlias: string,
+  membership: Record<string, unknown>,
+  dateRange: { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean } | undefined,
+): { clauses: string[]; params: unknown[] } {
+  const clauses: string[] = [];
+  const params: unknown[] = [];
+  for (const [key, value] of Object.entries(membership)) {
+    const parts: string[] = [`m.traceId = ${rootAlias}.traceId`];
+    const subParams: unknown[] = [];
+
+    const { clause, params: whereParams } = buildWhereClause({ [key]: value });
+    if (clause) {
+      // Unqualified column refs inside the subquery resolve to span_events (aliased m).
+      parts.push(clause.replace(/^WHERE\s+/i, ''));
+      subParams.push(...whereParams);
+    }
+    // Apply date window so the EXISTS is pruned to the same span of events
+    // that the root prefilter considers.
+    if (dateRange?.start) {
+      parts.push(`m.timestamp ${dateRange.startExclusive ? '>' : '>='} ?`);
+      subParams.push(dateRange.start);
+    }
+    if (dateRange?.end) {
+      parts.push(`m.timestamp ${dateRange.endExclusive ? '<' : '<='} ?`);
+      subParams.push(dateRange.end);
+    }
+
+    clauses.push(`EXISTS (SELECT 1 FROM span_events m WHERE ${parts.join(' AND ')})`);
+    params.push(...subParams);
+  }
+  return { clauses, params };
 }
 
 // ============================================================================
@@ -436,57 +576,133 @@ export async function getTraceLight(db: DuckDBConnection, args: GetTraceArgs): P
   };
 }
 
-/** List root spans (traces) with filtering, ordering, and pagination. */
+/**
+ * List root spans (traces) with filtering, ordering, and pagination.
+ *
+ * Instead of reconstructing every span in the table and then filtering, we:
+ *   1. Pick candidate root `(traceId, spanId)` tuples from raw `span_events`
+ *      by looking only at rows where `eventType = 'start'` and
+ *      `parentSpanId IS NULL`. All scalar filters (entity*, *Id, service,
+ *      environment, startedAt range, ...) run here, against raw columns.
+ *   2. Fully reconstruct spans only for that narrowed set, then apply
+ *      post-aggregation filters (status/tags/metadata/scope/endedAt/
+ *      hasChildError).
+ *
+ * When there are no post-aggregation filters, ordering + pagination happen
+ * inside the prefilter CTE so reconstruction runs on at most `perPage` rows.
+ */
 export async function listTraces(db: DuckDBConnection, args: ListTracesArgs): Promise<ListTracesResponse> {
   const filters = args.filters ?? {};
   const page = Number(args.pagination?.page ?? 0);
   const perPage = Number(args.pagination?.perPage ?? 10);
   const orderBy = { field: args.orderBy?.field ?? 'startedAt', direction: args.orderBy?.direction ?? 'DESC' } as const;
 
-  const { clause: filterClause, params: filterParams } = buildWhereClause(filters as Record<string, unknown>);
-  const orderByClause = buildOrderByClause(orderBy);
-  const { clause: paginationClause, params: paginationParams } = buildPaginationClause({ page, perPage });
+  const { root, membership, postAgg, hasChildError } = partitionListTracesFilters(filters as Record<string, unknown>);
 
-  const filterParts = [];
-  if (filterClause) filterParts.push(filterClause.replace(/^WHERE\s+/i, ''));
-  const hasChildError = typeof filters.hasChildError === 'boolean' ? filters.hasChildError : undefined;
-  const childErrorClause = buildHasChildErrorClause(hasChildError);
-  if (childErrorClause) filterParts.push(childErrorClause);
-  const combinedFilterClause = filterParts.length > 0 ? `WHERE ${filterParts.join(' AND ')}` : '';
+  // Stage 1 — cheap prefilter against raw span_events (start-row only).
+  //
+  // Root filters apply directly to the start row. Membership filters expand
+  // to EXISTS subqueries so a trace matches when *any* of its spans does.
+  const { clause: rootClause, params: rootParams } = buildWhereClause(root);
+  const prefilterParts = [`eventType = 'start'`, `parentSpanId IS NULL`];
+  if (rootClause) prefilterParts.push(rootClause.replace(/^WHERE\s+/i, ''));
+
+  const membershipDateRange = root.timestamp as
+    | { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean }
+    | undefined;
+  const { clauses: membershipClauses, params: membershipParams } = buildMembershipExists(
+    'span_events',
+    membership,
+    membershipDateRange,
+  );
+  prefilterParts.push(...membershipClauses);
+  const prefilterWhere = `WHERE ${prefilterParts.join(' AND ')}`;
+  const prefilterParams = [...rootParams, ...membershipParams];
+
+  // For ordering on the prefilter, `startedAt` maps to the start-row `timestamp`.
+  const orderByField = orderBy.field === 'startedAt' ? 'timestamp' : parseFieldKey(orderBy.field);
+  const orderDir = orderBy.direction.toUpperCase();
+  if (orderDir !== 'ASC' && orderDir !== 'DESC') {
+    throw new Error(`Invalid sort direction: ${orderBy.direction}`);
+  }
+  const prefilterOrderBy = `ORDER BY ${orderByField} ${orderDir}`;
+
+  const hasPostAggFilters = Object.keys(postAgg).length > 0 || hasChildError !== undefined;
+
+  if (!hasPostAggFilters) {
+    // Fast path: order + paginate in the prefilter, reconstruct only the page.
+    const offset = page * perPage;
+
+    const countSql = `
+      SELECT COUNT(*) as total
+      FROM span_events
+      ${prefilterWhere}
+    `;
+    const countResult = await db.query<{ total: number }>(countSql, prefilterParams);
+    const total = Number(countResult[0]?.total ?? 0);
+
+    const pageSql = `
+      WITH page_roots AS (
+        SELECT traceId, spanId
+        FROM span_events
+        ${prefilterWhere}
+        ${prefilterOrderBy}
+        LIMIT ? OFFSET ?
+      )
+      ${SPAN_RECONSTRUCT_SELECT}
+      WHERE (traceId, spanId) IN (SELECT traceId, spanId FROM page_roots)
+      GROUP BY traceId, spanId
+      ${buildOrderByClause(orderBy)}
+    `;
+    const rows = await db.query(pageSql, [...prefilterParams, perPage, offset]);
+    const spans = rows.map(row => rowToSpanRecord(row as Record<string, unknown>));
+
+    return {
+      pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
+      spans: toTraceSpans(spans),
+    };
+  }
+
+  // Slow path: reconstruct the prefilter set, then apply post-agg filters.
+  const { clause: postAggClause, params: postAggParams } = buildWhereClause(postAgg);
+  const postAggParts: string[] = [];
+  if (postAggClause) postAggParts.push(postAggClause.replace(/^WHERE\s+/i, ''));
+  const childErrorClause = buildHasChildErrorClause(hasChildError, 'root_spans');
+  if (childErrorClause) postAggParts.push(childErrorClause);
+  const postAggWhere = postAggParts.length > 0 ? `WHERE ${postAggParts.join(' AND ')}` : '';
 
   const cteSql = `
-    WITH reconstructed_spans AS (
-      ${SPAN_RECONSTRUCT_SELECT}
-      GROUP BY traceId, spanId
+    WITH candidate_roots AS (
+      SELECT traceId, spanId
+      FROM span_events
+      ${prefilterWhere}
     ),
     root_spans AS (
-      SELECT * FROM reconstructed_spans
-      WHERE parentSpanId IS NULL
+      ${SPAN_RECONSTRUCT_SELECT}
+      WHERE (traceId, spanId) IN (SELECT traceId, spanId FROM candidate_roots)
+      GROUP BY traceId, spanId
     )
   `;
 
+  const orderByClause = buildOrderByClause(orderBy);
+  const { clause: paginationClause, params: paginationParams } = buildPaginationClause({ page, perPage });
+
   const countSql = `
     ${cteSql}
-    SELECT COUNT(*) as total FROM root_spans ${combinedFilterClause}
+    SELECT COUNT(*) as total FROM root_spans ${postAggWhere}
   `;
-  const countResult = await db.query<{ total: number }>(countSql, filterParams);
+  const countResult = await db.query<{ total: number }>(countSql, [...prefilterParams, ...postAggParams]);
   const total = Number(countResult[0]?.total ?? 0);
 
   const dataSql = `
     ${cteSql}
-    SELECT * FROM root_spans ${combinedFilterClause} ${orderByClause} ${paginationClause}
+    SELECT * FROM root_spans ${postAggWhere} ${orderByClause} ${paginationClause}
   `;
-  const rows = await db.query(dataSql, [...filterParams, ...paginationParams]);
-
+  const rows = await db.query(dataSql, [...prefilterParams, ...postAggParams, ...paginationParams]);
   const spans = rows.map(row => rowToSpanRecord(row as Record<string, unknown>));
 
   return {
-    pagination: {
-      total,
-      page,
-      perPage,
-      hasMore: (page + 1) * perPage < total,
-    },
+    pagination: { total, page, perPage, hasMore: (page + 1) * perPage < total },
     spans: toTraceSpans(spans),
   };
 }

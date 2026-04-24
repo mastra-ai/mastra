@@ -324,64 +324,36 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
           queryArgs.push(filters.spanType);
         }
 
-        // Entity filters
-        if (filters.entityType !== undefined) {
-          conditions.push(`entityType = ?`);
-          queryArgs.push(filters.entityType);
-        }
-        if (filters.entityId !== undefined) {
-          conditions.push(`entityId = ?`);
-          queryArgs.push(filters.entityId);
-        }
-        if (filters.entityName !== undefined) {
-          conditions.push(`entityName = ?`);
-          queryArgs.push(filters.entityName);
-        }
+        // Membership filters: match any span within the trace, not just the
+        // root span. A single EXISTS against the same spans table resolves
+        // these — a trace matches if at least one of its spans satisfies all
+        // the membership predicates supplied together.
+        //
+        // Note: `source` stays on the root span (it's a root-level notion).
+        const membershipConditions: string[] = [`m.traceId = ${tableName}.traceId`];
+        const membershipArgs: any[] = [];
+        const pushMembership = (column: string, value: unknown) => {
+          membershipConditions.push(`m.${column} = ?`);
+          membershipArgs.push(value);
+        };
 
-        // Identity & Tenancy filters
-        if (filters.userId !== undefined) {
-          conditions.push(`userId = ?`);
-          queryArgs.push(filters.userId);
-        }
-        if (filters.organizationId !== undefined) {
-          conditions.push(`organizationId = ?`);
-          queryArgs.push(filters.organizationId);
-        }
-        if (filters.resourceId !== undefined) {
-          conditions.push(`resourceId = ?`);
-          queryArgs.push(filters.resourceId);
-        }
+        if (filters.entityType !== undefined) pushMembership('entityType', filters.entityType);
+        if (filters.entityId !== undefined) pushMembership('entityId', filters.entityId);
+        if (filters.entityName !== undefined) pushMembership('entityName', filters.entityName);
+        if (filters.userId !== undefined) pushMembership('userId', filters.userId);
+        if (filters.organizationId !== undefined) pushMembership('organizationId', filters.organizationId);
+        if (filters.resourceId !== undefined) pushMembership('resourceId', filters.resourceId);
+        if (filters.runId !== undefined) pushMembership('runId', filters.runId);
+        if (filters.sessionId !== undefined) pushMembership('sessionId', filters.sessionId);
+        if (filters.threadId !== undefined) pushMembership('threadId', filters.threadId);
+        if (filters.requestId !== undefined) pushMembership('requestId', filters.requestId);
+        if (filters.environment !== undefined) pushMembership('environment', filters.environment);
+        if (filters.serviceName !== undefined) pushMembership('serviceName', filters.serviceName);
 
-        // Correlation ID filters
-        if (filters.runId !== undefined) {
-          conditions.push(`runId = ?`);
-          queryArgs.push(filters.runId);
-        }
-        if (filters.sessionId !== undefined) {
-          conditions.push(`sessionId = ?`);
-          queryArgs.push(filters.sessionId);
-        }
-        if (filters.threadId !== undefined) {
-          conditions.push(`threadId = ?`);
-          queryArgs.push(filters.threadId);
-        }
-        if (filters.requestId !== undefined) {
-          conditions.push(`requestId = ?`);
-          queryArgs.push(filters.requestId);
-        }
-
-        // Deployment context filters
-        if (filters.environment !== undefined) {
-          conditions.push(`environment = ?`);
-          queryArgs.push(filters.environment);
-        }
+        // Deployment: `source` is root-only (set once per trace).
         if (filters.source !== undefined) {
           conditions.push(`source = ?`);
           queryArgs.push(filters.source);
-        }
-        if (filters.serviceName !== undefined) {
-          conditions.push(`serviceName = ?`);
-          queryArgs.push(filters.serviceName);
         }
 
         // Scope filter (JSON containment - SQLite uses json_extract)
@@ -419,13 +391,31 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
           }
         }
 
-        // Tags filter (all tags must be present)
+        // Tags filter: any span in the trace containing all supplied tags.
         if (filters.tags != null && filters.tags.length > 0) {
-          // Use json_each for exact tag matching (LIKE can match substrings)
           for (const tag of filters.tags) {
-            conditions.push(`EXISTS (SELECT 1 FROM json_each(${tableName}.tags) WHERE value = ?)`);
-            queryArgs.push(tag);
+            membershipConditions.push(`EXISTS (SELECT 1 FROM json_each(m.tags) WHERE value = ?)`);
+            membershipArgs.push(tag);
           }
+        }
+
+        // Only emit the EXISTS subquery if a membership predicate was supplied.
+        if (membershipConditions.length > 1) {
+          // Narrow the membership subquery to the same time window the root
+          // query is using so we don't widen the scan.
+          const existsDateConditions: string[] = [];
+          const existsDateArgs: any[] = [];
+          if (filters.startedAt?.start) {
+            existsDateConditions.push(`m.startedAt >= ?`);
+            existsDateArgs.push(filters.startedAt.start.toISOString());
+          }
+          if (filters.endedAt?.end) {
+            existsDateConditions.push(`m.startedAt <= ?`);
+            existsDateArgs.push(filters.endedAt.end.toISOString());
+          }
+          const allMembershipConditions = [...membershipConditions, ...existsDateConditions];
+          conditions.push(`EXISTS (SELECT 1 FROM ${tableName} m WHERE ${allMembershipConditions.join(' AND ')})`);
+          queryArgs.push(...membershipArgs, ...existsDateArgs);
         }
 
         // Status filter (derived from error and endedAt)

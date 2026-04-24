@@ -1,7 +1,10 @@
+import { EntityType } from '@mastra/core/observability';
 import { MetricsCard, MetricsDataTable, MetricsLineChart, Tabs, TabList, Tab, TabContent } from '@mastra/playground-ui';
 import { useMemo } from 'react';
 
+import { useDrilldown } from '../hooks/use-drilldown';
 import { useScoresMetrics } from '../hooks/use-scores-metrics';
+import { OpenInTracesButton } from './card-action-buttons';
 import { CHART_COLORS } from './metrics-utils';
 
 const SERIES_COLORS = [
@@ -15,6 +18,7 @@ const SERIES_COLORS = [
 
 export function ScoresCard() {
   const { data, isLoading, isError } = useScoresMetrics();
+  const { getTracesHref } = useDrilldown();
   const hasData = !!data && data.summaryData.length > 0;
 
   const series = useMemo(() => {
@@ -43,6 +47,9 @@ export function ScoresCard() {
             label="Across all scorers"
           />
         )}
+        <MetricsCard.Actions>
+          <OpenInTracesButton href={getTracesHref({ rootEntityType: EntityType.SCORER })} />
+        </MetricsCard.Actions>
       </MetricsCard.TopBar>
       {isLoading ? (
         <MetricsCard.Loading />
@@ -75,6 +82,7 @@ export function ScoresCard() {
                     { label: 'Count', value: row => row.count.toLocaleString() },
                   ]}
                   data={data.summaryData.map(row => ({ ...row, key: row.scorer }))}
+                  getRowHref={row => getTracesHref({ rootEntityType: EntityType.SCORER, entityName: row.scorer })}
                 />
               </TabContent>
             </Tabs>

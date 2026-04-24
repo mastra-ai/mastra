@@ -1,6 +1,9 @@
 import { Alert, AlertTitle, AlertDescription, Button, EmptyState, MetricsFlexGrid } from '@mastra/playground-ui';
 import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
+import { ActiveResourcesKpiCard } from './active-resources-kpi-card';
+import { ActiveThreadsKpiCard } from './active-threads-kpi-card';
 import { LatencyCard } from './latency-card';
+import { MemoryCard } from './memory-card';
 import { AgentRunsKpiCard, ModelCostKpiCard, TotalTokensKpiCard, AvgScoreKpiCard } from './metrics-kpi-cards';
 import { ModelUsageCostCard } from './model-usage-cost-card';
 import { ScoresCard } from './scores-card';
@@ -61,6 +64,8 @@ export function MetricsDashboard() {
 
       <MetricsFlexGrid>
         <AgentRunsKpiCard />
+        <ActiveThreadsKpiCard />
+        <ActiveResourcesKpiCard />
         <ModelCostKpiCard />
         <TotalTokensKpiCard />
         <AvgScoreKpiCard />
@@ -69,6 +74,7 @@ export function MetricsDashboard() {
       <MetricsFlexGrid>
         <ModelUsageCostCard />
         <TokenUsageByAgentCard />
+        <MemoryCard />
         <ScoresCard />
         <TracesVolumeCard />
         <LatencyCard />

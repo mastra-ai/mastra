@@ -19,10 +19,10 @@ export interface ScoresOverTimePoint {
 
 export function useScoresMetrics() {
   const client = useMastraClient();
-  const { datePreset, customRange, timestamp } = useMetricsFilters();
+  const { timestamp, filterKey } = useMetricsFilters();
 
   return useQuery({
-    queryKey: ['metrics', 'scores-card', datePreset, customRange],
+    queryKey: ['metrics', 'scores-card', filterKey],
     queryFn: async () => {
       const filters = {
         timestamp: { start: timestamp.start, end: timestamp.end },

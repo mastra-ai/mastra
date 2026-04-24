@@ -1,9 +1,13 @@
+import { EntityType } from '@mastra/core/observability';
 import { MetricsCard, MetricsDataTable } from '@mastra/playground-ui';
+import { useDrilldown } from '../hooks/use-drilldown';
 import { useModelUsageCostMetrics } from '../hooks/use-model-usage-cost-metrics';
+import { OpenInTracesButton } from './card-action-buttons';
 import { formatCost } from './metrics-utils';
 
 export function ModelUsageCostCard() {
   const { data: rows, isLoading, isError } = useModelUsageCostMetrics();
+  const { getTracesHref } = useDrilldown();
   const hasData = !!rows && rows.length > 0;
 
   return (
@@ -16,6 +20,9 @@ export function ModelUsageCostCard() {
             const unit = rows.find(r => r.costUnit)?.costUnit;
             return <MetricsCard.Summary value={totalCost > 0 ? formatCost(totalCost, unit) : '—'} label="Total cost" />;
           })()}
+        <MetricsCard.Actions>
+          <OpenInTracesButton href={getTracesHref({ rootEntityType: EntityType.AGENT })} />
+        </MetricsCard.Actions>
       </MetricsCard.TopBar>
       {isLoading ? (
         <MetricsCard.Loading />
@@ -40,6 +47,9 @@ export function ModelUsageCostCard() {
                 },
               ]}
               data={rows.map(row => ({ ...row, key: row.model }))}
+              // Model-specific filtering on traces is not yet available — row
+              // drilldowns land on the agent-scoped traces list for now.
+              getRowHref={() => getTracesHref({ rootEntityType: EntityType.AGENT })}
             />
           )}
         </MetricsCard.Content>

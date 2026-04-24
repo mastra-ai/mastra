@@ -19,6 +19,7 @@ import type {
   feedbackFilterSchema,
 } from '@mastra/core/storage';
 import type { z } from 'zod/v4';
+import { TABLE_SPAN_EVENTS } from './ddl';
 
 type TracesFilter = z.infer<typeof tracesFilterSchema>;
 type LogsFilter = z.infer<typeof logsFilterSchema>;
@@ -189,6 +190,30 @@ function addCommonFilterFields(
 // Trace filter builder (for trace_roots table)
 // ---------------------------------------------------------------------------
 
+/**
+ * Fields that match any span within a trace (trace-membership semantics).
+ * When any of these is supplied, we resolve them via an `EXISTS` subquery
+ * against `mastra_span_events` so that a trace matches if any of its spans
+ * satisfies the predicate, not only the root span.
+ */
+const MEMBERSHIP_TRACE_FIELDS = [
+  'entityType',
+  'entityId',
+  'entityName',
+  'entityVersionId',
+  'experimentId',
+  'userId',
+  'organizationId',
+  'resourceId',
+  'runId',
+  'sessionId',
+  'threadId',
+  'requestId',
+  'environment',
+  'serviceName',
+  'tags',
+] as const;
+
 export function buildTraceFilterConditions(filters: TracesFilter | undefined, tableAlias?: string): FilterResult {
   const out: FilterResult = { conditions: [], params: {} };
   if (!filters) return out;
@@ -197,11 +222,8 @@ export function buildTraceFilterConditions(filters: TracesFilter | undefined, ta
 
   addDateRange(col('startedAt'), filters.startedAt as DateRange | undefined, 'startedAt', out);
   addDateRange(col('endedAt'), filters.endedAt as DateRange | undefined, 'endedAt', out);
+  addEq(col('traceId'), filters.traceId, 'traceId', 'String', out);
   addEq(col('spanType'), filters.spanType, 'spanType', 'String', out);
-  addEq(col('entityType'), filters.entityType, 'entityType', 'String', out);
-  addEq(col('entityId'), filters.entityId, 'entityId', 'String', out);
-  addEq(col('entityName'), filters.entityName, 'entityName', 'String', out);
-  addEq(col('entityVersionId'), filters.entityVersionId, 'entityVersionId', 'String', out);
   addEq(col('parentEntityVersionId'), filters.parentEntityVersionId, 'parentEntityVersionId', 'String', out);
   addEq(col('parentEntityType'), filters.parentEntityType, 'parentEntityType', 'String', out);
   addEq(col('parentEntityId'), filters.parentEntityId, 'parentEntityId', 'String', out);
@@ -210,21 +232,44 @@ export function buildTraceFilterConditions(filters: TracesFilter | undefined, ta
   addEq(col('rootEntityType'), filters.rootEntityType, 'rootEntityType', 'String', out);
   addEq(col('rootEntityId'), filters.rootEntityId, 'rootEntityId', 'String', out);
   addEq(col('rootEntityName'), filters.rootEntityName, 'rootEntityName', 'String', out);
-  addEq(col('experimentId'), filters.experimentId, 'experimentId', 'String', out);
-  addEq(col('userId'), filters.userId, 'userId', 'String', out);
-  addEq(col('organizationId'), filters.organizationId, 'organizationId', 'String', out);
-  addEq(col('resourceId'), filters.resourceId, 'resourceId', 'String', out);
-  addEq(col('runId'), filters.runId, 'runId', 'String', out);
-  addEq(col('sessionId'), filters.sessionId, 'sessionId', 'String', out);
-  addEq(col('threadId'), filters.threadId, 'threadId', 'String', out);
-  addEq(col('requestId'), filters.requestId, 'requestId', 'String', out);
-  addEq(col('environment'), filters.environment, 'environment', 'String', out);
   // Trace filters still accept `source`, but it maps to the `executionSource` DB column.
   addEq(col('executionSource'), filters.source, 'source', 'String', out);
-  addEq(col('serviceName'), filters.serviceName, 'serviceName', 'String', out);
 
-  addTags(col('tags'), filters.tags, out);
   addStringMapFilters(col('metadataSearch'), filters.metadata, 'meta_k', 'meta_v', out);
+
+  // Membership fields: match any span in the trace. Encoded as an EXISTS
+  // subquery so a nested span (e.g. a child agent "Observer") surfaces the
+  // trace even when the root span has a different entityName.
+  const membership: FilterResult = { conditions: [], params: {} };
+  for (const field of MEMBERSHIP_TRACE_FIELDS) {
+    const value = (filters as Record<string, unknown>)[field];
+    if (value == null) continue;
+    if (field === 'tags') {
+      addTags('m.tags', value, membership);
+    } else {
+      addEq(`m.${field}`, value as string, `m_${field}`, 'String', membership);
+    }
+  }
+  if (membership.conditions.length > 0) {
+    // Narrow the subquery to the same time window as the outer query so we
+    // don't widen the scan. Root-span startedAt is a lower bound on child
+    // span timestamps within that trace.
+    const existsDateConditions: string[] = ['m.traceId = ' + col('traceId')];
+    if (filters.startedAt?.start) {
+      const op = filters.startedAt.startExclusive ? '>' : '>=';
+      existsDateConditions.push(`m.timestamp ${op} {existsStart:DateTime64(3)}`);
+      membership.params.existsStart = filters.startedAt.start.getTime();
+    }
+    if (filters.endedAt?.end) {
+      const op = filters.endedAt.endExclusive ? '<' : '<=';
+      existsDateConditions.push(`m.timestamp ${op} {existsEnd:DateTime64(3)}`);
+      membership.params.existsEnd = filters.endedAt.end.getTime();
+    }
+    out.conditions.push(
+      `EXISTS (SELECT 1 FROM ${TABLE_SPAN_EVENTS} m WHERE ${existsDateConditions.join(' AND ')} AND ${membership.conditions.join(' AND ')})`,
+    );
+    Object.assign(out.params, membership.params);
+  }
 
   if (filters.status === TraceStatus.ERROR) {
     out.conditions.push(`${col('error')} IS NOT NULL`);

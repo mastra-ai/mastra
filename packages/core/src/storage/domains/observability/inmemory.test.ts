@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { SpanType } from '../../../observability/types';
 import { InMemoryDB } from '../inmemory-db';
+import { EntityType } from '../shared';
 import { ObservabilityInMemory } from './inmemory';
 
 describe('ObservabilityInMemory', () => {
@@ -661,5 +663,73 @@ describe('ObservabilityInMemory', () => {
         points: [{ timestamp: new Date('2026-01-02T12:00:00.000Z'), value: 4.5 }],
       },
     ]);
+  });
+
+  it('listTraces matches traces where a non-root span carries the filter attribute', async () => {
+    const startedAt = new Date('2026-01-02T12:00:00.000Z');
+    const endedAt = new Date('2026-01-02T12:00:05.000Z');
+
+    await storage.batchCreateSpans({
+      records: [
+        {
+          traceId: 'trace-root-workflow',
+          spanId: 'root',
+          parentSpanId: null,
+          name: 'root-workflow',
+          spanType: SpanType.WORKFLOW_RUN,
+          isEvent: false,
+          startedAt,
+          endedAt,
+          entityType: EntityType.WORKFLOW_RUN,
+          entityName: 'Code Workflow',
+        },
+        {
+          traceId: 'trace-root-workflow',
+          spanId: 'child',
+          parentSpanId: 'root',
+          name: 'nested-agent',
+          spanType: SpanType.AGENT_RUN,
+          isEvent: false,
+          startedAt,
+          endedAt,
+          entityType: EntityType.AGENT,
+          entityName: 'Observer',
+          threadId: 'thread-x',
+          tags: ['beta'],
+        },
+        {
+          traceId: 'trace-unrelated',
+          spanId: 'root2',
+          parentSpanId: null,
+          name: 'other-root',
+          spanType: SpanType.AGENT_RUN,
+          isEvent: false,
+          startedAt,
+          endedAt,
+          entityType: EntityType.AGENT,
+          entityName: 'SomethingElse',
+        },
+      ],
+    });
+
+    const byNestedName = await storage.listTraces({
+      filters: { entityName: 'Observer' },
+    });
+    expect(byNestedName.spans.map(s => s.traceId)).toEqual(['trace-root-workflow']);
+
+    const byNestedThreadId = await storage.listTraces({
+      filters: { threadId: 'thread-x' },
+    });
+    expect(byNestedThreadId.spans.map(s => s.traceId)).toEqual(['trace-root-workflow']);
+
+    const byNestedTag = await storage.listTraces({
+      filters: { tags: ['beta'] },
+    });
+    expect(byNestedTag.spans.map(s => s.traceId)).toEqual(['trace-root-workflow']);
+
+    const noMatch = await storage.listTraces({
+      filters: { entityName: 'DoesNotExist' },
+    });
+    expect(noMatch.spans).toHaveLength(0);
   });
 });

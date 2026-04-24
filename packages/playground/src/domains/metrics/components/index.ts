@@ -1,4 +1,5 @@
 export { MetricsDashboard } from './metrics-dashboard';
+export { MetricsToolbar } from './metrics-toolbar';
 export { MetricsProvider, useMetrics, isValidPreset } from '../hooks/use-metrics';
 export type { DatePreset } from '../hooks/use-metrics';
 export { useAgentRunsKpiMetrics } from '../hooks/use-agent-runs-kpi-metrics';
@@ -27,4 +28,13 @@ export type { ScorerSummary, ScoresOverTimePoint } from '../hooks/use-scores-met
 export { TokenUsageByAgentCard } from './token-usage-by-agent-card';
 export { useTokenUsageByAgentMetrics } from '../hooks/use-token-usage-by-agent-metrics';
 export type { TokenUsageByAgentRow } from '../hooks/use-token-usage-by-agent-metrics';
+export { ActiveThreadsKpiCard } from './active-threads-kpi-card';
+export { useActiveThreadsKpiMetrics } from '../hooks/use-active-threads-kpi-metrics';
+export { ActiveResourcesKpiCard } from './active-resources-kpi-card';
+export { useActiveResourcesKpiMetrics } from '../hooks/use-active-resources-kpi-metrics';
+export { MemoryCard } from './memory-card';
+export { useTopActiveThreadsMetrics } from '../hooks/use-top-active-threads-metrics';
+export type { ActiveThreadRow } from '../hooks/use-top-active-threads-metrics';
+export { useTopResourcesByThreadsMetrics } from '../hooks/use-top-resources-by-threads-metrics';
+export type { ResourceThreadsRow } from '../hooks/use-top-resources-by-threads-metrics';
 export { formatCompact, CHART_COLORS } from './metrics-utils';

@@ -74,6 +74,40 @@ export const mastra = new Mastra({
 
 The Studio metrics dashboard visualizes all automatic metrics with KPI cards, detailed breakdowns, and configurable time ranges. See [Studio observability](/docs/studio/observability) for a full walkthrough.
 
+### Filtering the dashboard
+
+The dashboard toolbar supports dimensional filters backed by the underlying spans and metrics:
+
+- **Pick-list filters** (indexed via `LowCardinality` in ClickHouse, cheap on any backend): `rootEntityType`, `entityName`, `serviceName`, `environment`, `tags`.
+- **Free-text filters** (backed by `bloom_filter` skip indexes on ClickHouse so point lookups stay fast): `entityId`, `threadId`, `resourceId`, `userId`, `organizationId`, `runId`, `sessionId`, `requestId`, `experimentId`.
+
+All filters are reflected in the URL and can be saved as defaults per browser.
+
+### Memory activity
+
+The dashboard reuses the existing metrics pipeline to report memory activity without requiring any new emitters:
+
+- **Active Threads** — count of distinct `threadId` values observed in `mastra_agent_duration_ms`. Uses the new `count_distinct` aggregation (approximate `uniq`/`approx_count_distinct`) so the query stays fast on tens of millions of rows.
+- **Active Resources** — count of distinct `resourceId` values observed in `mastra_agent_duration_ms`, using the same approximate `count_distinct` aggregation.
+- **Memory** card — combined view with two tabs:
+
+  - **Top Threads** — server-side TopK breakdown of agent runs by `threadId` (with `resourceId`).
+  - **Top Resources** — server-side TopK breakdown by `resourceId`, aggregating `count_distinct(threadId)` per resource.
+
+  Both tabs use `limit` + `orderBy: 'value'` so only the top 20 rows leave the database.
+
+### Drilldown
+
+Most data points on the dashboard are actionable — a click takes you to the **Traces** (primary) or **Logs** (secondary) page pre-filtered to the same window and dimensions so you can see the activity behind the number:
+
+- **Latency** card — the header icon opens traces filtered to the active tab's `rootEntityType` (Agent / Workflow / Tool). Clicking a node on the p50 / p95 line narrows the window to the node's hourly bucket.
+- **Trace Volume** card — the header exposes two icons: open traces scoped to the active tab, and open the logs page filtered to `level=error`. Each bar's "Errors" segment links straight to traces for that entity with `status=error`.
+- **Token Usage by Agent** / **Model Usage & Cost** — each row links to traces scoped to the agent (`rootEntityType=AGENT` + `entityName`).
+- **Scores** card — the header opens traces filtered to `rootEntityType=SCORER`; each row in the summary table additionally adds `entityName=<scorer>`.
+- **Memory** card — Threads rows open traces filtered to the thread id (plus the resource id if known); Resources rows filter to the resource id.
+
+The dashboard's active date range and any dimensional filters are always carried through the drilldown, so you land on the traces / logs page with the same context you had on the dashboard.
+
 ## What Mastra measures
 
 Mastra emits three categories of metrics automatically:

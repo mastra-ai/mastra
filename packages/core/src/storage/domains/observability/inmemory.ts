@@ -399,59 +399,41 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       return false;
     }
 
-    // Entity filters
-    if (filters.entityType !== undefined && rootSpan.entityType !== filters.entityType) {
-      return false;
-    }
-    if (filters.entityId !== undefined && rootSpan.entityId !== filters.entityId) {
-      return false;
-    }
-    if (filters.entityName !== undefined && rootSpan.entityName !== filters.entityName) {
-      return false;
-    }
-    if (filters.entityVersionId !== undefined && rootSpan.entityVersionId !== filters.entityVersionId) {
-      return false;
-    }
-
-    // Experimentation
-    if (filters.experimentId !== undefined && rootSpan.experimentId !== filters.experimentId) {
-      return false;
-    }
-
-    // Identity & Tenancy filters
-    if (filters.userId !== undefined && rootSpan.userId !== filters.userId) {
-      return false;
-    }
-    if (filters.organizationId !== undefined && rootSpan.organizationId !== filters.organizationId) {
-      return false;
-    }
-    if (filters.resourceId !== undefined && rootSpan.resourceId !== filters.resourceId) {
-      return false;
-    }
-
-    // Correlation ID filters
-    if (filters.runId !== undefined && rootSpan.runId !== filters.runId) {
-      return false;
-    }
-    if (filters.sessionId !== undefined && rootSpan.sessionId !== filters.sessionId) {
-      return false;
-    }
-    if (filters.threadId !== undefined && rootSpan.threadId !== filters.threadId) {
-      return false;
-    }
-    if (filters.requestId !== undefined && rootSpan.requestId !== filters.requestId) {
-      return false;
-    }
-
-    // Deployment context filters
-    if (filters.environment !== undefined && rootSpan.environment !== filters.environment) {
-      return false;
-    }
+    // Source is a root-only attribute.
     if (filters.source !== undefined && rootSpan.source !== filters.source) {
       return false;
     }
-    if (filters.serviceName !== undefined && rootSpan.serviceName !== filters.serviceName) {
-      return false;
+
+    // Membership filters: a trace matches when *any* span in the trace matches
+    // the given attribute. This aligns the Traces list with what users see in
+    // the Metrics view (e.g. filtering by a nested agent's entityName returns
+    // the containing root trace).
+    const membershipChecks: Array<[keyof SpanRecord, unknown]> = [
+      ['entityType', filters.entityType],
+      ['entityId', filters.entityId],
+      ['entityName', filters.entityName],
+      ['entityVersionId', filters.entityVersionId],
+      ['experimentId', filters.experimentId],
+      ['userId', filters.userId],
+      ['organizationId', filters.organizationId],
+      ['resourceId', filters.resourceId],
+      ['runId', filters.runId],
+      ['sessionId', filters.sessionId],
+      ['threadId', filters.threadId],
+      ['requestId', filters.requestId],
+      ['environment', filters.environment],
+      ['serviceName', filters.serviceName],
+    ];
+    for (const [field, expected] of membershipChecks) {
+      if (expected === undefined) continue;
+      let matched = false;
+      for (const span of Object.values(traceEntry.spans)) {
+        if (span[field] === expected) {
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) return false;
     }
 
     // Scope filter (partial match - all provided keys must match)
@@ -478,16 +460,13 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       return false;
     }
 
-    // Tags filter (all provided tags must be present)
-    // Use != null to handle both null and undefined (nullish filter fields)
+    // Tags filter (each provided tag must be present on at least one span in
+    // the trace — trace-membership semantics to match traces list UI).
     if (filters.tags != null && filters.tags.length > 0) {
-      if (rootSpan.tags == null) {
-        return false;
-      }
+      const allSpans = Object.values(traceEntry.spans);
       for (const tag of filters.tags) {
-        if (!rootSpan.tags.includes(tag)) {
-          return false;
-        }
+        const found = allSpans.some(span => span.tags != null && span.tags.includes(tag));
+        if (!found) return false;
       }
     }
 
@@ -640,7 +619,21 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     });
   }
 
-  private aggregate(values: number[], type: AggregationType, timestamps?: number[]): number | null {
+  private aggregate(
+    values: number[],
+    type: AggregationType,
+    timestamps?: number[],
+    distinctValues?: Array<string | number | null | undefined>,
+  ): number | null {
+    if (type === 'count_distinct') {
+      if (!distinctValues) return 0;
+      const set = new Set<string | number>();
+      for (const v of distinctValues) {
+        if (v === null || v === undefined) continue;
+        set.add(v);
+      }
+      return set.size;
+    }
     if (values.length === 0) return null;
     switch (type) {
       case 'sum':
@@ -674,6 +667,19 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       default:
         return values.reduce((a, b) => a + b, 0);
     }
+  }
+
+  private extractDistinctValues(
+    records: MetricRecord[],
+    distinctColumn: string | undefined,
+  ): Array<string | number | null | undefined> | undefined {
+    if (!distinctColumn) return undefined;
+    return records.map(r => {
+      const raw = (r as unknown as Record<string, unknown>)[distinctColumn];
+      if (raw === null || raw === undefined) return null;
+      if (typeof raw === 'string' || typeof raw === 'number') return raw;
+      return String(raw);
+    });
   }
 
   private interpolatePercentile(sortedValues: number[], percentile: number): number {
@@ -716,6 +722,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     const value = this.aggregate(
       filtered.map(m => m.value),
       args.aggregation,
+      undefined,
+      this.extractDistinctValues(filtered, args.distinctColumn),
     );
     const costSummary = this.summarizeCost(filtered);
 
@@ -748,6 +756,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         const previousValue = this.aggregate(
           prevFiltered.map(m => m.value),
           args.aggregation,
+          undefined,
+          this.extractDistinctValues(prevFiltered, args.distinctColumn),
         );
         const previousCostSummary = this.summarizeCost(prevFiltered);
 
@@ -806,14 +816,28 @@ export class ObservabilityInMemory extends ObservabilityStorage {
           this.aggregate(
             records.map(record => record.value),
             args.aggregation,
+            undefined,
+            this.extractDistinctValues(records, args.distinctColumn),
           ) ?? 0,
         estimatedCost: costSummary.estimatedCost,
         costUnit: costSummary.costUnit,
       };
     });
-    groups.sort((a, b) => b.value - a.value);
 
-    return { groups };
+    const orderBy = args.orderBy ?? 'value';
+    const orderDirection = args.orderDirection ?? 'DESC';
+    const direction = orderDirection === 'ASC' ? 1 : -1;
+    groups.sort((a, b) => {
+      if (orderBy === 'dimension') {
+        const keyA = JSON.stringify(a.dimensions);
+        const keyB = JSON.stringify(b.dimensions);
+        return keyA < keyB ? -1 * direction : keyA > keyB ? 1 * direction : 0;
+      }
+      return (a.value - b.value) * direction;
+    });
+
+    const limited = typeof args.limit === 'number' ? groups.slice(0, args.limit) : groups;
+    return { groups: limited };
   }
 
   async getMetricTimeSeries(args: GetMetricTimeSeriesArgs): Promise<GetMetricTimeSeriesResponse> {
@@ -850,6 +874,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
                   this.aggregate(
                     records.map(record => record.value),
                     args.aggregation,
+                    undefined,
+                    this.extractDistinctValues(records, args.distinctColumn),
                   ) ?? 0,
                 estimatedCost: this.summarizeCost(records).estimatedCost,
               })),
@@ -880,6 +906,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
                 this.aggregate(
                   records.map(record => record.value),
                   args.aggregation,
+                  undefined,
+                  this.extractDistinctValues(records, args.distinctColumn),
                 ) ?? 0,
               estimatedCost: this.summarizeCost(records).estimatedCost,
             })),

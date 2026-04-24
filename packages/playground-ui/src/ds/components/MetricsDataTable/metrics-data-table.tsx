@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
 import { ScrollArea } from '@/ds/components/ScrollArea/scroll-area';
 import { cn } from '@/lib/utils';
 
@@ -12,11 +12,16 @@ export function MetricsDataTable<T extends { key: string }>({
   columns,
   data,
   className,
+  getRowHref,
 }: {
   columns: Column<T>[];
   data: T[];
   className?: string;
+  /** If provided and returns a non-null string, the row is rendered as a link to that URL. */
+  getRowHref?: (row: T) => string | undefined;
 }) {
+  const [hoveredRow, setHoveredRow] = useState<string | null>(null);
+
   if (columns.length === 0) return null;
 
   return (
@@ -46,12 +51,19 @@ export function MetricsDataTable<T extends { key: string }>({
         ))}
 
         {/* Data rows */}
-        {data.map((row, rowIndex) => (
-          <Fragment key={row.key}>
-            {columns.map((col, i) => (
-              <span
-                key={`${row.key}-${i}`}
-                className={cn(
+        {data.map((row, rowIndex) => {
+          const href = getRowHref?.(row);
+          const isHovered = hoveredRow === row.key;
+          const rowHandlers = href
+            ? {
+                onMouseEnter: () => setHoveredRow(row.key),
+                onMouseLeave: () => setHoveredRow(prev => (prev === row.key ? null : prev)),
+              }
+            : undefined;
+          return (
+            <Fragment key={row.key}>
+              {columns.map((col, i) => {
+                const cellClasses = cn(
                   'h-10 flex items-center text-ui-sm whitespace-nowrap border-t border-surface5',
                   rowIndex === 0 && 'border-t-transparent',
                   i === 0
@@ -60,13 +72,33 @@ export function MetricsDataTable<T extends { key: string }>({
                         'px-4 text-right tabular-nums',
                         col.highlight ? 'text-neutral4 font-semibold' : 'text-neutral3',
                       ),
-                )}
-              >
-                {col.value(row)}
-              </span>
-            ))}
-          </Fragment>
-        ))}
+                  href && 'cursor-pointer outline-none transition-colors',
+                  href && isHovered && 'bg-surface3',
+                );
+
+                if (href) {
+                  return (
+                    <a
+                      key={`${row.key}-${i}`}
+                      href={href}
+                      className={cellClasses}
+                      onFocus={() => setHoveredRow(row.key)}
+                      onBlur={() => setHoveredRow(prev => (prev === row.key ? null : prev))}
+                      {...rowHandlers}
+                    >
+                      {col.value(row)}
+                    </a>
+                  );
+                }
+                return (
+                  <span key={`${row.key}-${i}`} className={cellClasses}>
+                    {col.value(row)}
+                  </span>
+                );
+              })}
+            </Fragment>
+          );
+        })}
       </div>
     </ScrollArea>
   );

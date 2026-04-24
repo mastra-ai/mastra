@@ -71,7 +71,17 @@ const METRIC_TYPED_COLUMNS = new Set([
 /** Columns excluded from groupBy because they are complex types. */
 const GROUP_BY_EXCLUDED = new Set(['metadata', 'scope', 'costMetadata', 'tags']);
 
-function getAggregationSql(aggregation: AggregationType, measure = 'value'): string {
+function resolveDistinctColumnSql(distinctColumn: string | undefined): string {
+  if (!distinctColumn) {
+    throw new Error(`count_distinct aggregation requires a 'distinctColumn' argument`);
+  }
+  if (!METRIC_TYPED_COLUMNS.has(distinctColumn)) {
+    throw new Error(`Invalid distinctColumn: ${distinctColumn}`);
+  }
+  return parseFieldKey(distinctColumn);
+}
+
+function getAggregationSql(aggregation: AggregationType, measure = 'value', distinctColumn?: string): string {
   switch (aggregation) {
     case 'sum':
       return `sum(${measure})`;
@@ -83,6 +93,10 @@ function getAggregationSql(aggregation: AggregationType, measure = 'value'): str
       return `max(${measure})`;
     case 'count':
       return `toFloat64(count(${measure}))`;
+    case 'count_distinct': {
+      // Use ClickHouse's approximate HyperLogLog (~1-2% error) for dashboard scale.
+      return `toFloat64(uniq(${resolveDistinctColumnSql(distinctColumn)}))`;
+    }
     case 'last':
       return `argMax(${measure}, timestamp)`;
     default:
@@ -276,7 +290,7 @@ export async function getMetricAggregate(
   client: ClickHouseClient,
   args: GetMetricAggregateArgs,
 ): Promise<GetMetricAggregateResponse> {
-  const aggSql = getAggregationSql(args.aggregation);
+  const aggSql = getAggregationSql(args.aggregation, 'value', args.distinctColumn);
   const nameFilter = buildMetricNameFilter(args.name);
   const signalFilter = buildMetricsFilterConditions(args.filters);
   const combined = mergeFilters(nameFilter, signalFilter);
@@ -369,7 +383,7 @@ export async function getMetricBreakdown(
   client: ClickHouseClient,
   args: GetMetricBreakdownArgs,
 ): Promise<GetMetricBreakdownResponse> {
-  const aggSql = getAggregationSql(args.aggregation);
+  const aggSql = getAggregationSql(args.aggregation, 'value', args.distinctColumn);
   const nameFilter = buildMetricNameFilter(args.name);
   const signalFilter = buildMetricsFilterConditions(args.filters);
   const combined = mergeFilters(nameFilter, signalFilter);
@@ -384,14 +398,25 @@ export async function getMetricBreakdown(
   const allConditions = [...combined.conditions, ...labelExclusions];
   const fullWhereClause = allConditions.length ? `WHERE ${allConditions.join(' AND ')}` : '';
 
+  const orderBy = args.orderBy ?? 'value';
+  const orderDirection = args.orderDirection === 'ASC' ? 'ASC' : 'DESC';
+  const orderExpr = orderBy === 'dimension' ? groupByCols : 'value';
+  const limitClause = typeof args.limit === 'number' ? `LIMIT {breakdown_limit:UInt32}` : '';
+  const extraParams: Record<string, unknown> = typeof args.limit === 'number' ? { breakdown_limit: args.limit } : {};
+
   const sql = `
     SELECT ${selectGroupBy}, ${aggSql} AS value, ${getCostSummarySelect()}
     FROM ${TABLE_METRIC_EVENTS}
     ${fullWhereClause}
     GROUP BY ${groupByCols}
-    ORDER BY value DESC
+    ORDER BY ${orderExpr} ${orderDirection}
+    ${limitClause}
   `;
-  const rows = await queryJson<Record<string, unknown>>(client, sql, { ...combined.params, ...labelParams });
+  const rows = await queryJson<Record<string, unknown>>(client, sql, {
+    ...combined.params,
+    ...labelParams,
+    ...extraParams,
+  });
 
   const groups = rows.map(row => {
     const dimensions: Record<string, string | null> = {};
@@ -415,7 +440,7 @@ export async function getMetricTimeSeries(
   client: ClickHouseClient,
   args: GetMetricTimeSeriesArgs,
 ): Promise<GetMetricTimeSeriesResponse> {
-  const aggSql = getAggregationSql(args.aggregation);
+  const aggSql = getAggregationSql(args.aggregation, 'value', args.distinctColumn);
   const intervalSql = getIntervalSql(args.interval);
   const nameFilter = buildMetricNameFilter(args.name);
   const signalFilter = buildMetricsFilterConditions(args.filters);

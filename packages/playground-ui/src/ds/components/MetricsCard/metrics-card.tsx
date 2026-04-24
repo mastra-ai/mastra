@@ -1,3 +1,4 @@
+import { MetricsCardActions } from './metrics-card-actions';
 import { MetricsCardContent } from './metrics-card-content';
 import { MetricsCardDescription } from './metrics-card-description';
 import { MetricsCardError } from './metrics-card-error';
@@ -14,6 +15,7 @@ export const MetricsCard = Object.assign(MetricsCardRoot, {
   Root: MetricsCardRoot,
   Kpi: MetricsKpiCard,
   TopBar: MetricsCardTopBar,
+  Actions: MetricsCardActions,
   TitleAndDescription: MetricsCardTitleAndDescription,
   Title: MetricsCardTitle,
   Description: MetricsCardDescription,

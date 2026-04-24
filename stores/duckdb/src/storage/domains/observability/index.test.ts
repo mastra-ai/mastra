@@ -265,6 +265,201 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(traces.spans.length).toBeGreaterThanOrEqual(1);
     });
 
+    it('listTraces applies scalar prefilter and tag post-filter correctly', async () => {
+      await storage.batchCreateSpans({
+        records: [
+          {
+            traceId: 'trace-scalar-a',
+            spanId: 'root-a',
+            parentSpanId: null,
+            name: 'agent-run',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            entityType: EntityType.AGENT,
+            entityId: 'agent-a',
+            entityName: 'agentA',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: 'production',
+            source: null,
+            serviceName: 'svc-a',
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: ['keep'],
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-01-02T00:00:00Z'),
+            endedAt: new Date('2026-01-02T00:00:02Z'),
+          },
+          {
+            traceId: 'trace-scalar-b',
+            spanId: 'root-b',
+            parentSpanId: null,
+            name: 'agent-run',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            entityType: EntityType.AGENT,
+            entityId: 'agent-b',
+            entityName: 'agentB',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: 'staging',
+            source: null,
+            serviceName: 'svc-b',
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: ['skip'],
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-01-02T00:00:05Z'),
+            endedAt: new Date('2026-01-02T00:00:06Z'),
+          },
+        ],
+      });
+
+      // Fast path — scalar-only filter (no post-agg).
+      const byEnv = await storage.listTraces({
+        filters: { environment: 'production', startedAt: { start: new Date('2026-01-02T00:00:00Z') } },
+      });
+      const envTraceIds = byEnv.spans.map(s => s.traceId);
+      expect(envTraceIds).toContain('trace-scalar-a');
+      expect(envTraceIds).not.toContain('trace-scalar-b');
+
+      // Slow path — post-agg tag filter combined with scalar startedAt.
+      const byTag = await storage.listTraces({
+        filters: { tags: ['keep'], startedAt: { start: new Date('2026-01-02T00:00:00Z') } },
+      });
+      const tagTraceIds = byTag.spans.map(s => s.traceId);
+      expect(tagTraceIds).toContain('trace-scalar-a');
+      expect(tagTraceIds).not.toContain('trace-scalar-b');
+    });
+
+    it('listTraces resolves membership filters via nested spans', async () => {
+      await storage.batchCreateSpans({
+        records: [
+          {
+            traceId: 'trace-nested',
+            spanId: 'root',
+            parentSpanId: null,
+            name: 'root-workflow',
+            spanType: SpanType.WORKFLOW_RUN,
+            isEvent: false,
+            entityType: EntityType.WORKFLOW_RUN,
+            entityId: 'wf-1',
+            entityName: 'Code Workflow',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: 'production',
+            source: null,
+            serviceName: 'svc',
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: null,
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-01-03T00:00:00Z'),
+            endedAt: new Date('2026-01-03T00:00:02Z'),
+          },
+          {
+            traceId: 'trace-nested',
+            spanId: 'child',
+            parentSpanId: 'root',
+            name: 'nested-agent',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            entityType: EntityType.AGENT,
+            entityId: 'agent-obs',
+            entityName: 'Observer',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: 'thread-x',
+            requestId: null,
+            environment: 'production',
+            source: null,
+            serviceName: 'svc',
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: ['beta'],
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-01-03T00:00:00Z'),
+            endedAt: new Date('2026-01-03T00:00:01Z'),
+          },
+          {
+            traceId: 'trace-nested-unrelated',
+            spanId: 'root-u',
+            parentSpanId: null,
+            name: 'other-root',
+            spanType: SpanType.AGENT_RUN,
+            isEvent: false,
+            entityType: EntityType.AGENT,
+            entityId: 'agent-u',
+            entityName: 'SomethingElse',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: 'production',
+            source: null,
+            serviceName: 'svc',
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: null,
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-01-03T00:00:00Z'),
+            endedAt: new Date('2026-01-03T00:00:01Z'),
+          },
+        ],
+      });
+
+      const byNestedName = await storage.listTraces({ filters: { entityName: 'Observer' } });
+      expect(byNestedName.spans.map(s => s.traceId)).toContain('trace-nested');
+      expect(byNestedName.spans.map(s => s.traceId)).not.toContain('trace-nested-unrelated');
+
+      const byNestedThread = await storage.listTraces({ filters: { threadId: 'thread-x' } });
+      expect(byNestedThread.spans.map(s => s.traceId)).toEqual(['trace-nested']);
+
+      const byNestedTag = await storage.listTraces({ filters: { tags: ['beta'] } });
+      expect(byNestedTag.spans.map(s => s.traceId)).toEqual(['trace-nested']);
+    });
+
     it('batch deletes traces', async () => {
       await storage.createSpan({
         span: {
