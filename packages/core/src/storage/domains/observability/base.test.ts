@@ -24,6 +24,11 @@ describe('ObservabilityStorage base class', () => {
       expectedMessage: 'does not support batch creating metrics',
     },
     {
+      name: 'listMetrics',
+      callThunk: () => storage.listMetrics({}),
+      expectedMessage: 'does not support listing metrics',
+    },
+    {
       name: 'getMetricAggregate',
       callThunk: () => storage.getMetricAggregate({ name: 'test', aggregation: 'sum' }),
       expectedMessage: 'does not support metric aggregation',
@@ -86,13 +91,20 @@ describe('ObservabilityStorage base class', () => {
       expectedMessage: 'does not support tag discovery',
     },
 
+    // Traces
+    {
+      name: 'getTraceLight',
+      callThunk: () => storage.getTraceLight({ traceId: 'test' }),
+      expectedMessage: 'does not support getting lightweight traces',
+    },
+
     // Scores
     {
       name: 'createScore',
       callThunk: () =>
         storage.createScore({
           score: {
-            id: 's1',
+            scoreId: 's1',
             timestamp: new Date(),
             traceId: 't1',
             scorerId: 'test',
@@ -106,6 +118,26 @@ describe('ObservabilityStorage base class', () => {
       callThunk: () => storage.listScores({}),
       expectedMessage: 'does not support listing scores',
     },
+    {
+      name: 'getScoreAggregate',
+      callThunk: () => storage.getScoreAggregate({ scorerId: 'test', aggregation: 'sum' }),
+      expectedMessage: 'does not support score aggregation',
+    },
+    {
+      name: 'getScoreBreakdown',
+      callThunk: () => storage.getScoreBreakdown({ scorerId: 'test', groupBy: ['entityType'], aggregation: 'sum' }),
+      expectedMessage: 'does not support score breakdown',
+    },
+    {
+      name: 'getScoreTimeSeries',
+      callThunk: () => storage.getScoreTimeSeries({ scorerId: 'test', interval: '1h', aggregation: 'sum' }),
+      expectedMessage: 'does not support score time series',
+    },
+    {
+      name: 'getScorePercentiles',
+      callThunk: () => storage.getScorePercentiles({ scorerId: 'test', percentiles: [0.5, 0.95], interval: '1h' }),
+      expectedMessage: 'does not support score percentiles',
+    },
 
     // Feedback
     {
@@ -113,10 +145,10 @@ describe('ObservabilityStorage base class', () => {
       callThunk: () =>
         storage.createFeedback({
           feedback: {
-            id: 'f1',
+            feedbackId: 'f1',
             timestamp: new Date(),
             traceId: 't1',
-            source: 'user',
+            feedbackSource: 'user',
             feedbackType: 'thumbs',
             value: 1,
           },
@@ -127,6 +159,28 @@ describe('ObservabilityStorage base class', () => {
       name: 'listFeedback',
       callThunk: () => storage.listFeedback({}),
       expectedMessage: 'does not support listing feedback',
+    },
+    {
+      name: 'getFeedbackAggregate',
+      callThunk: () => storage.getFeedbackAggregate({ feedbackType: 'rating', aggregation: 'avg' }),
+      expectedMessage: 'does not support feedback aggregation',
+    },
+    {
+      name: 'getFeedbackBreakdown',
+      callThunk: () =>
+        storage.getFeedbackBreakdown({ feedbackType: 'rating', groupBy: ['entityType'], aggregation: 'avg' }),
+      expectedMessage: 'does not support feedback breakdown',
+    },
+    {
+      name: 'getFeedbackTimeSeries',
+      callThunk: () => storage.getFeedbackTimeSeries({ feedbackType: 'rating', interval: '1h', aggregation: 'avg' }),
+      expectedMessage: 'does not support feedback time series',
+    },
+    {
+      name: 'getFeedbackPercentiles',
+      callThunk: () =>
+        storage.getFeedbackPercentiles({ feedbackType: 'rating', percentiles: [0.5, 0.95], interval: '1h' }),
+      expectedMessage: 'does not support feedback percentiles',
     },
   ];
 

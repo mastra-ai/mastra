@@ -28,7 +28,7 @@ const loggingProcessor: Processor<'logger'> = {
   },
 }
 
-const model = withMastra(openai('gpt-4o'), {
+const model = withMastra(openai('gpt-5.4'), {
   inputProcessors: [loggingProcessor],
 })
 
@@ -45,7 +45,7 @@ const { text } = await generateText({
   {
     name: 'model',
     type: 'LanguageModelV2 | LanguageModelV3',
-    description: "Any AI SDK v5 or v6 language model (e.g., `openai('gpt-4o')`, `anthropic('claude-3-opus')`).",
+    description: "Any AI SDK v5 or v6 language model (e.g., `openai('gpt-5.4')`, `anthropic('claude-opus-4-6')`).",
     isOptional: false,
   },
   {

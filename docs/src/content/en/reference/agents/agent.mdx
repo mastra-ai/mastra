@@ -13,7 +13,7 @@ The `Agent` class is the foundation for creating AI agents in Mastra. It provide
 
 ### Basic string instructions
 
-Passing instructions as a string or array of strings is the simplest way to set up an agent. This is useful for straightforward use cases where you just need to provide a prompt without additional configuration.
+Passing instructions as a string or array of strings is the simplest way to set up an agent. This is useful for straightforward use cases where you need to provide a prompt without additional configuration.
 
 ```typescript title="src/mastra/agents/string-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -226,10 +226,10 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
   },
   {
     name: 'requestContextSchema',
-    type: 'z.ZodType<any>',
+    type: 'StandardJSONSchemaV1',
     isOptional: true,
     description:
-      'Zod schema for validating request context values. When provided, the context is validated at the start of generate() or stream(), throwing a MastraError if validation fails.',
+      'Standard JSON Schema for validating request context values. When provided, the context is validated at the start of generate() or stream(), throwing a MastraError if validation fails.',
   },
 ]}
 />

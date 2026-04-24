@@ -12,6 +12,7 @@ import type { AgentExecutionOptions, NetworkOptions } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
+import type { AgentVersionOptions } from './chat-route';
 import { toAISdkStream } from './convert-streams';
 import type {
   SupportedUIMessage,
@@ -35,6 +36,7 @@ export type NetworkStreamHandlerOptions<
 > = {
   mastra: Mastra;
   agentId: string;
+  agentVersion?: AgentVersionOptions;
   params: NetworkStreamHandlerParams<UI_MESSAGE, OUTPUT>;
   defaultOptions?: NetworkOptions<OUTPUT>;
   version?: 'v5' | 'v6';
@@ -85,13 +87,14 @@ export function handleNetworkStream<UI_MESSAGE extends V6UIMessage = V6UIMessage
 export async function handleNetworkStream<OUTPUT = undefined>({
   mastra,
   agentId,
+  agentVersion,
   params,
   defaultOptions,
   version = 'v5',
 }: NetworkStreamHandlerOptions<SupportedUIMessage, OUTPUT>): Promise<SupportedUIMessageStream> {
   const { messages, ...rest } = params;
 
-  const agentObj = mastra.getAgentById(agentId);
+  const agentObj = agentVersion ? await mastra.getAgentById(agentId, agentVersion) : mastra.getAgentById(agentId);
 
   if (!agentObj) {
     throw new Error(`Agent ${agentId} not found`);
@@ -138,8 +141,15 @@ export type NetworkRouteOptions<OUTPUT = undefined> =
       agent?: never;
       defaultOptions?: NetworkOptions<OUTPUT>;
       version?: 'v5' | 'v6';
+      agentVersion?: AgentVersionOptions;
     }
-  | { path: string; agent: string; defaultOptions?: NetworkOptions<OUTPUT>; version?: 'v5' | 'v6' };
+  | {
+      path: string;
+      agent: string;
+      defaultOptions?: NetworkOptions<OUTPUT>;
+      version?: 'v5' | 'v6';
+      agentVersion?: AgentVersionOptions;
+    };
 
 /**
  * Creates a network route handler for streaming agent network execution using the AI SDK-compatible format.
@@ -172,6 +182,7 @@ export function networkRoute<OUTPUT = undefined>({
   agent,
   defaultOptions,
   version = 'v5',
+  agentVersion,
 }: NetworkRouteOptions<OUTPUT>): ReturnType<typeof registerApiRoute> {
   if (!agent && !path.includes('/:agentId')) {
     throw new Error('Path must include :agentId to route to the correct agent or pass the agent explicitly');
@@ -190,6 +201,21 @@ export function networkRoute<OUTPUT = undefined>({
           required: true,
           description: 'The ID of the routing agent to execute as a network',
           schema: { type: 'string' },
+        },
+        {
+          name: 'versionId',
+          in: 'query',
+          required: false,
+          description: 'Specific agent version ID to use. Mutually exclusive with status.',
+          schema: { type: 'string' },
+        },
+        {
+          name: 'status',
+          in: 'query',
+          required: false,
+          description:
+            'Which stored config version to resolve: draft (latest) or published (active version). Mutually exclusive with versionId.',
+          schema: { type: 'string', enum: ['draft', 'published'] },
         },
       ],
       requestBody: {
@@ -217,6 +243,14 @@ export function networkRoute<OUTPUT = undefined>({
         '200': {
           description: 'Streaming AI SDK UIMessage event stream for the agent network',
           content: { 'text/plain': { schema: { type: 'string', description: 'SSE stream' } } },
+        },
+        '400': {
+          description: 'Bad request - invalid input',
+          content: {
+            'application/json': {
+              schema: { type: 'object', properties: { error: { type: 'string' } } },
+            },
+          },
         },
         '404': {
           description: 'Agent not found',
@@ -264,9 +298,29 @@ export function networkRoute<OUTPUT = undefined>({
         throw new Error('Agent ID is required');
       }
 
+      // Resolve agent version from query params, falling back to static option
+      const queryVersionId = c.req.query('versionId');
+      const rawStatus = c.req.query('status');
+
+      if (queryVersionId && rawStatus) {
+        throw new Error('Query parameters "versionId" and "status" are mutually exclusive');
+      }
+
+      if (rawStatus && rawStatus !== 'draft' && rawStatus !== 'published') {
+        throw new Error('Query parameter "status" must be "draft" or "published"');
+      }
+
+      const queryStatus = rawStatus as 'draft' | 'published' | undefined;
+      const effectiveAgentVersion: AgentVersionOptions | undefined = queryVersionId
+        ? { versionId: queryVersionId }
+        : queryStatus
+          ? { status: queryStatus }
+          : agentVersion;
+
       const handlerOptions = {
         mastra,
         agentId: agentToUse,
+        agentVersion: effectiveAgentVersion,
         params: {
           ...params,
           requestContext: effectiveRequestContext,

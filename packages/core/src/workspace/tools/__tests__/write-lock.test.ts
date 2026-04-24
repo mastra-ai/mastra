@@ -28,7 +28,7 @@ describe('write-lock integration', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
     const editFile = tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE];
 
     // Fire three concurrent edits — each targets a different unique string
@@ -60,7 +60,7 @@ describe('write-lock integration', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
     const editFile = tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE];
 
     const [r1, r2] = await Promise.all([
@@ -81,7 +81,7 @@ describe('write-lock integration', () => {
     const workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
     const writeFile = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE];
 
     // Fire three concurrent writes — last one in the queue should win
@@ -118,7 +118,7 @@ describe('filesystem-level optimistic concurrency (StaleFileError)', () => {
         [WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]: { requireReadBeforeWrite: true },
       },
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
     const readFile = tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE];
     const editFile = tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE];
 
@@ -153,7 +153,7 @@ describe('filesystem-level optimistic concurrency (StaleFileError)', () => {
         [WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]: { requireReadBeforeWrite: true },
       },
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
     const readFile = tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE];
     const editFile = tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE];
 
@@ -179,7 +179,7 @@ describe('filesystem-level optimistic concurrency (StaleFileError)', () => {
         [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: { requireReadBeforeWrite: true },
       },
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
     const readFile = tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE];
     const writeFile = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE];
 
@@ -207,7 +207,7 @@ describe('filesystem-level optimistic concurrency (StaleFileError)', () => {
         [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: { requireReadBeforeWrite: true },
       },
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
     const writeFile = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE];
 
     // Writing a new file should not require a prior read

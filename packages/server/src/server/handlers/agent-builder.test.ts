@@ -3,7 +3,7 @@ import { MockStore } from '@mastra/core/storage';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Workflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import { getWorkflowInfo, WorkflowRegistry } from '../utils';
 import {

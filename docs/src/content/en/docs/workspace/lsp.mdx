@@ -1,0 +1,195 @@
+---
+title: "LSP inspection | Workspace"
+description: Configure Language Server Protocol support for semantic code inspection in workspace files.
+packages:
+  - "@mastra/core"
+---
+
+# LSP inspection
+
+**Added in:** `@mastra/core@1.1.0`
+
+LSP inspection gives workspace-backed agents semantic code intelligence. When you enable LSP on a workspace, agents can inspect symbols in supported files to retrieve hover information, jump to definitions, and find implementations.
+
+## When to use LSP inspection
+
+Use LSP inspection when your agent needs semantic code understanding instead of plain-text search alone:
+
+- Inspect symbols and their inferred types in any supported language
+- Find where a symbol is declared before editing related code
+- Explore implementations across a codebase without manually tracing every file
+- Combine semantic inspection with `view` and `search_content` for faster navigation
+- Add LSP support for additional languages by [registering custom language servers](#custom-language-servers)
+
+## Basic usage
+
+Enable LSP on a workspace by setting `lsp: true`:
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  lsp: true,
+})
+```
+
+With this configuration, the workspace registers the default LSP inspection tool alongside the configured filesystem and sandbox tools.
+
+## Agent tool
+
+When LSP is enabled, the workspace exposes `mastra_workspace_lsp_inspect` by default.
+
+```json
+{
+  "path": "/absolute/path/to/file.ts",
+  "line": 10,
+  "match": "const foo = <<<bar()"
+}
+```
+
+The `match` field must include exactly one `<<<` cursor marker. The marker identifies the symbol position on the specified line.
+
+The tool returns up to three result groups:
+
+| Result | Description |
+| - | - |
+| `hover` | Type information or documentation for the symbol at the cursor |
+| `diagnostics` | Line-scoped LSP diagnostics for the inspected line, when present |
+| `definition` | Declaration locations with a one-line preview |
+| `implementation` | Implementation or usage locations |
+
+## Tool name remapping
+
+Rename the tool if your agent expects a shorter name:
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  lsp: true,
+  tools: {
+    [WORKSPACE_TOOLS.LSP.LSP_INSPECT]: {
+      name: 'lsp_inspect',
+    },
+  },
+})
+```
+
+This changes the exposed tool name only. The configuration key stays `WORKSPACE_TOOLS.LSP.LSP_INSPECT`.
+
+## LSP configuration
+
+Set `lsp` to `true` for default behavior, or provide an object to customize server startup and diagnostics:
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  lsp: {
+    diagnosticTimeout: 4000,
+    initTimeout: 8000,
+    disableServers: ['eslint'],
+    binaryOverrides: {
+      typescript: '/custom/path/to/typescript-language-server --stdio',
+    },
+    searchPaths: ['/opt/homebrew/bin'],
+  },
+})
+```
+
+Use custom configuration when you need to:
+
+- Increase timeouts for large repositories
+- Disable specific language servers
+- Point Mastra at custom language server binaries
+- Add extra binary search paths in constrained environments
+
+## Custom language servers
+
+By default, Mastra includes built-in support for TypeScript, JavaScript, Python, Go, and Rust. To use LSP inspection with other languages (e.g. PHP, Ruby, Java, Kotlin, Swift, Elixir), register a custom language server via the `servers` field:
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  lsp: {
+    servers: {
+      phpactor: {
+        id: 'phpactor',
+        name: 'Phpactor Language Server',
+        languageIds: ['php'],
+        extensions: ['.php'],
+        markers: ['composer.json'],
+        command: 'phpactor language-server',
+      },
+    },
+  },
+})
+```
+
+Each custom server definition requires these fields:
+
+| Field | Description |
+| - | - |
+| `id` | Unique identifier for the server |
+| `name` | Human-readable name shown in logs |
+| `languageIds` | Language Server Protocol (LSP) language identifiers this server handles |
+| `extensions` | File extensions, including the dot |
+| `markers` | Files or directories that identify the project root (e.g. `composer.json`, `Gemfile`) |
+| `command` | Full command string to start the server |
+
+When a server has multiple language IDs, Mastra maps each extension to the first entry in `languageIds`.
+
+You can also pass optional `initializationOptions` to send custom settings during the LSP handshake.
+
+Custom servers are merged with built-in servers. To replace a built-in server, use the same `id` (e.g. `id: 'go'` replaces the built-in Go server). Register multiple servers to support several languages at once:
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  lsp: {
+    servers: {
+      phpactor: {
+        id: 'phpactor',
+        name: 'Phpactor Language Server',
+        languageIds: ['php'],
+        extensions: ['.php'],
+        markers: ['composer.json'],
+        command: 'phpactor language-server',
+      },
+      solargraph: {
+        id: 'solargraph',
+        name: 'Solargraph',
+        languageIds: ['ruby'],
+        extensions: ['.rb', '.erb'],
+        markers: ['Gemfile'],
+        command: 'solargraph stdio',
+      },
+    },
+  },
+})
+```
+
+## Requirements and limitations
+
+- LSP inspection only works for file types with a matching built-in or custom language server
+- The `path` you inspect must resolve inside the workspace filesystem or allowed paths
+- External package inspection may resolve to declaration files such as `.d.ts` instead of runtime source files
+- `lsp_inspect` complements `view` and `search_content`, but does not replace reading implementation code when you need full context
+
+## Related
+
+- [Workspace overview](/docs/workspace/overview)
+- [Filesystem](/docs/workspace/filesystem)
+- [Sandbox](/docs/workspace/sandbox)
+- [Search and indexing](/docs/workspace/search)
+- [Workspace class reference](/reference/workspace/workspace-class)

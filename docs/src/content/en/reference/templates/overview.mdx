@@ -1,5 +1,5 @@
 ---
-title: "Reference: LLM provider API keys (choose one or more) | Templates"
+title: "Reference: Templates overview | Templates"
 description: "Complete guide to creating, using, and contributing Mastra templates"
 packages:
   - "@mastra/core"
@@ -11,10 +11,10 @@ This reference provides comprehensive information about Mastra templates, includ
 
 Mastra templates are pre-built project structures that demonstrate specific use cases and patterns. They provide:
 
-- **Working examples** - Complete, functional Mastra applications
-- **Best practices** - Proper project structure and coding conventions
-- **Educational resources** - Learn Mastra patterns through real implementations
-- **Quickstarts** - Bootstrap projects faster than building from scratch
+- **Working examples**: Complete, functional Mastra applications
+- **Best practices**: Proper project structure and coding conventions
+- **Educational resources**: Learn Mastra patterns through real implementations
+- **Quickstarts**: Bootstrap projects faster than building from scratch
 
 ## Using templates
 
@@ -22,7 +22,7 @@ Mastra templates are pre-built project structures that demonstrate specific use 
 
 Install a template using the `create-mastra` command:
 
-```bash
+```sh npm2yarn
 npx create-mastra@latest --template template-name
 ```
 
@@ -48,19 +48,33 @@ After installation:
 
 1. **Install dependencies** (if not done automatically):
 
-   ```bash
+   ```sh npm2yarn
    npm install
    ```
 
 1. **Start development server**:
 
-   ```bash
+   ```sh npm2yarn
    npm run dev
    ```
 
-### Template Structure
+### Template structure
 
 All templates follow this standardized structure:
+
+```
+your-template/
+├── src/
+│   └── mastra/
+│       ├── agents/       # Agent definitions
+│       ├── tools/        # Tool definitions
+│       ├── workflows/    # Workflow definitions
+│       └── index.ts      # Main Mastra config
+├── .env.example          # Required environment variables
+├── package.json
+├── tsconfig.json
+└── README.md
+```
 
 ## Creating templates
 
@@ -132,12 +146,12 @@ const agent = new Agent({
 
 Templates must be:
 
-- **Single projects** - Not monorepos with multiple applications
-- **Framework-free** - No Next.js, Express, or other web framework boilerplate
-- **Mastra-focused** - Demonstrate Mastra functionality without additional layers
-- **Mergeable** - Structure code for seamless integration into existing projects
-- **Node.js compatible** - Support Node.js v22.13.0 and later
-- **ESM modules** - Use ES modules (`"type": "module"` in package.json)
+- **Single projects**: Not monorepos with multiple applications
+- **Framework-free**: No Next.js, Express, or other web framework boilerplate
+- **Mastra-focused**: Demonstrate Mastra functionality without additional layers
+- **Mergeable**: Structure code for seamless integration into existing projects
+- **Node.js compatible**: Support Node.js v22.13.0 and later
+- **ESM modules**: Use ES modules (`"type": "module"` in package.json)
 
 ### Documentation Requirements
 

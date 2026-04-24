@@ -9,13 +9,13 @@ import { resolveModule } from 'local-pkg';
 import { rollup } from 'rollup';
 import type { OutputChunk, Plugin, SourceMap } from 'rollup';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
-import { isNodeBuiltin } from '../isNodeBuiltin';
 import { getPackageRootPath } from '../package-info';
 import { esbuild } from '../plugins/esbuild';
+import { protocolExternalResolver } from '../plugins/protocol-external-resolver';
 import { removeDeployer } from '../plugins/remove-deployer';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
 import type { DependencyMetadata } from '../types';
-import { getPackageName, slash } from '../utils';
+import { getPackageName, isBareModuleSpecifier, slash } from '../utils';
 import { DEPS_TO_IGNORE } from './constants';
 
 /**
@@ -44,6 +44,7 @@ function getInputPlugins(
   plugins.push(
     ...[
       tsConfigPaths(),
+      protocolExternalResolver(),
       {
         name: 'custom-alias-resolver',
         resolveId(id: string) {
@@ -89,9 +90,11 @@ async function captureDependenciesToOptimize(
   {
     logger,
     shouldCheckTransitiveDependencies,
+    analyzeCache,
   }: {
     logger: IMastraLogger;
     shouldCheckTransitiveDependencies: boolean;
+    analyzeCache?: Map<string, AnalyzeEntryResult>;
   },
 ): Promise<Map<string, DependencyMetadata>> {
   const depsToOptimize = new Map<string, DependencyMetadata>();
@@ -108,7 +111,7 @@ async function captureDependenciesToOptimize(
   }
 
   for (const [dependency, bindings] of Object.entries(output.importedBindings)) {
-    if (isNodeBuiltin(dependency) || dependency.startsWith('#')) {
+    if (!isBareModuleSpecifier(dependency)) {
       continue;
     }
 
@@ -176,7 +179,7 @@ async function captureDependenciesToOptimize(
           paths: [importerPath],
         });
         if (!resolvedPath) {
-          logger.warn(`Could not resolve path for workspace dependency ${dep}`);
+          logger.warn('Could not resolve path for workspace dependency', { dep });
           continue;
         }
 
@@ -186,6 +189,7 @@ async function captureDependenciesToOptimize(
           logger: noopLogger,
           sourcemapEnabled: false,
           initialDepsToOptimize: depsToOptimize,
+          analyzeCache,
         });
 
         if (!analysis?.dependencies) {
@@ -206,7 +210,7 @@ async function captureDependenciesToOptimize(
           }
         }
       } catch (err) {
-        logger.error(`Failed to resolve or analyze dependency ${dep}: ${(err as Error).message}`);
+        logger.error('Failed to resolve or analyze dependency', { dep, error: (err as Error).message });
       }
     }
 
@@ -224,7 +228,7 @@ async function captureDependenciesToOptimize(
   const dynamicImports = output.dynamicImports.filter(d => !DEPS_TO_IGNORE.includes(d));
   if (dynamicImports.length) {
     for (const dynamicImport of dynamicImports) {
-      if (!depsToOptimize.has(dynamicImport) && !isNodeBuiltin(dynamicImport)) {
+      if (!depsToOptimize.has(dynamicImport) && isBareModuleSpecifier(dynamicImport)) {
         // Try to resolve version for dynamic imports as well
         const pkgName = getPackageName(dynamicImport);
         let version: string | undefined;
@@ -269,6 +273,15 @@ async function captureDependenciesToOptimize(
  * @param options.shouldCheckTransitiveDependencies - Whether to recursively analyze transitive workspace dependencies (default: false)
  * @returns A promise that resolves to an object containing the analyzed dependencies and generated output
  */
+/** Return type of {@link analyzeEntry} */
+export type AnalyzeEntryResult = {
+  dependencies: Map<string, DependencyMetadata>;
+  output: {
+    code: string;
+    map: SourceMap | null;
+  };
+};
+
 export async function analyzeEntry(
   {
     entry,
@@ -285,6 +298,7 @@ export async function analyzeEntry(
     projectRoot,
     initialDepsToOptimize = new Map(), // used to avoid infinite recursion
     shouldCheckTransitiveDependencies = false,
+    analyzeCache,
   }: {
     logger: IMastraLogger;
     sourcemapEnabled: boolean;
@@ -292,14 +306,16 @@ export async function analyzeEntry(
     projectRoot: string;
     initialDepsToOptimize?: Map<string, DependencyMetadata>;
     shouldCheckTransitiveDependencies?: boolean;
+    /** Shared cache to avoid re-analyzing the same entry across recursive calls */
+    analyzeCache?: Map<string, AnalyzeEntryResult>;
   },
-): Promise<{
-  dependencies: Map<string, DependencyMetadata>;
-  output: {
-    code: string;
-    map: SourceMap | null;
-  };
-}> {
+): Promise<AnalyzeEntryResult> {
+  // Deduplicate: if this entry was already analyzed, return cached result
+  const cacheKey = isVirtualFile ? undefined : slash(entry);
+  if (cacheKey && analyzeCache?.has(cacheKey)) {
+    return analyzeCache.get(cacheKey)!;
+  }
+
   const optimizerBundler = await rollup({
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     input: isVirtualFile ? '#entry' : entry,
@@ -324,14 +340,22 @@ export async function analyzeEntry(
     {
       logger,
       shouldCheckTransitiveDependencies,
+      analyzeCache,
     },
   );
 
-  return {
+  const result: AnalyzeEntryResult = {
     dependencies: depsToOptimize,
     output: {
       code: output[0].code,
       map: output[0].map as SourceMap,
     },
   };
+
+  // Cache the result so recursive calls for the same entry are instant
+  if (cacheKey && analyzeCache) {
+    analyzeCache.set(cacheKey, result);
+  }
+
+  return result;
 }

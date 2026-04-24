@@ -1,57 +1,92 @@
 import {
-  MainContentLayout,
-  Header,
-  HeaderTitle,
-  MainContentContent,
+  ButtonWithTooltip,
+  ErrorState,
+  ListSearch,
+  NoDataPageLayout,
+  PageHeader,
+  PageLayout,
+  PermissionDenied,
+  SessionExpired,
   ToolsIcon,
-  Icon,
-  HeaderAction,
-  DocsIcon,
-  Button,
-  ToolTable,
-  useAgents,
-  useTools,
+  is401UnauthorizedError,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
-
-import { Link } from 'react-router';
+import { BookIcon } from 'lucide-react';
+import { useState } from 'react';
+import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { NoToolsInfo } from '@/domains/tools/components/tools-list/no-tools-info';
+import { ToolsList } from '@/domains/tools/components/tools-list/tools-list';
+import { useTools } from '@/domains/tools/hooks/use-all-tools';
 
 export default function Tools() {
-  const { data: agentsRecord = {}, isLoading: isLoadingAgents } = useAgents();
-  const { data: tools = {}, isLoading: isLoadingTools, error } = useTools();
+  const { data: agentsRecord = {}, isLoading: isLoadingAgents, error: agentsError } = useAgents();
+  const { data: tools = {}, isLoading: isLoadingTools, error: toolsError } = useTools();
+  const [search, setSearch] = useState('');
 
-  const hasDirectTools = Object.keys(tools).length > 0;
-  const hasToolsFromAgents = Object.values(agentsRecord).some(
-    agent => agent.tools && Object.keys(agent.tools).length > 0,
-  );
-  const isEmpty = !isLoadingTools && !isLoadingAgents && !hasDirectTools && !hasToolsFromAgents;
+  const isLoading = isLoadingAgents || isLoadingTools;
+  const error = toolsError || agentsError;
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <NoDataPageLayout title="Tools" icon={<ToolsIcon />}>
+        <SessionExpired />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <NoDataPageLayout title="Tools" icon={<ToolsIcon />}>
+        <PermissionDenied resource="tools" />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <NoDataPageLayout title="Tools" icon={<ToolsIcon />}>
+        <ErrorState title="Failed to load tools" message={error.message} />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (Object.keys(tools).length === 0 && !isLoading) {
+    return (
+      <NoDataPageLayout title="Tools" icon={<ToolsIcon />}>
+        <NoToolsInfo />
+      </NoDataPageLayout>
+    );
+  }
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>
-          <Icon>
-            <ToolsIcon />
-          </Icon>
-          Tools
-        </HeaderTitle>
+    <PageLayout>
+      <PageLayout.TopArea>
+        <PageLayout.Row>
+          <PageLayout.Column>
+            <PageHeader>
+              <PageHeader.Title isLoading={isLoading}>
+                <ToolsIcon /> Tools
+              </PageHeader.Title>
+            </PageHeader>
+          </PageLayout.Column>
+          <PageLayout.Column className="flex justify-end gap-2">
+            <ButtonWithTooltip
+              as="a"
+              href="https://mastra.ai/en/docs/agents/using-tools-and-mcp"
+              target="_blank"
+              rel="noopener noreferrer"
+              tooltipContent="Go to Tools documentation"
+            >
+              <BookIcon />
+            </ButtonWithTooltip>
+          </PageLayout.Column>
+        </PageLayout.Row>
+        <div className="max-w-120">
+          <ListSearch onSearch={setSearch} label="Filter tools" placeholder="Filter by name" />
+        </div>
+      </PageLayout.TopArea>
 
-        <HeaderAction>
-          <Button
-            as={Link}
-            to="https://mastra.ai/en/docs/agents/using-tools-and-mcp"
-            target="_blank"
-            variant="ghost"
-            size="md"
-          >
-            <DocsIcon />
-            Tools documentation
-          </Button>
-        </HeaderAction>
-      </Header>
-
-      <MainContentContent isCentered={isEmpty}>
-        <ToolTable tools={tools} agents={agentsRecord} isLoading={isLoadingAgents || isLoadingTools} error={error} />
-      </MainContentContent>
-    </MainContentLayout>
+      <ToolsList tools={tools} agents={agentsRecord} isLoading={isLoading} search={search} />
+    </PageLayout>
   );
 }

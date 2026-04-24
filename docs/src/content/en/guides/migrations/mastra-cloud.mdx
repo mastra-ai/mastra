@@ -1,0 +1,369 @@
+---
+title: "Migrate from Mastra Cloud | Migration Guide"
+description: Learn how to migrate from Mastra Cloud to the Mastra platform
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Migrate from Mastra Cloud to Mastra platform
+
+The Mastra platform replaces Mastra Cloud with separate Studio and Server products, CLI-driven deploys, and a new observability system. This guide walks you through each step.
+
+## What changed
+
+| Area | Mastra Cloud | Mastra platform |
+| - | - | - |
+| **Products** | Single project | Separate Studio and Server |
+| **Deploys** | Auto-deploy on push | CLI-driven (`mastra studio deploy`, `mastra server deploy`) |
+| **Project creation** | GitHub import | CLI creates projects on first deploy |
+| **Storage** | Managed LibSQL (Cloud Store) or bring your own | Bring your own hosted database |
+| **Observability** | Logger-based | `Observability` class with exporters |
+| **Env vars** | Set during project setup | Seeded from `.env` on first deploy, managed in dashboard after |
+| **URLs** | Single URL | Separate Studio and Server URLs |
+
+## Before you start
+
+<Steps>
+  <StepItem>
+    Install or update the CLI:
+
+    ```bash npm2yarn
+    npm install -g mastra@latest
+    ```
+  </StepItem>
+
+  <StepItem>
+    Authenticate:
+
+    ```bash
+    mastra auth login
+    ```
+  </StepItem>
+
+  <StepItem>
+    Verify your project builds locally:
+
+    ```bash
+    mastra build
+    ```
+  </StepItem>
+</Steps>
+
+## Replace Mastra Cloud Store with a hosted database
+
+Mastra Cloud provided a managed libSQL database, backed by [Turso](https://turso.tech). The Mastra platform does not host a database for you, so you need to point your storage at an externally hosted instance.
+
+If you were already using a hosted database ("bring your own"), no changes are needed. Ensure the connection string is set as an environment variable in the dashboard rather than hardcoded.
+
+If you were using Cloud Store, follow the steps below to export your data and load it into a new libSQL database that you control.
+
+### Export your Cloud Store data
+
+There are two ways to export your Cloud Store data: a one-click download from the dashboard, or a manual dump via the Turso CLI.
+
+#### Option A — Export from the dashboard (recommended)
+
+Open your project in the [Mastra dashboard](https://projects.mastra.ai) and navigate to **Runtime → Settings → Storage**. Click the **Export Database** button. The dashboard generates a full `.sql` dump of your Cloud Store and downloads it directly to your Downloads folder.
+
+Once the download completes, convert the dump into a SQLite database file:
+
+```bash
+sqlite3 mydb.db < ~/Downloads/mastra-cloud-dump.sql
+```
+
+You now have a portable `mydb.db` file you can inspect locally, back up, or use as the source for the new database in the steps that follow.
+
+#### Option B — Export via the Turso CLI
+
+If you prefer to work from the command line, or need to script the export, you can dump the database directly using the [Turso CLI](https://docs.turso.tech/cli). This approach requires the database URL and an auth token, both surfaced in the dashboard.
+
+<Steps>
+  <StepItem>
+    Retrieve your Cloud Store credentials from the dashboard.
+
+    Open your project in the [Mastra dashboard](https://projects.mastra.ai) and navigate to **Runtime → Settings → Env Variables**. For Cloud Store–backed projects, two variables are injected alongside your own:
+
+    - `MASTRA_STORAGE_URL`: A libSQL connection string (e.g. `libsql://<db-name>-<org>.turso.io`).
+    - `MASTRA_STORAGE_AUTH_TOKEN`: A read-capable auth token scoped to that database.
+
+    Each row supports the standard environment variable actions — show/hide via the eye toggle, Edit, Delete, and Copy Value. Use **Copy Value** to grab both values for the dump command below.
+
+    :::note
+    These variables only appear for projects that were provisioned with Cloud Store. If you brought your own database to Mastra Cloud, you already have these credentials and can skip ahead to [Point your Mastra app at the new database](#point-your-mastra-app-at-the-new-database).
+    :::
+
+    :::info
+    If the variables are missing, the values do not decrypt, or the Turso CLI rejects the token, email [support@mastra.ai](mailto:support@mastra.ai) from the address associated with your Mastra Cloud account and ask for the libSQL URL and auth token for the project you want to export. Include the project name/ID. Support can also run the dump on your behalf if CLI access is blocked on your network.
+    :::
+  </StepItem>
+
+  <StepItem>
+    Install the Turso CLI.
+
+    ```bash title="macOS"
+    brew install tursodatabase/tap/turso
+    ```
+
+    ```bash title="Linux / WSL"
+    curl -sSfL https://get.tur.so/install.sh | bash
+    ```
+
+    See the [Turso CLI introduction](https://docs.turso.tech/cli/introduction) for Windows and headless-install options.
+  </StepItem>
+
+  <StepItem>
+    Export the database to a SQL dump.
+
+    Set the credentials provided by support (or use the dashboard values if you already copied them earlier) as environment variables, then dump the database to a local file. If you copied the URL from the dashboard, swap the `libsql://` scheme for `https://` — the Turso CLI expects the HTTPS form when passing the URL with an auth token.
+
+    ```bash
+    export MASTRA_STORAGE_URL="https://<db-name>-<org>.turso.io"
+    export MASTRA_STORAGE_AUTH_TOKEN="<token-from-dashboard-or-support>"
+
+    turso db shell "$MASTRA_STORAGE_URL?authToken=$MASTRA_STORAGE_AUTH_TOKEN" ".dump" > mastra-cloud-dump.sql
+    ```
+
+    :::warning
+    Embedding the auth token in the connection string is less secure than Turso's recommended pattern — the full URL (with token) can end up in shell history, process listings, and terminal logs. Turso officially recommends running `turso auth login` and then dumping by database name only: `turso db shell <database-name> ".dump" > mastra-cloud-dump.sql`. That flow requires the database to live in a Turso account you own, which is not the case for Cloud Store, so the env-var example above is provided as an alternative for this one-time export. If you prefer to avoid token interpolation entirely, ask support to run the dump on your behalf and send you the resulting SQL file.
+    :::
+
+    The resulting `mastra-cloud-dump.sql` contains the full schema and data: thread and message history, workflow snapshots, traces, and eval scores. Store it somewhere safe before continuing.
+  </StepItem>
+</Steps>
+
+### Load the dump into a new libSQL database
+
+The dump is a standard SQL file and can be loaded into any libSQL-compatible database. The example below uses a new Turso-hosted database, which keeps the migration like-for-like and avoids schema translation.
+
+<Steps>
+  <StepItem>
+    Authenticate the Turso CLI against your own Turso account.
+
+    ```bash
+    turso auth login
+    ```
+
+    If you do not have a Turso account, the CLI will prompt you to create one. See [Turso pricing](https://turso.tech/pricing) for plan details.
+  </StepItem>
+
+  <StepItem>
+    Create a new database and load the dump in one step.
+
+    ```bash
+    turso db create mastra-migrated --from-dump ./mastra-cloud-dump.sql
+    ```
+
+    `--from-dump` restores a local SQLite/libSQL dump at create time, which is faster and safer than piping statements through `turso db shell` after the fact. Pick a region close to where your Mastra Server runs to minimize latency — list available regions with `turso db locations` and pass `--group <group-name>` if you manage multiple groups.
+
+    For multi-gigabyte dumps, add `--wait` so the CLI blocks until the database is fully available.
+  </StepItem>
+
+  <StepItem>
+    Generate connection credentials for the new database.
+
+    ```bash
+    turso db show mastra-migrated --url
+    turso db tokens create mastra-migrated
+    ```
+
+    The first command prints the libSQL URL. The second prints an auth token. Both are needed by `LibSQLStore`.
+  </StepItem>
+</Steps>
+
+### Point your Mastra app at the new database
+
+Set the new credentials as environment variables, either locally in `.env` or in the Mastra platform dashboard:
+
+```bash title=".env"
+TURSO_DATABASE_URL="libsql://mastra-migrated-<org>.turso.io"
+TURSO_AUTH_TOKEN="<token-from-turso-db-tokens-create>"
+```
+
+Configure `LibSQLStore` to read from those variables:
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { LibSQLStore } from '@mastra/libsql'
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'libsql-storage',
+    url: process.env.TURSO_DATABASE_URL!,
+    authToken: process.env.TURSO_AUTH_TOKEN,
+  }),
+})
+```
+
+See the [libSQL storage reference](/reference/storage/libsql) for the full set of options.
+
+### Verify the migration
+
+Before decommissioning your Cloud project, confirm the new database serves the data your app expects.
+
+- Run `turso db shell mastra-migrated "SELECT name FROM sqlite_master WHERE type='table';"` to list tables. The output should include the Mastra-managed tables (e.g. `mastra_threads`, `mastra_messages`, `mastra_workflow_snapshot`, `mastra_traces`).
+- Run a row count against a known-populated table, for example `turso db shell mastra-migrated "SELECT COUNT(*) FROM mastra_messages;"`, and compare it to the same query against the Cloud Store URL.
+- Start your Mastra app against the new credentials and confirm that an existing thread or workflow run loads as expected in [Studio](/docs/studio/observability).
+
+## Update observability configuration
+
+Mastra Cloud used logger-based tracing. The Mastra platform uses the `Observability` class with explicit exporters.
+
+Install the observability package:
+
+```bash npm2yarn
+npm install @mastra/observability
+```
+
+**Before (Mastra Cloud):**
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { PinoLogger } from '@mastra/loggers'
+
+export const mastra = new Mastra({
+  logger: new PinoLogger({ name: 'my-app', level: 'info' }),
+  // traces appear in Cloud dashboard automatically
+})
+```
+
+**After (Mastra platform):**
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from '@mastra/observability'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'my-app',
+        exporters: [new DefaultExporter(), new CloudExporter()],
+        spanOutputProcessors: [new SensitiveDataFilter()],
+      },
+    },
+  }),
+})
+```
+
+- `DefaultExporter` persists traces to your storage backend for [Studio](/docs/studio/observability).
+- `CloudExporter` Sends observability data to hosted Mastra Studio when `MASTRA_CLOUD_ACCESS_TOKEN` is set.
+- `SensitiveDataFilter` redacts passwords, tokens, and keys from span data before export.
+
+See the [observability overview](/docs/observability/overview) for the full configuration, including composite storage with DuckDB for metrics.
+
+## Deploy Studio
+
+Deploy your hosted Studio instance:
+
+```bash
+mastra studio deploy
+```
+
+The CLI builds your project, uploads the artifact, and deploys it. On first deploy, a `.mastra-project.json` file is created to link your local project to the platform. Commit this file to your repository.
+
+See [Studio deployment](/docs/studio/deployment#mastra-platform) for details.
+
+## Deploy Server (optional)
+
+If you need a production API endpoint, deploy a Server:
+
+```bash
+mastra server deploy
+```
+
+This creates a separate deployment with a stable API URL, environment variable management, and custom domain support. See the [Server deployment guide](/guides/deployment/mastra-platform) for the full walkthrough.
+
+:::note
+Environment variables from `.env`, `.env.local`, and `.env.production` are included automatically on first deploy. After that, manage env vars through the [web dashboard](https://projects.mastra.ai).
+Review and sanitize these files before first deploy to avoid uploading development-only or personal secrets.
+:::
+
+## Set up CI (optional)
+
+Mastra Cloud auto-deployed on push. The Mastra platform uses CLI-driven deploys, which you can run from any CI provider.
+
+### Prerequisites
+
+1. Create an API token:
+
+   ```bash
+   mastra auth tokens create ci-deploy
+   ```
+
+1. Store the token as a GitHub Actions secret (e.g. `MASTRA_API_TOKEN`).
+
+1. Commit `.mastra-project.json` to your repo (generated on your first manual deploy).
+
+When `MASTRA_API_TOKEN` is set, the CLI runs in headless mode and skips all interactive prompts.
+
+### Deploy Server on push to main
+
+Server deploy accepts org and project from `.mastra-project.json`, so no extra env vars are needed beyond the token:
+
+```yaml title=".github/workflows/deploy-server.yml"
+name: Deploy to Mastra Server
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pnpm install
+      - run: pnpm mastra server deploy --yes --config .mastra-project.json
+        env:
+          MASTRA_API_TOKEN: ${{ secrets.MASTRA_API_TOKEN }}
+```
+
+### Deploy Studio on push to main
+
+Studio deploy requires `MASTRA_ORG_ID` and `MASTRA_PROJECT_ID` as env vars in headless mode, even when `--config` is provided:
+
+```yaml title=".github/workflows/deploy-studio.yml"
+name: Deploy to Mastra Studio
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pnpm install
+      - run: pnpm mastra studio deploy --yes --config .mastra-project.json
+        env:
+          MASTRA_API_TOKEN: ${{ secrets.MASTRA_API_TOKEN }}
+          MASTRA_ORG_ID: ${{ secrets.MASTRA_ORG_ID }}
+          MASTRA_PROJECT_ID: ${{ secrets.MASTRA_PROJECT_ID }}
+```
+
+## Decommission old Cloud project
+
+Update any clients pointing to your old Mastra Cloud URL to the new Server or Studio URL. Verify traces appear in the new platform by checking the [Studio observability dashboard](/docs/studio/observability). Delete your old Mastra Cloud project once everything is confirmed working.
+
+## Related
+
+- [Observability overview](/docs/observability/overview)
+- [Studio deployment](/docs/studio/deployment#mastra-platform)
+- [Server deployment](/guides/deployment/mastra-platform)
+- [CLI reference](/reference/cli/mastra)
+- [Mastra platform overview](/docs/mastra-platform/overview)

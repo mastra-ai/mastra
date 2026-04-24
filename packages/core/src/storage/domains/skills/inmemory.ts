@@ -39,14 +39,12 @@ export class InMemorySkillsStorage extends SkillsStorage {
   // ==========================================================================
 
   async getById(id: string): Promise<StorageSkillType | null> {
-    this.logger.debug(`InMemorySkillsStorage: getById called for ${id}`);
     const config = this.db.skills.get(id);
     return config ? this.deepCopyConfig(config) : null;
   }
 
   async create(input: { skill: StorageCreateSkillInput }): Promise<StorageSkillType> {
     const { skill } = input;
-    this.logger.debug(`InMemorySkillsStorage: create called for ${skill.id}`);
 
     if (this.db.skills.has(skill.id)) {
       throw new Error(`Skill with id ${skill.id} already exists`);
@@ -90,7 +88,6 @@ export class InMemorySkillsStorage extends SkillsStorage {
 
   async update(input: StorageUpdateSkillInput): Promise<StorageSkillType> {
     const { id, ...updates } = input;
-    this.logger.debug(`InMemorySkillsStorage: update called for ${id}`);
 
     const existingConfig = this.db.skills.get(id);
     if (!existingConfig) {
@@ -187,7 +184,6 @@ export class InMemorySkillsStorage extends SkillsStorage {
   }
 
   async delete(id: string): Promise<void> {
-    this.logger.debug(`InMemorySkillsStorage: delete called for ${id}`);
     // Idempotent delete
     this.db.skills.delete(id);
     // Also delete all versions for this skill
@@ -197,8 +193,6 @@ export class InMemorySkillsStorage extends SkillsStorage {
   async list(args?: StorageListSkillsInput): Promise<StorageListSkillsOutput> {
     const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
-
-    this.logger.debug(`InMemorySkillsStorage: list called`);
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 100)
     const perPage = normalizePerPage(perPageInput, 100);
@@ -252,8 +246,6 @@ export class InMemorySkillsStorage extends SkillsStorage {
   // ==========================================================================
 
   async createVersion(input: CreateSkillVersionInput): Promise<SkillVersion> {
-    this.logger.debug(`InMemorySkillsStorage: createVersion called for skill ${input.skillId}`);
-
     // Check if version with this ID already exists
     if (this.db.skillVersions.has(input.id)) {
       throw new Error(`Version with id ${input.id} already exists`);
@@ -277,14 +269,11 @@ export class InMemorySkillsStorage extends SkillsStorage {
   }
 
   async getVersion(id: string): Promise<SkillVersion | null> {
-    this.logger.debug(`InMemorySkillsStorage: getVersion called for ${id}`);
     const version = this.db.skillVersions.get(id);
     return version ? this.deepCopyVersion(version) : null;
   }
 
   async getVersionByNumber(skillId: string, versionNumber: number): Promise<SkillVersion | null> {
-    this.logger.debug(`InMemorySkillsStorage: getVersionByNumber called for skill ${skillId}, v${versionNumber}`);
-
     for (const version of this.db.skillVersions.values()) {
       if (version.skillId === skillId && version.versionNumber === versionNumber) {
         return this.deepCopyVersion(version);
@@ -294,8 +283,6 @@ export class InMemorySkillsStorage extends SkillsStorage {
   }
 
   async getLatestVersion(skillId: string): Promise<SkillVersion | null> {
-    this.logger.debug(`InMemorySkillsStorage: getLatestVersion called for skill ${skillId}`);
-
     let latest: SkillVersion | null = null;
     for (const version of this.db.skillVersions.values()) {
       if (version.skillId === skillId) {
@@ -310,8 +297,6 @@ export class InMemorySkillsStorage extends SkillsStorage {
   async listVersions(input: ListSkillVersionsInput): Promise<ListSkillVersionsOutput> {
     const { skillId, page = 0, perPage: perPageInput, orderBy } = input;
     const { field, direction } = this.parseVersionOrderBy(orderBy);
-
-    this.logger.debug(`InMemorySkillsStorage: listVersions called for skill ${skillId}`);
 
     // Normalize perPage (false -> MAX_SAFE_INTEGER, 0 -> 0, undefined -> 20)
     const perPage = normalizePerPage(perPageInput, 20);
@@ -348,13 +333,10 @@ export class InMemorySkillsStorage extends SkillsStorage {
   }
 
   async deleteVersion(id: string): Promise<void> {
-    this.logger.debug(`InMemorySkillsStorage: deleteVersion called for ${id}`);
     this.db.skillVersions.delete(id);
   }
 
   async deleteVersionsByParentId(entityId: string): Promise<void> {
-    this.logger.debug(`InMemorySkillsStorage: deleteVersionsByParentId called for skill ${entityId}`);
-
     const idsToDelete: string[] = [];
     for (const [id, version] of this.db.skillVersions.entries()) {
       if (version.skillId === entityId) {
@@ -368,8 +350,6 @@ export class InMemorySkillsStorage extends SkillsStorage {
   }
 
   async countVersions(skillId: string): Promise<number> {
-    this.logger.debug(`InMemorySkillsStorage: countVersions called for skill ${skillId}`);
-
     let count = 0;
     for (const version of this.db.skillVersions.values()) {
       if (version.skillId === skillId) {

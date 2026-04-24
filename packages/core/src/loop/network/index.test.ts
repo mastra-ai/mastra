@@ -1,5 +1,5 @@
 import { it, describe, expect, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { MessageListInput } from '../../agent/message-list';
 import type { Processor } from '../../processors';
 import { RequestContext } from '../../request-context';

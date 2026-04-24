@@ -83,6 +83,44 @@ export function getPackageName(id: string) {
 }
 
 /**
+ * Check if an import specifier uses a protocol scheme rather than a package name.
+ * Examples: `cloudflare:workers`, `data:text/javascript,...`, `node:fs`.
+ */
+export function hasImportProtocol(specifier: string): boolean {
+  // Avoid treating Windows absolute paths like `C:\foo` as protocol imports.
+  if (/^[A-Za-z]:[\\/]/.test(specifier)) {
+    return false;
+  }
+
+  return /^[A-Za-z][A-Za-z\d+.-]*:/.test(specifier);
+}
+
+const DEFAULT_PROTOCOL_IMPORT_EXCLUDE_LIST = ['node:'] as const;
+
+/**
+ * Check if a specifier uses a non-builtin protocol that should be preserved at
+ * runtime instead of being treated as an installable dependency.
+ */
+export function isExternalProtocolImport(
+  specifier: string,
+  excludeList: readonly string[] = DEFAULT_PROTOCOL_IMPORT_EXCLUDE_LIST,
+): boolean {
+  if (!hasImportProtocol(specifier)) {
+    return false;
+  }
+
+  return !excludeList.some(prefix => specifier.startsWith(prefix));
+}
+
+function isRelativeImportSpecifier(specifier: string): boolean {
+  return specifier === '.' || specifier === '..' || specifier.startsWith('./') || specifier.startsWith('../');
+}
+
+function isAbsolutePathSpecifier(specifier: string): boolean {
+  return specifier.startsWith('/') || specifier.startsWith('\\\\') || /^[A-Za-z]:[\\/]/.test(specifier);
+}
+
+/**
  * During `mastra dev` we are compiling TS files to JS (inside workspaces) so that users can just their workspace packages.
  * We store these compiled files inside `node_modules/.cache` for each workspace package.
  */
@@ -233,7 +271,7 @@ export interface StudioInjectionConfig {
   templates: string;
   telemetryDisabled: string;
   requestContextPresets: string;
-  themeToggle: string;
+  experimentalUI: string;
   autoDetectUrl?: string;
 }
 
@@ -257,7 +295,7 @@ export function injectStudioHtmlConfig(html: string, config: StudioInjectionConf
   html = html.replace(`'%%MASTRA_TEMPLATES%%'`, config.templates);
   html = html.replace(`'%%MASTRA_TELEMETRY_DISABLED%%'`, config.telemetryDisabled);
   html = html.replace(`'%%MASTRA_REQUEST_CONTEXT_PRESETS%%'`, config.requestContextPresets);
-  html = html.replace(`'%%MASTRA_THEME_TOGGLE%%'`, config.themeToggle);
+  html = html.replace(`'%%MASTRA_EXPERIMENTAL_UI%%'`, config.experimentalUI);
   if (config.autoDetectUrl) {
     html = html.replace(`'%%MASTRA_AUTO_DETECT_URL%%'`, config.autoDetectUrl);
   }
@@ -277,4 +315,28 @@ export function isBuiltinModule(specifier: string): boolean {
     specifier.startsWith('node:') ||
     builtinModules.includes(specifier.replace(/^node:/, ''))
   );
+}
+
+/**
+ * Check whether a module specifier is a bare module import rather than a path,
+ * virtual module, or Node builtin.
+ */
+export function isBareModuleSpecifier(specifier: string): boolean {
+  if (!specifier || specifier.startsWith('#')) {
+    return false;
+  }
+
+  if (isRelativeImportSpecifier(specifier) || isAbsolutePathSpecifier(specifier)) {
+    return false;
+  }
+
+  if (isBuiltinModule(specifier)) {
+    return false;
+  }
+
+  if (isExternalProtocolImport(specifier)) {
+    return false;
+  }
+
+  return true;
 }

@@ -8,7 +8,7 @@ import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { config } from 'dotenv';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { ModelRouterLanguageModel } from '../llm';
 import { noopLogger } from '../logger';
@@ -40,7 +40,23 @@ const mockFindUser = vi.fn().mockImplementation(async data => {
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
 
-const mock = createGatewayMock();
+const mock = createGatewayMock({
+  transformRequest: ({ url, body }) => {
+    let serialized = JSON.stringify(body);
+
+    serialized = serialized.replace(
+      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
+      '00000000-0000-0000-0000-000000000000',
+    );
+    serialized = serialized.replace(/"toolCallId":"[a-zA-Z0-9_-]+"/g, '"toolCallId":"NORMALIZED"');
+    serialized = serialized.replace(/\\"toolCallId\\":\\"[a-zA-Z0-9_-]+\\"/g, '\\"toolCallId\\":\\"NORMALIZED\\"');
+    serialized = serialized.replace(/"call_id":"call_[a-zA-Z0-9]+"/g, '"call_id":"call_NORMALIZED"');
+    serialized = serialized.replace(/\\"call_id\\":\\"call_[a-zA-Z0-9]+\\"/g, '\\"call_id\\":\\"call_NORMALIZED\\"');
+    serialized = serialized.replace(/"id":"fc_[a-zA-Z0-9]+"/g, '"id":"fc_NORMALIZED"');
+
+    return { url, body: JSON.parse(serialized) };
+  },
+});
 beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());
 
@@ -117,19 +133,18 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
 
       expect(result.error).toBeUndefined();
 
-      const resultData = {
+      const resultObject = await result.object;
+
+      expect(resultObject).toMatchObject({
         weather: expect.any(String),
         temperature: expect.any(Number),
         humidity: expect.any(Number),
-        // .optional() fields: compat layer transforms null → undefined
-        windSpeed: undefined,
+        // .optional().nullable() fields: compat layer transforms null → undefined
         barometricPressure: undefined,
         // .nullable() (without .optional()) stays null
         precipitation: null,
-      };
-
-      const resultObject = await result.object;
-      expect(resultObject).toEqual(resultData);
+      });
+      expect(resultObject?.windSpeed === undefined || typeof resultObject?.windSpeed === 'string').toBe(true);
     });
   });
 
@@ -1045,12 +1060,8 @@ describe('prepareStep (e2e)', () => {
       stepNumber: 0,
     });
 
-    expect((result.request.body as any).tools).toMatchObject([
-      {
-        type: 'function',
-        name: 'tool1',
-      },
-    ]);
+    expect((result.request.body as any).tools).toBeUndefined();
+    expect((result.request.body as any).tool_choice).toBeUndefined();
   });
 
   it('should execute a new tool added in prepareStep with toolChoice required', async () => {

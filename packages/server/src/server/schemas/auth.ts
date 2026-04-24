@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 // ============================================================================
 // Capabilities Response Schemas
@@ -86,6 +86,14 @@ export const ssoCallbackResponseSchema = z.object({
 export const logoutResponseSchema = z.object({
   success: z.boolean(),
   redirectTo: z.string().optional(),
+});
+
+// ============================================================================
+// Refresh Schema
+// ============================================================================
+
+export const refreshResponseSchema = z.object({
+  success: z.boolean(),
 });
 
 // ============================================================================

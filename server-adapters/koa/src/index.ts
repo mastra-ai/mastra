@@ -14,6 +14,8 @@ import {
 import type Koa from 'koa';
 import type { Context, Middleware, Next } from 'koa';
 import { ZodError } from 'zod';
+export { createAuthMiddleware } from './auth-middleware';
+export type { KoaAuthMiddlewareOptions } from './auth-middleware';
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
@@ -419,13 +421,27 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
       if (fetchResponse.body) {
         const reader = fetchResponse.body.getReader();
+
+        const onResError = (err: unknown) => {
+          this.mastra.getLogger()?.error('Error writing datastream response', {
+            error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+          });
+          void reader.cancel('response write error');
+        };
+        ctx.res.once('error', onResError);
+
         try {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
             ctx.res.write(value);
           }
+        } catch (error) {
+          this.mastra.getLogger()?.error('Error in datastream processing', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
         } finally {
+          ctx.res.off('error', onResError);
           ctx.res.end();
         }
       } else {

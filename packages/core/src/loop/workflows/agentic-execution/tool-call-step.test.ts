@@ -1,7 +1,7 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import type { Mock } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { MessageList } from '../../../agent/message-list';
 import { RequestContext } from '../../../request-context';
 import { ChunkFrom } from '../../../stream/types';
@@ -296,6 +296,105 @@ describe('createToolCallStep tool approval workflow', () => {
     expect(result).toEqual({
       result: toolResult,
       ...inputData,
+    });
+  });
+});
+
+describe('createToolCallStep needsApprovalFn enriched context', () => {
+  let controller: { enqueue: Mock };
+  let suspend: Mock;
+  let streamState: { serialize: Mock };
+  let messageList: MessageList;
+  let neverResolve: Promise<never>;
+
+  const makeInputData = () => ({
+    toolCallId: 'ctx-call-id',
+    toolName: 'ctx-tool',
+    args: { action: 'delete' },
+  });
+
+  const makeExecuteParams = (overrides: any = {}) => ({
+    ...makeBaseExecuteParams(suspend),
+    writer: new ToolStream({
+      prefix: 'tool',
+      callId: 'ctx-call-id',
+      name: 'ctx-tool',
+      runId: 'ctx-run-id',
+    }),
+    inputData: makeInputData(),
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    controller = { enqueue: vi.fn() };
+    neverResolve = new Promise(() => {});
+    suspend = vi.fn().mockReturnValue(neverResolve);
+    streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    messageList = createMessageList();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('should default to requiring approval when needsApprovalFn throws', async () => {
+    const needsApprovalFn = vi.fn().mockImplementation(() => {
+      throw new Error('approval fn error');
+    });
+    const tools = {
+      'ctx-tool': {
+        execute: vi.fn(),
+        requireApproval: true,
+        needsApprovalFn,
+      },
+    };
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'error-run-id',
+      streamState,
+    });
+
+    const executePromise = toolCallStep.execute(makeExecuteParams());
+
+    await new Promise(resolve => setImmediate(resolve));
+
+    // Should still suspend (default to requiring approval on error)
+    expect(suspend).toHaveBeenCalled();
+    expect(tools['ctx-tool'].execute).not.toHaveBeenCalled();
+
+    await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
+  it('should skip approval when needsApprovalFn returns false', async () => {
+    const needsApprovalFn = vi.fn().mockReturnValue(false);
+    const toolResult = { deleted: true };
+    const tools = {
+      'ctx-tool': {
+        execute: vi.fn().mockResolvedValue(toolResult),
+        requireApproval: true,
+        needsApprovalFn,
+      },
+    };
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'skip-run-id',
+      streamState,
+    });
+
+    const result = await toolCallStep.execute(makeExecuteParams());
+
+    expect(needsApprovalFn).toHaveBeenCalled();
+    expect(suspend).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      result: toolResult,
+      ...makeInputData(),
     });
   });
 });

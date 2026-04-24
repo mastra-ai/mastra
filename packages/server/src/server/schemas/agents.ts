@@ -1,4 +1,4 @@
-import z from 'zod';
+import { z } from 'zod/v4';
 import { tracingOptionsSchema, coreMessageSchema, messageResponseSchema } from './common';
 import { defaultOptionsSchema } from './default-options';
 
@@ -223,6 +223,18 @@ export const agentExecutionBodySchema = z
     // Request Context (handler-specific field - merged with server's requestContext)
     requestContext: z.record(z.string(), z.any()).optional(),
 
+    // Version overrides for sub-agents (and future primitives)
+    versions: z
+      .object({
+        agents: z
+          .record(
+            z.string(),
+            z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
+          )
+          .optional(),
+      })
+      .optional(),
+
     // Execution Control
     maxSteps: z.number().optional(),
     stopWhen: z.any().optional(),
@@ -363,6 +375,21 @@ export const declineNetworkToolCallBodySchema = networkToolCallActionBodySchema;
  */
 export const toolCallResponseSchema = z.object({
   fullStream: z.any(), // ReadableStream
+});
+
+// ============================================================================
+// Resume Stream Schema
+// ============================================================================
+
+/**
+ * Body schema for resuming a suspended agent stream with custom data.
+ * Extends the agent execution body without messages, since resume
+ * continues from a prior suspension point rather than starting fresh.
+ */
+export const resumeStreamBodySchema = agentExecutionBodySchema.omit({ messages: true }).extend({
+  runId: z.string(),
+  resumeData: z.unknown().refine(x => x !== undefined, { message: 'resumeData is required' }),
+  toolCallId: z.string().optional(),
 });
 
 // ============================================================================

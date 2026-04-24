@@ -11,7 +11,7 @@ import type {
 import { asSchema, tool as toolFn } from '@internal/ai-sdk-v5';
 import type { Tool, ToolChoice } from '@internal/ai-sdk-v5';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '../../../../schema';
-import { getProviderToolName, isProviderDefinedTool } from '../../../../tools/toolchecks';
+import { isProviderDefinedTool } from '../../../../tools/toolchecks';
 
 /** Model specification version for tool type conversion */
 export type ModelSpecVersion = 'v2' | 'v3';
@@ -84,11 +84,19 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
   tools: PreparedTool[] | undefined;
   toolChoice: PreparedToolChoice | undefined;
 } {
-  if (Object.keys(tools || {}).length === 0) {
-    // Preserve explicit 'none' toolChoice to tell the LLM not to attempt tool calls
+  if (toolChoice === 'none') {
+    // When toolChoice is 'none', strip tools entirely — providers like Gemini reject
+    // requests that combine tools + structured output (response_format: json_schema)
     return {
       tools: undefined,
-      toolChoice: toolChoice === 'none' ? { type: 'none' as const } : undefined,
+      toolChoice: { type: 'none' as const },
+    };
+  }
+
+  if (Object.keys(tools || {}).length === 0) {
+    return {
+      tools: undefined,
+      toolChoice: undefined,
     };
   }
 
@@ -111,9 +119,14 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
           // V6 provider tools (like openaiV6.tools.webSearch()) have type='function' but
           // contain an 'id' property with format '<provider>.<tool_name>'
           if (isProviderDefinedTool(tool)) {
+            // V5 SDK factories set a hardcoded `.name` (e.g. "web_search"
+            // for anthropic.web_search_20250305). V6 factories don't, so
+            // we fall back to the user-provided key. Either way, the V6
+            // provider's bidirectional toolNameMapping will map correctly.
+            const toolName = (tool as any).name ?? name;
             return {
               type: providerToolType,
-              name: getProviderToolName(tool.id),
+              name: toolName,
               id: tool.id,
               args: tool.args ?? {},
             } as PreparedTool;
@@ -132,6 +145,7 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
             ...tool,
             inputSchema,
           } as any);
+          const strict = 'strict' in tool ? tool.strict : undefined;
 
           const toolType = sdkTool?.type ?? 'function';
 
@@ -183,14 +197,19 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
                 name,
                 description: sdkTool.description,
                 inputSchema: fixTypelessProperties(parameters as Record<string, unknown>),
+                // Preserve strict through v2 preparation because the model router may
+                // still forward these tools to an AI SDK v6 / V3 model later. Actual
+                // V2 model calls strip this field at the AISDKV5LanguageModel boundary.
+                ...(strict != null ? { strict } : {}),
                 providerOptions: sdkTool.providerOptions,
               };
             case 'provider-defined': {
               // Fallback for tools that pass through toolFn and still get recognized as provider-defined
               const providerId = (sdkTool as any).id;
+              const providerName = (sdkTool as any).name ?? name;
               return {
                 type: providerToolType,
-                name: providerId ? getProviderToolName(providerId) : name,
+                name: providerName,
                 id: providerId,
                 args: (sdkTool as any).args,
               } as PreparedTool;

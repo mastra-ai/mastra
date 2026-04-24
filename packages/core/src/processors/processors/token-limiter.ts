@@ -26,6 +26,7 @@ export interface TokenLimiterOptions {
    * - 'part': Only count tokens in the current part
    */
   countMode?: 'cumulative' | 'part';
+  trimMode?: 'best-fit' | 'contiguous';
 }
 
 /**
@@ -43,6 +44,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', { syste
   private maxTokens: number;
   private strategy: 'truncate' | 'abort';
   private countMode: 'cumulative' | 'part';
+  private trimMode: 'best-fit' | 'contiguous';
 
   // Token counting constants for input processing
   private static readonly TOKENS_PER_MESSAGE = 3.8;
@@ -54,12 +56,14 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', { syste
       this.maxTokens = options;
       this.strategy = 'truncate';
       this.countMode = 'cumulative';
+      this.trimMode = 'best-fit';
     } else {
       // Object format with all options
       this.maxTokens = options.limit;
       this.customEncoding = options.encoding;
       this.strategy = options.strategy || 'truncate';
       this.countMode = options.countMode || 'cumulative';
+      this.trimMode = options.trimMode || 'best-fit';
     }
   }
 
@@ -138,10 +142,14 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', { syste
       const messageTokens = await this.countInputMessageTokens(message);
 
       if (currentTokens + messageTokens <= remainingBudget) {
-        messagesToKeep.unshift(message); // Add to beginning to maintain order
+        messagesToKeep.unshift(message);
         currentTokens += messageTokens;
+      } else {
+        if (this.trimMode === 'contiguous') {
+          break;
+        }
+        // best-fit → continue (existing behavior)
       }
-      // Continue checking all messages, don't break early
     }
 
     // Remove messages that don't fit within the token budget

@@ -1,5 +1,7 @@
 import type { AgentConfig } from '@mastra/core/agent';
 import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
+import type { MemoryStorage } from '@mastra/core/storage';
+import type { ModelByInputTokens } from './model-by-input-tokens';
 
 /**
  * Threshold can be a simple number or a dynamic range.
@@ -50,18 +52,21 @@ export interface ProviderOptions {
 /**
  * Configuration for the observation step (Observer agent).
  */
+export type ObservationalMemoryModel = Exclude<AgentConfig['model'], undefined> | ModelByInputTokens;
+
 export interface ObservationConfig {
   /**
    * Model for the Observer agent.
    * Can be a model ID string (e.g., 'openai/gpt-4o'), a LanguageModel instance,
    * a function that returns either (for dynamic model selection),
+   * a `ModelByInputTokens` selector (for token-tiered routing),
    * or an array of ModelWithRetries for fallback support.
    *
    * Cannot be set if a top-level `model` is also provided on ObservationalMemoryConfig.
    *
    * @default 'google/gemini-2.5-flash'
    */
-  model?: AgentConfig['model'];
+  model?: ObservationalMemoryModel;
 
   /**
    * Token count of unobserved messages that triggers observation.
@@ -179,13 +184,14 @@ export interface ReflectionConfig {
    * Model for the Reflector agent.
    * Can be a model ID string (e.g., 'openai/gpt-4o'), a LanguageModel instance,
    * a function that returns either (for dynamic model selection),
+   * a `ModelByInputTokens` selector (for token-tiered routing),
    * or an array of ModelWithRetries for fallback support.
    *
    * Cannot be set if a top-level `model` is also provided on ObservationalMemoryConfig.
    *
    * @default 'google/gemini-2.5-flash'
    */
-  model?: AgentConfig['model'];
+  model?: ObservationalMemoryModel;
 
   /**
    * Token count of observations that triggers reflection.
@@ -275,6 +281,12 @@ export interface ObservationMarkerConfig {
   messageTokens: number;
   observationTokens: number;
   scope: 'thread' | 'resource';
+  activateAfterIdle?: number;
+}
+
+export interface ObservationModelContext {
+  provider?: string;
+  modelId?: string;
 }
 
 /**
@@ -615,6 +627,21 @@ export interface DataOmActivationPart {
 
     /** The actual observations from activated chunks (for UI display) */
     observations?: string;
+
+    /** Whether activation was triggered by threshold crossing, activateAfterIdle expiry, or a model/provider change */
+    triggeredBy?: 'threshold' | 'ttl' | 'provider_change';
+
+    /** Unix-ms timestamp of the last assistant message part used for TTL checks */
+    lastActivityAt?: number;
+
+    /** How long activateAfterIdle had been exceeded when activation fired */
+    ttlExpiredMs?: number;
+
+    /** Previous assistant model identifier that triggered activation, e.g. openai/gpt-4o */
+    previousModel?: string;
+
+    /** Current actor model identifier that triggered activation, e.g. anthropic/claude-3-7-sonnet */
+    currentModel?: string;
   };
 }
 
@@ -684,4 +711,229 @@ export interface DataOmObservedPart {
     /** Snapshot of config at observation time (for debugging) */
     config?: ObservationMarkerConfig;
   };
+}
+
+// ─── Types moved from observational-memory.ts ──────────────────────────────
+
+/**
+ * Debug event emitted when observation-related events occur.
+ * Useful for understanding what the Observer is doing.
+ */
+export interface ObservationDebugEvent {
+  type:
+    | 'observation_triggered'
+    | 'observation_complete'
+    | 'reflection_triggered'
+    | 'reflection_complete'
+    | 'tokens_accumulated'
+    | 'step_progress';
+  timestamp: Date;
+  threadId: string;
+  resourceId: string;
+  /** Messages that were sent to the Observer */
+  messages?: Array<{ role: string; content: string }>;
+  /** Token counts */
+  pendingTokens?: number;
+  sessionTokens?: number;
+  totalPendingTokens?: number;
+  threshold?: number;
+  /** Input token count (for reflection events) */
+  inputTokens?: number;
+  /** Number of active observations (for reflection events) */
+  activeObservationsLength?: number;
+  /** Output token count after reflection */
+  outputTokens?: number;
+  /** The observations that were generated */
+  observations?: string;
+  /** Previous observations (before this event) */
+  previousObservations?: string;
+  /** Observer's raw output */
+  rawObserverOutput?: string;
+  /** LLM usage from Observer/Reflector calls */
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+  };
+  /** Step progress fields (for step_progress events) */
+  stepNumber?: number;
+  finishReason?: string;
+  thresholdPercent?: number;
+  willSave?: boolean;
+  willObserve?: boolean;
+}
+
+/**
+ * Configuration for ObservationalMemory
+ */
+export interface ObservationalMemoryConfig {
+  /**
+   * Storage adapter for persisting observations.
+   * Must be a MemoryStorage instance (from MastraStorage.stores.memory).
+   */
+  storage: MemoryStorage;
+
+  /**
+   * **Experimental.** Enable retrieval-mode observation group metadata.
+   * When true, observation groups are treated as durable pointers to raw
+   * message history and a `recall` tool is registered so the actor can
+   * inspect raw messages behind a stored observation summary.
+   *
+   * Use `{ vector: true }` to also index emitted observation groups into the
+   * configured vector store for semantic recall, and `scope` to limit recall
+   * browsing to the current thread instead of the whole resource.
+   *
+   * @experimental
+   * @default false
+   */
+  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
+
+  /**
+   * Optional callback used to index emitted observation groups for semantic retrieval.
+   */
+  onIndexObservations?: (observation: {
+    text: string;
+    groupId: string;
+    range: string;
+    threadId: string;
+    resourceId: string;
+    observedAt?: Date;
+  }) => Promise<void>;
+
+  /**
+   * Model for both Observer and Reflector agents.
+   * Sets the model for both agents at once. Cannot be used together with
+   * `observation.model` or `reflection.model` — an error will be thrown.
+   *
+   * @default 'google/gemini-2.5-flash'
+   */
+  model?: ObservationalMemoryModel;
+
+  /**
+   * Observation step configuration.
+   */
+  observation?: ObservationConfig;
+
+  /**
+   * Reflection step configuration.
+   */
+  reflection?: ReflectionConfig;
+
+  /**
+   * Memory scope for observations.
+   * - 'resource': Observations span all threads for a resource (cross-thread memory)
+   * - 'thread': Observations are per-thread (default)
+   */
+  scope?: 'resource' | 'thread';
+
+  /**
+   * Debug callback for observation events.
+   * Called whenever observation-related events occur.
+   * Useful for debugging and understanding the observation flow.
+   */
+  onDebugEvent?: (event: ObservationDebugEvent) => void;
+
+  obscureThreadIds?: boolean;
+
+  /**
+   * Share the token budget between messages and observations.
+   * When true, the total budget = observation.messageTokens + reflection.observationTokens.
+   * - Messages can use more space when observations are small
+   * - Observations can use more space when messages are small
+   *
+   * This helps maximize context usage by allowing flexible allocation.
+   *
+   * @default false
+   */
+  shareTokenBudget?: boolean;
+
+  /**
+   * When true, inserts temporal-gap reminder markers before new user messages after
+   * significant inactivity.
+   *
+   * @default false
+   */
+  temporalMarkers?: boolean;
+
+  /**
+   * Time before buffered observations or buffered reflections are force-activated after inactivity.
+   * Accepts milliseconds as a number or a duration string like `"5m"` or `"1hr"`.
+   * When the gap between the current time and the last assistant message part's `createdAt`
+   * exceeds this value, buffered observational memory activates regardless of whether the
+   * token threshold has been reached.
+   */
+  activateAfterIdle?: number | string;
+
+  /**
+   * Force-activate buffered observations and reflections when the actor provider/model changes.
+   * This helps flush prompt-cache-specific memory before switching to a different model.
+   */
+  activateOnProviderChange?: boolean;
+}
+
+/**
+ * Internal resolved config with all defaults applied.
+ * Thresholds are stored as ThresholdRange internally for dynamic calculation,
+ * even when user provides a simple number (converted based on shareTokenBudget).
+ */
+export interface ResolvedObservationConfig {
+  model: ObservationalMemoryModel;
+  /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
+  messageTokens: number | ThresholdRange;
+  /** Whether shared token budget is enabled */
+  shareTokenBudget: boolean;
+  /** Model settings - merged with user config and defaults */
+  modelSettings: ModelSettings;
+  providerOptions: ProviderOptions;
+  maxTokensPerBatch: number;
+  /** Token interval for async background observation buffering (resolved from config) */
+  bufferTokens?: number;
+  /** Ratio of buffered observations to activate (0-1 float) */
+  bufferActivation?: number;
+  /** Time in milliseconds before buffered observations are force-activated based on the last assistant message part timestamp */
+  activateAfterIdle?: number;
+  /** Force-activate buffered observations when the actor model/provider changes */
+  activateOnProviderChange?: boolean;
+  /** Token threshold above which synchronous observation is forced */
+  blockAfter?: number;
+  /** Optional token budget for observer context optimization (0 = full truncation, false = disabled) */
+  previousObserverTokens?: number | false;
+  /** Custom instructions to append to the Observer's system prompt */
+  instruction?: string;
+  /** Whether the Observer should suggest thread titles */
+  threadTitle?: boolean;
+}
+
+export interface ResolvedReflectionConfig {
+  model: ObservationalMemoryModel;
+  /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
+  observationTokens: number | ThresholdRange;
+  /** Whether shared token budget is enabled */
+  shareTokenBudget: boolean;
+  /** Model settings - merged with user config and defaults */
+  modelSettings: ModelSettings;
+  providerOptions: ProviderOptions;
+  /** Ratio (0-1) controlling when async reflection buffering starts */
+  bufferActivation?: number;
+  /** Time in milliseconds before buffered reflections are force-activated based on the last assistant message part timestamp */
+  activateAfterIdle?: number;
+  /** Force-activate buffered reflections when the actor model/provider changes */
+  activateOnProviderChange?: boolean;
+  /** Token threshold above which synchronous reflection is forced */
+  blockAfter?: number;
+  /** Custom instructions to append to the Reflector's system prompt */
+  instruction?: string;
+}
+
+export interface ObserveHookUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}
+
+export interface ObserveHooks {
+  onObservationStart?: () => void;
+  onObservationEnd?: (result: { usage?: ObserveHookUsage; error?: Error }) => void;
+  onReflectionStart?: () => void;
+  onReflectionEnd?: (result: { usage?: ObserveHookUsage; error?: Error }) => void;
 }

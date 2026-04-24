@@ -1,6 +1,6 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { MockMemory } from '../../memory/mock';
 import type { ChunkType } from '../../stream/types';
 import { createTool } from '../../tools';

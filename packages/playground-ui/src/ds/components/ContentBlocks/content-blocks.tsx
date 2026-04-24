@@ -1,4 +1,5 @@
-import { DragDropContext, Droppable, DropResult } from '@hello-pangea/dnd';
+import type { DropResult } from '@hello-pangea/dnd';
+import { DragDropContext, Droppable } from '@hello-pangea/dnd';
 
 export interface ContentBlocksProps<T> {
   children: React.ReactNode;

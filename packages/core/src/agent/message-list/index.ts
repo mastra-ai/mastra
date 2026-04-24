@@ -2,7 +2,7 @@
 export { MessageList } from './message-list';
 
 // Type exports
-export type { AIV5ResponseMessage, MessageInput, MessageListInput } from './types';
+export type { AIV5ResponseMessage, AIV6ResponseMessage, MessageInput, MessageListInput } from './types';
 
 // Re-export types from state/types (canonical source)
 export type {
@@ -10,6 +10,9 @@ export type {
   MastraMessageV1,
   MastraMessageContentV2,
   MastraMessagePart,
+  MastraToolApproval,
+  MastraToolInvocation,
+  MastraToolInvocationPart,
   UIMessageV4Part,
   MessageSource,
   MemoryInfo,
@@ -17,7 +20,7 @@ export type {
 } from './state/types';
 
 // Re-export AI SDK types for convenience
-export type { AIV5Type, AIV4Type, CoreMessageV4, UIMessageV4 } from './types';
+export type { AIV6Type, AIV5Type, AIV4Type, CoreMessageV4, UIMessageV4 } from './types';
 
 // Utility exports
 export { convertMessages } from './utils/convert-messages';
@@ -32,7 +35,7 @@ export {
 } from './conversion';
 
 // Adapter exports
-export { AIV4Adapter, AIV5Adapter } from './adapters';
+export { AIV4Adapter, AIV5Adapter, AIV6Adapter } from './adapters';
 export type { AIV4AdapterContext, AIV5AdapterContext, AdapterContext } from './adapters';
 
 // Provider compatibility exports

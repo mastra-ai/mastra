@@ -23,6 +23,21 @@ interface GoogleMetadata {
   usageMetadata?: GoogleUsageMetadata;
 }
 
+interface V3InputUsage {
+  total?: number;
+  noCache?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+}
+
+interface V3RawUsage {
+  inputTokens?: V3InputUsage;
+}
+
+function isV3RawUsage(raw: unknown): raw is V3RawUsage {
+  return typeof raw === 'object' && raw !== null && 'inputTokens' in raw;
+}
+
 /**
  * AI SDK aggregated input token details.
  * Available on totalUsage in multi-step runs — properly summed across all steps.
@@ -100,6 +115,11 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
   const anthropic = providerMetadata?.anthropic as AnthropicMetadata | undefined;
 
   if (anthropic) {
+    const rawV3InputUsage = isV3RawUsage(usage.raw) ? usage.raw.inputTokens : undefined;
+    const hasV3CachedTotals =
+      rawV3InputUsage?.total !== undefined &&
+      (rawV3InputUsage.cacheRead !== undefined || rawV3InputUsage.cacheWrite !== undefined);
+
     if (!isDefined(inputDetails.cacheRead) && isDefined(anthropic.cacheReadInputTokens)) {
       inputDetails.cacheRead = anthropic.cacheReadInputTokens;
     }
@@ -107,11 +127,12 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
       inputDetails.cacheWrite = anthropic.cacheCreationInputTokens;
     }
 
-    // For Anthropic, adjust inputTokens to include cache tokens
-    // Per Anthropic docs: "Total input tokens is the summation of input_tokens,
-    // cache_creation_input_tokens, and cache_read_input_tokens"
-    if (isDefined(inputDetails.cacheRead) || isDefined(inputDetails.cacheWrite)) {
-      inputDetails.text = usage.inputTokens;
+    // Skip adjustment when inputTokens already includes cache tokens.
+    // Detected via V3 raw structure or a positive cachedInputTokens field.
+    const inputAlreadyIncludesCache =
+      hasV3CachedTotals || (isDefined(usage.cachedInputTokens) && usage.cachedInputTokens > 0);
+
+    if (!inputAlreadyIncludesCache && (isDefined(inputDetails.cacheRead) || isDefined(inputDetails.cacheWrite))) {
       inputTokens = (usage.inputTokens ?? 0) + (inputDetails.cacheRead ?? 0) + (inputDetails.cacheWrite ?? 0);
     }
   }
@@ -130,6 +151,17 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
     }
   }
 
+  if (isDefined(inputTokens)) {
+    inputDetails.text = Math.max(
+      0,
+      inputTokens - sumDefinedValues(inputDetails, ['cacheRead', 'cacheWrite', 'audio', 'image']),
+    );
+  }
+
+  if (isDefined(outputTokens)) {
+    outputDetails.text = Math.max(0, outputTokens - sumDefinedValues(outputDetails, ['reasoning', 'audio', 'image']));
+  }
+
   // Build the final UsageStats object
   const result: UsageStats = {
     inputTokens,
@@ -145,4 +177,8 @@ export function extractUsageMetrics(usage?: LanguageModelUsage, providerMetadata
   }
 
   return result;
+}
+
+function sumDefinedValues<T extends object, K extends keyof T>(obj: T, keys: K[]): number {
+  return keys.reduce((sum, key) => sum + ((obj[key] as number | undefined) ?? 0), 0);
 }

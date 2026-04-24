@@ -5,18 +5,10 @@ import {
   metadataField,
   paginationArgsSchema,
   paginationInfoSchema,
-  parentEntityNameField,
-  parentEntityTypeField,
-  requestIdField,
-  resourceIdField,
-  rootEntityNameField,
-  rootEntityTypeField,
-  runIdField,
-  sessionIdField,
   sortDirectionSchema,
-  sourceField,
+  spanIdField,
   tagsField,
-  threadIdField,
+  traceIdField,
 } from '../shared';
 
 // ============================================================================
@@ -39,20 +31,23 @@ const logDataField = z.record(z.string(), z.unknown()).describe('Structured data
  */
 export const logRecordSchema = z
   .object({
+    logId: z.string().nullish().describe('Unique id for this log event'),
     timestamp: z.date().describe('When the log was created'),
     level: logLevelSchema.describe('Log severity level'),
     message: messageField,
     data: logDataField.nullish(),
 
     // Correlation
-    traceId: z.string().nullish().describe('Trace ID for correlation'),
-    spanId: z.string().nullish().describe('Span ID for correlation'),
+    traceId: traceIdField.nullish(),
+    spanId: spanIdField.nullish(),
 
-    // Context fields (same as tracing)
+    // Context fields
     ...contextFields,
+    /**
+     * @deprecated Use `executionSource` instead.
+     */
+    source: z.string().nullish().describe('Execution source'),
 
-    // Filtering
-    tags: tagsField.nullish(),
     metadata: metadataField.nullish(),
   })
   .describe('Log record as stored in the database');
@@ -110,31 +105,14 @@ export const logsFilterSchema = z
     ...commonFilterFields,
 
     // Log-specific filters
+    /**
+     * @deprecated Use `executionSource` instead.
+     */
+    source: z.string().optional().describe('Filter by execution source'),
     level: z
       .union([logLevelSchema, z.array(logLevelSchema)])
       .optional()
       .describe('Filter by log level(s)'),
-
-    // Extended correlation filters
-    runId: runIdField.optional(),
-    sessionId: sessionIdField.optional(),
-    threadId: threadIdField.optional(),
-    requestId: requestIdField.optional(),
-
-    // Parent/root entity filters
-    parentEntityType: parentEntityTypeField.optional(),
-    parentEntityName: parentEntityNameField.optional(),
-    rootEntityType: rootEntityTypeField.optional(),
-    rootEntityName: rootEntityNameField.optional(),
-
-    // Multi-tenancy filters
-    resourceId: resourceIdField.optional(),
-    source: sourceField.optional(),
-
-    // Content filters
-    search: z.string().optional().describe('Full-text search on message'),
-    tags: z.array(z.string()).optional().describe('Filter by tags (logs must have all specified tags)'),
-    dataKeys: z.array(z.string()).optional().describe('Filter logs that have specific data keys'),
   })
   .describe('Filters for querying logs');
 

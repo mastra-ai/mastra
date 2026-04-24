@@ -67,6 +67,13 @@ export interface WorkspaceSkillsImplConfig {
   searchEngine?: SkillSearchEngine;
   /** Validate skills on load (default: true) */
   validateOnLoad?: boolean;
+  /**
+   * Check SKILL.md file mtime in addition to directory mtime for staleness detection.
+   * Enables detection of in-place file edits (e.g., fixing validation errors).
+   * Increases stat calls - recommended for local development only.
+   * Default: false
+   */
+  checkSkillFileMtime?: boolean;
 }
 
 /**
@@ -77,9 +84,10 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   readonly #skillsResolver: SkillsResolver;
   readonly #searchEngine?: SkillSearchEngine;
   readonly #validateOnLoad: boolean;
+  readonly #checkSkillFileMtime: boolean;
 
-  /** Map of skill name -> full skill data */
-  #skills: Map<string, InternalSkill> = new Map();
+  /** Map of skill name -> array of candidates (supports same-named skills from different sources) */
+  #skills: Map<string, InternalSkill[]> = new Map();
 
   /** Whether skills have been discovered */
   #initialized = false;
@@ -104,6 +112,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     this.#skillsResolver = config.skills;
     this.#searchEngine = config.searchEngine;
     this.#validateOnLoad = config.validateOnLoad ?? true;
+    this.#checkSkillFileMtime = config.checkSkillFileMtime ?? false;
   }
 
   // ===========================================================================
@@ -112,18 +121,28 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
   async list(): Promise<SkillMetadata[]> {
     await this.#ensureInitialized();
-    return Array.from(this.#skills.values()).map(skill => ({
-      name: skill.name,
-      description: skill.description,
-      license: skill.license,
-      compatibility: skill.compatibility,
-      metadata: skill.metadata,
-    }));
+
+    const results: SkillMetadata[] = [];
+    for (const candidates of this.#skills.values()) {
+      const canonicalCandidates = await this.#dedupeCanonicalCandidates(candidates);
+      for (const skill of canonicalCandidates) {
+        results.push({
+          name: skill.name,
+          path: skill.path,
+          description: skill.description,
+          license: skill.license,
+          compatibility: skill.compatibility,
+          metadata: skill.metadata,
+        });
+      }
+    }
+    return results;
   }
 
   async get(name: string): Promise<Skill | null> {
     await this.#ensureInitialized();
-    const skill = this.#skills.get(name);
+    // Try name-based lookup first, then fall back to path-based (escape hatch)
+    const skill = (await this.#resolveByName(name)) ?? this.#resolveByPath(name);
     if (!skill) return null;
 
     // Return without internal indexableContent field
@@ -133,13 +152,127 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
   async has(name: string): Promise<boolean> {
     await this.#ensureInitialized();
-    return this.#skills.has(name);
+    return ((await this.#resolveByName(name)) ?? this.#resolveByPath(name)) !== null;
+  }
+
+  // ===========================================================================
+  // Skill Resolution (Private)
+  // ===========================================================================
+
+  /**
+   * Resolve a skill by name with tie-breaking when multiple candidates exist.
+   * Priority: local > managed > external, then alphabetical path.
+   */
+  async #resolveByName(name: string): Promise<InternalSkill | null> {
+    const candidates = this.#skills.get(name);
+    if (!candidates || candidates.length === 0) return null;
+    return this.#tieBreak(candidates);
+  }
+
+  /**
+   * Resolve a skill by exact path (escape hatch for disambiguation).
+   * Searches across all candidate arrays.
+   * Accepts paths with or without a trailing `/SKILL.md` suffix, since
+   * SkillsProcessor.formatLocation() exposes `${path}/SKILL.md` to the LLM.
+   */
+  #resolveByPath(skillPath: string): InternalSkill | null {
+    const normalized = skillPath.replace(/\/SKILL\.md$/, '');
+    for (const candidates of this.#skills.values()) {
+      const match = candidates.find(s => s.path === normalized);
+      if (match) return match;
+    }
+    return null;
+  }
+
+  async #getCanonicalSkillPath(skillPath: string): Promise<string> {
+    if (!this.#source.realpath) return skillPath;
+
+    try {
+      return await this.#source.realpath(skillPath);
+    } catch {
+      return skillPath;
+    }
+  }
+
+  async #dedupeCanonicalCandidates(candidates: InternalSkill[]): Promise<InternalSkill[]> {
+    const canonicalGroups = new Map<string, InternalSkill[]>();
+    for (const candidate of candidates) {
+      const canonicalPath = await this.#getCanonicalSkillPath(candidate.path);
+      const group = canonicalGroups.get(canonicalPath) ?? [];
+      group.push(candidate);
+      canonicalGroups.set(canonicalPath, group);
+    }
+
+    const SOURCE_PRIORITY: Record<string, number> = { local: 0, managed: 1, external: 2 };
+    return [...canonicalGroups.values()].map(
+      group =>
+        [...group].sort((a, b) => {
+          const aPri = SOURCE_PRIORITY[a.source.type] ?? 99;
+          const bPri = SOURCE_PRIORITY[b.source.type] ?? 99;
+          if (aPri !== bPri) return aPri - bPri;
+          return a.path.localeCompare(b.path);
+        })[0]!,
+    );
+  }
+
+  /**
+   * Pick the winning skill from an array of same-named candidates.
+   * When there's only one candidate, returns it directly (no warning).
+   * When there are multiple, de-duplicates alias paths that point to the same
+   * canonical skill, then applies source-type priority and warns.
+   *
+   * Priority: local (0) > managed (1) > external (2).
+   * Throws if source-type priority can't resolve the tie (e.g., two distinct local skills with same name).
+   */
+  async #tieBreak(candidates: InternalSkill[]): Promise<InternalSkill | null> {
+    if (candidates.length === 0) return null;
+    if (candidates.length === 1) return candidates[0]!;
+
+    const deduped = await this.#dedupeCanonicalCandidates(candidates);
+
+    if (deduped.length === 1) return deduped[0]!;
+
+    const SOURCE_PRIORITY: Record<string, number> = { local: 0, managed: 1, external: 2 };
+    const sorted = [...deduped].sort((a, b) => {
+      const aPri = SOURCE_PRIORITY[a.source.type] ?? 99;
+      const bPri = SOURCE_PRIORITY[b.source.type] ?? 99;
+      if (aPri !== bPri) return aPri - bPri;
+      return a.path.localeCompare(b.path);
+    });
+
+    const winner = sorted[0]!;
+    const runnerUp = sorted[1]!;
+
+    // Error if source-type priority can't break the tie
+    if (winner.source.type === runnerUp.source.type) {
+      const paths = sorted
+        .filter(s => s.source.type === winner.source.type)
+        .map(s => `"${s.path}"`)
+        .join(', ');
+      throw new Error(
+        `[WorkspaceSkills] Cannot resolve skill "${winner.name}": multiple ${winner.source.type} skills found at ${paths}. ` +
+          `Rename one or move it to a different source type.`,
+      );
+    }
+
+    console.warn(
+      `[WorkspaceSkills] Multiple skills named "${winner.name}" found. ` +
+        `Using "${winner.path}" (source: ${winner.source.type}). ` +
+        `Other candidates: ${sorted
+          .slice(1)
+          .map(s => `"${s.path}" (${s.source.type})`)
+          .join(', ')}`,
+    );
+
+    return winner;
   }
 
   async refresh(): Promise<void> {
     // Remove only skill entries from the shared search engine (not workspace content)
-    for (const skill of this.#skills.values()) {
-      await this.#removeSkillFromIndex(skill);
+    for (const candidates of this.#skills.values()) {
+      for (const skill of candidates) {
+        await this.#removeSkillFromIndex(skill);
+      }
     }
     this.#skills.clear();
     this.#initialized = false;
@@ -191,13 +324,16 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     // Parse and add to cache
     const skill = await this.#parseSkillFile(skillFilePath, dirName, source);
 
-    // Remove old index entries if skill already exists (for update case)
-    const existing = this.#skills.get(skill.name);
-    if (existing) {
-      await this.#removeSkillFromIndex(existing);
+    // Remove old index entries if skill already exists at same path (for update case)
+    const candidates = this.#skills.get(skill.name) ?? [];
+    const existingIdx = candidates.findIndex(s => s.path === skill.path);
+    if (existingIdx >= 0) {
+      await this.#removeSkillFromIndex(candidates[existingIdx]!);
+      candidates[existingIdx] = skill;
+    } else {
+      candidates.push(skill);
     }
-
-    this.#skills.set(skill.name, skill);
+    this.#skills.set(skill.name, candidates);
     await this.#indexSkill(skill);
 
     // Update discovery time so maybeRefresh() doesn't trigger full scan
@@ -207,14 +343,22 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   async removeSkill(skillName: string): Promise<void> {
     await this.#ensureInitialized();
 
-    const skill = this.#skills.get(skillName);
+    // Resolve by name (tie-break winner), then fall back to path-based lookup
+    const skill = (await this.#resolveByName(skillName)) ?? this.#resolveByPath(skillName);
     if (!skill) return;
 
     // Remove from search index
     await this.#removeSkillFromIndex(skill);
 
-    // Remove from cache
-    this.#skills.delete(skillName);
+    // Remove from candidates array
+    const candidates = this.#skills.get(skill.name);
+    if (candidates) {
+      const idx = candidates.findIndex(s => s.path === skill.path);
+      if (idx >= 0) candidates.splice(idx, 1);
+      if (candidates.length === 0) {
+        this.#skills.delete(skill.name);
+      }
+    }
 
     // Update discovery time so maybeRefresh() doesn't trigger full scan
     this.#lastDiscoveryTime = Date.now();
@@ -254,8 +398,14 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
     const { topK = 5, minScore, skillNames, includeReferences = true, mode } = options;
 
-    // Get more results than needed to filter by skillNames/includeReferences
-    const expandedTopK = skillNames ? topK * 3 : topK;
+    // Ask the search engine for enough rows to survive post-search filtering and
+    // canonical alias de-duplication before applying the final topK.
+    const totalIndexedDocuments = [...this.#skills.values()].reduce(
+      (count, candidates) =>
+        count + candidates.reduce((skillCount, skill) => skillCount + 1 + skill.references.length, 0),
+      0,
+    );
+    const expandedTopK = Math.max(skillNames ? topK * 3 : topK, totalIndexedDocuments);
 
     // Delegate to SearchEngine
     const searchResults = await this.#searchEngine.search(query, {
@@ -265,15 +415,22 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     });
 
     const results: SkillSearchResult[] = [];
+    const seenCanonicalSources = new Set<string>();
 
     for (const result of searchResults) {
-      const skillName = result.metadata?.skillName as string;
+      const skillPath = result.metadata?.skillPath as string;
       const source = result.metadata?.source as string;
 
-      if (!skillName || !source) continue;
+      if (!skillPath || !source) continue;
+
+      // Map path back to the canonical skill winner for filtering and results.
+      const matchedSkill = this.#resolveByPath(skillPath);
+      if (!matchedSkill) continue;
+
+      const skill = (await this.#resolveByName(matchedSkill.name)) ?? matchedSkill;
 
       // Filter by skill names if specified
-      if (skillNames && !skillNames.includes(skillName)) {
+      if (skillNames && !skillNames.includes(skill.name)) {
         continue;
       }
 
@@ -282,8 +439,15 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
         continue;
       }
 
+      const canonicalSourceKey = `${skill.path}:${source}`;
+      if (seenCanonicalSources.has(canonicalSourceKey)) {
+        continue;
+      }
+      seenCanonicalSources.add(canonicalSourceKey);
+
       results.push({
-        skillName,
+        skillName: skill.name,
+        skillPath: skill.path,
         source,
         content: result.content,
         score: result.score,
@@ -304,7 +468,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   async getReference(skillName: string, referencePath: string): Promise<string | null> {
     await this.#ensureInitialized();
 
-    const skill = this.#skills.get(skillName);
+    const skill = (await this.#resolveByName(skillName)) ?? this.#resolveByPath(skillName);
     if (!skill) return null;
 
     const safeRefPath = this.#assertRelativePath(referencePath, 'reference');
@@ -325,7 +489,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   async getScript(skillName: string, scriptPath: string): Promise<string | null> {
     await this.#ensureInitialized();
 
-    const skill = this.#skills.get(skillName);
+    const skill = (await this.#resolveByName(skillName)) ?? this.#resolveByPath(skillName);
     if (!skill) return null;
 
     const safeScriptPath = this.#assertRelativePath(scriptPath, 'script');
@@ -346,7 +510,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   async getAsset(skillName: string, assetPath: string): Promise<Buffer | null> {
     await this.#ensureInitialized();
 
-    const skill = this.#skills.get(skillName);
+    const skill = (await this.#resolveByName(skillName)) ?? this.#resolveByPath(skillName);
     if (!skill) return null;
 
     const safeAssetPath = this.#assertRelativePath(assetPath, 'asset');
@@ -370,19 +534,19 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
   async listReferences(skillName: string): Promise<string[]> {
     await this.#ensureInitialized();
-    const skill = this.#skills.get(skillName);
+    const skill = (await this.#resolveByName(skillName)) ?? this.#resolveByPath(skillName);
     return skill?.references ?? [];
   }
 
   async listScripts(skillName: string): Promise<string[]> {
     await this.#ensureInitialized();
-    const skill = this.#skills.get(skillName);
+    const skill = (await this.#resolveByName(skillName)) ?? this.#resolveByPath(skillName);
     return skill?.scripts ?? [];
   }
 
   async listAssets(skillName: string): Promise<string[]> {
     await this.#ensureInitialized();
-    const skill = this.#skills.get(skillName);
+    const skill = (await this.#resolveByName(skillName)) ?? this.#resolveByPath(skillName);
     return skill?.assets ?? [];
   }
 
@@ -420,6 +584,21 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     })();
 
     await this.#initPromise;
+  }
+
+  /**
+   * Add a skill to the candidates map, keyed by name.
+   * Replaces an existing entry at the same path (update case), otherwise appends.
+   */
+  #addToSkillsMap(skill: InternalSkill): void {
+    const candidates = this.#skills.get(skill.name) ?? [];
+    const idx = candidates.findIndex(s => s.path === skill.path);
+    if (idx >= 0) {
+      candidates[idx] = skill;
+    } else {
+      candidates.push(skill);
+    }
+    this.#skills.set(skill.name, candidates);
   }
 
   /**
@@ -533,8 +712,8 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
           try {
             const skill = await this.#parseSkillFile(skillFilePath, entry.name, source);
 
-            // Set skill (later discoveries overwrite earlier ones)
-            this.#skills.set(skill.name, skill);
+            // Add to candidates array (replace if same path exists, otherwise append)
+            this.#addToSkillsMap(skill);
 
             // Index the skill content for search
             await this.#indexSkill(skill);
@@ -575,7 +754,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
         try {
           const skill = await this.#parseSkillFile(skillsPath, dirName, source);
-          this.#skills.set(skill.name, skill);
+          this.#addToSkillsMap(skill);
           await this.#indexSkill(skill);
         } catch (error) {
           if (error instanceof Error) {
@@ -593,7 +772,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
           try {
             const skill = await this.#parseSkillFile(skillFilePath, dirName, source);
-            this.#skills.set(skill.name, skill);
+            this.#addToSkillsMap(skill);
             await this.#indexSkill(skill);
           } catch (error) {
             if (error instanceof Error) {
@@ -676,6 +855,23 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
             continue;
           }
 
+          // If this directory is itself a skill root, check its SKILL.md mtime.
+          // This covers direct skill paths and file-level glob expansions (e.g., **/SKILL.md).
+          if (this.#checkSkillFileMtime) {
+            const directSkillFilePath = this.#joinPath(pathToCheck, 'SKILL.md');
+            try {
+              const directSkillFileStat = await this.#source.stat(directSkillFilePath);
+              if (
+                directSkillFileStat.type === 'file' &&
+                directSkillFileStat.modifiedAt.getTime() > this.#lastDiscoveryTime
+              ) {
+                return true;
+              }
+            } catch {
+              // Not a direct skill dir (or SKILL.md unavailable), continue to subdirectory scan.
+            }
+          }
+
           // Also check subdirectories (skill directories) for changes
           const entries = await this.#source.readdir(pathToCheck);
           for (const entry of entries) {
@@ -686,6 +882,20 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
               const entryStat = await this.#source.stat(entryPath);
               if (entryStat.modifiedAt.getTime() > this.#lastDiscoveryTime) {
                 return true;
+              }
+
+              // Optionally check SKILL.md file mtime - editing file content may not update directory mtime.
+              // This doubles stat calls per skill, so it's opt-in for local development scenarios.
+              if (this.#checkSkillFileMtime) {
+                const skillFilePath = this.#joinPath(entryPath, 'SKILL.md');
+                try {
+                  const skillFileStat = await this.#source.stat(skillFilePath);
+                  if (skillFileStat.type === 'file' && skillFileStat.modifiedAt.getTime() > this.#lastDiscoveryTime) {
+                    return true;
+                  }
+                } catch {
+                  // SKILL.md doesn't exist or can't be stat'd, skip
+                }
               }
             } catch {
               // Couldn't stat entry, skip it
@@ -713,8 +923,12 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     const body = parsed.content.trim();
 
     // Extract required fields
+    // Get skill directory path (parent of SKILL.md) - needed for SkillMetadata
+    const skillPath = this.#getParentPath(filePath);
+
     const metadata: SkillMetadata = {
       name: frontmatter.name,
+      path: skillPath,
       description: frontmatter.description,
       license: frontmatter.license,
       compatibility: frontmatter.compatibility,
@@ -729,9 +943,6 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       }
     }
 
-    // Get skill directory path (parent of SKILL.md)
-    const skillPath = this.#getParentPath(filePath);
-
     // Discover reference, script, and asset files
     const references = await this.#discoverFilesInSubdir(skillPath, 'references');
     const scripts = await this.#discoverFilesInSubdir(skillPath, 'scripts');
@@ -742,7 +953,6 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
     return {
       ...metadata,
-      path: skillPath,
       instructions: body,
       source,
       references,
@@ -850,7 +1060,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   async #removeSkillFromIndex(skill: InternalSkill): Promise<void> {
     if (!this.#searchEngine?.remove) return;
 
-    const ids = [`skill:${skill.name}:SKILL.md`, ...skill.references.map(r => `skill:${skill.name}:${r}`)];
+    const ids = [`skill:${skill.path}:SKILL.md`, ...skill.references.map(r => `skill:${skill.path}:${r}`)];
     for (const id of ids) {
       try {
         await this.#searchEngine.remove(id);
@@ -880,10 +1090,10 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
     // Index the main skill instructions
     await this.#searchEngine.index({
-      id: `skill:${skill.name}:SKILL.md`,
+      id: `skill:${skill.path}:SKILL.md`,
       content: skill.instructions,
       metadata: {
-        skillName: skill.name,
+        skillPath: skill.path,
         source: 'SKILL.md',
       },
     });
@@ -895,10 +1105,10 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
         const rawContent = await this.#source.readFile(fullPath);
         const content = typeof rawContent === 'string' ? rawContent : rawContent.toString('utf-8');
         await this.#searchEngine.index({
-          id: `skill:${skill.name}:${refPath}`,
+          id: `skill:${skill.path}:${refPath}`,
           content,
           metadata: {
-            skillName: skill.name,
+            skillPath: skill.path,
             source: `references/${refPath}`,
           },
         });
@@ -916,7 +1126,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     const queryLower = query.toLowerCase();
     const results: SkillSearchResult[] = [];
 
-    for (const skill of this.#skills.values()) {
+    for (const candidates of this.#skills.values()) {
+      // Use tie-break winner for each name
+      const skill = await this.#tieBreak(candidates);
+      if (!skill) continue;
+
       // Filter by skill names if specified
       if (skillNames && !skillNames.includes(skill.name)) {
         continue;
@@ -926,6 +1140,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       if (skill.instructions.toLowerCase().includes(queryLower)) {
         results.push({
           skillName: skill.name,
+          skillPath: skill.path,
           source: 'SKILL.md',
           content: skill.instructions.substring(0, 200),
           score: 1,
@@ -940,6 +1155,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
           if (content && content.toLowerCase().includes(queryLower)) {
             results.push({
               skillName: skill.name,
+              skillPath: skill.path,
               source: `references/${refPath}`,
               content: content.substring(0, 200),
               score: 0.8,
@@ -974,10 +1190,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    */
   #joinPath(...segments: string[]): string {
     return segments
-      .map((seg, i) => {
-        if (i === 0) return seg.replace(/\/+$/, '');
-        return seg.replace(/^\/+|\/+$/g, '');
-      })
+      .map((seg, i) => (i === 0 ? stripTrailingSlashes(seg) : stripLeadingAndTrailingSlashes(seg)))
       .filter(Boolean)
       .join('/');
   }
@@ -1002,4 +1215,24 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     const lastSlash = path.lastIndexOf('/');
     return lastSlash > 0 ? path.substring(0, lastSlash) : '/';
   }
+}
+
+function stripTrailingSlashes(s: string): string {
+  let end = s.length;
+  while (end > 0 && s.charCodeAt(end - 1) === 47 /* "/" */) {
+    end--;
+  }
+  return end === s.length ? s : s.slice(0, end);
+}
+
+function stripLeadingAndTrailingSlashes(s: string): string {
+  let start = 0;
+  while (start < s.length && s.charCodeAt(start) === 47 /* "/" */) {
+    start++;
+  }
+  let end = s.length;
+  while (end > start && s.charCodeAt(end - 1) === 47 /* "/" */) {
+    end--;
+  }
+  return start === 0 && end === s.length ? s : s.slice(start, end);
 }

@@ -2,7 +2,6 @@
 title: "Langfuse exporter | Tracing | Observability"
 description: "Send traces to Langfuse for LLM observability and analytics"
 packages:
-  - "@mastra/core"
   - "@mastra/langfuse"
   - "@mastra/observability"
 ---
@@ -71,9 +70,8 @@ export const mastra = new Mastra({
             publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
             secretKey: process.env.LANGFUSE_SECRET_KEY!,
             baseUrl: process.env.LANGFUSE_BASE_URL,
-            options: {
-              environment: process.env.NODE_ENV,
-            },
+            environment: process.env.NODE_ENV,
+            release: process.env.GIT_COMMIT,
           }),
         ],
       },
@@ -112,6 +110,35 @@ new LangfuseExporter({
 })
 ```
 
+#### Batch Tuning for High-Volume Traces
+
+For self-hosted Langfuse deployments or streamed runs that produce many spans per second, you can tune the OTEL batch size and flush interval to reduce request pressure on the Langfuse ingestion endpoint:
+
+```typescript
+new LangfuseExporter({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+  flushAt: 500, // Maximum spans per OTEL export batch
+  flushInterval: 20, // Maximum seconds between flushes
+})
+```
+
+To suppress high-volume span types entirely (for example `MODEL_CHUNK` spans from streamed responses), use the observability-level [`excludeSpanTypes` option](/reference/observability/tracing/span-filtering) rather than configuring the exporter:
+
+```typescript
+import { SpanType } from '@mastra/core/observability'
+
+new Observability({
+  configs: {
+    langfuse: {
+      serviceName: 'my-service',
+      exporters: [new LangfuseExporter()],
+      excludeSpanTypes: [SpanType.MODEL_CHUNK],
+    },
+  },
+})
+```
+
 ### Complete Configuration
 
 ```typescript
@@ -123,14 +150,13 @@ new LangfuseExporter({
   // Optional settings
   baseUrl: process.env.LANGFUSE_BASE_URL, // Default: https://cloud.langfuse.com
   realtime: process.env.NODE_ENV === 'development', // Dynamic mode selection
+  flushAt: 500, // Maximum spans per OTEL export batch
+  flushInterval: 20, // Maximum seconds between flushes
   logLevel: 'info', // Diagnostic logging: debug | info | warn | error
 
-  // Langfuse-specific options
-  options: {
-    environment: process.env.NODE_ENV, // Shows in UI for filtering
-    version: process.env.APP_VERSION, // Track different versions
-    release: process.env.GIT_COMMIT, // Git commit hash
-  },
+  // Langfuse-specific settings
+  environment: process.env.NODE_ENV, // Shows in Langfuse UI for filtering
+  release: process.env.GIT_COMMIT, // Git commit hash for version tracking
 })
 ```
 
@@ -145,26 +171,26 @@ Use `withLangfusePrompt` with `buildTracingOptions` for the cleanest API:
 ```typescript title="src/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
 import { buildTracingOptions } from '@mastra/observability'
-import { withLangfusePrompt } from '@mastra/langfuse'
-import { Langfuse } from 'langfuse'
+import { LangfuseExporter, withLangfusePrompt } from '@mastra/langfuse'
 
-// Reads credentials from LANGFUSE_SECRET_KEY, LANGFUSE_PUBLIC_KEY, LANGFUSE_BASE_URL env vars
-const langfuse = new Langfuse()
+const exporter = new LangfuseExporter()
 
-// Fetch the prompt from Langfuse Prompt Management
-const prompt = await langfuse.getPrompt('customer-support')
+// Fetch the prompt from Langfuse Prompt Management via the client
+const prompt = await exporter.client.prompt.get('customer-support', { type: 'text' })
 
 export const supportAgent = new Agent({
   name: 'support-agent',
-  instructions: prompt.prompt, // Use the prompt text from Langfuse
+  instructions: prompt.compile(), // Use the prompt text from Langfuse
   model: 'openai/gpt-5.4',
   defaultGenerateOptions: {
-    tracingOptions: buildTracingOptions(withLangfusePrompt(prompt)),
+    tracingOptions: buildTracingOptions(
+      withLangfusePrompt({ name: prompt.name, version: prompt.version }),
+    ),
   },
 })
 ```
 
-The `withLangfusePrompt` helper automatically extracts `name`, `version`, and `id` from the Langfuse prompt object.
+The `withLangfusePrompt` helper accepts `name` and `version` fields for prompt linking. Langfuse v5 requires both fields.
 
 ### Manual Fields
 
@@ -172,26 +198,16 @@ You can also pass manual fields if you're not using the Langfuse SDK:
 
 ```typescript
 const tracingOptions = buildTracingOptions(withLangfusePrompt({ name: 'my-prompt', version: 1 }))
-
-// Or with just an ID
-const tracingOptions = buildTracingOptions(withLangfusePrompt({ id: 'prompt-uuid-12345' }))
 ```
 
 ### Prompt Object Fields
 
-The prompt object supports these fields:
+The prompt object requires both `name` and `version`:
 
 | Field | Type | Description |
 | - | - | - |
 | `name` | string | The prompt name in Langfuse |
 | `version` | number | The prompt version number |
-| `id` | string | The prompt UUID for direct linking |
-
-You can link prompts using either:
-
-- `id` alone (the UUID uniquely identifies a prompt version)
-- `name` + `version` together
-- All three fields
 
 When set on a `MODEL_GENERATION` span, the Langfuse exporter automatically links the generation to the corresponding prompt.
 

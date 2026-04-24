@@ -1,5 +1,5 @@
 import { getColumnTemplate } from './shared';
-import { type ColumnType } from './types';
+import type { ColumnType } from './types';
 
 import { cn } from '@/lib/utils';
 

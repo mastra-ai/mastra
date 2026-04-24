@@ -1,7 +1,7 @@
 import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { RequestContext } from '@mastra/core/di';
 import type { WorkflowInfo, ChunkType, StreamEvent, WorkflowStateField } from '@mastra/core/workflows';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import { streamResponseSchema } from '../schemas/agents';
 import { optionalRunIdSchema, runIdSchema } from '../schemas/common';

@@ -19,6 +19,7 @@ const processor = new PIIDetector({
   threshold: 0.6,
   strategy: 'redact',
   detectionTypes: ['email', 'phone', 'credit-card', 'ssn'],
+  lastMessageOnly: true,
 })
 ```
 
@@ -85,6 +86,14 @@ const processor = new PIIDetector({
             name: 'includeDetections',
             type: 'boolean',
             description: 'Whether to include detection details in logs. Useful for compliance auditing and debugging',
+            isOptional: true,
+            default: 'false',
+          },
+          {
+            name: 'lastMessageOnly',
+            type: 'boolean',
+            description:
+              'Whether to inspect only the most recent message in the batch instead of checking every message. Use this to avoid one LLM call per earlier message in long threads.',
             isOptional: true,
             default: 'false',
           },

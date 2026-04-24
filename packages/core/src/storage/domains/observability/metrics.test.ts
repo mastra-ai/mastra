@@ -12,10 +12,14 @@ import {
   aggregationTypeSchema,
   batchCreateMetricsArgsSchema,
   createMetricRecordSchema,
+  listMetricsArgsSchema,
+  listMetricsResponseSchema,
   getMetricAggregateArgsSchema,
   getMetricAggregateResponseSchema,
   getMetricBreakdownArgsSchema,
+  getMetricBreakdownResponseSchema,
   getMetricTimeSeriesArgsSchema,
+  getMetricTimeSeriesResponseSchema,
   getMetricPercentilesArgsSchema,
   metricInputSchema,
   metricRecordSchema,
@@ -34,12 +38,20 @@ describe('Metric Schemas', () => {
         name: 'mastra_agent_duration_ms',
         value: 150.5,
         labels: { agent: 'weatherAgent', status: 'success' },
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        estimatedCost: 0.00123,
+        costUnit: 'usd',
+        costMetadata: { source: 'snapshot' },
         metadata: { environment: 'production' },
         createdAt: now,
         updatedAt: now,
       });
       expect(record.name).toBe('mastra_agent_duration_ms');
       expect(record.value).toBe(150.5);
+      expect(record.provider).toBe('openai');
+      expect(record.estimatedCost).toBe(0.00123);
+      expect(record.costMetadata).toEqual({ source: 'snapshot' });
     });
 
     it('defaults labels to empty object', () => {
@@ -62,6 +74,12 @@ describe('Metric Schemas', () => {
         value: 1,
         traceId: 'trace-1',
         spanId: 'span-1',
+        tags: ['prod', 'agent'],
+        scope: { pkg: 'core', version: '1.0.0' },
+        provider: 'anthropic',
+        model: 'claude-3-7-sonnet',
+        estimatedCost: 0,
+        costUnit: 'usd',
         entityType: 'agent',
         entityName: 'myAgent',
         parentEntityType: 'workflow_run',
@@ -74,6 +92,9 @@ describe('Metric Schemas', () => {
         updatedAt: null,
       });
       expect(record.traceId).toBe('trace-1');
+      expect(record.tags).toEqual(['prod', 'agent']);
+      expect(record.scope).toEqual({ pkg: 'core', version: '1.0.0' });
+      expect(record.provider).toBe('anthropic');
       expect(record.parentEntityType).toBe('workflow_run');
       expect(record.experimentId).toBe('exp-1');
     });
@@ -127,6 +148,22 @@ describe('Metric Schemas', () => {
     });
   });
 
+  describe('listMetrics schemas', () => {
+    it('listMetricsArgsSchema applies defaults', () => {
+      const args = listMetricsArgsSchema.parse({});
+      expect(args.pagination).toEqual({ page: 0, perPage: 10 });
+      expect(args.orderBy).toEqual({ field: 'timestamp', direction: 'DESC' });
+    });
+
+    it('listMetricsResponseSchema validates', () => {
+      const response = listMetricsResponseSchema.parse({
+        pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
+        metrics: [{ timestamp: now, name: 'test', value: 1 }],
+      });
+      expect(response.metrics).toHaveLength(1);
+    });
+  });
+
   describe('aggregation schemas', () => {
     it('accepts valid aggregation types', () => {
       for (const type of ['sum', 'avg', 'min', 'max', 'count', 'last'] as const) {
@@ -163,13 +200,19 @@ describe('Metric Schemas', () => {
         timestamp: { start: now },
         name: ['mastra_agent_duration_ms', 'mastra_tool_duration_ms'],
         labels: { agent: 'weatherAgent' },
+        tags: ['prod'],
         environment: 'production',
         traceId: 'trace-1',
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        costUnit: 'usd',
         entityType: 'agent',
         experimentId: 'exp-1',
       });
       expect(filter.name).toHaveLength(2);
+      expect(filter.tags).toEqual(['prod']);
       expect(filter.traceId).toBe('trace-1');
+      expect(filter.provider).toBe('openai');
       expect(filter.experimentId).toBe('exp-1');
     });
 
@@ -198,10 +241,15 @@ describe('Metric Schemas', () => {
     it('getMetricAggregateResponseSchema validates', () => {
       const response = getMetricAggregateResponseSchema.parse({
         value: 42,
+        estimatedCost: 1.23,
+        costUnit: 'usd',
         previousValue: 35,
+        previousEstimatedCost: 1.0,
         changePercent: 20,
+        costChangePercent: 23,
       });
       expect(response.value).toBe(42);
+      expect(response.estimatedCost).toBe(1.23);
     });
 
     it('getMetricBreakdownArgsSchema validates', () => {
@@ -211,6 +259,20 @@ describe('Metric Schemas', () => {
         aggregation: 'avg',
       });
       expect(args.groupBy).toEqual(['entityType']);
+    });
+
+    it('getMetricBreakdownResponseSchema validates cost-bearing groups', () => {
+      const response = getMetricBreakdownResponseSchema.parse({
+        groups: [
+          {
+            dimensions: { entityType: 'agent' },
+            value: 42,
+            estimatedCost: 1.23,
+            costUnit: 'usd',
+          },
+        ],
+      });
+      expect(response.groups[0]!.estimatedCost).toBe(1.23);
     });
 
     it('getMetricTimeSeriesArgsSchema validates', () => {
@@ -223,6 +285,19 @@ describe('Metric Schemas', () => {
       expect(args.interval).toBe('1h');
     });
 
+    it('getMetricTimeSeriesResponseSchema validates cost-bearing points', () => {
+      const response = getMetricTimeSeriesResponseSchema.parse({
+        series: [
+          {
+            name: 'test',
+            costUnit: 'usd',
+            points: [{ timestamp: now, value: 42, estimatedCost: 1.23 }],
+          },
+        ],
+      });
+      expect(response.series[0]!.points[0]!.estimatedCost).toBe(1.23);
+    });
+
     it('getMetricPercentilesArgsSchema validates', () => {
       const args = getMetricPercentilesArgsSchema.parse({
         name: 'test',
@@ -230,6 +305,16 @@ describe('Metric Schemas', () => {
         interval: '1h',
       });
       expect(args.percentiles).toHaveLength(3);
+    });
+
+    it('getMetricPercentilesArgsSchema rejects empty percentile arrays', () => {
+      expect(() =>
+        getMetricPercentilesArgsSchema.parse({
+          name: 'test',
+          percentiles: [],
+          interval: '1h',
+        }),
+      ).toThrow();
     });
   });
 

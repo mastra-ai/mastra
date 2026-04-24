@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
-import z from 'zod';
+import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory';
 import { InMemoryStore } from '../../storage';
