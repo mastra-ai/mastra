@@ -647,7 +647,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
         this.#globResolveTimes.set(skillsPath, Date.now());
 
         // Process glob-resolved entries in parallel (independent discoveries)
-        await Promise.allSettled(
+        const results = await Promise.allSettled(
           resolved.map(async entry => {
             if (entry.type === 'file') {
               // File match (e.g., **/SKILL.md) — load as direct skill
@@ -661,6 +661,16 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
             }
           }),
         );
+
+        for (const [index, result] of results.entries()) {
+          const entry = resolved[index];
+          if (entry && result.status === 'rejected') {
+            const error = result.reason;
+            if (error instanceof Error) {
+              console.error(`[WorkspaceSkills] Failed to load skill from ${entry.path}:`, error.message);
+            }
+          }
+        }
       } else {
         // Check if the path is a direct skill reference (directory with SKILL.md or SKILL.md file)
         const isDirect = await this.#discoverDirectSkill(skillsPath, source);
