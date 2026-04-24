@@ -49,6 +49,7 @@ const AGENT_SNAPSHOT_CONFIG_FIELDS = [
   'mcpClients',
   'skills',
   'workspace',
+  'browser',
 ] as const;
 
 // ============================================================================
@@ -201,6 +202,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
     scorers,
     skills,
     workspace,
+    browser,
     requestContextSchema,
   }) => {
     try {
@@ -255,6 +257,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         scorers,
         skills,
         workspace,
+        browser,
         requestContextSchema,
       } as StorageCreateAgentInput;
 
@@ -345,6 +348,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
     scorers,
     skills,
     workspace,
+    browser,
     requestContextSchema,
     // Version metadata
     changeMessage,
@@ -400,6 +404,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         scorers,
         skills,
         workspace,
+        browser,
         requestContextSchema,
       } as StorageUpdateAgentInput);
 
@@ -421,6 +426,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         scorers,
         skills,
         workspace,
+        browser,
         requestContextSchema,
       };
 

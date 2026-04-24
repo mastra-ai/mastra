@@ -126,6 +126,40 @@ const workspaceRefSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('inline'), config: workspaceSnapshotConfigSchema }),
 ]);
 
+/** Screencast options for streaming browser frames */
+const screencastOptionsSchema = z.object({
+  format: z.enum(['jpeg', 'png']).optional().describe('Image format (default: jpeg)'),
+  quality: z.number().min(0).max(100).optional().describe('JPEG quality 0-100 (default: 80)'),
+  maxWidth: z.number().optional().describe('Max width in pixels (default: 1280)'),
+  maxHeight: z.number().optional().describe('Max height in pixels (default: 720)'),
+  everyNthFrame: z.number().optional().describe('Capture every Nth frame (default: 1)'),
+});
+
+/** Browser config: serializable browser configuration matching BrowserConfigBase */
+const browserConfigSchema = z.object({
+  provider: z.string().describe('Browser provider type (e.g., stagehand, playwright, browserbase)'),
+  headless: z.boolean().optional().describe('Run browser in headless mode (default: true)'),
+  viewport: z
+    .object({
+      width: z.number().describe('Viewport width in pixels'),
+      height: z.number().describe('Viewport height in pixels'),
+    })
+    .optional()
+    .describe('Browser viewport dimensions'),
+  timeout: z.number().optional().describe('Default timeout in milliseconds (default: 10000)'),
+  cdpUrl: z.string().optional().describe('CDP WebSocket URL for connecting to existing browser'),
+  scope: z.enum(['shared', 'thread']).optional().describe('Browser instance scope (default: thread)'),
+  screencast: screencastOptionsSchema.optional().describe('Screencast options for streaming browser frames'),
+  profile: z.string().optional().describe('Path to Chrome/Chromium user data directory'),
+  executablePath: z.string().optional().describe('Path to browser executable'),
+});
+
+/** Browser reference: inline browser configuration */
+const browserRefSchema = z.object({
+  type: z.literal('inline'),
+  config: browserConfigSchema,
+});
+
 /**
  * Processor phase enum matching ProcessorPhase type
  */
@@ -247,6 +281,9 @@ const snapshotConfigSchema = z.object({
   workspace: conditionalFieldSchema(workspaceRefSchema)
     .optional()
     .describe('Workspace reference (stored ID or inline config) — static or conditional'),
+  browser: conditionalFieldSchema(browserRefSchema)
+    .optional()
+    .describe('Browser configuration — static or conditional'),
   requestContextSchema: z
     .record(z.string(), z.unknown())
     .optional()
@@ -369,6 +406,9 @@ export const storedAgentSchema = z.object({
   workspace: conditionalFieldSchema(workspaceRefSchema)
     .optional()
     .describe('Workspace reference (stored ID or inline config) — static or conditional'),
+  browser: conditionalFieldSchema(browserRefSchema)
+    .optional()
+    .describe('Browser configuration — static or conditional'),
   requestContextSchema: z
     .record(z.string(), z.unknown())
     .optional()

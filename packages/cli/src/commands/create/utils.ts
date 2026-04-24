@@ -5,7 +5,6 @@ import path from 'node:path';
 import util from 'node:util';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
-import prettier from 'prettier';
 
 import { DepsService } from '../../services/service.deps.js';
 import { getPackageManagerAddCommand } from '../../utils/package-manager.js';
@@ -113,17 +112,12 @@ The [Mastra platform](https://projects.mastra.ai) provides two products for depl
 
 Learn more in the [Mastra platform documentation](https://mastra.ai/docs/mastra-platform/overview).`;
 
-  const formattedContent = await prettier.format(content, {
-    parser: 'markdown',
-    singleQuote: true,
-  });
-
-  await fs.writeFile(readmePath, formattedContent);
+  await fs.writeFile(readmePath, content);
 };
 
-async function installMastraDependency(
+async function installMastraDependencies(
   pm: PackageManager,
-  dependency: string,
+  dependencies: string[],
   versionTag: string,
   isDev: boolean,
   timeout?: number,
@@ -138,19 +132,23 @@ async function installMastraDependency(
     installCommand = `${installCommand} -D`;
   }
 
+  const dependenciesWithVersion = dependencies.map(dependency => `${dependency}${versionTag}`).join(' ');
+
   try {
-    await execWithTimeout(`${pm} ${installCommand} ${dependency}${versionTag}`, timeout);
+    await execWithTimeout(`${pm} ${installCommand} ${dependenciesWithVersion}`, timeout);
   } catch (err) {
     if (versionTag === '@latest') {
       throw new Error(
-        `Failed to install ${dependency}@latest: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        `Failed to install ${dependenciesWithVersion}: ${err instanceof Error ? err.message : 'Unknown error'}`,
       );
     }
+
+    const latestDependencies = dependencies.map(dependency => `${dependency}@latest`).join(' ');
     try {
-      await execWithTimeout(`${pm} ${installCommand} ${dependency}@latest`, timeout);
+      await execWithTimeout(`${pm} ${installCommand} ${latestDependencies}`, timeout);
     } catch (fallbackErr) {
       throw new Error(
-        `Failed to install ${dependency} (tried ${versionTag} and @latest): ${fallbackErr instanceof Error ? fallbackErr.message : 'Unknown error'}`,
+        `Failed to install ${dependencies.join(', ')} (tried ${versionTag} and @latest): ${fallbackErr instanceof Error ? fallbackErr.message : 'Unknown error'}`,
       );
     }
   }
@@ -285,7 +283,7 @@ export const createMastraProject = async ({
     const versionTag = createVersionTag ? `@${createVersionTag}` : '@latest';
 
     try {
-      await installMastraDependency(pm, 'mastra', versionTag, true, timeout);
+      await installMastraDependencies(pm, ['mastra'], versionTag, true, timeout);
     } catch (error) {
       throw new Error(`Failed to install Mastra CLI: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -293,9 +291,13 @@ export const createMastraProject = async ({
 
     s.start('Installing Mastra dependencies');
     try {
-      await installMastraDependency(pm, '@mastra/core', versionTag, false, timeout);
-      await installMastraDependency(pm, '@mastra/libsql', versionTag, false, timeout);
-      await installMastraDependency(pm, '@mastra/memory', versionTag, false, timeout);
+      await installMastraDependencies(
+        pm,
+        ['@mastra/core', '@mastra/libsql', '@mastra/memory'],
+        versionTag,
+        false,
+        timeout,
+      );
     } catch (error) {
       throw new Error(
         `Failed to install Mastra dependencies: ${error instanceof Error ? error.message : 'Unknown error'}`,

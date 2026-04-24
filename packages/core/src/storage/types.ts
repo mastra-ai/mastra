@@ -425,6 +425,8 @@ export interface StorageAgentSnapshotType {
   mcpClients?: StorageConditionalField<Record<string, StorageMCPClientToolsConfig>>;
   /** Workspace reference — ID of a stored workspace or inline config — static or conditional on request context */
   workspace?: StorageConditionalField<StorageWorkspaceRef>;
+  /** Browser configuration — provider and config for browser automation — static or conditional on request context */
+  browser?: StorageConditionalField<StorageBrowserRef>;
   /** Skill entity IDs with optional per-skill overrides — static or conditional on request context */
   skills?: StorageConditionalField<Record<string, StorageSkillConfig>>;
   /** Skill format for system message injection (default: 'xml') */
@@ -2031,6 +2033,85 @@ export interface StorageBlobEntry {
 export type StorageWorkspaceRef =
   | { type: 'id'; workspaceId: string }
   | { type: 'inline'; config: StorageWorkspaceSnapshotType };
+
+/**
+ * Serializable browser configuration for storage.
+ * Mirrors BrowserConfigBase but excludes non-serializable fields (functions).
+ *
+ * Runtime-only options (onLaunch, onClose, cdpUrl as function) are not stored;
+ * they're added when instantiating the browser at runtime.
+ */
+export interface StorageBrowserConfig {
+  /** Provider type identifier (e.g., 'stagehand', 'playwright', 'browserbase') — resolved by the editor's browser registry */
+  provider: string;
+
+  /**
+   * Whether to run the browser in headless mode (no visible UI).
+   * @default true
+   */
+  headless?: boolean;
+
+  /**
+   * Browser viewport dimensions.
+   * Controls the size of the browser window and how websites render.
+   */
+  viewport?: {
+    width: number;
+    height: number;
+  };
+
+  /**
+   * Default timeout in milliseconds for browser operations.
+   * @default 10000 (10 seconds)
+   */
+  timeout?: number;
+
+  /**
+   * CDP WebSocket URL for connecting to an existing browser.
+   * Only string URLs are storable; function providers must be set at runtime.
+   */
+  cdpUrl?: string;
+
+  /**
+   * Browser instance scope across threads.
+   * - `'thread'`: Each thread gets its own isolated browser instance.
+   * - `'shared'`: All threads share a single browser instance.
+   * @default 'thread'
+   */
+  scope?: 'shared' | 'thread';
+
+  /**
+   * Screencast options for streaming browser frames.
+   */
+  screencast?: {
+    /** Image format (default: 'jpeg') */
+    format?: 'jpeg' | 'png';
+    /** JPEG quality 0-100 (default: 80) */
+    quality?: number;
+    /** Max width in pixels (default: 1280) */
+    maxWidth?: number;
+    /** Max height in pixels (default: 720) */
+    maxHeight?: number;
+    /** Capture every Nth frame (default: 1) */
+    everyNthFrame?: number;
+  };
+
+  /**
+   * Path to a Chrome/Chromium user data directory (profile).
+   */
+  profile?: string;
+
+  /**
+   * Path to the browser executable to use.
+   */
+  executablePath?: string;
+}
+
+/**
+ * Browser reference configuration stored in agent snapshots.
+ * Provides inline browser config that the editor resolves at hydration time.
+ */
+export type StorageBrowserRef = { type: 'inline'; config: StorageBrowserConfig };
 
 // ============================================
 // Workflow Storage Types

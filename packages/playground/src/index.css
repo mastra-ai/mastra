@@ -2,6 +2,7 @@
 
 /* Scan playground-ui package for Tailwind classes */
 @source '../../node_modules/@mastra/playground-ui';
+@custom-variant dark (&:is(.dark *));
 
 @font-face {
   font-family: 'TasaExplorer';
@@ -217,6 +218,15 @@ html::-webkit-scrollbar-thumb:hover {
   }
 }
 
+@keyframes shimmer-text {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
 div[class^='language-'],
 pre[class^='language-'],
 code[class^='language-'] {
@@ -279,10 +289,66 @@ th:has(header) {
     will-change: transform, opacity;
   }
 
+  .agent-builder-detail-grid {
+    transition: grid-template-columns 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .agent-builder-panel-grid,
-    .agent-builder-panel-slide {
+    .agent-builder-panel-slide,
+    .agent-builder-detail-grid {
       transition: none;
+    }
+  }
+
+  /*
+   * Agent builder starter page — editorial serif minimal motion.
+   * A slow aurora-like gradient drifts behind the content, and the
+   * headline / prompt / chips stagger in on mount. Low contrast on
+   * purpose so the motion feels atmospheric, never loud.
+   */
+  .starter-aurora {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  .starter-aurora::before {
+    content: '';
+    position: absolute;
+    inset: -20%;
+    background:
+      radial-gradient(ellipse 55% 45% at 25% 30%, rgba(212, 212, 216, 0.09), transparent 65%),
+      radial-gradient(ellipse 50% 40% at 75% 70%, rgba(161, 161, 170, 0.07), transparent 65%),
+      radial-gradient(ellipse 40% 35% at 50% 95%, rgba(244, 244, 245, 0.05), transparent 70%);
+    filter: blur(40px);
+    animation: starter-drift 28s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+    pointer-events: none;
+    z-index: 0;
+    will-change: transform;
+  }
+
+  @keyframes starter-drift {
+    0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+    33%      { transform: translate3d(-2%, 1.5%, 0) scale(1.04); }
+    66%      { transform: translate3d(1.5%, -2%, 0) scale(0.98); }
+  }
+
+  @keyframes starter-enter {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .starter-heading { animation: starter-enter 520ms var(--ease-out-custom) both; }
+  .starter-prompt  { animation: starter-enter 520ms var(--ease-out-custom) 120ms both; }
+  .starter-chip    { animation: starter-enter 420ms var(--ease-out-custom) both; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .starter-aurora::before,
+    .starter-heading,
+    .starter-prompt,
+    .starter-chip {
+      animation: none;
     }
   }
 }

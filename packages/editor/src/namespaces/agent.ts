@@ -49,7 +49,7 @@ import { EditorMCPNamespace } from './mcp';
 // ============================================================================
 
 /** Fields from builder.configuration.agent that can be applied as creation defaults */
-const BUILDER_DEFAULT_FIELDS = ['memory'] as const;
+const BUILDER_DEFAULT_FIELDS = ['memory', 'workspace', 'browser'] as const;
 
 /**
  * Apply builder defaults to agent creation input.

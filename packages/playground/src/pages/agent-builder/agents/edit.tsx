@@ -1,140 +1,220 @@
-import { Button, cn, IconButton } from '@mastra/playground-ui';
+import { Button, IconButton, Spinner } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
-import { ArrowLeftIcon, Columns2, EyeIcon } from 'lucide-react';
+import { MessageSquareIcon, SaveIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { FormProvider, useForm } from 'react-hook-form';
-import { useLocation, useNavigate, useParams } from 'react-router';
+import { FormProvider, useForm, useFormContext } from 'react-hook-form';
+import { useNavigate, useParams } from 'react-router';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
-import { AgentBuilderBreadcrumb } from '@/domains/agent-builder/components/agent-builder-edit/agent-builder-breadcrumb';
 import { EditableAgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
-import { AgentPreviewChat } from '@/domains/agent-builder/components/agent-builder-edit/agent-preview-chat';
+import type {
+  ActiveDetail,
+  AgentConfig,
+} from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { ConversationPanel } from '@/domains/agent-builder/components/agent-builder-edit/conversation-panel';
-import { BrowserFrame } from '@/domains/agent-builder/components/browser-frame';
-import { defaultAgentFixture } from '@/domains/agent-builder/fixtures';
-import type { AgentFixture } from '@/domains/agent-builder/fixtures';
+import type { AvailableWorkspace } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-agent-builder-tool';
+import { useStarterUserMessage } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-starter-user-message';
+import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
 import { useSaveAgent } from '@/domains/agent-builder/hooks/use-save-agent';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
+import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
+import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
+import { useWorkspaces } from '@/domains/workspace/hooks';
 
 interface AvailableTool {
   id: string;
   description?: string;
 }
 
-type LocationState = { userMessage?: string } | null;
+type ToolsData = NonNullable<ReturnType<typeof useTools>['data']>;
+
+const extractWorkspaceId = (workspace: StoredAgent['workspace']): string | undefined => {
+  if (
+    workspace &&
+    typeof workspace === 'object' &&
+    'type' in workspace &&
+    (workspace as { type: string }).type === 'id'
+  ) {
+    const id = (workspace as { workspaceId?: unknown }).workspaceId;
+    return typeof id === 'string' ? id : undefined;
+  }
+  return undefined;
+};
 
 export default function AgentBuilderAgentEdit() {
   const { id } = useParams<{ id: string }>();
-  const location = useLocation();
+  const initialUserMessage = useStarterUserMessage();
+  const fromStarter = initialUserMessage !== undefined;
+  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id, { enabled: !fromStarter });
+  const { data: toolsData, isPending: isToolsPending } = useTools();
+  const { data: workspacesData } = useWorkspaces();
+  const isReady = Boolean(id) && (fromStarter || !isStoredAgentLoading) && !isToolsPending;
+
+  const availableWorkspaces = useMemo<AvailableWorkspace[]>(
+    () => (workspacesData?.workspaces ?? []).map(ws => ({ id: ws.id, name: ws.name })),
+    [workspacesData],
+  );
+
+  if (!isReady) return <AgentBuilderAgentEditSkeleton />;
+
+  return (
+    <AgentBuilderAgentEditPage
+      id={id}
+      storedAgent={storedAgent}
+      toolsData={toolsData}
+      availableWorkspaces={availableWorkspaces}
+      initialUserMessage={initialUserMessage}
+      fromStarter={fromStarter}
+    />
+  );
+}
+
+interface PageProps {
+  id: string | undefined;
+  storedAgent: StoredAgent | null | undefined;
+  toolsData: ToolsData | undefined;
+  availableWorkspaces: AvailableWorkspace[];
+  initialUserMessage: string | undefined;
+  fromStarter: boolean;
+}
+
+const AgentBuilderAgentEditPage = ({
+  id,
+  storedAgent,
+  toolsData,
+  availableWorkspaces,
+  initialUserMessage,
+  fromStarter,
+}: PageProps) => {
   const formMethods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {
-      name: '',
-      instructions: '',
-      tools: {},
-      skills: [],
+      name: storedAgent?.name ?? '',
+      description: storedAgent?.description ?? '',
+      instructions: typeof storedAgent?.instructions === 'string' ? storedAgent.instructions : '',
+      tools: Object.fromEntries(Object.keys(storedAgent?.tools ?? {}).map(k => [k, true])),
+      skills: Object.keys(storedAgent?.skills ?? {}),
+      workspaceId: extractWorkspaceId(storedAgent?.workspace),
     },
   });
-  const state = (location.state as LocationState) ?? null;
-  const [agent, setAgent] = useState<AgentFixture>(defaultAgentFixture);
+
+  return (
+    <FormProvider {...formMethods}>
+      <AgentBuilderAgentEditReady
+        id={id!}
+        storedAgent={storedAgent}
+        toolsData={toolsData ?? {}}
+        availableWorkspaces={availableWorkspaces}
+        initialUserMessage={initialUserMessage}
+        fromStarter={fromStarter}
+      />
+    </FormProvider>
+  );
+};
+
+const AgentBuilderAgentEditSkeleton = () => (
+  <div className="h-screen w-screen flex items-center justify-center">
+    <Spinner />
+  </div>
+);
+
+interface AgentBuilderAgentEditReadyProps {
+  id: string;
+  storedAgent: StoredAgent | null | undefined;
+  toolsData: ToolsData;
+  availableWorkspaces: AvailableWorkspace[];
+  initialUserMessage: string | undefined;
+  fromStarter: boolean;
+}
+
+const AgentBuilderAgentEditReady = ({
+  id,
+  storedAgent,
+  toolsData,
+  availableWorkspaces,
+  initialUserMessage,
+  fromStarter,
+}: AgentBuilderAgentEditReadyProps) => {
+  const navigate = useNavigate();
   const features = useBuilderAgentFeatures();
-  const { data: toolsData, isPending } = useTools();
+  const formMethods = useFormContext<AgentBuilderEditFormValues>();
 
   const availableTools = useMemo<AvailableTool[]>(
     () =>
-      toolsData
-        ? Object.entries(toolsData).map(([id, tool]) => ({
-            id,
-            description: (tool as { description?: string }).description,
-          }))
-        : [],
+      Object.entries(toolsData).map(([toolId, tool]) => ({
+        id: toolId,
+        description: (tool as { description?: string }).description,
+      })),
     [toolsData],
   );
 
-  const { save, isSaving } = useSaveAgent({ agentId: id!, availableTools });
+  const [agent, setAgent] = useState<AgentConfig>({
+    id: id ?? '',
+    name: storedAgent?.name ?? '',
+    systemPrompt: typeof storedAgent?.instructions === 'string' ? storedAgent.instructions : '',
+  });
+
+  const [activeDetail, setActiveDetail] = useState<ActiveDetail>(null);
+
+  const mode: 'create' | 'edit' = storedAgent ? 'edit' : 'create';
+  const { save, isSaving } = useSaveAgent({ agentId: id, mode, availableTools });
+
   const handleSaveSuccess = async (values: AgentBuilderEditFormValues) => {
     await save(values);
     void navigate(`/agent-builder/agents`, { viewTransition: true });
   };
   const handleSave = formMethods.handleSubmit(handleSaveSuccess);
 
-  const [expanded, setExpanded] = useState(true);
-  const navigate = useNavigate();
-
-  const gridClass = expanded ? 'grid-cols-[1fr_380px]' : 'grid-cols-[1fr_0px]';
-
   return (
-    <FormProvider {...formMethods}>
-      <div className="flex flex-col h-full bg-surface1">
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-6 pt-4">
-          <div className="justify-self-start">
-            <IconButton
-              tooltip="Agents list"
-              className="rounded-full"
-              onClick={() => navigate(`/agent-builder/agents`)}
-            >
-              <ArrowLeftIcon />
-            </IconButton>
-          </div>
-          <AgentBuilderBreadcrumb className="justify-self-center" />
-          <div className="justify-self-end">
-            <Button variant="primary" onClick={handleSave} disabled={isSaving} data-testid="agent-builder-edit-save">
-              {isSaving ? 'Saving…' : 'Save'}
-            </Button>
-          </div>
-        </div>
-        <div className="flex flex-1 min-h-0">
-          <div className="flex w-[40ch] shrink-0 flex-col bg-surface1 pt-4 pb-6 px-6">
-            <MastraReactProvider baseUrl="http://localhost:4111">
-              <ConversationPanel
-                initialUserMessage={state?.userMessage}
-                features={features}
-                availableTools={availableTools}
-                toolsReady={!isPending}
-              />
-            </MastraReactProvider>
-          </div>
-          <div className="flex flex-1 min-w-0 flex-col pt-4 pb-6 pr-6">
-            <BrowserFrame className={cn('grid relative agent-builder-panel-grid', gridClass)}>
-              <div className="h-full w-full overflow-hidden grid grid-rows-[auto_1fr]">
-                <div className="flex gap-2 items-center pl-6 pt-6 pr-6 justify-between">
-                  <IconButton
-                    tooltip="View agent"
-                    className="rounded-full"
-                    onClick={() => navigate(`/agent-builder/agents/${id}/view`, { viewTransition: true })}
-                  >
-                    <EyeIcon />
-                  </IconButton>
-
-                  {!expanded && (
-                    <IconButton tooltip="Expand" className="rounded-full" onClick={() => setExpanded(true)}>
-                      <Columns2 />
-                    </IconButton>
-                  )}
-                </div>
-
-                <AgentPreviewChat agent={agent} />
-              </div>
-
-              <div className="h-full min-w-0 overflow-hidden" aria-hidden={!expanded}>
-                <div
-                  className={cn(
-                    'agent-builder-panel-slide h-full w-[380px] overflow-y-auto pr-6 pb-6 pt-6',
-                    expanded ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0 pointer-events-none',
-                  )}
-                  style={expanded ? { viewTransitionName: 'agent-builder-configure-panel' } : undefined}
-                >
-                  <EditableAgentConfigurePanel
-                    agent={agent}
-                    onAgentChange={setAgent}
-                    onClose={() => setExpanded(false)}
-                    availableTools={availableTools}
-                  />
-                </div>
-              </div>
-            </BrowserFrame>
-          </div>
-        </div>
-      </div>
-    </FormProvider>
+    <WorkspaceLayout
+      isLoading={false}
+      mode="build"
+      detailOpen={activeDetail !== null}
+      modeAction={
+        mode === 'edit' ? (
+          <IconButton
+            tooltip="Chat"
+            className="rounded-full"
+            onClick={() => navigate(`/agent-builder/agents/${id}/view`, { viewTransition: true })}
+            data-testid="agent-builder-edit-preview"
+          >
+            <MessageSquareIcon />
+          </IconButton>
+        ) : undefined
+      }
+      primaryAction={
+        <Button
+          size="sm"
+          variant="primary"
+          onClick={handleSave}
+          disabled={isSaving}
+          data-testid="agent-builder-edit-save"
+        >
+          <SaveIcon /> {isSaving ? 'Saving…' : mode === 'edit' ? 'Save' : 'Create'}
+        </Button>
+      }
+      chat={
+        <MastraReactProvider baseUrl="http://localhost:4112">
+          <ConversationPanel
+            initialUserMessage={initialUserMessage}
+            isFreshThread={fromStarter}
+            features={features}
+            availableTools={availableTools}
+            availableWorkspaces={availableWorkspaces}
+            toolsReady
+            agentId={id}
+          />
+        </MastraReactProvider>
+      }
+      configure={
+        <EditableAgentConfigurePanel
+          agent={agent}
+          onAgentChange={setAgent}
+          availableTools={availableTools}
+          isLoading={false}
+          activeDetail={activeDetail}
+          onActiveDetailChange={setActiveDetail}
+        />
+      }
+    />
   );
-}
+};

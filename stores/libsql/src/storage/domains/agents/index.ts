@@ -53,7 +53,7 @@ export class AgentsLibSQL extends AgentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_AGENT_VERSIONS,
       schema: AGENT_VERSIONS_SCHEMA,
-      ifNotExists: ['mcpClients', 'requestContextSchema', 'workspace', 'skills', 'skillsFormat'],
+      ifNotExists: ['mcpClients', 'requestContextSchema', 'workspace', 'skills', 'skillsFormat', 'browser'],
     });
 
     // Migrate tools field from string[] to JSONB format
@@ -626,6 +626,7 @@ export class AgentsLibSQL extends AgentsStorage {
           workspace: input.workspace ?? null,
           skills: input.skills ?? null,
           skillsFormat: input.skillsFormat ?? null,
+          browser: input.browser ?? null,
           changedFields: input.changedFields ?? null,
           changeMessage: input.changeMessage ?? null,
           createdAt: now,
@@ -931,6 +932,7 @@ export class AgentsLibSQL extends AgentsStorage {
       workspace: this.parseJson(row.workspace, 'workspace'),
       skills: this.parseJson(row.skills, 'skills'),
       skillsFormat: row.skillsFormat as 'xml' | 'json' | 'markdown' | undefined,
+      browser: this.parseJson(row.browser, 'browser'),
       changedFields: this.parseJson(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: new Date(row.createdAt as string),

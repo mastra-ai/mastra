@@ -12,6 +12,7 @@ export const useChatDraft = ({ onSubmit }: UseChatDraftArgs) => {
     e.preventDefault();
     if (!trimmed) return;
     onSubmit(trimmed);
+    setDraft('');
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

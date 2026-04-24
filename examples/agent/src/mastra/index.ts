@@ -1,5 +1,5 @@
-import { Mastra } from '@mastra/core/mastra';
-import { registerApiRoute } from '@mastra/core/server';
+import { Mastra, type Config } from '@mastra/core/mastra';
+
 import { MastraCompositeStore, FilesystemStore, InMemoryDB, InMemoryStore } from '@mastra/core/storage';
 import { MastraEditor } from '@mastra/editor';
 import { LibSQLStore } from '@mastra/libsql';
@@ -7,7 +7,7 @@ import { DuckDBStore } from '@mastra/duckdb';
 
 import { mastraAuth, rbacProvider } from './auth';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
-import { z } from 'zod';
+
 import { ComposioToolProvider } from '@mastra/editor/composio';
 
 import {
@@ -50,7 +50,8 @@ import {
   stepLoggerProcessor,
 } from './processors/index';
 import { gatewayAgent } from './agents/gateway';
-import { builderAgent } from './agents/agent-builder';
+import { Workspace } from '@mastra/core/workspace';
+import { DaytonaSandbox } from '@mastra/daytona';
 
 const libsqlStore = new LibSQLStore({
   id: 'mastra-storage',
@@ -67,9 +68,13 @@ const storage = new MastraCompositeStore({
   // editor: new FilesystemStore({ dir: '.mastra-storage' }),
 });
 
-const config = {
+const workspace = new Workspace({
+  id: 'builder-workspace',
+  sandbox: new DaytonaSandbox(),
+});
+
+const config: Config = {
   agents: {
-    builderAgent,
     gatewayAgent,
     chefAgent,
     chefAgentResponses,
@@ -122,6 +127,7 @@ const config = {
     auth: mastraAuth,
     rbac: rbacProvider,
   },
+  workspace,
 };
 
 export const mastra = new Mastra({
@@ -144,6 +150,7 @@ export const mastra = new Mastra({
       },
       configuration: {
         agent: {
+          workspace: { type: 'id', workspaceId: 'builder-workspace' },
           memory: {
             options: {
               lastMessages: 10,

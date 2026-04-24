@@ -28,6 +28,11 @@ vi.mock('@mastra/react', () => ({
       sentMessages.push(payload);
     },
   }),
+  useMastraClient: () => ({}),
+}));
+
+vi.mock('@/hooks/use-agent-messages', () => ({
+  useAgentMessages: () => ({ data: { messages: [] }, isLoading: false }),
 }));
 
 let formMethodsRef: UseFormReturn<AgentBuilderEditFormValues> | null = null;
@@ -54,6 +59,7 @@ const FormWrapper = ({ children }: { children: React.ReactNode }) => {
 const renderPanel = (
   features: Features,
   availableTools: Array<{ id: string; description?: string }> = [],
+  availableWorkspaces: Array<{ id: string; name: string }> = [],
 ) =>
   render(
     <FormWrapper>
@@ -61,6 +67,8 @@ const renderPanel = (
         initialUserMessage="hello"
         features={features}
         availableTools={availableTools}
+        availableWorkspaces={availableWorkspaces}
+        agentId="agent-test"
       />
     </FormWrapper>,
   );
@@ -138,7 +146,7 @@ describe('ConversationPanel agent-builder client tool', () => {
     await tool.execute({
       name: 'N',
       instructions: 'I',
-      tools: ['web-search'],
+      tools: [{ id: 'web-search', name: 'Web Search' }],
       skills: ['summarize'],
     });
 
@@ -159,21 +167,54 @@ describe('ConversationPanel agent-builder client tool', () => {
     expect(tool.description).toContain('Fetch a URL');
   });
 
-  it('constrains the tools field to the provided ids', () => {
+  it('requires both id and name for each entry in the tools field', () => {
+    renderPanel({ ...allOff, tools: true }, [{ id: 'web-search', description: 'Search the web' }]);
+    const tool = getAgentBuilderTool();
+
+    const valid = tool.inputSchema.safeParse({
+      name: 'N',
+      instructions: 'I',
+      tools: [{ id: 'web-search', name: 'Web Search' }],
+    });
+    expect(valid.success).toBe(true);
+
+    const missingName = tool.inputSchema.safeParse({
+      name: 'N',
+      instructions: 'I',
+      tools: [{ id: 'web-search' }],
+    });
+    expect(missingName.success).toBe(false);
+
+    const emptyName = tool.inputSchema.safeParse({
+      name: 'N',
+      instructions: 'I',
+      tools: [{ id: 'web-search', name: '' }],
+    });
+    expect(emptyName.success).toBe(false);
+
+    const asString = tool.inputSchema.safeParse({
+      name: 'N',
+      instructions: 'I',
+      tools: ['web-search'],
+    });
+    expect(asString.success).toBe(false);
+  });
+
+  it('constrains the tools id field to the provided ids', () => {
     renderPanel({ ...allOff, tools: true }, [{ id: 'web-search' }]);
     const tool = getAgentBuilderTool();
 
     const valid = tool.inputSchema.safeParse({
       name: 'N',
       instructions: 'I',
-      tools: ['web-search'],
+      tools: [{ id: 'web-search', name: 'Web Search' }],
     });
     expect(valid.success).toBe(true);
 
     const invalid = tool.inputSchema.safeParse({
       name: 'N',
       instructions: 'I',
-      tools: ['unknown-tool'],
+      tools: [{ id: 'unknown-tool', name: 'Unknown' }],
     });
     expect(invalid.success).toBe(false);
   });
@@ -185,7 +226,7 @@ describe('ConversationPanel agent-builder client tool', () => {
     await tool.execute({
       name: 'N',
       instructions: 'I',
-      tools: ['web-search'],
+      tools: [{ id: 'web-search', name: 'Web Search' }],
       skills: ['summarize'],
     });
 
@@ -201,6 +242,7 @@ describe('ConversationPanel agent-builder client tool', () => {
           features={{ ...allOff, tools: true }}
           availableTools={[]}
           toolsReady={false}
+          agentId="agent-test"
         />
       </FormWrapper>,
     );
@@ -214,6 +256,7 @@ describe('ConversationPanel agent-builder client tool', () => {
           features={{ ...allOff, tools: true }}
           availableTools={[{ id: 'web-search', description: 'Search the web' }]}
           toolsReady={true}
+          agentId="agent-test"
         />
       </FormWrapper>,
     );
@@ -232,5 +275,66 @@ describe('ConversationPanel agent-builder client tool', () => {
     expect(sentMessages).toHaveLength(1);
     const tool = sentMessages[0].clientTools.agentBuilderTool;
     expect(tool.description).toContain('web-search');
+  });
+
+  it('exposes an optional workspaceId field in the tool input schema', () => {
+    renderPanel(allOff);
+    const tool = getAgentBuilderTool();
+    const shape = tool.inputSchema.shape;
+
+    expect(shape.workspaceId).toBeDefined();
+
+    const withoutWorkspace = tool.inputSchema.safeParse({ name: 'N', instructions: 'I' });
+    expect(withoutWorkspace.success).toBe(true);
+  });
+
+  it('lists available workspaces in the tool description', () => {
+    renderPanel(allOff, [], [
+      { id: 'ws-1', name: 'Primary' },
+      { id: 'ws-2', name: 'Secondary' },
+    ]);
+    const tool = getAgentBuilderTool();
+
+    expect(tool.description).toContain('ws-1');
+    expect(tool.description).toContain('Primary');
+    expect(tool.description).toContain('ws-2');
+    expect(tool.description).toContain('Secondary');
+  });
+
+  it('constrains workspaceId to the provided ids when workspaces are available', () => {
+    renderPanel(allOff, [], [{ id: 'ws-1', name: 'Primary' }]);
+    const tool = getAgentBuilderTool();
+
+    const valid = tool.inputSchema.safeParse({
+      name: 'N',
+      instructions: 'I',
+      workspaceId: 'ws-1',
+    });
+    expect(valid.success).toBe(true);
+
+    const invalid = tool.inputSchema.safeParse({
+      name: 'N',
+      instructions: 'I',
+      workspaceId: 'unknown-workspace',
+    });
+    expect(invalid.success).toBe(false);
+  });
+
+  it('execute writes workspaceId to the form when provided', async () => {
+    renderPanel(allOff, [], [{ id: 'ws-1', name: 'Primary' }]);
+    const tool = getAgentBuilderTool();
+
+    await tool.execute({ name: 'N', instructions: 'I', workspaceId: 'ws-1' });
+
+    expect(formMethodsRef!.getValues('workspaceId')).toBe('ws-1');
+  });
+
+  it('execute does not set workspaceId when omitted', async () => {
+    renderPanel(allOff, [], [{ id: 'ws-1', name: 'Primary' }]);
+    const tool = getAgentBuilderTool();
+
+    await tool.execute({ name: 'N', instructions: 'I' });
+
+    expect(formMethodsRef!.getValues('workspaceId')).toBeUndefined();
   });
 });

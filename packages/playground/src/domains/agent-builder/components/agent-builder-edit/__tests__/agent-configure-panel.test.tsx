@@ -3,9 +3,15 @@ import { TooltipProvider } from '@mastra/playground-ui';
 import { render, screen, cleanup } from '@testing-library/react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
-import { defaultAgentFixture } from '../../../fixtures';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import { EditableAgentConfigurePanel } from '../agent-configure-panel';
+import type { AgentConfig } from '../agent-configure-panel';
+
+const testAgent: AgentConfig = {
+  id: 'test',
+  name: 'Test agent',
+  systemPrompt: 'Test prompt',
+};
 
 const mockUseBuilderAgentFeatures = vi.fn();
 
@@ -32,11 +38,7 @@ const FormWrapper = ({ children }: { children: React.ReactNode }) => {
 const renderPanel = () =>
   render(
     <FormWrapper>
-      <EditableAgentConfigurePanel
-        agent={defaultAgentFixture}
-        onAgentChange={() => {}}
-        onClose={() => {}}
-      />
+      <EditableAgentConfigurePanel agent={testAgent} onAgentChange={() => {}} />
     </FormWrapper>,
   );
 
@@ -113,5 +115,47 @@ describe('AgentConfigurePanel feature gating', () => {
 
     expect(screen.getByTestId('agent-preview-tools-button')).toBeTruthy();
     expect(screen.getByTestId('agent-preview-skills-button')).toBeTruthy();
+  });
+});
+
+describe('AgentConfigurePanel skeleton', () => {
+  beforeEach(() => {
+    mockUseBuilderAgentFeatures.mockReturnValue({
+      tools: false,
+      skills: false,
+      memory: false,
+      workflows: false,
+      agents: false,
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('renders the skeleton and hides form fields while loading', () => {
+    render(
+      <FormWrapper>
+        <EditableAgentConfigurePanel
+          agent={testAgent}
+          onAgentChange={() => {}}
+          isLoading
+        />
+      </FormWrapper>,
+    );
+
+    expect(screen.getByTestId('agent-configure-panel-skeleton')).toBeTruthy();
+    expect(screen.queryByTestId('agent-configure-name')).toBeNull();
+    expect(screen.queryByTestId('agent-preview-edit-system-prompt')).toBeNull();
+  });
+
+  it('does not render the save button inside the panel', () => {
+    render(
+      <FormWrapper>
+        <EditableAgentConfigurePanel agent={testAgent} onAgentChange={() => {}} />
+      </FormWrapper>,
+    );
+
+    expect(screen.queryByTestId('agent-builder-edit-save')).toBeNull();
   });
 });

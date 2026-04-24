@@ -1,7 +1,10 @@
-import { Txt } from '@mastra/playground-ui';
+import { Skeleton, Txt } from '@mastra/playground-ui';
 import type { MastraUIMessage } from '@mastra/react';
+import { Check, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import Markdown from 'react-markdown';
+import { AGENT_BUILDER_TOOL_NAME } from '../agent-builder-edit/hooks/use-agent-builder-tool';
+import { Shimmer } from './shimmer';
 
 export const MessageRow = ({ message }: { message: MastraUIMessage }) => {
   return (
@@ -14,13 +17,27 @@ export const MessageRow = ({ message }: { message: MastraUIMessage }) => {
 
           case 'reasoning':
             return part.state === 'streaming' ? (
-              <ReasoningMessage key={key} text="Reasoning..." />
+              <ReasoningMessage key={key} text="Anayzing the agent requirements..." streaming />
             ) : (
-              <ReasoningMessage key={key} text="Finished reasoning" />
+              <ReasoningMessage key={key} text="Requirements analyzed, preparing the agent." />
             );
 
           case 'dynamic-tool': {
+            if (part.toolName === AGENT_BUILDER_TOOL_NAME) {
+              const toolsAdded = (part.input as { tools: { id: string; name: string }[] })?.tools ?? [];
+              return <BuilderAgentToolMessage toolsAdded={toolsAdded} key={key} />;
+            }
+
             return <ToolExecutionMessage key={key} />;
+          }
+
+          case `tool-${AGENT_BUILDER_TOOL_NAME}`: {
+            const toolsAdded = part.input.tools ?? [];
+            return <BuilderAgentToolMessage toolsAdded={toolsAdded} key={key} />;
+          }
+
+          default: {
+            return null;
           }
         }
       })}
@@ -33,8 +50,8 @@ export const Txtmessage = ({ txt, role }: { txt: string; role: MastraUIMessage['
     return (
       <div className="flex justify-end">
         <Txt
-          variant="ui-sm"
-          className="whitespace-pre-wrap text-neutral6 rounded-md bg-surface3 px-2 py-1 max-w-[80%]"
+          variant="ui-md"
+          className="whitespace-pre-wrap bg-white text-black rounded-2xl px-4 py-2.5 max-w-[80%]"
           as="div"
         >
           <Markdown>{txt}</Markdown>
@@ -45,7 +62,7 @@ export const Txtmessage = ({ txt, role }: { txt: string; role: MastraUIMessage['
 
   if (role === 'assistant' || role === 'system') {
     return (
-      <Txt variant="ui-sm" className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%]" as="div">
+      <Txt variant="ui-md" className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%]" as="div">
         <Markdown>{txt}</Markdown>
       </Txt>
     );
@@ -54,10 +71,26 @@ export const Txtmessage = ({ txt, role }: { txt: string; role: MastraUIMessage['
   return null;
 };
 
-export const ReasoningMessage = ({ text }: { text: string }) => {
+export const ReasoningMessage = ({ text, streaming = false }: { text: string; streaming?: boolean }) => {
   return (
-    <Txt variant="ui-sm" className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%]">
-      {text}
+    <Txt
+      variant="ui-md"
+      className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%] flex items-center gap-2"
+      as="div"
+    >
+      {streaming ? (
+        <>
+          <Loader2 className="animate-spin size-4 text-neutral3" />
+
+          <Shimmer>{text}</Shimmer>
+        </>
+      ) : (
+        <>
+          <Check className="text-neutral3 size-4" />
+
+          {text}
+        </>
+      )}
     </Txt>
   );
 };
@@ -115,11 +148,49 @@ const words = [
   'settling',
 ];
 
+export const MessagesSkeleton = ({ testId }: { testId?: string }) => {
+  return (
+    <div className="flex flex-col gap-6" data-testid={testId}>
+      <div className="flex justify-end">
+        <Skeleton className="h-10 w-56 rounded-2xl" />
+      </div>
+      <Skeleton className="h-6 w-[70%] rounded-full" />
+      <Skeleton className="h-6 w-[55%] rounded-full" />
+      <div className="flex justify-end">
+        <Skeleton className="h-10 w-40 rounded-2xl" />
+      </div>
+      <Skeleton className="h-6 w-[65%] rounded-full" />
+    </div>
+  );
+};
+
 export const ToolExecutionMessage = () => {
   const [randomWord] = useState(() => words[Math.floor(Math.random() * words.length)]);
   return (
-    <Txt variant="ui-sm" className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%]">
+    <Txt variant="ui-md" className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%]">
       {randomWord.charAt(0).toUpperCase() + randomWord.slice(1)}...
     </Txt>
+  );
+};
+
+const BuilderAgentToolMessage = ({ toolsAdded, key }: { toolsAdded: { id: string; name: string }[]; key: string }) => {
+  if (toolsAdded.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="border border-1 p-3 rounded-xl">
+      <Txt variant="ui-sm" className="whitespace-pre-wrap leading-relaxed text-neutral3 pb-2" as="div">
+        Agent capabilities unlocked:
+      </Txt>
+
+      <ul key={key} className="space-y-1">
+        {toolsAdded.map((tool: { id: string; name: string }) => (
+          <li key={`${key}-${tool.id}`} className="flex items-center gap-2">
+            <Check className="w-4 h-4 text-neutral3" /> <Txtmessage key={key} txt={tool.name} role="assistant" />
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 };

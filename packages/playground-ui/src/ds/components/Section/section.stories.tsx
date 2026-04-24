@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Section } from './section';
-import { Button } from '../Button';
 import { Plus } from 'lucide-react';
+import { Button } from '../Button';
+import { Section } from './section';
 
 const meta: Meta<typeof Section> = {
   title: 'Layout/Section',

@@ -1,32 +1,44 @@
-import { Avatar, IconButton, TextFieldBlock, Txt } from '@mastra/playground-ui';
-import { ChevronRight, FileText, GraduationCap, Plus, Wrench, X } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { Avatar, cn, Skeleton, TextFieldBlock, Txt } from '@mastra/playground-ui';
+import { ChevronRight, FileText, GraduationCap, Plus, Wrench } from 'lucide-react';
+import { useMemo, useRef } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
-import { skillsFixture } from '../../fixtures';
-import type { AgentFixture } from '../../fixtures';
 import { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
 import type { AgentBuilderEditFormValues } from '../../schemas';
-import { SkillsDialog } from './dialogs/skills-dialog';
-import { SystemPromptDialog } from './dialogs/system-prompt-dialog';
-import { ToolsDialog } from './dialogs/tools-dialog';
+import { InstructionsDetail } from './details/instructions-detail';
+import { SkillsDetail } from './details/skills-detail';
+import { ToolsDetail } from './details/tools-detail';
 
 export interface AvailableTool {
   id: string;
   description?: string;
 }
 
+export interface AgentConfig {
+  id: string;
+  name: string;
+  description?: string;
+  avatarUrl?: string;
+  systemPrompt: string;
+}
+
+export type ActiveDetail = 'instructions' | 'tools' | 'skills' | null;
+
 interface AgentConfigurePanelProps {
-  agent: AgentFixture;
-  onAgentChange: (next: AgentFixture) => void;
+  agent: AgentConfig;
+  onAgentChange: (next: AgentConfig) => void;
   editable?: boolean;
   draftName?: string;
+  draftDescription?: string;
   draftAvatarUrl?: string;
   draftInstructions?: string;
   onDraftNameChange?: (next: string) => void;
+  onDraftDescriptionChange?: (next: string) => void;
   onDraftAvatarUrlChange?: (next: string) => void;
   onDraftInstructionsChange?: (next: string) => void;
-  onClose: () => void;
   availableTools?: AvailableTool[];
+  isLoading?: boolean;
+  activeDetail?: ActiveDetail;
+  onActiveDetailChange?: (next: ActiveDetail) => void;
 }
 
 export const AgentConfigurePanel = ({
@@ -34,18 +46,19 @@ export const AgentConfigurePanel = ({
   onAgentChange,
   editable = true,
   draftName = agent.name,
+  draftDescription = agent.description ?? '',
   draftAvatarUrl = agent.avatarUrl ?? '',
   draftInstructions = agent.systemPrompt,
   onDraftNameChange = () => {},
+  onDraftDescriptionChange = () => {},
   onDraftAvatarUrlChange = () => {},
   onDraftInstructionsChange = () => {},
-  onClose = () => {},
   availableTools = [],
+  isLoading = false,
+  activeDetail = null,
+  onActiveDetailChange = () => {},
 }: AgentConfigurePanelProps) => {
   const features = useBuilderAgentFeatures();
-  const [systemPromptOpen, setSystemPromptOpen] = useState(false);
-  const [toolsOpen, setToolsOpen] = useState(false);
-  const [skillsOpen, setSkillsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleAvatarFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -61,124 +74,161 @@ export const AgentConfigurePanel = ({
 
   const { control } = useFormContext<AgentBuilderEditFormValues>();
   const toolsMap = useWatch({ control, name: 'tools' });
-  const activeToolsCount = useMemo(
-    () => Object.values(toolsMap ?? {}).filter(Boolean).length,
-    [toolsMap],
-  );
+  const activeToolsCount = useMemo(() => Object.values(toolsMap ?? {}).filter(Boolean).length, [toolsMap]);
   const totalToolsCount = availableTools.length;
-  const activeSkillsCount = useMemo(() => skillsFixture.filter(s => s.enabled).length, []);
 
   const handleSystemPromptSave = (nextPrompt: string) => {
     onDraftInstructionsChange(nextPrompt);
     onAgentChange({ ...agent, systemPrompt: nextPrompt });
-    setSystemPromptOpen(false);
+    onActiveDetailChange(null);
   };
 
+  const toggleDetail = (next: ActiveDetail) => {
+    onActiveDetailChange(activeDetail === next ? null : next);
+  };
+
+  const closeDetail = () => onActiveDetailChange(null);
+
+  if (isLoading) {
+    return <AgentConfigurePanelSkeleton />;
+  }
+
+  const trimmedInstructions = draftInstructions.trim();
+  const instructionsDescription = trimmedInstructions.length === 0
+    ? 'Set how your agent thinks and responds'
+    : trimmedInstructions.length > 80
+      ? `${trimmedInstructions.slice(0, 80).trimEnd()}…`
+      : trimmedInstructions;
+
   return (
-    <div className="flex h-full flex-col border border-border1 bg-surface3 rounded-3xl overflow-hidden">
-      <div className="pr-6 pt-6 flex justify-end">
-        <IconButton onClick={onClose} className="rounded-full" tooltip="Close" variant="ghost">
-          <X />
-        </IconButton>
-      </div>
-      <div className="flex-1 flex flex-col gap-6 py-6 overflow-y-auto">
-        {editable ? (
-          <div className="flex items-center gap-4 px-6">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="group relative h-avatar-lg w-avatar-lg shrink-0 overflow-hidden rounded-full border border-border1 bg-surface3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral3"
-              aria-label="Upload avatar"
-              data-testid="agent-configure-avatar-trigger"
-            >
-              {draftAvatarUrl ? (
-                <img src={draftAvatarUrl} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <span className="flex h-full w-full items-center justify-center text-ui-md text-neutral4">
-                  {(draftName[0] ?? 'A').toUpperCase()}
-                </span>
-              )}
-              <span className="absolute inset-0 flex items-center justify-center rounded-full bg-surface4 opacity-0 transition-opacity group-hover:opacity-100">
-                <Plus className="h-5 w-5 text-neutral5" />
-              </span>
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleAvatarFile}
-              className="hidden"
-              data-testid="agent-configure-avatar-input"
-            />
-            <div className="min-w-0 flex-1">
+    <div
+      className={cn(
+        'grid h-full border border-border1 bg-surface2 rounded-3xl overflow-hidden agent-builder-detail-grid',
+        activeDetail ? 'grid-cols-[320px_calc(100%-320px)]' : 'grid-cols-[320px_0px]',
+      )}
+    >
+      <div className="flex h-full min-w-0 flex-col">
+        <div className="flex-1 flex flex-col gap-6 py-6 overflow-y-auto">
+          {editable ? (
+            <div className="flex flex-col gap-3 px-6">
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="group relative h-avatar-lg w-avatar-lg shrink-0 overflow-hidden rounded-full border border-border1 bg-surface3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral3"
+                  aria-label="Upload avatar"
+                  data-testid="agent-configure-avatar-trigger"
+                >
+                  {draftAvatarUrl ? (
+                    <img src={draftAvatarUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center text-ui-md text-neutral4">
+                      {(draftName[0] ?? 'A').toUpperCase()}
+                    </span>
+                  )}
+                  <span className="absolute inset-0 flex items-center justify-center rounded-full bg-surface4 opacity-0 transition-opacity group-hover:opacity-100">
+                    <Plus className="h-5 w-5 text-neutral5" />
+                  </span>
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarFile}
+                  className="hidden"
+                  data-testid="agent-configure-avatar-input"
+                />
+                <div className="min-w-0 flex-1">
+                  <TextFieldBlock
+                    name="agent-name"
+                    label="Name"
+                    value={draftName}
+                    placeholder="Untitled agent"
+                    onChange={e => onDraftNameChange(e.target.value)}
+                    testId="agent-configure-name"
+                  />
+                </div>
+              </div>
               <TextFieldBlock
-                name="agent-name"
-                label="Name"
-                value={draftName}
-                placeholder="My agent"
-                onChange={e => onDraftNameChange(e.target.value)}
-                testId="agent-configure-name"
+                name="agent-description"
+                label="Description"
+                value={draftDescription}
+                placeholder="What is this agent for?"
+                onChange={e => onDraftDescriptionChange(e.target.value)}
+                testId="agent-configure-description"
               />
             </div>
-          </div>
-        ) : (
-          <div className="flex items-center gap-3 px-6">
-            <Avatar name={agent.name} size="lg" src={agent.avatarUrl} />
-            <Txt variant="ui-md" className="min-w-0 flex-1 truncate font-medium text-neutral6">
-              {agent.name}
-            </Txt>
-          </div>
-        )}
+          ) : (
+            <div className="flex flex-col gap-1 px-6">
+              <div className="flex items-center gap-3">
+                <Avatar name={agent.name} size="lg" src={agent.avatarUrl} />
+                <Txt variant="ui-md" className="min-w-0 flex-1 truncate font-medium text-neutral6">
+                  {agent.name}
+                </Txt>
+              </div>
+              {agent.description && (
+                <Txt variant="ui-sm" className="text-neutral3" data-testid="agent-configure-description-view">
+                  {agent.description}
+                </Txt>
+              )}
+            </div>
+          )}
 
-        <div className="flex flex-col">
-          <ConfigRow
-            icon={<FileText className="h-4 w-4" />}
-            label="Instructions"
-            description={draftInstructions}
-            onClick={() => setSystemPromptOpen(true)}
-            testId="agent-preview-edit-system-prompt"
-          />
-          {features.tools && (
+          <div className="flex flex-col divide-y divide-border1 border-t border-border1">
             <ConfigRow
-              icon={<Wrench className="h-4 w-4" />}
-              label="Tools"
-              description="External actions your agent can take"
-              count={activeToolsCount}
-              total={totalToolsCount}
-              onClick={() => setToolsOpen(true)}
-              testId="agent-preview-tools-button"
+              icon={<FileText className="h-4 w-4" />}
+              label="Instructions"
+              description={instructionsDescription}
+              isActive={activeDetail === 'instructions'}
+              onClick={() => toggleDetail('instructions')}
+              testId="agent-preview-edit-system-prompt"
             />
-          )}
-          {features.skills && (
-            <ConfigRow
-              icon={<GraduationCap className="h-4 w-4" />}
-              label="Skills"
-              description="Reusable knowledge and behaviors"
-              count={activeSkillsCount}
-              total={skillsFixture.length}
-              onClick={() => setSkillsOpen(true)}
-              testId="agent-preview-skills-button"
-            />
-          )}
+            {features.tools && (
+              <ConfigRow
+                icon={<Wrench className="h-4 w-4" />}
+                label="Tools"
+                description="External actions your agent can take"
+                count={activeToolsCount}
+                total={totalToolsCount}
+                isActive={activeDetail === 'tools'}
+                onClick={() => toggleDetail('tools')}
+                testId="agent-preview-tools-button"
+              />
+            )}
+            {features.skills && (
+              <ConfigRow
+                icon={<GraduationCap className="h-4 w-4" />}
+                label="Skills"
+                description="Reusable knowledge and behaviors"
+                isActive={activeDetail === 'skills'}
+                onClick={() => toggleDetail('skills')}
+                testId="agent-preview-skills-button"
+              />
+            )}
+          </div>
         </div>
       </div>
 
-      <SystemPromptDialog
-        open={systemPromptOpen}
-        onOpenChange={setSystemPromptOpen}
-        prompt={draftInstructions}
-        onSave={handleSystemPromptSave}
-        editable={editable}
-      />
-      {features.tools && (
-        <ToolsDialog
-          open={toolsOpen}
-          onOpenChange={setToolsOpen}
-          editable={editable}
-          availableTools={availableTools}
-        />
-      )}
-      {features.skills && <SkillsDialog open={skillsOpen} onOpenChange={setSkillsOpen} editable={editable} />}
+      <div
+        className={cn(
+          'h-full min-w-0 overflow-hidden',
+          activeDetail ? 'border-l border-border1' : 'pointer-events-none',
+        )}
+        aria-hidden={!activeDetail}
+      >
+        {activeDetail === 'instructions' && (
+          <InstructionsDetail
+            prompt={draftInstructions}
+            onSave={handleSystemPromptSave}
+            onClose={closeDetail}
+            editable={editable}
+          />
+        )}
+        {activeDetail === 'tools' && features.tools && (
+          <ToolsDetail onClose={closeDetail} editable={editable} availableTools={availableTools} />
+        )}
+        {activeDetail === 'skills' && features.skills && <SkillsDetail onClose={closeDetail} />}
+      </div>
     </div>
   );
 };
@@ -189,18 +239,30 @@ interface ConfigRowProps {
   description: string;
   count?: number;
   total?: number;
+  isActive?: boolean;
   onClick: () => void;
   testId: string;
 }
 
-const ConfigRow = ({ icon, label, description, count, total, onClick, testId }: ConfigRowProps) => (
+const ConfigRow = ({ icon, label, description, count, total, isActive = false, onClick, testId }: ConfigRowProps) => (
   <button
     type="button"
     onClick={onClick}
     data-testid={testId}
-    className="group flex items-center gap-4 border-b border-border1 px-6 py-4 text-left transition-colors first:border-t hover:bg-surface2"
+    aria-pressed={isActive}
+    className={cn(
+      'group flex items-center gap-3 px-6 py-4 text-left transition-colors hover:bg-surface3',
+      isActive && 'bg-surface3',
+    )}
   >
-    <span className="shrink-0 text-neutral3 transition-colors group-hover:text-neutral5">{icon}</span>
+    <span
+      className={cn(
+        'shrink-0 text-neutral3 transition-colors group-hover:text-neutral5',
+        isActive && 'text-neutral5',
+      )}
+    >
+      {icon}
+    </span>
     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
       <Txt variant="ui-sm" className="font-medium text-neutral6">
         {label}
@@ -210,20 +272,56 @@ const ConfigRow = ({ icon, label, description, count, total, onClick, testId }: 
       </Txt>
     </div>
     {count !== undefined && total !== undefined && (
-      <Txt variant="ui-sm" className="shrink-0 font-mono text-neutral3">
+      <Txt variant="ui-sm" className="shrink-0 tabular-nums text-neutral3">
         {count} / {total}
       </Txt>
     )}
-    <ChevronRight className="h-4 w-4 shrink-0 text-neutral3 transition-colors group-hover:text-neutral5" />
+    <ChevronRight
+      className={cn(
+        'h-4 w-4 shrink-0 text-neutral3 transition-colors group-hover:text-neutral5',
+        isActive && 'text-neutral5',
+      )}
+    />
   </button>
+);
+
+const AgentConfigurePanelSkeleton = () => (
+  <div
+    className="flex h-full flex-col border border-border1 bg-surface2 rounded-3xl overflow-hidden"
+    data-testid="agent-configure-panel-skeleton"
+  >
+    <div className="flex-1 flex flex-col gap-6 py-6 overflow-y-auto">
+      <div className="flex items-center gap-4 px-6">
+        <Skeleton className="h-avatar-lg w-avatar-lg rounded-full shrink-0" />
+        <div className="min-w-0 flex-1 flex flex-col gap-2">
+          <Skeleton className="h-3 w-12" />
+          <Skeleton className="h-9 w-full" />
+        </div>
+      </div>
+      <div className="flex flex-col divide-y divide-border1 border-t border-border1">
+        {[0, 1, 2].map(i => (
+          <div key={i} className="flex items-center gap-3 px-6 py-4">
+            <Skeleton className="h-4 w-4 shrink-0 rounded" />
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-3 w-40" />
+            </div>
+            <Skeleton className="h-4 w-4 shrink-0 rounded" />
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
 );
 
 export const EditableAgentConfigurePanel = (props: AgentConfigurePanelProps) => {
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
   const draftName = formMethods.watch('name');
+  const draftDescription = formMethods.watch('description') ?? '';
   const draftInstructions = formMethods.watch('instructions') ?? '';
 
   const setDraftName = (value: string) => formMethods.setValue('name', value);
+  const setDraftDescription = (value: string) => formMethods.setValue('description', value);
   const setDraftInstructions = (value: string) => formMethods.setValue('instructions', value);
 
   return (
@@ -231,9 +329,11 @@ export const EditableAgentConfigurePanel = (props: AgentConfigurePanelProps) => 
       {...props}
       editable={true}
       draftName={draftName}
+      draftDescription={draftDescription}
       draftAvatarUrl={''}
       draftInstructions={draftInstructions}
       onDraftNameChange={setDraftName}
+      onDraftDescriptionChange={setDraftDescription}
       onDraftAvatarUrlChange={() => {}}
       onDraftInstructionsChange={setDraftInstructions}
     />

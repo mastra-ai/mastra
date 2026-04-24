@@ -103,7 +103,7 @@ export class AgentsPG extends AgentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_AGENT_VERSIONS,
       schema: TABLE_SCHEMAS[TABLE_AGENT_VERSIONS],
-      ifNotExists: ['mcpClients', 'requestContextSchema', 'workspace', 'skills', 'skillsFormat'],
+      ifNotExists: ['mcpClients', 'requestContextSchema', 'workspace', 'skills', 'skillsFormat', 'browser'],
     });
 
     // Migrate tools field from string[] to JSONB format
@@ -710,9 +710,10 @@ export class AgentsPG extends AgentsStorage {
           "defaultOptions", workflows, agents, "integrationTools",
           "inputProcessors", "outputProcessors", memory, scorers,
           "mcpClients", "requestContextSchema", workspace, skills, "skillsFormat",
+          browser,
           "changedFields", "changeMessage",
           "createdAt", "createdAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)`,
         [
           input.id,
           input.agentId,
@@ -735,6 +736,7 @@ export class AgentsPG extends AgentsStorage {
           input.workspace ? JSON.stringify(input.workspace) : null,
           input.skills ? JSON.stringify(input.skills) : null,
           input.skillsFormat ?? null,
+          input.browser ? JSON.stringify(input.browser) : null,
           input.changedFields ? JSON.stringify(input.changedFields) : null,
           input.changeMessage ?? null,
           nowIso,
@@ -1006,6 +1008,7 @@ export class AgentsPG extends AgentsStorage {
       workspace: this.parseJson(row.workspace, 'workspace'),
       skills: this.parseJson(row.skills, 'skills'),
       skillsFormat: row.skillsFormat as 'xml' | 'json' | 'markdown' | undefined,
+      browser: this.parseJson(row.browser, 'browser'),
       changedFields: this.parseJson(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: row.createdAtZ || row.createdAt,
