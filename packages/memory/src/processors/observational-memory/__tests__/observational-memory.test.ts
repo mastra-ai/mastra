@@ -113,6 +113,7 @@ import {
 } from '../reflector-agent';
 import { resolveRetentionFloor } from '../thresholds';
 import { TokenCounter } from '../token-counter';
+import { formatToolResultForObserver } from '../tool-result-helpers';
 
 // =============================================================================
 // Test Helpers
@@ -1295,6 +1296,42 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).toContain('Hello');
     });
 
+    it('should render persisted temporal gap markers as time-passed lines', () => {
+      const temporalGapMarker = createTestMessage('ignored', 'user');
+      temporalGapMarker.id = '__temporal_gap_test';
+      temporalGapMarker.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'text',
+            text: '<system-reminder type="temporal-gap" precedesMessageId="input-1">10 minutes later — 9:10 AM</system-reminder>',
+          },
+        ],
+        metadata: {
+          reminderType: 'temporal-gap',
+          gapText: '10 minutes later',
+          timestamp: '9:10 AM',
+          timestampMs: new Date('2025-01-01T09:10:00.000Z').getTime(),
+          precedesMessageId: 'input-1',
+          systemReminder: {
+            type: 'temporal-gap',
+            message: '10 minutes later — 9:10 AM',
+            gapText: '10 minutes later',
+            timestamp: '9:10 AM',
+            timestampMs: new Date('2025-01-01T09:10:00.000Z').getTime(),
+            precedesMessageId: 'input-1',
+          },
+        },
+      } as any;
+      const textMsg = createTestMessage('Hello after the gap', 'user');
+
+      const formatted = formatMessagesForObserver([temporalGapMarker, textMsg]);
+      expect(formatted).toMatch(/(?:^|\n) ?(?:\([^)]*\): )?10 minutes later/);
+      expect(formatted).toMatch(/User( \([^)]*\))?: Hello after the gap/);
+      expect(formatted).not.toContain('Time passed:');
+      expect(formatted).not.toContain('<system-reminder');
+    });
+
     it('should include non-obscured reasoning content', () => {
       const msg = createTestMessage('ignored', 'assistant');
       msg.content = {
@@ -1365,6 +1402,61 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).toContain('[stripped encryptedContent: 6000 characters]');
       expect(formatted).toContain('[truncated ~');
       expect(formatted).not.toContain('x'.repeat(200));
+    });
+
+    // Regression test for https://github.com/mastra-ai/mastra/issues/15573
+    // Anthropic rejects bodies containing lone UTF-16 surrogates with
+    // `The request body is not valid JSON: no low surrogate in string`.
+    // Truncating via `str.slice(0, maxLen)` can cut between the high and low
+    // surrogate of a non-BMP character (e.g. emoji like 🔥 U+1F525), leaving a
+    // lone high surrogate in the <other-conversation> blocks we inject into
+    // the actor's context.
+    it('should not leave lone UTF-16 surrogates when truncating emoji across maxPartLength boundary', () => {
+      // Place an emoji (surrogate pair) such that maxPartLength lands between
+      // its high and low surrogate code units.
+      const prefix = 'a'.repeat(9);
+      const emoji = '🔥'; // length 2 in UTF-16
+      const suffix = 'tail content that will be truncated';
+      const text = prefix + emoji + suffix;
+
+      const msg = createTestMessage(text, 'user');
+      // Cut in the middle of the emoji's surrogate pair (after prefix + high surrogate).
+      const formatted = formatMessagesForObserver([msg], { maxPartLength: prefix.length + 1 });
+
+      // JSON.stringify is what the AI SDK / Anthropic client uses to serialize
+      // the request body. A lone surrogate survives stringification and is
+      // what Anthropic's server-side parser rejects.
+      const serialized = JSON.stringify({ content: formatted });
+
+      const loneHighSurrogate = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])/;
+      const loneLowSurrogate = /(^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+      expect(loneHighSurrogate.test(formatted)).toBe(false);
+      expect(loneLowSurrogate.test(formatted)).toBe(false);
+      // Belt-and-suspenders: the serialized form must also be free of lone surrogates.
+      expect(loneHighSurrogate.test(serialized)).toBe(false);
+      expect(loneLowSurrogate.test(serialized)).toBe(false);
+    });
+
+    it('should not leave lone UTF-16 surrogates when truncating tool results with emoji', () => {
+      // Regression for the same surrogate issue, but via the tool-result path.
+      // formatToolResultForObserver serializes the value, then truncateStringByTokens
+      // performs a binary-search slice. A large tool result containing an emoji at
+      // the token boundary must not produce a lone surrogate.
+      const prefix = 'b'.repeat(20);
+      const emoji = '🔥'; // U+1F525 surrogate pair
+      const suffix = ' '.repeat(1000); // spaces are cheap in tokens so binary search lands near length
+      const toolResult = { summary: prefix + emoji + suffix };
+
+      // Force a very low token limit so truncation is guaranteed.
+      const formatted = formatToolResultForObserver(toolResult, { maxTokens: 10 });
+      const serialized = JSON.stringify({ content: formatted });
+
+      const loneHighSurrogate = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])/;
+      const loneLowSurrogate = /(^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+      expect(loneHighSurrogate.test(formatted)).toBe(false);
+      expect(loneLowSurrogate.test(formatted)).toBe(false);
+      expect(loneHighSurrogate.test(serialized)).toBe(false);
+      expect(loneLowSurrogate.test(serialized)).toBe(false);
     });
   });
 
@@ -8678,6 +8770,79 @@ describe('Full Async Buffering Flow', () => {
     expect(observerCalls.length).toBeGreaterThan(0);
   });
 
+  it('should persist buffering markers on observed assistant messages instead of data-only DB messages', async () => {
+    const { storage, om, threadId, resourceId } = await setupAsyncBufferingScenario({
+      messageTokens: 10000,
+      bufferTokens: 300,
+      bufferActivation: 1,
+      reflectionObservationTokens: 50000,
+      messageCount: 4,
+    });
+
+    const stored = await storage.listMessages({
+      threadId,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      perPage: false,
+    });
+    const messages = stored.messages;
+    const streamedMarkers: Array<{ type: string; transient?: boolean }> = [];
+
+    const writer = {
+      custom: async (part: { type: string; data?: unknown; transient?: boolean }) => {
+        streamedMarkers.push(part);
+        if (part.type.startsWith('data-') && !part.transient) {
+          await storage.saveMessages({
+            messages: [
+              {
+                id: `writer-${streamedMarkers.length}`,
+                role: 'assistant' as const,
+                content: { format: 2 as const, parts: [part as any] },
+                type: 'text',
+                createdAt: new Date(Date.UTC(2025, 0, 1, 10, streamedMarkers.length)),
+                threadId,
+                resourceId,
+              },
+            ],
+          });
+        }
+      },
+    };
+
+    const result = await om.buffer({
+      threadId,
+      resourceId,
+      messages,
+      pendingTokens: 1000,
+      writer,
+    });
+
+    expect(result.buffered).toBe(true);
+    expect(streamedMarkers.some(marker => marker.type === 'data-om-buffering-start')).toBe(true);
+    expect(streamedMarkers.some(marker => marker.type === 'data-om-buffering-end')).toBe(true);
+    expect(streamedMarkers.every(marker => marker.transient === true)).toBe(true);
+
+    const after = await storage.listMessages({
+      threadId,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      perPage: false,
+    });
+    const dataOnlyMessages = after.messages.filter(
+      message =>
+        message.role === 'assistant' &&
+        message.content.parts.length > 0 &&
+        message.content.parts.every(part => part.type.startsWith('data-')),
+    );
+    expect(dataOnlyMessages).toHaveLength(0);
+
+    const assistantWithMarkers = after.messages.find(
+      message =>
+        message.role === 'assistant' &&
+        message.content.parts.some(part => part.type === 'data-om-buffering-start') &&
+        message.content.parts.some(part => part.type === 'data-om-buffering-end'),
+    );
+    expect(assistantWithMarkers).toBeDefined();
+  });
+
   it('should activate buffered observations when threshold is reached', async () => {
     // Phase 1: Start with few messages so buffering triggers (below threshold)
     // 10 messages × ~200 tokens = ~2000 tokens, threshold = 5000
@@ -14672,6 +14837,21 @@ describe('Observer output threadTitle propagation', () => {
     const mockWriter = {
       custom: async (part: any) => {
         capturedParts.push(part);
+        if (part.type.startsWith('data-') && !part.transient) {
+          await storage.saveMessages({
+            messages: [
+              {
+                id: `writer-${capturedParts.length}`,
+                role: 'assistant' as const,
+                content: { format: 2 as const, parts: [part] },
+                type: 'text',
+                createdAt: new Date(Date.UTC(2025, 0, 1, 10, capturedParts.length)),
+                threadId,
+                resourceId,
+              },
+            ],
+          });
+        }
       },
     };
 
@@ -14766,6 +14946,27 @@ describe('Observer output threadTitle propagation', () => {
     });
     expect(threadUpdatePart?.data.cycleId).toEqual(expect.any(String));
     expect(threadUpdatePart?.data.timestamp).toEqual(expect.any(String));
+    expect(capturedParts.every(part => part.transient === true)).toBe(true);
+
+    const after = await storage.listMessages({
+      threadId,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      perPage: false,
+    });
+    const dataOnlyMessages = after.messages.filter(
+      message =>
+        message.role === 'assistant' &&
+        message.content.parts.length > 0 &&
+        message.content.parts.every(part => part.type.startsWith('data-')),
+    );
+    expect(dataOnlyMessages).toHaveLength(0);
+    expect(
+      after.messages.some(message =>
+        message.content.parts.some(
+          part => part.type === 'data-om-thread-update' && (part.data as any)?.newTitle === 'React Dashboard Project',
+        ),
+      ),
+    ).toBe(true);
   });
 
   it('should persist threadTitle from activated buffered chunks to thread record', async () => {

@@ -3,8 +3,30 @@ import type { ClickHouseClient } from '@clickhouse/client';
 import { MastraError } from '@mastra/core/error';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TABLE_LOG_EVENTS, TABLE_METRIC_EVENTS, TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS } from './ddl';
-import { migrateSignalTables } from './migration';
+import { isReplacingMergeTreeEngine, migrateSignalTables } from './migration';
 import { ObservabilityStorageClickhouseVNext } from '.';
+
+describe('isReplacingMergeTreeEngine', () => {
+  it('accepts plain ReplacingMergeTree', () => {
+    expect(isReplacingMergeTreeEngine('ReplacingMergeTree')).toBe(true);
+  });
+
+  it('accepts SharedReplacingMergeTree (ClickHouse Cloud rewrite)', () => {
+    expect(isReplacingMergeTreeEngine('SharedReplacingMergeTree')).toBe(true);
+  });
+
+  it('accepts ReplicatedReplacingMergeTree (self-managed replicated clusters)', () => {
+    expect(isReplacingMergeTreeEngine('ReplicatedReplacingMergeTree')).toBe(true);
+  });
+
+  it('rejects non-replacing engines', () => {
+    expect(isReplacingMergeTreeEngine('MergeTree')).toBe(false);
+    expect(isReplacingMergeTreeEngine('SharedMergeTree')).toBe(false);
+    expect(isReplacingMergeTreeEngine('AggregatingMergeTree')).toBe(false);
+    expect(isReplacingMergeTreeEngine('Log')).toBe(false);
+    expect(isReplacingMergeTreeEngine('')).toBe(false);
+  });
+});
 
 /** Wraps a client so that INSERT commands throw — used to exercise rollback. */
 function clientThatFailsOnInsert(real: ClickHouseClient): ClickHouseClient {

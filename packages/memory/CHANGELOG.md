@@ -1,5 +1,40 @@
 # @mastra/memory
 
+## 1.17.1-alpha.0
+
+### Patch Changes
+
+- Fixed observational memory message boundaries so streamed tool results continue in a fresh assistant message instead of being filtered out mid-run, and OM lifecycle markers persist through memory without creating data-only database messages. ([#15701](https://github.com/mastra-ai/mastra/pull/15701))
+
+- Updated dependencies [[`750b4d3`](https://github.com/mastra-ai/mastra/commit/750b4d3d8231f92e769b2c485921ac5a8ca639b9)]:
+  - @mastra/core@1.28.0-alpha.1
+
+## 1.17.0
+
+### Minor Changes
+
+- Added opt-in temporal-gap markers for observational memory. When enabled via `observationalMemory.temporalMarkers: true`, the agent receives a `<system-reminder type="temporal-gap">` before any user message that arrives more than 10 minutes after the previous one, so it can anchor responses in real elapsed time. Markers are persisted, surfaced to the observer, and rendered by the MastraCode TUI on reload. ([#15605](https://github.com/mastra-ai/mastra/pull/15605))
+
+### Patch Changes
+
+- Fixed observer agent truncation that could cut UTF-16 surrogate pairs in half when formatting messages, tool results, or observation lines with emoji or other astral-plane characters. This produced lone surrogates that strict JSON parsers (including Anthropic's) reject with errors like `no low surrogate in string`, causing observer runs to fail. ([#15634](https://github.com/mastra-ai/mastra/pull/15634))
+
+- Updated dependencies [[`f112db1`](https://github.com/mastra-ai/mastra/commit/f112db179557ae9b5a0f1d25dc47f928d7d61cd9), [`21d9706`](https://github.com/mastra-ai/mastra/commit/21d970604d89eee970cbf8013d26d7551aff6ea5), [`0a0aa94`](https://github.com/mastra-ai/mastra/commit/0a0aa94729592e99885af2efb90c56aaada62247), [`ed07df3`](https://github.com/mastra-ai/mastra/commit/ed07df32a9d539c8261e892fc1bade783f5b41a6), [`01a7d51`](https://github.com/mastra-ai/mastra/commit/01a7d513493d21562f677f98550f7ceb165ba78c)]:
+  - @mastra/core@1.27.0
+
+## 1.17.0-alpha.0
+
+### Minor Changes
+
+- Added opt-in temporal-gap markers for observational memory. When enabled via `observationalMemory.temporalMarkers: true`, the agent receives a `<system-reminder type="temporal-gap">` before any user message that arrives more than 10 minutes after the previous one, so it can anchor responses in real elapsed time. Markers are persisted, surfaced to the observer, and rendered by the MastraCode TUI on reload. ([#15605](https://github.com/mastra-ai/mastra/pull/15605))
+
+### Patch Changes
+
+- Fixed observer agent truncation that could cut UTF-16 surrogate pairs in half when formatting messages, tool results, or observation lines with emoji or other astral-plane characters. This produced lone surrogates that strict JSON parsers (including Anthropic's) reject with errors like `no low surrogate in string`, causing observer runs to fail. ([#15634](https://github.com/mastra-ai/mastra/pull/15634))
+
+- Updated dependencies [[`0a0aa94`](https://github.com/mastra-ai/mastra/commit/0a0aa94729592e99885af2efb90c56aaada62247), [`01a7d51`](https://github.com/mastra-ai/mastra/commit/01a7d513493d21562f677f98550f7ceb165ba78c)]:
+  - @mastra/core@1.27.0-alpha.1
+
 ## 1.16.0
 
 ### Minor Changes

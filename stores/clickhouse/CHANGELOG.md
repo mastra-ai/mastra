@@ -1,5 +1,34 @@
 # @mastra/clickhouse
 
+## 1.5.1
+
+### Patch Changes
+
+- Fixed `mastra dev` repeatedly reporting `MIGRATION REQUIRED` on ClickHouse Cloud after `mastra migrate` had already run successfully. The observability migration check now recognizes the engine-name variants that ClickHouse Cloud and replicated clusters use in place of `ReplacingMergeTree`. ([#15623](https://github.com/mastra-ai/mastra/pull/15623))
+
+- Improved ClickHouse v-next observability initialization errors to include the underlying ClickHouse message in the standard error text. This makes init failures actionable in loggers that only print `error.message`. ([#15588](https://github.com/mastra-ai/mastra/pull/15588))
+
+- Updated dependencies [[`f112db1`](https://github.com/mastra-ai/mastra/commit/f112db179557ae9b5a0f1d25dc47f928d7d61cd9), [`21d9706`](https://github.com/mastra-ai/mastra/commit/21d970604d89eee970cbf8013d26d7551aff6ea5), [`0a0aa94`](https://github.com/mastra-ai/mastra/commit/0a0aa94729592e99885af2efb90c56aaada62247), [`ed07df3`](https://github.com/mastra-ai/mastra/commit/ed07df32a9d539c8261e892fc1bade783f5b41a6), [`01a7d51`](https://github.com/mastra-ai/mastra/commit/01a7d513493d21562f677f98550f7ceb165ba78c)]:
+  - @mastra/core@1.27.0
+
+## 1.5.1-alpha.1
+
+### Patch Changes
+
+- Improved ClickHouse v-next observability initialization errors to include the underlying ClickHouse message in the standard error text. This makes init failures actionable in loggers that only print `error.message`. ([#15588](https://github.com/mastra-ai/mastra/pull/15588))
+
+- Updated dependencies [[`0a0aa94`](https://github.com/mastra-ai/mastra/commit/0a0aa94729592e99885af2efb90c56aaada62247), [`01a7d51`](https://github.com/mastra-ai/mastra/commit/01a7d513493d21562f677f98550f7ceb165ba78c)]:
+  - @mastra/core@1.27.0-alpha.1
+
+## 1.5.1-alpha.0
+
+### Patch Changes
+
+- Fixed `mastra dev` repeatedly reporting `MIGRATION REQUIRED` on ClickHouse Cloud after `mastra migrate` had already run successfully. The observability migration check now recognizes the engine-name variants that ClickHouse Cloud and replicated clusters use in place of `ReplacingMergeTree`. ([#15623](https://github.com/mastra-ai/mastra/pull/15623))
+
+- Updated dependencies [[`f112db1`](https://github.com/mastra-ai/mastra/commit/f112db179557ae9b5a0f1d25dc47f928d7d61cd9), [`21d9706`](https://github.com/mastra-ai/mastra/commit/21d970604d89eee970cbf8013d26d7551aff6ea5)]:
+  - @mastra/core@1.26.1-alpha.0
+
 ## 1.5.0
 
 ### Minor Changes

@@ -450,7 +450,7 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   /** Unique identifier for this execution run */
   runId?: string;
 
-  /** Save messages incrementally after each stream step completes (default: false). */
+  /** Save messages incrementally after each stream step completes (default: false). Is disabled internally when observational memory is enabled, as OM handles its own message saving */
   savePerStep?: boolean;
 
   /** Request Context containing dynamic configuration and state */

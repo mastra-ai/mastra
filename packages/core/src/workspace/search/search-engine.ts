@@ -117,6 +117,76 @@ export interface SearchEngineConfig {
 }
 
 // =============================================================================
+// Chunking
+// =============================================================================
+
+const DEFAULT_MAX_CHUNK_CHARS = 4000;
+const DEFAULT_OVERLAP_LINES = 3;
+
+export interface ChunkOptions {
+  maxChunkChars?: number;
+  overlapLines?: number;
+}
+
+export interface TextChunk {
+  content: string;
+  startLine: number;
+}
+
+/**
+ * Split text into line-based chunks that stay within a character budget.
+ *
+ * Each chunk is formed by accumulating whole lines until adding the next line
+ * would exceed `maxChunkChars`. Adjacent chunks share `overlapLines` lines so
+ * that context around chunk boundaries is preserved for embedding quality.
+ *
+ * Returns the original text as a single chunk when it already fits.
+ */
+export function splitIntoChunks(text: string, options: ChunkOptions = {}): TextChunk[] {
+  const maxChars = Math.max(1, Math.floor(options.maxChunkChars ?? DEFAULT_MAX_CHUNK_CHARS));
+  const overlapLines = Math.max(0, Math.floor(options.overlapLines ?? DEFAULT_OVERLAP_LINES));
+
+  if (text.length <= maxChars) {
+    return [{ content: text, startLine: 1 }];
+  }
+
+  const lines = text.split('\n');
+  const chunks: TextChunk[] = [];
+  let start = 0;
+
+  while (start < lines.length) {
+    let end = start;
+    let charCount = 0;
+
+    while (end < lines.length) {
+      const lineLen = lines[end]!.length + (end > start ? 1 : 0);
+      if (charCount + lineLen > maxChars && end > start) break;
+      charCount += lineLen;
+      end++;
+    }
+
+    const chunkContent = lines.slice(start, end).join('\n');
+
+    if (chunkContent.length <= maxChars) {
+      chunks.push({ content: chunkContent, startLine: start + 1 });
+    } else {
+      // Single line exceeds maxChars — split by character boundaries.
+      for (let offset = 0; offset < chunkContent.length; offset += maxChars) {
+        chunks.push({
+          content: chunkContent.slice(offset, offset + maxChars),
+          startLine: start + 1,
+        });
+      }
+    }
+
+    const nextStart = end - overlapLines;
+    start = nextStart <= start ? end : nextStart;
+  }
+
+  return chunks;
+}
+
+// =============================================================================
 // SearchEngine
 // =============================================================================
 
@@ -152,11 +222,17 @@ export class SearchEngine {
   /** Whether to use lazy vector indexing */
   #lazyVectorIndex: boolean;
 
+  /** All indexed document IDs (used for prefix-based removal across backends) */
+  #indexedIds: Set<string> = new Set();
+
   /** Documents pending vector indexing (for lazy mode) */
   #pendingVectorDocs: IndexDocument[] = [];
 
   /** Whether vector index has been built (for lazy mode) */
   #vectorIndexBuilt: boolean = false;
+
+  /** Whether createIndex has been attempted on the vector store */
+  #vectorIndexReady: boolean = false;
 
   constructor(config: SearchEngineConfig = {}) {
     // Initialize BM25 if configured
@@ -188,6 +264,8 @@ export class SearchEngine {
     if (doc.startLineOffset !== undefined) {
       metadata._startLineOffset = doc.startLineOffset;
     }
+
+    this.#indexedIds.add(doc.id);
 
     // BM25 indexing (always synchronous and immediate)
     if (this.#bm25Index) {
@@ -221,6 +299,8 @@ export class SearchEngine {
    * Remove a document from the index
    */
   async remove(id: string): Promise<void> {
+    this.#indexedIds.delete(id);
+
     // Remove from BM25
     if (this.#bm25Index) {
       this.#bm25Index.remove(id);
@@ -245,9 +325,67 @@ export class SearchEngine {
   }
 
   /**
+   * Remove all documents whose ID starts with the given prefix.
+   * Used to remove all chunks belonging to a single source document.
+   */
+  async removeByPrefix(prefix: string): Promise<void> {
+    const matchedIds = [...this.#indexedIds].filter(id => id.startsWith(prefix));
+
+    for (const id of matchedIds) {
+      this.#indexedIds.delete(id);
+    }
+
+    if (this.#bm25Index) {
+      for (const id of matchedIds) {
+        this.#bm25Index.remove(id);
+      }
+    }
+
+    if (this.#vectorConfig) {
+      if (this.#lazyVectorIndex) {
+        this.#pendingVectorDocs = this.#pendingVectorDocs.filter(d => !d.id.startsWith(prefix));
+      }
+
+      for (const id of matchedIds) {
+        try {
+          await this.#vectorConfig.vectorStore.deleteVector({
+            indexName: this.#vectorConfig.indexName,
+            id,
+          });
+        } catch {
+          // Vector may not exist, ignore
+        }
+      }
+    }
+  }
+
+  /**
+   * Remove a source document and all of its chunked variants.
+   *
+   * This also attempts a metadata-based bulk delete for chunk vectors so stale
+   * chunk IDs from previous process runs are cleaned up in persistent stores.
+   */
+  async removeSource(sourceId: string): Promise<void> {
+    await this.remove(sourceId);
+    await this.removeByPrefix(`${sourceId}#chunk-`);
+
+    if (this.#vectorConfig) {
+      try {
+        await this.#vectorConfig.vectorStore.deleteVectors({
+          indexName: this.#vectorConfig.indexName,
+          filter: { sourceFile: sourceId } as VectorFilter,
+        });
+      } catch {
+        // Bulk delete/filter may not be supported by all vector backends.
+      }
+    }
+  }
+
+  /**
    * Clear all indexed documents
    */
   clear(): void {
+    this.#indexedIds.clear();
     if (this.#bm25Index) {
       this.#bm25Index.clear();
     }
@@ -349,6 +487,17 @@ export class SearchEngine {
 
     const embedding = await embedder(doc.content);
 
+    if (!this.#vectorIndexReady) {
+      // Some backends (e.g. LibSQLVector) require createIndex before upsert.
+      // createIndex is expected to be idempotent; we ignore errors here and let
+      // upsert determine whether the index is actually usable.
+      try {
+        await vectorStore.createIndex({ indexName, dimension: embedding.length });
+      } catch {
+        // Already exists, temporarily unavailable, or not required by backend.
+      }
+    }
+
     await vectorStore.upsert({
       indexName,
       vectors: [embedding],
@@ -361,6 +510,10 @@ export class SearchEngine {
       ],
       ids: [doc.id],
     });
+
+    // Mark index as ready only after a successful upsert so createIndex is retried
+    // on subsequent writes if the previous attempt did not produce a usable index.
+    this.#vectorIndexReady = true;
   }
 
   /**

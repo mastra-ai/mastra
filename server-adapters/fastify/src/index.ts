@@ -61,7 +61,7 @@ declare module 'fastify' {
   interface FastifyRequest {
     mastra: Mastra;
     requestContext: RequestContext;
-    tools: ToolsInput;
+    registeredTools: ToolsInput;
     abortSignal: AbortSignal;
     taskStore: InMemoryTaskStore;
     customRouteAuthConfig?: Map<string, boolean>;
@@ -115,7 +115,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       // Set context in request object
       request.requestContext = requestContext;
       request.mastra = this.mastra;
-      request.tools = this.tools || {};
+      request.registeredTools = this.tools || {};
       if (this.taskStore) {
         request.taskStore = this.taskStore;
       }
@@ -531,7 +531,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         ...(typeof params.body === 'object' ? params.body : {}),
         requestContext: request.requestContext,
         mastra: this.mastra,
-        tools: request.tools,
+        registeredTools: request.registeredTools,
         taskStore: request.taskStore,
         abortSignal: request.abortSignal,
         routePrefix: prefix,

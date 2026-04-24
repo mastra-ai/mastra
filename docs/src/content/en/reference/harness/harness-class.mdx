@@ -71,8 +71,9 @@ await harness.sendMessage({ content: 'Hello!' })
   },
   {
     name: 'stateSchema',
-    type: 'z.ZodObject',
-    description: 'Zod schema defining the shape of harness state. Used for validation and extracting defaults.',
+    type: 'StandardJSONSchemaV1',
+    description:
+      'Standard JSON Schema defining the shape of harness state. Used for validation and extracting defaults.',
     isOptional: true,
   },
   {
