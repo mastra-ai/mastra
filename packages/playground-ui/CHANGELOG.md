@@ -1,5 +1,24 @@
 # @mastra/playground-ui
 
+## 24.0.0-alpha.0
+
+### Patch Changes
+
+- Migrated color tokens to oklch() for perceptually uniform, wide-gamut (P3) ready colors. Light theme neutrals and surfaces no longer have a blue tint (slate → true gray). Dark theme is visually unchanged. ([#15713](https://github.com/mastra-ai/mastra/pull/15713))
+
+- Added shared Logs components and hooks under `@mastra/playground-ui`. Consumers can now reuse the Logs page building blocks together with the data hooks and the URL-state / filter-persistence helpers instead of duplicating them per app. ([#15723](https://github.com/mastra-ai/mastra/pull/15723))
+
+- Added shared metrics components and hooks under `@mastra/playground-ui`. Consumers can now reuse the metrics dashboard building blocks (KPI, Latency, Scores, Token Usage, Trace Volume, Model Usage Cost cards), their data hooks, and the `MetricsProvider` / `DateRangeSelector` primitives instead of duplicating them per app. ([#15705](https://github.com/mastra-ai/mastra/pull/15705))
+
+  **New peer dependency:** `@tanstack/react-query ^5.90.21`. Add it alongside your existing playground-ui install.
+
+- Added shared Traces components and hooks under `@mastra/playground-ui`. Consumers can now reuse the Traces page building blocks together with the data hooks and the URL-state / filter-persistence helpers instead of duplicating them per app. ([#15714](https://github.com/mastra-ai/mastra/pull/15714))
+
+- Updated dependencies [[`b1888da`](https://github.com/mastra-ai/mastra/commit/b1888da8fb00c2ebe8404350303c10a289ba9838), [`b510d36`](https://github.com/mastra-ai/mastra/commit/b510d368f73dab6be2e2c2bc99035aaef1fb7d7a)]:
+  - @mastra/client-js@1.15.0-alpha.0
+  - @mastra/core@1.29.0-alpha.0
+  - @mastra/react@0.2.30-alpha.0
+
 ## 23.0.2
 
 ### Patch Changes
