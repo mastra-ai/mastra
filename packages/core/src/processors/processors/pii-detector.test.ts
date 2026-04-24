@@ -1142,9 +1142,11 @@ describe('PIIDetector', () => {
   });
 
   describe('structured output schema compatibility', () => {
-    it('should not add number bounds to score or confidence schemas', async () => {
+    it('should not send number bounds to Anthropic in score or confidence schemas', async () => {
       const mockResult = createMockPIIResult();
       const mockModel = new MastraLanguageModelV2Mock({
+        provider: 'anthropic',
+        modelId: 'claude-3-5-sonnet',
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',

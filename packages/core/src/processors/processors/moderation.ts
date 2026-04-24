@@ -14,14 +14,6 @@ import type { Processor } from '../index';
 import { selectMessagesToCheck } from './message-selection';
 import type { LastMessageOnlyOption } from './message-selection';
 
-const validateScore = (score: number) => {
-  if (score < 0 || score > 1) {
-    throw new Error(`Expected score to be between 0 and 1, received ${score}`);
-  }
-
-  return score;
-};
-
 /**
  * Individual moderation category score
  */
@@ -296,6 +288,8 @@ export class ModerationProcessor implements Processor<'moderation'> {
                 .describe('The moderation category being evaluated'),
               score: z
                 .number()
+                .min(0)
+                .max(1)
                 .describe('Confidence score between 0 and 1 indicating how strongly the content matches this category'),
             }),
           )
@@ -334,14 +328,7 @@ export class ModerationProcessor implements Processor<'moderation'> {
         result = response.object as ModerationResult;
       }
 
-      return {
-        ...result,
-        category_scores:
-          result.category_scores?.map(category => ({
-            ...category,
-            score: validateScore(category.score),
-          })) ?? null,
-      };
+      return result;
     } catch (error) {
       console.warn('[ModerationProcessor] Agent moderation failed, allowing content:', error);
       // Fail open - return empty result if moderation agent fails (no moderation needed)

@@ -725,9 +725,11 @@ describe('PromptInjectionDetector', () => {
   });
 
   describe('structured output schema compatibility', () => {
-    it('should not add number bounds to score schemas', async () => {
+    it('should not send number bounds to Anthropic in score schemas', async () => {
       const mockResult = createMockDetectionResult(false);
       const mockModel = new MastraLanguageModelV2Mock({
+        provider: 'anthropic',
+        modelId: 'claude-3-5-sonnet',
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
