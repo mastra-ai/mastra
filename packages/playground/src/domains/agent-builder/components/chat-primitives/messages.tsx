@@ -1,5 +1,4 @@
-import { Skeleton, Txt, Spinner } from '@mastra/playground-ui';
-import { Icon } from '@mastra/react';
+import { Skeleton, Txt } from '@mastra/playground-ui';
 import type { MastraUIMessage } from '@mastra/react';
 import { Check, Loader2 } from 'lucide-react';
 import { useState } from 'react';
@@ -24,7 +23,6 @@ export const MessageRow = ({ message }: { message: MastraUIMessage }) => {
             );
 
           case 'dynamic-tool': {
-            console.log('dynamic-tool', part);
             if (part.toolName === AGENT_BUILDER_TOOL_NAME) {
               const toolsAdded = (part.input as { tools: { id: string; name: string }[] })?.tools ?? [];
               return <BuilderAgentToolMessage toolsAdded={toolsAdded} key={key} />;
@@ -34,13 +32,11 @@ export const MessageRow = ({ message }: { message: MastraUIMessage }) => {
           }
 
           case `tool-${AGENT_BUILDER_TOOL_NAME}`: {
-            console.log(`tool-${AGENT_BUILDER_TOOL_NAME}`, part);
             const toolsAdded = part.input.tools ?? [];
             return <BuilderAgentToolMessage toolsAdded={toolsAdded} key={key} />;
           }
 
           default: {
-            console.log('default', part);
             return null;
           }
         }
