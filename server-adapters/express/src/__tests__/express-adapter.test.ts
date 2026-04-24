@@ -784,5 +784,41 @@ describe('Express Server Adapter', () => {
       const data = await response.json();
       expect(data).toEqual({ echo: { test: 'data' } });
     });
+
+    it('should apply prefix to custom API routes', async () => {
+      const customRoutes = [
+        registerApiRoute('/chat', {
+          method: 'GET',
+          handler: async c => {
+            return c.json({ ok: true });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        prefix: '/api',
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      // Custom route should be reachable at the prefixed path
+      const prefixed = await fetch(`http://localhost:${port}/api/chat`);
+      expect(prefixed.status).toBe(200);
+      const data = await prefixed.json();
+      expect(data).toEqual({ ok: true });
+    });
   });
 });

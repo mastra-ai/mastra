@@ -559,21 +559,29 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
   async registerCustomApiRoutes(): Promise<void> {
     if (!(await this.buildCustomRouteHandler())) return;
 
+    const prefix = this.prefix ?? '';
+
     this.app.use(async (req: Request, res: Response, next: NextFunction) => {
+      // Strip the prefix from the path so custom route matching and forwarding
+      // use the bare path that the internal Hono sub-app expects.
+      let routePath = String(req.path || '/');
+      if (prefix && routePath.startsWith(prefix)) {
+        routePath = routePath.slice(prefix.length) || '/';
+      }
+
       // Check if this request matches a protected custom route and run auth
-      const path = String(req.path || '/');
       const method = String(req.method || 'GET');
 
-      if (isProtectedCustomRoute(path, method, this.customRouteAuthConfig)) {
+      if (isProtectedCustomRoute(routePath, method, this.customRouteAuthConfig)) {
         const serverRoute: ServerRoute = {
           method: method as any,
-          path,
+          path: routePath,
           responseType: 'json',
           handler: async () => {},
         };
 
         const authError = await this.checkRouteAuth(serverRoute, {
-          path,
+          path: routePath,
           method,
           getHeader: name => req.headers[name.toLowerCase()] as string | undefined,
           getQuery: name => req.query[name] as string | undefined,
@@ -602,8 +610,14 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         }
       }
 
+      // Strip the prefix from the URL before forwarding to the internal Hono
+      // sub-app, which has routes registered at their original (un-prefixed) paths.
+      let routeUrl = req.originalUrl;
+      if (prefix && routeUrl.startsWith(prefix)) {
+        routeUrl = routeUrl.slice(prefix.length) || '/';
+      }
       const response = await this.handleCustomRouteRequest(
-        `${req.protocol}://${req.get('host') || 'localhost'}${req.originalUrl}`,
+        `${req.protocol}://${req.get('host') || 'localhost'}${routeUrl}`,
         req.method,
         req.headers as Record<string, string | string[] | undefined>,
         req.body,
