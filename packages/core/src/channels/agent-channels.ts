@@ -40,11 +40,30 @@ export type ChannelStatusHandle = {
 /** Runtime helpers available to channel lifecycle hooks. */
 export type ChannelRuntime = {
   status: {
-    /** Set a best-effort channel status and return a handle that can clear it. */
+    /** Set a best-effort channel status through configured status handlers or adapter status methods. */
     set: (text: string) => Promise<ChannelStatusHandle>;
     /** Clear the active channel status. */
     clear: () => Promise<void>;
   };
+};
+
+/** Context passed to adapter status handlers. */
+export type ChannelStatusContext = {
+  adapter: Adapter;
+  thread: Thread;
+  threadId: string;
+  platform: string;
+};
+
+/** Context passed when setting adapter status. */
+export type ChannelStatusSetContext = ChannelStatusContext & {
+  text: string;
+};
+
+/** Optional adapter status handlers. */
+export type ChannelStatusConfig = {
+  set?: (ctx: ChannelStatusSetContext) => Promise<void> | void;
+  clear?: (ctx: ChannelStatusContext) => Promise<void> | void;
 };
 
 /** Context passed when a tool starts running in a channel response. */
@@ -101,6 +120,12 @@ export interface ChannelAdapterConfig {
    * @default - A Card showing the function-call signature and result.
    */
   formatToolCall?: (info: ChannelToolEndContext) => PostableMessage | null;
+
+  /**
+   * Optional status handlers for adapters that do not implement status methods directly.
+   * Use this to bridge third-party adapter APIs to Mastra's channel status runtime.
+   */
+  status?: ChannelStatusConfig;
 
   /**
    * Called when a tool starts running in the channel response.
@@ -1156,13 +1181,32 @@ export class AgentChannels {
     let statusToken = 0;
     let activeStatusToken: number | undefined;
 
+    const statusContext: ChannelStatusContext = {
+      adapter,
+      thread: sdkThread,
+      threadId: sdkThread.id,
+      platform,
+    };
+
     const setAdapterStatus = async (text: string) => {
+      if (typeof adapterConfig?.status?.set === 'function') {
+        await adapterConfig.status.set({ ...statusContext, text });
+        return;
+      }
       if (typeof statusAdapter.setStatus === 'function') {
         await statusAdapter.setStatus(sdkThread.id, text);
       }
     };
 
     const clearAdapterStatus = async () => {
+      if (typeof adapterConfig?.status?.clear === 'function') {
+        await adapterConfig.status.clear(statusContext);
+        return;
+      }
+      if (typeof adapterConfig?.status?.set === 'function') {
+        await adapterConfig.status.set({ ...statusContext, text: '' });
+        return;
+      }
       if (typeof statusAdapter.clearStatus === 'function') {
         await statusAdapter.clearStatus(sdkThread.id);
         return;

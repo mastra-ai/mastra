@@ -419,6 +419,39 @@ describe('AgentChannels', () => {
       expect(adapter.clearStatus).toHaveBeenCalledWith('thread-1');
     });
 
+    it('maps channel status to configured status handlers', async () => {
+      const adapter = createMockAdapter('slack');
+      const setStatus = vi.fn().mockResolvedValue(undefined);
+      const clearStatus = vi.fn().mockResolvedValue(undefined);
+      const onToolStart = vi.fn(async ({ channel }: any) => {
+        await channel.status.set('Reading file…');
+      });
+      const channels = new AgentChannels({
+        adapters: { slack: { adapter, status: { set: setStatus, clear: clearStatus }, onToolStart } },
+      });
+      const thread = createThread();
+
+      await (channels as any).consumeAgentStream(
+        {
+          fullStream: chunks({
+            type: 'tool-call',
+            payload: { toolName: 'read_file', toolCallId: 'call-1', args: { path: 'README.md' } },
+          }),
+        },
+        thread,
+        'slack',
+      );
+
+      expect(setStatus).toHaveBeenCalledWith({
+        adapter,
+        thread,
+        threadId: 'thread-1',
+        platform: 'slack',
+        text: 'Reading file…',
+      });
+      expect(clearStatus).toHaveBeenCalledWith({ adapter, thread, threadId: 'thread-1', platform: 'slack' });
+    });
+
     it('no-ops channel status when adapter lacks status support', async () => {
       const adapter = createMockAdapter('slack');
       const onToolStart = vi.fn(async ({ channel }: any) => {

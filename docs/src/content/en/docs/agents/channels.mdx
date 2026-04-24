@@ -139,8 +139,17 @@ export const supportAgent = new Agent({
   channels: {
     adapters: {
       slack: {
-        // Status updates no-op unless the adapter implements Mastra status methods.
         adapter: createSlackAdapter(),
+        // Optional: bridge channel.status to this adapter's platform-specific status API.
+        // If omitted and the adapter does not implement setStatus/clearStatus, status no-ops.
+        status: {
+          set: async ({ threadId, text }) => {
+            // Map threadId/text to your adapter's status API.
+          },
+          clear: async ({ threadId }) => {
+            // Clear the platform status for threadId.
+          },
+        },
         onToolStart: async ({ toolCallId, displayName, channel }) => {
           toolStatuses.set(toolCallId, await channel.status.set(`Running ${displayName}…`))
         },
@@ -154,7 +163,7 @@ export const supportAgent = new Agent({
 })
 ```
 
-`channel.status` is best-effort. Visible status requires the adapter to implement Mastra status methods such as `setStatus(threadId, text)` and `clearStatus(threadId)`. Other adapters no-op. For Slack assistant status, use a Slack adapter version or wrapper that implements these methods. Mastra core does not call Slack-specific status methods directly. Mastra also clears status when the stream finishes or errors. Use `isError` in `onToolEnd` to handle failed tool results.
+`channel.status` is best-effort. Visible status requires either per-adapter `status` handlers or adapter methods such as `setStatus(threadId, text)` and `clearStatus(threadId)`. Other adapters no-op. For Slack assistant status, bridge to the Slack adapter's status API in `status.set` and `status.clear`. Mastra core does not call Slack-specific status methods directly. Mastra also clears status when the stream finishes or errors. Use `isError` in `onToolEnd` to handle failed tool results.
 
 ## Multi-user awareness
 
