@@ -85,7 +85,7 @@ export const AgentConfigurePanel = ({
   }
 
   return (
-    <div className="flex h-full flex-col border border-border1 bg-surface3 rounded-3xl overflow-hidden">
+    <div className="flex h-full flex-col border border-border1 bg-surface2 rounded-3xl overflow-hidden">
       <div className="flex-1 flex flex-col gap-6 py-6 overflow-y-auto">
         {editable ? (
           <div className="flex items-center gap-4 px-6">
@@ -210,7 +210,7 @@ const ConfigRow = ({ icon, label, description, count, total, onClick, testId }: 
     type="button"
     onClick={onClick}
     data-testid={testId}
-    className="group flex items-center gap-4 border-b border-border1 px-6 py-4 text-left transition-colors first:border-t hover:bg-surface2"
+    className="group flex items-center gap-4 border-b border-border1 px-6 py-4 text-left transition-colors first:border-t hover:bg-surface3"
   >
     <span className="shrink-0 text-neutral3 transition-colors group-hover:text-neutral5">{icon}</span>
     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -236,7 +236,7 @@ interface AgentConfigurePanelSkeletonProps {
 
 const AgentConfigurePanelSkeleton = ({ showSaveButton }: AgentConfigurePanelSkeletonProps) => (
   <div
-    className="flex h-full flex-col border border-border1 bg-surface3 rounded-3xl overflow-hidden"
+    className="flex h-full flex-col border border-border1 bg-surface2 rounded-3xl overflow-hidden"
     data-testid="agent-configure-panel-skeleton"
   >
     <div className="flex-1 flex flex-col gap-6 py-6 overflow-y-auto">

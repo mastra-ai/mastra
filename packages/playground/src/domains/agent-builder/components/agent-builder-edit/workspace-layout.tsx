@@ -23,7 +23,7 @@ export const WorkspaceLayout = ({
 }: WorkspaceLayoutProps) => {
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(defaultExpanded);
-  const gridClass = expanded ? 'grid-cols-[1fr_380px]' : 'grid-cols-[1fr_0px]';
+  const gridClass = expanded ? 'grid-cols-[1fr_380px] gap-6' : 'grid-cols-[1fr_0px] gap-0';
 
   return (
     <div className="flex flex-1 min-w-0 flex-col h-full">
@@ -45,16 +45,18 @@ export const WorkspaceLayout = ({
         </div>
       </div>
       <div className="flex flex-1 min-h-0 min-w-0 flex-col px-6 pb-6 pt-4">
-        <BrowserFrame className={cn('grid relative agent-builder-panel-grid', gridClass)}>
-          <div className="h-full w-full min-w-0 overflow-hidden grid grid-rows-[auto_1fr]">
-            <div className="flex gap-2 items-center pl-6 pt-6 pr-6">{toolbarAction}</div>
-            <div className="min-h-0 min-w-0 overflow-hidden pb-6 max-w-[80ch] mx-auto w-full">{chat}</div>
-          </div>
+        <div className={cn('grid relative h-full min-h-0 agent-builder-panel-grid', gridClass)}>
+          <BrowserFrame>
+            <div className="h-full w-full min-w-0 overflow-hidden grid grid-rows-[auto_1fr]">
+              <div className="flex gap-2 items-center pl-6 pt-6 pr-6">{toolbarAction}</div>
+              <div className="min-h-0 min-w-0 overflow-hidden pb-6 max-w-[80ch] mx-auto w-full">{chat}</div>
+            </div>
+          </BrowserFrame>
 
-          <div className="h-full min-w-0 overflow-hidden" aria-hidden={!expanded}>
+          <div className="h-full min-w-0 overflow-hidden bg-surface2 rounded-3xl" aria-hidden={!expanded}>
             <div
               className={cn(
-                'agent-builder-panel-slide h-full w-[380px] overflow-y-auto pr-6 pb-6 pt-6',
+                'agent-builder-panel-slide h-full w-[380px] overflow-y-auto',
                 expanded ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0 pointer-events-none',
               )}
               style={expanded ? { viewTransitionName: 'agent-builder-configure-panel' } : undefined}
@@ -62,7 +64,7 @@ export const WorkspaceLayout = ({
               {configure}
             </div>
           </div>
-        </BrowserFrame>
+        </div>
       </div>
     </div>
   );
