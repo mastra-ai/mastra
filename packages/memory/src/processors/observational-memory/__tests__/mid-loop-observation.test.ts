@@ -258,7 +258,14 @@ describe('Mid-Loop Observation', () => {
     it('should rotate the response message id after synchronous observation persists', async () => {
       const requestContext = createRequestContext(threadId, resourceId);
       const state: Record<string, unknown> = {};
-      const rotateResponseMessageId = vi.fn(() => 'rotated-response-id');
+      const sealedAtRotate: boolean[] = [];
+      const rotateResponseMessageId = vi.fn(() => {
+        const latestAssistant = [...messageList.get.all.db()].reverse().find(message => message.role === 'assistant');
+        sealedAtRotate.push(
+          !!(latestAssistant?.content.metadata as { mastra?: { sealed?: boolean } } | undefined)?.mastra?.sealed,
+        );
+        return 'rotated-response-id';
+      });
 
       const messageList = new MessageList({
         threadId,
@@ -308,6 +315,7 @@ describe('Mid-Loop Observation', () => {
       });
 
       expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
+      expect(sealedAtRotate).toEqual([true]);
     });
 
     it('should NOT trigger observation on step 0', async () => {
