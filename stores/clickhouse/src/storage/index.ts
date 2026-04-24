@@ -3,6 +3,7 @@ import { createClient } from '@clickhouse/client';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageDomains, TABLE_SCHEMAS } from '@mastra/core/storage';
+import type { ClickhouseTableEngineConfig } from './db/engine';
 import { BackgroundTasksStorageClickhouse } from './domains/background-tasks';
 import { MemoryStorageClickhouse } from './domains/memory';
 import { ObservabilityStorageClickhouse } from './domains/observability';
@@ -21,6 +22,7 @@ export {
   WorkflowsStorageClickhouse,
 };
 export type { ClickhouseDomainConfig } from './db';
+export type { ClickhouseTableEngineConfig } from './db/engine';
 
 type IntervalUnit =
   | 'NANOSECOND'
@@ -116,6 +118,13 @@ export type ClickhouseConfig = {
    * // No auto-init, tables must already exist
    */
   disableInit?: boolean;
+  /**
+   * Optional table engine configuration for ClickHouse-managed tables.
+   *
+   * Use `replicated` or `{ type: 'replicated', ... }` when the store initializes
+   * tables on a replicated ClickHouse cluster.
+   */
+  engine?: ClickhouseTableEngineConfig;
 } & (
   | {
       /**
@@ -199,7 +208,7 @@ export class ClickhouseStore extends MastraCompositeStore {
       }
 
       // Extract Mastra-specific config, pass rest to ClickHouse client
-      const { id, ttl, disableInit, clickhouse_settings, ...clientOptions } = config;
+      const { id, ttl, disableInit, engine, clickhouse_settings, ...clientOptions } = config;
 
       // Create client with all provided options
       this.db = createClient({
@@ -216,7 +225,7 @@ export class ClickhouseStore extends MastraCompositeStore {
 
     this.ttl = config.ttl;
 
-    const domainConfig = { client: this.db, ttl: this.ttl };
+    const domainConfig = { client: this.db, ttl: this.ttl, engine: config.engine };
     const workflows = new WorkflowsStorageClickhouse(domainConfig);
     const scores = new ScoresStorageClickhouse(domainConfig);
     const memory = new MemoryStorageClickhouse(domainConfig);

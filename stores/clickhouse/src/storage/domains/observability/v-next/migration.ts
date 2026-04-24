@@ -2,6 +2,8 @@ import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { createStorageErrorId } from '@mastra/core/storage';
+import type { ClickhouseTableEngineConfig } from '../../../db/engine';
+import { applyClickhouseDDLConfig } from '../../../db/engine';
 
 import {
   TABLE_METRIC_EVENTS,
@@ -107,17 +109,21 @@ export async function checkSignalTablesMigrationStatus(client: ClickHouseClient)
  * → drop old data. EXCHANGE swaps the two table names atomically, so concurrent
  * writers never observe a missing table.
  */
-export async function migrateSignalTables(client: ClickHouseClient, logger?: IMastraLogger): Promise<void> {
+export async function migrateSignalTables(
+  client: ClickHouseClient,
+  logger?: IMastraLogger,
+  engine?: ClickhouseTableEngineConfig,
+): Promise<void> {
   for (const { table, createDDL, idColumn } of SIGNAL_MIGRATIONS) {
-    const engine = await getTableEngine(client, table);
-    if (!engine || isReplacingMergeTreeEngine(engine)) continue;
+    const currentEngine = await getTableEngine(client, table);
+    if (!currentEngine || isReplacingMergeTreeEngine(currentEngine)) continue;
 
-    logger?.info?.(`Migrating ${table} from ${engine} to ReplacingMergeTree with ${idColumn} column`);
+    logger?.info?.(`Migrating ${table} from ${currentEngine} to ReplacingMergeTree with ${idColumn} column`);
 
     const temp = `${table}_migrating_${Date.now()}`;
 
     try {
-      await client.command({ query: buildTemporaryTableDDL(createDDL, table, temp) });
+      await client.command({ query: applyClickhouseDDLConfig(buildTemporaryTableDDL(createDDL, table, temp), engine) });
 
       const newColumns = await getTableColumns(client, temp);
       const currentColumns = new Set(await getTableColumns(client, table));

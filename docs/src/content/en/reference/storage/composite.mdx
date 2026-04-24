@@ -277,3 +277,31 @@ const storage = new MastraCompositeStore({
 This approach is also required when using storage providers that don't support observability (like Convex, DynamoDB, or Cloudflare). See the [DefaultExporter documentation](/docs/observability/tracing/exporters/default#storage-provider-support) for the full list of supported providers.
 
 :::
+
+For multi-replica ClickHouse clusters behind a load balancer, configure replicated table engines when Mastra initializes the ClickHouse tables. Without replicated engines, ClickHouse stores each table locally on the replica that receives the write, so Studio can show different observability data depending on which replica serves a read.
+
+```typescript
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { MemoryPG, WorkflowsPG, ScoresPG } from '@mastra/pg'
+import { ObservabilityStorageClickhouse } from '@mastra/clickhouse'
+
+const storage = new MastraCompositeStore({
+  id: 'composite',
+  domains: {
+    memory: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
+    workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+    scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
+    observability: new ObservabilityStorageClickhouse({
+      url: process.env.CLICKHOUSE_URL,
+      username: process.env.CLICKHOUSE_USERNAME,
+      password: process.env.CLICKHOUSE_PASSWORD,
+      engine: {
+        type: 'replicated',
+        cluster: 'production_cluster',
+        zooPath: '/clickhouse/tables/{shard}/{table}',
+        replica: '{replica}',
+      },
+    }),
+  },
+})
+```

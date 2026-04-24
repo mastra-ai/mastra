@@ -28,6 +28,7 @@ import {
   TABLE_SKILL_VERSIONS,
   TABLE_SKILL_BLOBS,
 } from '@mastra/core/storage';
+import type { ClickhouseTableEngineConfig } from './engine';
 
 export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_MESSAGES]: `MergeTree()`,
@@ -91,6 +92,7 @@ export type ClickhouseConfig = {
   url: string;
   username: string;
   password: string;
+  engine?: ClickhouseTableEngineConfig;
   ttl?: {
     [TableKey in TABLE_NAMES]?: {
       row?: { interval: number; unit: IntervalUnit; ttlKey?: string };

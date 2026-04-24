@@ -82,6 +82,8 @@ import type {
 
 import { resolveClickhouseConfig } from '../../../db';
 import type { ClickhouseDomainConfig } from '../../../db';
+import type { ClickhouseTableEngineConfig } from '../../../db/engine';
+import { applyClickhouseDDLConfig } from '../../../db/engine';
 
 import {
   ALL_TABLE_DDL,
@@ -99,6 +101,7 @@ export type { RetentionConfig } from './ddl';
 /** Extended config for v-next observability, adding per-signal retention. */
 export type VNextObservabilityConfig = ClickhouseDomainConfig & {
   retention?: RetentionConfig;
+  engine?: ClickhouseTableEngineConfig;
 };
 import * as discoveryOps from './discovery';
 import * as feedbackOps from './feedback';
@@ -144,12 +147,14 @@ function buildSignalMigrationRequiredMessage(args: {
 export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   readonly #client: ClickHouseClient;
   readonly #retention?: RetentionConfig;
+  readonly #engine?: ClickhouseTableEngineConfig;
 
   constructor(config: VNextObservabilityConfig) {
     super();
-    const { client } = resolveClickhouseConfig(config);
+    const { client, engine } = resolveClickhouseConfig(config);
     this.#client = client;
     this.#retention = config.retention;
+    this.#engine = engine;
   }
 
   // -------------------------------------------------------------------------
@@ -173,12 +178,12 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     try {
       // Core tables + incremental MVs (must succeed)
       for (const ddl of [...ALL_TABLE_DDL, ...ALL_MV_DDL]) {
-        await this.#client.command({ query: ddl });
+        await this.#client.command({ query: applyClickhouseDDLConfig(ddl, this.#engine) });
       }
 
       // Additive migrations for existing databases (add new columns)
       for (const migration of ALL_MIGRATIONS) {
-        await this.#client.command({ query: migration });
+        await this.#client.command({ query: applyClickhouseDDLConfig(migration, this.#engine) });
       }
 
       // Apply retention TTL if configured (per design doc: per-signal, day increments).
@@ -186,7 +191,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       if (this.#retention) {
         const ttlStatements = buildRetentionDDL(this.#retention);
         for (const stmt of ttlStatements) {
-          await this.#client.command({ query: stmt });
+          await this.#client.command({ query: applyClickhouseDDLConfig(stmt, this.#engine) });
         }
       }
     } catch (error) {
@@ -210,7 +215,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     // discovery methods should continue returning empty results until a later refresh succeeds."
     try {
       for (const ddl of DISCOVERY_MV_DDL) {
-        await this.#client.command({ query: ddl });
+        await this.#client.command({ query: applyClickhouseDDLConfig(ddl, this.#engine) });
       }
       // Trigger an immediate refresh so discovery data is available right away
       // instead of waiting for the first scheduled refresh cycle.
@@ -248,7 +253,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       };
     }
 
-    await migrateSignalTables(this.#client, this.logger);
+    await migrateSignalTables(this.#client, this.logger, this.#engine);
 
     return {
       success: true,
