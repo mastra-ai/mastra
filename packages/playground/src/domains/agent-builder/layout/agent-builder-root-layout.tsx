@@ -30,12 +30,7 @@ export const AgentBuilderRootLayout = ({ paths }: AgentBuilderRootLayoutProps) =
   }
 
   if (authCapabilities?.enabled && !isAuthenticated(authCapabilities)) {
-    return (
-      <Navigate
-        to={buildAgentBuilderLoginRedirect(location.pathname, location.search, location.hash)}
-        replace
-      />
-    );
+    return <Navigate to={buildAgentBuilderLoginRedirect(location.pathname, location.search, location.hash)} replace />;
   }
 
   return <AgentBuilderPermissionsGuard paths={paths} />;

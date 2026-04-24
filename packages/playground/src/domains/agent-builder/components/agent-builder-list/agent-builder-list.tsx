@@ -74,9 +74,7 @@ export function AgentBuilderList({ agents, search }: AgentBuilderListProps) {
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-ui-md text-neutral6 truncate">{agent.name}</div>
-            <div className="text-ui-sm text-neutral3 line-clamp-1 mt-0.5">
-              {agent.description || 'No description'}
-            </div>
+            <div className="text-ui-sm text-neutral3 line-clamp-1 mt-0.5">{agent.description || 'No description'}</div>
           </div>
           <div className="hidden sm:flex items-center gap-6 text-ui-sm text-neutral3 shrink-0">
             <span className="truncate max-w-[16rem]">{getModelLabel(agent.model)}</span>

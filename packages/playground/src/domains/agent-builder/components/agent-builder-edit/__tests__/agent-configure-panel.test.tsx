@@ -136,11 +136,7 @@ describe('AgentConfigurePanel skeleton', () => {
   it('renders the skeleton and hides form fields while loading', () => {
     render(
       <FormWrapper>
-        <EditableAgentConfigurePanel
-          agent={testAgent}
-          onAgentChange={() => {}}
-          isLoading
-        />
+        <EditableAgentConfigurePanel agent={testAgent} onAgentChange={() => {}} isLoading />
       </FormWrapper>,
     );
 
