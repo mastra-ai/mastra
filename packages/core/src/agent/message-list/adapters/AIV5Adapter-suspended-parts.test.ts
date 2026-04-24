@@ -24,6 +24,10 @@ describe('AIV5Adapter — suspended tool state rehydration', () => {
               state: 'call',
             },
           },
+          {
+            type: 'text',
+            text: 'The tool is suspended.',
+          },
         ],
         metadata: {
           suspendedTools: {
@@ -61,6 +65,8 @@ describe('AIV5Adapter — suspended tool state rehydration', () => {
     // so the client can render the suspended state after page refresh.
     const suspendedParts = uiMessage.parts.filter((p: any) => p.type === 'data-tool-call-suspended');
     expect(suspendedParts).toHaveLength(1);
+    expect(uiMessage.parts[1]?.type).toBe('data-tool-call-suspended');
+    expect(uiMessage.parts[2]).toMatchObject({ type: 'text', text: 'The tool is suspended.' });
     expect((suspendedParts[0] as any).data).toMatchObject({
       toolCallId: 'tc-1',
       toolName: 'process-data',
@@ -84,6 +90,10 @@ describe('AIV5Adapter — suspended tool state rehydration', () => {
               args: { path: '/tmp/test.txt' },
               state: 'call',
             },
+          },
+          {
+            type: 'text',
+            text: 'Waiting for approval.',
           },
         ],
         metadata: {
@@ -118,6 +128,8 @@ describe('AIV5Adapter — suspended tool state rehydration', () => {
 
     const approvalParts = uiMessage.parts.filter((p: any) => p.type === 'data-tool-call-approval');
     expect(approvalParts).toHaveLength(1);
+    expect(uiMessage.parts[1]?.type).toBe('data-tool-call-approval');
+    expect(uiMessage.parts[2]).toMatchObject({ type: 'text', text: 'Waiting for approval.' });
     expect((approvalParts[0] as any).data).toMatchObject({
       toolCallId: 'tc-2',
       toolName: 'delete-file',

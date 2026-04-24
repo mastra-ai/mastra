@@ -302,6 +302,19 @@ export class AIV5Adapter {
         .filter((toolCallId): toolCallId is string => typeof toolCallId === 'string'),
     );
 
+    const insertToolStateDataPart = (toolCallId: string, toolStateDataPart: AIV5Type.DataUIPart<AIV5.UIDataTypes>) => {
+      const toolPartIndex = parts.findIndex(
+        part => part.type.startsWith('tool-') && (part as { toolCallId?: unknown }).toolCallId === toolCallId,
+      );
+
+      if (toolPartIndex === -1) {
+        parts.push(toolStateDataPart);
+        return;
+      }
+
+      parts.splice(toolPartIndex + 1, 0, toolStateDataPart);
+    };
+
     const suspendedTools = metadata.suspendedTools;
     if (suspendedTools && typeof suspendedTools === 'object') {
       for (const suspendedTool of Object.values(suspendedTools)) {
@@ -314,7 +327,7 @@ export class AIV5Adapter {
           continue;
         }
 
-        parts.push({
+        insertToolStateDataPart(toolCallId, {
           type: 'data-tool-call-suspended',
           data: suspendedTool,
         } as AIV5Type.DataUIPart<AIV5.UIDataTypes>);
@@ -334,7 +347,7 @@ export class AIV5Adapter {
           continue;
         }
 
-        parts.push({
+        insertToolStateDataPart(toolCallId, {
           type: 'data-tool-call-approval',
           data: pendingToolApproval,
         } as AIV5Type.DataUIPart<AIV5.UIDataTypes>);
