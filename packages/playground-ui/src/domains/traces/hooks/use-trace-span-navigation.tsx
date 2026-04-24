@@ -12,17 +12,11 @@ export function useTraceSpanNavigation(
   featuredSpanId: string | null | undefined,
   onSpanChange: (spanId: string) => void,
 ) {
-  const timelineSpanIds = useMemo(
-    () => getAllSpanIds(formatHierarchicalSpans(lightSpans ?? [])),
-    [lightSpans],
-  );
+  const timelineSpanIds = useMemo(() => getAllSpanIds(formatHierarchicalSpans(lightSpans ?? [])), [lightSpans]);
 
   const featuredSpanIdx = featuredSpanId ? timelineSpanIds.indexOf(featuredSpanId) : -1;
 
-  const handlePreviousSpan =
-    featuredSpanIdx > 0
-      ? () => onSpanChange(timelineSpanIds[featuredSpanIdx - 1])
-      : undefined;
+  const handlePreviousSpan = featuredSpanIdx > 0 ? () => onSpanChange(timelineSpanIds[featuredSpanIdx - 1]) : undefined;
 
   const handleNextSpan =
     featuredSpanIdx >= 0 && featuredSpanIdx < timelineSpanIds.length - 1

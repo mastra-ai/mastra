@@ -12,11 +12,9 @@ import {
   TRACE_STATUS_PARAM,
   TRACE_STATUS_VALUES,
   applyTracePropertyFilterTokens,
-  getTracePropertyFilterTokens
-  
-  
+  getTracePropertyFilterTokens,
 } from '../trace-filters';
-import type {EntityOptions, TraceStatusFilter} from '../trace-filters';
+import type { EntityOptions, TraceStatusFilter } from '../trace-filters';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
 const TRACE_ID_PARAM = 'traceId';
@@ -111,9 +109,7 @@ export function useTraceUrlState(
   const { onRemoveAll } = options ?? {};
   const datePreset = useMemo<TraceDatePreset>(() => {
     const value = searchParams.get(TRACE_DATE_PRESET_PARAM);
-    return value && TRACE_DATE_PRESET_VALUES.has(value as TraceDatePreset)
-      ? (value as TraceDatePreset)
-      : 'last-24h';
+    return value && TRACE_DATE_PRESET_VALUES.has(value as TraceDatePreset) ? (value as TraceDatePreset) : 'last-24h';
   }, [searchParams]);
 
   const dateFromParamRaw = searchParams.get(TRACE_DATE_FROM_PARAM);
@@ -151,17 +147,12 @@ export function useTraceUrlState(
   const scoreIdParam = searchParams.get(SCORE_ID_PARAM) || undefined;
 
   const selectedEntityOption = useMemo(
-    () =>
-      ROOT_ENTITY_TYPE_OPTIONS.find(
-        option => option.entityType === searchParams.get(TRACE_ROOT_ENTITY_TYPE_PARAM),
-      ),
+    () => ROOT_ENTITY_TYPE_OPTIONS.find(option => option.entityType === searchParams.get(TRACE_ROOT_ENTITY_TYPE_PARAM)),
     [searchParams],
   );
   const selectedStatus = useMemo<TraceStatusFilter | undefined>(() => {
     const value = searchParams.get(TRACE_STATUS_PARAM);
-    return value && TRACE_STATUS_VALUES.has(value as TraceStatusFilter)
-      ? (value as TraceStatusFilter)
-      : undefined;
+    return value && TRACE_STATUS_VALUES.has(value as TraceStatusFilter) ? (value as TraceStatusFilter) : undefined;
   }, [searchParams]);
   const filterTokens = useMemo(() => getTracePropertyFilterTokens(searchParams), [searchParams]);
 
