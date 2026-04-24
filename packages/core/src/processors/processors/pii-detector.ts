@@ -15,6 +15,8 @@ import type { Processor } from '../index';
 import { selectMessagesToCheck } from './message-selection';
 import type { LastMessageOnlyOption } from './message-selection';
 
+const normalizeScore = (score: number) => Math.max(0, Math.min(1, score));
+
 /**
  * PII categories for detection and redaction
  */
@@ -280,7 +282,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
       const baseDetectionSchema = z.object({
         type: z.string().describe('Type of PII detected'),
         value: z.string().describe('The actual PII value found'),
-        confidence: z.number().min(0).max(1).describe('Confidence of this detection'),
+        confidence: z.number().describe('Confidence of this detection'),
         start: z.number().describe('Start position in the text'),
         end: z.number().describe('End position in the text'),
       });
@@ -299,11 +301,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
               type: z
                 .enum(this.detectionTypes as [string, ...string[]])
                 .describe('The type of PII detected from the list of detection types'),
-              score: z
-                .number()
-                .min(0)
-                .max(1)
-                .describe('Confidence level between 0 and 1 indicating how certain the detection is'),
+              score: z.number().describe('Confidence level between 0 and 1 indicating how certain the detection is'),
             }),
           )
           .describe('Array of detected PII types with their confidence scores')
@@ -349,6 +347,20 @@ export class PIIDetector implements Processor<'pii-detector'> {
 
         result = response.object as PIIDetectionResult;
       }
+
+      result = {
+        ...result,
+        categories:
+          result.categories?.map(category => ({
+            ...category,
+            score: normalizeScore(category.score),
+          })) ?? null,
+        detections:
+          result.detections?.map(detection => ({
+            ...detection,
+            confidence: normalizeScore(detection.confidence),
+          })) ?? null,
+      };
 
       // Apply redaction method if not already provided and we have detections
       if (this.strategy === 'redact') {

@@ -13,6 +13,8 @@ import type { Processor } from '../index';
 import { selectMessagesToCheck } from './message-selection';
 import type { LastMessageOnlyOption } from './message-selection';
 
+const normalizeScore = (score: number) => Math.max(0, Math.min(1, score));
+
 /**
  * Individual detection category score
  */
@@ -222,11 +224,7 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
               type: z
                 .enum(this.detectionTypes as [string, ...string[]])
                 .describe('The type of attack detected from the list of detection types'),
-              score: z
-                .number()
-                .min(0)
-                .max(1)
-                .describe('Confidence level between 0 and 1 indicating how certain the detection is'),
+              score: z.number().describe('Confidence level between 0 and 1 indicating how certain the detection is'),
             }),
           )
           .nullable(),
@@ -276,7 +274,14 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
         result = response.object as PromptInjectionResult;
       }
 
-      return result;
+      return {
+        ...result,
+        categories:
+          result.categories?.map(category => ({
+            ...category,
+            score: normalizeScore(category.score),
+          })) ?? null,
+      };
     } catch (error) {
       console.warn('[PromptInjectionDetector] Detection agent failed, allowing content:', error);
       // Fail open - return empty result if detection agent fails (no injection detected)

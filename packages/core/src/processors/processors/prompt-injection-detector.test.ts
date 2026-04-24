@@ -723,4 +723,50 @@ describe('PromptInjectionDetector', () => {
       });
     });
   });
+
+  describe('structured output schema compatibility', () => {
+    it('should not add number bounds to score schemas', async () => {
+      const mockResult = createMockDetectionResult(false);
+      const mockModel = new MastraLanguageModelV2Mock({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: JSON.stringify(mockResult) }],
+          warnings: [],
+        }),
+      });
+
+      const detector = new PromptInjectionDetector({ model: mockModel });
+
+      await detector.processInput({ messages: [createTestMessage('Test message', 'user')], abort: vi.fn() as any });
+
+      const responseFormat = mockModel.doGenerateCalls[0].responseFormat;
+      expect(responseFormat?.type).toBe('json');
+      const schema = responseFormat?.type === 'json' ? responseFormat.schema : undefined;
+      const schemaJson = JSON.stringify(schema);
+      expect(schemaJson).toContain('score');
+      expect(schemaJson).not.toContain('minimum');
+      expect(schemaJson).not.toContain('maximum');
+    });
+
+    it('should normalize scores to the 0-1 range at runtime', async () => {
+      const model = setupMockModel({
+        categories: [
+          { type: 'injection', score: 1.2 },
+          { type: 'jailbreak', score: -0.2 },
+        ],
+        reason: 'Attack detected',
+      });
+      const detector = new PromptInjectionDetector({ model, strategy: 'warn', includeScores: true });
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await detector.processInput({ messages: [createTestMessage('Test message', 'user')], abort: vi.fn() as any });
+
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('injection: 1'));
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('jailbreak: 0'));
+
+      consoleSpy.mockRestore();
+    });
+  });
 });
