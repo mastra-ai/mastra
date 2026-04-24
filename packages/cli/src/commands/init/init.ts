@@ -6,8 +6,8 @@ import { DepsService } from '../../services/service.deps';
 import { gitInit } from '../utils';
 import { installMastraDocsMCPServer } from './mcp-docs-server-install';
 import type { Editor } from './mcp-docs-server-install';
-import { installMastraSkills } from './skills-install';
 import { provisionObserveProject } from './observe-provision';
+import { installMastraSkills } from './skills-install';
 import {
   createComponentsDir,
   createMastraDir,
