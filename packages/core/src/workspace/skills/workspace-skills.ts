@@ -901,7 +901,9 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
                     const skillFilePath = this.#joinPath(entryPath, 'SKILL.md');
                     try {
                       const skillFileStat = await this.#source.stat(skillFilePath);
-                      return skillFileStat.type === 'file' && skillFileStat.modifiedAt.getTime() > this.#lastDiscoveryTime;
+                      return (
+                        skillFileStat.type === 'file' && skillFileStat.modifiedAt.getTime() > this.#lastDiscoveryTime
+                      );
                     } catch {
                       // SKILL.md doesn't exist or can't be stat'd, skip
                     }
