@@ -13,38 +13,50 @@ function showStatus(ctx: SlashCommandContext): void {
   const resourceConfig = settings.observability.resources[resourceId];
   const hasToken = ctx.authStorage?.hasStoredApiKey(`${OBSERVABILITY_AUTH_PREFIX}${resourceId}`) ?? false;
 
-  const lines: string[] = [theme.bold(theme.fg('accent', 'Cloud Observability')), ''];
+  const lines: string[] = [theme.bold(theme.fg('accent', 'Observability')), ''];
 
+  // Cloud status
+  lines.push(theme.bold('Cloud'));
   if (resourceConfig && hasToken) {
-    lines.push(`${theme.fg('success', '●')} Connected`);
+    lines.push(`  ${theme.fg('success', '●')} Connected`);
     lines.push(`  Project:    ${resourceConfig.projectId}`);
     lines.push(`  Resource:   ${resourceId}`);
     lines.push(`  Since:      ${new Date(resourceConfig.configuredAt).toLocaleDateString()}`);
   } else if (resourceConfig && !hasToken) {
-    lines.push(`${theme.fg('warning', '●')} Partially configured (missing token)`);
+    lines.push(`  ${theme.fg('warning', '●')} Partially configured (missing token)`);
     lines.push(`  Project:    ${resourceConfig.projectId}`);
-    lines.push(`  Resource:   ${resourceId}`);
     lines.push('');
-    lines.push(theme.fg('dim', 'Run /observability connect to re-enter credentials.'));
+    lines.push(theme.fg('dim', '  Run /observability connect to re-enter credentials.'));
   } else {
     const envToken = process.env.MASTRA_CLOUD_ACCESS_TOKEN;
     const envProject = process.env.MASTRA_PROJECT_ID;
     if (envToken) {
-      lines.push(`${theme.fg('success', '●')} Connected ${theme.fg('dim', '(via environment variables)')}`);
+      lines.push(`  ${theme.fg('success', '●')} Connected ${theme.fg('dim', '(via environment variables)')}`);
       if (envProject) {
         lines.push(`  Project:    ${envProject}`);
       }
       lines.push(`  Resource:   ${resourceId}`);
     } else {
-      lines.push(`${theme.fg('dim', '●')} Not configured`);
+      lines.push(`  ${theme.fg('dim', '●')} Not configured`);
       lines.push(`  Resource:   ${resourceId}`);
     }
+  }
+
+  // Local tracing status
+  lines.push('');
+  lines.push(theme.bold('Local tracing (DuckDB)'));
+  if (settings.observability.localTracing) {
+    lines.push(`  ${theme.fg('success', '●')} Enabled`);
+  } else {
+    lines.push(`  ${theme.fg('dim', '●')} Disabled`);
   }
 
   lines.push('');
   lines.push(theme.fg('dim', 'Commands:'));
   lines.push(theme.fg('dim', '  /observability connect      — configure cloud project'));
-  lines.push(theme.fg('dim', '  /observability disconnect   — remove configuration'));
+  lines.push(theme.fg('dim', '  /observability disconnect   — remove cloud configuration'));
+  lines.push(theme.fg('dim', '  /observability local on     — enable local DuckDB tracing'));
+  lines.push(theme.fg('dim', '  /observability local off    — disable local DuckDB tracing'));
 
   ctx.showInfo(lines.join('\n'));
 }
@@ -126,6 +138,41 @@ function handleConnect(ctx: SlashCommandContext): Promise<void> {
   });
 }
 
+function handleLocal(ctx: SlashCommandContext, args: string[]): void {
+  const toggle = args[1]?.trim().toLowerCase();
+  if (toggle !== 'on' && toggle !== 'off') {
+    const settings = loadSettings();
+    const current = settings.observability.localTracing ? 'on' : 'off';
+    ctx.showInfo(
+      `Local DuckDB tracing is currently ${theme.bold(current)}.\n\n` +
+        theme.fg('dim', 'Usage:\n  /observability local on    — enable\n  /observability local off   — disable'),
+    );
+    return;
+  }
+
+  const enable = toggle === 'on';
+  const settings = loadSettings();
+  if (settings.observability.localTracing === enable) {
+    ctx.showInfo(`Local tracing is already ${theme.bold(toggle)}.`);
+    return;
+  }
+
+  settings.observability.localTracing = enable;
+  saveSettings(settings);
+
+  if (enable) {
+    ctx.showInfo(
+      `${theme.fg('success', '✓')} Local DuckDB tracing enabled.\n` +
+        theme.fg('dim', 'Restart MastraCode for changes to take effect.'),
+    );
+  } else {
+    ctx.showInfo(
+      `${theme.fg('success', '✓')} Local DuckDB tracing disabled.\n` +
+        theme.fg('dim', 'Restart MastraCode for changes to take effect.\nExisting data remains at the DuckDB path — delete manually if needed.'),
+    );
+  }
+}
+
 function handleDisconnect(ctx: SlashCommandContext): void {
   const resourceId = ctx.harness.getResourceId();
   const settings = loadSettings();
@@ -161,6 +208,9 @@ export async function handleObservabilityCommand(ctx: SlashCommandContext, args:
     case 'disconnect':
       handleDisconnect(ctx);
       break;
+    case 'local':
+      handleLocal(ctx, args);
+      break;
     case 'status':
     case undefined:
       showStatus(ctx);
@@ -170,7 +220,9 @@ export async function handleObservabilityCommand(ctx: SlashCommandContext, args:
         'Usage:\n' +
           '  /observability              — show current status\n' +
           '  /observability connect      — configure cloud observability\n' +
-          '  /observability disconnect   — remove cloud observability config',
+          '  /observability disconnect   — remove cloud configuration\n' +
+          '  /observability local on     — enable local DuckDB tracing\n' +
+          '  /observability local off    — disable local DuckDB tracing',
       );
   }
 }

@@ -187,6 +187,8 @@ export interface ObservabilityResourceConfig {
 export interface ObservabilitySettings {
   /** Per-resource cloud project configs, keyed by resourceId */
   resources: Record<string, ObservabilityResourceConfig>;
+  /** Whether to store traces locally in DuckDB. Off by default to avoid disk usage. */
+  localTracing: boolean;
 }
 
 /** Auth key prefix for observability tokens stored per-resource in auth.json */
@@ -235,7 +237,7 @@ const DEFAULTS: GlobalSettings = {
     viewport: { width: 1280, height: 720 },
     stagehand: { env: 'LOCAL' },
   },
-  observability: { resources: {} },
+  observability: { resources: {}, localTracing: false },
 };
 
 const THINKING_LEVEL_VALUES: ThinkingLevelSetting[] = ['off', 'low', 'medium', 'high', 'xhigh'];
@@ -379,10 +381,11 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
 const VALID_PROJECT_ID = /^[a-zA-Z0-9_-]+$/;
 
 function parseObservabilitySettings(raw: unknown): ObservabilitySettings {
-  if (!raw || typeof raw !== 'object') return { resources: {} };
+  if (!raw || typeof raw !== 'object') return { resources: {}, localTracing: false };
   const obj = raw as Record<string, unknown>;
+  const localTracing = obj.localTracing === true;
   const rawResources = obj.resources;
-  if (!rawResources || typeof rawResources !== 'object') return { resources: {} };
+  if (!rawResources || typeof rawResources !== 'object') return { resources: {}, localTracing };
   const resources: Record<string, ObservabilityResourceConfig> = {};
   for (const [key, val] of Object.entries(rawResources as Record<string, unknown>)) {
     if (val && typeof val === 'object') {
@@ -395,7 +398,7 @@ function parseObservabilitySettings(raw: unknown): ObservabilitySettings {
       }
     }
   }
-  return { resources };
+  return { resources, localTracing };
 }
 
 /**

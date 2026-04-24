@@ -214,27 +214,28 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const storageWarning = storageResult.warning;
 
   // Observability storage (DuckDB — separate file for OLAP-style trace/score/feedback queries).
-  // DuckDB only allows a single process to hold the file lock, so if another MastraCode
-  // instance is already running we gracefully degrade: observability (traces, scores,
-  // feedback) will be unavailable in this session, but everything else works normally.
+  // Local tracing is opt-in to avoid writing gigabytes of trace data to disk without the
+  // user's knowledge. Enable via `/observability local on`.
   let observabilityDomain: DuckDBStore['observability'] | undefined;
   let observabilityWarning: string | undefined;
-  try {
-    const observabilityDuckDB = new DuckDBStore({
-      id: 'mastra-code-observability',
-      path: getObservabilityDatabasePath(),
-    });
-    // Force an early connection attempt so the lock error surfaces now, not mid-session.
-    await observabilityDuckDB.db.getConnection();
-    observabilityDomain = observabilityDuckDB.observability;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    const isLockError = /lock|locked|busy/i.test(message);
-    if (isLockError) {
-      observabilityWarning =
-        'Observability unavailable — another MastraCode instance holds the database lock. Traces, scores, and feedback will not be recorded in this session.';
-    } else {
-      observabilityWarning = `Observability unavailable — DuckDB initialization failed: ${message}`;
+  if (globalSettings.observability.localTracing) {
+    try {
+      const observabilityDuckDB = new DuckDBStore({
+        id: 'mastra-code-observability',
+        path: getObservabilityDatabasePath(),
+      });
+      // Force an early connection attempt so the lock error surfaces now, not mid-session.
+      await observabilityDuckDB.db.getConnection();
+      observabilityDomain = observabilityDuckDB.observability;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const isLockError = /lock|locked|busy/i.test(message);
+      if (isLockError) {
+        observabilityWarning =
+          'Observability unavailable — another MastraCode instance holds the database lock. Traces, scores, and feedback will not be recorded in this session.';
+      } else {
+        observabilityWarning = `Observability unavailable — DuckDB initialization failed: ${message}`;
+      }
     }
   }
 
