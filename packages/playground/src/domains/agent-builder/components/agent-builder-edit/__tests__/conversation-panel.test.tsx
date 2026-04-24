@@ -59,6 +59,7 @@ const FormWrapper = ({ children }: { children: React.ReactNode }) => {
 const renderPanel = (
   features: Features,
   availableTools: Array<{ id: string; description?: string }> = [],
+  availableWorkspaces: Array<{ id: string; name: string }> = [],
 ) =>
   render(
     <FormWrapper>
@@ -66,6 +67,7 @@ const renderPanel = (
         initialUserMessage="hello"
         features={features}
         availableTools={availableTools}
+        availableWorkspaces={availableWorkspaces}
         agentId="agent-test"
       />
     </FormWrapper>,
@@ -240,5 +242,66 @@ describe('ConversationPanel agent-builder client tool', () => {
     expect(sentMessages).toHaveLength(1);
     const tool = sentMessages[0].clientTools.agentBuilderTool;
     expect(tool.description).toContain('web-search');
+  });
+
+  it('exposes an optional workspaceId field in the tool input schema', () => {
+    renderPanel(allOff);
+    const tool = getAgentBuilderTool();
+    const shape = tool.inputSchema.shape;
+
+    expect(shape.workspaceId).toBeDefined();
+
+    const withoutWorkspace = tool.inputSchema.safeParse({ name: 'N', instructions: 'I' });
+    expect(withoutWorkspace.success).toBe(true);
+  });
+
+  it('lists available workspaces in the tool description', () => {
+    renderPanel(allOff, [], [
+      { id: 'ws-1', name: 'Primary' },
+      { id: 'ws-2', name: 'Secondary' },
+    ]);
+    const tool = getAgentBuilderTool();
+
+    expect(tool.description).toContain('ws-1');
+    expect(tool.description).toContain('Primary');
+    expect(tool.description).toContain('ws-2');
+    expect(tool.description).toContain('Secondary');
+  });
+
+  it('constrains workspaceId to the provided ids when workspaces are available', () => {
+    renderPanel(allOff, [], [{ id: 'ws-1', name: 'Primary' }]);
+    const tool = getAgentBuilderTool();
+
+    const valid = tool.inputSchema.safeParse({
+      name: 'N',
+      instructions: 'I',
+      workspaceId: 'ws-1',
+    });
+    expect(valid.success).toBe(true);
+
+    const invalid = tool.inputSchema.safeParse({
+      name: 'N',
+      instructions: 'I',
+      workspaceId: 'unknown-workspace',
+    });
+    expect(invalid.success).toBe(false);
+  });
+
+  it('execute writes workspaceId to the form when provided', async () => {
+    renderPanel(allOff, [], [{ id: 'ws-1', name: 'Primary' }]);
+    const tool = getAgentBuilderTool();
+
+    await tool.execute({ name: 'N', instructions: 'I', workspaceId: 'ws-1' });
+
+    expect(formMethodsRef!.getValues('workspaceId')).toBe('ws-1');
+  });
+
+  it('execute does not set workspaceId when omitted', async () => {
+    renderPanel(allOff, [], [{ id: 'ws-1', name: 'Primary' }]);
+    const tool = getAgentBuilderTool();
+
+    await tool.execute({ name: 'N', instructions: 'I' });
+
+    expect(formMethodsRef!.getValues('workspaceId')).toBeUndefined();
   });
 });

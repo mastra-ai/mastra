@@ -8,7 +8,7 @@ import { ChatComposer } from '../chat-primitives/chat-composer';
 import { MessageRow } from '../chat-primitives/messages';
 import { ConversationHeader } from './conversation-header';
 import { useAgentBuilderTool } from './hooks/use-agent-builder-tool';
-import type { AvailableTool } from './hooks/use-agent-builder-tool';
+import type { AvailableTool, AvailableWorkspace } from './hooks/use-agent-builder-tool';
 import { useAutoScroll } from './hooks/use-auto-scroll';
 import { useChatDraft } from './hooks/use-chat-draft';
 import { useInitialMessage } from './hooks/use-initial-message';
@@ -18,6 +18,7 @@ interface ConversationPanelProps {
   initialUserMessage?: string;
   features: ReturnType<typeof useBuilderAgentFeatures>;
   availableTools?: AvailableTool[];
+  availableWorkspaces?: AvailableWorkspace[];
   toolsReady?: boolean;
   agentId: string;
 }
@@ -28,6 +29,7 @@ export const ConversationPanel = ({
   initialUserMessage,
   features,
   availableTools = [],
+  availableWorkspaces = [],
   toolsReady = true,
   agentId,
 }: ConversationPanelProps) => {
@@ -54,7 +56,7 @@ export const ConversationPanel = ({
     initialMessages: v5Messages,
   });
 
-  const agentBuilderTool = useAgentBuilderTool({ features, availableTools });
+  const agentBuilderTool = useAgentBuilderTool({ features, availableTools, availableWorkspaces });
 
   const send = (message: string) => {
     void sendMessage({ message, threadId: agentId, clientTools: { agentBuilderTool } });

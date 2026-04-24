@@ -33,4 +33,19 @@ describe('AgentBuilderEditFormSchema', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('accepts an optional workspaceId', () => {
+    const withId = AgentBuilderEditFormSchema.safeParse({
+      name: 'My agent',
+      instructions: 'Do things',
+      workspaceId: 'workspace-123',
+    });
+    expect(withId.success).toBe(true);
+
+    const without = AgentBuilderEditFormSchema.safeParse({
+      name: 'My agent',
+      instructions: 'Do things',
+    });
+    expect(without.success).toBe(true);
+  });
 });

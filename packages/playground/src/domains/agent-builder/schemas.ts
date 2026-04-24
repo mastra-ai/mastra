@@ -5,6 +5,7 @@ export const AgentBuilderEditFormSchema = z.object({
   instructions: z.string(),
   tools: z.record(z.string(), z.boolean()).optional(),
   skills: z.array(z.string()).optional(),
+  workspaceId: z.string().optional(),
 });
 
 export type AgentBuilderEditFormValues = z.infer<typeof AgentBuilderEditFormSchema>;

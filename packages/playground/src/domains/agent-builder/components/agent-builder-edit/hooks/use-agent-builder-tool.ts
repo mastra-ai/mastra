@@ -11,16 +11,27 @@ export interface AvailableTool {
   description?: string;
 }
 
+export interface AvailableWorkspace {
+  id: string;
+  name: string;
+}
+
 interface UseAgentBuilderToolArgs {
   features: ReturnType<typeof useBuilderAgentFeatures>;
   availableTools: AvailableTool[];
+  availableWorkspaces?: AvailableWorkspace[];
 }
 
-export const useAgentBuilderTool = ({ features, availableTools }: UseAgentBuilderToolArgs) => {
+export const useAgentBuilderTool = ({
+  features,
+  availableTools,
+  availableWorkspaces = [],
+}: UseAgentBuilderToolArgs) => {
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
 
   return useMemo(() => {
     const toolIds = availableTools.map(t => t.id);
+    const workspaceIds = availableWorkspaces.map(w => w.id);
 
     const shape: Record<string, z.ZodType> = {
       name: z.string(),
@@ -37,10 +48,18 @@ export const useAgentBuilderTool = ({ features, availableTools }: UseAgentBuilde
     if (features.skills) {
       shape.skills = z.array(z.string());
     }
+    const workspaceIdSchema =
+      workspaceIds.length > 0 ? z.enum(workspaceIds as [string, ...string[]]) : z.string();
+    shape.workspaceId = workspaceIdSchema
+      .optional()
+      .describe(
+        'Id of the workspace to attach to the agent. Only use ids from the available workspaces list in this tool description.',
+      );
 
     const descriptionParts = ['name', 'instructions'];
     if (features.tools) descriptionParts.push('tools');
     if (features.skills) descriptionParts.push('skills');
+    descriptionParts.push('workspaceId');
 
     const availableToolsBlock =
       features.tools && availableTools.length > 0
@@ -49,9 +68,16 @@ export const useAgentBuilderTool = ({ features, availableTools }: UseAgentBuilde
             .join('\n')}`
         : '';
 
+    const availableWorkspacesBlock =
+      availableWorkspaces.length > 0
+        ? `\n\nAvailable workspaces (use these ids in the "workspaceId" field):\n${availableWorkspaces
+            .map(w => `- ${w.id}: ${w.name}`)
+            .join('\n')}`
+        : '';
+
     return createTool({
       id: 'builder-agent-tool',
-      description: `Modify the agent configuration that the user is building. Supported fields: ${descriptionParts.join(', ')}.${availableToolsBlock}`,
+      description: `Modify the agent configuration that the user is building. Supported fields: ${descriptionParts.join(', ')}.${availableToolsBlock}${availableWorkspacesBlock}`,
       inputSchema: z.object(shape),
       outputSchema: z.object({
         success: z.boolean(),
@@ -70,9 +96,12 @@ export const useAgentBuilderTool = ({ features, availableTools }: UseAgentBuilde
         if (features.skills && Array.isArray(inputData?.skills)) {
           formMethods.setValue('skills', inputData.skills);
         }
+        if (typeof inputData?.workspaceId === 'string' && inputData.workspaceId.length > 0) {
+          formMethods.setValue('workspaceId', inputData.workspaceId);
+        }
 
         return { success: true };
       },
     });
-  }, [formMethods, features.tools, features.skills, availableTools]);
+  }, [formMethods, features.tools, features.skills, availableTools, availableWorkspaces]);
 };

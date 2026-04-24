@@ -43,6 +43,14 @@ interface PageProps {
   isReady: boolean;
 }
 
+const extractWorkspaceId = (workspace: StoredAgent['workspace']): string | undefined => {
+  if (workspace && typeof workspace === 'object' && 'type' in workspace && (workspace as { type: string }).type === 'id') {
+    const wsId = (workspace as { workspaceId?: unknown }).workspaceId;
+    return typeof wsId === 'string' ? wsId : undefined;
+  }
+  return undefined;
+};
+
 const AgentBuilderAgentViewPage = ({ id, storedAgent, toolsData, isReady }: PageProps) => {
   const formMethods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {
@@ -50,6 +58,7 @@ const AgentBuilderAgentViewPage = ({ id, storedAgent, toolsData, isReady }: Page
       instructions: typeof storedAgent?.instructions === 'string' ? storedAgent.instructions : '',
       tools: Object.fromEntries(Object.keys(storedAgent?.tools ?? {}).map(k => [k, true])),
       skills: Object.keys(storedAgent?.skills ?? {}),
+      workspaceId: extractWorkspaceId(storedAgent?.workspace),
     },
   });
 

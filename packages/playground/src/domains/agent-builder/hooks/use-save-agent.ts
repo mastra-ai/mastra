@@ -1,4 +1,9 @@
-import type { CreateStoredAgentParams, StoredAgentToolConfig, UpdateStoredAgentParams } from '@mastra/client-js';
+import type {
+  CreateStoredAgentParams,
+  StoredAgentToolConfig,
+  StoredWorkspaceRef,
+  UpdateStoredAgentParams,
+} from '@mastra/client-js';
 import { toast } from '@mastra/playground-ui';
 import { useCallback } from 'react';
 import type { AgentBuilderEditFormValues } from '../schemas';
@@ -37,6 +42,11 @@ export const useSaveAgent = ({ agentId, mode, availableTools = [], onSuccess }: 
       const toolsOrUndefined = Object.keys(tools).length > 0 ? tools : undefined;
       const skillsOrUndefined = Object.keys(skills).length > 0 ? skills : undefined;
 
+      const workspaceRef: StoredWorkspaceRef | undefined =
+        typeof values.workspaceId === 'string' && values.workspaceId.length > 0
+          ? { type: 'id', workspaceId: values.workspaceId }
+          : undefined;
+
       try {
         if (mode === 'edit') {
           const params: UpdateStoredAgentParams = {
@@ -44,6 +54,7 @@ export const useSaveAgent = ({ agentId, mode, availableTools = [], onSuccess }: 
             instructions: values.instructions,
             tools: toolsOrUndefined,
             skills: skillsOrUndefined,
+            ...(workspaceRef ? { workspace: workspaceRef } : {}),
           };
           const updated = await updateStoredAgent.mutateAsync(params);
           toast.success('Agent updated');
@@ -58,6 +69,7 @@ export const useSaveAgent = ({ agentId, mode, availableTools = [], onSuccess }: 
           model: { provider: 'google', name: 'gemini-2.5-flash' },
           tools: toolsOrUndefined,
           skills: skillsOrUndefined,
+          ...(workspaceRef ? { workspace: workspaceRef } : {}),
         };
         const created = await createStoredAgent.mutateAsync(params);
         toast.success('Agent created');

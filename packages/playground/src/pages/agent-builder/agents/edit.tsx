@@ -8,12 +8,14 @@ import { useBuilderAgentFeatures } from '@/domains/agent-builder';
 import { EditableAgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import type { AgentConfig } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { ConversationPanel } from '@/domains/agent-builder/components/agent-builder-edit/conversation-panel';
+import type { AvailableWorkspace } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-agent-builder-tool';
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
 import { useSaveAgent } from '@/domains/agent-builder/hooks/use-save-agent';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
+import { useWorkspaces } from '@/domains/workspace/hooks';
 
 interface AvailableTool {
   id: string;
@@ -24,11 +26,25 @@ type ToolsData = NonNullable<ReturnType<typeof useTools>['data']>;
 
 type LocationState = { userMessage?: string } | null;
 
+const extractWorkspaceId = (workspace: StoredAgent['workspace']): string | undefined => {
+  if (workspace && typeof workspace === 'object' && 'type' in workspace && (workspace as { type: string }).type === 'id') {
+    const id = (workspace as { workspaceId?: unknown }).workspaceId;
+    return typeof id === 'string' ? id : undefined;
+  }
+  return undefined;
+};
+
 export default function AgentBuilderAgentEdit() {
   const { id } = useParams<{ id: string }>();
   const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id);
   const { data: toolsData, isPending: isToolsPending } = useTools();
+  const { data: workspacesData } = useWorkspaces();
   const isReady = Boolean(id) && !isStoredAgentLoading && !isToolsPending;
+
+  const availableWorkspaces = useMemo<AvailableWorkspace[]>(
+    () => (workspacesData?.workspaces ?? []).map(ws => ({ id: ws.id, name: ws.name })),
+    [workspacesData],
+  );
 
   return (
     <AgentBuilderAgentEditPage
@@ -36,6 +52,7 @@ export default function AgentBuilderAgentEdit() {
       id={id}
       storedAgent={storedAgent}
       toolsData={toolsData}
+      availableWorkspaces={availableWorkspaces}
       isReady={isReady}
     />
   );
@@ -45,16 +62,18 @@ interface PageProps {
   id: string | undefined;
   storedAgent: StoredAgent | null | undefined;
   toolsData: ToolsData | undefined;
+  availableWorkspaces: AvailableWorkspace[];
   isReady: boolean;
 }
 
-const AgentBuilderAgentEditPage = ({ id, storedAgent, toolsData, isReady }: PageProps) => {
+const AgentBuilderAgentEditPage = ({ id, storedAgent, toolsData, availableWorkspaces, isReady }: PageProps) => {
   const formMethods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {
       name: storedAgent?.name ?? '',
       instructions: typeof storedAgent?.instructions === 'string' ? storedAgent.instructions : '',
       tools: Object.fromEntries(Object.keys(storedAgent?.tools ?? {}).map(k => [k, true])),
       skills: Object.keys(storedAgent?.skills ?? {}),
+      workspaceId: extractWorkspaceId(storedAgent?.workspace),
     },
   });
 
@@ -63,7 +82,12 @@ const AgentBuilderAgentEditPage = ({ id, storedAgent, toolsData, isReady }: Page
       {!isReady || !id ? (
         <AgentBuilderAgentEditSkeleton />
       ) : (
-        <AgentBuilderAgentEditReady id={id} storedAgent={storedAgent} toolsData={toolsData ?? {}} />
+        <AgentBuilderAgentEditReady
+          id={id}
+          storedAgent={storedAgent}
+          toolsData={toolsData ?? {}}
+          availableWorkspaces={availableWorkspaces}
+        />
       )}
     </FormProvider>
   );
@@ -90,9 +114,15 @@ interface AgentBuilderAgentEditReadyProps {
   id: string;
   storedAgent: StoredAgent | null | undefined;
   toolsData: ToolsData;
+  availableWorkspaces: AvailableWorkspace[];
 }
 
-const AgentBuilderAgentEditReady = ({ id, storedAgent, toolsData }: AgentBuilderAgentEditReadyProps) => {
+const AgentBuilderAgentEditReady = ({
+  id,
+  storedAgent,
+  toolsData,
+  availableWorkspaces,
+}: AgentBuilderAgentEditReadyProps) => {
   const location = useLocation();
   const navigate = useNavigate();
   const features = useBuilderAgentFeatures();
@@ -142,6 +172,7 @@ const AgentBuilderAgentEditReady = ({ id, storedAgent, toolsData }: AgentBuilder
             initialUserMessage={state?.userMessage}
             features={features}
             availableTools={availableTools}
+            availableWorkspaces={availableWorkspaces}
             toolsReady
             agentId={id}
           />
