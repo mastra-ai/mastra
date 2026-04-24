@@ -1127,8 +1127,11 @@ describe('finishReason length with pending tool calls', () => {
     engine: 'default' as any,
     abortSignal: new AbortController().signal,
     writer: new ToolStream({
-      emit: vi.fn(),
-    }).getWriter(controller),
+      prefix: 'tool',
+      callId: 'call-1',
+      name: 'generateReport',
+      runId: 'test-run',
+    }),
     inputData,
     validateSchemas: false,
     [PUBSUB_SYMBOL]: {} as any,
