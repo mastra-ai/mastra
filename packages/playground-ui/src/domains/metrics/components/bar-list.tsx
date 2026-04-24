@@ -1,4 +1,4 @@
-import { Tooltip, TooltipTrigger, TooltipContent } from '@mastra/playground-ui';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../../ds/components/Tooltip';
 import { CHART_COLORS } from './metrics-utils';
 
 export function BarListContent({
