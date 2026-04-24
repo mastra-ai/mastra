@@ -145,5 +145,10 @@ export * from './lib/template';
 // Store
 export { usePlaygroundStore, useIsDarkMode, type PlaygroundTheme } from './store/playground-store';
 
+// Domains
+export * from './domains/metrics';
+export * from './domains/traces';
+export * from './domains/logs';
+
 // DS Types
 export type { LinkComponent, LinkComponentProps } from './ds/types/link-component';

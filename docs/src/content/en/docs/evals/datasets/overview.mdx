@@ -82,7 +82,7 @@ console.log(dataset.id) // auto-generated UUID
 
 ### Defining schemas
 
-You can enforce the shape of `input` and `groundTruth` by passing Zod schemas. Mastra converts them to JSON Schema at creation time:
+You can enforce the shape of `input` and `groundTruth` by passing a [Standard JSON Schema](https://standardschema.dev/json-schema) ([Zod](https://zod.dev/), [Valibot](https://valibot.dev/), [ArkType](https://arktype.io/), etc.) when creating the dataset:
 
 ```typescript title="src/mastra/datasets/create-with-schema.ts"
 import { z } from 'zod'

@@ -51,6 +51,13 @@ import { processMastraNetworkStream, processMastraStream } from '../utils/proces
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { BaseResource } from './base';
 
+type ResumeStreamParams<OUTPUT extends {}> = StreamParamsBaseWithoutMessages<OUTPUT> & {
+  messages?: MessageListInput;
+  runId: string;
+  toolCallId?: string;
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
+};
+
 type ToolCallRespondFn<OUTPUT> = (
   messages: MessageListInput,
   options: StreamParamsBaseWithoutMessages<OUTPUT> & {
@@ -1322,9 +1329,15 @@ export class Agent extends BaseResource {
     const threadId = processedParams.threadId ?? (typeof thread === 'string' ? thread : thread?.id);
     const resourceId = processedParams.resourceId ?? resource;
 
+    let requestBody = processedParams;
+    if (route === 'resume-stream') {
+      const { messages: _messages, ...resumeStreamBody } = processedParams;
+      requestBody = resumeStreamBody;
+    }
+
     const response: Response = await this.request(`/agents/${this.agentId}/${route}`, {
       method: 'POST',
-      body: processedParams,
+      body: requestBody,
       stream: true,
     });
 
@@ -1863,6 +1876,70 @@ export class Agent extends BaseResource {
     };
 
     // Add the processDataStream method to the response
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  /**
+   * Resumes a suspended agent stream with custom resume data.
+   * Used to continue execution after a suspension point (e.g., workflow suspend within an agent).
+   */
+  async resumeStream<OUTPUT extends {}>(
+    resumeData: JSONValue,
+    options: ResumeStreamParams<OUTPUT>,
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const processedParams = {
+      ...options,
+      resumeData,
+      requestContext: parseClientRequestContext(options.requestContext),
+      clientTools: processClientTools(options.clientTools),
+      structuredOutput: options.structuredOutput
+        ? {
+            ...options.structuredOutput,
+            schema: standardSchemaToJSONSchema(toStandardSchema(options.structuredOutput.schema)),
+          }
+        : undefined,
+    };
+
+    let readableController: ReadableStreamDefaultController<Uint8Array>;
+    const readable = new ReadableStream<Uint8Array>({
+      start(controller) {
+        readableController = controller;
+      },
+    });
+
+    const response = await this.processStreamResponse(processedParams, readableController!, 'resume-stream');
+
+    const streamResponse = new Response(readable, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
     streamResponse.processDataStream = async ({
       onChunk,
     }: {

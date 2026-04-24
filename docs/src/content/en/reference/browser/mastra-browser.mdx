@@ -13,6 +13,7 @@ You don't instantiate `MastraBrowser` directly. Instead, use a provider implemen
 
 - [`AgentBrowser`](/reference/browser/agent-browser): Deterministic browser automation using refs
 - [`StagehandBrowser`](/reference/browser/stagehand-browser): AI-powered browser automation using natural language
+- [`BrowserViewer`](/reference/browser/browser-viewer): CLI-based browser automation with CDP URL injection
 
 ## Usage example
 
@@ -27,7 +28,8 @@ const browser = new AgentBrowser({
 })
 
 export const browserAgent = new Agent({
-  name: 'browser-agent',
+  id: 'browser-agent',
+  name: 'Browser Agent',
   instructions: 'You can browse the web to find information.',
   model: 'openai/gpt-5.4',
   browser,
@@ -55,9 +57,9 @@ export const browserAgent = new Agent({
   {
     name: 'timeout',
     type: 'number',
-    description: 'Default timeout in milliseconds for browser operations.',
+    description:
+      'Default timeout in milliseconds. Each provider defines its own semantics and default. See the provider reference for details.',
     isOptional: true,
-    defaultValue: '10000',
   },
   {
     name: 'cdpUrl',

@@ -86,6 +86,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'browser/agent-browser', label: 'AgentBrowser' },
+        { type: 'doc', id: 'browser/browser-viewer', label: 'BrowserViewer' },
         { type: 'doc', id: 'browser/mastra-browser', label: 'MastraBrowser Class' },
         { type: 'doc', id: 'browser/stagehand-browser', label: 'StagehandBrowser' },
       ],
@@ -616,6 +617,7 @@ const sidebars = {
         { type: 'doc', id: 'workspace/gcs-filesystem', label: 'GCSFilesystem' },
         { type: 'doc', id: 'workspace/local-filesystem', label: 'LocalFilesystem' },
         { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
+        { type: 'doc', id: 'workspace/modal-sandbox', label: 'ModalSandbox' },
         { type: 'doc', id: 'workspace/s3-filesystem', label: 'S3Filesystem' },
         { type: 'doc', id: 'workspace/process-manager', label: 'SandboxProcessManager' },
         { type: 'doc', id: 'workspace/vercel', label: 'VercelSandbox' },

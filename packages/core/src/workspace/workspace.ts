@@ -33,7 +33,7 @@
 import * as path from 'node:path';
 import type { MastraBrowser } from '../browser';
 import type { IMastraLogger } from '../logger';
-import type { RequestContext } from '../request-context';
+import { RequestContext } from '../request-context';
 import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError } from './errors';
@@ -60,6 +60,14 @@ import type { WorkspaceStatus } from './types';
 // =============================================================================
 
 /**
+ * A function that resolves a WorkspaceFilesystem dynamically based on request context.
+ * Called on each tool invocation, allowing different filesystems per request.
+ */
+export type WorkspaceFilesystemResolver = (context: {
+  requestContext: RequestContext;
+}) => WorkspaceFilesystem | Promise<WorkspaceFilesystem>;
+
+/**
  * Configuration for creating a Workspace.
  * Users pass provider instances directly.
  *
@@ -79,11 +87,15 @@ export interface WorkspaceConfig<
   name?: string;
 
   /**
-   * Filesystem provider instance.
-   * Use LocalFilesystem for a folder on disk, or AgentFS for Turso-backed storage.
-   * Extend MastraFilesystem for automatic logger integration.
+   * Filesystem provider instance, or a resolver function for dynamic per-request filesystems.
+   *
+   * Static: Pass a LocalFilesystem, AgentFS, or any WorkspaceFilesystem instance.
+   * Dynamic: Pass a function `({ requestContext }) => WorkspaceFilesystem` to resolve
+   * a different filesystem per request. The resolver is called at tool execution time.
+   *
+   * Extend MastraFilesystem for automatic logger integration (static instances only).
    */
-  filesystem?: TFilesystem;
+  filesystem?: TFilesystem | WorkspaceFilesystemResolver;
 
   /**
    * Sandbox provider instance.
@@ -278,6 +290,20 @@ export interface WorkspaceConfig<
    */
   skillSource?: SkillSource;
 
+  /**
+   * Check SKILL.md file mtime in addition to directory mtime for staleness detection.
+   *
+   * When enabled, allows hot-reload detection of in-place SKILL.md edits
+   * (e.g., fixing a validation error or updating a skill description).
+   *
+   * Trade-off: This doubles the stat() calls per skill during staleness checks.
+   * Recommended for local development only. Not recommended for cloud storage
+   * backends (S3, etc.) where stat() calls have higher latency.
+   *
+   * @default false
+   */
+  checkSkillFileMtime?: boolean;
+
   // ---------------------------------------------------------------------------
   // LSP Configuration
   // ---------------------------------------------------------------------------
@@ -441,6 +467,7 @@ export class Workspace<
 
   private _status: WorkspaceStatus = 'pending';
   private readonly _fs?: WorkspaceFilesystem;
+  private readonly _filesystemResolver?: WorkspaceFilesystemResolver;
   private readonly _sandbox?: WorkspaceSandbox;
   private readonly _browser?: MastraBrowser;
   private readonly _config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>;
@@ -486,6 +513,17 @@ export class Workspace<
           this._sandbox.mounts.setOnMount(config.onMount);
         }
       }
+    } else if (typeof config.filesystem === 'function') {
+      // Reject class constructors — a common mistake is passing the class itself instead of an instance
+      if (/^class\s/.test(Function.prototype.toString.call(config.filesystem))) {
+        throw new WorkspaceError(
+          'filesystem received a class constructor instead of an instance or resolver function. ' +
+            'Pass an instance (e.g., new LocalFilesystem(...)) or a resolver function (({ requestContext }) => fs).',
+          'INVALID_CONFIG',
+        );
+      }
+      // Dynamic filesystem resolver — stored separately, no static _fs instance
+      this._filesystemResolver = config.filesystem as WorkspaceFilesystemResolver;
     } else {
       this._fs = config.filesystem;
     }
@@ -574,7 +612,7 @@ export class Workspace<
 
     // Validate at least one provider is given
     // Note: skills alone is also valid - uses LocalSkillSource for read-only skills
-    if (!this._fs && !this._sandbox && !this.hasSkillsConfig()) {
+    if (!this._fs && !this._filesystemResolver && !this._sandbox && !this.hasSkillsConfig()) {
       throw new WorkspaceError('Workspace requires at least a filesystem, sandbox, or skills', 'NO_PROVIDERS');
     }
   }
@@ -661,6 +699,30 @@ export class Workspace<
   }
 
   /**
+   * Returns true if a filesystem is configured, either as a static instance or a resolver function.
+   */
+  hasFilesystemConfig(): boolean {
+    return this._fs !== undefined || this._filesystemResolver !== undefined;
+  }
+
+  /**
+   * Resolve the filesystem for a given request context.
+   * When a resolver function is configured, calls it with the provided requestContext.
+   * When a static filesystem is configured, returns it directly.
+   * Returns undefined if no filesystem is configured.
+   */
+  async resolveFilesystem({
+    requestContext,
+  }: {
+    requestContext: RequestContext;
+  }): Promise<WorkspaceFilesystem | undefined> {
+    if (this._filesystemResolver) {
+      return await this._filesystemResolver({ requestContext });
+    }
+    return this._fs;
+  }
+
+  /**
    * Access skills stored in this workspace.
    * Skills are SKILL.md files discovered from the configured skillPaths.
    *
@@ -689,6 +751,7 @@ export class Workspace<
         skills: this._config.skills!,
         searchEngine: this._searchEngine,
         validateOnLoad: true,
+        checkSkillFileMtime: this._config.checkSkillFileMtime,
       });
     }
 
@@ -884,11 +947,16 @@ export class Workspace<
     }
   }
 
-  private async getAllFiles(dir: string, depth: number = 0, maxDepth: number = 10): Promise<string[]> {
-    if (!this._fs || depth >= maxDepth) return [];
+  private async getAllFiles(
+    dir: string,
+    depth: number = 0,
+    maxDepth: number = 10,
+    filesystem: WorkspaceFilesystem | undefined = this._fs,
+  ): Promise<string[]> {
+    if (!filesystem || depth >= maxDepth) return [];
 
     const files: string[] = [];
-    const entries = await this._fs.readdir(dir);
+    const entries = await filesystem.readdir(dir);
 
     for (const entry of entries) {
       const fullPath = dir === '.' || dir === '' ? entry.name : `${dir}/${entry.name}`;
@@ -896,7 +964,7 @@ export class Workspace<
         files.push(fullPath);
       } else if (entry.type === 'directory' && !entry.isSymlink) {
         // Skip symlink directories to prevent infinite recursion from cycles
-        files.push(...(await this.getAllFiles(fullPath, depth + 1, maxDepth)));
+        files.push(...(await this.getAllFiles(fullPath, depth + 1, maxDepth, filesystem)));
       }
     }
 
@@ -984,7 +1052,7 @@ export class Workspace<
    * Get workspace information.
    * @param options.includeFileCount - Whether to count total files (can be slow for large workspaces)
    */
-  async getInfo(options?: { includeFileCount?: boolean }): Promise<WorkspaceInfo> {
+  async getInfo(options?: { includeFileCount?: boolean; requestContext?: RequestContext }): Promise<WorkspaceInfo> {
     const info: WorkspaceInfo = {
       id: this.id,
       name: this.name,
@@ -993,13 +1061,19 @@ export class Workspace<
       lastAccessedAt: this.lastAccessedAt,
     };
 
-    if (this._fs) {
-      const fsInfo = await this._fs.getInfo?.();
+    const filesystem =
+      this._fs ??
+      (this._filesystemResolver
+        ? await this.resolveFilesystem({ requestContext: options?.requestContext ?? new RequestContext() })
+        : undefined);
+
+    if (filesystem) {
+      const fsInfo = await filesystem.getInfo?.();
       info.filesystem = {
-        id: fsInfo?.id ?? this._fs.id,
-        name: fsInfo?.name ?? this._fs.name,
-        provider: fsInfo?.provider ?? this._fs.provider,
-        readOnly: fsInfo?.readOnly ?? this._fs.readOnly,
+        id: fsInfo?.id ?? filesystem.id,
+        name: fsInfo?.name ?? filesystem.name,
+        provider: fsInfo?.provider ?? filesystem.provider,
+        readOnly: fsInfo?.readOnly ?? filesystem.readOnly,
         status: fsInfo?.status,
         error: fsInfo?.error,
         icon: fsInfo?.icon,
@@ -1008,7 +1082,7 @@ export class Workspace<
 
       if (options?.includeFileCount) {
         try {
-          const files = await this.getAllFiles('.');
+          const files = await this.getAllFiles('.', 0, 10, filesystem);
           info.filesystem.totalFiles = files.length;
         } catch {
           // Ignore errors - filesystem may not support listing
@@ -1136,6 +1210,7 @@ export class Workspace<
     this._logger = logger;
 
     // Propagate logger to filesystem provider if it extends MastraFilesystem
+    // Skip when using a resolver — no static instance to set logger on
     if (this._fs instanceof MastraFilesystem) {
       this._fs.__setLogger(logger);
     }

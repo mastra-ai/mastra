@@ -191,7 +191,7 @@ export class BrowserViewerThreadManager extends ThreadManager<Browser> {
     this.logger?.debug?.(`Launching Chrome for thread ${threadId} with remote-debugging-port=${cdpPort}`);
 
     const launchOptions: Parameters<typeof chromium.launchServer>[0] = {
-      headless: this.browserConfig.headless ?? false,
+      headless: this.browserConfig.headless,
       args: [`--remote-debugging-port=${cdpPort}`, '--no-first-run', '--no-default-browser-check'],
     };
 

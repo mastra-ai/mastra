@@ -5,6 +5,9 @@ packages:
   - "@mastra/core"
 ---
 
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
 # Tools
 
 Agents use tools to call APIs, query databases, or run custom functions from your codebase. Tools give agents capabilities beyond language generation by providing structured access to data and performing clearly defined operations. You can also load tools from remote [MCP servers](/docs/mcp/overview) to expand an agent's capabilities.
@@ -67,6 +70,80 @@ export const weatherAgent = new Agent({
   tools: { weatherTool },
 })
 ```
+
+## Define schemas
+
+You can define the tool's `inputSchema` and `outputSchema` with any library that supports [Standard JSON Schema](https://standardschema.dev/json-schema). This includes libraries like [Zod](https://zod.dev/), [Valibot](https://valibot.dev/), and [ArkType](https://arktype.io/).
+
+<Tabs>
+  <TabItem value="zod" label="Zod">
+    ```typescript title="src/mastra/tools/weather-tool.ts"
+    import { createTool } from '@mastra/core/tools'
+    import { z } from 'zod'
+
+    export const weatherTool = createTool({
+      id: 'weather-tool',
+      description: 'Fetches weather for a location',
+      inputSchema: z.object({
+        location: z.string(),
+      }),
+      outputSchema: z.object({
+        weather: z.string(),
+      }),
+      execute: async inputData => {
+        // Fetch weather data
+      },
+    })
+    ```
+  </TabItem>
+
+  <TabItem value="valibot" label="Valibot">
+    ```typescript title="src/mastra/tools/weather-tool.ts"
+    import { createTool } from '@mastra/core/tools'
+    import * as v from 'valibot'
+    import { toStandardJsonSchema } from '@valibot/to-json-schema'
+
+    export const weatherTool = createTool({
+      id: 'weather-tool',
+      description: 'Fetches weather for a location',
+      inputSchema: toStandardJsonSchema(
+        v.object({
+          location: v.string(),
+        }),
+      ),
+      outputSchema: toStandardJsonSchema(
+        v.object({
+          weather: v.string(),
+        }),
+      ),
+      execute: async inputData => {
+        // Fetch weather data
+      },
+    })
+    ```
+  </TabItem>
+
+  <TabItem value="arktype" label="ArkType">
+    ```typescript title="src/mastra/tools/weather-tool.ts"
+    import { createTool } from '@mastra/core/tools'
+    import { type } from 'arktype'
+
+    export const weatherTool = createTool({
+      id: 'weather-tool',
+      description: 'Fetches weather for a location',
+      inputSchema: type({
+        location: 'string',
+      }),
+      outputSchema: type({
+        weather: 'string',
+      }),
+      execute: async inputData => {
+        // Fetch weather data
+      },
+    })
+    ```
+  </TabItem>
+</Tabs>
 
 ## Multiple tools
 

@@ -359,4 +359,65 @@ describe('MessageList sealed message handling', () => {
     expect(newMessage?.content.parts).toHaveLength(1);
     expect((newMessage?.content.parts[0] as { text?: string })?.text).toBe('New content after observation');
   });
+
+  it('should not merge into messages at or before the latest sealed boundary', () => {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+
+    messageList.add(
+      {
+        id: 'old-assistant',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'old response' }],
+        },
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      } as MastraDBMessage,
+      'response',
+    );
+
+    messageList.add(
+      {
+        id: 'sealed-boundary',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'data-om-observation-end',
+              data: { observedAt: new Date('2024-01-01T00:00:01.000Z').toISOString() },
+              metadata: { mastra: { sealedAt: 1 } },
+            } as MastraMessagePart,
+          ],
+          metadata: { mastra: { sealed: true } },
+        },
+        createdAt: new Date('2024-01-01T00:00:01.000Z'),
+      } as MastraDBMessage,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'old-assistant',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'new content after boundary' }],
+        },
+        createdAt: new Date('2024-01-01T00:00:02.000Z'),
+      } as MastraDBMessage,
+      'response',
+    );
+
+    const allMessages = messageList.get.all.db();
+    const oldAssistant = allMessages.find(message => message.id === 'old-assistant');
+    const newAssistant = allMessages.find(
+      message => message.id !== 'old-assistant' && message.id !== 'sealed-boundary' && message.role === 'assistant',
+    );
+
+    expect(oldAssistant?.content.parts).toHaveLength(1);
+    expect((oldAssistant?.content.parts[0] as { text?: string })?.text).toBe('old response');
+    expect(newAssistant).toBeDefined();
+    expect((newAssistant?.content.parts[0] as { text?: string })?.text).toBe('new content after boundary');
+  });
 });

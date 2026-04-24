@@ -1348,7 +1348,8 @@ export class Harness<TState = {}> {
         // Harness supports suspending + resuming streams (tool approvals, tool suspensions, workflows).
         // Persisting per-step snapshots ensures `resumeStream()` can load state reliably (especially in CI).
         // Doesn't do anything when OM is enabled though, OM does its own saving per step
-        savePerStep: true,
+        // actually disable for now, it still breaks OM somehow! TODO fix it
+        savePerStep: false,
         requireToolApproval: !isYolo,
         modelSettings: { temperature: 1 },
         ...(tracingContext && { tracingContext }),
