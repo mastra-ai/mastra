@@ -5,6 +5,9 @@ packages:
   - "@mastra/core"
 ---
 
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
 # Step class
 
 The Step class defines individual units of work within a workflow, encapsulating execution logic, data validation, and input/output handling.
@@ -33,6 +36,89 @@ const step1 = createStep({
   },
 })
 ```
+
+## Define schemas
+
+You can define the step's `inputSchema` and `outputSchema` with any library that supports [Standard JSON Schema](https://standardschema.dev/json-schema). This includes libraries like [Zod](https://zod.dev/), [Valibot](https://valibot.dev/), and [ArkType](https://arktype.io/).
+
+<Tabs>
+  <TabItem value="zod" label="Zod">
+    ```typescript {7,10,16} title="src/mastra/workflows/test-workflow.ts"
+    import { createStep } from '@mastra/core/workflows'
+    import { z } from 'zod'
+
+    const step1 = createStep({
+      id: 'step-1',
+      inputSchema: z.object({
+        message: z.string(),
+      }),
+      outputSchema: z.object({
+        formatted: z.string(),
+      }),
+      execute: async ({ inputData }) => {
+        const { message } = inputData
+
+        return {
+          formatted: message.toUpperCase(),
+        }
+      },
+    })
+    ```
+  </TabItem>
+
+  <TabItem value="valibot" label="Valibot">
+    ```typescript {9,14,21} title="src/mastra/workflows/test-workflow.ts"
+    import { createStep } from '@mastra/core/workflows'
+    import * as v from 'valibot'
+    import { toStandardJsonSchema } from '@valibot/to-json-schema'
+
+    const step1 = createStep({
+      id: 'step-1',
+      inputSchema: toStandardJsonSchema(
+        v.object({
+          message: v.string(),
+        }),
+      ),
+      outputSchema: toStandardJsonSchema(
+        v.object({
+          formatted: v.string(),
+        }),
+      ),
+      execute: async ({ inputData }) => {
+        const { message } = inputData
+
+        return {
+          formatted: message.toUpperCase(),
+        }
+      },
+    })
+    ```
+  </TabItem>
+
+  <TabItem value="arktype" label="ArkType">
+    ```typescript {7,10,16} title="src/mastra/workflows/test-workflow.ts"
+    import { createStep } from '@mastra/core/workflows'
+    import { type } from 'arktype'
+
+    const step1 = createStep({
+      id: 'step-1',
+      inputSchema: type({
+        message: 'string',
+      }),
+      outputSchema: type({
+        formatted: 'string',
+      }),
+      execute: async ({ inputData }) => {
+        const { message } = inputData
+
+        return {
+          formatted: message.toUpperCase(),
+        }
+      },
+    })
+    ```
+  </TabItem>
+</Tabs>
 
 ## Creating steps from agents
 
