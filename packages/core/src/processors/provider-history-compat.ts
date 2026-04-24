@@ -3,17 +3,31 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
 import type { Processor, ProcessAPIErrorArgs, ProcessAPIErrorResult } from './index';
 
-/**
- * Pattern that valid tool-call IDs must match.
- * Providers like Anthropic enforce `^[a-zA-Z0-9_-]+$`.
- */
-const VALID_TOOL_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
+// ---------------------------------------------------------------------------
+// Compat-rule infrastructure
+// ---------------------------------------------------------------------------
 
 /**
- * Error patterns that indicate a tool-call ID validation failure.
- * Different providers surface this in slightly different wording.
+ * A single compatibility rule that maps an error pattern to a history fix.
+ *
+ * `errorPatterns` – regexes tested against the error message *and* the
+ *   `responseBody` (when present).  Any match triggers the rule.
+ *
+ * `fix` – mutates the message list to resolve the incompatibility.
+ *   Returns `true` if any changes were made (meaning a retry is worthwhile).
  */
-const TOOL_ID_ERROR_PATTERNS = [/tool_use\.id:.*should match pattern/i, /tool_call_id.*invalid/i];
+export interface CompatRule {
+  /** Human-readable identifier for logging/debugging. */
+  name: string;
+  /** Regexes matched against the error message and response body. */
+  errorPatterns: RegExp[];
+  /** Mutate messages to resolve the incompatibility. Return `true` if changes were made. */
+  fix: (messages: MastraDBMessage[]) => boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function getErrorCandidates(error: APICallError | Error): string[] {
   const candidates = [error.message];
@@ -25,34 +39,30 @@ function getErrorCandidates(error: APICallError | Error): string[] {
   return candidates.filter(Boolean);
 }
 
-/**
- * Checks whether an error is a tool-call ID validation failure.
- */
-function isToolIdError(error: unknown): boolean {
-  const matchesKnownPattern = (message: string) => TOOL_ID_ERROR_PATTERNS.some(pattern => pattern.test(message));
+function matchesRule(error: unknown, rule: CompatRule): boolean {
+  const matches = (text: string) => rule.errorPatterns.some(p => p.test(text));
 
   if (APICallError.isInstance(error)) {
-    return getErrorCandidates(error).some(matchesKnownPattern);
+    return getErrorCandidates(error).some(matches);
   }
 
   if (error instanceof Error) {
-    return getErrorCandidates(error).some(matchesKnownPattern);
+    return getErrorCandidates(error).some(matches);
   }
 
   return false;
 }
 
-/**
- * Replace characters that don't match `[a-zA-Z0-9_-]` with an underscore.
- */
+// ---------------------------------------------------------------------------
+// Built-in rule: Anthropic tool-call ID format
+// ---------------------------------------------------------------------------
+
+const VALID_TOOL_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
 function sanitizeToolId(id: string): string {
   return id.replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 
-/**
- * Build a mapping of invalid tool-call IDs to sanitized replacements
- * by scanning all messages.
- */
 function buildToolIdMap(messages: MastraDBMessage[]): Map<string, string> {
   const idMap = new Map<string, string>();
 
@@ -67,7 +77,6 @@ function buildToolIdMap(messages: MastraDBMessage[]): Map<string, string> {
       }
     }
 
-    // Also check legacy toolInvocations array
     if (msg.content.toolInvocations) {
       for (const inv of msg.content.toolInvocations) {
         const id = inv.toolCallId;
@@ -81,10 +90,6 @@ function buildToolIdMap(messages: MastraDBMessage[]): Map<string, string> {
   return idMap;
 }
 
-/**
- * Rewrite tool-call IDs in all messages using the provided mapping.
- * Mutates messages in place.
- */
 function rewriteToolIds(messages: MastraDBMessage[], idMap: Map<string, string>): void {
   for (const msg of messages) {
     if (msg.content?.parts) {
@@ -103,7 +108,6 @@ function rewriteToolIds(messages: MastraDBMessage[], idMap: Map<string, string>)
       }
     }
 
-    // Also rewrite legacy toolInvocations array
     if (msg.content?.toolInvocations) {
       for (const inv of msg.content.toolInvocations) {
         const newId = idMap.get(inv.toolCallId);
@@ -116,16 +120,63 @@ function rewriteToolIds(messages: MastraDBMessage[], idMap: Map<string, string>)
 }
 
 /**
- * Handles tool-call ID validation errors that occur when switching between
- * LLM providers. Different providers generate tool-call IDs in different
- * formats, and some providers (e.g. Anthropic) enforce a strict pattern
- * (`^[a-zA-Z0-9_-]+$`). When history from one provider contains IDs that
- * violate another provider's rules, this processor rewrites those IDs and
- * retries the request.
+ * Anthropic enforces `^[a-zA-Z0-9_-]+$` on tool_use.id values.
+ * Tool-call IDs from other providers (e.g. containing `.`, `:`) will be
+ * rejected. This rule rewrites offending characters to `_`.
+ */
+export const anthropicToolIdFormat: CompatRule = {
+  name: 'anthropic-tool-id-format',
+  errorPatterns: [/tool_use\.id:.*should match pattern/i, /tool_call_id.*invalid/i],
+  fix(messages) {
+    const idMap = buildToolIdMap(messages);
+    if (idMap.size === 0) return false;
+    rewriteToolIds(messages, idMap);
+    return true;
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Default rule set
+// ---------------------------------------------------------------------------
+
+/**
+ * All built-in compat rules. Extend by passing additional rules to the
+ * `ProviderHistoryCompat` constructor.
+ */
+export const DEFAULT_COMPAT_RULES: CompatRule[] = [anthropicToolIdFormat];
+
+// ---------------------------------------------------------------------------
+// Processor
+// ---------------------------------------------------------------------------
+
+/**
+ * Handles provider-specific history incompatibilities by matching API errors
+ * against a registry of known patterns and applying targeted fixes.
+ *
+ * Each {@link CompatRule} pairs an error pattern with a message-rewriting
+ * function. When the API returns an error that matches a rule, the processor
+ * applies the fix and retries the request.
+ *
+ * Built-in rules:
+ * - **anthropic-tool-id-format** – rewrites tool-call IDs that contain
+ *   characters outside `[a-zA-Z0-9_-]` (e.g. `.` or `:` from other providers).
+ *
+ * To add custom rules, pass them to the constructor:
+ * ```ts
+ * new ProviderHistoryCompat({
+ *   additionalRules: [myCustomRule],
+ * })
+ * ```
  */
 export class ProviderHistoryCompat implements Processor<'provider-history-compat'> {
   readonly id = 'provider-history-compat' as const;
   readonly name = 'Provider History Compat';
+
+  private rules: CompatRule[];
+
+  constructor(opts?: { additionalRules?: CompatRule[] }) {
+    this.rules = [...DEFAULT_COMPAT_RULES, ...(opts?.additionalRules ?? [])];
+  }
 
   async processAPIError({
     error,
@@ -134,15 +185,15 @@ export class ProviderHistoryCompat implements Processor<'provider-history-compat
   }: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
     if (retryCount > 0) return;
 
-    if (!isToolIdError(error)) return;
-
     const messages = messageList.get.all.db();
-    const idMap = buildToolIdMap(messages);
 
-    if (idMap.size === 0) return;
-
-    rewriteToolIds(messages, idMap);
-
-    return { retry: true };
+    for (const rule of this.rules) {
+      if (matchesRule(error, rule)) {
+        const changed = rule.fix(messages);
+        if (changed) {
+          return { retry: true };
+        }
+      }
+    }
   }
 }
