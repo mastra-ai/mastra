@@ -3,12 +3,12 @@
 '@mastra/client-js': minor
 ---
 
-Added agent resume-stream endpoint (`POST /agents/:agentId/resume-stream`) that allows resuming a suspended agent stream with custom data. This enables resuming workflows running within an agent when using the Mastra client SDK over HTTP.
+Added support for resuming suspended agent streams over HTTP with custom data. This adds the `POST /agents/:agentId/resume-stream` server endpoint and the client SDK `agent.resumeStream()` method, so apps can continue a suspended agent run through the Mastra client.
 
 **Usage example (client SDK):**
 
 ```typescript
-const agent = mastra.agents.get('my-agent');
+const agent = mastraClient.getAgent('my-agent');
 
 // Resume a suspended agent stream with custom data
 const response = await agent.resumeStream(
