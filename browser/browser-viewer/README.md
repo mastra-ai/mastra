@@ -76,10 +76,9 @@ const workspace = new Workspace({
 | ---------------- | -------------------------------------------------- | ---------- | ------------------------------------------------ |
 | `cli`            | `'agent-browser' \| 'browser-use' \| 'browse-cli'` | Required   | Which CLI the agent uses                         |
 | `cdpUrl`         | `string`                                           | -          | Connect to existing browser instead of launching |
-| `headless`       | `boolean`                                          | `false`    | Run browser in headless mode                     |
+| `headless`       | `boolean`                                          | `true`     | Run browser in headless mode                     |
 | `cdpPort`        | `number`                                           | `0` (auto) | Port for Chrome remote debugging                 |
 | `viewport`       | `{ width, height }`                                | `1280x720` | Browser viewport size                            |
-| `userDataDir`    | `string`                                           | -          | Chrome profile directory                         |
 | `executablePath` | `string`                                           | -          | Path to Chrome executable                        |
 
 ## How It Works

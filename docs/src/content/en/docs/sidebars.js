@@ -358,6 +358,11 @@ const sidebars = {
           id: 'browser/stagehand',
           label: 'Stagehand',
         },
+        {
+          type: 'doc',
+          id: 'browser/browser-viewer',
+          label: 'BrowserViewer',
+        },
       ],
     },
     {
