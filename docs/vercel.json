@@ -722,7 +722,7 @@
     },
     {
       "source": "/docs/mcp/publishing-mcp-server",
-      "destination": "TODO",
+      "destination": "/guides/guide/publishing-mcp-server",
       "permanent": true
     }
   ]
