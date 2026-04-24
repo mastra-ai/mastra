@@ -26,7 +26,7 @@ export function TokenUsageByAgentCardView({ data, isLoading, isError }: TokenUsa
   const costRows = rows.filter(d => d.cost != null && d.cost > 0);
   const uniqueCostUnits = new Set(costRows.map(d => d.costUnit ?? 'usd'));
   const hasSingleCostUnit = uniqueCostUnits.size <= 1;
-  const costUnit = hasSingleCostUnit ? (costRows[0]?.costUnit ?? null) : null;
+  const costUnit = hasSingleCostUnit ? ([...uniqueCostUnits][0] ?? 'usd') : null;
   const totalCost = hasSingleCostUnit ? costRows.reduce((s, d) => s + (d.cost ?? 0), 0) : 0;
   const hasCostData = hasSingleCostUnit && totalCost > 0;
 

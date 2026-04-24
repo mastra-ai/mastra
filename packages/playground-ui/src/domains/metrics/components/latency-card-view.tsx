@@ -65,7 +65,18 @@ export function LatencyCardView({ data, isLoading, isError }: LatencyCardViewPro
           {!hasData ? (
             <MetricsCard.NoData message="No latency data yet" />
           ) : (
-            <Tabs defaultTab="agents" className="overflow-visible">
+            <Tabs
+              defaultTab={
+                data.agentData.length > 0
+                  ? 'agents'
+                  : data.workflowData.length > 0
+                    ? 'workflows'
+                    : data.toolData.length > 0
+                      ? 'tools'
+                      : 'agents'
+              }
+              className="overflow-visible"
+            >
               <TabList>
                 <Tab value="agents">Agents</Tab>
                 <Tab value="workflows">Workflows</Tab>
