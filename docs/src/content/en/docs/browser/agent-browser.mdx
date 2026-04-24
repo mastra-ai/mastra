@@ -38,7 +38,7 @@ const browser = new AgentBrowser({
 
 export const browserAgent = new Agent({
   id: 'browser-agent',
-  name: "Browser Agent",
+  name: 'Browser Agent',
   model: 'openai/gpt-5.4',
   browser,
   instructions: `You are a web automation assistant.
@@ -50,12 +50,11 @@ When interacting with pages:
 })
 ```
 
-:::warning
+:::note
 
-For local launches (the default), AgentBrowser requires a Chromium binary installed via Playwright. This is normally downloaded automatically when you install `@mastra/agent-browser`. If launching the browser fails with "browser executable is missing", run `npx playwright install chromium`. If you connect to a remote browser using the [`cdpUrl`](/reference/browser/agent-browser) option, no local Chromium is needed.
+For local launches (the default), AgentBrowser requires a Chromium binary installed via Playwright. This is normally downloaded automatically when you install `@mastra/agent-browser`. If launching the browser fails with `"browser executable is missing"`, run `npx playwright install chromium`. If you connect to a remote browser using the [`cdpUrl`](/reference/browser/agent-browser) option, no local Chromium is needed.
 
 :::
-
 
 ## Element refs
 
