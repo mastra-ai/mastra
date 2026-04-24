@@ -127,7 +127,10 @@ Use per-adapter tool lifecycle hooks to run side effects when tools start and fi
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
+import type { ChannelStatusHandle } from '@mastra/core/channels'
 import { createSlackAdapter } from '@chat-adapter/slack'
+
+const toolStatuses = new Map<string, ChannelStatusHandle>()
 
 export const supportAgent = new Agent({
   name: 'Support Agent',
@@ -137,11 +140,12 @@ export const supportAgent = new Agent({
     adapters: {
       slack: {
         adapter: createSlackAdapter(),
-        onToolStart: async ({ displayName, channel }) => {
-          await channel.status.set(`Running ${displayName}…`)
+        onToolStart: async ({ toolCallId, displayName, channel }) => {
+          toolStatuses.set(toolCallId, await channel.status.set(`Running ${displayName}…`))
         },
-        onToolEnd: async ({ channel }) => {
-          await channel.status.clear()
+        onToolEnd: async ({ toolCallId }) => {
+          await toolStatuses.get(toolCallId)?.clear()
+          toolStatuses.delete(toolCallId)
         },
       },
     },
