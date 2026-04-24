@@ -1,8 +1,8 @@
 import { useChat } from '@mastra/react';
 
 import type { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
+import { ChatComposer } from '../chat-primitives/chat-composer';
 import { MessageRow } from '../chat-primitives/messages';
-import { ConversationComposer } from './conversation-composer';
 import { ConversationHeader } from './conversation-header';
 import { useAgentBuilderTool } from './hooks/use-agent-builder-tool';
 import type { AvailableTool } from './hooks/use-agent-builder-tool';
@@ -38,7 +38,7 @@ export const ConversationPanel = ({
   const { draft, setDraft, trimmed, handleFormSubmit, handleKeyDown } = useChatDraft({ onSubmit: send });
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-surface1 pt-6">
+    <div className="flex h-full min-h-0 flex-col px-6 pt-6">
       <ConversationHeader />
 
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto pb-4">
@@ -49,13 +49,17 @@ export const ConversationPanel = ({
         </div>
       </div>
 
-      <ConversationComposer
+      <ChatComposer
         draft={draft}
         onDraftChange={setDraft}
         onSubmit={handleFormSubmit}
         onKeyDown={handleKeyDown}
         disabled={isRunning}
         canSubmit={trimmed.length > 0 && !isRunning}
+        placeholder="Ask a follow-up…"
+        inputTestId="agent-builder-conversation-input"
+        submitTestId="agent-builder-conversation-submit"
+        viewTransitionName="agent-builder-prompt"
       />
     </div>
   );

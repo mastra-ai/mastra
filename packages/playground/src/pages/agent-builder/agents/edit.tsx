@@ -1,19 +1,18 @@
-import { cn, IconButton } from '@mastra/playground-ui';
+import { IconButton } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
-import { ArrowLeftIcon, Columns2, EyeIcon } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { FormProvider, useForm } from 'react-hook-form';
+import { EyeIcon } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
-import { AgentBuilderBreadcrumb } from '@/domains/agent-builder/components/agent-builder-edit/agent-builder-breadcrumb';
 import { EditableAgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
-import { AgentPreviewChat } from '@/domains/agent-builder/components/agent-builder-edit/agent-preview-chat';
 import { ConversationPanel } from '@/domains/agent-builder/components/agent-builder-edit/conversation-panel';
-import { BrowserFrame } from '@/domains/agent-builder/components/browser-frame';
+import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
 import { defaultAgentFixture } from '@/domains/agent-builder/fixtures';
 import type { AgentFixture } from '@/domains/agent-builder/fixtures';
 import { useSaveAgent } from '@/domains/agent-builder/hooks/use-save-agent';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
+import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 
@@ -22,135 +21,138 @@ interface AvailableTool {
   description?: string;
 }
 
+type ToolsData = NonNullable<ReturnType<typeof useTools>['data']>;
+
 type LocationState = { userMessage?: string } | null;
 
 export default function AgentBuilderAgentEdit() {
   const { id } = useParams<{ id: string }>();
-  const location = useLocation();
+  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id);
+  const { data: toolsData, isPending: isToolsPending } = useTools();
+  const isReady = Boolean(id) && !isStoredAgentLoading && !isToolsPending;
+
+  return (
+    <AgentBuilderAgentEditPage
+      key={isReady ? 'ready' : 'loading'}
+      id={id}
+      storedAgent={storedAgent}
+      toolsData={toolsData}
+      isReady={isReady}
+    />
+  );
+}
+
+interface PageProps {
+  id: string | undefined;
+  storedAgent: StoredAgent | null | undefined;
+  toolsData: ToolsData | undefined;
+  isReady: boolean;
+}
+
+const AgentBuilderAgentEditPage = ({ id, storedAgent, toolsData, isReady }: PageProps) => {
   const formMethods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {
-      name: '',
-      instructions: '',
-      tools: {},
-      skills: [],
+      name: storedAgent?.name ?? '',
+      instructions: typeof storedAgent?.instructions === 'string' ? storedAgent.instructions : '',
+      tools: Object.fromEntries(Object.keys(storedAgent?.tools ?? {}).map(k => [k, true])),
+      skills: Object.keys(storedAgent?.skills ?? {}),
     },
   });
-  const state = (location.state as LocationState) ?? null;
-  const [agent, setAgent] = useState<AgentFixture>(defaultAgentFixture);
+
+  return (
+    <FormProvider {...formMethods}>
+      {!isReady || !id ? (
+        <AgentBuilderAgentEditSkeleton />
+      ) : (
+        <AgentBuilderAgentEditReady id={id} storedAgent={storedAgent} toolsData={toolsData ?? {}} />
+      )}
+    </FormProvider>
+  );
+};
+
+const AgentBuilderAgentEditSkeleton = () => (
+  <WorkspaceLayout
+    isLoading
+    chat={null}
+    configure={
+      <EditableAgentConfigurePanel
+        agent={defaultAgentFixture}
+        onAgentChange={() => {}}
+        availableTools={[]}
+        onSave={() => {}}
+        isSaving={false}
+        isLoading
+      />
+    }
+  />
+);
+
+interface AgentBuilderAgentEditReadyProps {
+  id: string;
+  storedAgent: StoredAgent | null | undefined;
+  toolsData: ToolsData;
+}
+
+const AgentBuilderAgentEditReady = ({ id, storedAgent, toolsData }: AgentBuilderAgentEditReadyProps) => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const features = useBuilderAgentFeatures();
-  const { data: toolsData, isPending } = useTools();
-  const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id);
+  const state = (location.state as LocationState) ?? null;
+  const formMethods = useFormContext<AgentBuilderEditFormValues>();
 
   const availableTools = useMemo<AvailableTool[]>(
     () =>
-      toolsData
-        ? Object.entries(toolsData).map(([id, tool]) => ({
-            id,
-            description: (tool as { description?: string }).description,
-          }))
-        : [],
+      Object.entries(toolsData).map(([toolId, tool]) => ({
+        id: toolId,
+        description: (tool as { description?: string }).description,
+      })),
     [toolsData],
   );
 
-  useEffect(() => {
-    if (!storedAgent) return;
-    const instructions = typeof storedAgent.instructions === 'string' ? storedAgent.instructions : '';
-    const tools = Object.fromEntries(Object.keys(storedAgent.tools ?? {}).map(k => [k, true]));
-    const skills = Object.keys(storedAgent.skills ?? {});
-    formMethods.reset({
-      name: storedAgent.name ?? '',
-      instructions,
-      tools,
-      skills,
-    });
-  }, [storedAgent, formMethods]);
+  const [agent, setAgent] = useState<AgentFixture>(defaultAgentFixture);
 
   const mode: 'create' | 'edit' = storedAgent ? 'edit' : 'create';
-  const { save, isSaving } = useSaveAgent({ agentId: id!, mode, availableTools });
+  const { save, isSaving } = useSaveAgent({ agentId: id, mode, availableTools });
+
   const handleSaveSuccess = async (values: AgentBuilderEditFormValues) => {
     await save(values);
     void navigate(`/agent-builder/agents`, { viewTransition: true });
   };
   const handleSave = formMethods.handleSubmit(handleSaveSuccess);
-  const isLoading = isStoredAgentLoading || isPending;
-
-  const [expanded, setExpanded] = useState(true);
-  const navigate = useNavigate();
-
-  const gridClass = expanded ? 'grid-cols-[1fr_380px]' : 'grid-cols-[1fr_0px]';
 
   return (
-    <FormProvider {...formMethods}>
-      <div className="flex flex-col h-full bg-surface1">
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-6 pt-4">
-          <div className="justify-self-start">
-            <IconButton
-              tooltip="Agents list"
-              className="rounded-full"
-              onClick={() => navigate(`/agent-builder/agents`)}
-            >
-              <ArrowLeftIcon />
-            </IconButton>
-          </div>
-          <AgentBuilderBreadcrumb className="justify-self-center" isLoading={isLoading} />
-          <div className="justify-self-end" />
-        </div>
-        <div className="flex flex-1 min-h-0">
-          <div className="flex w-[40ch] shrink-0 flex-col bg-surface1 pt-4 pb-6 px-6">
-            <MastraReactProvider baseUrl="http://localhost:4112">
-              <ConversationPanel
-                initialUserMessage={state?.userMessage}
-                features={features}
-                availableTools={availableTools}
-                toolsReady={!isPending}
-              />
-            </MastraReactProvider>
-          </div>
-          <div className="flex flex-1 min-w-0 flex-col pt-4 pb-6 pr-6">
-            <BrowserFrame className={cn('grid relative agent-builder-panel-grid', gridClass)}>
-              <div className="h-full w-full overflow-hidden grid grid-rows-[auto_1fr]">
-                <div className="flex gap-2 items-center pl-6 pt-6 pr-6 justify-between">
-                  <IconButton
-                    tooltip="View agent"
-                    className="rounded-full"
-                    onClick={() => navigate(`/agent-builder/agents/${id}/view`, { viewTransition: true })}
-                  >
-                    <EyeIcon />
-                  </IconButton>
-
-                  {!expanded && (
-                    <IconButton tooltip="Expand" className="rounded-full" onClick={() => setExpanded(true)}>
-                      <Columns2 />
-                    </IconButton>
-                  )}
-                </div>
-
-                <AgentPreviewChat agent={agent} isLoading={isLoading} />
-              </div>
-
-              <div className="h-full min-w-0 overflow-hidden" aria-hidden={!expanded}>
-                <div
-                  className={cn(
-                    'agent-builder-panel-slide h-full w-[380px] overflow-y-auto pr-6 pb-6 pt-6',
-                    expanded ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0 pointer-events-none',
-                  )}
-                  style={expanded ? { viewTransitionName: 'agent-builder-configure-panel' } : undefined}
-                >
-                  <EditableAgentConfigurePanel
-                    agent={agent}
-                    onAgentChange={setAgent}
-                    onClose={() => setExpanded(false)}
-                    availableTools={availableTools}
-                    onSave={handleSave}
-                    isSaving={isSaving}
-                    isLoading={isLoading}
-                  />
-                </div>
-              </div>
-            </BrowserFrame>
-          </div>
-        </div>
-      </div>
-    </FormProvider>
+    <WorkspaceLayout
+      isLoading={false}
+      defaultExpanded
+      toolbarAction={
+        <IconButton
+          tooltip="View agent"
+          className="rounded-full"
+          onClick={() => navigate(`/agent-builder/agents/${id}/view`, { viewTransition: true })}
+        >
+          <EyeIcon />
+        </IconButton>
+      }
+      chat={
+        <MastraReactProvider baseUrl="http://localhost:4112">
+          <ConversationPanel
+            initialUserMessage={state?.userMessage}
+            features={features}
+            availableTools={availableTools}
+            toolsReady
+          />
+        </MastraReactProvider>
+      }
+      configure={
+        <EditableAgentConfigurePanel
+          agent={agent}
+          onAgentChange={setAgent}
+          availableTools={availableTools}
+          onSave={handleSave}
+          isSaving={isSaving}
+          isLoading={false}
+        />
+      }
+    />
   );
-}
+};

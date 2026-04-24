@@ -32,7 +32,7 @@ const FormWrapper = ({ children }: { children: React.ReactNode }) => {
 const renderPanel = () =>
   render(
     <FormWrapper>
-      <EditableAgentConfigurePanel agent={defaultAgentFixture} onAgentChange={() => {}} onClose={() => {}} />
+      <EditableAgentConfigurePanel agent={defaultAgentFixture} onAgentChange={() => {}} />
     </FormWrapper>,
   );
 
@@ -133,7 +133,6 @@ describe('AgentConfigurePanel save + skeleton', () => {
         <EditableAgentConfigurePanel
           agent={defaultAgentFixture}
           onAgentChange={() => {}}
-          onClose={() => {}}
           isLoading
         />
       </FormWrapper>,
@@ -151,7 +150,6 @@ describe('AgentConfigurePanel save + skeleton', () => {
         <EditableAgentConfigurePanel
           agent={defaultAgentFixture}
           onAgentChange={() => {}}
-          onClose={() => {}}
           onSave={onSave}
         />
       </FormWrapper>,
@@ -166,7 +164,7 @@ describe('AgentConfigurePanel save + skeleton', () => {
   it('does not render the save button when onSave is omitted', () => {
     render(
       <FormWrapper>
-        <EditableAgentConfigurePanel agent={defaultAgentFixture} onAgentChange={() => {}} onClose={() => {}} />
+        <EditableAgentConfigurePanel agent={defaultAgentFixture} onAgentChange={() => {}} />
       </FormWrapper>,
     );
 
@@ -179,7 +177,6 @@ describe('AgentConfigurePanel save + skeleton', () => {
         <EditableAgentConfigurePanel
           agent={defaultAgentFixture}
           onAgentChange={() => {}}
-          onClose={() => {}}
           onSave={() => {}}
           isSaving
         />

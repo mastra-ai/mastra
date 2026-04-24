@@ -1,5 +1,5 @@
 import { Avatar, Button, IconButton, Skeleton, TextFieldBlock, Txt } from '@mastra/playground-ui';
-import { ChevronRight, FileText, GraduationCap, Plus, Wrench, X } from 'lucide-react';
+import { ChevronRight, FileText, GraduationCap, Plus, Wrench } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { skillsFixture } from '../../fixtures';
@@ -25,7 +25,6 @@ interface AgentConfigurePanelProps {
   onDraftNameChange?: (next: string) => void;
   onDraftAvatarUrlChange?: (next: string) => void;
   onDraftInstructionsChange?: (next: string) => void;
-  onClose: () => void;
   availableTools?: AvailableTool[];
   onSave?: () => void;
   isSaving?: boolean;
@@ -42,7 +41,6 @@ export const AgentConfigurePanel = ({
   onDraftNameChange = () => {},
   onDraftAvatarUrlChange = () => {},
   onDraftInstructionsChange = () => {},
-  onClose = () => {},
   availableTools = [],
   onSave,
   isSaving = false,
@@ -78,16 +76,11 @@ export const AgentConfigurePanel = ({
   };
 
   if (isLoading) {
-    return <AgentConfigurePanelSkeleton onClose={onClose} showSaveButton={Boolean(onSave) && editable} />;
+    return <AgentConfigurePanelSkeleton showSaveButton={Boolean(onSave) && editable} />;
   }
 
   return (
     <div className="flex h-full flex-col border border-border1 bg-surface3 rounded-3xl overflow-hidden">
-      <div className="pr-6 pt-6 flex justify-end">
-        <IconButton onClick={onClose} className="rounded-full" tooltip="Close" variant="ghost">
-          <X />
-        </IconButton>
-      </div>
       <div className="flex-1 flex flex-col gap-6 py-6 overflow-y-auto">
         {editable ? (
           <div className="flex items-center gap-4 px-6">
@@ -235,20 +228,14 @@ const ConfigRow = ({ icon, label, description, count, total, onClick, testId }: 
 );
 
 interface AgentConfigurePanelSkeletonProps {
-  onClose: () => void;
   showSaveButton: boolean;
 }
 
-const AgentConfigurePanelSkeleton = ({ onClose, showSaveButton }: AgentConfigurePanelSkeletonProps) => (
+const AgentConfigurePanelSkeleton = ({ showSaveButton }: AgentConfigurePanelSkeletonProps) => (
   <div
     className="flex h-full flex-col border border-border1 bg-surface3 rounded-3xl overflow-hidden"
     data-testid="agent-configure-panel-skeleton"
   >
-    <div className="pr-6 pt-6 flex justify-end">
-      <IconButton onClick={onClose} className="rounded-full" tooltip="Close" variant="ghost">
-        <X />
-      </IconButton>
-    </div>
     <div className="flex-1 flex flex-col gap-6 py-6 overflow-y-auto">
       <div className="flex items-center gap-4 px-6">
         <Skeleton className="h-avatar-lg w-avatar-lg rounded-full shrink-0" />
