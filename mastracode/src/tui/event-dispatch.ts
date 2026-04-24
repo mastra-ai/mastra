@@ -122,6 +122,14 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
 
     case 'thread_changed': {
       ectx.showInfo(`Switched to thread: ${event.threadId}`);
+      // Clear per-thread ephemeral state first so renderExistingMessages
+      // and other downstream observers see clean state.
+      await state.harness.setState({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      if (state.taskProgress) {
+        state.taskProgress.updateTasks([]);
+        state.ui.requestRender();
+      }
+      state.taskWriteInsertIndex = -1;
       await ectx.renderExistingMessages();
       await state.harness.loadOMProgress();
       // Refresh git branch so TUI status line reflects the current branch
@@ -135,14 +143,6 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       if (currentThread) {
         state.currentThreadTitle = currentThread.title;
       }
-      // Clear per-thread ephemeral state from the global harness state
-      // so it doesn't leak into the newly switched thread.
-      await state.harness.setState({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
-      if (state.taskProgress) {
-        state.taskProgress.updateTasks([]);
-        state.ui.requestRender();
-      }
-      state.taskWriteInsertIndex = -1;
       break;
     }
 
