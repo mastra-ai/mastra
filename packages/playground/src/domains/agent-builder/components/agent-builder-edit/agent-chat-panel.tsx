@@ -5,8 +5,7 @@ import type { MastraUIMessage } from '@mastra/react';
 import { useMemo } from 'react';
 
 import { ChatComposer } from '../chat-primitives/chat-composer';
-import { MessageRow, MessagesSkeleton } from '../chat-primitives/messages';
-import { useAutoScroll } from './hooks/use-auto-scroll';
+import { MessageList } from '../chat-primitives/message-list';
 import { useChatDraft } from './hooks/use-chat-draft';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 
@@ -21,6 +20,9 @@ export const AgentChatPanel = ({ agentId }: AgentChatPanelProps) => {
     memory: true,
   });
 
+  // Stable empty array per agentId: stays the same reference across re-renders
+  // (preventing useChat from wiping streamed messages), but changes when agentId
+  // changes (allowing useChat to reset when switching agents).
   const emptyMessages = useMemo(() => [] as never[], [agentId]);
   const storedMessages = data?.messages ?? emptyMessages;
   const v5Messages = useMemo(() => toAISdkV5Messages(storedMessages) as MastraUIMessage[], [storedMessages]);
@@ -34,17 +36,15 @@ export const AgentChatPanel = ({ agentId }: AgentChatPanelProps) => {
     void sendMessage({ message, threadId: agentId });
   };
 
-  const scrollRef = useAutoScroll(messages);
   const { draft, setDraft, trimmed, handleFormSubmit, handleKeyDown } = useChatDraft({ onSubmit: send });
-
-  const showEmptyState = messages.length === 0 && !isConversationLoading;
 
   return (
     <div className="flex h-full min-h-0 flex-col px-6 pt-6">
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto pb-6 px-6">
-        {isConversationLoading && messages.length === 0 ? (
-          <MessagesSkeleton testId="agent-builder-agent-chat-messages-skeleton" />
-        ) : showEmptyState ? (
+      <MessageList
+        messages={messages}
+        isLoading={isConversationLoading}
+        skeletonTestId="agent-builder-agent-chat-messages-skeleton"
+        emptyState={
           <div
             className="flex h-full flex-col items-center justify-center gap-1 text-center"
             data-testid="agent-builder-agent-chat-empty-state"
@@ -56,14 +56,8 @@ export const AgentChatPanel = ({ agentId }: AgentChatPanelProps) => {
               Your messages will appear here.
             </Txt>
           </div>
-        ) : (
-          <div className="flex flex-col gap-6">
-            {messages.map(message => (
-              <MessageRow key={message.id} message={message} />
-            ))}
-          </div>
-        )}
-      </div>
+        }
+      />
 
       <ChatComposer
         draft={draft}

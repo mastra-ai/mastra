@@ -1,14 +1,14 @@
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+
 import { useChat } from '@mastra/react';
 import type { MastraUIMessage } from '@mastra/react';
 import { useMemo } from 'react';
 
 import type { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
 import { ChatComposer } from '../chat-primitives/chat-composer';
-import { MessageRow, MessagesSkeleton } from '../chat-primitives/messages';
+import { MessageList } from '../chat-primitives/message-list';
 import { useAgentBuilderTool } from './hooks/use-agent-builder-tool';
 import type { AvailableTool, AvailableWorkspace } from './hooks/use-agent-builder-tool';
-import { useAutoScroll } from './hooks/use-auto-scroll';
 import { useChatDraft } from './hooks/use-chat-draft';
 import { useInitialMessage } from './hooks/use-initial-message';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
@@ -68,22 +68,15 @@ export const ConversationPanel = ({
     hasExistingConversation,
     onSend: send,
   });
-  const scrollRef = useAutoScroll(chatMessages);
   const { draft, setDraft, trimmed, handleFormSubmit, handleKeyDown } = useChatDraft({ onSubmit: send });
 
   return (
     <div className="flex h-full min-h-0 flex-col px-6 pt-6">
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto pb-6 px-6">
-        {isConversationLoading && chatMessages.length === 0 ? (
-          <MessagesSkeleton testId="agent-builder-conversation-messages-skeleton" />
-        ) : (
-          <div className="flex flex-col gap-6">
-            {chatMessages.map(message => (
-              <MessageRow key={message.id} message={message} />
-            ))}
-          </div>
-        )}
-      </div>
+      <MessageList
+        messages={chatMessages}
+        isLoading={isConversationLoading}
+        skeletonTestId="agent-builder-conversation-messages-skeleton"
+      />
 
       <ChatComposer
         draft={draft}
