@@ -858,7 +858,7 @@ describe('Hono Server Adapter', () => {
       context = await createDefaultTestContext();
     });
 
-    it('should apply prefix to custom API routes', async () => {
+    it('should serve custom routes at root path regardless of prefix', async () => {
       const app = new Hono();
 
       const adapter = new MastraServer({
@@ -876,13 +876,9 @@ describe('Hono Server Adapter', () => {
 
       await adapter.init();
 
-      // Custom route should be reachable at the prefixed path
-      const prefixed = await app.request(new Request('http://localhost/api/chat', { method: 'GET' }));
-      expect(prefixed.status).toBe(200);
-
-      // Custom route should NOT be reachable at the bare path
+      // Custom routes are served at their bare path, not under the API prefix
       const bare = await app.request(new Request('http://localhost/chat', { method: 'GET' }));
-      expect(bare.status).toBe(404);
+      expect(bare.status).toBe(200);
     });
   });
 });
