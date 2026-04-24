@@ -190,38 +190,38 @@ const agentStep = createStep(testAgent, {
   },
   {
     name: 'inputSchema',
-    type: 'StandardJSONSchemaV1>',
+    type: 'StandardJSONSchemaV1',
     description: 'Standard JSON Schema defining the input structure',
     required: true,
   },
   {
     name: 'outputSchema',
-    type: 'StandardJSONSchemaV1>',
+    type: 'StandardJSONSchemaV1',
     description: 'Standard JSON Schema defining the output structure',
     required: true,
   },
   {
     name: 'resumeSchema',
-    type: 'StandardJSONSchemaV1>',
+    type: 'StandardJSONSchemaV1',
     description: 'Optional Standard JSON Schema for resuming the step',
     required: false,
   },
   {
     name: 'suspendSchema',
-    type: 'StandardJSONSchemaV1>',
+    type: 'StandardJSONSchemaV1',
     description: 'Optional Standard JSON Schema for suspending the step',
     required: false,
   },
   {
     name: 'stateSchema',
-    type: 'StandardJSONSchemaV1>',
+    type: 'StandardJSONSchemaV1',
     description:
       "Optional Standard JSON Schema for the step state. Automatically injected when using Mastra's state system. The stateSchema must be a subset of the workflow's stateSchema. If not specified, type is 'any'.",
     required: false,
   },
   {
     name: 'requestContextSchema',
-    type: 'StandardJSONSchemaV1>',
+    type: 'StandardJSONSchemaV1',
     description:
       "Standard JSON Schema for validating request context values. When provided, the context is validated before the step's execute() runs, failing the step if validation fails.",
     required: false,
