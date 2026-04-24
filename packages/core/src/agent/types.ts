@@ -1,4 +1,5 @@
 import type { GenerateTextOnStepFinishCallback } from '@internal/ai-sdk-v4';
+import type { CallSettings } from '@internal/ai-sdk-v5';
 import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
@@ -27,6 +28,7 @@ import type {
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { VersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../memory/types';
 import type { Span, SpanType, TracingOptions, TracingPolicy, ObservabilityContext } from '../observability';
@@ -89,6 +91,13 @@ export type StructuredOutputOptionsBase<OUTPUT = {}> = {
   instructions?: string;
 
   /**
+   * When true and `model` is also provided, reuse the parent agent for the separate
+   * structuring pass. If a thread is available, Mastra attaches read-only memory so
+   * the structuring model has full conversation context.
+   */
+  useAgent?: boolean;
+
+  /**
    * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
    */
   jsonPromptInjection?: boolean;
@@ -134,11 +143,16 @@ export interface AgentCreateOptions {
   tracingPolicy?: TracingPolicy;
 }
 
+export type ModelFallbackSettings = Omit<CallSettings, 'abortSignal' | 'maxRetries' | 'headers'>;
+
 export type ModelWithRetries = {
   id?: string;
   model: DynamicArgument<MastraModelConfig>;
   maxRetries?: number; // defaults to agent-level maxRetries
   enabled?: boolean; // defaults to true
+  modelSettings?: DynamicArgument<ModelFallbackSettings>;
+  providerOptions?: DynamicArgument<ProviderOptions>;
+  headers?: DynamicArgument<Record<string, string>>;
 };
 
 export interface AgentConfig<
@@ -186,6 +200,24 @@ export interface AgentConfig<
    * model: [
    *   { model: 'openai/gpt-4', maxRetries: 2 },
    *   { model: 'anthropic/claude-3-opus', maxRetries: 1 }
+   * ]
+   * ```
+   *
+   * @example Static fallback array with per-entry settings
+   * ```typescript
+   * model: [
+   *   {
+   *     model: 'google/gemini-2.5-flash',
+   *     maxRetries: 2,
+   *     modelSettings: { temperature: 0.3 },
+   *     providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } },
+   *   },
+   *   {
+   *     model: 'openai/gpt-5-mini',
+   *     maxRetries: 2,
+   *     modelSettings: { temperature: 0.7 },
+   *     providerOptions: { openai: { reasoningEffort: 'low' } },
+   *   },
    * ]
    * ```
    *
@@ -390,7 +422,7 @@ export interface AgentConfig<
 
 export type AgentMemoryOption = {
   thread: string | (Partial<StorageThreadType> & { id: string });
-  resource: string;
+  resource?: string;
   options?: MemoryConfigInternal;
 };
 
@@ -426,6 +458,15 @@ export type AgentGenerateOptions<
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** RequestContext for dependency injection */
   requestContext?: RequestContext;
+  /**
+   * Per-invocation version overrides for sub-agents (and future primitives).
+   * Merged on top of Mastra instance-level versions and propagated via requestContext.
+   *
+   * NOTE: This field is intentionally duplicated across AgentGenerateOptions,
+   * AgentStreamOptions, and AgentExecutionOptionsBase because these types are
+   * independent (generate/stream options do not extend the base). Do not remove.
+   */
+  versions?: VersionOverrides;
   /** Scorers to use for this generation */
   scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
   /** Whether to return the input required to run scorers for agents, defaults to false */
@@ -516,6 +557,15 @@ export type AgentStreamOptions<
   experimental_output?: EXPERIMENTAL_OUTPUT;
   /** RequestContext for dependency injection */
   requestContext?: RequestContext;
+  /**
+   * Per-invocation version overrides for sub-agents (and future primitives).
+   * Merged on top of Mastra instance-level versions and propagated via requestContext.
+   *
+   * NOTE: This field is intentionally duplicated across AgentGenerateOptions,
+   * AgentStreamOptions, and AgentExecutionOptionsBase because these types are
+   * independent (generate/stream options do not extend the base). Do not remove.
+   */
+  versions?: VersionOverrides;
   /**
    * Whether to save messages incrementally on step finish
    * @default false

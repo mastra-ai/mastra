@@ -1081,6 +1081,58 @@ describe('ProcessorRunner', () => {
       expect(chunks[1]).toEqual({ type: 'tool-call', toolCallId: '123' });
       expect(chunks[2]).toEqual({ type: 'finish' });
     });
+
+    it('should not enqueue undefined into the stream when a processor returns undefined', async () => {
+      const outputProcessors: Processor[] = [
+        {
+          id: 'returnUndefined',
+          name: 'Return Undefined',
+          processOutputStream: async ({ part }) => {
+            if (part.type === 'text-delta' && part.payload.text === 'bad') {
+              // Simulate a processor that forgets to `return part`
+              return undefined as unknown as ChunkType;
+            }
+            return part;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const mockStream = {
+        fullStream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'text-delta', payload: { text: 'hello' } });
+            controller.enqueue({ type: 'text-delta', payload: { text: 'bad' } });
+            controller.enqueue({ type: 'text-delta', payload: { text: 'world' } });
+            controller.enqueue({ type: 'finish' });
+            controller.close();
+          },
+        }),
+      };
+
+      const processedStream = await runner.runOutputProcessorsForStream(mockStream as any);
+      const reader = processedStream.getReader();
+      const chunks: Array<ChunkType | undefined> = [];
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+
+      // Consumer should never see an `undefined` chunk.
+      expect(chunks.some(c => c === undefined)).toBe(false);
+      expect(chunks).toHaveLength(3);
+      expect(chunks[0]).toEqual({ type: 'text-delta', payload: { text: 'hello' } });
+      expect(chunks[1]).toEqual({ type: 'text-delta', payload: { text: 'world' } });
+      expect(chunks[2]).toEqual({ type: 'finish' });
+    });
   });
 
   /**
@@ -1808,6 +1860,83 @@ describe('ProcessorRunner', () => {
       const allMessages = result.get.all.db();
       expect(allMessages).toHaveLength(2);
       expect(allMessages[1].role).toBe('assistant');
+    });
+
+    it('should receive usage data in processOutputStep', async () => {
+      let receivedUsage: unknown = undefined;
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'usage-processor',
+          name: 'Usage Processor',
+          processOutputStep: async ({ messages, usage }) => {
+            receivedUsage = usage;
+            return messages;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('user message', 'user')], 'user');
+
+      const usage = {
+        inputTokens: 100,
+        outputTokens: 50,
+        totalTokens: 150,
+      };
+
+      await runner.runProcessOutputStep({
+        steps: [],
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+        usage,
+      });
+
+      expect(receivedUsage).toEqual(usage);
+    });
+
+    it('should provide default usage when not supplied', async () => {
+      let receivedUsage: unknown = 'NOT_CALLED';
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'usage-default-processor',
+          name: 'Usage Default Processor',
+          processOutputStep: async ({ messages, usage }) => {
+            receivedUsage = usage;
+            return messages;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('user message', 'user')], 'user');
+
+      await runner.runProcessOutputStep({
+        steps: [],
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+      });
+
+      expect(receivedUsage).toEqual({
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+      });
     });
   });
 

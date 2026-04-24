@@ -60,54 +60,6 @@
               "runId": "<runId-1>"
             },
             "input": {
-              "phase": "input",
-              "messageCount": 1
-            },
-            "output": {
-              "phase": "input",
-              "messageList": {
-                "messages": [
-                  {
-                    "role": "user",
-                    "content": [
-                      {
-                        "type": "text",
-                        "text": "  Hello! How are you?  "
-                      }
-                    ]
-                  }
-                ],
-                "systemMessages": [
-                  {
-                    "role": "system",
-                    "content": "You are a helpful assistant"
-                  }
-                ]
-              },
-              "systemMessages": [
-                {
-                  "role": "system",
-                  "content": "You are a helpful assistant"
-                }
-              ],
-              "state": {},
-              "processorStates": {
-                "__type": "Map",
-                "__map_entries": [
-                  [
-                    "string",
-                    "validator",
-                    {
-                      "inputAccumulatedText": "",
-                      "outputAccumulatedText": "",
-                      "outputChunkCount": 0,
-                      "customState": {},
-                      "streamParts": []
-                    }
-                  ]
-                ]
-              },
-              "retryCount": 0,
               "messages": [
                 {
                   "id": "<id-1>",
@@ -125,8 +77,16 @@
                     "content": "  Hello! How are you?  "
                   }
                 }
-              ]
-            }
+              ],
+              "systemMessages": [
+                {
+                  "role": "system",
+                  "content": "You are a helpful assistant"
+                }
+              ],
+              "retryCount": 0
+            },
+            "output": {}
           },
           "children": [
             {
@@ -448,153 +408,9 @@
               "runId": "<runId-1>"
             },
             "input": {
-              "phase": "outputResult",
-              "messageCount": 1
-            },
-            "output": {
-              "phase": "outputResult",
-              "messageList": {
-                "messages": [
-                  {
-                    "role": "user",
-                    "content": [
-                      {
-                        "type": "text",
-                        "text": "  Hello! How are you?  "
-                      }
-                    ]
-                  },
-                  {
-                    "role": "assistant",
-                    "content": [
-                      {
-                        "type": "text",
-                        "text": "Mock V2 generate response",
-                        "createdAt": "<date>"
-                      }
-                    ]
-                  }
-                ],
-                "systemMessages": [
-                  {
-                    "role": "system",
-                    "content": "You are a helpful assistant"
-                  }
-                ]
-              },
-              "state": {},
-              "processorStates": {
-                "__type": "Map",
-                "__map_entries": [
-                  [
-                    "string",
-                    "validator",
-                    {
-                      "inputAccumulatedText": "",
-                      "outputAccumulatedText": "",
-                      "outputChunkCount": 0,
-                      "customState": {},
-                      "streamParts": []
-                    }
-                  ],
-                  [
-                    "string",
-                    "test-agent-output-processor",
-                    {
-                      "inputAccumulatedText": "Mock V2 generate response",
-                      "outputAccumulatedText": "Mock V2 generate response",
-                      "outputChunkCount": 5,
-                      "customState": {},
-                      "streamParts": [
-                        {
-                          "type": "response-metadata",
-                          "runId": "<runId-1>",
-                          "from": "AGENT",
-                          "payload": {
-                            "type": "response-metadata",
-                            "id": "<id-2>",
-                            "modelId": "mock-model-id"
-                          }
-                        },
-                        {
-                          "type": "text-start",
-                          "runId": "<runId-1>",
-                          "from": "AGENT",
-                          "payload": {
-                            "id": "msg_<msg-1>"
-                          }
-                        },
-                        {
-                          "type": "text-delta",
-                          "runId": "<runId-1>",
-                          "from": "AGENT",
-                          "payload": {
-                            "id": "msg_<msg-1>",
-                            "text": "Mock V2 generate response"
-                          }
-                        },
-                        {
-                          "type": "text-end",
-                          "runId": "<runId-1>",
-                          "from": "AGENT",
-                          "payload": {
-                            "type": "text-end",
-                            "id": "msg_<msg-1>"
-                          }
-                        },
-                        {
-                          "type": "finish",
-                          "runId": "<runId-1>",
-                          "from": "AGENT",
-                          "payload": {
-                            "stepResult": {
-                              "reason": "stop"
-                            },
-                            "output": {
-                              "usage": {
-                                "inputTokens": 15,
-                                "outputTokens": 25,
-                                "totalTokens": 40
-                              }
-                            },
-                            "metadata": {},
-                            "messages": {
-                              "all": [],
-                              "user": [],
-                              "nonUser": []
-                            },
-                            "type": "finish"
-                          }
-                        }
-                      ]
-                    }
-                  ],
-                  [
-                    "string",
-                    "summarizer",
-                    {
-                      "inputAccumulatedText": "",
-                      "outputAccumulatedText": "",
-                      "outputChunkCount": 0,
-                      "customState": {},
-                      "streamParts": []
-                    }
-                  ]
-                ]
-              },
-              "result": {
-                "text": "Mock V2 generate response",
-                "usage": {
-                  "inputTokens": 15,
-                  "outputTokens": 25,
-                  "totalTokens": 40
-                },
-                "finishReason": "stop"
-              },
-              "retryCount": 0,
               "messages": [
                 {
-                  "id": "<id-3>",
+                  "id": "<id-2>",
                   "role": "assistant",
                   "content": {
                     "format": 2,
@@ -606,14 +422,22 @@
                       }
                     ],
                     "metadata": {
-                      "modelId": "mock-model-id"
+                      "modelId": "mock-model-id",
+                      "provider": "mock-provider"
                     },
                     "content": "Mock V2 generate response"
                   },
                   "createdAt": "<date>"
                 }
-              ]
-            }
+              ],
+              "result": {
+                "text": "Mock V2 generate response",
+                "finishReason": "stop",
+                "stepCount": 1
+              },
+              "retryCount": 0
+            },
+            "output": {}
           },
           "children": [
             {

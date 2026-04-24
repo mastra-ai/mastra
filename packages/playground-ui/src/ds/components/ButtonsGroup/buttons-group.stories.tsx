@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ButtonsGroup } from './buttons-group';
-import { Button } from '../Button';
 import { ChevronDown, ChevronDownIcon } from 'lucide-react';
+import { Button } from '../Button';
+import { ButtonsGroup } from './buttons-group';
 
 const meta: Meta<typeof ButtonsGroup> = {
   title: 'Composite/ButtonsGroup',

@@ -18,7 +18,10 @@ import { Agent } from '../agent';
  * Related: https://github.com/mastra-ai/mastra/issues/13969
  */
 
-function createPrefillErrorModel(responseText: string) {
+function createPrefillErrorModel(
+  responseText: string,
+  errorMessage = 'This model does not support assistant message prefill. The conversation must end with a user message.',
+) {
   let callCount = 0;
   const receivedPrompts: any[] = [];
 
@@ -29,8 +32,7 @@ function createPrefillErrorModel(responseText: string) {
 
       if (callCount === 1) {
         throw new APICallError({
-          message:
-            'This model does not support assistant message prefill. The conversation must end with a user message.',
+          message: errorMessage,
           url: 'https://api.anthropic.com/v1/messages',
           requestBodyValues: {},
           statusCode: 400,
@@ -38,8 +40,7 @@ function createPrefillErrorModel(responseText: string) {
             type: 'error',
             error: {
               type: 'invalid_request_error',
-              message:
-                'This model does not support assistant message prefill. The conversation must end with a user message.',
+              message: errorMessage,
             },
           }),
           isRetryable: false,
@@ -60,8 +61,7 @@ function createPrefillErrorModel(responseText: string) {
 
       if (callCount === 1) {
         throw new APICallError({
-          message:
-            'This model does not support assistant message prefill. The conversation must end with a user message.',
+          message: errorMessage,
           url: 'https://api.anthropic.com/v1/messages',
           requestBodyValues: {},
           statusCode: 400,
@@ -69,8 +69,7 @@ function createPrefillErrorModel(responseText: string) {
             type: 'error',
             error: {
               type: 'invalid_request_error',
-              message:
-                'This model does not support assistant message prefill. The conversation must end with a user message.',
+              message: errorMessage,
             },
           }),
           isRetryable: false,
@@ -241,6 +240,29 @@ describe('PrefillErrorHandler Recovery', () => {
       expect(callCount).toBe(5);
       expect(seenRetryCounts).toEqual([0, 1, 2, 3, 4]);
       expect(exhaustedHandler).toHaveBeenCalledTimes(5);
+    });
+
+    it('should recover from qwen enable_thinking prefill errors', async () => {
+      const { model, getCallCount } = createPrefillErrorModel(
+        'Qwen recovery successful!',
+        'Assistant response prefill is incompatible with enable_thinking.',
+      );
+
+      const agent = new Agent({
+        id: 'prefill-test-generate-qwen',
+        name: 'Prefill Test Agent Qwen',
+        instructions: 'You are a test agent',
+        model: [{ model, maxRetries: 0 }],
+        errorProcessors: [new PrefillErrorHandler()],
+      });
+
+      const result = await agent.generate([
+        { role: 'user', content: 'What is 2+2?' },
+        { role: 'assistant', content: 'The answer is 4.' },
+      ]);
+
+      expect(result.text).toBe('Qwen recovery successful!');
+      expect(getCallCount()).toBe(2);
     });
 
     it('should preserve fallback model position when an error processor retries', async () => {

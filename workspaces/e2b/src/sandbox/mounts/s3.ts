@@ -1,6 +1,7 @@
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
-import { LOG_PREFIX, validateBucketName, validateEndpoint } from './types';
+import { shellQuote } from '../../utils/shell-quote';
+import { LOG_PREFIX, validateBucketName, validateEndpoint, validatePrefix } from './types';
 import type { MountContext } from './types';
 
 /**
@@ -23,6 +24,11 @@ export interface E2BS3MountConfig extends FilesystemMountConfig {
   accessKeyId?: string;
   /** AWS secret access key (optional - omit for public buckets) */
   secretAccessKey?: string;
+  /**
+   * Optional prefix (subdirectory) to mount instead of the entire bucket.
+   * Uses s3fs `bucket:/prefix` syntax. Leading/trailing slashes are normalized.
+   */
+  prefix?: string;
   /** Mount as read-only (even if credentials have write access) */
   readOnly?: boolean;
 }
@@ -123,8 +129,15 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
     logger.debug(`${LOG_PREFIX} Mounting as read-only`);
   }
 
+  // Build the s3fs bucket argument — supports optional prefix via `bucket:/path` syntax
+  let bucketArg = config.bucket;
+  if (config.prefix) {
+    const normalizedPrefix = validatePrefix(config.prefix);
+    bucketArg = `${config.bucket}:/${normalizedPrefix}`;
+  }
+
   // Mount with sudo (required for /dev/fuse access)
-  const mountCmd = `sudo s3fs ${config.bucket} ${mountPath} -o ${mountOptions.join(' -o ')}`;
+  const mountCmd = `sudo s3fs ${shellQuote(bucketArg)} ${shellQuote(mountPath)} -o ${mountOptions.join(' -o ')}`;
   logger.debug(`${LOG_PREFIX} Mounting S3:`, hasCredentials ? mountCmd.replace(credentialsPath, '***') : mountCmd);
 
   try {

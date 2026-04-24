@@ -226,10 +226,10 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
   },
   {
     name: 'requestContextSchema',
-    type: 'z.ZodType<any>',
+    type: 'StandardJSONSchemaV1',
     isOptional: true,
     description:
-      'Zod schema for validating request context values. When provided, the context is validated at the start of generate() or stream(), throwing a MastraError if validation fails.',
+      'Standard JSON Schema for validating request context values. When provided, the context is validated at the start of generate() or stream(), throwing a MastraError if validation fails.',
   },
 ]}
 />

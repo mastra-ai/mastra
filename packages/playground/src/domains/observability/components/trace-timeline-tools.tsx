@@ -1,4 +1,4 @@
-import type { SpanRecord } from '@mastra/core/storage';
+import type { LightSpanRecord } from '@mastra/core/storage';
 import { Button, CombinedButtons, SearchFieldBlock, Icon } from '@mastra/playground-ui';
 import { XIcon, CircleDashedIcon } from 'lucide-react';
 import { Fragment, useEffect, useState } from 'react';
@@ -7,7 +7,7 @@ import type { UISpanType } from '../types';
 import { spanTypePrefixes, getSpanTypeUi } from './shared';
 
 type TraceTimelineLegendProps = {
-  spans?: SpanRecord[];
+  spans?: LightSpanRecord[];
   fadedTypes?: string[];
   onLegendClick?: (val: string) => void;
   onLegendReset?: () => void;
@@ -44,6 +44,7 @@ export function TraceTimelineTools({
 
   useEffect(() => {
     handleSearchPhraseChange(localSearchPhrase);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localSearchPhrase, onSearchPhraseChange]);
 
   const handleSearchPhraseChange = useThrottledCallback((value: string) => {

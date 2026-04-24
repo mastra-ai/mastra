@@ -45,12 +45,22 @@ export interface LibSQLVectorConfig {
    * @default 100
    */
   initialBackoffMs?: number;
+  /**
+   * Over-fetch multiplier for vector_top_k queries when metadata filters are present.
+   * Since vector_top_k doesn't support inline WHERE clauses, we fetch topK * this multiplier
+   * candidates and post-filter. Higher values improve recall at the cost of more data scanned.
+   * @default 10
+   */
+  vectorTopKOverFetchMultiplier?: number;
 }
 
 export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
   private turso: TursoClient;
   private readonly maxRetries: number;
   private readonly initialBackoffMs: number;
+  private readonly overFetchMultiplier: number;
+  private readonly isMemoryDb: boolean;
+  private vectorIndexes: Promise<Set<string>>;
 
   constructor({
     url,
@@ -59,6 +69,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     syncInterval,
     maxRetries = 5,
     initialBackoffMs = 100,
+    vectorTopKOverFetchMultiplier = 10,
     id,
   }: LibSQLVectorConfig & { id: string }) {
     super({ id });
@@ -71,8 +82,13 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     });
     this.maxRetries = maxRetries;
     this.initialBackoffMs = initialBackoffMs;
+    if (!Number.isInteger(vectorTopKOverFetchMultiplier) || vectorTopKOverFetchMultiplier < 1) {
+      throw new Error('vectorTopKOverFetchMultiplier must be a positive integer');
+    }
+    this.overFetchMultiplier = vectorTopKOverFetchMultiplier;
+    this.isMemoryDb = url.includes(':memory:');
 
-    if (url.includes(`file:`) || url.includes(`:memory:`)) {
+    if (url.includes(`file:`) || this.isMemoryDb) {
       this.turso
         .execute('PRAGMA journal_mode=WAL;')
         .then(() => this.logger.debug('LibSQLStore: PRAGMA journal_mode=WAL set.'))
@@ -81,6 +97,20 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
         .execute('PRAGMA busy_timeout = 5000;')
         .then(() => this.logger.debug('LibSQLStore: PRAGMA busy_timeout=5000 set.'))
         .catch(err => this.logger.warn('LibSQLStore: Failed to set PRAGMA busy_timeout=5000.', err));
+    }
+
+    this.vectorIndexes = this.isMemoryDb ? Promise.resolve(new Set<string>()) : this.discoverVectorIndexes();
+  }
+
+  private async discoverVectorIndexes(): Promise<Set<string>> {
+    try {
+      const result = await this.turso.execute({
+        sql: `SELECT name FROM sqlite_master WHERE type='index' AND name LIKE '%_vector_idx'`,
+        args: [],
+      });
+      return new Set(result.rows.map(row => row.name as string));
+    } catch {
+      return new Set();
     }
   }
 
@@ -124,6 +154,53 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     return translator.translate(filter);
   }
 
+  private async hasVectorIndex(parsedIndexName: string): Promise<boolean> {
+    const indexes = await this.vectorIndexes;
+    return indexes.has(`${parsedIndexName}_vector_idx`);
+  }
+
+  private async queryWithIndex(
+    parsedIndexName: string,
+    vectorStr: string,
+    topK: number,
+    filter: LibSQLVectorFilter | undefined,
+    includeVector: boolean,
+    minScore: number,
+  ): Promise<QueryResult[]> {
+    const translatedFilter = this.transformFilter(filter);
+    const { sql: filterQuery, values: filterValues } = buildFilterQuery(translatedFilter);
+    const hasFilter = filterQuery.length > 0;
+    const fetchCount = hasFilter ? topK * this.overFetchMultiplier : topK * 2;
+
+    const embeddingSelect = includeVector ? ', vector_extract(t.embedding) as embedding' : '';
+    const filterCondition = hasFilter ? filterQuery.replace(/^\s*WHERE\s+/i, '') : '';
+    const whereClause = hasFilter ? `WHERE ${filterCondition} AND score > ?` : 'WHERE score > ?';
+
+    const query = `
+      WITH candidates AS (
+        SELECT t.vector_id AS id,
+               (1 - vector_distance_cos(t.embedding, vector32(?))) AS score,
+               t.metadata
+               ${embeddingSelect}
+        FROM vector_top_k('${parsedIndexName}_vector_idx', vector32(?), ?) AS v
+        JOIN "${parsedIndexName}" AS t ON t.rowid = v.id
+      )
+      SELECT * FROM candidates
+      ${whereClause}
+      ORDER BY score DESC
+      LIMIT ?`;
+
+    const args: InValue[] = [vectorStr, vectorStr, fetchCount, ...filterValues, minScore, topK];
+    const result = await this.turso.execute({ sql: query, args });
+
+    return result.rows.map(({ id, score, metadata, embedding }) => ({
+      id: id as string,
+      score: score as number,
+      metadata: JSON.parse((metadata as string) ?? '{}'),
+      ...(includeVector && embedding && { vector: JSON.parse(embedding as string) }),
+    }));
+  }
+
   async query({
     indexName,
     queryVector,
@@ -158,6 +235,24 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
       const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
 
       const vectorStr = `[${queryVector.join(',')}]`;
+
+      if (!this.isMemoryDb && (await this.hasVectorIndex(parsedIndexName))) {
+        try {
+          const indexedResults = await this.queryWithIndex(
+            parsedIndexName,
+            vectorStr,
+            topK,
+            filter,
+            includeVector,
+            minScore,
+          );
+          if (!filter || indexedResults.length >= topK) {
+            return indexedResults;
+          }
+        } catch (err) {
+          this.logger.warn('LibSQLVector: indexed query failed, falling back to brute-force', err);
+        }
+      }
 
       const translatedFilter = this.transformFilter(filter);
       const { sql: filterQuery, values: filterValues } = buildFilterQuery(translatedFilter);
@@ -303,6 +398,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
         `,
       args: [],
     });
+    void this.vectorIndexes.then(indexes => indexes.add(`${parsedIndexName}_vector_idx`));
   }
 
   public deleteIndex(args: DeleteIndexParams): Promise<void> {
@@ -327,6 +423,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
       sql: `DROP TABLE IF EXISTS ${parsedIndexName}`,
       args: [],
     });
+    void this.vectorIndexes.then(indexes => indexes.delete(`${parsedIndexName}_vector_idx`));
   }
 
   async listIndexes(): Promise<string[]> {

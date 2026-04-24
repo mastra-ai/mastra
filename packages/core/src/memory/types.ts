@@ -740,6 +740,12 @@ export interface ObservationalMemoryOptions {
   activateAfterIdle?: number | string;
 
   /**
+   * Force-activate buffered observations and reflections when the actor provider/model changes.
+   * Useful when switching between models that do not share prompt caches.
+   */
+  activateOnProviderChange?: boolean;
+
+  /**
    * Share the token budget between messages and observations.
    * When true, the total budget = observation.messageTokens + reflection.observationTokens.
    * - Messages can use more space when observations are small
@@ -750,6 +756,15 @@ export interface ObservationalMemoryOptions {
    * @default false
    */
   shareTokenBudget?: boolean;
+
+  /**
+   * When true, inserts temporal-gap reminder markers before new user messages after
+   * significant inactivity. These markers are persisted in memory and also emitted
+   * as inline reminder events for clients that want to render them specially.
+   *
+   * @default false
+   */
+  temporalMarkers?: boolean;
 
   /**
    * **Experimental.** Enable retrieval-mode observation groups as durable pointers
@@ -925,6 +940,25 @@ type BaseMemoryConfig = {
          */
         instructions?: DynamicArgument<string>;
       };
+
+  /**
+   * Whether to filter out incomplete (suspended) tool calls when sending messages to the LLM.
+   * When true, tool calls in `input-available` state are stripped from the prompt,
+   * preventing the agent from seeing its own suspended tool calls in thread history.
+   *
+   * Set to false to allow the agent to see suspended tool calls in context.
+   * This is useful for suspend/resume patterns where the agent should be aware of pending interactions.
+   *
+   * Note: Some providers (e.g. OpenAI) may return errors when incomplete tool calls are included.
+   * Anthropic handles incomplete tool calls without issues.
+   *
+   * @default true
+   * @example
+   * ```typescript
+   * filterIncompleteToolCalls: false // Keep suspended tool calls visible in context
+   * ```
+   */
+  filterIncompleteToolCalls?: boolean;
 
   /**
    * Thread management configuration.
@@ -1176,8 +1210,14 @@ export type SerializedObservationalMemoryConfig = {
   /** Inactivity TTL before forcing buffered observation/reflection activation */
   activateAfterIdle?: number | string;
 
+  /** Force-activate buffered observation/reflection activation when the actor model changes */
+  activateOnProviderChange?: boolean;
+
   /** Share the token budget between messages and observations */
   shareTokenBudget?: boolean;
+
+  /** Persist inline temporal gap markers for long pauses between messages */
+  temporalMarkers?: boolean;
 
   /**
    * **Experimental.** Enable retrieval-mode observation groups as durable pointers to raw message history.

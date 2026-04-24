@@ -16,6 +16,16 @@ import type { StructuredOutputOptions } from './processors';
 import type { ProcessorStepOutput } from './step-schema';
 
 /**
+ * Options forwarded alongside a custom chunk emitted via ProcessorStreamWriter.
+ * Mirrors the options accepted by the underlying `OutputWriter` so processors can
+ * pass them through type-safely. The runtime may override fields it owns (for
+ * example, `messageId` is overridden with the step-owned response id).
+ */
+export type ProcessorStreamWriterOptions = {
+  messageId?: string;
+};
+
+/**
  * Writer interface for processors to emit custom data chunks to the stream.
  * This enables real-time streaming of processor-specific data (e.g., observation markers).
  */
@@ -24,8 +34,13 @@ export interface ProcessorStreamWriter {
    * Emit a custom data chunk to the stream.
    * The chunk type must start with 'data-' prefix.
    * @param data - The data chunk to emit
+   * @param options - Optional options forwarded to the underlying output writer
+   *   (e.g. `messageId`). Fields the runtime owns may be overridden.
    */
-  custom<T extends { type: string }>(data: T extends { type: `data-${string}` } ? DataChunkType : T): Promise<void>;
+  custom<T extends { type: string }>(
+    data: T extends { type: `data-${string}` } ? DataChunkType : T,
+    options?: ProcessorStreamWriterOptions,
+  ): Promise<void>;
 }
 
 /**
@@ -251,6 +266,8 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
   toolCalls?: ToolCallInfo[];
   /** Generated text from this step */
   text?: string;
+  /** Token usage for the current step (input tokens, output tokens, etc.) */
+  usage: LanguageModelUsage;
   /** All system messages */
   systemMessages: CoreMessageV4[];
   /** All completed steps so far (including the current step) */

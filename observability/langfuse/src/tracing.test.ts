@@ -31,6 +31,13 @@ const mockScoreCreate = vi.fn();
 const mockClientFlush = vi.fn().mockResolvedValue(undefined);
 const mockClientShutdown = vi.fn().mockResolvedValue(undefined);
 const clientConstructorArgs: any[] = [];
+const originalLangfuseEnv = {
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+  secretKey: process.env.LANGFUSE_SECRET_KEY,
+  baseUrl: process.env.LANGFUSE_BASE_URL,
+  environment: process.env.LANGFUSE_TRACING_ENVIRONMENT,
+  release: process.env.LANGFUSE_RELEASE,
+};
 
 vi.mock('@langfuse/client', () => {
   class MockLangfuseClient {
@@ -63,6 +70,10 @@ vi.mock('@mastra/otel-exporter', () => {
         ...(span.attributes?.completionStartTime
           ? { 'mastra.completion_start_time': span.attributes.completionStartTime.toISOString() }
           : {}),
+        // Pass through entityId/entityName as gen_ai.agent.* (mirrors real SpanConverter behavior)
+        ...(span.entityId ? { 'gen_ai.agent.id': span.entityId } : {}),
+        ...(span.entityName ? { 'gen_ai.agent.name': span.entityName } : {}),
+        ...(span.operationName ? { 'gen_ai.operation.name': span.operationName } : {}),
       },
       spanContext: () => ({ traceId: span.traceId, spanId: span.id }),
     }));
@@ -108,6 +119,11 @@ describe('LangfuseExporter', () => {
     mockShutdown.mockClear();
     mockClientFlush.mockClear();
     mockClientShutdown.mockClear();
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.LANGFUSE_TRACING_ENVIRONMENT;
+    delete process.env.LANGFUSE_RELEASE;
   });
 
   afterEach(async () => {
@@ -115,6 +131,17 @@ describe('LangfuseExporter', () => {
       await exporter.shutdown();
       exporter = undefined;
     }
+
+    if (originalLangfuseEnv.publicKey === undefined) delete process.env.LANGFUSE_PUBLIC_KEY;
+    else process.env.LANGFUSE_PUBLIC_KEY = originalLangfuseEnv.publicKey;
+    if (originalLangfuseEnv.secretKey === undefined) delete process.env.LANGFUSE_SECRET_KEY;
+    else process.env.LANGFUSE_SECRET_KEY = originalLangfuseEnv.secretKey;
+    if (originalLangfuseEnv.baseUrl === undefined) delete process.env.LANGFUSE_BASE_URL;
+    else process.env.LANGFUSE_BASE_URL = originalLangfuseEnv.baseUrl;
+    if (originalLangfuseEnv.environment === undefined) delete process.env.LANGFUSE_TRACING_ENVIRONMENT;
+    else process.env.LANGFUSE_TRACING_ENVIRONMENT = originalLangfuseEnv.environment;
+    if (originalLangfuseEnv.release === undefined) delete process.env.LANGFUSE_RELEASE;
+    else process.env.LANGFUSE_RELEASE = originalLangfuseEnv.release;
   });
 
   describe('configuration', () => {
@@ -181,6 +208,22 @@ describe('LangfuseExporter', () => {
       expect(processorConstructorArgs[0]).toEqual(
         expect.objectContaining({
           exportMode: 'immediate',
+        }),
+      );
+    });
+
+    it('passes batch controls to LangfuseSpanProcessor', () => {
+      exporter = new LangfuseExporter({
+        publicKey: 'pk-test',
+        secretKey: 'sk-test',
+        flushAt: 200,
+        flushInterval: 15,
+      });
+
+      expect(processorConstructorArgs[0]).toEqual(
+        expect.objectContaining({
+          flushAt: 200,
+          flushInterval: 15,
         }),
       );
     });
@@ -309,6 +352,71 @@ describe('LangfuseExporter', () => {
       const attrs = processedSpans[0].attributes;
       expect(attrs['langfuse.trace.tags']).toBe(JSON.stringify(['prod', 'v2']));
       expect(attrs['mastra.tags']).toBeUndefined();
+    });
+
+    it('maps traceName metadata to langfuse.trace.name', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(exporter, makeSpan({ metadata: { traceName: 'Weather Agent Run' } }));
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.name']).toBe('Weather Agent Run');
+      expect(attrs['mastra.metadata.traceName']).toBeUndefined();
+    });
+
+    it('maps version metadata to langfuse.trace.version', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(exporter, makeSpan({ metadata: { version: '2.1.0' } }));
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.version']).toBe('2.1.0');
+      expect(attrs['mastra.metadata.version']).toBeUndefined();
+    });
+
+    it('maps gen_ai.agent.id to langfuse.observation.metadata.agentId', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          entityId: 'weather-agent',
+          entityName: 'Weather Agent',
+          operationName: 'chat',
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.observation.metadata.agentId']).toBe('weather-agent');
+      expect(attrs['langfuse.observation.metadata.agentName']).toBe('Weather Agent');
+      expect(attrs['langfuse.observation.metadata.operationName']).toBe('chat');
+      // Original attributes should still be present (not deleted)
+      expect(attrs['gen_ai.agent.id']).toBe('weather-agent');
+    });
+
+    it('maps mastra.span.type to langfuse.observation.metadata.spanType', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(exporter, makeSpan({ type: SpanType.MODEL_GENERATION }));
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.observation.metadata.spanType']).toBe(SpanType.MODEL_GENERATION);
+    });
+
+    it('does not set observation metadata when source attributes are absent', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      // Create a span with no type, entityId, entityName, or operationName
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: undefined as any,
+          entityId: undefined,
+          entityName: undefined,
+          operationName: undefined,
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.observation.metadata.agentId']).toBeUndefined();
+      expect(attrs['langfuse.observation.metadata.agentName']).toBeUndefined();
+      expect(attrs['langfuse.observation.metadata.spanType']).toBeUndefined();
+      expect(attrs['langfuse.observation.metadata.operationName']).toBeUndefined();
     });
 
     it('sets langfuse.environment and langfuse.release on spans', async () => {
