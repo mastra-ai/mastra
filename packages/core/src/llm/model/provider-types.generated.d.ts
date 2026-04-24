@@ -920,6 +920,8 @@ export type ProviderModelsMap = {
     'deepseek/deepseek-v3.1-terminus:exacto',
     'deepseek/deepseek-v3.2',
     'deepseek/deepseek-v3.2-speciale',
+    'deepseek/deepseek-v4-flash',
+    'deepseek/deepseek-v4-pro',
     'google/gemini-2.0-flash-001',
     'google/gemini-2.5-flash',
     'google/gemini-2.5-flash-lite',
@@ -1089,6 +1091,8 @@ export type ProviderModelsMap = {
   readonly 'kimi-for-coding': readonly ['k2p5', 'k2p6', 'kimi-k2-thinking'];
   readonly moark: readonly ['GLM-4.7', 'MiniMax-M2.1'];
   readonly 'opencode-go': readonly [
+    'deepseek-v4-flash',
+    'deepseek-v4-pro',
     'glm-5',
     'glm-5.1',
     'kimi-k2.5',
