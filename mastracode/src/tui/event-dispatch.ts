@@ -135,8 +135,9 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       if (currentThread) {
         state.currentThreadTitle = currentThread.title;
       }
-      // Clear tasks — they are ephemeral per-thread and should not leak
-      // from the previous thread's global harness state.
+      // Clear per-thread ephemeral state from the global harness state
+      // so it doesn't leak into the newly switched thread.
+      await state.harness.setState({ tasks: [], activePlan: null, sandboxAllowedPaths: [] } as any);
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
         state.ui.requestRender();
@@ -154,7 +155,8 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       if (typeof tState?.escapeAsCancel === 'boolean') {
         state.editor.escapeEnabled = tState.escapeAsCancel;
       }
-      // Clear stale tasks from the previous thread
+      // Clear per-thread ephemeral state so new threads start clean.
+      await state.harness.setState({ tasks: [], activePlan: null, sandboxAllowedPaths: [] } as any);
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
       }
