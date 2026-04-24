@@ -6,10 +6,9 @@ import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
 import { EditableAgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
+import type { AgentConfig } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { ConversationPanel } from '@/domains/agent-builder/components/agent-builder-edit/conversation-panel';
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
-import { defaultAgentFixture } from '@/domains/agent-builder/fixtures';
-import type { AgentFixture } from '@/domains/agent-builder/fixtures';
 import { useSaveAgent } from '@/domains/agent-builder/hooks/use-save-agent';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
@@ -76,7 +75,7 @@ const AgentBuilderAgentEditSkeleton = () => (
     chat={null}
     configure={
       <EditableAgentConfigurePanel
-        agent={defaultAgentFixture}
+        agent={{ id: '', name: '', systemPrompt: '' }}
         onAgentChange={() => {}}
         availableTools={[]}
         onSave={() => {}}
@@ -109,7 +108,11 @@ const AgentBuilderAgentEditReady = ({ id, storedAgent, toolsData }: AgentBuilder
     [toolsData],
   );
 
-  const [agent, setAgent] = useState<AgentFixture>(defaultAgentFixture);
+  const [agent, setAgent] = useState<AgentConfig>({
+    id: id ?? '',
+    name: storedAgent?.name ?? '',
+    systemPrompt: typeof storedAgent?.instructions === 'string' ? storedAgent.instructions : '',
+  });
 
   const mode: 'create' | 'edit' = storedAgent ? 'edit' : 'create';
   const { save, isSaving } = useSaveAgent({ agentId: id, mode, availableTools });

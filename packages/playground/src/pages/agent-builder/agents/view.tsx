@@ -5,9 +5,8 @@ import { FormProvider, useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router';
 import { AgentChatPanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-chat-panel';
 import { AgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
+import type { AgentConfig } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
-import { defaultAgentFixture } from '@/domains/agent-builder/fixtures';
-import type { AgentFixture } from '@/domains/agent-builder/fixtures';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
@@ -47,7 +46,7 @@ interface PageProps {
 const AgentBuilderAgentViewPage = ({ id, storedAgent, toolsData, isReady }: PageProps) => {
   const formMethods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {
-      name: storedAgent?.name ?? defaultAgentFixture.name,
+      name: storedAgent?.name ?? '',
       instructions: typeof storedAgent?.instructions === 'string' ? storedAgent.instructions : '',
       tools: Object.fromEntries(Object.keys(storedAgent?.tools ?? {}).map(k => [k, true])),
       skills: Object.keys(storedAgent?.skills ?? {}),
@@ -72,7 +71,7 @@ const AgentBuilderAgentViewSkeleton = () => (
     chat={null}
     configure={
       <AgentConfigurePanel
-        agent={defaultAgentFixture}
+        agent={{ id: '', name: '', systemPrompt: '' }}
         onAgentChange={() => {}}
         editable={false}
         isLoading
@@ -100,16 +99,14 @@ const AgentBuilderAgentViewReady = ({ id, storedAgent, toolsData }: AgentBuilder
     [toolsData],
   );
 
-  const agent = useMemo<AgentFixture>(() => {
-    if (!storedAgent) return defaultAgentFixture;
-    const instructions = typeof storedAgent.instructions === 'string' ? storedAgent.instructions : '';
-    return {
-      ...defaultAgentFixture,
-      id: storedAgent.id ?? defaultAgentFixture.id,
-      name: storedAgent.name ?? defaultAgentFixture.name,
-      systemPrompt: instructions || defaultAgentFixture.systemPrompt,
-    };
-  }, [storedAgent]);
+  const agent = useMemo<AgentConfig>(
+    () => ({
+      id: storedAgent?.id ?? id ?? '',
+      name: storedAgent?.name ?? '',
+      systemPrompt: typeof storedAgent?.instructions === 'string' ? storedAgent.instructions : '',
+    }),
+    [storedAgent, id],
+  );
 
   return (
     <WorkspaceLayout

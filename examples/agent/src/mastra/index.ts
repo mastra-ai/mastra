@@ -50,7 +50,6 @@ import {
   stepLoggerProcessor,
 } from './processors/index';
 import { gatewayAgent } from './agents/gateway';
-import { builderAgent } from './agents/agent-builder';
 
 const libsqlStore = new LibSQLStore({
   id: 'mastra-storage',
@@ -69,7 +68,6 @@ const storage = new MastraCompositeStore({
 
 const config = {
   agents: {
-    builderAgent,
     gatewayAgent,
     chefAgent,
     chefAgentResponses,

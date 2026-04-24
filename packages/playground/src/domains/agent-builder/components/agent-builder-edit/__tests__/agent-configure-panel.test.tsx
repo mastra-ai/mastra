@@ -3,9 +3,15 @@ import { TooltipProvider } from '@mastra/playground-ui';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
-import { defaultAgentFixture } from '../../../fixtures';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import { EditableAgentConfigurePanel } from '../agent-configure-panel';
+import type { AgentConfig } from '../agent-configure-panel';
+
+const testAgent: AgentConfig = {
+  id: 'test',
+  name: 'Test agent',
+  systemPrompt: 'Test prompt',
+};
 
 const mockUseBuilderAgentFeatures = vi.fn();
 
@@ -32,7 +38,7 @@ const FormWrapper = ({ children }: { children: React.ReactNode }) => {
 const renderPanel = () =>
   render(
     <FormWrapper>
-      <EditableAgentConfigurePanel agent={defaultAgentFixture} onAgentChange={() => {}} />
+      <EditableAgentConfigurePanel agent={testAgent} onAgentChange={() => {}} />
     </FormWrapper>,
   );
 
@@ -131,7 +137,7 @@ describe('AgentConfigurePanel save + skeleton', () => {
     render(
       <FormWrapper>
         <EditableAgentConfigurePanel
-          agent={defaultAgentFixture}
+          agent={testAgent}
           onAgentChange={() => {}}
           isLoading
         />
@@ -148,7 +154,7 @@ describe('AgentConfigurePanel save + skeleton', () => {
     render(
       <FormWrapper>
         <EditableAgentConfigurePanel
-          agent={defaultAgentFixture}
+          agent={testAgent}
           onAgentChange={() => {}}
           onSave={onSave}
         />
@@ -164,7 +170,7 @@ describe('AgentConfigurePanel save + skeleton', () => {
   it('does not render the save button when onSave is omitted', () => {
     render(
       <FormWrapper>
-        <EditableAgentConfigurePanel agent={defaultAgentFixture} onAgentChange={() => {}} />
+        <EditableAgentConfigurePanel agent={testAgent} onAgentChange={() => {}} />
       </FormWrapper>,
     );
 
@@ -175,7 +181,7 @@ describe('AgentConfigurePanel save + skeleton', () => {
     render(
       <FormWrapper>
         <EditableAgentConfigurePanel
-          agent={defaultAgentFixture}
+          agent={testAgent}
           onAgentChange={() => {}}
           onSave={() => {}}
           isSaving

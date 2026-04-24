@@ -2,8 +2,6 @@ import { Avatar, Button, IconButton, Skeleton, TextFieldBlock, Txt } from '@mast
 import { ChevronRight, FileText, GraduationCap, Plus, Wrench } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
-import { skillsFixture } from '../../fixtures';
-import type { AgentFixture } from '../../fixtures';
 import { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import { SkillsDialog } from './dialogs/skills-dialog';
@@ -15,9 +13,17 @@ export interface AvailableTool {
   description?: string;
 }
 
+export interface AgentConfig {
+  id: string;
+  name: string;
+  description?: string;
+  avatarUrl?: string;
+  systemPrompt: string;
+}
+
 interface AgentConfigurePanelProps {
-  agent: AgentFixture;
-  onAgentChange: (next: AgentFixture) => void;
+  agent: AgentConfig;
+  onAgentChange: (next: AgentConfig) => void;
   editable?: boolean;
   draftName?: string;
   draftAvatarUrl?: string;
@@ -67,7 +73,6 @@ export const AgentConfigurePanel = ({
   const toolsMap = useWatch({ control, name: 'tools' });
   const activeToolsCount = useMemo(() => Object.values(toolsMap ?? {}).filter(Boolean).length, [toolsMap]);
   const totalToolsCount = availableTools.length;
-  const activeSkillsCount = useMemo(() => skillsFixture.filter(s => s.enabled).length, []);
 
   const handleSystemPromptSave = (nextPrompt: string) => {
     onDraftInstructionsChange(nextPrompt);
@@ -154,8 +159,6 @@ export const AgentConfigurePanel = ({
               icon={<GraduationCap className="h-4 w-4" />}
               label="Skills"
               description="Reusable knowledge and behaviors"
-              count={activeSkillsCount}
-              total={skillsFixture.length}
               onClick={() => setSkillsOpen(true)}
               testId="agent-preview-skills-button"
             />
