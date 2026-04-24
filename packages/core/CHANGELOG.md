@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.28.0-alpha.1
+
+### Patch Changes
+
+- Fixed observational memory message boundaries so streamed tool results continue in a fresh assistant message instead of being filtered out mid-run, and OM lifecycle markers persist through memory without creating data-only database messages. ([#15701](https://github.com/mastra-ai/mastra/pull/15701))
+
 ## 1.28.0-alpha.0
 
 ### Minor Changes

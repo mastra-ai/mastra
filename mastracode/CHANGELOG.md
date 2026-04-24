@@ -1,5 +1,15 @@
 # mastracode
 
+## 0.15.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`a48adc3`](https://github.com/mastra-ai/mastra/commit/a48adc387375d1ff75f8526525c809a8fdea46df), [`750b4d3`](https://github.com/mastra-ai/mastra/commit/750b4d3d8231f92e769b2c485921ac5a8ca639b9)]:
+  - @mastra/agent-browser@0.2.1-alpha.1
+  - @mastra/stagehand@0.2.1-alpha.0
+  - @mastra/core@1.28.0-alpha.1
+  - @mastra/memory@1.17.1-alpha.0
+
 ## 0.15.2-alpha.0
 
 ### Patch Changes
