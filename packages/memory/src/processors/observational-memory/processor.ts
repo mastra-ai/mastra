@@ -175,6 +175,11 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         state.__omTurn = this.turn;
       }
 
+      this.turn.addHooks({
+        onBufferChunkSealed: rotateResponseMessageId,
+        onSyncObservationComplete: rotateResponseMessageId,
+      });
+
       const observabilityContext = getOmObservabilityContext(args);
       state.__omObservabilityContext = observabilityContext;
       this.turn.observabilityContext = observabilityContext;
