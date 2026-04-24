@@ -1,21 +1,14 @@
-import { Button, IconButton, Textarea, Txt } from '@mastra/playground-ui';
+import { CodeEditor, IconButton, Txt } from '@mastra/playground-ui';
 import { FileTextIcon, XIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
 
 interface InstructionsDetailProps {
   prompt: string;
-  onSave: (prompt: string) => void;
+  onChange: (prompt: string) => void;
   onClose: () => void;
   editable?: boolean;
 }
 
-export const InstructionsDetail = ({ prompt, onSave, onClose, editable = true }: InstructionsDetailProps) => {
-  const [draft, setDraft] = useState(prompt);
-
-  useEffect(() => {
-    setDraft(prompt);
-  }, [prompt]);
-
+export const InstructionsDetail = ({ prompt, onChange, onClose, editable = true }: InstructionsDetailProps) => {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-border1">
@@ -30,28 +23,18 @@ export const InstructionsDetail = ({ prompt, onSave, onClose, editable = true }:
         </IconButton>
       </div>
 
-      <div className="flex-1 min-h-0 flex flex-col gap-3 px-6 py-4 overflow-y-auto">
-        <Textarea
-          testId="system-prompt-dialog-input"
-          size="default"
-          value={draft}
-          onChange={e => setDraft(e.target.value)}
-          rows={16}
+      <div className="flex-1 min-h-0 flex flex-col px-6 py-4">
+        <CodeEditor
+          data-testid="system-prompt-dialog-input"
+          value={prompt}
+          onChange={onChange}
+          language="markdown"
+          editable={editable}
           placeholder="You are a helpful assistant that…"
-          readOnly={!editable}
+          showCopyButton={false}
+          className="h-full w-full border-0 bg-transparent p-0 rounded-none"
         />
       </div>
-
-      {editable && (
-        <div className="flex justify-end gap-2 px-6 py-4 border-t border-border1">
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="primary" onClick={() => onSave(draft)} data-testid="system-prompt-dialog-save">
-            Save
-          </Button>
-        </div>
-      )}
     </div>
   );
 };
