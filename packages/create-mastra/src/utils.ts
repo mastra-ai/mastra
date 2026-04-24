@@ -1,7 +1,7 @@
 import * as fsPromises from 'node:fs/promises';
 import path, { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execa } from 'execa';
+import { x } from 'tinyexec';
 
 export async function getPackageVersion() {
   const __filename = fileURLToPath(import.meta.url);
@@ -17,7 +17,7 @@ export async function getCreateVersionTag(): Promise<string | undefined> {
     const pkgPath = fileURLToPath(import.meta.resolve('create-mastra/package.json'));
     const json = await fsPromises.readFile(pkgPath, 'utf8').then(JSON.parse);
 
-    const { stdout } = await execa('npm', ['dist-tag', 'create-mastra']);
+    const { stdout } = await x('npm', ['dist-tag', 'create-mastra'], { throwOnError: true });
     const tagLine = stdout.split('\n').find(distLine => distLine.endsWith(`: ${json.version}`));
     const tag = tagLine ? tagLine.split(':')[0].trim() : 'latest';
 

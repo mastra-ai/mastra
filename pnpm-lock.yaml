@@ -3294,9 +3294,6 @@ importers:
       commander:
         specifier: ^14.0.3
         version: 14.0.3
-      execa:
-        specifier: ^9.6.1
-        version: 9.6.1
       pino:
         specifier: ^10.3.1
         version: 10.3.1
@@ -3306,6 +3303,9 @@ importers:
       posthog-node:
         specifier: ^5.28.2
         version: 5.28.3(rxjs@7.8.1)
+      tinyexec:
+        specifier: ^1.1.1
+        version: 1.1.1
     devDependencies:
       '@internal/lint':
         specifier: workspace:*

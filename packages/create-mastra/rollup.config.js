@@ -9,7 +9,7 @@ import esbuild from 'rollup-plugin-esbuild';
 import nodeExternals from 'rollup-plugin-node-externals';
 import pkgJson from './package.json' with { type: 'json' };
 
-const external = ['commander', 'execa', 'posthog-node', 'pino', 'pino-pretty'];
+const external = ['commander', 'tinyexec', 'posthog-node', 'pino', 'pino-pretty'];
 external.forEach(pkg => {
   if (!pkgJson.dependencies[pkg]) {
     throw new Error(`${pkg} is not in the dependencies of create-mastra`);
