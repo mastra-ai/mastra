@@ -1,4 +1,4 @@
-import { Button, IconButton } from '@mastra/playground-ui';
+import { Button, IconButton, Spinner } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { MessageSquareIcon, SaveIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -6,7 +6,10 @@ import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
 import { EditableAgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
-import type { ActiveDetail, AgentConfig } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
+import type {
+  ActiveDetail,
+  AgentConfig,
+} from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { ConversationPanel } from '@/domains/agent-builder/components/agent-builder-edit/conversation-panel';
 import type { AvailableWorkspace } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-agent-builder-tool';
 import { useStarterUserMessage } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-starter-user-message';
@@ -52,13 +55,14 @@ export default function AgentBuilderAgentEdit() {
     [workspacesData],
   );
 
+  if (!isReady) return <AgentBuilderAgentEditSkeleton />;
+
   return (
     <AgentBuilderAgentEditPage
       id={id}
       storedAgent={storedAgent}
       toolsData={toolsData}
       availableWorkspaces={availableWorkspaces}
-      isReady={isReady}
       initialUserMessage={initialUserMessage}
       fromStarter={fromStarter}
     />
@@ -70,7 +74,6 @@ interface PageProps {
   storedAgent: StoredAgent | null | undefined;
   toolsData: ToolsData | undefined;
   availableWorkspaces: AvailableWorkspace[];
-  isReady: boolean;
   initialUserMessage: string | undefined;
   fromStarter: boolean;
 }
@@ -80,7 +83,6 @@ const AgentBuilderAgentEditPage = ({
   storedAgent,
   toolsData,
   availableWorkspaces,
-  isReady,
   initialUserMessage,
   fromStarter,
 }: PageProps) => {
@@ -97,41 +99,22 @@ const AgentBuilderAgentEditPage = ({
 
   return (
     <FormProvider {...formMethods}>
-      {!isReady || !id ? (
-        <AgentBuilderAgentEditSkeleton />
-      ) : (
-        <AgentBuilderAgentEditReady
-          id={id}
-          storedAgent={storedAgent}
-          toolsData={toolsData ?? {}}
-          availableWorkspaces={availableWorkspaces}
-          initialUserMessage={initialUserMessage}
-          fromStarter={fromStarter}
-        />
-      )}
+      <AgentBuilderAgentEditReady
+        id={id!}
+        storedAgent={storedAgent}
+        toolsData={toolsData ?? {}}
+        availableWorkspaces={availableWorkspaces}
+        initialUserMessage={initialUserMessage}
+        fromStarter={fromStarter}
+      />
     </FormProvider>
   );
 };
 
 const AgentBuilderAgentEditSkeleton = () => (
-  <WorkspaceLayout
-    isLoading
-    mode="build"
-    chat={null}
-    primaryAction={
-      <Button size="sm" variant="primary" disabled data-testid="agent-builder-edit-save">
-        <SaveIcon /> Save
-      </Button>
-    }
-    configure={
-      <EditableAgentConfigurePanel
-        agent={{ id: '', name: '', systemPrompt: '' }}
-        onAgentChange={() => {}}
-        availableTools={[]}
-        isLoading
-      />
-    }
-  />
+  <div className="h-screen w-screen flex items-center justify-center">
+    <Spinner />
+  </div>
 );
 
 interface AgentBuilderAgentEditReadyProps {

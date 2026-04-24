@@ -1,11 +1,14 @@
-import { IconButton } from '@mastra/playground-ui';
+import { IconButton, Spinner } from '@mastra/playground-ui';
 import { PencilIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router';
 import { AgentChatPanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-chat-panel';
 import { AgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
-import type { ActiveDetail, AgentConfig } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
+import type {
+  ActiveDetail,
+  AgentConfig,
+} from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
@@ -25,14 +28,15 @@ export default function AgentBuilderAgentView() {
   const { data: toolsData, isPending: isToolsPending } = useTools();
   const isReady = Boolean(id) && !isStoredAgentLoading && !isToolsPending;
 
-  return <AgentBuilderAgentViewPage id={id} storedAgent={storedAgent} toolsData={toolsData} isReady={isReady} />;
+  if (!isReady) return <AgentBuilderAgentViewSkeleton />;
+
+  return <AgentBuilderAgentViewPage id={id} storedAgent={storedAgent} toolsData={toolsData} />;
 }
 
 interface PageProps {
   id: string | undefined;
   storedAgent: StoredAgent | null | undefined;
   toolsData: ToolsData | undefined;
-  isReady: boolean;
 }
 
 const extractWorkspaceId = (workspace: StoredAgent['workspace']): string | undefined => {
@@ -48,7 +52,7 @@ const extractWorkspaceId = (workspace: StoredAgent['workspace']): string | undef
   return undefined;
 };
 
-const AgentBuilderAgentViewPage = ({ id, storedAgent, toolsData, isReady }: PageProps) => {
+const AgentBuilderAgentViewPage = ({ id, storedAgent, toolsData }: PageProps) => {
   const formMethods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {
       name: storedAgent?.name ?? '',
@@ -62,31 +66,15 @@ const AgentBuilderAgentViewPage = ({ id, storedAgent, toolsData, isReady }: Page
 
   return (
     <FormProvider {...formMethods}>
-      {!isReady || !id ? (
-        <AgentBuilderAgentViewSkeleton />
-      ) : (
-        <AgentBuilderAgentViewReady id={id} storedAgent={storedAgent} toolsData={toolsData ?? {}} />
-      )}
+      <AgentBuilderAgentViewReady id={id!} storedAgent={storedAgent} toolsData={toolsData ?? {}} />
     </FormProvider>
   );
 };
 
 const AgentBuilderAgentViewSkeleton = () => (
-  <WorkspaceLayout
-    isLoading
-    mode="test"
-    defaultExpanded={false}
-    chat={null}
-    configure={
-      <AgentConfigurePanel
-        agent={{ id: '', name: '', systemPrompt: '' }}
-        onAgentChange={() => {}}
-        editable={false}
-        isLoading
-        availableTools={[]}
-      />
-    }
-  />
+  <div className="h-screen w-screen flex items-center justify-center">
+    <Spinner />
+  </div>
 );
 
 interface AgentBuilderAgentViewReadyProps {
