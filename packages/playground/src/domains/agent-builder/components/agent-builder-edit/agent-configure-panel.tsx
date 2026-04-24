@@ -94,11 +94,12 @@ export const AgentConfigurePanel = ({
   }
 
   const trimmedInstructions = draftInstructions.trim();
-  const instructionsDescription = trimmedInstructions.length === 0
-    ? 'Set how your agent thinks and responds'
-    : trimmedInstructions.length > 80
-      ? `${trimmedInstructions.slice(0, 80).trimEnd()}…`
-      : trimmedInstructions;
+  const instructionsDescription =
+    trimmedInstructions.length === 0
+      ? 'Set how your agent thinks and responds'
+      : trimmedInstructions.length > 80
+        ? `${trimmedInstructions.slice(0, 80).trimEnd()}…`
+        : trimmedInstructions;
 
   return (
     <div
@@ -256,10 +257,7 @@ const ConfigRow = ({ icon, label, description, count, total, isActive = false, o
     )}
   >
     <span
-      className={cn(
-        'shrink-0 text-neutral3 transition-colors group-hover:text-neutral5',
-        isActive && 'text-neutral5',
-      )}
+      className={cn('shrink-0 text-neutral3 transition-colors group-hover:text-neutral5', isActive && 'text-neutral5')}
     >
       {icon}
     </span>

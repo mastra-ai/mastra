@@ -268,9 +268,7 @@ describe('ConversationPanel agent-builder client tool', () => {
   });
 
   it('sends the initial message once toolsReady is true on mount', () => {
-    renderPanel({ ...allOff, tools: true }, [
-      { id: 'web-search', description: 'Search the web' },
-    ]);
+    renderPanel({ ...allOff, tools: true }, [{ id: 'web-search', description: 'Search the web' }]);
 
     expect(sentMessages).toHaveLength(1);
     const tool = sentMessages[0].clientTools.agentBuilderTool;
@@ -289,10 +287,14 @@ describe('ConversationPanel agent-builder client tool', () => {
   });
 
   it('lists available workspaces in the tool description', () => {
-    renderPanel(allOff, [], [
-      { id: 'ws-1', name: 'Primary' },
-      { id: 'ws-2', name: 'Secondary' },
-    ]);
+    renderPanel(
+      allOff,
+      [],
+      [
+        { id: 'ws-1', name: 'Primary' },
+        { id: 'ws-2', name: 'Secondary' },
+      ],
+    );
     const tool = getAgentBuilderTool();
 
     expect(tool.description).toContain('ws-1');

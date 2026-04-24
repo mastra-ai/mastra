@@ -11,8 +11,7 @@ type CheckboxVariant = 'primary' | 'neutral';
 const variantCheckedClasses: Record<CheckboxVariant, string> = {
   primary:
     'data-[state=checked]:bg-accent1 data-[state=checked]:border-accent1 data-[state=checked]:text-surface1 data-[state=checked]:shadow-glow-accent1',
-  neutral:
-    'data-[state=checked]:bg-neutral3 data-[state=checked]:border-neutral3 data-[state=checked]:text-surface1',
+  neutral: 'data-[state=checked]:bg-neutral3 data-[state=checked]:border-neutral3 data-[state=checked]:text-surface1',
 };
 
 interface CheckboxProps extends React.ComponentPropsWithoutRef<typeof CheckboxPrimitive.Root> {
