@@ -26,6 +26,8 @@ const CONTENT_ROOT = path.join(REPO_DOCS_ROOT, 'src/content/en')
 const STYLE_FILE = path.join(__dirname, 'style.css')
 
 const DEFAULT_OUTPUT = path.join(__dirname, 'mastra-docs.pdf')
+const DEFAULT_CHAPTER_DIR = path.join(__dirname, 'chapters')
+const CHAPTER_STYLE_FILE = path.join(__dirname, 'chapter-style.css')
 
 // Ordered list of top-level "parts". Each part corresponds to a sidebar
 // config in a docs subdirectory. The order below is the order they appear
@@ -75,15 +77,25 @@ const PARTS = [
 ]
 
 function parseArgs(argv) {
-  const args = { out: DEFAULT_OUTPUT, htmlOnly: false, only: null }
+  const args = {
+    out: DEFAULT_OUTPUT,
+    htmlOnly: false,
+    only: null,
+    chapters: false,
+    outDir: DEFAULT_CHAPTER_DIR,
+  }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--out' || a === '-o') args.out = path.resolve(argv[++i])
+    else if (a === '--out-dir') args.outDir = path.resolve(argv[++i])
     else if (a === '--html-only') args.htmlOnly = true
+    else if (a === '--chapters') args.chapters = true
     else if (a === '--only') args.only = new Set(argv[++i].split(',').map((s) => s.trim()))
     else if (a === '--help' || a === '-h') {
       console.log(
-        'Usage: node index.mjs [--out path.pdf] [--html-only] [--only docs,reference]',
+        'Usage:\n' +
+          '  node index.mjs [--out path.pdf] [--html-only] [--only docs,reference]\n' +
+          '  node index.mjs --chapters [--out-dir ./chapters] [--only docs,reference]',
       )
       process.exit(0)
     }
@@ -95,6 +107,11 @@ async function main() {
   const args = parseArgs(process.argv.slice(2))
   console.log('Mastra Docs PDF generator')
   console.log('─'.repeat(40))
+
+  if (args.chapters) {
+    await buildChapters(args)
+    return
+  }
 
   const md = buildMarkdownIt()
   const usedSlugs = new Set()
@@ -165,6 +182,200 @@ async function main() {
 
   const stat = await fs.stat(args.out)
   console.log(`\nDone. Wrote ${formatBytes(stat.size)} → ${args.out}`)
+}
+
+// ---------- Chapter mode ----------
+//
+// Produces one PDF per TOC category (e.g. "Memory", "Workflows", "Agents").
+// The output is intended as a corpus for RAG — plain styling, no cover, no
+// TOC, no page chrome, no syntax-highlight colors, one coherent topic per
+// file. Filenames are numeric-prefixed for stable ordering:
+//   chapters/02-docs-memory.pdf
+//   chapters/05-reference-agents.pdf
+
+async function buildChapters(args) {
+  const outDir = args.outDir
+  await fs.mkdir(outDir, { recursive: true })
+
+  const md = buildMarkdownIt()
+  const style = await fs.readFile(CHAPTER_STYLE_FILE, 'utf8')
+
+  const chapters = []
+  for (let pi = 0; pi < PARTS.length; pi++) {
+    const part = PARTS[pi]
+    if (args.only && !args.only.has(part.id)) continue
+    const tree = await resolvePartTree(part)
+    for (const ch of enumerateChapters(tree, part)) {
+      chapters.push({ ...ch, partIndex: pi + 1 })
+    }
+  }
+
+  if (chapters.length === 0) {
+    console.log('No chapters to render.')
+    return
+  }
+
+  console.log(`\nRendering ${chapters.length} chapters → ${outDir}`)
+  const { default: puppeteer } = await import('puppeteer')
+  const browser = await puppeteer.launch({ headless: 'new' })
+  try {
+    const page = await browser.newPage()
+    let totalBytes = 0
+    for (const chapter of chapters) {
+      const html = await buildChapterHtml(chapter, md, style)
+      const slug = `${String(chapter.partIndex).padStart(2, '0')}-${chapter.part.id}-${chapter.slug}.pdf`
+      const outPath = path.join(outDir, slug)
+      await page.setContent(html, { waitUntil: 'networkidle0' })
+      await page.emulateMediaType('print')
+      await page.pdf({
+        path: outPath,
+        format: 'A4',
+        printBackground: false,
+        preferCSSPageSize: true,
+        margin: { top: '18mm', bottom: '18mm', left: '20mm', right: '20mm' },
+      })
+      const stat = await fs.stat(outPath)
+      totalBytes += stat.size
+      console.log(`  ✓ ${slug}  (${formatBytes(stat.size)}, ${chapter.docCount} docs)`)
+    }
+    console.log(
+      `\nDone. ${chapters.length} chapters, ${formatBytes(totalBytes)} total in ${outDir}`,
+    )
+  } finally {
+    await browser.close()
+  }
+}
+
+// Split a part's tree into "chapters". Loose docs that sit directly under a
+// part (no enclosing category) roll up into a single part-level chapter;
+// each category becomes its own chapter with all its nested descendants
+// included.
+function enumerateChapters(tree, part) {
+  const out = []
+  const looseDocs = tree.filter((n) => n.type === 'doc' && !(part.skipIds && part.skipIds.has(n.id)))
+  const categories = tree.filter((n) => n.type === 'category')
+
+  if (looseDocs.length) {
+    out.push({
+      part,
+      slug: 'overview',
+      title: part.title,
+      nodes: looseDocs,
+      docCount: looseDocs.length,
+    })
+  }
+  for (const cat of categories) {
+    const nodes = collectChapterNodes(cat, 2)
+    const docCount = nodes.filter((n) => n.type === 'doc').length
+    if (docCount === 0) continue
+    out.push({
+      part,
+      slug: simpleSlug(cat.label),
+      title: cat.label,
+      nodes,
+      docCount,
+    })
+  }
+  return out
+}
+
+// Flatten a category subtree into a linear list. Sub-category boundaries
+// become "subheading" nodes so the chapter still reads with structure, but
+// there is only ever one chapter file per top-level category.
+function collectChapterNodes(node, headingLevel) {
+  const out = []
+  if (node.type === 'doc') {
+    out.push({ type: 'doc', ...node })
+    return out
+  }
+  for (const child of node.children) {
+    if (child.type === 'doc') {
+      out.push({ type: 'doc', ...child })
+    } else if (child.type === 'category') {
+      out.push({ type: 'subheading', label: child.label, level: Math.min(headingLevel, 4) })
+      for (const n of collectChapterNodes(child, headingLevel + 1)) out.push(n)
+    }
+  }
+  return out
+}
+
+async function buildChapterHtml(chapter, md, style) {
+  const parts = []
+  parts.push(
+    `<header>` +
+      `<div class="chapter-kicker">${escapeHtml(chapter.part.title)}</div>` +
+      `<h1 class="chapter-title">${escapeHtml(chapter.title)}</h1>` +
+      `<hr class="chapter-divider"/>` +
+      `</header>`,
+  )
+
+  // For a single-doc chapter, the chapter H1 already names the topic, so
+  // skip the per-doc header to avoid three redundant "Memory" / "Get
+  // Started" style headings stacked on top of each other.
+  const suppressDocHeader = chapter.docCount === 1 && chapter.nodes.filter((n) => n.type === 'doc').length === 1
+
+  for (const node of chapter.nodes) {
+    if (node.type === 'subheading') {
+      const tag = `h${node.level}`
+      parts.push(`<${tag}>${escapeHtml(node.label)}</${tag}>`)
+      continue
+    }
+    // doc
+    let raw
+    try {
+      raw = await fs.readFile(node.file, 'utf8')
+    } catch {
+      continue
+    }
+    const { data, content } = preprocessMdx(raw)
+    const title = node.label || data.title || node.id
+    const clean = stripTitleDecoration(title)
+    const dropAgainst = suppressDocHeader ? chapter.title : clean
+    const contentNoLeadingH1 = dropLeadingH1IfMatchesTitle(content, dropAgainst)
+
+    if (suppressDocHeader) {
+      if (data.description) {
+        parts.push(`<div class="doc-description">${escapeHtml(data.description)}</div>`)
+      }
+      parts.push(`<article>${md.render(contentNoLeadingH1)}</article>`)
+    } else {
+      parts.push(
+        `<section class="doc">` +
+          `<div class="doc-header">` +
+          `<h2>${escapeHtml(clean)}</h2>` +
+          (data.description ? `<div class="doc-description">${escapeHtml(data.description)}</div>` : '') +
+          `</div>` +
+          `<article>${md.render(contentNoLeadingH1)}</article>` +
+          `</section>`,
+      )
+    }
+  }
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>${escapeHtml(chapter.title)} — Mastra Documentation</title>
+<style>${style}</style>
+</head>
+<body>
+${parts.join('\n')}
+</body>
+</html>`
+}
+
+// If the preprocessed markdown begins with the same H1 we already emit in
+// the doc header, drop it to avoid a duplicate heading. Matching is lenient
+// on whitespace and trailing punctuation.
+function dropLeadingH1IfMatchesTitle(content, title) {
+  const match = /^\s*#\s+(.+)\n/.exec(content)
+  if (!match) return content
+  const heading = match[1].trim().replace(/\s+/g, ' ').toLowerCase()
+  const wanted = title.trim().replace(/\s+/g, ' ').toLowerCase()
+  if (heading === wanted || heading.startsWith(wanted) || wanted.startsWith(heading)) {
+    return content.slice(match[0].length)
+  }
+  return content
 }
 
 // ---------- Tree resolution ----------
@@ -269,32 +480,70 @@ function buildHtml({ sections, toc, style }) {
 </html>`
 }
 
+// Compact TOC: each part becomes a labelled section containing a two-column
+// flow of category cards. Inside each card, doc links render as
+// horizontally-flowing pills so the full table of contents fits in 2-3 pages
+// rather than 12.
 function renderToc(entries) {
-  const lines = ['<ol>']
+  const out = ['<div class="toc-parts">']
   for (const part of entries) {
-    // Parts no longer have a body anchor, so render the label as plain text.
-    lines.push(`<li class="toc-part">${escapeHtml(part.title)}</li>`)
-    lines.push(...renderTocChildren(part.children, 'toc-chapter'))
+    out.push('<div class="toc-part-group">')
+    out.push(`<div class="toc-part-label">${escapeHtml(part.title)}</div>`)
+
+    const { looseDocs, categories } = partitionTocChildren(part.children)
+    out.push('<div class="toc-cards">')
+    if (looseDocs.length) {
+      out.push(`<div class="toc-card toc-card-loose">${renderPills(looseDocs)}</div>`)
+    }
+    for (const cat of categories) {
+      out.push(...renderCategoryCards(cat))
+    }
+    out.push('</div>')
+    out.push('</div>')
   }
-  lines.push('</ol>')
-  return lines.join('\n')
+  out.push('</div>')
+  return out.join('\n')
 }
 
-function renderTocChildren(children, cls) {
-  const out = []
-  for (const child of children || []) {
-    const childCls = cls === 'toc-chapter' && child.children ? 'toc-chapter' : cls
-    const itemCls = child.children ? 'toc-chapter' : childCls
-    const label = escapeHtml(child.title)
-    // Categories have no id (they're just visual grouping), so render the
-    // label as plain text instead of a broken anchor.
-    const inner = child.id ? `<a href="#${child.id}">${label}</a>` : label
-    out.push(`<li class="${itemCls}">${inner}</li>`)
-    if (child.children && child.children.length) {
-      out.push(...renderTocChildren(child.children, 'toc-section'))
-    }
+// A category renders as a titled card of pills. Nested sub-categories are
+// flattened to sibling cards with breadcrumb-style titles (e.g. "Workflows ›
+// Run Methods") so the layout stays two-level and readable.
+function renderCategoryCards(cat, prefix = '') {
+  const fullTitle = prefix ? `${prefix} › ${cat.title}` : cat.title
+  const { looseDocs, categories: subCats } = partitionTocChildren(cat.children)
+  const cards = []
+  if (looseDocs.length) {
+    cards.push(
+      `<div class="toc-card">` +
+        `<div class="toc-card-title">${escapeHtml(fullTitle)}</div>` +
+        renderPills(looseDocs) +
+        `</div>`,
+    )
   }
-  return out
+  for (const sub of subCats) {
+    cards.push(...renderCategoryCards(sub, fullTitle))
+  }
+  return cards
+}
+
+function renderPills(docs) {
+  const pills = docs
+    .map(
+      (d) =>
+        `<a class="toc-pill" href="#${d.id}">${escapeHtml(d.title)}</a>`,
+    )
+    .join('')
+  return `<div class="toc-pills">${pills}</div>`
+}
+
+function partitionTocChildren(children) {
+  const looseDocs = []
+  const categories = []
+  for (const c of children || []) {
+    if (c.children && c.children.length) categories.push(c)
+    else if (c.id) looseDocs.push(c)
+  }
+  return { looseDocs, categories }
 }
 
 // ---------- Markdown rendering ----------

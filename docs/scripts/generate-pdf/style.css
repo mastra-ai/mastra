@@ -107,51 +107,92 @@ body {
   font-weight: 700;
   letter-spacing: -0.01em;
   border-bottom: 1px solid var(--rule);
-  padding-bottom: 6mm;
-  margin: 0 0 8mm 0;
+  padding-bottom: 5mm;
+  margin: 0 0 6mm 0;
 }
 
-.toc ol {
-  list-style: none;
-  counter-reset: toc-counter;
-  padding: 0;
-  margin: 0;
+.toc-parts {
+  counter-reset: toc-part;
 }
 
-.toc li.toc-part {
-  counter-increment: toc-counter;
-  margin: 6mm 0 3mm 0;
+.toc-part-group {
+  margin-bottom: 6mm;
+}
+
+.toc-part-label {
+  counter-increment: toc-part;
   font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  font-size: 13pt;
+  font-size: 11pt;
   font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   color: var(--text);
+  border-bottom: 0.5pt solid var(--rule);
+  padding: 2.5mm 0 1.4mm 0;
+  margin-bottom: 2.8mm;
+  break-after: avoid;
 }
 
-.toc li.toc-part::before {
-  content: counter(toc-counter, upper-roman) '. ';
+.toc-part-label::before {
+  content: counter(toc-part, upper-roman) ' · ';
   color: var(--muted);
-  margin-right: 6pt;
+  margin-right: 2pt;
+  font-weight: 500;
 }
 
-.toc li.toc-chapter {
-  margin: 1.2mm 0;
-  padding-left: 6mm;
+/* Two-column flow for category cards. break-inside on cards keeps each
+   card intact whenever it fits in a column; large cards are allowed to
+   break rather than pushing to the next page and leaving whitespace. */
+.toc-cards {
+  column-count: 2;
+  column-gap: 3.5mm;
+}
+
+.toc-card {
+  border: 0.5pt solid var(--border);
+  border-radius: 2.5pt;
+  padding: 2mm 2.4mm 2.2mm 2.4mm;
+  margin: 0 0 2.2mm 0;
+  background: #ffffff;
+  break-inside: avoid;
+}
+
+.toc-card-loose {
+  border-color: transparent;
+  padding-left: 0;
+  padding-right: 0;
+  background: transparent;
+}
+
+.toc-card-title {
   font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  font-size: 10.5pt;
+  font-size: 9pt;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 1.6mm;
+}
+
+.toc-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.4mm 1.6mm;
+}
+
+.toc-pill {
+  display: inline-block;
+  font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 8.5pt;
+  font-weight: 500;
+  line-height: 1.3;
+  padding: 0.9mm 2.4mm;
+  background: var(--code-bg);
+  border: 0.4pt solid var(--border);
+  border-radius: 40pt;
   color: var(--text);
-}
-
-.toc li.toc-section {
-  padding-left: 12mm;
-  margin: 0.6mm 0;
-  font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  font-size: 9.5pt;
-  color: var(--muted);
-}
-
-.toc a {
-  color: inherit;
   text-decoration: none;
+  white-space: nowrap;
 }
 
 /* ---------- Chapter / section headings ---------- */
