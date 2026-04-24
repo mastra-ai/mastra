@@ -48,7 +48,7 @@ export type RoutePermission = {
  * Common gotchas the types will catch:
  * - 'mcp' not 'mcps' (UI route is /mcps but resource is 'mcp')
  * - 'scores' not 'scorers' (UI route is /scorers but resource is 'scores')
- * - 'stored' for prompts (uses /stored/prompt-blocks routes)
+ * - 'stored-prompt-blocks' for prompts (uses /stored/prompt-blocks routes)
  */
 export const ROUTE_PERMISSIONS: RoutePermission[] = [
   // Primary routes (highest priority for redirects)
@@ -70,7 +70,7 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
   { route: '/tools', permission: P('tools:read'), name: 'Tools' },
   { route: '/mcps', permission: P('mcp:read'), name: 'MCP Servers' },
   { route: '/processors', permission: P('processors:read'), name: 'Processors' },
-  { route: '/prompts', permission: P('stored:read'), name: 'Prompts' },
+  { route: '/prompts', permission: P('stored-prompt-blocks:read'), name: 'Prompts' },
   { route: '/workspaces', permission: P('workspaces:read'), name: 'Workspaces' },
 
   // UI-only pages (no corresponding API resource) - marked as public

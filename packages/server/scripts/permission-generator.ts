@@ -23,6 +23,7 @@ export const OUTPUT_PATH = path.join(__dirname, '../../core/src/auth/ee/interfac
 const ACTION_DESCRIPTIONS: Record<string, string> = {
   delete: 'Delete',
   execute: 'Execute',
+  publish: 'Publish, activate, or restore',
   read: 'View',
   write: 'Create and modify',
 };
@@ -39,11 +40,33 @@ const RESOURCE_DESCRIPTIONS: Record<string, string> = {
   processors: 'processors',
   scores: 'evaluation scores',
   'stored-agents': 'stored agents',
+  'stored-mcp-clients': 'stored MCP clients',
+  'stored-prompt-blocks': 'stored prompt blocks',
+  'stored-scorers': 'stored scorers',
+  'stored-skills': 'stored skills',
+  'stored-workspaces': 'stored workspaces',
   system: 'system info',
   tools: 'tools',
   vector: 'vector stores',
   workflows: 'workflows',
   workspaces: 'workspaces',
+};
+
+/**
+ * Legacy permission patterns kept for backward compatibility.
+ * These were released in @mastra/core 1.11.0 – 1.27.0 before `stored` was
+ * split into per-family resources (stored-agents, stored-skills, ...).
+ *
+ * Emitted in PERMISSION_PATTERNS with `@deprecated` TSDoc so existing role
+ * configs keep type-checking. Runtime matching in matchesPermission expands
+ * `stored:<action>` to each `stored-<family>:<action>`.
+ */
+const LEGACY_PATTERNS: Record<string, string> = {
+  'stored:*':
+    'Full access to all stored-* resources (use stored-agents:*, stored-skills:*, stored-prompt-blocks:*, stored-mcp-clients:*, stored-scorers:*, stored-workspaces:*)',
+  'stored:read': 'View stored-* resources (use stored-<family>:read instead)',
+  'stored:write': 'Create and modify stored-* resources (use stored-<family>:write instead)',
+  'stored:delete': 'Delete stored-* resources (use stored-<family>:delete instead)',
 };
 
 /**
@@ -128,6 +151,16 @@ export function generatePermissionFileContent(data: PermissionData): string {
     })
     .join(',\n');
 
+  // Legacy patterns: kept for backward compatibility with pre-split releases.
+  // Skip any that collide with a current pattern (none today, but guard against regressions).
+  const legacyEntries = Object.entries(LEGACY_PATTERNS)
+    .filter(([pattern]) => !allPatterns.includes(pattern))
+    .map(
+      ([pattern, desc]) =>
+        `  /**\n   * ${desc}\n   * @deprecated Use the per-family stored-* resource instead. Will be removed in the next major release.\n   */\n  '${pattern}': '${pattern}'`,
+    )
+    .join(',\n');
+
   return `/**
  * AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY
  *
@@ -171,7 +204,7 @@ export type Action = (typeof ACTIONS)[number];
  * Use \`keyof typeof PERMISSION_PATTERNS\` or the \`PermissionPattern\` type.
  */
 export const PERMISSION_PATTERNS = {
-${patternEntries},
+${patternEntries},${legacyEntries ? `\n${legacyEntries},` : ''}
 } as const;
 
 /**
