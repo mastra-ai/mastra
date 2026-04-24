@@ -1,8 +1,6 @@
 ---
-title: "Publishing an MCP server | MCP"
+title: "Guide: Publishing an MCP server"
 description: Guide to setting up and building a Mastra MCP server using the stdio transport, and publishing it to NPM.
-packages:
-  - "@mastra/mcp"
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -24,7 +22,7 @@ npm install @mastra/mcp @mastra/core tsup
 
 <Steps>
   <StepItem>
-    Create a file for your stdio server, for example, `/src/mastra/stdio.ts`.
+    Create a file for your stdio server, for example, `src/mastra/stdio.ts`.
   </StepItem>
 
   <StepItem>
@@ -66,8 +64,8 @@ npm install @mastra/mcp @mastra/core tsup
   <StepItem>
     Run the build command:
 
-    ```bash
-    pnpm run build:mcp
+    ```bash npm2yarn
+    npm run build:mcp
     ```
 
     This will compile your server code into both ESM and CJS formats and make the ESM output file executable. On Unix-like systems, the `chmod +x` step makes the file directly executable. Windows users may need to use WSL or handle execution through Node.js directly.
