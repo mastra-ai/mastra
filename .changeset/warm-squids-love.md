@@ -23,7 +23,3 @@ for await (const chunk of result.fullStream) {
   /* ... */
 }
 ```
-
-**Sub-agents default to background**
-
-Agents used as tools from another agent now run as background tasks by default instead of blocking the parent's turn. Pair with `streamUntilIdle` to keep the outer stream open until the sub-agent finishes. To keep the old blocking behavior, pass `background: false` when attaching the sub-agent tool.
