@@ -1,5 +1,5 @@
-import { EmptyState } from '@mastra/playground-ui';
 import { CircleSlashIcon } from 'lucide-react';
+import { EmptyState } from '@/ds/components/EmptyState';
 
 export const NoLogsInfo = () => (
   <div className="flex h-full items-center justify-center">

@@ -1,6 +1,9 @@
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 
 export interface LogRecord {
+  /** Canonical unique id assigned by the storage backend. When present, used directly as the
+   *  row id; otherwise a content hash is derived. */
+  logId?: string | null;
   timestamp: Date | string;
   level: LogLevel;
   message: string;
@@ -40,7 +43,7 @@ export interface LogRecord {
   environment?: string | null;
   source?: string | null;
   serviceName?: string | null;
-  scope?: string | null;
+  scope?: Record<string, unknown> | null;
 
   // Experimentation
   experimentId?: string | null;

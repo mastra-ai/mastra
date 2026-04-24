@@ -1,19 +1,24 @@
-import { DataDetailsPanel, useSpanDetail } from '@mastra/playground-ui';
+import type { SpanRecord } from '@mastra/core/storage';
 import { format } from 'date-fns';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
+import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
 
 const KV = DataDetailsPanel.KeyValueList;
 
-export interface SpanDetailsProps {
-  traceId: string;
+export interface SpanDetailsViewProps {
   spanId: string;
+  /** Full span record. Caller fetches via useSpanDetail. */
+  span: SpanRecord | undefined;
+  isLoading?: boolean;
   onClose: () => void;
 }
 
-export function SpanDetails({ traceId, spanId, onClose }: SpanDetailsProps) {
-  const { data: spanDetail, isLoading } = useSpanDetail(traceId, spanId);
-  const span = spanDetail?.span;
-
+/**
+ * Compact span panel using `DataDetailsPanel` (popover-style). Shows basic span metadata +
+ * input/output/metadata/attributes code sections. Use this for inline span inspection; for the
+ * full-width span view with scoring tab + prev/next nav, use `SpanDataPanelView`.
+ */
+export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetailsViewProps) {
   const durationMs =
     span?.startedAt && span?.endedAt ? new Date(span.endedAt).getTime() - new Date(span.startedAt).getTime() : null;
 
