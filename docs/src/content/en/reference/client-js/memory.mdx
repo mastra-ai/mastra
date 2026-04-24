@@ -14,7 +14,7 @@ The Memory API provides methods to manage conversation threads and message histo
 Retrieve all memory threads for a specific resource:
 
 ```typescript
-const threads = await mastraClient.getMemoryThreads({
+const threads = await mastraClient.listMemoryThreads({
   resourceId: 'resource-1',
   agentId: 'agent-1', // Optional - can be omitted if storage is configured
 })

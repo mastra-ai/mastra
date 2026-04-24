@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { EntityHeader } from './entity-header';
 import { Bot, Workflow, Database, Settings } from 'lucide-react';
 import { Badge } from '../Badge';
+import { EntityHeader } from './entity-header';
 
 const meta: Meta<typeof EntityHeader> = {
   title: 'Composite/EntityHeader',
@@ -55,7 +55,7 @@ export const WithBadge: Story = {
 
 export const LongTitle: Story = {
   render: () => (
-    <div className="w-[300px] bg-surface3 rounded-lg">
+    <div className="w-dropdown-max-height bg-surface3 rounded-lg">
       <EntityHeader
         icon={<Settings />}
         title="This is a very long title that should be truncated when it exceeds the available width"

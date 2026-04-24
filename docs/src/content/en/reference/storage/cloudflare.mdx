@@ -9,11 +9,13 @@ packages:
 
 Mastra provides two Cloudflare storage implementations:
 
-- **Cloudflare KV** (`CloudflareKVStorage`) - A globally distributed, eventually consistent key-value store
-- **Cloudflare Durable Objects** (`CloudflareDOStorage`) - A strongly consistent, SQLite-based storage using Durable Objects
+- **Cloudflare KV** (`CloudflareKVStorage`): A globally distributed, eventually consistent key-value store
+- **Cloudflare Durable Objects** (`CloudflareDOStorage`): A strongly consistent, SQLite-based storage using Durable Objects
 
 :::warning[Observability Not Supported]
-Cloudflare storage **does not support the observability domain**. Traces from the `DefaultExporter` cannot be persisted, and Mastra Studio's observability features won't work with Cloudflare as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
+
+Cloudflare storage **doesn't support the observability domain**. Traces from the `DefaultExporter` can't be persisted, and [Studio's](/docs/studio/overview) observability features won't work with Cloudflare as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
+
 :::
 
 ## Installation

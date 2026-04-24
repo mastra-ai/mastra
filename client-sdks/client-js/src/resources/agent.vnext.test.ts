@@ -128,6 +128,74 @@ describe('Agent vNext', () => {
     );
   });
 
+  it('resumeStream: omits local seed messages from initial request and preserves them for stateless client-tool recursion', async () => {
+    const toolCallId = 'call_1';
+    const seedMessages = [{ role: 'user', content: 'Original prompt before suspension' }];
+
+    const firstCycle = [
+      { type: 'step-start', payload: { messageId: 'm1' } },
+      {
+        type: 'tool-call',
+        payload: { toolCallId, toolName: 'weatherTool', args: { location: 'NYC' } },
+      },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } },
+    ];
+
+    const secondCycle = [
+      { type: 'step-start', payload: { messageId: 'm2' } },
+      { type: 'text-delta', payload: { text: 'Tool handled' } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 3 } } },
+    ];
+
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse(firstCycle))
+      .mockResolvedValueOnce(sseResponse(secondCycle));
+
+    const executeSpy = vi.fn(async () => ({ ok: true }));
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Weather',
+      inputSchema: z.object({ location: z.string() }),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: executeSpy,
+    });
+
+    const resp = await agent.resumeStream({ approved: true }, {
+      runId: 'run-1',
+      messages: seedMessages,
+      clientTools: { weatherTool },
+    } as any);
+
+    await resp.processDataStream({
+      onChunk: async () => {},
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+
+    const initialRequestBody = JSON.parse((global.fetch as any).mock.calls[0][1].body);
+    expect((global.fetch as any).mock.calls[0][0]).toBe('http://localhost:4111/api/agents/agent-1/resume-stream');
+    expect(initialRequestBody).toMatchObject({
+      runId: 'run-1',
+      resumeData: { approved: true },
+    });
+    expect(initialRequestBody).not.toHaveProperty('messages');
+
+    const recursiveRequestBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
+    expect((global.fetch as any).mock.calls[1][0]).toBe('http://localhost:4111/api/agents/agent-1/stream');
+    expect(recursiveRequestBody.messages[0]).toEqual(seedMessages[0]);
+    expect(recursiveRequestBody.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'user',
+          content: 'Original prompt before suspension',
+        }),
+      ]),
+    );
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('stream: receives chunks from both initial and recursive requests', async () => {
     const toolCallId = 'call_1';
 

@@ -2,7 +2,6 @@
 title: "OpenTelemetry bridge | Tracing | Observability"
 description: "Integrate Mastra tracing with existing OpenTelemetry infrastructure"
 packages:
-  - "@mastra/core"
   - "@mastra/observability"
   - "@mastra/otel-bridge"
 ---
@@ -148,10 +147,10 @@ With the OtelBridge, your traces maintain proper hierarchy across OTEL and Mastr
 ```
 HTTP POST /api/chat (from Hono middleware)
 └── agent.assistant (from Mastra via OtelBridge)
-    ├── chat gpt-4o (LLM call)
+    ├── chat gpt-5.4 (LLM call)
     ├── tool.execute search (tool execution)
     │   └── HTTP GET api.example.com (from OTEL auto-instrumentation)
-    └── chat gpt-4o (follow-up LLM call)
+    └── chat gpt-5.4 (follow-up LLM call)
 ```
 
 ## Multi-service distributed tracing
@@ -164,7 +163,7 @@ Service A: HTTP POST /api/process
 
 Service B: HTTP POST /api/analyze (incoming call - same trace!)
 └── agent.analyzer (Mastra agent inherits trace context)
-    └── chat gpt-4o
+    └── chat gpt-5.4
 ```
 
 Both services must have:
@@ -202,5 +201,5 @@ If traces aren't displaying or connecting as expected:
 ## Related
 
 - [Tracing Overview](/docs/observability/tracing/overview)
-- [OpenTelemetry Exporter](/docs/observability/tracing/exporters/otel) - For sending traces to OTEL backends
-- [OtelBridge Reference](/reference/observability/tracing/bridges/otel) - API documentation
+- [OpenTelemetry Exporter](/docs/observability/tracing/exporters/otel): For sending traces to OTEL backends
+- [OtelBridge Reference](/reference/observability/tracing/bridges/otel): API documentation

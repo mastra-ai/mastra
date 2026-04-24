@@ -1,6 +1,7 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
-import path from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { PassThrough } from 'node:stream';
+import { fileURLToPath } from 'node:url';
 import { openai } from '@ai-sdk/openai-v5';
 import { useLLMRecording } from '@internal/llm-recorder';
 import { describe, expect, it, beforeAll } from 'vitest';
@@ -8,10 +9,12 @@ import { describe, expect, it, beforeAll } from 'vitest';
 import { AISDKSpeech } from '../speech';
 import { AISDKTranscription } from '../transcription';
 
-describe('AI SDK Voice Integration Tests', () => {
-  useLLMRecording('core-src-voice-aisdk-__tests__-aisdk-voice.e2e');
+const testDir = dirname(fileURLToPath(import.meta.url));
+const recordingsDir = resolve(testDir, '__recordings__');
+const outputDir = resolve(testDir, 'test-outputs');
 
-  const outputDir = path.join(process.cwd(), 'test-outputs');
+describe('AI SDK Voice Integration Tests', () => {
+  useLLMRecording('core-src-voice-aisdk-__tests__-aisdk-voice.e2e', { recordingsDir });
 
   beforeAll(() => {
     mkdirSync(outputDir, { recursive: true });
@@ -35,7 +38,7 @@ describe('AI SDK Voice Integration Tests', () => {
 
       expect(audioBuffer.length).toBeGreaterThan(0);
 
-      const outputPath = path.join(outputDir, 'aisdk-speech-test.mp3');
+      const outputPath = resolve(outputDir, 'aisdk-speech-test.mp3');
       writeFileSync(outputPath, audioBuffer);
     }, 10000);
 
@@ -52,7 +55,7 @@ describe('AI SDK Voice Integration Tests', () => {
 
       expect(audioBuffer.length).toBeGreaterThan(0);
 
-      const outputPath = path.join(outputDir, 'aisdk-speech-nova.mp3');
+      const outputPath = resolve(outputDir, 'aisdk-speech-nova.mp3');
       writeFileSync(outputPath, audioBuffer);
     }, 10000);
 
@@ -72,7 +75,7 @@ describe('AI SDK Voice Integration Tests', () => {
 
       expect(audioBuffer.length).toBeGreaterThan(0);
 
-      const outputPath = path.join(outputDir, 'aisdk-speech-stream.mp3');
+      const outputPath = resolve(outputDir, 'aisdk-speech-stream.mp3');
       writeFileSync(outputPath, audioBuffer);
     }, 10000);
 
@@ -228,13 +231,11 @@ describe('AI SDK Voice Integration Tests', () => {
 
       expect(transcribedText).toBeTruthy();
       expect(typeof transcribedText).toBe('string');
-      // Check for either "round trip" or "round-trip"
+      // Exact match not expected due to speech synthesis variations
+      // but key words should be present
       expect(transcribedText.toLowerCase()).toMatch(/round.?trip/);
       console.log('Original:', originalText);
       console.log('Transcribed:', transcribedText);
-
-      // Note: Exact match not expected due to speech synthesis variations
-      // but key words should be present
     }, 20000);
   });
 });

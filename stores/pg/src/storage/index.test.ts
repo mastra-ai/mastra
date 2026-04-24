@@ -6,9 +6,12 @@ import {
   createStoreIndexTests,
   createDomainIndexTests,
 } from '@internal/storage-test-utils';
+import { Mastra } from '@mastra/core/mastra';
 import { TABLE_THREADS } from '@mastra/core/storage';
+import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { Pool } from 'pg';
 import { describe, it, expect, vi } from 'vitest';
+import { z } from 'zod/v4';
 
 import { DatasetsPG } from './domains/datasets';
 import { ExperimentsPG } from './domains/experiments';
@@ -343,5 +346,118 @@ describe('PostgresStore pool integration', () => {
 
     // Pool should be closed now
     await expect(store.pool.query('SELECT 1')).rejects.toThrow();
+  });
+});
+
+describe('WorkflowsPG snapshot sanitization', () => {
+  it('round-trips workflow-executed backslash content and strips null characters', async () => {
+    const pool = createTestPool();
+    const store = new PostgresStore({ id: `pg-sanitize-${Date.now()}`, pool });
+    const workflowName = `sanitize-roundtrip-${Date.now()}`;
+    const runId = `run-${Date.now()}`;
+
+    const captureStep = createStep({
+      id: 'capture-special-strings',
+      inputSchema: z.object({
+        invalidEscapeV: z.string(),
+        invalidEscapeK: z.string(),
+        backslashSpace: z.string(),
+        validEscape: z.string(),
+        nullCharContent: z.string(),
+      }),
+      outputSchema: z.object({
+        invalidEscapeV: z.string(),
+        invalidEscapeK: z.string(),
+        backslashSpace: z.string(),
+        validEscape: z.string(),
+        nullCharContent: z.string(),
+      }),
+      execute: async ({ inputData }) => inputData,
+    });
+
+    const workflow = createWorkflow({
+      id: workflowName,
+      inputSchema: z.object({
+        invalidEscapeV: z.string(),
+        invalidEscapeK: z.string(),
+        backslashSpace: z.string(),
+        validEscape: z.string(),
+        nullCharContent: z.string(),
+      }),
+      outputSchema: z.object({
+        invalidEscapeV: z.string(),
+        invalidEscapeK: z.string(),
+        backslashSpace: z.string(),
+        validEscape: z.string(),
+        nullCharContent: z.string(),
+      }),
+    })
+      .then(captureStep)
+      .commit();
+
+    const inputData = {
+      invalidEscapeV: 'Omschr\\vijving',
+      invalidEscapeK: 'Toepassel\\k',
+      backslashSpace: 'hello\\ world',
+      validEscape: 'line1\nline2',
+      nullCharContent: 'prefix\u0000suffix',
+    };
+
+    try {
+      await store.init();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: store,
+        workflows: { [workflowName]: workflow },
+      });
+
+      workflow.__registerMastra(mastra);
+
+      const run = await workflow.createRun({ runId });
+      const result = await run.start({ inputData });
+
+      expect(result.status).toBe('success');
+      expect(result.steps['capture-special-strings']).toMatchObject({
+        status: 'success',
+        output: {
+          invalidEscapeV: 'Omschr\\vijving',
+          invalidEscapeK: 'Toepassel\\k',
+          backslashSpace: 'hello\\ world',
+          validEscape: 'line1\nline2',
+          nullCharContent: 'prefix\u0000suffix',
+        },
+      });
+
+      const workflows = await store.getStore('workflows');
+      const loadedSnapshot = await workflows?.loadWorkflowSnapshot({ workflowName, runId });
+      expect(loadedSnapshot).toBeDefined();
+      expect((loadedSnapshot as any)?.context['capture-special-strings']).toMatchObject({
+        status: 'success',
+        output: {
+          invalidEscapeV: 'Omschr\\vijving',
+          invalidEscapeK: 'Toepassel\\k',
+          backslashSpace: 'hello\\ world',
+          validEscape: 'line1\nline2',
+          nullCharContent: 'prefixsuffix',
+        },
+      });
+
+      const { runs } = await workflows!.listWorkflowRuns({ workflowName, status: 'success' });
+      const storedRun = runs.find(run => run.runId === runId);
+      expect(storedRun).toBeDefined();
+      expect((storedRun?.snapshot as any)?.context['capture-special-strings']).toMatchObject({
+        status: 'success',
+        output: {
+          invalidEscapeV: 'Omschr\\vijving',
+          invalidEscapeK: 'Toepassel\\k',
+          backslashSpace: 'hello\\ world',
+          validEscape: 'line1\nline2',
+          nullCharContent: 'prefixsuffix',
+        },
+      });
+    } finally {
+      await pool.end();
+    }
   });
 });

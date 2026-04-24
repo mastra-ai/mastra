@@ -61,7 +61,7 @@ declare module 'fastify' {
   interface FastifyRequest {
     mastra: Mastra;
     requestContext: RequestContext;
-    tools: ToolsInput;
+    registeredTools: ToolsInput;
     abortSignal: AbortSignal;
     taskStore: InMemoryTaskStore;
     customRouteAuthConfig?: Map<string, boolean>;
@@ -115,7 +115,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       // Set context in request object
       request.requestContext = requestContext;
       request.mastra = this.mastra;
-      request.tools = this.tools || {};
+      request.registeredTools = this.tools || {};
       if (this.taskStore) {
         request.taskStore = this.taskStore;
       }
@@ -320,13 +320,27 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       reply.status(fetchResponse.status);
       if (fetchResponse.body) {
         const reader = fetchResponse.body.getReader();
+
+        const onResError = (err: unknown) => {
+          this.mastra.getLogger()?.error('Error writing datastream response', {
+            error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+          });
+          void reader.cancel('response write error');
+        };
+        reply.raw.once('error', onResError);
+
         try {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
             reply.raw.write(value);
           }
+        } catch (error) {
+          this.mastra.getLogger()?.error('Error in datastream processing', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
         } finally {
+          reply.raw.off('error', onResError);
           reply.raw.end();
         }
       } else {
@@ -517,7 +531,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         ...(typeof params.body === 'object' ? params.body : {}),
         requestContext: request.requestContext,
         mastra: this.mastra,
-        tools: request.tools,
+        registeredTools: request.registeredTools,
         taskStore: request.taskStore,
         abortSignal: request.abortSignal,
         routePrefix: prefix,

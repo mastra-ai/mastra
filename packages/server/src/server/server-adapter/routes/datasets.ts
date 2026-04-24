@@ -9,6 +9,8 @@ import {
   GET_ITEM_ROUTE,
   UPDATE_ITEM_ROUTE,
   DELETE_ITEM_ROUTE,
+  LIST_ALL_EXPERIMENTS_ROUTE,
+  EXPERIMENT_REVIEW_SUMMARY_ROUTE,
   LIST_EXPERIMENTS_ROUTE,
   TRIGGER_EXPERIMENT_ROUTE,
   GET_EXPERIMENT_ROUTE,
@@ -45,7 +47,11 @@ export const DATASETS_ROUTES = [
   LIST_DATASET_VERSIONS_ROUTE,
   LIST_ITEM_VERSIONS_ROUTE,
   GET_ITEM_VERSION_ROUTE,
-  // Experiment operations
+  // All experiments (cross-dataset) - MUST come before dataset-scoped experiments
+  LIST_ALL_EXPERIMENTS_ROUTE,
+  // Experiment review summary (cross-dataset) - MUST come before dataset-scoped experiments
+  EXPERIMENT_REVIEW_SUMMARY_ROUTE,
+  // Experiment operations (dataset-scoped)
   LIST_EXPERIMENTS_ROUTE,
   TRIGGER_EXPERIMENT_ROUTE,
   GET_EXPERIMENT_ROUTE,

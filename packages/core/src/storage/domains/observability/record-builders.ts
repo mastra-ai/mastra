@@ -66,18 +66,19 @@ export function serializeSpanAttributes(span: AnyExportedSpan): Record<string, a
 
 type CorrelationRecordFields = Pick<
   CreateLogRecord,
-  | 'traceId'
-  | 'spanId'
   | 'tags'
   | 'entityType'
   | 'entityId'
   | 'entityName'
+  | 'entityVersionId'
   | 'parentEntityType'
   | 'parentEntityId'
   | 'parentEntityName'
+  | 'parentEntityVersionId'
   | 'rootEntityType'
   | 'rootEntityId'
   | 'rootEntityName'
+  | 'rootEntityVersionId'
   | 'userId'
   | 'organizationId'
   | 'resourceId'
@@ -86,25 +87,26 @@ type CorrelationRecordFields = Pick<
   | 'threadId'
   | 'requestId'
   | 'environment'
-  | 'source'
+  | 'executionSource'
   | 'serviceName'
   | 'experimentId'
 >;
 
 function buildCorrelationRecordFields(context: CorrelationContext | undefined): CorrelationRecordFields {
   return {
-    traceId: context?.traceId ?? null,
-    spanId: context?.spanId ?? null,
     tags: context?.tags ?? null,
     entityType: context?.entityType ?? null,
     entityId: context?.entityId ?? null,
     entityName: context?.entityName ?? null,
+    entityVersionId: context?.entityVersionId ?? null,
     parentEntityType: context?.parentEntityType ?? null,
     parentEntityId: context?.parentEntityId ?? null,
     parentEntityName: context?.parentEntityName ?? null,
+    parentEntityVersionId: context?.parentEntityVersionId ?? null,
     rootEntityType: context?.rootEntityType ?? null,
     rootEntityId: context?.rootEntityId ?? null,
     rootEntityName: context?.rootEntityName ?? null,
+    rootEntityVersionId: context?.rootEntityVersionId ?? null,
     userId: context?.userId ?? null,
     organizationId: context?.organizationId ?? null,
     resourceId: context?.resourceId ?? null,
@@ -113,7 +115,7 @@ function buildCorrelationRecordFields(context: CorrelationContext | undefined): 
     threadId: context?.threadId ?? null,
     requestId: context?.requestId ?? null,
     environment: context?.environment ?? null,
-    source: context?.source ?? null,
+    executionSource: context?.source ?? null,
     serviceName: context?.serviceName ?? null,
     experimentId: context?.experimentId ?? null,
   };
@@ -150,7 +152,7 @@ function buildLegacyLogMetadataCorrelationFields(
     rootEntityType: toEntityType(getStringOrNull(metadata?.root_type) ?? undefined),
     rootEntityName: getStringOrNull(metadata?.root_name),
     environment: getStringOrNull(metadata?.environment),
-    source: getStringOrNull(metadata?.source),
+    executionSource: getStringOrNull(metadata?.source),
     serviceName: getStringOrNull(metadata?.service_name),
   };
 }
@@ -173,6 +175,7 @@ export function buildCreateSpanRecord(span: AnyExportedSpan): CreateSpanRecord {
     entityType: span.entityType ?? null,
     entityId: span.entityId ?? null,
     entityName: span.entityName ?? null,
+    entityVersionId: getStringOrNull(metadata.entityVersionId),
 
     // Identity & Tenancy - extracted from metadata if present
     userId: getStringOrNull(metadata.userId),
@@ -190,6 +193,9 @@ export function buildCreateSpanRecord(span: AnyExportedSpan): CreateSpanRecord {
     source: getStringOrNull(metadata.source),
     serviceName: getStringOrNull(metadata.serviceName),
     scope: getObjectOrNull(metadata.scope),
+
+    // Experimentation
+    experimentId: getStringOrNull(metadata.experimentId),
 
     // Span data
     spanType: span.type,
@@ -235,10 +241,13 @@ export function buildMetricRecord(event: MetricEvent): CreateMetricRecord {
   const cost = m.costContext;
 
   return {
+    metricId: m.metricId,
     timestamp: m.timestamp,
     name: m.name,
     value: m.value,
     labels,
+    traceId: m.traceId ?? m.correlationContext?.traceId ?? null,
+    spanId: m.spanId ?? m.correlationContext?.spanId ?? null,
     ...correlationFields,
     scope: null,
     entityType: correlationFields.entityType ?? legacyCorrelationFields.entityType ?? null,
@@ -262,13 +271,14 @@ export function buildLogRecord(event: LogEvent): CreateLogRecord {
   const legacyCorrelationFields = buildLegacyLogMetadataCorrelationFields(l.metadata ?? null);
 
   return {
+    logId: l.logId,
     timestamp: l.timestamp,
     level: l.level,
     message: l.message,
     data: l.data ?? null,
     ...correlationFields,
-    traceId: correlationFields.traceId ?? l.traceId ?? null,
-    spanId: correlationFields.spanId ?? l.spanId ?? null,
+    traceId: l.traceId ?? l.correlationContext?.traceId ?? null,
+    spanId: l.spanId ?? l.correlationContext?.spanId ?? null,
     tags: correlationFields.tags ?? l.tags ?? null,
     entityType: correlationFields.entityType ?? legacyCorrelationFields.entityType ?? null,
     entityName: correlationFields.entityName ?? legacyCorrelationFields.entityName ?? null,
@@ -277,7 +287,7 @@ export function buildLogRecord(event: LogEvent): CreateLogRecord {
     rootEntityType: correlationFields.rootEntityType ?? legacyCorrelationFields.rootEntityType ?? null,
     rootEntityName: correlationFields.rootEntityName ?? legacyCorrelationFields.rootEntityName ?? null,
     environment: correlationFields.environment ?? legacyCorrelationFields.environment ?? null,
-    source: correlationFields.source ?? legacyCorrelationFields.source ?? null,
+    executionSource: correlationFields.executionSource ?? legacyCorrelationFields.executionSource ?? null,
     serviceName: correlationFields.serviceName ?? legacyCorrelationFields.serviceName ?? null,
     scope: null,
     metadata: l.metadata ?? null,
@@ -287,35 +297,47 @@ export function buildLogRecord(event: LogEvent): CreateLogRecord {
 /** Convert a ScoreEvent to a CreateScoreRecord */
 export function buildScoreRecord(event: ScoreEvent): CreateScoreRecord {
   const s = event.score;
+  const correlationFields = buildCorrelationRecordFields(s.correlationContext);
   return {
+    scoreId: s.scoreId,
     timestamp: s.timestamp,
-    traceId: s.traceId,
-    spanId: s.spanId ?? null,
+    traceId: s.traceId ?? s.correlationContext?.traceId ?? null,
+    spanId: s.spanId ?? s.correlationContext?.spanId ?? null,
     scorerId: s.scorerId,
     scorerVersion: s.scorerVersion ?? null,
-    source: s.source ?? null,
+    scoreSource: s.scoreSource ?? s.source ?? null,
+    source: s.scoreSource ?? s.source ?? null,
     score: s.score,
     reason: s.reason ?? null,
-    experimentId: s.experimentId ?? null,
+    ...correlationFields,
+    entityType: correlationFields.entityType ?? s.targetEntityType ?? null,
+    experimentId: correlationFields.experimentId ?? s.experimentId ?? null,
+    scope: null,
     scoreTraceId: s.scoreTraceId ?? null,
-    metadata: s.metadata ?? null,
+    metadata: s.scorerName ? { ...(s.metadata ?? {}), scorerName: s.scorerName } : (s.metadata ?? null),
   };
 }
 
 /** Convert a FeedbackEvent to a CreateFeedbackRecord */
 export function buildFeedbackRecord(event: FeedbackEvent): CreateFeedbackRecord {
   const fb = event.feedback;
-  const userId = typeof fb.metadata?.userId === 'string' ? fb.metadata.userId : null;
+  const correlationFields = buildCorrelationRecordFields(fb.correlationContext);
   return {
+    feedbackId: fb.feedbackId,
     timestamp: fb.timestamp,
-    traceId: fb.traceId,
-    spanId: fb.spanId ?? null,
-    source: fb.source,
+    traceId: fb.traceId ?? fb.correlationContext?.traceId ?? null,
+    spanId: fb.spanId ?? fb.correlationContext?.spanId ?? null,
+    feedbackSource: fb.feedbackSource ?? fb.source ?? '',
+    source: fb.feedbackSource ?? fb.source ?? '',
     feedbackType: fb.feedbackType,
     value: fb.value,
     comment: fb.comment ?? null,
-    experimentId: fb.experimentId ?? null,
-    userId,
+    ...correlationFields,
+    experimentId: correlationFields.experimentId ?? fb.experimentId ?? null,
+    feedbackUserId:
+      fb.feedbackUserId ?? fb.userId ?? (typeof fb.metadata?.userId === 'string' ? fb.metadata.userId : null),
+    scope: null,
+    sourceId: fb.sourceId ?? null,
     metadata: fb.metadata ?? null,
   };
 }

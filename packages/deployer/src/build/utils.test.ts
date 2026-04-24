@@ -2,6 +2,9 @@ import { posix } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   getPackageName,
+  hasImportProtocol,
+  isExternalProtocolImport,
+  isBareModuleSpecifier,
   getCompiledDepCachePath,
   slash,
   findNativePackageModule,
@@ -32,6 +35,53 @@ describe('getPackageName', () => {
   it('should handle multiple slashes', () => {
     expect(getPackageName('foo/bar/baz')).toBe('foo');
     expect(getPackageName('@scope/foo/bar/baz')).toBe('@scope/foo');
+  });
+});
+
+describe('hasImportProtocol', () => {
+  it('should detect protocol-style import specifiers', () => {
+    expect(hasImportProtocol('cloudflare:workers')).toBe(true);
+    expect(hasImportProtocol('node:fs')).toBe(true);
+    expect(hasImportProtocol('data:text/javascript,export default 1')).toBe(true);
+  });
+
+  it('should not treat package names or paths as protocol imports', () => {
+    expect(hasImportProtocol('@mastra/core')).toBe(false);
+    expect(hasImportProtocol('lodash')).toBe(false);
+    expect(hasImportProtocol('./relative/file.ts')).toBe(false);
+    expect(hasImportProtocol('/absolute/file.ts')).toBe(false);
+    expect(hasImportProtocol('C:\\Users\\demo\\file.ts')).toBe(false);
+  });
+});
+
+describe('isExternalProtocolImport', () => {
+  it('should treat non-node protocol imports as runtime externals', () => {
+    expect(isExternalProtocolImport('cloudflare:workers')).toBe(true);
+    expect(isExternalProtocolImport('data:text/javascript,export default 1')).toBe(true);
+  });
+
+  it('should exclude node: imports from protocol external handling', () => {
+    expect(isExternalProtocolImport('node:fs')).toBe(false);
+  });
+});
+
+describe('isBareModuleSpecifier', () => {
+  it('should accept package imports and package subpaths', () => {
+    expect(isBareModuleSpecifier('@mastra/core')).toBe(true);
+    expect(isBareModuleSpecifier('@mastra/core/agent')).toBe(true);
+    expect(isBareModuleSpecifier('lodash')).toBe(true);
+    expect(isBareModuleSpecifier('lodash/fp/get')).toBe(true);
+  });
+
+  it('should reject virtual, path, builtin, and runtime protocol specifiers', () => {
+    expect(isBareModuleSpecifier('node:fs')).toBe(false);
+    expect(isBareModuleSpecifier('cloudflare:workers')).toBe(false);
+    expect(isBareModuleSpecifier('#server')).toBe(false);
+    expect(isBareModuleSpecifier('./relative/file.ts')).toBe(false);
+    expect(isBareModuleSpecifier('../relative/file.ts')).toBe(false);
+    expect(isBareModuleSpecifier('/absolute/file.ts')).toBe(false);
+    expect(isBareModuleSpecifier('C:\\Users\\demo\\file.ts')).toBe(false);
+    expect(isBareModuleSpecifier('fs')).toBe(false);
   });
 });
 
@@ -529,8 +579,8 @@ describe('detectRuntime', () => {
 });
 
 describe('injectStudioHtmlConfig', () => {
-  it('should inject MASTRA_THEME_TOGGLE placeholder', () => {
-    const html = "window.MASTRA_THEME_TOGGLE = '%%MASTRA_THEME_TOGGLE%%';";
+  it('should inject MASTRA_EXPERIMENTAL_UI placeholder', () => {
+    const html = "window.MASTRA_EXPERIMENTAL_UI = '%%MASTRA_EXPERIMENTAL_UI%%';";
 
     const result = injectStudioHtmlConfig(html, {
       host: "'localhost'",
@@ -541,13 +591,13 @@ describe('injectStudioHtmlConfig', () => {
       hideCloudCta: "'false'",
       cloudApiEndpoint: "''",
       experimentalFeatures: "'false'",
+      templates: "'false'",
       telemetryDisabled: "''",
       requestContextPresets: "''",
-      themeToggle: "'true'",
-      experimentalUI: "'false'",
+      experimentalUI: "'true'",
       autoDetectUrl: "'false'",
     });
 
-    expect(result).toBe("window.MASTRA_THEME_TOGGLE = 'true';");
+    expect(result).toBe("window.MASTRA_EXPERIMENTAL_UI = 'true';");
   });
 });

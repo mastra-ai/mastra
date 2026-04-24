@@ -51,7 +51,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
         )}
       </PopoverTrigger>
       <PopoverContent
-        className="backdrop-blur-4xl w-auto !p-0 bg-surface4 max-w-[16.5rem]"
+        className="backdrop-blur-4xl w-auto p-0! bg-surface4 max-w-[16.5rem]"
         align="start"
         data-testid="datepicker-calendar"
       >
@@ -208,7 +208,7 @@ export const DateTimePickerContent = ({
         value={dateInputValue}
         onChange={handleInputChange}
         placeholder={placeholder}
-        className="m-4 mb-0 !w-auto"
+        className="m-4 mb-0 w-auto!"
       />
 
       {localErrorMsg && (

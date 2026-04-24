@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest';
 import type { ProviderConfig } from './gateways/base.js';
+import { MastraGateway } from './gateways/mastra.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
 import { GatewayRegistry } from './provider-registry.js';
@@ -520,6 +521,38 @@ describe('GatewayRegistry Auto-Refresh', () => {
     // Note: Mocks are automatically restored by vi.restoreAllMocks() in afterEach
   });
 
+  it('should hide disabled gateway providers at runtime when shouldEnable returns false', async () => {
+    delete process.env.MASTRA_GATEWAY_API_KEY;
+    // @ts-expect-error - accessing private property for testing
+    GatewayRegistry['instance'] = undefined;
+
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: false });
+
+    expect(registry.getProviders().mastra).toBeUndefined();
+    expect(registry.getProviders()['mastra/google']).toBeUndefined();
+    expect(registry.getModels().mastra).toBeUndefined();
+    expect(registry.getModels()['mastra/google']).toBeUndefined();
+  });
+
+  it('should allow a later caller to enable dynamic loading on the singleton', async () => {
+    // @ts-expect-error - accessing private property for testing
+    GatewayRegistry['instance'] = undefined;
+
+    const syncSpy = vi.spyOn(GatewayRegistry.prototype, 'syncGateways').mockResolvedValue();
+
+    const initialRegistry = GatewayRegistry.getInstance({ useDynamicLoading: false });
+    const upgradedRegistry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+
+    expect(upgradedRegistry).toBe(initialRegistry);
+
+    await upgradedRegistry.syncGateways(true);
+
+    expect(syncSpy).toHaveBeenCalledOnce();
+    expect(syncSpy).toHaveBeenCalledWith(true);
+    // @ts-expect-error - accessing private property for testing
+    expect(upgradedRegistry.useDynamicLoading).toBe(true);
+  });
+
   it('should write to src/ when writeToSrc flag is true', async () => {
     const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
     const tmpDir = path.join(os.tmpdir(), `mastra-test-${Date.now()}`);
@@ -558,9 +591,19 @@ describe('GatewayRegistry Auto-Refresh', () => {
     });
 
     vi.spyOn(NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({});
+    const mastraFetchProvidersSpy = vi.spyOn(MastraGateway.prototype, 'fetchProviders').mockResolvedValue({
+      mastra: {
+        name: 'Mastra Gateway',
+        models: ['anthropic/claude-sonnet-4.5'],
+        apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
+        gateway: 'mastra',
+      } as ProviderConfig,
+    });
 
     // Call syncGateways with writeToSrc=true
     await registry.syncGateways(true, true);
+
+    expect(mastraFetchProvidersSpy).not.toHaveBeenCalled();
 
     // Verify files were written to dist/ via atomic rename
     expect(renamedFiles.some(f => f.dest.includes('dist/provider-registry.json'))).toBe(true);
@@ -571,6 +614,57 @@ describe('GatewayRegistry Auto-Refresh', () => {
     expect(copiedFiles.some(c => c.dest.includes('src/llm/model/provider-types.generated.d.ts'))).toBe(true);
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('should skip syncGateways when MASTRA_OFFLINE is set to true', async () => {
+    process.env.MASTRA_OFFLINE = 'true';
+
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+
+    // Mock fetchProviders to detect if network calls are attempted
+    const fetchSpy = vi.spyOn(ModelsDevGateway.prototype, 'fetchProviders');
+
+    await registry.syncGateways(true);
+
+    // fetchProviders should never be called — syncGateways bails out early
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('should skip syncGateways when MASTRA_OFFLINE is set to 1', async () => {
+    process.env.MASTRA_OFFLINE = '1';
+
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+
+    const fetchSpy = vi.spyOn(ModelsDevGateway.prototype, 'fetchProviders');
+
+    await registry.syncGateways(true);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('should not skip syncGateways when MASTRA_OFFLINE is set to false', async () => {
+    process.env.MASTRA_OFFLINE = 'false';
+
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+
+    // Mock fetchProviders to avoid actual network calls but verify it's called
+    const fetchSpy = vi.spyOn(ModelsDevGateway.prototype, 'fetchProviders').mockResolvedValue({});
+    vi.spyOn(NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({});
+
+    await registry.syncGateways(true);
+
+    expect(fetchSpy).toHaveBeenCalled();
+  });
+
+  it('should skip startAutoRefresh when MASTRA_OFFLINE is set', () => {
+    process.env.MASTRA_OFFLINE = 'true';
+
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+
+    registry.startAutoRefresh(100);
+
+    // @ts-expect-error - accessing private property for testing
+    expect(registry.refreshInterval).toBeNull();
   });
 
   it('should write .d.ts file to correct dist subdirectory path', async () => {

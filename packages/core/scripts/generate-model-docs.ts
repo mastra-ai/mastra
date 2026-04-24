@@ -76,6 +76,35 @@ function cleanDocumentationUrl(url: string | undefined): string | undefined {
   }
 }
 
+function extractEnvVarsFromUrl(url?: string): string[] {
+  if (!url) return [];
+
+  const envVars: string[] = [];
+
+  for (const match of url.matchAll(/\$\{([^}]+)\}/g)) {
+    if (match[1]) {
+      envVars.push(match[1]);
+    }
+  }
+
+  return envVars;
+}
+
+function getRequiredEnvVars(provider: ProviderInfo): string[] {
+  const authEnvVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
+
+  return Array.from(new Set([...extractEnvVarsFromUrl(provider.url), ...authEnvVars]));
+}
+
+function getEnvVarPlaceholder(envVar: string): string {
+  if (/_API_TOKEN$|_TOKEN$/.test(envVar)) return 'your-api-token';
+  if (/_API_KEY$|_KEY$|_PAT$/.test(envVar)) return 'your-api-key';
+  if (/_ACCOUNT_ID$|_PROJECT_ID$|_SITE_ID$|_WORKSPACE_ID$|_ORG_ID$|_ORGANIZATION_ID$/.test(envVar)) {
+    return 'your-account-id';
+  }
+  return 'your-value';
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -241,17 +270,30 @@ async function generateProviderPage(
   providerRegistry: Record<string, ProviderConfig>,
 ): Promise<string> {
   const modelCount = provider.models.length;
+  const requiredEnvVars = getRequiredEnvVars(provider);
+  const authEnvVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
+  const additionalEnvVars = requiredEnvVars.filter(envVar => !authEnvVars.includes(envVar));
 
   // Get documentation URL if available
   const rawDocUrl = (providerRegistry[provider.id] as any).docUrl;
   const docUrl = cleanDocumentationUrl(rawDocUrl);
 
   // Create intro with optional documentation link
+  const authText =
+    authEnvVars.length === 1
+      ? `Authentication is handled automatically using the \`${authEnvVars[0]}\` environment variable.`
+      : `Authentication is handled automatically using one of the following environment variables: ${authEnvVars.map(envVar => `\`${envVar}\``).join(', ')}.`;
+
+  const setupText =
+    additionalEnvVars.length === 0
+      ? authText
+      : `${authText} Configure ${additionalEnvVars.map(envVar => `\`${envVar}\``).join(', ')} as well.`;
+
   const introText = docUrl
-    ? `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. Authentication is handled automatically using the \`${provider.apiKeyEnvVar}\` environment variable.
+    ? `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. ${setupText}
 
 Learn more in the [${provider.name} documentation](${docUrl}).`
-    : `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. Authentication is handled automatically using the \`${provider.apiKeyEnvVar}\` environment variable.`;
+    : `Access ${modelCount} ${provider.name} model${modelCount !== 1 ? 's' : ''} through Mastra's model router. ${setupText}`;
 
   // Fetch model capabilities from models.dev
   const { models: modelsWithCapabilities, packageName } = await fetchProviderInfo(provider.id);
@@ -275,7 +317,7 @@ ${getGeneratedComment()}
 ${introText}
 
 \`\`\`bash title=".env"
-${provider.apiKeyEnvVar}=your-api-key
+${requiredEnvVars.map(envVar => `${envVar}=${getEnvVarPlaceholder(envVar)}`).join('\n')}
 \`\`\`
 
 \`\`\`typescript title="src/mastra/agents/my-agent.ts" {7}
@@ -572,13 +614,13 @@ Mastra provides a unified interface for working with LLMs across multiple provid
 
 ## Features
 
-- **One API for any model** - Access any model without having to install and manage additional provider dependencies.
+- **One API for any model**: Access any model without having to install and manage additional provider dependencies.
 
-- **Access the newest AI** - Use new models the moment they're released, no matter which provider they come from. Avoid vendor lock-in with Mastra's provider-agnostic interface.
+- **Access the newest AI**: Use new models the moment they're released, no matter which provider they come from. Avoid vendor lock-in with Mastra's provider-agnostic interface.
 
-- [**Mix and match models**](#mix-and-match-models) - Use different models for different tasks. For example, run GPT-5-mini for large-context processing, then switch to Claude Opus 4.6 for reasoning tasks.
+- [**Mix and match models**](#mix-and-match-models): Use different models for different tasks. For example, run GPT-5-mini for large-context processing, then switch to Claude Opus 4.6 for reasoning tasks.
 
-- [**Model fallbacks**](#model-fallbacks) - If a provider experiences an outage, Mastra can automatically switch to another provider at the application level, minimizing latency compared to API gateways.
+- [**Model fallbacks**](#model-fallbacks): If a provider experiences an outage, Mastra can automatically switch to another provider at the application level, minimizing latency compared to API gateways.
 
 ## Basic usage
 
@@ -730,7 +772,7 @@ ${grouped.gateways.size > 3 ? `        <div className="text-sm text-gray-600 dar
 
 You can also discover models directly in your editor. Mastra provides full autocomplete for the \`model\` field - just start typing, and your IDE will show available options.
 
-Alternatively, browse and test models in [Studio](/docs/getting-started/studio) UI.
+Alternatively, browse and test models in [Studio](/docs/studio/overview) UI.
 
 :::info
 
@@ -873,6 +915,41 @@ const agent = new Agent({
 Mastra tries your primary model first. If it encounters a 500 error, rate limit, or timeout, it automatically switches to your first fallback. If that fails too, it moves to the next. Each model gets its own retry count before moving on.
 
 Your users never experience the disruption - the response comes back with the same format, just from a different model. The error context is preserved as the system moves through your fallback chain, ensuring clean error propagation while maintaining streaming compatibility.
+
+### Per-model settings
+
+Each fallback entry can carry its own \`modelSettings\`, \`providerOptions\`, and \`headers\` — useful when models in the chain need different temperatures or provider-specific knobs to produce comparable output.
+
+\`\`\`typescript title="src/mastra/agents/tuned-resilient-agent.ts"
+import { Agent } from '@mastra/core/agent';
+
+const agent = new Agent({
+  id: 'tuned-resilient',
+  name: 'Tuned Resilient Agent',
+  instructions: 'You are a helpful assistant.',
+  model: [
+    {
+      model: 'google/gemini-2.5-flash',
+      maxRetries: 2,
+      modelSettings: { temperature: 0.3 },
+      providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } },
+    },
+    {
+      model: 'openai/gpt-5-mini',
+      maxRetries: 2,
+      modelSettings: { temperature: 0.7 },
+      providerOptions: { openai: { reasoningEffort: 'low' } },
+    },
+  ],
+});
+\`\`\`
+
+**Precedence:**
+
+- \`modelSettings\` and \`providerOptions\`: per-fallback entry overrides call-time options, which override agent \`defaultOptions\`. \`modelSettings\` shallow-merges by key. \`providerOptions\` deep-merges recursively, so nested provider config (e.g. \`google.thinkingConfig\`) preserves sibling keys across layers.
+- \`headers\`: call-time \`modelSettings.headers\` overrides per-fallback \`headers\`, which overrides headers extracted from model-router models. Runtime headers (tracing, auth, tenancy) intentionally take precedence over model-level headers.
+
+Each field also accepts a function of \`requestContext\`, matching how dynamic models are resolved.
 
 ## Use local models with Mastra
 

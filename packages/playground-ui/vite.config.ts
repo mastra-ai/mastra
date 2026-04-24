@@ -1,8 +1,7 @@
 import { resolve } from 'node:path';
+import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import autoprefixer from 'autoprefixer';
 import nodeExternals from 'rollup-plugin-node-externals';
-import tailwindcss from 'tailwindcss';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import { libInjectCss } from 'vite-plugin-lib-inject-css';
@@ -10,6 +9,7 @@ import { libInjectCss } from 'vite-plugin-lib-inject-css';
 export default defineConfig({
   plugins: [
     react(),
+    tailwindcss(),
     dts({
       insertTypesEntry: true,
     }),
@@ -21,18 +21,12 @@ export default defineConfig({
       '@': resolve(__dirname, './src'),
     },
   },
-  css: {
-    postcss: {
-      plugins: [tailwindcss, autoprefixer],
-    },
-  },
   build: {
     lib: {
       entry: {
         index: resolve(__dirname, 'src/index.ts'),
         utils: resolve(__dirname, 'src/utils.ts'),
         tokens: resolve(__dirname, 'src/ds/tokens/index.ts'),
-        'tailwind.preset': resolve(__dirname, 'tailwind.preset.ts'),
       },
       formats: ['es', 'cjs'],
       fileName: (format, entryName) => {

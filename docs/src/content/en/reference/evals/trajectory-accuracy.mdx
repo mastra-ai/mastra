@@ -1,0 +1,825 @@
+---
+title: "Reference: Trajectory accuracy scorers | Evals"
+description: Documentation for the Trajectory Accuracy Scorers in Mastra, which evaluate whether an agent or workflow follows the expected sequence of actions.
+packages:
+  - "@mastra/evals"
+  - "@mastra/core"
+---
+
+# Trajectory accuracy scorers
+
+Mastra provides two trajectory accuracy scorers for evaluating whether an agent or workflow follows an expected sequence of actions:
+
+1. **Code-based scorer** - Deterministic evaluation using exact step matching and ordering
+1. **LLM-based scorer** - Semantic evaluation using AI to assess trajectory quality and appropriateness
+
+Both scorers work with agents and workflows. The `runEvals` pipeline automatically extracts trajectories, so scorers receive a `Trajectory` object directly.
+
+## Trajectory extraction
+
+The `runEvals` pipeline uses two extraction strategies, depending on whether observability storage is configured:
+
+### Trace-based extraction (preferred)
+
+When the target's `Mastra` instance has storage configured, the pipeline fetches the full execution trace from the observability store and calls `extractTrajectoryFromTrace()`. This produces a hierarchical trajectory with nested `children`, capturing the complete execution tree — including nested agent runs, tool calls within workflow steps, and model generations.
+
+For example, a workflow that calls an agent, which in turn calls tools, produces:
+
+```
+workflow_run
+  └─ workflow_step (validate-input)
+  └─ workflow_step (process-data)
+       └─ agent_run (my-agent)
+            └─ model_generation
+            └─ tool_call (search)
+            └─ model_generation
+            └─ tool_call (summarize)
+  └─ workflow_step (save-result)
+```
+
+### Fallback extraction
+
+When storage is not available, the pipeline falls back to:
+
+- **Agents:** `extractTrajectory()` — Extracts `ToolCallStep` entries from `toolInvocations` in the agent's message output. Produces a flat list of tool calls.
+- **Workflows:** `extractWorkflowTrajectory()` — Extracts `WorkflowStepStep` entries from `stepResults`. Produces a flat list of workflow steps.
+
+These fallbacks don't capture nested execution or non-tool-call spans.
+
+## Trajectory types
+
+Trajectory steps use a discriminated union on `stepType`. Each step type has specific properties:
+
+### `ToolCallStep`
+
+Represents an agent tool call.
+
+<PropertiesTable
+  content={[
+  { name: 'stepType', type: "'tool_call'", description: 'Discriminant.', required: true },
+  { name: 'name', type: 'string', description: 'Tool name.', required: true },
+  { name: 'toolArgs', type: 'Record<string, unknown>', description: 'Arguments passed to the tool.', isOptional: true },
+  {
+    name: 'toolResult',
+    type: 'Record<string, unknown>',
+    description: 'Result returned by the tool.',
+    isOptional: true,
+  },
+  { name: 'success', type: 'boolean', description: 'Whether the call succeeded.', isOptional: true },
+  { name: 'durationMs', type: 'number', description: 'Execution time in milliseconds.', isOptional: true },
+  { name: 'metadata', type: 'Record<string, unknown>', description: 'Arbitrary metadata.', isOptional: true },
+  { name: 'children', type: 'TrajectoryStep[]', description: 'Nested sub-steps.', isOptional: true },
+]}
+/>
+
+### `WorkflowStepStep`
+
+Represents a workflow step execution.
+
+<PropertiesTable
+  content={[
+  { name: 'stepType', type: "'workflow_step'", description: 'Discriminant.', required: true },
+  { name: 'name', type: 'string', description: 'Step identifier.', required: true },
+  { name: 'stepId', type: 'string', description: 'Step ID in the workflow.', isOptional: true },
+  {
+    name: 'status',
+    type: 'string',
+    description: 'Step result status (success, failed, suspended, etc.).',
+    isOptional: true,
+  },
+  { name: 'output', type: 'Record<string, unknown>', description: 'Step output data.', isOptional: true },
+  { name: 'durationMs', type: 'number', description: 'Execution time in milliseconds.', isOptional: true },
+  { name: 'metadata', type: 'Record<string, unknown>', description: 'Arbitrary metadata.', isOptional: true },
+  {
+    name: 'children',
+    type: 'TrajectoryStep[]',
+    description: 'Nested sub-steps (e.g. tool calls inside the step).',
+    isOptional: true,
+  },
+]}
+/>
+
+### Other step types
+
+The discriminated union includes these additional step types:
+
+| Step type | Key properties |
+| - | - |
+| `mcp_tool_call` | `toolArgs`, `toolResult`, `mcpServer`, `success` |
+| `model_generation` | `modelId`, `promptTokens`, `completionTokens`, `finishReason` |
+| `agent_run` | `agentId` |
+| `workflow_run` | `workflowId`, `status` |
+| `workflow_conditional` | `conditionCount`, `selectedSteps` |
+| `workflow_parallel` | `branchCount`, `parallelSteps` |
+| `workflow_loop` | `loopType`, `totalIterations` |
+| `workflow_sleep` | `durationMs`, `sleepType` |
+| `workflow_wait_event` | `eventName`, `eventReceived` |
+| `processor_run` | `processorId` |
+
+All step types share the base properties `name`, `durationMs`, `metadata`, and `children`.
+
+## Expected steps
+
+When defining expected trajectories, use `ExpectedStep` instead of the full `TrajectoryStep` discriminated union. `ExpectedStep` is a discriminated union that mirrors `TrajectoryStep` — when you specify a `stepType`, you get autocomplete for that variant's fields (e.g., `toolArgs` for `tool_call`, `modelId` for `model_generation`). All variant-specific fields are optional, so you only assert against what you care about.
+
+Omit `stepType` entirely to match any step by name only.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Step name to match (tool name, agent ID, workflow step name, etc.).',
+    required: true,
+  },
+  {
+    name: 'stepType',
+    type: 'TrajectoryStepType',
+    description:
+      "Step type discriminant. When set, enables autocomplete for that variant's fields. If omitted, matches any step type with the given name.",
+    isOptional: true,
+  },
+  {
+    name: '(variant fields)',
+    type: 'varies',
+    description:
+      'Type-specific fields from the corresponding TrajectoryStep variant. For example, `toolArgs` and `toolResult` for `tool_call`, `modelId` for `model_generation`, `output` for `workflow_step`. All optional — only specified fields are compared.',
+    isOptional: true,
+  },
+  {
+    name: 'children',
+    type: 'TrajectoryExpectation',
+    description:
+      "Nested expectation config for this step's children. Overrides the parent config for evaluating children of this step.",
+    isOptional: true,
+  },
+]}
+/>
+
+### Simple expected steps
+
+```typescript
+const steps: ExpectedStep[] = [
+  // Match by name only (any step type)
+  { name: 'search' },
+
+  // Match by name and step type (autocomplete for tool_call fields)
+  { name: 'search', stepType: 'tool_call' },
+
+  // Match with specific toolArgs (auto-compared when present)
+  { name: 'search', stepType: 'tool_call', toolArgs: { query: 'weather' } },
+
+  // Match a model generation step by model ID
+  { name: 'gpt-4o', stepType: 'model_generation', modelId: 'gpt-4o' },
+]
+```
+
+### Nested expectations
+
+Each expected step can include a `children` config with its own evaluation rules. This lets you set different ordering or comparison rules at each level of the hierarchy.
+
+```typescript
+const scorer = createTrajectoryScorerCode({
+  defaults: {
+    ordering: 'strict',
+    steps: [
+      { name: 'validate-input', stepType: 'workflow_step' },
+      {
+        name: 'research-agent',
+        stepType: 'agent_run',
+        children: {
+          // Sub-agent can call tools in any order
+          ordering: 'unordered',
+          steps: [
+            { name: 'search', stepType: 'tool_call' },
+            { name: 'summarize', stepType: 'tool_call' },
+          ],
+        },
+      },
+      { name: 'save-result', stepType: 'workflow_step' },
+    ],
+  },
+})
+```
+
+In this example, the parent workflow requires strict ordering of its steps, but the nested `research-agent` allows its tool calls in any order.
+
+## Choosing between scorers
+
+### Use the code-based scorer when:
+
+- You need **deterministic, reproducible** results
+- You have a **known expected trajectory** to compare against
+- You want to validate **exact step sequences**
+- Speed and cost are priorities (no LLM calls)
+- You are running automated tests in CI/CD
+
+### Use the LLM-based scorer when:
+
+- You need **semantic understanding** of whether steps were appropriate
+- The optimal trajectory is **not predetermined** (evaluate based on task requirements)
+- You want to detect **unnecessary, redundant, or missing** steps
+- You need **explanations** for scoring decisions
+- You are evaluating **production agent behavior**
+
+## Code-based trajectory accuracy scorer
+
+The `createTrajectoryAccuracyScorerCode()` function from `@mastra/evals/scorers/prebuilt` provides deterministic scoring based on step matching and ordering against an expected trajectory.
+
+### Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'expectedTrajectory',
+    type: 'Trajectory | ExpectedStep[]',
+    description:
+      'Static expected trajectory to compare against. Accepts a full Trajectory or an array of ExpectedStep matchers. When omitted, the scorer reads expectedTrajectory from each dataset item at runtime.',
+    isOptional: true,
+  },
+  {
+    name: 'comparisonOptions',
+    type: 'TrajectoryComparisonOptions',
+    description: 'Controls how the comparison is performed.',
+    isOptional: true,
+    properties: [
+      {
+        name: 'strictOrder',
+        type: 'boolean',
+        description:
+          'Requires exact match of trajectory (same steps in same order, no extra steps). When false, allows additional steps as long as expected steps appear in order.',
+        isOptional: true,
+        defaultValue: 'false',
+      },
+      {
+        name: 'allowRepeatedSteps',
+        type: 'boolean',
+        description: 'Whether to allow repeated steps in the trajectory without penalty.',
+        isOptional: true,
+        defaultValue: 'true',
+      },
+    ],
+  },
+]}
+/>
+
+This function returns an instance of the MastraScorer class. See the [MastraScorer reference](./mastra-scorer) for details on the `.run()` method and its input/output.
+
+### Expected trajectory sources
+
+The code-based scorer resolves `expectedTrajectory` from two sources, in order of priority:
+
+1. **Constructor option** — A static trajectory passed when creating the scorer. Used for all dataset items.
+1. **Dataset item** — An `expectedTrajectory` field on the dataset item, passed through the `runEvals` pipeline. Allows different expected trajectories per item.
+
+```typescript title="src/static-expected.ts"
+// Static: same expected trajectory for all items
+const scorer = createTrajectoryAccuracyScorerCode({
+  expectedTrajectory: {
+    steps: [
+      { stepType: 'tool_call', name: 'search' },
+      { stepType: 'tool_call', name: 'summarize' },
+    ],
+  },
+})
+```
+
+```typescript title="src/per-item-expected.ts"
+// Per-item: each dataset item has its own expectedTrajectory
+const scorer = createTrajectoryAccuracyScorerCode()
+
+await runEvals({
+  target: myAgent,
+  scorers: { trajectory: [scorer] },
+  data: [
+    {
+      input: 'Search and summarize weather',
+      expectedTrajectory: {
+        steps: [
+          { stepType: 'tool_call', name: 'search' },
+          { stepType: 'tool_call', name: 'summarize' },
+        ],
+      },
+    },
+    {
+      input: 'Just search for weather',
+      expectedTrajectory: {
+        steps: [{ stepType: 'tool_call', name: 'search' }],
+      },
+    },
+  ],
+})
+```
+
+### Evaluation modes
+
+The code-based scorer operates in two modes based on `strictOrder`:
+
+#### Strict mode (`strictOrder: true`)
+
+Requires an exact match. The actual steps must match the expected steps in the same order with no extra or missing steps. Returns `1.0` for an exact match and `0.0` otherwise.
+
+#### Relaxed mode (`strictOrder: false`, default)
+
+Allows extra steps. Expected steps must appear in the correct relative order. The score is calculated based on how many expected steps were matched, with optional penalties for extra or repeated steps.
+
+## Code-based scoring details
+
+- **Continuous scores**: Returns values between 0.0 and 1.0 in relaxed mode; binary (0 or 1) in strict mode
+- **Deterministic**: Same input always produces the same output
+- **Fast**: No external API calls
+
+### Code-based scorer results
+
+```typescript prettier:false
+{
+  runId: string,
+  preprocessStepResult: {
+    actualTrajectory: Trajectory,
+    expectedTrajectory: Trajectory,
+    comparison: {
+      score: number,
+      matchedSteps: number,
+      totalExpectedSteps: number,
+      totalActualSteps: number,
+      missingSteps: string[],
+      extraSteps: string[],
+      outOfOrderSteps: string[],
+      repeatedSteps: string[]
+    },
+    actualStepNames: string[],
+    expectedStepNames: string[]
+  },
+  score: number
+}
+```
+
+## Code-based scorer examples
+
+### Agent trajectory with strict ordering
+
+Validates that an agent follows an exact sequence of tool calls:
+
+```typescript title="src/example-strict-trajectory.ts"
+import { createTrajectoryAccuracyScorerCode } from '@mastra/evals/scorers/prebuilt'
+import { runEvals } from '@mastra/core/evals'
+
+const scorer = createTrajectoryAccuracyScorerCode({
+  expectedTrajectory: {
+    steps: [
+      { stepType: 'tool_call', name: 'auth-tool' },
+      { stepType: 'tool_call', name: 'fetch-tool' },
+    ],
+  },
+  comparisonOptions: { strictOrder: true },
+})
+
+const result = await runEvals({
+  target: myAgent,
+  scorers: { trajectory: [scorer] },
+  data: [{ input: 'Get my data' }],
+})
+
+console.log(result.scores.trajectory['trajectory-accuracy']) // 1.0
+```
+
+### Agent trajectory with relaxed ordering
+
+Allows extra steps as long as expected steps appear in the correct relative order:
+
+```typescript title="src/example-relaxed-trajectory.ts"
+const scorer = createTrajectoryAccuracyScorerCode({
+  expectedTrajectory: {
+    steps: [
+      { stepType: 'tool_call', name: 'search-tool' },
+      { stepType: 'tool_call', name: 'summarize-tool' },
+    ],
+  },
+  comparisonOptions: { strictOrder: false },
+})
+
+// Agent called search-tool → log-tool → summarize-tool
+// The extra log-tool is allowed in relaxed mode
+// score: 0.75 — all expected steps matched, small penalty for extra step
+```
+
+### Workflow trajectory
+
+Evaluates a workflow's execution path:
+
+```typescript title="src/example-workflow-trajectory.ts"
+import { createTrajectoryAccuracyScorerCode } from '@mastra/evals/scorers/prebuilt'
+import { runEvals } from '@mastra/core/evals'
+
+const scorer = createTrajectoryAccuracyScorerCode({
+  expectedTrajectory: {
+    steps: [
+      { stepType: 'workflow_step', name: 'validate-input' },
+      { stepType: 'workflow_step', name: 'process-data' },
+      { stepType: 'workflow_step', name: 'save-result' },
+    ],
+  },
+})
+
+const result = await runEvals({
+  target: myWorkflow,
+  scorers: { trajectory: [scorer] },
+  data: [{ input: { data: 'test' } }],
+})
+
+console.log(result.scores.trajectory['trajectory-accuracy'])
+```
+
+### Comparing step data
+
+Validates not just the step names but also step-specific data. For tool calls, this compares `toolArgs` and `toolResult`. For workflow steps, this compares `output`.
+
+```typescript title="src/example-trajectory-with-data.ts"
+const scorer = createTrajectoryAccuracyScorerCode({
+  expectedTrajectory: {
+    steps: [
+      {
+        stepType: 'tool_call',
+        name: 'search-tool',
+        toolArgs: { query: 'weather in NYC' },
+      },
+    ],
+  },
+})
+// Data fields like toolArgs are auto-compared when present on expected steps
+```
+
+## LLM-based trajectory accuracy scorer
+
+The `createTrajectoryAccuracyScorerLLM()` function from `@mastra/evals/scorers/prebuilt` uses an LLM to evaluate whether an agent's or workflow's trajectory was appropriate, efficient, and complete.
+
+### Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'model',
+    type: 'MastraModelConfig',
+    description: 'The LLM model to use for evaluating trajectory quality.',
+    required: true,
+  },
+  {
+    name: 'expectedTrajectory',
+    type: 'Trajectory | ExpectedStep[]',
+    description:
+      'Optional static expected trajectory to compare against. Accepts a full Trajectory or an array of ExpectedStep matchers. When omitted, the LLM evaluates the trajectory based on the task requirements alone. Can also come from dataset items at runtime.',
+    isOptional: true,
+  },
+]}
+/>
+
+### Features
+
+The LLM-based scorer provides:
+
+- **Task-aware evaluation**: Assesses whether each step was necessary given the user's request
+- **Ordering assessment**: Evaluates whether steps were taken in a logical order
+- **Missing step detection**: Identifies steps that should have been taken
+- **Redundancy detection**: Flags unnecessary or repeated steps
+- **Reasoning generation**: Provides human-readable explanations for scoring decisions
+
+### Evaluation process
+
+1. **Receive trajectory**: Gets a pre-extracted `Trajectory` object from the pipeline
+1. **Analyze steps**: Evaluates each step for necessity and ordering using the LLM
+1. **Generate score**: Calculates score weighted as 60% necessity, 30% ordering, minus 10% missing penalty
+1. **Generate reasoning**: Provides a human-readable explanation
+
+## LLM-based scoring details
+
+- **Fractional scores**: Returns values between 0.0 and 1.0
+- **Context-aware**: Considers user intent and task requirements
+- **Explanatory**: Provides reasoning for scores
+- **Flexible**: Works with or without an expected trajectory
+
+### LLM-based scorer options
+
+```typescript
+// Evaluate based on task requirements (no expected trajectory)
+const openScorer = createTrajectoryAccuracyScorerLLM({
+  model: { provider: 'openai', name: 'gpt-5.4' },
+})
+
+// Evaluate against a static expected trajectory
+const guidedScorer = createTrajectoryAccuracyScorerLLM({
+  model: { provider: 'openai', name: 'gpt-5.4' },
+  expectedTrajectory: {
+    steps: [
+      { stepType: 'tool_call', name: 'search-tool' },
+      { stepType: 'tool_call', name: 'summarize-tool' },
+    ],
+  },
+})
+```
+
+### LLM-based scorer results
+
+```typescript prettier:false
+{
+  runId: string,
+  preprocessStepResult: {
+    actualTrajectory: Trajectory,
+    actualTrajectoryFormatted: string,
+    expectedTrajectoryFormatted?: string,
+    hasSteps: boolean
+  },
+  analyzeStepResult: {
+    stepEvaluations: Array<{
+      stepName: string,
+      wasNecessary: boolean,
+      wasInOrder: boolean,
+      reasoning: string
+    }>,
+    missingSteps?: string[],
+    extraSteps?: string[],
+    overallAssessment: string
+  },
+  score: number,
+  reason: string
+}
+```
+
+## Unified trajectory scorer
+
+The `createTrajectoryScorerCode()` function from `@mastra/evals/scorers/prebuilt` provides a multi-dimensional trajectory evaluation that checks accuracy, efficiency, blacklisted tools, and tool failure patterns in a single pass.
+
+### Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'defaults',
+    type: 'TrajectoryExpectation',
+    description:
+      'Default expectations applied to all dataset items. Per-item expectedTrajectory values override these defaults.',
+    isOptional: true,
+    properties: [
+      {
+        name: 'steps',
+        type: 'ExpectedStep[]',
+        description: 'Expected steps for accuracy scoring. See [Expected steps](#expected-steps).',
+        isOptional: true,
+      },
+      {
+        name: 'ordering',
+        type: "'strict' | 'relaxed' | 'unordered'",
+        description:
+          "How step ordering is evaluated. 'strict' requires exact match, 'relaxed' (default) allows extra steps, 'unordered' only checks presence.",
+        isOptional: true,
+        defaultValue: "'relaxed'",
+      },
+      {
+        name: 'allowRepeatedSteps',
+        type: 'boolean',
+        description: 'Whether to allow repeated steps without penalty.',
+        isOptional: true,
+        defaultValue: 'true',
+      },
+      {
+        name: 'maxSteps',
+        type: 'number',
+        description: 'Maximum allowed number of steps. Steps beyond this budget reduce the efficiency score.',
+        isOptional: true,
+      },
+      {
+        name: 'maxTotalTokens',
+        type: 'number',
+        description: 'Maximum total tokens across model_generation steps.',
+        isOptional: true,
+      },
+      {
+        name: 'maxTotalDurationMs',
+        type: 'number',
+        description: 'Maximum total duration across all steps.',
+        isOptional: true,
+      },
+      {
+        name: 'noRedundantCalls',
+        type: 'boolean',
+        description: 'Whether to penalize redundant calls (same tool with same args).',
+        isOptional: true,
+        defaultValue: 'true',
+      },
+      {
+        name: 'blacklistedTools',
+        type: 'string[]',
+        description: 'Tools that must not be called. Presence of any blacklisted tool results in a score of 0.',
+        isOptional: true,
+      },
+      {
+        name: 'blacklistedSequences',
+        type: 'string[][]',
+        description:
+          'Sequences of tool names that must not appear in order. Any matching sequence results in a score of 0.',
+        isOptional: true,
+      },
+      {
+        name: 'maxRetriesPerTool',
+        type: 'number',
+        description: 'Maximum retries per tool before flagging as a failure pattern.',
+        isOptional: true,
+        defaultValue: '2',
+      },
+    ],
+  },
+  {
+    name: 'weights',
+    type: 'TrajectoryScoreWeights',
+    description: 'Custom weights for combining dimension scores. Weights are normalized to sum to 1.0.',
+    isOptional: true,
+    properties: [
+      {
+        name: 'accuracy',
+        type: 'number',
+        description: 'Weight for accuracy scoring.',
+        isOptional: true,
+        defaultValue: '0.4',
+      },
+      {
+        name: 'efficiency',
+        type: 'number',
+        description: 'Weight for efficiency scoring.',
+        isOptional: true,
+        defaultValue: '0.3',
+      },
+      {
+        name: 'toolFailures',
+        type: 'number',
+        description: 'Weight for tool failure analysis.',
+        isOptional: true,
+        defaultValue: '0.2',
+      },
+      {
+        name: 'blacklist',
+        type: 'number',
+        description: 'Weight for blacklist scoring (when no violations occur).',
+        isOptional: true,
+        defaultValue: '0.1',
+      },
+    ],
+  },
+]}
+/>
+
+### Scoring behavior
+
+The unified scorer evaluates four dimensions:
+
+1. **Accuracy** — Matches actual steps against expected steps (if `steps` is configured). Uses the `ordering` mode.
+1. **Efficiency** — Checks step budgets (`maxSteps`, `maxTotalTokens`, `maxTotalDurationMs`) and redundant calls (`noRedundantCalls`).
+1. **Blacklist** — Checks for forbidden tools or sequences. Any violation immediately results in a score of **0.0** regardless of other dimensions.
+1. **Tool failures** — Detects retry patterns, fallback patterns, and argument correction patterns.
+
+The final score is a weighted combination of active dimensions, normalized by which dimensions are active. Default weights are accuracy 0.4, efficiency 0.3, tool failures 0.2, blacklist 0.1, but you can customize them via the `weights` option. Blacklist violations override everything to 0. When nested evaluations are present, the score is 70% top-level and 30% nested average.
+
+### Unified scorer results
+
+```typescript prettier:false
+{
+  runId: string,
+  preprocessStepResult: {
+    accuracy?: TrajectoryComparisonResult,
+    efficiency?: TrajectoryEfficiencyResult,
+    blacklist?: TrajectoryBlacklistResult,
+    toolFailures?: ToolFailureAnalysisResult,
+    nested?: NestedEvaluationResult[],
+  },
+  score: number,
+  reason: string
+}
+```
+
+### Per-item expectations
+
+Each dataset item can override the defaults with its own `expectedTrajectory`. This lets you vary expectations per prompt:
+
+```typescript title="src/unified-per-item.ts"
+import { createTrajectoryScorerCode } from '@mastra/evals/scorers/prebuilt'
+import { runEvals } from '@mastra/core/evals'
+
+// Default blacklist applies to all items
+const scorer = createTrajectoryScorerCode({
+  defaults: {
+    blacklistedTools: ['deleteAll'],
+    maxSteps: 5,
+  },
+})
+
+const result = await runEvals({
+  target: myAgent,
+  scorers: { trajectory: [scorer] },
+  data: [
+    {
+      input: 'Search for weather',
+      expectedTrajectory: {
+        steps: [{ stepType: 'tool_call', name: 'search' }],
+        maxSteps: 2,
+      },
+    },
+    {
+      input: 'Search and summarize',
+      expectedTrajectory: {
+        steps: [
+          { stepType: 'tool_call', name: 'search' },
+          { stepType: 'tool_call', name: 'summarize' },
+        ],
+      },
+    },
+  ],
+})
+```
+
+### Example: efficiency and blacklist
+
+```typescript title="src/unified-scorer.ts"
+import { createTrajectoryScorerCode } from '@mastra/evals/scorers/prebuilt'
+
+const scorer = createTrajectoryScorerCode({
+  defaults: {
+    blacklistedTools: ['escalate', 'admin-override'],
+    blacklistedSequences: [['escalate', 'admin-override']],
+    maxSteps: 10,
+    noRedundantCalls: true,
+    maxRetriesPerTool: 2,
+  },
+  // Customize how dimensions contribute to the final score
+  weights: {
+    accuracy: 0.5, // prioritize step accuracy
+    efficiency: 0.3,
+    toolFailures: 0.1,
+    blacklist: 0.1,
+  },
+})
+```
+
+## Using trajectory scorers with `runEvals`
+
+Trajectory scorers are configured under the `trajectory` key in the scorer config. The `runEvals` pipeline handles trajectory extraction automatically.
+
+### Agent trajectory evaluation
+
+```typescript title="src/agent-trajectory-eval.ts"
+import { runEvals } from '@mastra/core/evals'
+import { createTrajectoryAccuracyScorerCode } from '@mastra/evals/scorers/prebuilt'
+
+const trajectoryScorer = createTrajectoryAccuracyScorerCode({
+  expectedTrajectory: {
+    steps: [
+      { stepType: 'tool_call', name: 'search' },
+      { stepType: 'tool_call', name: 'format' },
+    ],
+  },
+})
+
+const result = await runEvals({
+  target: myAgent,
+  scorers: {
+    agent: [qualityScorer], // receives raw MastraDBMessage[] output
+    trajectory: [trajectoryScorer], // receives pre-extracted Trajectory
+  },
+  data: [{ input: 'Find and format the data' }],
+})
+
+// result.scores.agent['quality'] — agent-level score
+// result.scores.trajectory['trajectory-accuracy'] — trajectory score
+```
+
+### Workflow trajectory evaluation
+
+```typescript title="src/workflow-trajectory-eval.ts"
+import { runEvals } from '@mastra/core/evals'
+import { createTrajectoryAccuracyScorerCode } from '@mastra/evals/scorers/prebuilt'
+
+const workflowTrajectoryScorer = createTrajectoryAccuracyScorerCode({
+  expectedTrajectory: {
+    steps: [
+      { stepType: 'workflow_step', name: 'validate' },
+      { stepType: 'workflow_step', name: 'process' },
+      { stepType: 'workflow_step', name: 'notify' },
+    ],
+  },
+})
+
+const result = await runEvals({
+  target: myWorkflow,
+  scorers: {
+    workflow: [outputScorer], // receives workflow output
+    trajectory: [workflowTrajectoryScorer], // receives pre-extracted Trajectory from step results
+  },
+  data: [{ input: { userId: '123' } }],
+})
+
+// result.scores.workflow['output-quality'] — workflow-level score
+// result.scores.trajectory['trajectory-accuracy'] — trajectory score
+```
+
+## Related
+
+- [runEvals reference](./run-evals): Pipeline that extracts trajectories and passes them to scorers
+- [MastraScorer reference](./mastra-scorer): Base scorer interface
+- [Scorer utils](./scorer-utils): Utility functions including `extractTrajectory` and `compareTrajectories`

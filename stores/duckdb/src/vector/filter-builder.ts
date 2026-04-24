@@ -1,5 +1,6 @@
-import type { DuckDBVectorFilter } from './types.js';
+import type { DuckDBVectorFilter } from './types';
 
+/** Result of building a SQL filter: a WHERE clause fragment and bound parameters. */
 export interface FilterResult {
   clause: string;
   params: unknown[];

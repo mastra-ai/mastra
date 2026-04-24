@@ -71,8 +71,9 @@ await harness.sendMessage({ content: 'Hello!' })
   },
   {
     name: 'stateSchema',
-    type: 'z.ZodObject',
-    description: 'Zod schema defining the shape of harness state. Used for validation and extracting defaults.',
+    type: 'StandardJSONSchemaV1',
+    description:
+      'Standard JSON Schema defining the shape of harness state. Used for validation and extracting defaults.',
     isOptional: true,
   },
   {
@@ -235,6 +236,13 @@ await harness.sendMessage({ content: 'Hello!' })
     name: 'omConfig',
     type: 'HarnessOMConfig',
     description: 'Default configuration for observational memory (observer/reflector model IDs and thresholds).',
+    isOptional: true,
+  },
+  {
+    name: 'disableBuiltinTools',
+    type: 'BuiltinToolId[]',
+    description:
+      'Built-in harness tool IDs to remove from the `harnessBuiltIn` toolset. Valid values are `ask_user`, `submit_plan`, `task_write`, `task_check`, and `subagent`.',
     isOptional: true,
   },
   {
@@ -639,6 +647,12 @@ Respond to a pending question from the `ask_user` built-in tool.
 harness.respondToQuestion({ questionId: 'q-123', answer: 'Yes, proceed with the refactor' })
 ```
 
+For multi-select questions, pass the selected option labels as a string array.
+
+```typescript
+harness.respondToQuestion({ questionId: 'q-123', answer: ['Add tests', 'Update docs'] })
+```
+
 #### `respondToPlanApproval({ planId, response })`
 
 Respond to a pending plan approval from the `submit_plan` built-in tool. The `response` object contains `action` (`'approved'` or `'rejected'`) and an optional `feedback` string.
@@ -913,7 +927,7 @@ The harness emits events through registered listeners. The following table lists
 | `om_observation_end` | An observation completed. |
 | `om_reflection_start` | A reflection started. |
 | `om_reflection_end` | A reflection completed. |
-| `ask_question` | The agent asked a question via the `ask_user` tool. |
+| `ask_question` | The agent asked a question via the `ask_user` tool. Includes optional choices and a selection mode. |
 | `plan_approval_required` | The agent submitted a plan for approval via the `submit_plan` tool. |
 | `plan_approved` | A plan was approved. |
 | `subagent_start` | A subagent started processing. |
@@ -930,8 +944,25 @@ The harness provides built-in tools to agents in every mode:
 
 | Tool | Description |
 | - | - |
-| `ask_user` | Ask the user a question and wait for their response. |
+| `ask_user` | Ask the user a question and wait for their response. Supports free text, single-select choices, and multi-select choices. |
 | `submit_plan` | Submit a plan for user review and approval. |
 | `task_write` | Create or update a structured task list for tracking progress. |
 | `task_check` | Check the completion status of the current task list. |
 | `subagent` | Spawn a focused subagent with constrained tools (only available when `subagents` is configured). |
+
+### `ask_user` selections
+
+The `ask_user` tool accepts `options` for choice prompts. Set `selectionMode` to `single_select` to let the user pick one option, or `multi_select` to let the user pick multiple options. When `options` are provided and `selectionMode` is omitted, the prompt defaults to `single_select`. Omit `options` for free-text questions.
+
+The following example demonstrates a multi-select response handler. The UI reads `event.selectionMode`, lets the user choose multiple options, then returns a string array with `respondToQuestion()`.
+
+```typescript
+harness.subscribe(event => {
+  if (event.type === 'ask_question' && event.selectionMode === 'multi_select') {
+    harness.respondToQuestion({
+      questionId: event.questionId,
+      answer: ['Add tests', 'Update docs'],
+    })
+  }
+})
+```

@@ -42,6 +42,9 @@ export async function handleResourceCommand(ctx: SlashCommandContext, args: stri
     state.chatContainer.clear();
     state.pendingTools.clear();
     state.allToolComponents = [];
+    state.allSystemReminderComponents = [];
+    state.messageComponentsById.clear();
+    state.allShellComponents = [];
     state.pendingNewThread = false;
     await ctx.renderExistingMessages();
     ctx.showInfo(
@@ -53,6 +56,9 @@ export async function handleResourceCommand(ctx: SlashCommandContext, args: stri
     state.chatContainer.clear();
     state.pendingTools.clear();
     state.allToolComponents = [];
+    state.allSystemReminderComponents = [];
+    state.messageComponentsById.clear();
+    state.allShellComponents = [];
     state.pendingNewThread = true;
     ctx.showInfo(
       sub === 'reset'

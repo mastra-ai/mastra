@@ -20,6 +20,8 @@ import { z } from 'zod/v4';
 import { Agent } from '../../agent';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
+import type { Processor } from '../../processors';
+import { ProcessorStepSchema } from '../../processors/step-schema';
 import { MockStore } from '../../storage/mock';
 import { createTool } from '../../tools/tool';
 import { createStep, createWorkflow } from '.';
@@ -317,6 +319,95 @@ describe('Workflow (Evented Engine Specific)', () => {
     vi.resetAllMocks();
     const workflowsStore = await testStorage.getStore('workflows');
     await workflowsStore?.dangerouslyClearAll();
+  });
+
+  it('should preserve processorStates across nested processor workflows', async () => {
+    const trackingProcessor: Processor = {
+      id: 'tracking-processor',
+      async processInput({ messages, state }) {
+        state['messageCount'] = messages.length;
+        return messages;
+      },
+    };
+
+    const nestedPassthroughProcessor: Processor = {
+      id: 'nested-passthrough-processor',
+      async processInput({ messages }) {
+        return messages;
+      },
+    };
+
+    const nestedProcessorWorkflow = createWorkflow({
+      id: 'nested-processor-workflow',
+      inputSchema: ProcessorStepSchema,
+      outputSchema: ProcessorStepSchema,
+      type: 'processor',
+      options: {
+        validateInputs: false,
+      },
+    })
+      .then(createStep(nestedPassthroughProcessor))
+      .commit();
+
+    const parentProcessorWorkflow = createWorkflow({
+      id: 'parent-processor-workflow',
+      inputSchema: ProcessorStepSchema,
+      outputSchema: ProcessorStepSchema,
+      type: 'processor',
+      options: {
+        validateInputs: false,
+      },
+    })
+      .then(nestedProcessorWorkflow)
+      .then(createStep(trackingProcessor))
+      .commit();
+
+    const processorStates = new Map();
+    const mockMessageList = {
+      get: {
+        all: { db: () => [] },
+        input: { db: () => [] },
+        response: { db: () => [] },
+      },
+      add: vi.fn(),
+      addSystem: vi.fn(),
+      removeByIds: vi.fn(),
+      startRecording: vi.fn(),
+      stopRecording: vi.fn(() => []),
+      makeMessageSourceChecker: vi.fn(() => ({ getSource: () => 'input' })),
+      getAllSystemMessages: vi.fn(() => []),
+    } as any;
+
+    const mastra = new Mastra({
+      workflows: { 'parent-processor-workflow': parentProcessorWorkflow },
+      storage: testStorage,
+      pubsub: new EventEmitterPubSub(),
+    });
+    await mastra.startEventEngine();
+
+    try {
+      const run = await parentProcessorWorkflow.createRun();
+      const result = await run.start({
+        inputData: {
+          phase: 'input',
+          messages: [
+            {
+              id: 'message-1',
+              role: 'user',
+              createdAt: new Date(),
+              content: { format: 2, parts: [{ type: 'text', text: 'hello' }] },
+            },
+          ],
+          messageList: mockMessageList,
+          processorStates,
+        } as any,
+      });
+
+      expect(result.status).toBe('success');
+      expect((processorStates.get('tracking-processor') as any)?.customState).toEqual({ messageCount: 1 });
+    } finally {
+      await mastra.stopEventEngine();
+    }
   });
 
   // Note: Streaming Legacy tests removed - they duplicated Streaming tests.

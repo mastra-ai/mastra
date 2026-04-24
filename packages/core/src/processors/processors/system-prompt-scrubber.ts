@@ -8,8 +8,10 @@ import type { PublicSchema } from '../../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
+import { selectMessagesToCheck } from './message-selection';
+import type { LastMessageOnlyOption } from './message-selection';
 
-export interface SystemPromptScrubberOptions {
+export interface SystemPromptScrubberOptions extends LastMessageOnlyOption {
   /** Strategy to use when system prompts are detected: 'block' | 'warn' | 'filter' | 'redact' */
   strategy?: 'block' | 'warn' | 'filter' | 'redact';
   /** Custom patterns to detect system prompts (regex strings) */
@@ -71,6 +73,7 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
   private placeholderText: string;
   private model: MastraModelConfig;
   private detectionAgent: Agent;
+  private lastMessageOnly: boolean;
   private structuredOutputOptions?: SystemPromptScrubberOptions['structuredOutputOptions'];
 
   constructor(options: SystemPromptScrubberOptions) {
@@ -83,6 +86,7 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
     this.includeDetections = options.includeDetections || false;
     this.redactionMethod = options.redactionMethod || 'mask';
     this.placeholderText = options.placeholderText || '[SYSTEM_PROMPT]';
+    this.lastMessageOnly = options.lastMessageOnly ?? false;
     this.structuredOutputOptions = options.structuredOutputOptions;
 
     // Initialize instructions after customPatterns is set
@@ -182,8 +186,14 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
   } & Partial<ObservabilityContext>): Promise<MastraDBMessage[]> {
     const observabilityContext = resolveObservabilityContext(rest);
     const processedMessages: MastraDBMessage[] = [];
+    const messagesToCheck = selectMessagesToCheck(messages, this.lastMessageOnly);
+    const checkedMessageIds = new Set(messagesToCheck.map(message => message.id));
 
     for (const message of messages) {
+      if (!checkedMessageIds.has(message.id)) {
+        processedMessages.push(message);
+        continue;
+      }
       if (message.role !== 'assistant' || !message.content?.parts) {
         processedMessages.push(message);
         continue;

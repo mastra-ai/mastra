@@ -140,6 +140,24 @@ describe('ModerationProcessor', () => {
       expect(mockAbort).not.toHaveBeenCalled();
     });
 
+    it('should only moderate the last message when lastMessageOnly is enabled', async () => {
+      const model = setupMockModel({ object: createMockModerationResult(true, ['violence']) });
+      const moderator = new ModerationProcessor({
+        model,
+        strategy: 'filter',
+        lastMessageOnly: true,
+      });
+
+      const messages = [
+        createTestMessage('This earlier message would have been checked before', 'user', 'msg1'),
+        createTestMessage('Flag this violent content', 'user', 'msg2'),
+      ];
+
+      const result = await moderator.processInput({ messages, abort: vi.fn() as any });
+
+      expect(result).toEqual([messages[0]]);
+    });
+
     it('should abort when content is flagged with block strategy', async () => {
       const model = setupMockModel({ object: createMockModerationResult(true, ['hate', 'harassment']) });
       const moderator = new ModerationProcessor({

@@ -15,6 +15,7 @@ import {
 import type {
   Experiment,
   ExperimentResult,
+  ExperimentReviewCounts,
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
@@ -44,6 +45,17 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
     await this.#db.createTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
+    });
+    // Add columns introduced after initial schema for backwards compatibility
+    await this.#db.alterTable({
+      tableName: TABLE_EXPERIMENTS,
+      schema: EXPERIMENTS_SCHEMA,
+      ifNotExists: ['agentVersion'],
+    });
+    await this.#db.alterTable({
+      tableName: TABLE_EXPERIMENT_RESULTS,
+      schema: EXPERIMENT_RESULTS_SCHEMA,
+      ifNotExists: ['status', 'tags'],
     });
 
     // Indexes — idempotent, safe to run on every init
@@ -285,6 +297,22 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         conditions.push('datasetId = ?');
         queryParams.push(args.datasetId);
       }
+      if (args.targetType) {
+        conditions.push('targetType = ?');
+        queryParams.push(args.targetType);
+      }
+      if (args.targetId) {
+        conditions.push('targetId = ?');
+        queryParams.push(args.targetId);
+      }
+      if (args.agentVersion) {
+        conditions.push('agentVersion = ?');
+        queryParams.push(args.agentVersion);
+      }
+      if (args.status) {
+        conditions.push('status = ?');
+        queryParams.push(args.status);
+      }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -510,6 +538,15 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       const conditions: string[] = ['experimentId = ?'];
       const queryParams: InValue[] = [args.experimentId];
 
+      if (args.traceId) {
+        conditions.push('traceId = ?');
+        queryParams.push(args.traceId);
+      }
+      if (args.status) {
+        conditions.push('status = ?');
+        queryParams.push(args.status);
+      }
+
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
       // Get total count
@@ -567,6 +604,39 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'DELETE_EXPERIMENT_RESULTS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async getReviewSummary(): Promise<ExperimentReviewCounts[]> {
+    try {
+      const result = await this.#client.execute({
+        sql: `SELECT
+          "experimentId",
+          COUNT(*) as total,
+          SUM(CASE WHEN status = 'needs-review' THEN 1 ELSE 0 END) as "needsReview",
+          SUM(CASE WHEN status = 'reviewed' THEN 1 ELSE 0 END) as reviewed,
+          SUM(CASE WHEN status = 'complete' THEN 1 ELSE 0 END) as complete
+        FROM ${TABLE_EXPERIMENT_RESULTS}
+        GROUP BY "experimentId"`,
+        args: [],
+      });
+
+      return (result.rows ?? []).map(row => ({
+        experimentId: row.experimentId as string,
+        total: Number(row.total ?? 0),
+        needsReview: Number(row.needsReview ?? 0),
+        reviewed: Number(row.reviewed ?? 0),
+        complete: Number(row.complete ?? 0),
+      }));
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'GET_REVIEW_SUMMARY', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

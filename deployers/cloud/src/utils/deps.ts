@@ -90,7 +90,7 @@ export async function installNodeVersion({ path }: { path: string }) {
 
 export async function installDeps({ path, pm }: { path: string; pm?: string }) {
   pm = pm ?? detectPm({ path });
-  logger.info(`Installing dependencies with ${pm} in ${path}`);
+  logger.info('Installing dependencies', { pm, path });
   // --force is needed to install peer deps for external packages in the mastra output directory
   // --legacy-peer-deps=false is needed to override other overrides by the repo package manager such as pnpm. Pnpm would set it to true
   const args = ['install', '--legacy-peer-deps=false', '--force'];
@@ -108,7 +108,7 @@ export async function installDeps({ path, pm }: { path: string; pm?: string }) {
 }
 
 export async function runInstallCommand({ path, installCommand }: { path: string; installCommand: string }) {
-  logger.info(`Running install command ${installCommand} in workspace with ${path}`);
+  logger.info('Running install command', { command: installCommand, path });
   const { success, error } = await runWithExeca({ cmd: 'sh', args: ['-c', installCommand], cwd: path });
   if (!success) {
     throw new MastraError(
@@ -124,7 +124,7 @@ export async function runInstallCommand({ path, installCommand }: { path: string
 
 export async function runScript({ scriptName, path, args }: { scriptName: string; path: string; args?: string[] }) {
   const pm = detectPm({ path });
-  logger.info(`Running script ${scriptName} in workspace with ${pm}`);
+  logger.info('Running script', { script: scriptName, pm });
   const { success, error } = await runWithExeca({
     cmd: pm,
     args: pm === 'npm' ? ['run', scriptName, ...(args ?? [])] : [scriptName, ...(args ?? [])],
@@ -143,7 +143,7 @@ export async function runScript({ scriptName, path, args }: { scriptName: string
 }
 
 export async function runBuildCommand({ command, path }: { command: string; path: string }) {
-  logger.info(`Running build command ${command}`);
+  logger.info('Running build command', { command });
   const { success, error } = await runWithExeca({ cmd: 'sh', args: ['-c', command], cwd: path });
   if (!success) {
     throw new MastraError(

@@ -1,4 +1,4 @@
-import type { HarnessThread } from '@mastra/core/harness';
+import type { HarnessMessage, HarnessThread } from '@mastra/core/harness';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleThreadsCommand } from '../threads.js';
 import type { SlashCommandContext } from '../types.js';
@@ -45,6 +45,15 @@ function createThread(id: string, updatedAtIso: string): HarnessThread {
   };
 }
 
+function createMessage(id: string, text: string): HarnessMessage {
+  return {
+    id,
+    role: 'user',
+    createdAt: new Date('2026-03-17T15:00:00.000Z'),
+    content: [{ type: 'text', text }],
+  };
+}
+
 function createContext(threads: HarnessThread[]) {
   const showOverlay = vi.fn();
   const state = {
@@ -81,7 +90,7 @@ function createContext(threads: HarnessThread[]) {
   return { ctx, state, showOverlay };
 }
 
-describe('handleThreadsCommand preview cache invalidation', () => {
+describe('handleThreadsCommand thread listing', () => {
   beforeEach(() => {
     selectorInstances.length = 0;
   });
@@ -125,6 +134,39 @@ describe('handleThreadsCommand preview cache invalidation', () => {
     expect(selector.options.initialMessagePreviews.get('thread-1')).toBe('Fresh preview');
     expect(state.threadPreviewCache.get('thread-1')?.preview).toBe('Fresh preview');
     expect(state.attemptedThreadPreviewIds.has('thread-1')).toBe(true);
+
+    selector.options.onCancel();
+    await commandPromise;
+  });
+
+  it('returns only cached previews and never requests uncached ones from the harness', async () => {
+    const threads = [createThread('thread-1', '2026-03-17T15:10:00.000Z')];
+    const { ctx, state, showOverlay } = createContext(threads);
+    state.threadPreviewCache.set('thread-1', {
+      preview: 'Cached preview',
+      updatedAt: new Date('2026-03-17T15:10:00.000Z').getTime(),
+    });
+    state.attemptedThreadPreviewIds.add('thread-1');
+    state.harness.getFirstUserMessagesForThreads = vi.fn(
+      async () => new Map([['thread-1', createMessage('message-1', 'slow')]]),
+    );
+
+    const commandPromise = handleThreadsCommand(ctx);
+    await Promise.resolve();
+    expect(showOverlay).toHaveBeenCalledTimes(1);
+
+    const selector = selectorInstances[0];
+    expect(typeof selector.options.getMessagePreviews).toBe('function');
+    await expect(selector.options.getMessagePreviews(['thread-1', 'thread-2'])).resolves.toEqual(
+      new Map([['thread-1', 'Cached preview']]),
+    );
+    expect(state.harness.getFirstUserMessagesForThreads).not.toHaveBeenCalled();
+    expect(state.threadPreviewCache.get('thread-1')).toEqual({
+      preview: 'Cached preview',
+      updatedAt: new Date('2026-03-17T15:10:00.000Z').getTime(),
+    });
+    expect(state.attemptedThreadPreviewIds.has('thread-1')).toBe(true);
+    expect(state.attemptedThreadPreviewIds.has('thread-2')).toBe(false);
 
     selector.options.onCancel();
     await commandPromise;

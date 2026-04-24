@@ -6,7 +6,7 @@ import fs from 'node:fs';
 
 import { isStreamDestroyedError } from './error-classification.js';
 import { hasHeadlessFlag, headlessMain } from './headless.js';
-import { loadSettings } from './onboarding/settings.js';
+import { createBrowserFromSettings, loadSettings } from './onboarding/settings.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
 import { applyThemeMode, restoreTerminalForeground } from './tui/theme.js';
@@ -33,14 +33,27 @@ process.on('unhandledRejection', reason => {
 });
 
 async function tuiMain() {
-  const result = await createMastraCode();
+  // Load browser from settings (before creating harness)
+  const settings = loadSettings();
+  const browser = await createBrowserFromSettings(settings.browser);
+
+  const result = await createMastraCode({ browser });
   harness = result.harness;
   mcpManager = result.mcpManager;
   hookManager = result.hookManager;
   authStorage = result.authStorage;
 
+  // Track the initial browser settings in harness state for config drift detection
+  if (browser) {
+    harness.setState({ activeBrowserSettings: settings.browser } as any);
+  }
+
   if (result.storageWarning) {
     console.info(`⚠ ${result.storageWarning}`);
+  }
+
+  if (browser) {
+    console.info(`Browser: ${settings.browser.provider} (${settings.browser.headless ? 'headless' : 'visible'})`);
   }
 
   // MCP connection is deferred to TUI.init() (after ui.start()) so that

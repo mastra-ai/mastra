@@ -1,0 +1,388 @@
+---
+title: "Reference: MastraBrowser class | Browser"
+description: "API reference for MastraBrowser, the abstract base class for browser automation providers in Mastra."
+packages:
+  - "@mastra/core"
+---
+
+# MastraBrowser class
+
+The `MastraBrowser` class is the abstract base class for browser automation providers. It defines the common interface for launching browsers, managing thread isolation, streaming screencasts, and handling input events.
+
+You don't instantiate `MastraBrowser` directly. Instead, use a provider implementation:
+
+- [`AgentBrowser`](/reference/browser/agent-browser): Deterministic browser automation using refs
+- [`StagehandBrowser`](/reference/browser/stagehand-browser): AI-powered browser automation using natural language
+- [`BrowserViewer`](/reference/browser/browser-viewer): CLI-based browser automation with CDP URL injection
+
+## Usage example
+
+```typescript title="src/mastra/agents/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { AgentBrowser } from '@mastra/agent-browser'
+
+const browser = new AgentBrowser({
+  headless: true,
+  viewport: { width: 1280, height: 720 },
+  scope: 'thread',
+})
+
+export const browserAgent = new Agent({
+  id: 'browser-agent',
+  name: 'Browser Agent',
+  instructions: 'You can browse the web to find information.',
+  model: 'openai/gpt-5.4',
+  browser,
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'headless',
+    type: 'boolean',
+    description: 'Whether to run the browser in headless mode (no visible UI).',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'viewport',
+    type: '{ width: number; height: number }',
+    description: 'Browser viewport dimensions. Controls the size of the browser window.',
+    isOptional: true,
+    defaultValue: '{ width: 1280, height: 720 }',
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    description:
+      'Default timeout in milliseconds. Each provider defines its own semantics and default. See the provider reference for details.',
+    isOptional: true,
+  },
+  {
+    name: 'cdpUrl',
+    type: 'string | (() => string | Promise<string>)',
+    description:
+      "CDP WebSocket URL, HTTP endpoint, or sync/async provider function. When provided, connects to an existing browser instead of launching a new one. HTTP endpoints are resolved to WebSocket internally. Can't be used with scope: 'thread' (automatically uses shared scope).",
+    isOptional: true,
+  },
+  {
+    name: 'scope',
+    type: "'shared' | 'thread'",
+    description:
+      "Browser instance scope across threads. 'shared' means all threads share a single browser instance. 'thread' means each thread gets its own browser instance (full isolation).",
+    isOptional: true,
+    defaultValue: "'thread' (or 'shared' when cdpUrl is provided)",
+  },
+  {
+    name: 'onLaunch',
+    type: '(args: { browser: MastraBrowser }) => void | Promise<void>',
+    description: "Callback invoked after the browser reaches 'ready' status.",
+    isOptional: true,
+  },
+  {
+    name: 'onClose',
+    type: '(args: { browser: MastraBrowser }) => void | Promise<void>',
+    description: 'Callback invoked before the browser is closed.',
+    isOptional: true,
+  },
+  {
+    name: 'screencast',
+    type: 'ScreencastOptions',
+    description: 'Configuration for streaming browser frames.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'ScreencastOptions',
+        parameters: [
+          {
+            name: 'format',
+            type: "'jpeg' | 'png'",
+            description: 'Image format for screencast frames.',
+            isOptional: true,
+            defaultValue: "'jpeg'",
+          },
+          {
+            name: 'quality',
+            type: 'number',
+            description: 'Image quality (1-100). Only applies to JPEG format.',
+            isOptional: true,
+            defaultValue: '80',
+          },
+          {
+            name: 'maxWidth',
+            type: 'number',
+            description: 'Maximum width for screencast frames.',
+            isOptional: true,
+          },
+          {
+            name: 'maxHeight',
+            type: 'number',
+            description: 'Maximum height for screencast frames.',
+            isOptional: true,
+          },
+          {
+            name: 'everyNthFrame',
+            type: 'number',
+            description: 'Capture every Nth frame to reduce bandwidth.',
+            isOptional: true,
+            defaultValue: '1',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Properties
+
+The following properties (`id`, `name`, `provider`) are abstract and must be defined by concrete provider implementations:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this browser instance. Abstract - defined by provider.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description:
+      "Human-readable name of the browser provider (e.g., 'AgentBrowser', 'StagehandBrowser'). Abstract - defined by provider.",
+  },
+  {
+    name: 'provider',
+    type: 'string',
+    description:
+      "Provider identifier (e.g., 'vercel-labs/agent-browser', 'browserbase/stagehand'). Abstract - defined by provider.",
+  },
+  {
+    name: 'headless',
+    type: 'boolean',
+    description: 'Whether the browser is running in headless mode.',
+  },
+  {
+    name: 'status',
+    type: 'BrowserStatus',
+    description: "Current browser status: 'pending', 'launching', 'ready', 'error', 'closing', or 'closed'.",
+  },
+]}
+/>
+
+## Methods
+
+### Lifecycle
+
+#### `ensureReady()`
+
+Ensures the browser is launched and ready for use. Automatically called before tool execution. Implemented in the base class.
+
+```typescript
+await browser.ensureReady()
+```
+
+#### `close()`
+
+Closes the browser and cleans up all resources. Implemented in the base class with race-condition-safe handling.
+
+```typescript
+await browser.close()
+```
+
+#### `isBrowserRunning()`
+
+Checks if the browser is currently running.
+
+```typescript
+const isRunning = browser.isBrowserRunning()
+```
+
+**Returns:** `boolean`
+
+### Thread management
+
+#### `setCurrentThread(threadId)`
+
+Sets the current thread ID for browser operations. Used internally by the agent runtime.
+
+```typescript
+browser.setCurrentThread('thread-123')
+```
+
+#### `getCurrentThread()`
+
+Gets the current thread ID.
+
+```typescript
+const threadId = browser.getCurrentThread()
+```
+
+**Returns:** `string`
+
+#### `hasThreadSession(threadId)`
+
+Checks if a thread has an active browser session.
+
+```typescript
+const hasSession = browser.hasThreadSession('thread-123')
+```
+
+**Returns:** `boolean`
+
+#### `closeThreadSession(threadId)`
+
+Closes a specific thread's browser session. For 'thread' scope, this closes that thread's browser instance. For 'shared' scope, this clears the thread's state.
+
+```typescript
+await browser.closeThreadSession('thread-123')
+```
+
+### Tools
+
+#### `getTools()`
+
+Returns the browser tools for use with agents. Each provider returns different tools based on its paradigm.
+
+```typescript
+const tools = browser.getTools()
+```
+
+**Returns:** `Record<string, Tool>`
+
+### Screencast
+
+#### `startScreencast(options?, threadId?)`
+
+Starts streaming browser frames. Returns a `ScreencastStream` that emits frame events.
+
+```typescript
+const stream = await browser.startScreencast({ format: 'jpeg', quality: 80 }, 'thread-123')
+
+stream.on('frame', frame => {
+  console.log('Frame received:', frame.data.length, 'bytes')
+})
+
+stream.on('stop', reason => {
+  console.log('Screencast stopped:', reason)
+})
+```
+
+**Returns:** `Promise<ScreencastStream>`
+
+### Input injection
+
+#### `injectMouseEvent(params, threadId?)`
+
+Injects a mouse event into the browser. Used by Studio for live interaction.
+
+```typescript
+await browser.injectMouseEvent({
+  type: 'mousePressed',
+  x: 100,
+  y: 200,
+  button: 'left',
+  clickCount: 1,
+})
+```
+
+#### `injectKeyboardEvent(params, threadId?)`
+
+Injects a keyboard event into the browser. Used by Studio for live interaction.
+
+```typescript
+await browser.injectKeyboardEvent({
+  type: 'keyDown',
+  key: 'Enter',
+  code: 'Enter',
+})
+```
+
+### State
+
+#### `getState(threadId?)`
+
+Gets the current browser state including URL and tabs.
+
+```typescript
+const state = await browser.getState('thread-123')
+console.log('Current URL:', state.currentUrl)
+console.log('Tabs:', state.tabs)
+```
+
+**Returns:** `Promise<BrowserState>`
+
+```typescript
+interface BrowserState {
+  currentUrl: string | null
+  tabs: BrowserTabState[]
+  activeTabIndex: number
+}
+
+interface BrowserTabState {
+  id: string
+  url: string
+  title: string
+}
+```
+
+#### `getCurrentUrl(threadId?)`
+
+Gets the current page URL.
+
+```typescript
+const url = await browser.getCurrentUrl()
+```
+
+**Returns:** `Promise<string | null>`
+
+## Browser scope
+
+The `scope` option controls how browser instances are shared across conversation threads:
+
+| Scope | Description | Use case |
+| - | - | - |
+| `'shared'` | All threads share a single browser instance | Cost-efficient for non-conflicting tasks |
+| `'thread'` | Each thread gets its own browser instance | Full isolation for concurrent users |
+
+```typescript
+// Shared browser for all threads
+const sharedBrowser = new AgentBrowser({
+  scope: 'shared',
+})
+
+// Isolated browser per thread
+const isolatedBrowser = new AgentBrowser({
+  scope: 'thread',
+})
+```
+
+When using `cdpUrl` to connect to an external browser, the scope automatically falls back to `'shared'` since you can't spawn new browser instances.
+
+## Cloud browser providers
+
+Connect to cloud browser services using the `cdpUrl` option:
+
+```typescript
+// Static CDP URL
+const browser = new AgentBrowser({
+  cdpUrl: 'wss://browser.example.com/ws',
+})
+
+// Dynamic CDP URL (e.g., session-based)
+const browser = new AgentBrowser({
+  cdpUrl: async () => {
+    const session = await createBrowserSession()
+    return session.wsUrl
+  },
+})
+```
+
+## Related
+
+- [AgentBrowser](/reference/browser/agent-browser): Deterministic browser automation
+- [StagehandBrowser](/reference/browser/stagehand-browser): AI-powered browser automation
+- [Browser overview](/docs/browser/overview): Conceptual guide to browser automation

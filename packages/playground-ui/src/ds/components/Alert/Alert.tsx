@@ -39,7 +39,7 @@ export const Alert = ({ children, variant = 'destructive', className }: AlertPro
       )}
     >
       <div className="flex items-start gap-2">
-        <Icon className="mt-0.5 flex-shrink-0">
+        <Icon className="mt-0.5 shrink-0">
           <Ico />
         </Icon>
         <div className="text-neutral4">{children}</div>

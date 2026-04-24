@@ -649,13 +649,11 @@ export class OpenAIRealtimeVoice extends MastraVoice {
         });
       }
 
-      const result = await tool?.execute?.(
-        { context, requestContext: this.requestContext },
-        {
-          toolCallId: output.call_id,
-          messages: [],
-        },
-      );
+      const result = await tool?.execute?.(context, {
+        toolCallId: output.call_id,
+        messages: [],
+        requestContext: this.requestContext,
+      });
 
       this.emit('tool-call-result', {
         toolCallId: output.call_id,

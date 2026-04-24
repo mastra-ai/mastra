@@ -1,5 +1,5 @@
-import { usePlaygroundStore, useStudioConfig } from '@mastra/playground-ui';
 import { createContext, useEffect } from 'react';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 type Theme = 'dark' | 'light' | 'system';
 type ResolvedTheme = 'dark' | 'light';
@@ -26,13 +26,11 @@ const resolveTheme = (theme: Theme): ResolvedTheme => {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 };
 
-export function ThemeProvider({ children, defaultTheme = 'dark' }: ThemeProviderProps) {
-  const { themeToggleEnabled } = useStudioConfig();
+export function ThemeProvider({ children }: ThemeProviderProps) {
   const theme = usePlaygroundStore(state => state.theme);
   const setTheme = usePlaygroundStore(state => state.setTheme);
 
-  const persistedTheme: Theme = theme === 'light' || theme === 'system' ? theme : 'dark';
-  const selectedTheme: Theme = themeToggleEnabled ? persistedTheme : defaultTheme;
+  const selectedTheme: Theme = theme === 'light' || theme === 'system' ? theme : 'dark';
 
   useEffect(() => {
     const root = window.document.documentElement;

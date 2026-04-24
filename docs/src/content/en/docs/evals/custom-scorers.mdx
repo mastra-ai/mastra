@@ -412,7 +412,7 @@ Defines how the LLM should analyze the input and what structured output to retur
 The analysis step uses a prompt object to:
 
 - Provide a clear description of the analysis task
-- Define expected output structure with Zod schema (both boolean result and list of gluten sources)
+- Define expected output structure with a Standard JSON Schema (both boolean result and list of gluten sources)
 - Generate dynamic prompts based on the input content
 
 ### Score Generation
@@ -525,5 +525,5 @@ console.log('Reason:', result.reason)
 
 **Examples and Resources:**
 
-- [createScorer API Reference](/reference/evals/create-scorer) - Complete technical documentation
-- [Built-in Scorers Source Code](https://github.com/mastra-ai/mastra/tree/main/packages/evals/src/scorers) - Real implementations for reference
+- [createScorer API Reference](/reference/evals/create-scorer): Complete technical documentation
+- [Built-in Scorers Source Code](https://github.com/mastra-ai/mastra/tree/main/packages/evals/src/scorers): Real implementations for reference
