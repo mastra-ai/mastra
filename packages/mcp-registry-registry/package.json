@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp-registry-registry",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP server for registry registry services.",
   "type": "module",
   "main": "dist/index.js",
@@ -32,7 +32,6 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
-    "uuid": "^13.0.0",
     "zod": "catalog:"
   },
   "devDependencies": {

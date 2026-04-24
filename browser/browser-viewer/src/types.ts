@@ -26,10 +26,4 @@ export interface BrowserViewerConfig extends BrowserConfigBase {
    * @default 0 (auto-assign available port)
    */
   cdpPort?: number;
-
-  /**
-   * Path to Chrome user data directory (profile).
-   * Persists cookies, localStorage, extensions, etc.
-   */
-  userDataDir?: string;
 }

@@ -167,6 +167,15 @@ describe('AgentBrowser', () => {
       expect(browser.status).toBe('pending');
     });
 
+    it('defaults headless to true', () => {
+      expect(browser.headless).toBe(true);
+    });
+
+    it('respects headless: false', () => {
+      const visible = new AgentBrowser({ headless: false });
+      expect(visible.headless).toBe(false);
+    });
+
     it('accepts custom config', () => {
       const custom = new AgentBrowser({ headless: false, timeout: 5000 });
       expect(custom.status).toBe('pending');
