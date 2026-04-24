@@ -11,12 +11,19 @@ export interface TokenUsageByAgentCardViewProps {
   isError: boolean;
 }
 
-export function TokenUsageByAgentCardView({ data, isLoading, isError }: TokenUsageByAgentCardViewProps) {
-  const [activeTab, setActiveTab] = useState<'tokens' | 'cost'>('tokens');
+type TokenUsageTab = 'tokens' | 'cost';
 
-  const hasData = !!data && data.length > 0;
-  const totalTokens = data?.reduce((s, d) => s + d.total, 0) ?? 0;
-  const costRows = data?.filter(d => d.cost != null && d.cost > 0) ?? [];
+function isTokenUsageTab(value: string): value is TokenUsageTab {
+  return value === 'tokens' || value === 'cost';
+}
+
+export function TokenUsageByAgentCardView({ data, isLoading, isError }: TokenUsageByAgentCardViewProps) {
+  const [activeTab, setActiveTab] = useState<TokenUsageTab>('tokens');
+
+  const rows = data ?? [];
+  const hasData = rows.length > 0;
+  const totalTokens = rows.reduce((s, d) => s + d.total, 0);
+  const costRows = rows.filter(d => d.cost != null && d.cost > 0);
   const uniqueCostUnits = new Set(costRows.map(d => d.costUnit ?? 'usd'));
   const hasSingleCostUnit = uniqueCostUnits.size <= 1;
   const costUnit = hasSingleCostUnit ? (costRows[0]?.costUnit ?? null) : null;
@@ -49,7 +56,9 @@ export function TokenUsageByAgentCardView({ data, isLoading, isError }: TokenUsa
             <Tabs
               defaultTab="tokens"
               value={activeTab}
-              onValueChange={v => setActiveTab(v as 'tokens' | 'cost')}
+              onValueChange={v => {
+                if (isTokenUsageTab(v)) setActiveTab(v);
+              }}
               className="grid grid-rows-[auto_1fr] overflow-y-auto h-full"
             >
               <TabList>
@@ -58,24 +67,24 @@ export function TokenUsageByAgentCardView({ data, isLoading, isError }: TokenUsa
               </TabList>
               <TabContent value="tokens">
                 <HorizontalBars
-                  data={data.map(d => ({ name: d.name, values: [d.input, d.output] }))}
+                  data={rows.map(d => ({ name: d.name, values: [d.input, d.output] }))}
                   segments={[
                     { label: 'Input', color: CHART_COLORS.blueDark },
                     { label: 'Output', color: CHART_COLORS.blue },
                   ]}
-                  maxVal={Math.max(...data.map(d => d.input + d.output))}
+                  maxVal={Math.max(...rows.map(d => d.input + d.output))}
                   fmt={formatCompact}
                 />
               </TabContent>
               <TabContent value="cost">
                 {hasCostData ? (
                   <HorizontalBars
-                    data={data
-                      .filter(d => d.cost != null && d.cost > 0)
+                    data={costRows
+                      .slice()
                       .sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0))
                       .map(d => ({ name: d.name, values: [d.cost!] }))}
                     segments={[{ label: 'Cost', color: CHART_COLORS.purple }]}
-                    maxVal={Math.max(...data.map(d => d.cost ?? 0))}
+                    maxVal={Math.max(...costRows.map(d => d.cost ?? 0))}
                     fmt={v => formatCost(v, costUnit)}
                   />
                 ) : (

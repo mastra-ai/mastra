@@ -2,7 +2,6 @@ import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { useMetricsFilters } from './use-metrics-filters';
 
-
 /** Avg Score — average score across all scorers via aggregate API */
 export function useAvgScoreKpiMetrics() {
   const client = useMastraClient();

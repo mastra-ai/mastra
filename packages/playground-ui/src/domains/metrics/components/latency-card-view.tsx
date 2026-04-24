@@ -40,10 +40,15 @@ export interface LatencyCardViewProps {
 
 export function LatencyCardView({ data, isLoading, isError }: LatencyCardViewProps) {
   const hasData = !!data && (data.agentData.length > 0 || data.workflowData.length > 0 || data.toolData.length > 0);
+  const p50Values = data
+    ? Object.values(data)
+        .filter(Array.isArray)
+        .flat()
+        .map(d => d.p50)
+        .filter((v): v is number => typeof v === 'number')
+    : [];
   const avgP50 =
-    data && data.agentData.length > 0
-      ? `${Math.round(data.agentData.reduce((s, d) => s + d.p50, 0) / data.agentData.length)}ms`
-      : '—';
+    p50Values.length > 0 ? `${Math.round(p50Values.reduce((s, v) => s + v, 0) / p50Values.length)}ms` : '—';
 
   return (
     <MetricsCard>

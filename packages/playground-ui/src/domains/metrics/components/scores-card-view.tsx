@@ -29,7 +29,7 @@ export interface ScoresCardViewProps {
 }
 
 export function ScoresCardView({ data, isLoading, isError }: ScoresCardViewProps) {
-  const hasData = !!data && data.summaryData.length > 0;
+  const hasData = !!data && (data.summaryData.length > 0 || data.overTimeData.length > 0);
 
   const series = useMemo(() => {
     if (!data?.scorerNames) return [];

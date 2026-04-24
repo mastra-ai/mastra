@@ -1,5 +1,5 @@
 import { SelectFieldBlock } from '../../../ds/components/FormFieldBlocks';
-import { DATE_PRESETS, useMetrics } from '../hooks/use-metrics';
+import { DATE_PRESETS, isValidPreset, useMetrics } from '../hooks/use-metrics';
 
 export function DateRangeSelector() {
   const { datePreset, setDatePreset } = useMetrics();
@@ -10,7 +10,9 @@ export function DateRangeSelector() {
       labelIsHidden
       value={datePreset}
       options={DATE_PRESETS.map(p => ({ label: p.label, value: p.value }))}
-      onValueChange={value => setDatePreset(value as typeof datePreset)}
+      onValueChange={value => {
+        if (isValidPreset(value)) setDatePreset(value);
+      }}
     />
   );
 }

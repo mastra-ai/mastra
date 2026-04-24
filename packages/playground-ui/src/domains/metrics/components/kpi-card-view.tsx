@@ -14,9 +14,7 @@ export function KpiCardView({ label, value, prevValue, changePct, isLoading, isE
   return (
     <MetricsKpiCard>
       <MetricsKpiCard.Label>{label}</MetricsKpiCard.Label>
-      <MetricsKpiCard.Value className={hasData ? undefined : 'invisible'}>
-        {hasData ? value : '—'}
-      </MetricsKpiCard.Value>
+      <MetricsKpiCard.Value className={hasData ? undefined : 'invisible'}>{hasData ? value : '—'}</MetricsKpiCard.Value>
       {isError ? (
         <MetricsKpiCard.Error />
       ) : isLoading ? (

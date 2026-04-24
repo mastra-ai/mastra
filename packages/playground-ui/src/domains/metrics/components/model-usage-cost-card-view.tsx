@@ -19,8 +19,16 @@ export function ModelUsageCostCardView({ rows, isLoading, isError }: ModelUsageC
         {hasData &&
           (() => {
             const totalCost = rows.reduce((sum, r) => sum + (r.cost ?? 0), 0);
-            const unit = rows.find(r => r.costUnit)?.costUnit;
-            return <MetricsCard.Summary value={totalCost > 0 ? formatCost(totalCost, unit) : '—'} label="Total cost" />;
+            const units = new Set(rows.filter(r => r.cost != null && r.costUnit).map(r => r.costUnit as string));
+            let value: string;
+            if (units.size === 0) {
+              value = totalCost > 0 ? formatCost(totalCost) : '—';
+            } else if (units.size === 1) {
+              value = totalCost > 0 ? formatCost(totalCost, [...units][0]) : '—';
+            } else {
+              value = 'Mixed';
+            }
+            return <MetricsCard.Summary value={value} label="Total cost" />;
           })()}
       </MetricsCard.TopBar>
       {isLoading ? (
