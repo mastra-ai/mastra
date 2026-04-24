@@ -14,10 +14,12 @@ Guide for interactive testing of mastracode's terminal UI in Konsole.
 ## Prerequisites
 
 1. Build mastracode and its dependencies:
+
    ```bash
    cd /home/ubuntu/repos/mastra
    COREPACK_ENABLE_STRICT=0 pnpm build:mastracode
    ```
+
    This may take a few minutes. If `pnpm` has corepack issues, install directly: `npm install -g pnpm@10.11.0`
 
 2. If unit tests fail with missing `@mastra/core/workspace`, run `pnpm build:core` first.
@@ -27,14 +29,17 @@ Guide for interactive testing of mastracode's terminal UI in Konsole.
 If you don't have a direct Anthropic/OpenAI API key, configure OpenRouter as a custom provider:
 
 1. Edit `~/.local/share/mastracode/settings.json`:
+
    ```json
    {
-     "customProviders": [{
-       "name": "OpenRouter",
-       "url": "https://openrouter.ai/api/v1",
-       "apiKey": "<OPENROUTER_API_KEY value>",
-       "models": ["minimax/minimax-m2.7"]
-     }],
+     "customProviders": [
+       {
+         "name": "OpenRouter",
+         "url": "https://openrouter.ai/api/v1",
+         "apiKey": "<OPENROUTER_API_KEY value>",
+         "models": ["minimax/minimax-m2.7"]
+       }
+     ],
      "models": {
        "activeModelPackId": "custom:Custom",
        "modeDefaults": {
@@ -43,15 +48,17 @@ If you don't have a direct Anthropic/OpenAI API key, configure OpenRouter as a c
          "fast": "openrouter/minimax/minimax-m2.7"
        }
      },
-     "customModelPacks": [{
-       "name": "Custom",
-       "models": {
-         "build": "openrouter/minimax/minimax-m2.7",
-         "plan": "openrouter/minimax/minimax-m2.7",
-         "fast": "openrouter/minimax/minimax-m2.7"
-       },
-       "createdAt": "2026-01-01T00:00:00.000Z"
-     }]
+     "customModelPacks": [
+       {
+         "name": "Custom",
+         "models": {
+           "build": "openrouter/minimax/minimax-m2.7",
+           "plan": "openrouter/minimax/minimax-m2.7",
+           "fast": "openrouter/minimax/minimax-m2.7"
+         },
+         "createdAt": "2026-01-01T00:00:00.000Z"
+       }
+     ]
    }
    ```
 
@@ -68,13 +75,13 @@ COREPACK_ENABLE_STRICT=0 pnpm cli
 
 ## Key TUI Commands
 
-| Command    | Action                                    |
-|------------|-------------------------------------------|
-| `/new`     | Create a new empty thread                 |
+| Command    | Action                                           |
+| ---------- | ------------------------------------------------ |
+| `/new`     | Create a new empty thread                        |
 | `/threads` | Open thread selector (↑↓ navigate, Enter select) |
-| `/clone`   | Clone current thread                      |
-| `/models`  | Switch model pack                         |
-| `/help`    | Show all available commands               |
+| `/clone`   | Clone current thread                             |
+| `/models`  | Switch model pack                                |
+| `/help`    | Show all available commands                      |
 
 ## Testing Thread State Isolation
 
