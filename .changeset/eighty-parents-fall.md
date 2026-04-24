@@ -3,4 +3,5 @@
 '@mastra/memory': patch
 ---
 
-Fixed observational memory message boundaries so streamed tool results continue in a fresh assistant message instead of being filtered out mid-run, and OM lifecycle markers persist through memory without creating data-only database messages.
+Fixed streamed tool results being replayed when observational memory runs mid-stream.
+Fixed observational memory markers being saved as separate empty assistant messages.
