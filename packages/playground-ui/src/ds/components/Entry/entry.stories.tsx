@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Entry } from './entry';
-import { Txt } from '../Txt';
 import { Badge } from '../Badge';
+import { Txt } from '../Txt';
+import { Entry } from './entry';
 
 const meta: Meta<typeof Entry> = {
   title: 'DataDisplay/Entry',
