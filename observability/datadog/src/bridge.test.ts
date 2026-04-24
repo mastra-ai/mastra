@@ -26,6 +26,7 @@ const {
   mockExporterFlush,
   mockFlush,
   mockInit,
+  mockLlmobsActivate,
   mockScopeActivate,
   mockScopeActive,
   mockStartSpan,
@@ -49,6 +50,8 @@ const {
   });
 
   const active = vi.fn(() => currentScopeSpan);
+
+  const llmobsActivate = vi.fn((span: any, _options: any, fn: () => any) => fn());
 
   const startSpan = vi.fn((name: string, options?: any) => {
     apmSpanCounter++;
@@ -81,6 +84,7 @@ const {
     mockExporterFlush: vi.fn((done?: (error?: unknown) => void) => done?.()),
     mockFlush: vi.fn().mockResolvedValue(undefined),
     mockInit: vi.fn(),
+    mockLlmobsActivate: llmobsActivate,
     mockScopeActivate: activate,
     mockScopeActive: active,
     mockStartSpan: startSpan,
@@ -101,6 +105,7 @@ vi.mock('dd-trace', () => {
       startSpan: mockStartSpan,
       llmobs: {
         _tagger: mockTagger,
+        _activate: mockLlmobsActivate,
         enable: mockEnable,
         disable: mockDisable,
         annotate: mockAnnotate,
@@ -312,9 +317,10 @@ describe('DatadogBridge', () => {
       expect(mockStartSpan).toHaveBeenCalledWith('test-span', { childOf: requestSpan });
       expect(result.parentSpanId).toBe('aaaaaaaaaaaaaaaa');
       expect(result.traceId).toBe('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
+      expect(llmobsRegistrations[0]?.options.parent).toBeUndefined();
     });
 
-    it('does not fall back to the active dd-trace scope when an explicit parent is missing from the bridge map', () => {
+    it('falls back to the active distributed dd-trace scope when an explicit external parent is missing from the bridge map', () => {
       const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
 
       const requestSpan = {
@@ -337,9 +343,36 @@ describe('DatadogBridge', () => {
         }),
       )!;
 
-      expect(mockStartSpan).toHaveBeenCalledWith('test-span', {});
-      expect(result.parentSpanId).toBe('missing-parent-id');
-      expect(result.traceId).not.toBe('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
+      expect(mockStartSpan).toHaveBeenCalledWith('test-span', { childOf: requestSpan });
+      expect(result.parentSpanId).toBe('aaaaaaaaaaaaaaaa');
+      expect(result.traceId).toBe('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
+      expect(llmobsRegistrations[0]?.options.parent).toBe(requestSpan);
+    });
+
+    it('uses the distributed APM parent for LLMObs when an external parent exists but is not in the local bridge map', () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+
+      const distributedParent = {
+        context: () => ({
+          toSpanId: () => 'aaaaaaaaaaaaaaaa',
+          toTraceId: () => 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        }),
+      };
+      mockScopeActive.mockReturnValueOnce(distributedParent);
+
+      bridge.createSpan(
+        createMockSpanOptions({
+          parent: {
+            id: 'missing-parent-id',
+            traceId: 'cccccccccccccccccccccccccccccccc',
+            isInternal: false,
+            metadata: {},
+            getParentSpanId: () => undefined,
+          } as any,
+        }),
+      )!;
+
+      expect(llmobsRegistrations[0]?.options.parent).toBe(distributedParent);
     });
 
     it('inherits model info for MODEL_STEP spans from a MODEL_GENERATION parent when needed', () => {
@@ -393,6 +426,7 @@ describe('DatadogBridge', () => {
       await bridge.executeInContext(spanResult.spanId, async () => {});
 
       expect(mockScopeActivate).toHaveBeenCalledWith(apmSpan, expect.any(Function));
+      expect(mockLlmobsActivate).toHaveBeenCalledWith(apmSpan, undefined, expect.any(Function));
     });
 
     it('falls back to direct execution when the span is not in the map', async () => {

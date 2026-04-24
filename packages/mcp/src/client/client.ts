@@ -92,12 +92,7 @@ type DatadogTracerLike = {
 };
 
 function shouldDetachPersistentTransportRequest(init?: RequestInit): boolean {
-  if ((init?.method ?? 'GET').toUpperCase() !== 'GET') {
-    return false;
-  }
-
-  const accept = new Headers(init?.headers).get('accept');
-  return typeof accept === 'string' && accept.toLowerCase().includes('text/event-stream');
+  return (init?.method ?? 'GET').toUpperCase() === 'GET';
 }
 
 function getDatadogScope(): DatadogScopeLike | null {

@@ -49,6 +49,10 @@ type LLMObsTagger = {
   ) => void;
 };
 
+type LLMObsInternalApi = {
+  _activate?: <T>(span: any, options: Record<string, never> | undefined, fn: () => T) => T;
+};
+
 interface TraceContext {
   userId?: string;
   sessionId?: string;
@@ -250,13 +254,15 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
     if (this.isDisabled) return undefined;
 
     try {
-      let parentDdSpan: any = undefined;
+      let apmParentDdSpan: any = undefined;
+      let llmobsParentDdSpan: any = undefined;
       let parentSource: 'external-parent' | 'active-scope' | 'none' = 'none';
 
       const externalParentId = getExternalParentId(options);
       if (externalParentId) {
-        parentDdSpan = this.ddSpanMap.get(externalParentId);
-        if (parentDdSpan) {
+        apmParentDdSpan = this.ddSpanMap.get(externalParentId);
+        llmobsParentDdSpan = apmParentDdSpan;
+        if (apmParentDdSpan) {
           parentSource = 'external-parent';
         } else {
           this.logger.warn('[DatadogBridge.createSpan] External parent span not found in bridge map', {
@@ -268,9 +274,16 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
         }
       }
 
-      if (!parentDdSpan && !externalParentId) {
-        parentDdSpan = tracer.scope().active() ?? undefined;
-        if (parentDdSpan) {
+      if (!apmParentDdSpan && externalParentId) {
+        apmParentDdSpan = tracer.scope().active() ?? undefined;
+        if (apmParentDdSpan) {
+          parentSource = 'active-scope';
+        }
+      }
+
+      if (!apmParentDdSpan && !externalParentId) {
+        apmParentDdSpan = tracer.scope().active() ?? undefined;
+        if (apmParentDdSpan) {
           parentSource = 'active-scope';
         } else {
           this.logger.debug('[DatadogBridge.createSpan] No active dd-trace scope for new root span', {
@@ -281,8 +294,12 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
         }
       }
 
+      if (!llmobsParentDdSpan && externalParentId) {
+        llmobsParentDdSpan = apmParentDdSpan;
+      }
+
       const ddSpan = tracer.startSpan(options.name, {
-        ...(parentDdSpan ? { childOf: parentDdSpan } : {}),
+        ...(apmParentDdSpan ? { childOf: apmParentDdSpan } : {}),
         ...(options.startTime ? { startTime: toDate(options.startTime).getTime() } : {}),
       });
 
@@ -296,13 +313,13 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
       const traceId =
         ddContext?.toTraceId?.(true) ??
         (externalParentId ? (options.parent?.traceId ?? generateTraceId()) : generateTraceId());
-      const parentContext = parentDdSpan?.context?.() as { toSpanId?: (hex?: boolean) => string } | undefined;
+      const parentContext = apmParentDdSpan?.context?.() as { toSpanId?: (hex?: boolean) => string } | undefined;
       const parentSpanId = parentContext?.toSpanId?.(true) ?? externalParentId;
 
       this.captureTraceContext(traceId, options);
       this.openSpanCounts.set(traceId, (this.openSpanCounts.get(traceId) ?? 0) + 1);
       this.ddSpanMap.set(spanId, ddSpan);
-      this.registerLlmObsSpan(ddSpan, traceId, options, parentDdSpan);
+      this.registerLlmObsSpan(ddSpan, traceId, options, llmobsParentDdSpan);
 
       this.logger.debug(
         `[DatadogBridge.createSpan] Created APM span [spanId=${spanId}] [traceId=${traceId}] ` +
@@ -312,7 +329,7 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
           ...(this.config.spanLifecycleDebug
             ? {
                 ddTraceState: getTraceDebugState(ddSpan),
-                parentDdTraceState: parentDdSpan ? getTraceDebugState(parentDdSpan) : undefined,
+                parentDdTraceState: apmParentDdSpan ? getTraceDebugState(apmParentDdSpan) : undefined,
               }
             : {}),
         },
@@ -345,7 +362,14 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
     this.logger.debug(`[DatadogBridge.executeWithSpanContext] spanId=${spanId}, inMap=${!!ddSpan}`);
 
     if (ddSpan) {
-      return tracer.scope().activate(ddSpan, fn);
+      return tracer.scope().activate(ddSpan, () => {
+        const llmobs = (tracer as any).llmobs as LLMObsInternalApi | undefined;
+        if (typeof llmobs?._activate === 'function') {
+          return llmobs._activate(ddSpan, undefined, fn);
+        }
+
+        return fn();
+      });
     }
 
     this.logger.debug(

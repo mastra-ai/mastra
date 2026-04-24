@@ -2408,7 +2408,7 @@ describe('MastraMCPClient fetch with requestContext', () => {
     expect(lastToolCallFetch!.length).toBeGreaterThanOrEqual(3);
   }, 15000);
 
-  it('should detach only the persistent stream GET from the active Datadog span', async () => {
+  it('should detach streamable transport GET requests from the active Datadog span', async () => {
     testServer = await setupTestServer(true);
     const fetchSpy = vi.fn((url: string | URL, init?: RequestInit, _requestContext?: RequestContext | null) => {
       return fetch(url, init);
@@ -2431,12 +2431,7 @@ describe('MastraMCPClient fetch with requestContext', () => {
 
     await client.connect();
 
-    const streamFetchCalls = fetchSpy.mock.calls.filter(([, init]) => {
-      return (
-        (init?.method ?? 'GET').toUpperCase() === 'GET' &&
-        new Headers(init?.headers).get('accept')?.toLowerCase().includes('text/event-stream')
-      );
-    });
+    const streamFetchCalls = fetchSpy.mock.calls.filter(([, init]) => (init?.method ?? 'GET').toUpperCase() === 'GET');
 
     expect(streamFetchCalls.length).toBeGreaterThan(0);
     expect(activateSpy).toHaveBeenCalledTimes(streamFetchCalls.length);
