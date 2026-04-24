@@ -15,6 +15,7 @@ interface WorkspaceLayoutProps {
   chat: ReactNode;
   configure: ReactNode;
   defaultExpanded?: boolean;
+  detailOpen?: boolean;
 }
 
 export const WorkspaceLayout = ({
@@ -25,10 +26,16 @@ export const WorkspaceLayout = ({
   chat,
   configure,
   defaultExpanded = false,
+  detailOpen = false,
 }: WorkspaceLayoutProps) => {
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(defaultExpanded);
-  const gridClass = expanded ? 'grid-cols-[1fr_380px] gap-6' : 'grid-cols-[1fr_0px] gap-0';
+  const gridClass = !expanded
+    ? 'grid-cols-[1fr_0px] gap-0'
+    : detailOpen
+      ? 'grid-cols-[1fr_calc(50%-12px)] gap-6'
+      : 'grid-cols-[1fr_320px] gap-6';
+  const panelWidthClass = 'w-full';
 
   return (
     <div className="flex flex-1 min-w-0 flex-col h-full">
@@ -57,13 +64,11 @@ export const WorkspaceLayout = ({
             <div className="min-h-0 min-w-0 h-full overflow-hidden max-w-[80ch] mx-auto w-full">{chat}</div>
           </div>
 
-          <div
-            className="h-full min-w-0 overflow-hidden"
-            aria-hidden={!expanded}
-          >
+          <div className="h-full min-w-0 overflow-hidden" aria-hidden={!expanded}>
             <div
               className={cn(
-                'agent-builder-panel-slide h-full w-[380px] overflow-y-auto',
+                'agent-builder-panel-slide h-full overflow-y-auto',
+                panelWidthClass,
                 expanded ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0 pointer-events-none',
               )}
               style={expanded ? { viewTransitionName: 'agent-builder-configure-panel' } : undefined}

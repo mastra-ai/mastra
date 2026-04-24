@@ -1,12 +1,12 @@
-import { Avatar, Skeleton, TextFieldBlock, Txt } from '@mastra/playground-ui';
+import { Avatar, cn, Skeleton, TextFieldBlock, Txt } from '@mastra/playground-ui';
 import { ChevronRight, FileText, GraduationCap, Plus, Wrench } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
 import type { AgentBuilderEditFormValues } from '../../schemas';
-import { SkillsDialog } from './dialogs/skills-dialog';
-import { SystemPromptDialog } from './dialogs/system-prompt-dialog';
-import { ToolsDialog } from './dialogs/tools-dialog';
+import { InstructionsDetail } from './details/instructions-detail';
+import { SkillsDetail } from './details/skills-detail';
+import { ToolsDetail } from './details/tools-detail';
 
 export interface AvailableTool {
   id: string;
@@ -20,6 +20,8 @@ export interface AgentConfig {
   avatarUrl?: string;
   systemPrompt: string;
 }
+
+export type ActiveDetail = 'instructions' | 'tools' | 'skills' | null;
 
 interface AgentConfigurePanelProps {
   agent: AgentConfig;
@@ -35,6 +37,8 @@ interface AgentConfigurePanelProps {
   onDraftInstructionsChange?: (next: string) => void;
   availableTools?: AvailableTool[];
   isLoading?: boolean;
+  activeDetail?: ActiveDetail;
+  onActiveDetailChange?: (next: ActiveDetail) => void;
 }
 
 export const AgentConfigurePanel = ({
@@ -51,11 +55,10 @@ export const AgentConfigurePanel = ({
   onDraftInstructionsChange = () => {},
   availableTools = [],
   isLoading = false,
+  activeDetail = null,
+  onActiveDetailChange = () => {},
 }: AgentConfigurePanelProps) => {
   const features = useBuilderAgentFeatures();
-  const [systemPromptOpen, setSystemPromptOpen] = useState(false);
-  const [toolsOpen, setToolsOpen] = useState(false);
-  const [skillsOpen, setSkillsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleAvatarFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -77,8 +80,14 @@ export const AgentConfigurePanel = ({
   const handleSystemPromptSave = (nextPrompt: string) => {
     onDraftInstructionsChange(nextPrompt);
     onAgentChange({ ...agent, systemPrompt: nextPrompt });
-    setSystemPromptOpen(false);
+    onActiveDetailChange(null);
   };
+
+  const toggleDetail = (next: ActiveDetail) => {
+    onActiveDetailChange(activeDetail === next ? null : next);
+  };
+
+  const closeDetail = () => onActiveDetailChange(null);
 
   if (isLoading) {
     return <AgentConfigurePanelSkeleton />;
@@ -92,115 +101,134 @@ export const AgentConfigurePanel = ({
       : trimmedInstructions;
 
   return (
-    <div className="flex h-full flex-col border border-border1 bg-surface2 rounded-3xl overflow-hidden">
-      <div className="flex-1 flex flex-col gap-6 py-6 overflow-y-auto">
-        {editable ? (
-          <div className="flex flex-col gap-3 px-6">
-            <div className="flex items-center gap-4">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="group relative h-avatar-lg w-avatar-lg shrink-0 overflow-hidden rounded-full border border-border1 bg-surface3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral3"
-                aria-label="Upload avatar"
-                data-testid="agent-configure-avatar-trigger"
-              >
-                {draftAvatarUrl ? (
-                  <img src={draftAvatarUrl} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <span className="flex h-full w-full items-center justify-center text-ui-md text-neutral4">
-                    {(draftName[0] ?? 'A').toUpperCase()}
+    <div
+      className={cn(
+        'grid h-full border border-border1 bg-surface2 rounded-3xl overflow-hidden agent-builder-detail-grid',
+        activeDetail ? 'grid-cols-[320px_calc(100%-320px)]' : 'grid-cols-[320px_0px]',
+      )}
+    >
+      <div className="flex h-full min-w-0 flex-col">
+        <div className="flex-1 flex flex-col gap-6 py-6 overflow-y-auto">
+          {editable ? (
+            <div className="flex flex-col gap-3 px-6">
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="group relative h-avatar-lg w-avatar-lg shrink-0 overflow-hidden rounded-full border border-border1 bg-surface3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral3"
+                  aria-label="Upload avatar"
+                  data-testid="agent-configure-avatar-trigger"
+                >
+                  {draftAvatarUrl ? (
+                    <img src={draftAvatarUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center text-ui-md text-neutral4">
+                      {(draftName[0] ?? 'A').toUpperCase()}
+                    </span>
+                  )}
+                  <span className="absolute inset-0 flex items-center justify-center rounded-full bg-surface4 opacity-0 transition-opacity group-hover:opacity-100">
+                    <Plus className="h-5 w-5 text-neutral5" />
                   </span>
-                )}
-                <span className="absolute inset-0 flex items-center justify-center rounded-full bg-surface4 opacity-0 transition-opacity group-hover:opacity-100">
-                  <Plus className="h-5 w-5 text-neutral5" />
-                </span>
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleAvatarFile}
-                className="hidden"
-                data-testid="agent-configure-avatar-input"
-              />
-              <div className="min-w-0 flex-1">
-                <TextFieldBlock
-                  name="agent-name"
-                  label="Name"
-                  value={draftName}
-                  placeholder="Untitled agent"
-                  onChange={e => onDraftNameChange(e.target.value)}
-                  testId="agent-configure-name"
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarFile}
+                  className="hidden"
+                  data-testid="agent-configure-avatar-input"
                 />
+                <div className="min-w-0 flex-1">
+                  <TextFieldBlock
+                    name="agent-name"
+                    label="Name"
+                    value={draftName}
+                    placeholder="Untitled agent"
+                    onChange={e => onDraftNameChange(e.target.value)}
+                    testId="agent-configure-name"
+                  />
+                </div>
               </div>
+              <TextFieldBlock
+                name="agent-description"
+                label="Description"
+                value={draftDescription}
+                placeholder="What is this agent for?"
+                onChange={e => onDraftDescriptionChange(e.target.value)}
+                testId="agent-configure-description"
+              />
             </div>
-            <TextFieldBlock
-              name="agent-description"
-              label="Description"
-              value={draftDescription}
-              placeholder="What is this agent for?"
-              onChange={e => onDraftDescriptionChange(e.target.value)}
-              testId="agent-configure-description"
+          ) : (
+            <div className="flex flex-col gap-1 px-6">
+              <div className="flex items-center gap-3">
+                <Avatar name={agent.name} size="lg" src={agent.avatarUrl} />
+                <Txt variant="ui-md" className="min-w-0 flex-1 truncate font-medium text-neutral6">
+                  {agent.name}
+                </Txt>
+              </div>
+              {agent.description && (
+                <Txt variant="ui-sm" className="text-neutral3" data-testid="agent-configure-description-view">
+                  {agent.description}
+                </Txt>
+              )}
+            </div>
+          )}
+
+          <div className="flex flex-col divide-y divide-border1 border-t border-border1">
+            <ConfigRow
+              icon={<FileText className="h-4 w-4" />}
+              label="Instructions"
+              description={instructionsDescription}
+              isActive={activeDetail === 'instructions'}
+              onClick={() => toggleDetail('instructions')}
+              testId="agent-preview-edit-system-prompt"
             />
-          </div>
-        ) : (
-          <div className="flex flex-col gap-1 px-6">
-            <div className="flex items-center gap-3">
-              <Avatar name={agent.name} size="lg" src={agent.avatarUrl} />
-              <Txt variant="ui-md" className="min-w-0 flex-1 truncate font-medium text-neutral6">
-                {agent.name}
-              </Txt>
-            </div>
-            {agent.description && (
-              <Txt variant="ui-sm" className="text-neutral3" data-testid="agent-configure-description-view">
-                {agent.description}
-              </Txt>
+            {features.tools && (
+              <ConfigRow
+                icon={<Wrench className="h-4 w-4" />}
+                label="Tools"
+                description="External actions your agent can take"
+                count={activeToolsCount}
+                total={totalToolsCount}
+                isActive={activeDetail === 'tools'}
+                onClick={() => toggleDetail('tools')}
+                testId="agent-preview-tools-button"
+              />
+            )}
+            {features.skills && (
+              <ConfigRow
+                icon={<GraduationCap className="h-4 w-4" />}
+                label="Skills"
+                description="Reusable knowledge and behaviors"
+                isActive={activeDetail === 'skills'}
+                onClick={() => toggleDetail('skills')}
+                testId="agent-preview-skills-button"
+              />
             )}
           </div>
-        )}
-
-        <div className="flex flex-col divide-y divide-border1 border-t border-border1">
-          <ConfigRow
-            icon={<FileText className="h-4 w-4" />}
-            label="Instructions"
-            description={instructionsDescription}
-            onClick={() => setSystemPromptOpen(true)}
-            testId="agent-preview-edit-system-prompt"
-          />
-          {features.tools && (
-            <ConfigRow
-              icon={<Wrench className="h-4 w-4" />}
-              label="Tools"
-              description="External actions your agent can take"
-              count={activeToolsCount}
-              total={totalToolsCount}
-              onClick={() => setToolsOpen(true)}
-              testId="agent-preview-tools-button"
-            />
-          )}
-          {features.skills && (
-            <ConfigRow
-              icon={<GraduationCap className="h-4 w-4" />}
-              label="Skills"
-              description="Reusable knowledge and behaviors"
-              onClick={() => setSkillsOpen(true)}
-              testId="agent-preview-skills-button"
-            />
-          )}
         </div>
       </div>
 
-      <SystemPromptDialog
-        open={systemPromptOpen}
-        onOpenChange={setSystemPromptOpen}
-        prompt={draftInstructions}
-        onSave={handleSystemPromptSave}
-        editable={editable}
-      />
-      {features.tools && (
-        <ToolsDialog open={toolsOpen} onOpenChange={setToolsOpen} editable={editable} availableTools={availableTools} />
-      )}
-      {features.skills && <SkillsDialog open={skillsOpen} onOpenChange={setSkillsOpen} editable={editable} />}
+      <div
+        className={cn(
+          'h-full min-w-0 overflow-hidden',
+          activeDetail ? 'border-l border-border1' : 'pointer-events-none',
+        )}
+        aria-hidden={!activeDetail}
+      >
+        {activeDetail === 'instructions' && (
+          <InstructionsDetail
+            prompt={draftInstructions}
+            onSave={handleSystemPromptSave}
+            onClose={closeDetail}
+            editable={editable}
+          />
+        )}
+        {activeDetail === 'tools' && features.tools && (
+          <ToolsDetail onClose={closeDetail} editable={editable} availableTools={availableTools} />
+        )}
+        {activeDetail === 'skills' && features.skills && <SkillsDetail onClose={closeDetail} />}
+      </div>
     </div>
   );
 };
@@ -211,18 +239,30 @@ interface ConfigRowProps {
   description: string;
   count?: number;
   total?: number;
+  isActive?: boolean;
   onClick: () => void;
   testId: string;
 }
 
-const ConfigRow = ({ icon, label, description, count, total, onClick, testId }: ConfigRowProps) => (
+const ConfigRow = ({ icon, label, description, count, total, isActive = false, onClick, testId }: ConfigRowProps) => (
   <button
     type="button"
     onClick={onClick}
     data-testid={testId}
-    className="group flex items-center gap-3 px-6 py-4 text-left transition-colors hover:bg-surface3"
+    aria-pressed={isActive}
+    className={cn(
+      'group flex items-center gap-3 px-6 py-4 text-left transition-colors hover:bg-surface3',
+      isActive && 'bg-surface3',
+    )}
   >
-    <span className="shrink-0 text-neutral3 transition-colors group-hover:text-neutral5">{icon}</span>
+    <span
+      className={cn(
+        'shrink-0 text-neutral3 transition-colors group-hover:text-neutral5',
+        isActive && 'text-neutral5',
+      )}
+    >
+      {icon}
+    </span>
     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
       <Txt variant="ui-sm" className="font-medium text-neutral6">
         {label}
@@ -236,7 +276,12 @@ const ConfigRow = ({ icon, label, description, count, total, onClick, testId }: 
         {count} / {total}
       </Txt>
     )}
-    <ChevronRight className="h-4 w-4 shrink-0 text-neutral3 transition-colors group-hover:text-neutral5" />
+    <ChevronRight
+      className={cn(
+        'h-4 w-4 shrink-0 text-neutral3 transition-colors group-hover:text-neutral5',
+        isActive && 'text-neutral5',
+      )}
+    />
   </button>
 );
 

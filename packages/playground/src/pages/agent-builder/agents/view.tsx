@@ -1,11 +1,11 @@
 import { IconButton } from '@mastra/playground-ui';
 import { PencilIcon } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router';
 import { AgentChatPanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-chat-panel';
 import { AgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
-import type { AgentConfig } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
+import type { ActiveDetail, AgentConfig } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
@@ -97,6 +97,7 @@ interface AgentBuilderAgentViewReadyProps {
 
 const AgentBuilderAgentViewReady = ({ id, storedAgent, toolsData }: AgentBuilderAgentViewReadyProps) => {
   const navigate = useNavigate();
+  const [activeDetail, setActiveDetail] = useState<ActiveDetail>(null);
 
   const availableTools = useMemo<AvailableTool[]>(
     () =>
@@ -122,6 +123,7 @@ const AgentBuilderAgentViewReady = ({ id, storedAgent, toolsData }: AgentBuilder
       isLoading={false}
       mode="test"
       defaultExpanded={false}
+      detailOpen={activeDetail !== null}
       modeAction={
         <IconButton
           tooltip="Edit configuration"
@@ -140,6 +142,8 @@ const AgentBuilderAgentViewReady = ({ id, storedAgent, toolsData }: AgentBuilder
           editable={false}
           isLoading={false}
           availableTools={availableTools}
+          activeDetail={activeDetail}
+          onActiveDetailChange={setActiveDetail}
         />
       }
     />

@@ -6,7 +6,7 @@ import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';
 import { EditableAgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
-import type { AgentConfig } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
+import type { ActiveDetail, AgentConfig } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { ConversationPanel } from '@/domains/agent-builder/components/agent-builder-edit/conversation-panel';
 import type { AvailableWorkspace } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-agent-builder-tool';
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
@@ -153,6 +153,8 @@ const AgentBuilderAgentEditReady = ({
     systemPrompt: typeof storedAgent?.instructions === 'string' ? storedAgent.instructions : '',
   });
 
+  const [activeDetail, setActiveDetail] = useState<ActiveDetail>(null);
+
   const mode: 'create' | 'edit' = storedAgent ? 'edit' : 'create';
   const { save, isSaving } = useSaveAgent({ agentId: id, mode, availableTools });
 
@@ -166,6 +168,7 @@ const AgentBuilderAgentEditReady = ({
     <WorkspaceLayout
       isLoading={false}
       mode="build"
+      detailOpen={activeDetail !== null}
       modeAction={
         mode === 'edit' ? (
           <IconButton
@@ -207,6 +210,8 @@ const AgentBuilderAgentEditReady = ({
           onAgentChange={setAgent}
           availableTools={availableTools}
           isLoading={false}
+          activeDetail={activeDetail}
+          onActiveDetailChange={setActiveDetail}
         />
       }
     />
