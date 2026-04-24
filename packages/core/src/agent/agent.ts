@@ -197,6 +197,17 @@ export class Agent<
   #hasExplicitBrowser = false;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   #backgroundTasks?: AgentBackgroundConfig;
+  /**
+   * Tracks the active `streamUntilIdle` wrapper per `(threadId|resourceId)`
+   * scope on this Agent instance. A new call for the same scope aborts the
+   * prior one before subscribing so bg-task pubsub events aren't fanned into
+   * two concurrent wrappers (which would forward duplicate events and
+   * trigger duplicate continuation turns).
+   *
+   * Value is the prior wrapper's `forceClose`. Entries remove themselves on
+   * close if they're still the active one.
+   */
+  #activeStreamUntilIdle = new Map<string, () => void>();
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>;
@@ -5823,6 +5834,7 @@ export class Agent<
           return {
             toolCallId: payload.toolCallId as string | undefined,
             toolName: payload.toolName as string | undefined,
+            args: payload.args as Record<string, unknown> | undefined,
             type: (chunk as { type?: string }).type,
           };
         })
@@ -5833,9 +5845,9 @@ export class Agent<
       const directive =
         `Background task(s) you previously dispatched have completed. ` +
         `Process ONLY these tool-call IDs (their results are now in the conversation): ${idList}. ` +
-        `Do NOT re-process earlier tool results that were already handled on a prior turn, ` +
+        `IMPORTANT: Do NOT process any tool-call IDs that were not in the list, ` +
         `and do NOT call the same tool again — the result is already available. ` +
-        `Use these result(s) to answer the user's original question; if multiple completed, summarize all of them.`;
+        `Use these result(s) to answer the user's original question.`;
 
       return {
         ...baseContinuationOpts,
@@ -5857,6 +5869,23 @@ export class Agent<
 
     const outerAbort = new AbortController();
 
+    // Per-call dedup of terminal bg events. Defense-in-depth for at-least-
+    // once pubsub delivery (e.g. durable queue backings) — in the normal
+    // in-process path each terminal event arrives once per subscriber, but
+    // this guard also absorbs pathological cases where a completion is
+    // redelivered while a continuation is still running.
+    const processedCompletionIds = new Set<string>();
+
+    // Only one streamUntilIdle wrapper may be active per (threadId,
+    // resourceId) on this Agent. Skip registration when both are empty
+    // (memoryless / scopeless calls fell through to plain stream() above,
+    // but belt-and-suspenders).
+    const scopeKey = threadId || resourceId ? `${threadId ?? ''}|${resourceId ?? ''}` : null;
+    if (scopeKey) {
+      const priorClose = this.#activeStreamUntilIdle.get(scopeKey);
+      priorClose?.();
+    }
+
     const forceClose = () => {
       if (closed) return;
       closed = true;
@@ -5870,7 +5899,16 @@ export class Agent<
       } catch {
         // already closed
       }
+      if (scopeKey && this.#activeStreamUntilIdle.get(scopeKey) === forceClose) {
+        this.#activeStreamUntilIdle.delete(scopeKey);
+      }
     };
+
+    // Register this wrapper as the active one for its scope. A later call
+    // with the same scope will call this forceClose before subscribing.
+    if (scopeKey) {
+      this.#activeStreamUntilIdle.set(scopeKey, forceClose);
+    }
 
     // External abort fires → close the outer stream immediately, even if bg
     // tasks are still running (they'll continue in the background — their
@@ -5942,6 +5980,15 @@ export class Agent<
         // completions we're about to process so the continuation directive
         // names exactly those tool-call IDs (not any that arrive mid-turn).
         const batch = pendingCompletions.splice(0, pendingCompletions.length);
+
+        // Mark taskIds as processed BEFORE kicking off the continuation.
+        // The inner agent.stream can take a while; if a duplicate terminal
+        // event for the same task arrives while it's running, the bg reader
+        // filters it out rather than queueing another continuation.
+        for (const chunk of batch) {
+          const tid = (chunk as { payload?: { taskId?: string } }).payload?.taskId;
+          if (tid) processedCompletionIds.add(tid);
+        }
         const inner = await (agent.stream as any)([], buildContinuationOpts(batch));
         await pipeInner(inner.fullStream);
       } catch (err) {
@@ -5998,6 +6045,15 @@ export class Agent<
           if (!chunk || typeof chunk !== 'object' || typeof chunk.type !== 'string') continue;
 
           const taskId = (chunk.payload as { taskId?: string } | undefined)?.taskId;
+
+          // Dedup guard: skip terminal events for tasks already handled on
+          // a prior continuation (or about to be). Dropping both the
+          // forward AND the state update so duplicates don't double-render
+          // on the UI and don't queue redundant continuation turns.
+          if (taskId && TERMINAL_BG_CHUNKS.has(chunk.type) && processedCompletionIds.has(taskId)) {
+            continue;
+          }
+
           // bg-task activity between turns refreshes the idle window.
           // If we're mid-inner-stream, updateIdleTimer clears (no-op).
           updateIdleTimer();

@@ -124,11 +124,11 @@ const config = {
 
 export const mastra = new Mastra({
   ...config,
-  // backgroundTasks: {
-  //   enabled: true,
-  //   globalConcurrency: 10,
-  //   perAgentConcurrency: 5,
-  // },
+  backgroundTasks: {
+    enabled: true,
+    globalConcurrency: 10,
+    perAgentConcurrency: 5,
+  },
   editor: new MastraEditor({
     toolProviders: {
       composio: new ComposioToolProvider({ apiKey: '' }),

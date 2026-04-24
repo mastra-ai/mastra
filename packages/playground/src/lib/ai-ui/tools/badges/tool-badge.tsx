@@ -58,6 +58,11 @@ export const ToolBadge = ({
 
   const toolCalled = toolCalledProp ?? (result || toolOutput.length > 0);
 
+  const bgEntry =
+    (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks
+      ? metadata.backgroundTasks[toolCallId]
+      : undefined;
+
   return (
     <BadgeWrapper
       data-testid="tool-badge"
@@ -69,21 +74,13 @@ export const ToolBadge = ({
             selectionReason={selectionReason || ''}
             input={agentNetworkInput as string | Record<string, unknown> | undefined}
           />
-        ) : (
-          (() => {
-            const bgEntry =
-              (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks
-                ? metadata.backgroundTasks[toolCallId]
-                : undefined;
-            return bgEntry?.taskId && bgEntry?.startedAt ? (
-              <BackgroundTaskMetadataDialogTrigger
-                backgroundTaskTaskId={bgEntry.taskId}
-                backgroundTaskStartedAt={bgEntry.startedAt}
-                backgroundTaskCompletedAt={bgEntry.completedAt}
-              />
-            ) : null;
-          })()
-        )
+        ) : bgEntry?.taskId && bgEntry?.startedAt ? (
+          <BackgroundTaskMetadataDialogTrigger
+            backgroundTaskTaskId={bgEntry.taskId}
+            backgroundTaskStartedAt={bgEntry.startedAt}
+            backgroundTaskCompletedAt={bgEntry.completedAt}
+          />
+        ) : null
       }
       initialCollapsed={!!!(toolApprovalMetadata ?? suspendPayload)}
     >

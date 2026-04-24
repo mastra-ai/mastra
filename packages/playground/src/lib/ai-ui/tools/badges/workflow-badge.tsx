@@ -49,6 +49,11 @@ export const WorkflowBadge = ({
   const selectionReason = metadata?.mode === 'network' ? metadata.selectionReason : undefined;
   const agentNetworkInput = metadata?.mode === 'network' ? metadata.agentInput : undefined;
 
+  const bgEntry =
+    (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks
+      ? metadata.backgroundTasks[toolCallId]
+      : undefined;
+
   let suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
       <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{suspendPayload}</pre>
@@ -70,21 +75,13 @@ export const WorkflowBadge = ({
             selectionReason={selectionReason ?? ''}
             input={agentNetworkInput as string | Record<string, unknown> | undefined}
           />
-        ) : (
-          (() => {
-            const bgEntry =
-              (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks
-                ? metadata.backgroundTasks[toolCallId]
-                : undefined;
-            return bgEntry?.taskId && bgEntry?.startedAt ? (
-              <BackgroundTaskMetadataDialogTrigger
-                backgroundTaskTaskId={bgEntry.taskId}
-                backgroundTaskStartedAt={bgEntry.startedAt}
-                backgroundTaskCompletedAt={bgEntry.completedAt}
-              />
-            ) : null;
-          })()
-        )
+        ) : bgEntry?.taskId && bgEntry?.startedAt ? (
+          <BackgroundTaskMetadataDialogTrigger
+            backgroundTaskTaskId={bgEntry.taskId}
+            backgroundTaskStartedAt={bgEntry.startedAt}
+            backgroundTaskCompletedAt={bgEntry.completedAt}
+          />
+        ) : null
       }
     >
       {!isStreaming && !isLoading && (

@@ -58,6 +58,11 @@ export const AgentBadge = ({
       ? metadata?.suspendedTools
       : undefined;
 
+  const bgEntry =
+    (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks
+      ? metadata.backgroundTasks[toolCallId]
+      : undefined;
+
   const allChildToolsComplete =
     messages.length > 0 &&
     messages.every(message => {
@@ -92,21 +97,13 @@ export const AgentBadge = ({
             selectionReason={selectionReason ?? ''}
             input={agentNetworkInput as string | Record<string, unknown> | undefined}
           />
-        ) : (
-          (() => {
-            const bgEntry =
-              (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks
-                ? metadata.backgroundTasks[toolCallId]
-                : undefined;
-            return bgEntry?.taskId && bgEntry?.startedAt ? (
-              <BackgroundTaskMetadataDialogTrigger
-                backgroundTaskTaskId={bgEntry.taskId}
-                backgroundTaskStartedAt={bgEntry.startedAt}
-                backgroundTaskCompletedAt={bgEntry.completedAt}
-              />
-            ) : null;
-          })()
-        )
+        ) : bgEntry?.taskId && bgEntry?.startedAt ? (
+          <BackgroundTaskMetadataDialogTrigger
+            backgroundTaskTaskId={bgEntry.taskId}
+            backgroundTaskStartedAt={bgEntry.startedAt}
+            backgroundTaskCompletedAt={bgEntry.completedAt}
+          />
+        ) : null
       }
     >
       {messages.map((message, index) => {

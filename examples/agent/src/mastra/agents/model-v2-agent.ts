@@ -591,6 +591,11 @@ export const subscriptionOrchestratorAgent = new Agent({
     generalAgent: generalSubAgent,
     cryptoResearchAgent,
   },
+  backgroundTasks: {
+    tools: {
+      cryptoResearchAgent: true,
+    }
+  },
   memory: new Memory(),
   defaultOptions: {
     maxSteps: 10,

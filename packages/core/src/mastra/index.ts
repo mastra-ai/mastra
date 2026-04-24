@@ -1137,10 +1137,6 @@ export class Mastra<
 
     agents[agentKey] = mastraAgent;
 
-    // If this agent has sub-agents, auto-enable the background task manager so
-    // sub-agent delegations can run in the background by default.
-    this.#maybeEnableBackgroundTasksForAgent(mastraAgent);
-
     // Register configured processor workflows from the agent
     // Use .then() to handle async resolution without blocking the constructor
     // This excludes memory-derived processors to avoid triggering memory factory functions

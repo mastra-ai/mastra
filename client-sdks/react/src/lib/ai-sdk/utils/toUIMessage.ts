@@ -553,7 +553,7 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
         const toolCallId = (toolPart as any).toolCallId;
         const input = (toolPart as any).input;
         const payloadOutput =
-          chunk.type === 'background-task-output' ? chunk.payload.payload.payload.output : chunk.payload.result;
+          chunk.type === 'background-task-output' ? chunk.payload.payload.payload.output : chunk.payload.output;
 
         // Handle workflow-related output chunks
         if (payloadOutput?.type?.startsWith('workflow-')) {
