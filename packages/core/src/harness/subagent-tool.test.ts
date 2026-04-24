@@ -569,6 +569,87 @@ describe('createSubagentTool forked subagent behavior', () => {
     expect(subagentHarness.resourceId).toBe('parent-resource-1');
   });
 
+  it('forks: drains the parent save queue before cloning so the fork carries the latest turn', async () => {
+    // Real regression: in TUI runs the parent's user message is still in the
+    // in-flight SaveQueueManager (100ms debounce) when the subagent tool call
+    // fires. Unless we flush first, `memory.cloneThread` reads an empty thread
+    // and the fork starts without parent history.
+    const { parentAgent, parentStream } = makeParentAgent('drained fork output');
+    const flushOrder: string[] = [];
+    const flushMessages = vi.fn(async () => {
+      flushOrder.push('flush');
+    });
+    const cloneThreadForFork = vi.fn().mockImplementation(async () => {
+      flushOrder.push('clone');
+      return { id: 'forked-thread-drained', resourceId: 'parent-resource-1' };
+    });
+
+    const tool = createSubagentTool({
+      subagents,
+      resolveModel,
+      fallbackModelId: 'test-model',
+      getParentAgent: () => parentAgent,
+      cloneThreadForFork,
+    });
+
+    const requestContext = new RequestContext();
+    const harnessCtx: Partial<HarnessRequestContext> = {
+      emitEvent: vi.fn(),
+      threadId: 'parent-thread-drained',
+      resourceId: 'parent-resource-1',
+    };
+    requestContext.set('harness', harnessCtx);
+
+    const result = await (tool as any).execute(
+      { agentType: 'explore', task: 'Needs latest history', forked: true },
+      { requestContext, agent: { toolCallId: 'tc-drain-1', flushMessages } },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(flushMessages).toHaveBeenCalledTimes(1);
+    expect(cloneThreadForFork).toHaveBeenCalledTimes(1);
+    // Flush must happen strictly before clone — otherwise the clone reads stale storage.
+    expect(flushOrder).toEqual(['flush', 'clone']);
+    expect(parentStream).toHaveBeenCalledTimes(1);
+  });
+
+  it('forks: flushMessages failures are swallowed and the clone still runs', async () => {
+    // A flush failure (e.g. transient storage error) should never abort the
+    // fork — the clone will just be missing the very latest turn, which is
+    // better than failing the subagent call outright.
+    const { parentAgent, parentStream } = makeParentAgent('flush-failure fork');
+    const flushMessages = vi.fn().mockRejectedValue(new Error('storage unavailable'));
+    const cloneThreadForFork = vi
+      .fn()
+      .mockResolvedValue({ id: 'forked-thread-after-flush-fail', resourceId: 'parent-resource-1' });
+
+    const tool = createSubagentTool({
+      subagents,
+      resolveModel,
+      fallbackModelId: 'test-model',
+      getParentAgent: () => parentAgent,
+      cloneThreadForFork,
+    });
+
+    const requestContext = new RequestContext();
+    const harnessCtx: Partial<HarnessRequestContext> = {
+      emitEvent: vi.fn(),
+      threadId: 'parent-thread-flush-fail',
+      resourceId: 'parent-resource-1',
+    };
+    requestContext.set('harness', harnessCtx);
+
+    const result = await (tool as any).execute(
+      { agentType: 'explore', task: 'Flush can fail', forked: true },
+      { requestContext, agent: { toolCallId: 'tc-flush-fail', flushMessages } },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(flushMessages).toHaveBeenCalledTimes(1);
+    expect(cloneThreadForFork).toHaveBeenCalledTimes(1);
+    expect(parentStream).toHaveBeenCalledTimes(1);
+  });
+
   it('forks by default when the subagent definition sets forked=true', async () => {
     const { parentAgent, parentStream } = makeParentAgent('default fork');
     const cloneThreadForFork = vi.fn().mockResolvedValue({ id: 'forked-thread-default', resourceId: 'rid' });

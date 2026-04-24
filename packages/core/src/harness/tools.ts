@@ -487,6 +487,17 @@ Use this tool when:
           };
         }
 
+        // The parent stream batches message saves through a debounced save
+        // queue (see SaveQueueManager). If we clone straight away, the parent's
+        // user message (and the assistant turn that produced this tool call)
+        // are still in-memory, not in the store — and the clone ends up empty.
+        // Drain the queue first so the fork actually carries the prior
+        // conversation.
+        await context?.agent?.flushMessages?.().catch(() => {
+          // Non-fatal: a failed flush just means the fork may be missing the
+          // very latest turn. Still proceed with the clone.
+        });
+
         let forkedThread: { id: string; resourceId: string };
         try {
           forkedThread = await opts.cloneThreadForFork({
