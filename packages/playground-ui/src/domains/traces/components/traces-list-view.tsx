@@ -67,7 +67,8 @@ export function TracesListView({
     rows.map(trace => {
       const isFeatured = trace.traceId === featuredTraceId;
       const displayDate = trace.startedAt ?? trace.createdAt;
-      const entityName = trace.entityName || trace.entityId || trace.attributes?.agentId || trace.attributes?.workflowId;
+      const entityName =
+        trace.entityName || trace.entityId || trace.attributes?.agentId || trace.attributes?.workflowId;
 
       return (
         <TracesDataList.RowButton
