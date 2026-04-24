@@ -1701,11 +1701,20 @@ export const RESUME_STREAM_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption?.resource);
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
-      if (effectiveThreadId && effectiveResourceId) {
+      if (effectiveThreadId) {
         const memoryInstance = await agent.getMemory({ requestContext: serverRequestContext });
         if (memoryInstance) {
           const thread = await memoryInstance.getThreadById({ threadId: effectiveThreadId });
-          await validateThreadOwnership(thread, effectiveResourceId);
+          if (thread) {
+            await enforceThreadAccess({
+              mastra,
+              requestContext: serverRequestContext,
+              threadId: effectiveThreadId,
+              thread,
+              effectiveResourceId,
+              permission: 'memory:write',
+            });
+          }
         }
       }
 
