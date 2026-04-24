@@ -142,7 +142,12 @@ export function sanitizeV5UIMessages(
         // Filter out incomplete client-side tool calls (input-available without providerExecuted)
         // and input-streaming states.
         if (filterIncompleteToolCalls) {
-          // Completed tools (client or provider) — keep them
+          // Completed provider-executed tools (e.g. Anthropic server_tool_use) carry
+          // provider-specific toolCallIds (srvtoolu_*). When sent to a different provider
+          // (e.g. OpenAI Responses API) these IDs are unrecognized and cause 404 errors.
+          // Filter them out — the tool results are already captured in the text parts.
+          if (p.providerExecuted && (p.state === 'output-available' || p.state === 'output-error')) return false;
+          // Completed client-side tools — keep them
           if (p.state === 'output-available' || p.state === 'output-error') return true;
           // Provider-executed tools may be deferred by the provider (e.g. Anthropic non-deterministically
           // defers web_search when mixed with client tool calls). Keep these so the provider API sees

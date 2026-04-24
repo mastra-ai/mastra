@@ -80,11 +80,11 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
     expect(result[0]!.parts).toHaveLength(1);
   });
 
-  it('should keep output-available provider-executed tool parts (provider needs encryptedContent for citations)', () => {
+  it('should filter out completed provider-executed tool parts to prevent cross-provider ID leaks', () => {
     const msg = makeMessage([
       makeToolPart({
         type: 'tool-web_search_20250305',
-        toolCallId: 'call-1',
+        toolCallId: 'srvtoolu_abc123',
         state: 'output-available',
         input: { query: 'anthropic' },
         output: { results: ['result1'] },
@@ -94,8 +94,9 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
 
     const result = sanitizeV5UIMessages([msg], true);
 
-    expect(result).toHaveLength(1);
-    expect(result[0]!.parts).toHaveLength(1);
+    // Completed provider-executed tools carry provider-specific IDs (e.g. srvtoolu_*)
+    // that are unrecognized by other providers — filter them out
+    expect(result).toHaveLength(0);
   });
 
   it('should handle mid-loop parallel calls: keep client output-available and deferred provider, drop client input-available', () => {
@@ -136,11 +137,11 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
     expect(toolCallIds).not.toContain('call-3');
   });
 
-  it('should keep output-error provider-executed tool parts', () => {
+  it('should filter out output-error provider-executed tool parts', () => {
     const msg = makeMessage([
       makeToolPart({
         type: 'tool-web_search_20250305',
-        toolCallId: 'call-1',
+        toolCallId: 'srvtoolu_err456',
         state: 'output-error',
         input: { query: 'test' },
         providerExecuted: true,
@@ -149,11 +150,11 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
 
     const result = sanitizeV5UIMessages([msg], true);
 
-    expect(result).toHaveLength(1);
-    expect(result[0]!.parts).toHaveLength(1);
+    // Even errored provider-executed tools should be filtered out
+    expect(result).toHaveLength(0);
   });
 
-  it('should keep both client and provider output-available in resume scenario', () => {
+  it('should keep client tool but filter provider-executed tool in mixed resume scenario', () => {
     const msg = makeMessage([
       // Client-executed tool with result — keep
       makeToolPart({
@@ -163,10 +164,10 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
         input: { name: 'test' },
         output: { company: 'Acme' },
       }),
-      // Provider-executed tool completed — keep (provider needs encryptedContent)
+      // Provider-executed tool completed — filter (cross-provider ID safety)
       makeToolPart({
         type: 'tool-web_search_20250305',
-        toolCallId: 'call-2',
+        toolCallId: 'srvtoolu_xyz789',
         state: 'output-available',
         input: { query: 'test' },
         output: { results: ['result1'] },
@@ -177,11 +178,36 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
     const result = sanitizeV5UIMessages([msg], true);
 
     expect(result).toHaveLength(1);
-    expect(result[0]!.parts).toHaveLength(2);
+    expect(result[0]!.parts).toHaveLength(1);
 
     const toolCallIds = result[0]!.parts.map((p: any) => p.toolCallId);
     expect(toolCallIds).toContain('call-1');
-    expect(toolCallIds).toContain('call-2');
+    expect(toolCallIds).not.toContain('srvtoolu_xyz789');
+  });
+
+  it('should prevent cross-provider tool ID leaks (Anthropic srvtoolu_* to OpenAI)', () => {
+    // Scenario: Anthropic agent ran server_tool_use (web_search), then a different
+    // agent (OpenAI) resumes the thread. The srvtoolu_* ID would cause a 404 on
+    // OpenAI Responses API because it uses toolCallId as item_reference.
+    const msg = makeMessage([
+      { type: 'text', text: 'Let me search for that...' },
+      makeToolPart({
+        type: 'tool-web_search_20250305',
+        toolCallId: 'srvtoolu_01MkPKoctHhE9KDNjDvEHnSD',
+        state: 'output-available',
+        input: { query: 'mastra ai framework' },
+        output: { encryptedContent: '...' },
+        providerExecuted: true,
+      }),
+      { type: 'text', text: 'Based on the search results, Mastra is...' },
+    ]);
+
+    const result = sanitizeV5UIMessages([msg], true);
+
+    // The provider-executed tool is filtered out, but text parts are preserved
+    expect(result).toHaveLength(1);
+    expect(result[0]!.parts).toHaveLength(2);
+    expect(result[0]!.parts.every(p => p.type === 'text')).toBe(true);
   });
 
   it('should not filter provider-executed tools when filterIncompleteToolCalls is false', () => {
