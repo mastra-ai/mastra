@@ -74,6 +74,7 @@ const AgentBuilderAgentViewPage = ({ id, storedAgent, toolsData, isReady }: Page
 const AgentBuilderAgentViewSkeleton = () => (
   <WorkspaceLayout
     isLoading
+    mode="test"
     defaultExpanded={false}
     chat={null}
     configure={
@@ -119,10 +120,11 @@ const AgentBuilderAgentViewReady = ({ id, storedAgent, toolsData }: AgentBuilder
   return (
     <WorkspaceLayout
       isLoading={false}
+      mode="test"
       defaultExpanded={false}
-      toolbarAction={
+      modeAction={
         <IconButton
-          tooltip="Edit agent"
+          tooltip="Edit configuration"
           className="rounded-full"
           onClick={() => navigate(`/agent-builder/agents/${id}/edit`, { viewTransition: true })}
           data-testid="agent-builder-view-edit"

@@ -21,17 +21,14 @@ export const SystemPromptDialog = ({ open, onOpenChange, prompt, onSave, editabl
     <SideDialog
       isOpen={open}
       onClose={() => onOpenChange(false)}
-      dialogTitle="Edit system prompt"
+      dialogTitle="Instructions"
       dialogDescription="Edit the instructions that shape your agent."
       level={2}
     >
-      <SideDialog.Top>
-        <FileTextIcon className="size-4" /> Instructions
-      </SideDialog.Top>
       <SideDialog.Content>
         <SideDialog.Header>
           <SideDialog.Heading>
-            <FileTextIcon /> Edit system prompt
+            <FileTextIcon /> Instructions
           </SideDialog.Heading>
         </SideDialog.Header>
 

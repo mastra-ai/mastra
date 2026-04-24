@@ -66,9 +66,6 @@ export const AgentBuilderStarter = () => {
           className="text-center font-serif text-neutral6"
           style={{ fontSize: 'clamp(1.875rem, 3.5vw, 2.5rem)', lineHeight: 1.1, letterSpacing: '-0.015em' }}
         >
-          <span aria-hidden className="mr-3 inline-block align-middle text-accent1" style={{ fontSize: '0.75em' }}>
-            ✦
-          </span>
           What should we build today?
         </h1>
 

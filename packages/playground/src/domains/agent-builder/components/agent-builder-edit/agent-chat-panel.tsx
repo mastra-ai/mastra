@@ -50,7 +50,7 @@ export const AgentChatPanel = ({ agentId }: AgentChatPanelProps) => {
             data-testid="agent-builder-agent-chat-empty-state"
           >
             <Txt variant="ui-md" className="text-neutral4">
-              Start chatting with this agent
+              Start chatting with your agent
             </Txt>
             <Txt variant="ui-sm" className="text-neutral3">
               Your messages will appear here.
@@ -66,7 +66,7 @@ export const AgentChatPanel = ({ agentId }: AgentChatPanelProps) => {
         onKeyDown={handleKeyDown}
         disabled={isRunning}
         canSubmit={trimmed.length > 0 && !isRunning}
-        placeholder="Message the agent…"
+        placeholder="Message your agent…"
         inputTestId="agent-builder-agent-chat-input"
         submitTestId="agent-builder-agent-chat-submit"
       />

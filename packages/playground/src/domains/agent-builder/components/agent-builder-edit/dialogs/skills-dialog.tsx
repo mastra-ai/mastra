@@ -1,4 +1,4 @@
-import { SideDialog, Txt } from '@mastra/playground-ui';
+import { EmptyState, SideDialog } from '@mastra/playground-ui';
 import { GraduationCapIcon } from 'lucide-react';
 
 interface SkillsDialogProps {
@@ -16,9 +16,6 @@ export const SkillsDialog = ({ open, onOpenChange }: SkillsDialogProps) => {
       dialogDescription="Turn on the skills your agent should specialize in."
       level={2}
     >
-      <SideDialog.Top>
-        <GraduationCapIcon className="size-4" /> Skills
-      </SideDialog.Top>
       <SideDialog.Content>
         <SideDialog.Header>
           <SideDialog.Heading>
@@ -26,9 +23,11 @@ export const SkillsDialog = ({ open, onOpenChange }: SkillsDialogProps) => {
           </SideDialog.Heading>
         </SideDialog.Header>
 
-        <Txt variant="ui-sm" className="text-neutral3">
-          No skills available yet.
-        </Txt>
+        <EmptyState
+          iconSlot={<GraduationCapIcon className="size-6 text-neutral3" />}
+          titleSlot="No skills in this project yet"
+          descriptionSlot="You can still shape your agent with instructions and tools."
+        />
       </SideDialog.Content>
     </SideDialog>
   );

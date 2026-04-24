@@ -84,6 +84,13 @@ export const AgentConfigurePanel = ({
     return <AgentConfigurePanelSkeleton />;
   }
 
+  const trimmedInstructions = draftInstructions.trim();
+  const instructionsDescription = trimmedInstructions.length === 0
+    ? 'Set how your agent thinks and responds'
+    : trimmedInstructions.length > 80
+      ? `${trimmedInstructions.slice(0, 80).trimEnd()}…`
+      : trimmedInstructions;
+
   return (
     <div className="flex h-full flex-col border border-border1 bg-surface2 rounded-3xl overflow-hidden">
       <div className="flex-1 flex flex-col gap-6 py-6 overflow-y-auto">
@@ -121,7 +128,7 @@ export const AgentConfigurePanel = ({
                   name="agent-name"
                   label="Name"
                   value={draftName}
-                  placeholder="My agent"
+                  placeholder="Untitled agent"
                   onChange={e => onDraftNameChange(e.target.value)}
                   testId="agent-configure-name"
                 />
@@ -152,11 +159,11 @@ export const AgentConfigurePanel = ({
           </div>
         )}
 
-        <div className="flex flex-col">
+        <div className="flex flex-col divide-y divide-border1 border-t border-border1">
           <ConfigRow
             icon={<FileText className="h-4 w-4" />}
             label="Instructions"
-            description={draftInstructions}
+            description={instructionsDescription}
             onClick={() => setSystemPromptOpen(true)}
             testId="agent-preview-edit-system-prompt"
           />
@@ -213,7 +220,7 @@ const ConfigRow = ({ icon, label, description, count, total, onClick, testId }: 
     type="button"
     onClick={onClick}
     data-testid={testId}
-    className="group flex items-center gap-4 border-b border-border1 px-6 py-4 text-left transition-colors first:border-t hover:bg-surface3"
+    className="group flex items-center gap-3 px-6 py-4 text-left transition-colors hover:bg-surface3"
   >
     <span className="shrink-0 text-neutral3 transition-colors group-hover:text-neutral5">{icon}</span>
     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -225,7 +232,7 @@ const ConfigRow = ({ icon, label, description, count, total, onClick, testId }: 
       </Txt>
     </div>
     {count !== undefined && total !== undefined && (
-      <Txt variant="ui-sm" className="shrink-0 font-mono text-neutral3">
+      <Txt variant="ui-sm" className="shrink-0 tabular-nums text-neutral3">
         {count} / {total}
       </Txt>
     )}
@@ -246,9 +253,9 @@ const AgentConfigurePanelSkeleton = () => (
           <Skeleton className="h-9 w-full" />
         </div>
       </div>
-      <div className="flex flex-col">
+      <div className="flex flex-col divide-y divide-border1 border-t border-border1">
         {[0, 1, 2].map(i => (
-          <div key={i} className="flex items-center gap-4 border-b border-border1 px-6 py-4 first:border-t">
+          <div key={i} className="flex items-center gap-3 px-6 py-4">
             <Skeleton className="h-4 w-4 shrink-0 rounded" />
             <div className="flex min-w-0 flex-1 flex-col gap-2">
               <Skeleton className="h-3 w-20" />

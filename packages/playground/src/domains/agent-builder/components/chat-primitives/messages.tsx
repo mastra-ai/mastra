@@ -51,7 +51,7 @@ export const Txtmessage = ({ txt, role }: { txt: string; role: MastraUIMessage['
       <div className="flex justify-end">
         <Txt
           variant="ui-md"
-          className="whitespace-pre-wrap text-neutral6 rounded-2xl bg-surface3 px-4 py-2.5 max-w-[80%]"
+          className="whitespace-pre-wrap bg-white text-black rounded-2xl px-4 py-2.5 max-w-[80%]"
           as="div"
         >
           <Markdown>{txt}</Markdown>
