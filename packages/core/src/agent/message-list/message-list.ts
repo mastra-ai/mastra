@@ -1136,50 +1136,11 @@ export class MessageList {
           }
           // If no new parts, don't add anything (the sealed message already has all the content)
         } else if (existingIsAtOrBeforeSealedBoundary) {
-          // Existing message lives at or before a sealed boundary. We can't
-          // replace it in place (that would mutate content behind a seal), but
-          // we also don't want to duplicate the pre-seal prefix if the incoming
-          // payload is an accumulated snapshot from the stale response id.
-          //
-          // Only strip a prefix when we can verify it — i.e. the existing
-          // parts match the first N parts of the incoming payload exactly. If
-          // they don't, keep the whole incoming payload as a fresh message
-          // so we don't silently drop unrelated content the caller emitted
-          // under the same id.
-          const existingParts = existingMessage.content?.parts || [];
-          const incomingParts = messageV2.content.parts;
-
-          let newParts: typeof incomingParts;
-          if (incomingParts.length <= existingParts.length) {
-            if (messagesAreEqual(existingMessage, messageV2)) {
-              // Stale accumulated snapshot — ignore.
-              return this;
-            }
-            // Shorter / different incoming under the same id — keep it all
-            // rather than truncating.
-            newParts = incomingParts;
-          } else if (
-            existingParts.length > 0 &&
-            CacheKeyGenerator.fromDBParts(existingParts) ===
-              CacheKeyGenerator.fromDBParts(incomingParts.slice(0, existingParts.length))
-          ) {
-            // Accumulated snapshot: incoming starts with existingParts verbatim.
-            // Append only the suffix so we don't replay the pre-seal prefix.
-            newParts = incomingParts.slice(existingParts.length);
-          } else {
-            // Longer incoming but prefix doesn't match existing — this isn't
-            // an accumulated snapshot, so keep the whole payload.
-            newParts = incomingParts;
+          messageV2.id = this.generateMessageId?.({ idType: 'message', source: 'memory' }) ?? randomUUID();
+          if (messageV2.createdAt <= existingMessage.createdAt) {
+            messageV2.createdAt = new Date(existingMessage.createdAt.getTime() + 1);
           }
-
-          if (newParts.length > 0) {
-            messageV2.id = this.generateMessageId?.({ idType: 'message', source: 'memory' }) ?? randomUUID();
-            messageV2.content.parts = newParts;
-            if (messageV2.createdAt <= existingMessage.createdAt) {
-              messageV2.createdAt = new Date(existingMessage.createdAt.getTime() + 1);
-            }
-            this.messages.push(messageV2);
-          }
+          this.messages.push(messageV2);
         } else {
           const isExistingFromMemory = this.memoryMessages.has(existingMessage);
           const shouldMergeIntoExisting = MessageMerger.shouldMerge(
