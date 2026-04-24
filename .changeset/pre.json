@@ -128,9 +128,32 @@
     "@mastra/e2b": "0.2.0",
     "@mastra/gcs": "0.2.0",
     "@mastra/s3": "0.4.0",
-    "@mastra/vercel": "0.1.0"
+    "@mastra/vercel": "0.1.0",
+    "@mastra/modal": "0.1.0"
   },
   "changesets": [
-    "green-birds-knock"
+    "automated-provider-registry-20260423-065218",
+    "brave-planets-drive",
+    "bright-screens-glow",
+    "chubby-comics-shake",
+    "cozy-roses-report",
+    "eighty-parents-fall",
+    "fast-lands-smoke",
+    "fix-dot-path-root-resolution",
+    "fix-studio-provider-icons-dark-mode",
+    "fruity-otters-burn",
+    "green-birds-knock",
+    "modal-sandbox-provider",
+    "pretty-streets-end",
+    "puny-actors-vanish",
+    "puny-dingos-knock",
+    "silent-carrots-pump",
+    "skill-mtime-detection",
+    "soft-pets-battle",
+    "sour-parks-refuse",
+    "swift-actors-judge",
+    "warm-bottles-wish",
+    "wicked-words-look",
+    "wild-mails-admire"
   ]
 }

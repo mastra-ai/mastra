@@ -163,6 +163,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           observabilityContext: getOmObservabilityContext(args),
           hooks: {
             onBufferChunkSealed: rotateResponseMessageId,
+            onSyncObservationComplete: rotateResponseMessageId,
           },
         });
         this.turn.writer = writer;
@@ -173,6 +174,11 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         }
         state.__omTurn = this.turn;
       }
+
+      this.turn.addHooks({
+        onBufferChunkSealed: rotateResponseMessageId,
+        onSyncObservationComplete: rotateResponseMessageId,
+      });
 
       const observabilityContext = getOmObservabilityContext(args);
       state.__omObservabilityContext = observabilityContext;

@@ -59,8 +59,8 @@ export class ObservationTurn {
   /** Current actor model for this step. Updated by the processor before prepare(). */
   actorModelContext?: ObservationModelContext;
 
-  /** Optional processor-provided hooks for turn/step lifecycle integration. */
-  readonly hooks?: ObservationTurnHooks;
+  /** Processor-provided hooks for turn/step lifecycle integration. */
+  readonly hooks: ObservationTurnHooks;
 
   constructor(opts: {
     om: ObservationalMemory;
@@ -75,7 +75,7 @@ export class ObservationTurn {
     this.resourceId = opts.resourceId;
     this.messageList = opts.messageList;
     this.observabilityContext = opts.observabilityContext;
-    this.hooks = opts.hooks;
+    this.hooks = opts.hooks ?? {};
   }
 
   readonly om: ObservationalMemory;
@@ -98,6 +98,11 @@ export class ObservationTurn {
   /** The current step, if one exists. */
   get currentStep(): ObservationStep | undefined {
     return this._currentStep;
+  }
+
+  addHooks(hooks?: ObservationTurnHooks): void {
+    if (!hooks) return;
+    Object.assign(this.hooks, hooks);
   }
 
   /**

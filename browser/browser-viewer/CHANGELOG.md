@@ -1,5 +1,16 @@
 # @mastra/browser-viewer
 
+## 0.1.1-alpha.0
+
+### Patch Changes
+
+- Remove unused `userDataDir` config option from `BrowserViewerConfig`. ([#15696](https://github.com/mastra-ai/mastra/pull/15696))
+
+- Standardize `headless` default to `true` across all browser providers. Each provider now resolves `headless` once in its constructor and passes it to the thread manager via the base class getter, removing duplicate fallback logic. ([#15696](https://github.com/mastra-ai/mastra/pull/15696))
+
+- Updated dependencies [[`750b4d3`](https://github.com/mastra-ai/mastra/commit/750b4d3d8231f92e769b2c485921ac5a8ca639b9)]:
+  - @mastra/core@1.28.0-alpha.1
+
 ## 0.1.0
 
 ### Minor Changes
