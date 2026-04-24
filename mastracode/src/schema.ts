@@ -32,7 +32,11 @@ export const stateSchema = z.object({
   smartEditing: z.boolean().default(true),
   // Notification mode — alert when TUI needs user attention
   notifications: z.enum(['bell', 'system', 'both', 'off']).default('off'),
-  // Task list (persisted per-thread)
+  // Task list — ephemeral and scoped to the active thread.
+  // NOTE: this lives on the harness's single global state (one per process)
+  // and is NOT persisted with the thread; callers (see mastracode TUI
+  // thread_changed / thread_created / /new handlers) must clear it when
+  // switching threads so tasks do not leak across conversations.
   tasks: z
     .array(
       z.object({

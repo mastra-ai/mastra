@@ -122,6 +122,10 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
 
     case 'thread_changed': {
       ectx.showInfo(`Switched to thread: ${event.threadId}`);
+      // Clear ephemeral per-thread harness state so it does not leak
+      // from the previous thread (Harness.state is a single global snapshot
+      // and is not reset by switchThread itself).
+      await state.harness.setState({ tasks: [], activePlan: null });
       await ectx.renderExistingMessages();
       await state.harness.loadOMProgress();
       // Refresh git branch so TUI status line reflects the current branch
@@ -135,8 +139,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       if (currentThread) {
         state.currentThreadTitle = currentThread.title;
       }
-      // Clear tasks — they are ephemeral per-thread and should not leak
-      // from the previous thread's global harness state.
+      // Clear task UI component to reflect the freshly cleared state
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
         state.ui.requestRender();
@@ -149,12 +152,15 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       ectx.showInfo(`Created thread: ${event.thread.id}`);
       // Update current thread title for status line display
       state.currentThreadTitle = event.thread.title;
+      // Clear ephemeral per-thread harness state (tasks, activePlan) so the
+      // new thread does not inherit stale values from the previous thread.
+      await state.harness.setState({ tasks: [], activePlan: null });
       // Sync inherited resource-level settings
       const tState = state.harness.getState() as any;
       if (typeof tState?.escapeAsCancel === 'boolean') {
         state.editor.escapeEnabled = tState.escapeAsCancel;
       }
-      // Clear stale tasks from the previous thread
+      // Clear task UI component to reflect the freshly cleared state
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
       }

@@ -1,6 +1,6 @@
 import type { SlashCommandContext } from './types.js';
 
-export function handleNewCommand(ctx: SlashCommandContext): void {
+export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> {
   const { state } = ctx;
 
   state.pendingNewThread = true;
@@ -13,6 +13,10 @@ export function handleNewCommand(ctx: SlashCommandContext): void {
   state.allShellComponents = [];
   // Clear file tracking in display state (thread_created will also reset this)
   state.harness.getDisplayState().modifiedFiles.clear();
+  // Clear ephemeral per-thread harness state so the next system prompt
+  // (built before `thread_created` fires) does not re-inject stale tasks
+  // or a stale active plan from the previous thread.
+  await state.harness.setState({ tasks: [], activePlan: null });
   if (state.taskProgress) {
     state.taskProgress.updateTasks([]);
   }

@@ -497,8 +497,9 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
 
 export async function renderExistingTasks(state: TUIState): Promise<void> {
   try {
-    const harnessState = state.harness.getState() as { tasks?: TaskItem[] };
-    const tasks = harnessState.tasks || [];
+    // Read from display state which is already scoped per-thread, rather
+    // than from the global harness state which can leak tasks across threads.
+    const tasks: TaskItem[] = state.harness.getDisplayState().tasks ?? [];
 
     if (tasks.length > 0 && state.taskProgress) {
       state.taskProgress.updateTasks(tasks);
