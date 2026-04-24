@@ -705,7 +705,11 @@ export class BackgroundTaskManager {
           startedAt: task.startedAt!,
         });
 
-        await Promise.all([ctx.onComplete?.(task), this.config.onTaskComplete?.(task)]);
+        // Globals (this.config.onTaskComplete / onTaskFailed) fire from
+        // handleResult via pubsub so they run once per subscribing process
+        // — in distributed deployments that's the dispatching process, which
+        // is where observers/metrics are typically wired.
+        await ctx.onComplete?.(task);
       } else {
         ctx.onChunk?.({
           type: 'background-task-failed',
@@ -734,7 +738,9 @@ export class BackgroundTaskManager {
           startedAt: task.startedAt!,
         });
 
-        await Promise.all([ctx.onFailed?.(task), this.config.onTaskFailed?.(task)]);
+        // See comment above — globals are handled exclusively by
+        // handleResult so they fire once per subscribing process.
+        await ctx.onFailed?.(task);
       }
     } finally {
       this.deregisterTaskContext(task.id);

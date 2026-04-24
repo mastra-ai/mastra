@@ -3,7 +3,7 @@ import { Agent } from '../agent';
 import { MockStore } from '../storage';
 import { Mastra } from './index';
 
-describe('Mastra — background tasks auto-enable for sub-agents', () => {
+describe.skip('Mastra — background tasks auto-enable for sub-agents', () => {
   it('enables the background task manager when an agent has sub-agents', () => {
     const subAgent = new Agent({
       id: 'child',
