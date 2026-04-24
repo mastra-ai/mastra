@@ -1,7 +1,9 @@
 import { Skeleton, Txt } from '@mastra/playground-ui';
 import type { MastraUIMessage } from '@mastra/react';
+import { Check } from 'lucide-react';
 import { useState } from 'react';
 import Markdown from 'react-markdown';
+import { AGENT_BUILDER_TOOL_NAME } from '../agent-builder-edit/hooks/use-agent-builder-tool';
 import { Shimmer } from './shimmer';
 
 export const MessageRow = ({ message }: { message: MastraUIMessage }) => {
@@ -21,7 +23,24 @@ export const MessageRow = ({ message }: { message: MastraUIMessage }) => {
             );
 
           case 'dynamic-tool': {
+            console.log('dynamic-tool', part);
+            if (part.toolName === AGENT_BUILDER_TOOL_NAME) {
+              const toolsAdded = (part.input as { tools: { id: string; name: string }[] })?.tools ?? [];
+              return <BuilderAgentToolMessage toolsAdded={toolsAdded} key={key} />;
+            }
+
             return <ToolExecutionMessage key={key} />;
+          }
+
+          case `tool-${AGENT_BUILDER_TOOL_NAME}`: {
+            console.log(`tool-${AGENT_BUILDER_TOOL_NAME}`, part);
+            const toolsAdded = part.input.tools ?? [];
+            return <BuilderAgentToolMessage toolsAdded={toolsAdded} key={key} />;
+          }
+
+          default: {
+            console.log('default', part);
+            return null;
           }
         }
       })}
@@ -138,5 +157,27 @@ export const ToolExecutionMessage = () => {
     <Txt variant="ui-md" className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%]">
       {randomWord.charAt(0).toUpperCase() + randomWord.slice(1)}...
     </Txt>
+  );
+};
+
+const BuilderAgentToolMessage = ({ toolsAdded, key }: { toolsAdded: { id: string; name: string }[]; key: string }) => {
+  if (toolsAdded.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="border border-1 p-3 rounded-xl">
+      <Txt variant="ui-sm" className="whitespace-pre-wrap leading-relaxed text-neutral3 pb-2" as="div">
+        Agent capabilities unlocked:
+      </Txt>
+
+      <ul key={key} className="space-y-1">
+        {toolsAdded.map((tool: { id: string; name: string }) => (
+          <li key={`${key}-${tool.id}`} className="flex items-center gap-2">
+            <Check className="w-4 h-4 text-neutral3" /> <Txtmessage key={key} txt={tool.name} role="assistant" />
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 };

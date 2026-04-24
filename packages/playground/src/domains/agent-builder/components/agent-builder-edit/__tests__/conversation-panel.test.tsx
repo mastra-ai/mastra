@@ -146,7 +146,7 @@ describe('ConversationPanel agent-builder client tool', () => {
     await tool.execute({
       name: 'N',
       instructions: 'I',
-      tools: ['web-search'],
+      tools: [{ id: 'web-search', name: 'Web Search' }],
       skills: ['summarize'],
     });
 
@@ -167,21 +167,54 @@ describe('ConversationPanel agent-builder client tool', () => {
     expect(tool.description).toContain('Fetch a URL');
   });
 
-  it('constrains the tools field to the provided ids', () => {
+  it('requires both id and name for each entry in the tools field', () => {
+    renderPanel({ ...allOff, tools: true }, [{ id: 'web-search', description: 'Search the web' }]);
+    const tool = getAgentBuilderTool();
+
+    const valid = tool.inputSchema.safeParse({
+      name: 'N',
+      instructions: 'I',
+      tools: [{ id: 'web-search', name: 'Web Search' }],
+    });
+    expect(valid.success).toBe(true);
+
+    const missingName = tool.inputSchema.safeParse({
+      name: 'N',
+      instructions: 'I',
+      tools: [{ id: 'web-search' }],
+    });
+    expect(missingName.success).toBe(false);
+
+    const emptyName = tool.inputSchema.safeParse({
+      name: 'N',
+      instructions: 'I',
+      tools: [{ id: 'web-search', name: '' }],
+    });
+    expect(emptyName.success).toBe(false);
+
+    const asString = tool.inputSchema.safeParse({
+      name: 'N',
+      instructions: 'I',
+      tools: ['web-search'],
+    });
+    expect(asString.success).toBe(false);
+  });
+
+  it('constrains the tools id field to the provided ids', () => {
     renderPanel({ ...allOff, tools: true }, [{ id: 'web-search' }]);
     const tool = getAgentBuilderTool();
 
     const valid = tool.inputSchema.safeParse({
       name: 'N',
       instructions: 'I',
-      tools: ['web-search'],
+      tools: [{ id: 'web-search', name: 'Web Search' }],
     });
     expect(valid.success).toBe(true);
 
     const invalid = tool.inputSchema.safeParse({
       name: 'N',
       instructions: 'I',
-      tools: ['unknown-tool'],
+      tools: [{ id: 'unknown-tool', name: 'Unknown' }],
     });
     expect(invalid.success).toBe(false);
   });
@@ -193,7 +226,7 @@ describe('ConversationPanel agent-builder client tool', () => {
     await tool.execute({
       name: 'N',
       instructions: 'I',
-      tools: ['web-search'],
+      tools: [{ id: 'web-search', name: 'Web Search' }],
       skills: ['summarize'],
     });
 
