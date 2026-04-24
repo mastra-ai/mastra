@@ -2778,8 +2778,6 @@ Premium instructions.
 
       return {
         ...fast,
-        ioCalls: 0,
-        peakConcurrency: 0,
         get ioCalls() {
           return tracker.ioCalls;
         },
