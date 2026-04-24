@@ -99,7 +99,7 @@ The key scenario for thread state testing:
 
 ## Common Issues
 
-- **Observational memory errors**: You may see errors about `GOOGLE_GENERATIVE_AI_API_KEY` for the OM model. These are unrelated to main model functionality and can be ignored for TUI testing.
+- **Observational memory errors**: You may see errors about `GOOGLE_GENERATIVE_AI_API_KEY` for the OM model. Fix this by setting the OM model to an OpenRouter model via `/om` or in settings.json (`models.omModelOverride`). Alternatively, these can be ignored for TUI testing since they don't affect main model functionality.
 - **Model not calling tools**: Less capable models may not use mastracode's tool system. Explicitly instruct them to use specific tools by name.
 - **Status bar shows wrong model**: After changing settings.json, you may need to use `/models` in the TUI to activate the custom pack.
 - **Build failures**: If `pnpm cli` fails with module resolution errors, run `pnpm build:mastracode` from the repo root to build all transitive dependencies.
