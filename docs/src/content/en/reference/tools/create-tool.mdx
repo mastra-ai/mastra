@@ -5,6 +5,9 @@ packages:
   - "@mastra/core"
 ---
 
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
 # createTool()
 
 The `createTool()` function is used to define custom tools that your Mastra agents can execute. Tools extend an agent's capabilities by allowing it to interact with external systems, perform calculations, or access specific data.
@@ -33,6 +36,80 @@ export const tool = createTool({
   },
 })
 ```
+
+## Define schemas
+
+You can define the tool's `inputSchema` and `outputSchema` with any library that supports [Standard JSON Schema](https://standardschema.dev/json-schema). This includes libraries like [Zod](https://zod.dev/), [Valibot](https://valibot.dev/), and [ArkType](https://arktype.io/).
+
+<Tabs>
+  <TabItem value="zod" label="Zod">
+    ```typescript title="src/mastra/tools/weather-tool.ts"
+    import { createTool } from '@mastra/core/tools'
+    import { z } from 'zod'
+
+    export const weatherTool = createTool({
+      id: 'weather-tool',
+      description: 'Fetches weather for a location',
+      inputSchema: z.object({
+        location: z.string(),
+      }),
+      outputSchema: z.object({
+        weather: z.string(),
+      }),
+      execute: async inputData => {
+        // Fetch weather data
+      },
+    })
+    ```
+  </TabItem>
+
+  <TabItem value="valibot" label="Valibot">
+    ```typescript title="src/mastra/tools/weather-tool.ts"
+    import { createTool } from '@mastra/core/tools'
+    import * as v from 'valibot'
+    import { toStandardJsonSchema } from '@valibot/to-json-schema'
+
+    export const weatherTool = createTool({
+      id: 'weather-tool',
+      description: 'Fetches weather for a location',
+      inputSchema: toStandardJsonSchema(
+        v.object({
+          location: v.string(),
+        }),
+      ),
+      outputSchema: toStandardJsonSchema(
+        v.object({
+          weather: v.string(),
+        }),
+      ),
+      execute: async inputData => {
+        // Fetch weather data
+      },
+    })
+    ```
+  </TabItem>
+
+  <TabItem value="arktype" label="ArkType">
+    ```typescript title="src/mastra/tools/weather-tool.ts"
+    import { createTool } from '@mastra/core/tools'
+    import { type } from 'arktype'
+
+    export const weatherTool = createTool({
+      id: 'weather-tool',
+      description: 'Fetches weather for a location',
+      inputSchema: type({
+        location: 'string',
+      }),
+      outputSchema: type({
+        weather: 'string',
+      }),
+      execute: async inputData => {
+        // Fetch weather data
+      },
+    })
+    ```
+  </TabItem>
+</Tabs>
 
 ## Example with strict tool inputs
 
@@ -163,14 +240,14 @@ export const weatherTool = createTool({
   },
   {
     name: 'inputSchema',
-    type: 'Zod schema',
-    description: "A Zod schema defining the expected input parameters for the tool's `execute` function.",
+    type: 'StandardJSONSchemaV1',
+    description: "A Standard JSON Schema defining the expected input parameters for the tool's `execute` function.",
     isOptional: true,
   },
   {
     name: 'outputSchema',
-    type: 'Zod schema',
-    description: "A Zod schema defining the expected output structure of the tool's `execute` function.",
+    type: 'StandardJSONSchemaV1',
+    description: "A Standard JSON Schema defining the expected output structure of the tool's `execute` function.",
     isOptional: true,
   },
   {
@@ -189,16 +266,16 @@ export const weatherTool = createTool({
   },
   {
     name: 'suspendSchema',
-    type: 'Zod schema',
+    type: 'StandardJSONSchemaV1',
     description:
-      'A Zod schema defining the structure of the payload passed to `suspend()`. This payload is returned to the client when the tool suspends execution.',
+      'A Standard JSON Schema defining the structure of the payload passed to `suspend()`. This payload is returned to the client when the tool suspends execution.',
     isOptional: true,
   },
   {
     name: 'resumeSchema',
-    type: 'Zod schema',
+    type: 'StandardJSONSchemaV1',
     description:
-      'A Zod schema defining the expected structure of `resumeData` when the tool is resumed. Used by the agent to extract data from user messages when `autoResumeSuspendedTools` is enabled.',
+      'A Standard JSON Schema defining the expected structure of `resumeData` when the tool is resumed. Used by the agent to extract data from user messages when `autoResumeSuspendedTools` is enabled.',
     isOptional: true,
   },
   {
@@ -217,9 +294,9 @@ export const weatherTool = createTool({
   },
   {
     name: 'requestContextSchema',
-    type: 'Zod schema',
+    type: 'StandardJSONSchemaV1',
     description:
-      'A Zod schema for validating request context values. When provided, the context is validated before execute() runs, returning an error object if validation fails.',
+      'A Standard JSON Schema for validating request context values. When provided, the context is validated before execute() runs, returning an error object if validation fails.',
     isOptional: true,
   },
   {
