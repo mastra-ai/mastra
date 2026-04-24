@@ -4,13 +4,22 @@ import { getInputPreview } from '../utils/span-utils';
 import { DataListSkeleton, TracesDataList } from '@/ds/components/DataList';
 import { cn } from '@/lib/utils';
 
+/** Span attributes fields the list view reads directly. Extra unknown keys are allowed so callers
+ *  can pass the full attributes record from @mastra/core/storage without mapping. */
+export type TraceAttributes = {
+  status?: string | null;
+  agentId?: string | null;
+  workflowId?: string | null;
+  [key: string]: unknown;
+};
+
 export type TracesListViewTrace = {
   traceId: string;
   name: string;
   entityType?: string | null;
   entityId?: string | null;
   entityName?: string | null;
-  attributes?: Record<string, any> | null;
+  attributes?: TraceAttributes | null;
   input?: unknown;
   startedAt?: Date | string | null;
   createdAt: Date | string;
@@ -19,7 +28,7 @@ export type TracesListViewTrace = {
 
 const COLUMNS = 'auto auto auto auto minmax(5rem,1fr) auto auto';
 
-export interface TracesListViewProps {
+export type TracesListViewProps = {
   traces: TracesListViewTrace[];
   isLoading?: boolean;
   isFetchingNextPage?: boolean;
@@ -32,7 +41,7 @@ export interface TracesListViewProps {
   onTraceClick: (trace: TracesListViewTrace) => void;
   groupByThread?: boolean;
   threadTitles?: Record<string, string>;
-}
+};
 
 /**
  * Pure presentational list. Renders the TracesDataList primitive with rows, optional thread grouping,
@@ -58,8 +67,7 @@ export function TracesListView({
     rows.map(trace => {
       const isFeatured = trace.traceId === featuredTraceId;
       const displayDate = trace.startedAt ?? trace.createdAt;
-      const entityName =
-        trace.entityName || trace.entityId || trace.attributes?.agentId || trace.attributes?.workflowId;
+      const entityName = trace.entityName || trace.entityId || trace.attributes?.agentId || trace.attributes?.workflowId;
 
       return (
         <TracesDataList.RowButton

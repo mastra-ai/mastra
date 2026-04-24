@@ -49,6 +49,10 @@ export default function TracePage() {
 
   const { data: spanDetailData, isLoading: isLoadingSpanDetail } = useSpanDetail(traceId, featuredSpanId ?? '');
 
+  // Reset pagination whenever the active span changes — otherwise a page index from a previous
+  // span could be reused against a span that has fewer (or no) scores.
+  useEffect(() => setSpanScoresPage(0), [traceId, featuredSpanId]);
+
   const { data: scorers, isLoading: isLoadingScorers } = useScorers();
   const { data: spanScoresData, isLoading: isLoadingSpanScoresData } = useTraceSpanScores({
     traceId,

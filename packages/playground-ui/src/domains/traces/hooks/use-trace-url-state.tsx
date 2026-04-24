@@ -192,6 +192,9 @@ export function useTraceUrlState(
           } else {
             next.delete(SPAN_ID_PARAM);
           }
+          // Tab + score are per-span; they'd point at the previous span's context otherwise.
+          next.delete(TAB_PARAM);
+          next.delete(SCORE_ID_PARAM);
           return next;
         },
         { replace: true },

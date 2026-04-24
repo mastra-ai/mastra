@@ -1,4 +1,3 @@
-import type { ScoreRowData } from '@mastra/core/evals';
 import { EntityType } from '@mastra/core/observability';
 import {
   ButtonWithTooltip,
@@ -48,13 +47,16 @@ export default function TracesPage() {
   });
 
   const [autoFocusFilterFieldId, setAutoFocusFilterFieldId] = useState<string | undefined>();
-  const [featuredScore, setFeaturedScore] = useState<ScoreRowData | undefined>();
   const [spanScoresPage, setSpanScoresPage] = useState(0);
   const [traceCollapsed, setTraceCollapsed] = useState(false);
   const [datasetDialogTarget, setDatasetDialogTarget] = useState<{
     traceId: string;
     rootSpanId: string | undefined;
   } | null>(null);
+
+  // Reset pagination whenever the selected trace or span changes — otherwise a page index from a
+  // previous span could be reused against a span that has fewer (or no) scores.
+  useEffect(() => setSpanScoresPage(0), [url.traceIdParam, url.spanIdParam]);
 
   const { data: scorers, isLoading: isLoadingScorers } = useScorers();
   const { data: spanScoresData, isLoading: isLoadingSpanScoresData } = useTraceSpanScores({
@@ -71,13 +73,9 @@ export default function TracesPage() {
     url.spanIdParam ?? '',
   );
 
-  // Resolve initialScoreId once scores data loads
-  useEffect(() => {
-    if (url.scoreIdParam && spanScoresData?.scores && !featuredScore) {
-      const match = spanScoresData.scores.find(s => s.id === url.scoreIdParam);
-      if (match) setFeaturedScore(match);
-    }
-  }, [url.scoreIdParam, spanScoresData?.scores, featuredScore]);
+  // Derived from URL + query data — no local state, so a span change (which clears scoreIdParam
+  // in the URL) or a direct URL edit always resyncs ScoreDataPanel.
+  const featuredScore = url.scoreIdParam ? spanScoresData?.scores?.find(s => s.id === url.scoreIdParam) : undefined;
 
   const { data: availableTags = [], isPending: isTagsLoading } = useTags();
   const { data: rootEntityNameSuggestions = [], isPending: isEntityNamesLoading } = useEntityNames({
@@ -310,10 +308,7 @@ export default function TracesPage() {
                     scoresData={spanScoresData}
                     onPageChange={setSpanScoresPage}
                     isLoadingScoresData={isLoadingSpanScoresData}
-                    onScoreSelect={score => {
-                      setFeaturedScore(score);
-                      url.handleScoreChange(score.id);
-                    }}
+                    onScoreSelect={score => url.handleScoreChange(score.id)}
                   />
                 </div>
               )}
@@ -321,15 +316,7 @@ export default function TracesPage() {
           ) : null
         }
         scorePanelSlot={
-          featuredScore ? (
-            <ScoreDataPanel
-              score={featuredScore}
-              onClose={() => {
-                setFeaturedScore(undefined);
-                url.handleScoreChange(null);
-              }}
-            />
-          ) : null
+          featuredScore ? <ScoreDataPanel score={featuredScore} onClose={() => url.handleScoreChange(null)} /> : null
         }
       />
 

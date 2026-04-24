@@ -8,8 +8,8 @@ import {
 import type { SetURLSearchParamsLike } from './use-trace-url-state';
 import { toast } from '@/lib/toast';
 
-const DEFAULT_SAVED_MESSAGE = 'Filters setting for Traces saved';
-const DEFAULT_CLEARED_MESSAGE = 'Filters setting for Traces cleared up';
+const DEFAULT_SAVED_MESSAGE = 'Trace filter settings saved.';
+const DEFAULT_CLEARED_MESSAGE = 'Trace filter settings cleared.';
 
 export interface TraceFilterPersistenceOptions {
   /** Override the localStorage key. Default: 'mastra:traces:saved-filters'. */

@@ -1,6 +1,7 @@
 import type { SpanRecord } from '@mastra/core/storage';
 import { format } from 'date-fns';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils';
 import { SpanTokenUsage } from './span-token-usage';
 import type { TokenUsage } from './span-token-usage';
@@ -10,7 +11,7 @@ import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
 
-function buildDialogTitle(sectionTitle: string, icon: React.ReactNode, span: { spanId: string; traceId: string }) {
+function buildDialogTitle(sectionTitle: string, icon: ReactNode, span: { spanId: string; traceId: string }) {
   return (
     <>
       <span className="flex items-center gap-1.5 text-neutral2 uppercase tracking-widest [&>svg]:size-3.5">
@@ -42,9 +43,9 @@ export interface SpanDataPanelViewProps {
    * When provided, a "Scoring" tab appears; the slot receives the loaded span and renders
    * whatever scoring UI the consumer wants. When undefined, only the "Details" tab renders.
    */
-  scoringTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => React.ReactNode;
+  scoringTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => ReactNode;
   /** Optional count shown in the "Scoring" tab label (e.g. number of scores). */
-  scoringTabBadge?: React.ReactNode;
+  scoringTabBadge?: ReactNode;
 }
 
 export function SpanDataPanelView({
@@ -110,8 +111,8 @@ function SpanDataPanelContent({
   spanId: string;
   activeTab?: string;
   onTabChange?: (tab: string) => void;
-  scoringTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => React.ReactNode;
-  scoringTabBadge?: React.ReactNode;
+  scoringTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => ReactNode;
+  scoringTabBadge?: ReactNode;
 }) {
   const durationMs =
     span.startedAt && span.endedAt ? new Date(span.endedAt).getTime() - new Date(span.startedAt).getTime() : null;
