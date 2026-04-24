@@ -6,7 +6,7 @@ import fs from 'node:fs';
 
 import { CombinedAutocompleteProvider, Spacer, Text } from '@mariozechner/pi-tui';
 import type { SlashCommand } from '@mariozechner/pi-tui';
-import type { HarnessEventListener, TaskItem } from '@mastra/core/harness';
+import type { HarnessEventListener } from '@mastra/core/harness';
 
 import { getUserId } from '../utils/project.js';
 import { loadCustomCommands } from '../utils/slash-command-loader.js';
@@ -497,8 +497,7 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
 
 export async function renderExistingTasks(state: TUIState): Promise<void> {
   try {
-    const harnessState = state.harness.getState() as { tasks?: TaskItem[] };
-    const tasks = harnessState.tasks || [];
+    const tasks = state.harness.getDisplayState().tasks;
 
     if (tasks.length > 0 && state.taskProgress) {
       state.taskProgress.updateTasks(tasks);
