@@ -689,6 +689,19 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           reply.status(404).send({ error: 'Not Found' });
           return;
         }
+        // Merge headers set by Fastify hooks/plugins (e.g. @fastify/cors) into
+        // the Fetch Response before hijacking. Otherwise writeCustomRouteResponse's
+        // nodeRes.writeHead() overwrites them with only the response.headers set
+        // by the custom route handler. Route-set headers win on conflict.
+        const existingHeaders = reply.getHeaders();
+        for (const [key, value] of Object.entries(existingHeaders)) {
+          if (value === undefined || response.headers.has(key)) continue;
+          if (Array.isArray(value)) {
+            for (const item of value) response.headers.append(key, String(item));
+          } else {
+            response.headers.set(key, String(value));
+          }
+        }
         reply.hijack();
         await this.writeCustomRouteResponse(response, reply.raw);
       };
