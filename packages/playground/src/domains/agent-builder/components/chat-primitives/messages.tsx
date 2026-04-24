@@ -152,14 +152,14 @@ export const MessagesSkeleton = ({ testId }: { testId?: string }) => {
   return (
     <div className="flex flex-col gap-6" data-testid={testId}>
       <div className="flex justify-end">
-        <Skeleton className="h-8 w-56 rounded-md" />
+        <Skeleton className="h-10 w-56 rounded-2xl" />
       </div>
-      <Skeleton className="h-5 w-[70%] rounded-md" />
-      <Skeleton className="h-5 w-[55%] rounded-md" />
+      <Skeleton className="h-6 w-[70%] rounded-full" />
+      <Skeleton className="h-6 w-[55%] rounded-full" />
       <div className="flex justify-end">
-        <Skeleton className="h-8 w-40 rounded-md" />
+        <Skeleton className="h-10 w-40 rounded-2xl" />
       </div>
-      <Skeleton className="h-5 w-[65%] rounded-md" />
+      <Skeleton className="h-6 w-[65%] rounded-full" />
     </div>
   );
 };

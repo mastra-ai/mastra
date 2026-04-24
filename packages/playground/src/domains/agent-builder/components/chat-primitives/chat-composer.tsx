@@ -30,7 +30,7 @@ export const ChatComposer = ({
   return (
     <form onSubmit={onSubmit} className="shrink-0">
       <div
-        className="rounded-xl border border-border1 bg-surface2 px-3 pt-2.5 transition-colors focus-within:border-neutral3"
+        className="rounded-3xl border border-border1 bg-surface2 px-3 pt-2.5 transition-colors focus-within:border-neutral3"
         style={viewTransitionName ? { viewTransitionName } : undefined}
       >
         <ChatTextarea
@@ -41,7 +41,7 @@ export const ChatComposer = ({
           onKeyDown={onKeyDown}
           disabled={disabled}
         />
-        <div className="flex items-center justify-end px-2 pb-2">
+        <div className="flex items-center justify-end pb-3">
           <IconButton
             type="submit"
             variant="default"
