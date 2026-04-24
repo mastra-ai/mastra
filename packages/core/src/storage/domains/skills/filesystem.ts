@@ -39,19 +39,21 @@ export class FilesystemSkillsStorage extends SkillsStorage {
   async create(input: { skill: StorageCreateSkillInput }): Promise<StorageSkillType> {
     const { skill } = input;
     const now = new Date();
+    const visibility = skill.visibility ?? (skill.authorId ? 'private' : undefined);
     const entity: StorageSkillType = {
       id: skill.id,
       status: 'draft',
       activeVersionId: undefined,
       authorId: skill.authorId,
+      visibility,
       createdAt: now,
       updatedAt: now,
     };
 
     await this.helpers.createEntity(skill.id, entity);
 
-    // Skills don't have metadata on the thin record, so only exclude id and authorId
-    const { id: _id, authorId: _authorId, ...snapshotConfig } = skill;
+    // Skills don't have metadata on the thin record, so only exclude id, authorId, visibility
+    const { id: _id, authorId: _authorId, visibility: _visibility, ...snapshotConfig } = skill;
     const versionId = crypto.randomUUID();
     await this.createVersion({
       id: versionId,
@@ -73,7 +75,7 @@ export class FilesystemSkillsStorage extends SkillsStorage {
       throw new Error(`FilesystemSkillsStorage: skill with id ${id} not found`);
     }
 
-    const { authorId, activeVersionId, status, ...configFields } = updates;
+    const { authorId, visibility, activeVersionId, status, ...configFields } = updates;
 
     // Config field names from StorageSkillSnapshotType
     const configFieldNames = [
@@ -96,6 +98,7 @@ export class FilesystemSkillsStorage extends SkillsStorage {
     const updatedEntity: StorageSkillType = {
       ...existing,
       ...(authorId !== undefined && { authorId }),
+      ...(visibility !== undefined && { visibility }),
       ...(activeVersionId !== undefined && { activeVersionId }),
       ...(status !== undefined && { status: status as StorageSkillType['status'] }),
       updatedAt: new Date(),
@@ -153,6 +156,7 @@ export class FilesystemSkillsStorage extends SkillsStorage {
     // Build the entity-level updates for the helpers
     const entityUpdates: Record<string, unknown> = {
       ...(authorId !== undefined && { authorId }),
+      ...(visibility !== undefined && { visibility }),
       ...(activeVersionId !== undefined && { activeVersionId }),
       ...(status !== undefined && { status }),
     };
@@ -167,13 +171,13 @@ export class FilesystemSkillsStorage extends SkillsStorage {
   }
 
   async list(args?: StorageListSkillsInput): Promise<StorageListSkillsOutput> {
-    const { page, perPage, orderBy, authorId, metadata } = args || {};
+    const { page, perPage, orderBy, authorId, visibility, metadata } = args || {};
     const result = await this.helpers.listEntities({
       page,
       perPage,
       orderBy,
       listKey: 'skills',
-      filters: { authorId, metadata },
+      filters: { authorId, visibility, metadata },
     });
     return result as unknown as StorageListSkillsOutput;
   }
