@@ -1592,4 +1592,154 @@ describe('agent.create with builder defaults', () => {
     const clonedNoMemory = await editor.agent.clone(noMemoryAgent!, { newId: 'cloned-no-memory' });
     expect(clonedNoMemory.memory).toBeUndefined();
   });
+
+  it('applies default workspace config when input has none', async () => {
+    const storage = new InMemoryStore();
+    const builderWorkspace = { type: 'id' as const, workspaceId: 'default-workspace-id' };
+    const editor = new MastraEditor({
+      builder: {
+        enabled: true,
+        configuration: { agent: { workspace: builderWorkspace } },
+      },
+    });
+    new Mastra({ storage, editor });
+
+    const agent = await editor.agent.create({
+      id: 'test-agent-no-workspace',
+      name: 'Test Agent',
+      instructions: 'Test',
+      model: { provider: 'openai', name: 'gpt-4' },
+    });
+
+    const rawConfig = agent.toRawConfig?.();
+    expect(rawConfig?.workspace).toEqual(builderWorkspace);
+  });
+
+  it('preserves input workspace config when provided', async () => {
+    const storage = new InMemoryStore();
+    const builderWorkspace = { type: 'id' as const, workspaceId: 'default-workspace-id' };
+    const inputWorkspace = { type: 'id' as const, workspaceId: 'custom-workspace-id' };
+    const editor = new MastraEditor({
+      builder: {
+        enabled: true,
+        configuration: { agent: { workspace: builderWorkspace } },
+      },
+    });
+    new Mastra({ storage, editor });
+
+    const agent = await editor.agent.create({
+      id: 'test-agent-with-workspace',
+      name: 'Test Agent',
+      instructions: 'Test',
+      model: { provider: 'openai', name: 'gpt-4' },
+      workspace: inputWorkspace,
+    });
+
+    const rawConfig = agent.toRawConfig?.();
+    expect(rawConfig?.workspace).toEqual(inputWorkspace);
+  });
+
+  it('does not override null workspace (explicit disable)', async () => {
+    const storage = new InMemoryStore();
+    const builderWorkspace = { type: 'id' as const, workspaceId: 'default-workspace-id' };
+    const editor = new MastraEditor({
+      builder: {
+        enabled: true,
+        configuration: { agent: { workspace: builderWorkspace } },
+      },
+    });
+    new Mastra({ storage, editor });
+
+    const agent = await editor.agent.create({
+      id: 'test-agent-null-workspace',
+      name: 'Test Agent',
+      instructions: 'Test',
+      model: { provider: 'openai', name: 'gpt-4' },
+      workspace: null,
+    });
+
+    const rawConfig = agent.toRawConfig?.();
+    expect(rawConfig?.workspace).toBeNull();
+  });
+
+  it('applies default browser config when input has none', async () => {
+    const storage = new InMemoryStore();
+    const builderBrowser = {
+      type: 'inline' as const,
+      config: { provider: 'stagehand', config: { headless: true } },
+    };
+    const editor = new MastraEditor({
+      builder: {
+        enabled: true,
+        configuration: { agent: { browser: builderBrowser } },
+      },
+    });
+    new Mastra({ storage, editor });
+
+    const agent = await editor.agent.create({
+      id: 'test-agent-no-browser',
+      name: 'Test Agent',
+      instructions: 'Test',
+      model: { provider: 'openai', name: 'gpt-4' },
+    });
+
+    const rawConfig = agent.toRawConfig?.();
+    expect(rawConfig?.browser).toEqual(builderBrowser);
+  });
+
+  it('preserves input browser config when provided', async () => {
+    const storage = new InMemoryStore();
+    const builderBrowser = {
+      type: 'inline' as const,
+      config: { provider: 'stagehand', config: { headless: true } },
+    };
+    const inputBrowser = {
+      type: 'inline' as const,
+      config: { provider: 'browserbase', config: { headless: false } },
+    };
+    const editor = new MastraEditor({
+      builder: {
+        enabled: true,
+        configuration: { agent: { browser: builderBrowser } },
+      },
+    });
+    new Mastra({ storage, editor });
+
+    const agent = await editor.agent.create({
+      id: 'test-agent-with-browser',
+      name: 'Test Agent',
+      instructions: 'Test',
+      model: { provider: 'openai', name: 'gpt-4' },
+      browser: inputBrowser,
+    });
+
+    const rawConfig = agent.toRawConfig?.();
+    expect(rawConfig?.browser).toEqual(inputBrowser);
+  });
+
+  it('does not override null browser (explicit disable)', async () => {
+    const storage = new InMemoryStore();
+    const builderBrowser = {
+      type: 'inline' as const,
+      config: { provider: 'stagehand', config: { headless: true } },
+    };
+    const editor = new MastraEditor({
+      builder: {
+        enabled: true,
+        configuration: { agent: { browser: builderBrowser } },
+      },
+    });
+    new Mastra({ storage, editor });
+
+    const agent = await editor.agent.create({
+      id: 'test-agent-null-browser',
+      name: 'Test Agent',
+      instructions: 'Test',
+      model: { provider: 'openai', name: 'gpt-4' },
+      browser: null,
+    });
+
+    const rawConfig = agent.toRawConfig?.();
+    expect(rawConfig?.browser).toBeNull();
+  });
 });
