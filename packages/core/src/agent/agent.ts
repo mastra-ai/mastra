@@ -440,19 +440,12 @@ export class Agent<
   }
 
   /**
-   * Derives a ToolBackgroundConfig for a sub-agent invocation (a child agent
-   * exposed as a tool on the parent).
+   * Inspects a sub-agent (a child agent invoked as a tool) and derives a
+   * ToolBackgroundConfig if any of its tools are background-eligible OR if the
+   * sub-agent itself has a background tasks config that enables tools.
    *
-   * Sub-agents run in the background by default because delegating to another
-   * agent is typically a long-running operation (it drives its own LLM loop,
-   * tool calls, memory I/O). Dispatching the delegation asynchronously keeps
-   * the parent's stream responsive and lets multiple sub-agents run in
-   * parallel. The sub-agent itself disables its own internal background
-   * dispatch via `disableBackgroundTasks: true` on each generate/stream call
-   * so its tools run synchronously inside its loop.
-   *
-   * Opt-out: set `backgroundTasks: { disabled: true }` on the sub-agent to
-   * force synchronous invocation.
+   * Returns undefined when no background dispatch is warranted, so the parent
+   * runs the sub-agent synchronously.
    *
    * @internal
    */
@@ -460,15 +453,11 @@ export class Agent<
     subAgent: Agent<any, any, any, any>,
     requestContext: RequestContext,
   ): Promise<ToolBackgroundConfig | undefined> {
-    const subAgentBgConfig = subAgent.getBackgroundTasksConfig?.();
     try {
-      // Opt-out: sub-agent explicitly disabled background tasks
-      if (subAgentBgConfig?.disabled === true) {
-        return undefined;
-      }
+      const subAgentBgConfig = subAgent.getBackgroundTasksConfig?.();
 
       // 1. Sub-agent has its own backgroundTasks config that enables tools
-      if (subAgentBgConfig?.tools) {
+      if (subAgentBgConfig?.disabled !== true && subAgentBgConfig?.tools) {
         if (subAgentBgConfig.tools === 'all') {
           return { enabled: true, waitTimeoutMs: subAgentBgConfig.waitTimeoutMs };
         }
@@ -494,10 +483,7 @@ export class Agent<
     } catch {
       // If anything fails (e.g., dynamic tools throw), skip background derivation
     }
-    return {
-      enabled: true,
-      waitTimeoutMs: subAgentBgConfig?.waitTimeoutMs,
-    };
+    return undefined;
   }
 
   /**
@@ -5740,6 +5726,31 @@ export class Agent<
    * }
    * ```
    */
+  async streamUntilIdle<
+    OUTPUT extends StandardSchemaWithJSON<any, any>,
+    T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
+  >(
+    messages: MessageListInput,
+    streamOptions: AgentExecutionOptionsBase<T> & {
+      structuredOutput: PublicStructuredOutputOptions<T>;
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
+  ): Promise<MastraModelOutput<T>>;
+  async streamUntilIdle<OUTPUT extends {}>(
+    messages: MessageListInput,
+    streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
+      structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
+  ): Promise<MastraModelOutput<OUTPUT>>;
+  async streamUntilIdle(
+    messages: MessageListInput,
+    streamOptions: AgentExecutionOptionsBase<unknown> & {
+      structuredOutput?: never;
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
+  ): Promise<MastraModelOutput<TOutput>>;
+  async streamUntilIdle(messages: MessageListInput): Promise<MastraModelOutput<TOutput>>;
   async streamUntilIdle<OUTPUT = TOutput>(
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptionsBase<any> & {
@@ -5752,24 +5763,32 @@ export class Agent<
 
     const { maxIdleMs: _maxIdleMs, ...restStreamOptions } = streamOptions ?? {};
 
+    const defaultOptions = await this.getDefaultOptions({
+      requestContext: streamOptions?.requestContext,
+    });
+    const mergedOptions = deepMerge(
+      defaultOptions as Record<string, unknown>,
+      (restStreamOptions ?? {}) as Record<string, unknown>,
+    ) as AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> };
+
     // Resolve memory the same way #execute does — honour requestContext-scoped
     // overrides AND let getMemory() decide whether a real MastraMemory backend
     // exists. That way request-context-scoped turns subscribe to the correct
     // bg-task stream and we don't enter continuation mode when there is no
     // backend to persist the tool result.
-    const requestContext = restStreamOptions?.requestContext || new RequestContext();
+    const requestContext = mergedOptions?.requestContext || new RequestContext();
     const memory = await this.getMemory({ requestContext });
     const threadIdFromContext = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
     const resourceIdFromContext = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
     const threadIdFromArgs =
-      typeof restStreamOptions?.memory?.thread === 'string'
-        ? restStreamOptions.memory.thread
-        : restStreamOptions?.memory?.thread?.id;
+      typeof mergedOptions?.memory?.thread === 'string'
+        ? mergedOptions.memory.thread
+        : mergedOptions?.memory?.thread?.id;
 
     // RequestContext-scoped keys win over caller-supplied memory args
     // (matches #execute semantics).
     const threadId = threadIdFromContext ?? threadIdFromArgs;
-    const resourceId = resourceIdFromContext ?? restStreamOptions?.memory?.resource;
+    const resourceId = resourceIdFromContext ?? mergedOptions?.memory?.resource;
 
     // Without a background task manager or memory, there's no continuation to
     // orchestrate — fall through to a plain stream with no wrapping.
@@ -5841,7 +5860,10 @@ export class Agent<
     const forceClose = () => {
       if (closed) return;
       closed = true;
-      if (idleTimer) clearTimeout(idleTimer);
+      if (idleTimer) {
+        clearTimeout(idleTimer);
+        idleTimer = undefined;
+      }
       outerAbort.abort();
       try {
         outerController.close();
@@ -5863,8 +5885,24 @@ export class Agent<
       forceClose();
     };
 
-    const resetIdleTimer = () => {
-      if (idleTimer) clearTimeout(idleTimer);
+    const clearIdleTimer = () => {
+      if (idleTimer) {
+        clearTimeout(idleTimer);
+        idleTimer = undefined;
+      }
+    };
+
+    // The idle timer exists to close the outer stream when we're *between*
+    // turns and no bg task has reported progress for `maxIdleMs`. It must
+    // NOT fire during an active inner LLM stream (slow first token / long
+    // gaps between deltas are not "idle"), and it must NOT fire when there
+    // is nothing to wait for (tryClose handles that terminal case).
+    const updateIdleTimer = () => {
+      if (closed) return;
+      clearIdleTimer();
+      if (isProcessing) return;
+      if (runningTaskIds.size === 0) return;
+      if (pendingCompletions.length > 0) return;
       idleTimer = setTimeout(forceClose, maxIdleMs);
     };
 
@@ -5877,7 +5915,9 @@ export class Agent<
           if (outerAbort.signal.aborted) break;
           const { done, value } = await reader.read();
           if (done) break;
-          resetIdleTimer();
+          // Active inner streaming — idle timer is cleared above via
+          // isProcessing=true, but clear defensively on every chunk too.
+          clearIdleTimer();
           try {
             outerController.enqueue(value);
           } catch {
@@ -5915,7 +5955,10 @@ export class Agent<
         if (pendingCompletions.length > 0) {
           void processIfIdle();
         } else {
+          // Between-turn transition — either close (nothing to wait for)
+          // or arm the idle timer (still waiting on bg tasks).
           tryClose();
+          updateIdleTimer();
         }
       }
     };
@@ -5955,7 +5998,9 @@ export class Agent<
           if (!chunk || typeof chunk !== 'object' || typeof chunk.type !== 'string') continue;
 
           const taskId = (chunk.payload as { taskId?: string } | undefined)?.taskId;
-          resetIdleTimer();
+          // bg-task activity between turns refreshes the idle window.
+          // If we're mid-inner-stream, updateIdleTimer clears (no-op).
+          updateIdleTimer();
 
           // Forward bg chunks to the outer stream so consumers see task
           // lifecycle events inline with agent chunks (started, progress,
@@ -5992,7 +6037,7 @@ export class Agent<
     // await the result. Its internal fullStream getter is what we consume
     // to feed the combined stream.
     isProcessing = true;
-    resetIdleTimer();
+    clearIdleTimer();
     let first: MastraModelOutput<OUTPUT>;
     try {
       first = (await agent.stream(messages, initialStreamOpts)) as MastraModelOutput<OUTPUT>;
@@ -6023,7 +6068,10 @@ export class Agent<
       if (pendingCompletions.length > 0) {
         void processIfIdle();
       } else {
+        // Between-turn transition — either close (nothing to wait for)
+        // or arm the idle timer (still waiting on bg tasks).
         tryClose();
+        updateIdleTimer();
       }
     })();
 

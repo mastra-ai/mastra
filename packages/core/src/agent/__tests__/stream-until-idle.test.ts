@@ -461,6 +461,60 @@ describe('Agent.streamUntilIdle', () => {
     expect(elapsed).toBeLessThan(2_000);
   });
 
+  it('does not close mid-turn when inner stream is slow (idle timer only runs between turns)', async () => {
+    const memory = new MockMemory();
+
+    // Build a model whose first turn blocks for longer than maxIdleMs
+    // before emitting its text deltas. If the idle timer were armed while
+    // the inner stream was active, the outer would close prematurely and
+    // we'd lose the "slow" chunk.
+    const slowStream = () =>
+      new ReadableStream<any>({
+        async start(controller) {
+          controller.enqueue({ type: 'stream-start', warnings: [] });
+          controller.enqueue({ type: 'response-metadata', id: 'id', modelId: 'mock', timestamp: new Date(0) });
+          controller.enqueue({ type: 'text-start', id: 't' });
+          // Long gap between deltas — exceeds maxIdleMs below.
+          await new Promise(r => setTimeout(r, 300));
+          controller.enqueue({ type: 'text-delta', id: 't', delta: 'slow' });
+          controller.enqueue({ type: 'text-end', id: 't' });
+          controller.enqueue({
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          });
+          controller.close();
+        },
+      });
+
+    const { model } = makeScriptedModel([slowStream]);
+
+    const agent = new Agent({
+      id: 'a-slow',
+      name: 'a-slow',
+      instructions: 'test',
+      model,
+      memory,
+    });
+    mastra.addAgent(agent, 'a-slow');
+
+    const result = await agent.streamUntilIdle('hi', {
+      memory: { thread: 'thread-slow', resource: 'user-1' },
+      maxIdleMs: 100, // shorter than the 300ms gap above
+    });
+
+    const chunks = await drain(result.fullStream as ReadableStream<any>);
+
+    // The slow delta must have survived — we weren't killed by the idle
+    // timer mid-turn. If the timer had fired during streaming, chunks
+    // would be truncated before the text-delta.
+    const deltaText = chunks
+      .filter(c => c?.type === 'text-delta')
+      .map(c => (c as any).payload?.text ?? (c as any).delta ?? '')
+      .join('');
+    expect(deltaText).toContain('slow');
+  });
+
   it('surfaces continuation errors through the outer stream', async () => {
     const memory = new MockMemory();
 
