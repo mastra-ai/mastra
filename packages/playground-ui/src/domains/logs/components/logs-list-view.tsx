@@ -52,7 +52,11 @@ export function LogsListView({
         <LogsDataList.NoMatch message="No logs match your search" />
       ) : (
         logs.map(log => {
-          const id = logIdMap.get(log)!;
+          const id = logIdMap.get(log);
+          // Defensive: consumer is expected to build `logIdMap` from the same `logs` list
+          // (via `useLogsListNavigation`), but if they drift we'd rather drop the row than
+          // ship a missing-key warning and broken selection highlighting.
+          if (!id) return null;
           const isFeatured = id === featuredLogId;
 
           return (

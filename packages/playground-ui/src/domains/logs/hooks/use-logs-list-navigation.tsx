@@ -10,19 +10,19 @@ function hashCode(str: string): string {
   return (hash >>> 0).toString(36);
 }
 
-/** Logs don't have a natural unique id, so we derive a stable hash from
- *  `timestamp + message + data`. Collisions within the same list get a `-N` suffix
- *  based on insertion order, so the same log always lands on the same id as long
- *  as the list itself is stable. */
+/** Prefer the storage-assigned `logId`. When absent, derive an id from immutable content fields
+ *  (`timestamp + message + data`) so the same log lands on the same id across polls regardless
+ *  of list order or insertions. Two logs without `logId` that hash identically share an id —
+ *  acceptable because the URL-driven selection still resolves deterministically. */
 function buildLogIds(logs: LogRecord[]): Map<LogRecord, string> {
   const ids = new Map<LogRecord, string>();
-  const seen = new Map<string, number>();
   for (const log of logs) {
+    if (log.logId) {
+      ids.set(log, log.logId);
+      continue;
+    }
     const ts = log.timestamp instanceof Date ? log.timestamp.toISOString() : log.timestamp;
-    const base = hashCode(`${ts}${log.message ?? ''}${log.data ? JSON.stringify(log.data) : ''}`);
-    const count = seen.get(base) ?? 0;
-    seen.set(base, count + 1);
-    ids.set(log, count > 0 ? `${base}-${count}` : base);
+    ids.set(log, hashCode(`${ts}${log.message ?? ''}${log.data ? JSON.stringify(log.data) : ''}`));
   }
   return ids;
 }

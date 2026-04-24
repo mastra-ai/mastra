@@ -218,6 +218,9 @@ export function useLogsUrlState(
         for (const fieldId of LOGS_PROPERTY_FILTER_FIELD_IDS) {
           next.delete(LOGS_PROPERTY_FILTER_PARAM_BY_FIELD[fieldId]);
         }
+        next.delete(LOGS_DATE_PRESET_PARAM);
+        next.delete(LOGS_DATE_FROM_PARAM);
+        next.delete(LOGS_DATE_TO_PARAM);
         clearSelectionParams(next);
         return next;
       },
@@ -226,23 +229,44 @@ export function useLogsUrlState(
     onRemoveAll?.();
   }, [setSearchParams, onRemoveAll]);
 
-  return {
-    searchParams,
-    setSearchParams,
-    datePreset,
-    selectedDateFrom,
-    selectedDateTo,
-    datePresetRef,
-    featuredLogId,
-    featuredTraceId,
-    featuredSpanId,
-    selectedEntityOption,
-    filterTokens,
-    handleFeaturedChange,
-    handleFilterTokensChange,
-    handleDateChange,
-    handleDatePresetChange,
-    handleRemoveAll,
-    applyFilterTokens,
-  };
+  return useMemo(
+    () => ({
+      searchParams,
+      setSearchParams,
+      datePreset,
+      selectedDateFrom,
+      selectedDateTo,
+      datePresetRef,
+      featuredLogId,
+      featuredTraceId,
+      featuredSpanId,
+      selectedEntityOption,
+      filterTokens,
+      handleFeaturedChange,
+      handleFilterTokensChange,
+      handleDateChange,
+      handleDatePresetChange,
+      handleRemoveAll,
+      applyFilterTokens,
+    }),
+    [
+      searchParams,
+      setSearchParams,
+      datePreset,
+      selectedDateFrom,
+      selectedDateTo,
+      datePresetRef,
+      featuredLogId,
+      featuredTraceId,
+      featuredSpanId,
+      selectedEntityOption,
+      filterTokens,
+      handleFeaturedChange,
+      handleFilterTokensChange,
+      handleDateChange,
+      handleDatePresetChange,
+      handleRemoveAll,
+      applyFilterTokens,
+    ],
+  );
 }
