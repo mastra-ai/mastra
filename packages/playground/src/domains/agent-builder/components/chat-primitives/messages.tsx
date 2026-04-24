@@ -1,6 +1,7 @@
-import { Skeleton, Txt } from '@mastra/playground-ui';
+import { Skeleton, Txt, Spinner } from '@mastra/playground-ui';
+import { Icon } from '@mastra/react';
 import type { MastraUIMessage } from '@mastra/react';
-import { Check } from 'lucide-react';
+import { Check, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import Markdown from 'react-markdown';
 import { AGENT_BUILDER_TOOL_NAME } from '../agent-builder-edit/hooks/use-agent-builder-tool';
@@ -17,9 +18,9 @@ export const MessageRow = ({ message }: { message: MastraUIMessage }) => {
 
           case 'reasoning':
             return part.state === 'streaming' ? (
-              <ReasoningMessage key={key} text="Reasoning..." streaming />
+              <ReasoningMessage key={key} text="Anayzing the agents requirements..." streaming />
             ) : (
-              <ReasoningMessage key={key} text="Finished reasoning" />
+              <ReasoningMessage key={key} text="Requirements analyzed, preparing the agent." />
             );
 
           case 'dynamic-tool': {
@@ -76,8 +77,24 @@ export const Txtmessage = ({ txt, role }: { txt: string; role: MastraUIMessage['
 
 export const ReasoningMessage = ({ text, streaming = false }: { text: string; streaming?: boolean }) => {
   return (
-    <Txt variant="ui-md" className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%]">
-      {streaming ? <Shimmer>{text}</Shimmer> : text}
+    <Txt
+      variant="ui-md"
+      className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%] flex items-center gap-2"
+      as="div"
+    >
+      {streaming ? (
+        <>
+          <Loader2 className="animate-spin size-4 text-neutral3" />
+
+          <Shimmer>{text}</Shimmer>
+        </>
+      ) : (
+        <>
+          <Check className="text-neutral3 size-4" />
+
+          {text}
+        </>
+      )}
     </Txt>
   );
 };
