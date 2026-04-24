@@ -61,7 +61,7 @@ When `cdpUrl` is provided, `BrowserViewer` connects to the existing browser inst
     type: 'boolean',
     description: 'Whether to run Chrome in headless mode.',
     isOptional: true,
-    defaultValue: 'false',
+    defaultValue: 'true',
   },
   {
     name: 'cdpUrl',
@@ -92,23 +92,10 @@ When `cdpUrl` is provided, `BrowserViewer` connects to the existing browser inst
     defaultValue: '{ width: 1280, height: 720 }',
   },
   {
-    name: 'userDataDir',
-    type: 'string',
-    description: 'Path to Chrome user data directory. Persists cookies, localStorage, and extensions across sessions.',
-    isOptional: true,
-  },
-  {
     name: 'executablePath',
     type: 'string',
     description: "Path to a Chrome executable. Uses Playwright's bundled Chromium by default.",
     isOptional: true,
-  },
-  {
-    name: 'timeout',
-    type: 'number',
-    description: 'Default timeout in milliseconds for browser operations.',
-    isOptional: true,
-    defaultValue: '10000',
   },
   {
     name: 'onLaunch',
