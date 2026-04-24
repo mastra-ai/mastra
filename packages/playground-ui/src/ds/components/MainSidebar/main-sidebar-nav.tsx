@@ -1,9 +1,11 @@
-import { cn } from '@/lib/utils';
+import type { ComponentPropsWithoutRef } from 'react';
 
-export type MainSidebarNavProps = {
-  children: React.ReactNode;
-  className?: string;
-};
-export function MainSidebarNav({ children, className }: MainSidebarNavProps) {
-  return <nav className={cn('', className)}>{children}</nav>;
+export type MainSidebarNavProps = ComponentPropsWithoutRef<'nav'>;
+
+export function MainSidebarNav({ 'aria-label': ariaLabel = 'Main', children, ...props }: MainSidebarNavProps) {
+  return (
+    <nav aria-label={ariaLabel} {...props}>
+      {children}
+    </nav>
+  );
 }

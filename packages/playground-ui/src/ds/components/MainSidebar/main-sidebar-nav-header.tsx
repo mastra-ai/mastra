@@ -1,39 +1,52 @@
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import type { ComponentPropsWithoutRef } from 'react';
 import type { SidebarState } from './main-sidebar-context';
+import { useMaybeSidebar } from './main-sidebar-context';
 import { MainSidebarNavSeparator } from './main-sidebar-nav-separator';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
-export type MainSidebarNavHeaderProps = {
+export type MainSidebarNavHeaderProps = Omit<ComponentPropsWithoutRef<'header'>, 'children'> & {
   children?: React.ReactNode;
-  className?: string;
   state?: SidebarState;
   href?: string;
   isActive?: boolean;
+  /** Override the Provider-level LinkComponent. Defaults to `<a>` when neither is set. */
   LinkComponent?: LinkComponent;
 };
 export function MainSidebarNavHeader({
   children,
   className,
-  state = 'default',
+  state: stateProp,
   href,
   isActive,
-  LinkComponent: Link,
+  LinkComponent: LinkProp,
+  ...props
 }: MainSidebarNavHeaderProps) {
+  const ctx = useMaybeSidebar();
+  const state: SidebarState = stateProp ?? ctx?.state ?? 'default';
+  const Link: LinkComponent | 'a' = LinkProp ?? ctx?.LinkComponent ?? 'a';
   const isDefaultState = state === 'default';
 
-  const labelContent = isDefaultState ? children : <VisuallyHidden>{children}</VisuallyHidden>;
+  if (!isDefaultState) {
+    return (
+      <div className={cn('grid items-center min-h-11', className)}>
+        <VisuallyHidden>{children}</VisuallyHidden>
+        <MainSidebarNavSeparator />
+      </div>
+    );
+  }
 
   return (
     <div className={cn('grid grid-cols-[auto_1fr] items-center min-h-11', className)}>
       <header
-        className={cn('text-ui-xs uppercase tracking-widest', {
-          'pl-3': isDefaultState,
+        {...props}
+        className={cn('text-ui-xs uppercase tracking-widest pl-3', {
           'text-black dark:text-white font-semibold': isActive,
           'text-neutral3/75': !isActive,
         })}
       >
-        {href && isDefaultState && Link ? (
+        {href ? (
           <Link
             href={href}
             className={cn('transition-colors duration-normal', {
@@ -41,10 +54,10 @@ export function MainSidebarNavHeader({
               'text-black dark:text-white': isActive,
             })}
           >
-            {labelContent}
+            {children}
           </Link>
         ) : (
-          labelContent
+          children
         )}
       </header>
       <MainSidebarNavSeparator />
