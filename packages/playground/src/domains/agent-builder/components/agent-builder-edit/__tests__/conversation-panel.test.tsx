@@ -28,6 +28,11 @@ vi.mock('@mastra/react', () => ({
       sentMessages.push(payload);
     },
   }),
+  useMastraClient: () => ({}),
+}));
+
+vi.mock('@/hooks/use-agent-messages', () => ({
+  useAgentMessages: () => ({ data: { messages: [] }, isLoading: false }),
 }));
 
 let formMethodsRef: UseFormReturn<AgentBuilderEditFormValues> | null = null;
@@ -61,6 +66,7 @@ const renderPanel = (
         initialUserMessage="hello"
         features={features}
         availableTools={availableTools}
+        agentId="agent-test"
       />
     </FormWrapper>,
   );
@@ -201,6 +207,7 @@ describe('ConversationPanel agent-builder client tool', () => {
           features={{ ...allOff, tools: true }}
           availableTools={[]}
           toolsReady={false}
+          agentId="agent-test"
         />
       </FormWrapper>,
     );
@@ -214,6 +221,7 @@ describe('ConversationPanel agent-builder client tool', () => {
           features={{ ...allOff, tools: true }}
           availableTools={[{ id: 'web-search', description: 'Search the web' }]}
           toolsReady={true}
+          agentId="agent-test"
         />
       </FormWrapper>,
     );

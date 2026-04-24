@@ -140,6 +140,7 @@ const AgentBuilderAgentEditReady = ({ id, storedAgent, toolsData }: AgentBuilder
             features={features}
             availableTools={availableTools}
             toolsReady
+            agentId={id}
           />
         </MastraReactProvider>
       }

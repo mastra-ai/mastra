@@ -1,5 +1,9 @@
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import { useChat } from '@mastra/react';
+import type { MastraUIMessage } from '@mastra/react';
+import { useMemo } from 'react';
 
+import { useAgentMessages } from '@/hooks/use-agent-messages';
 import type { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
 import { ChatComposer } from '../chat-primitives/chat-composer';
 import { MessageRow } from '../chat-primitives/messages';
@@ -15,6 +19,7 @@ interface ConversationPanelProps {
   features: ReturnType<typeof useBuilderAgentFeatures>;
   availableTools?: AvailableTool[];
   toolsReady?: boolean;
+  agentId: string;
 }
 
 export const ConversationPanel = ({
@@ -22,19 +27,44 @@ export const ConversationPanel = ({
   features,
   availableTools = [],
   toolsReady = true,
+  agentId,
 }: ConversationPanelProps) => {
-  const { messages, sendMessage, isRunning } = useChat({
+  const { data, isLoading: isConversationLoading } = useAgentMessages({
     agentId: 'builder-agent',
+    threadId: agentId,
+    memory: true,
+  });
+
+  // Stable empty array per agentId: stays the same reference across re-renders
+  // (preventing useChat from wiping streamed messages), but changes when agentId
+  // changes (allowing useChat to reset when switching agents).
+  const emptyMessages = useMemo(() => [] as never[], [agentId]);
+  const storedMessages = data?.messages ?? emptyMessages;
+  const v5Messages = useMemo(
+    () => toAISdkV5Messages(storedMessages) as MastraUIMessage[],
+    [storedMessages],
+  );
+  const hasExistingConversation = (data?.messages?.length ?? 0) > 0;
+
+  const { messages: chatMessages, sendMessage, isRunning } = useChat({
+    agentId: 'builder-agent',
+    initialMessages: v5Messages,
   });
 
   const agentBuilderTool = useAgentBuilderTool({ features, availableTools });
 
   const send = (message: string) => {
-    void sendMessage({ message, clientTools: { agentBuilderTool } });
+    void sendMessage({ message, threadId: agentId, clientTools: { agentBuilderTool } });
   };
 
-  useInitialMessage({ initialUserMessage, toolsReady, onSend: send });
-  const scrollRef = useAutoScroll(messages);
+  useInitialMessage({
+    initialUserMessage,
+    toolsReady,
+    isConversationLoading,
+    hasExistingConversation,
+    onSend: send,
+  });
+  const scrollRef = useAutoScroll(chatMessages);
   const { draft, setDraft, trimmed, handleFormSubmit, handleKeyDown } = useChatDraft({ onSubmit: send });
 
   return (
@@ -43,7 +73,7 @@ export const ConversationPanel = ({
 
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto pb-4">
         <div className="flex flex-col gap-3">
-          {messages.map(message => (
+          {chatMessages.map(message => (
             <MessageRow key={message.id} message={message} />
           ))}
         </div>
