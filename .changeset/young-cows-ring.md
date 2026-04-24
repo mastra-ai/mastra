@@ -2,7 +2,5 @@
 'create-mastra': patch
 ---
 
-Improve bundle size.
-
-- Remove `fs-extra` dependency to use native Node.js APIs instead
-- Replace `execa` with `tinyexec` for executing shell commands
+Improved `create-mastra` package size by reducing runtime dependency overhead.
+This decreases install surface while preserving existing CLI behavior.

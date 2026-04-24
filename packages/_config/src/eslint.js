@@ -26,7 +26,7 @@ const playwrightFiles = ['**/e2e/**'];
  * @param {boolean} options.e18e Whether to include rules for https://e18e.dev/ or not
  * @returns {Promise<import("eslint").Linter.Config[]>}
  */
-export const createConfig = async ({ e18e = false }) =>
+export const createConfig = async ({ e18e = false } = {}) =>
   [
     {
       ignores: [
