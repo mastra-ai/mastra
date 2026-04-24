@@ -29,17 +29,6 @@ function persistOmThresholds({
 
 export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
   const availableModels = await ctx.state.harness.listAvailableModels();
-  const modelById = new Map(availableModels.map(model => [model.id, model] as const));
-  const modelOptions = availableModels.map(m => ({
-    id: m.id,
-    label: m.id,
-  }));
-
-  const ensureApiKeyForModel = async (modelId: string) => {
-    const model = modelById.get(modelId);
-    if (!model) return;
-    await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
-  };
 
   const config = {
     observerModelId: ctx.state.harness.getObserverModelId() ?? '',
@@ -52,17 +41,17 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
     const settings = new OMSettingsComponent(
       config,
       {
-        onObserverModelChange: async modelId => {
-          await ensureApiKeyForModel(modelId);
-          await ctx.state.harness.switchObserverModel({ modelId });
-          persistOmModelOverride(modelId);
-          ctx.showInfo(`Observer model → ${modelId}`);
+        onObserverModelChange: async model => {
+          await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
+          await ctx.state.harness.switchObserverModel({ modelId: model.id });
+          persistOmModelOverride(model.id);
+          ctx.showInfo(`Observer model → ${model.id}`);
         },
-        onReflectorModelChange: async modelId => {
-          await ensureApiKeyForModel(modelId);
-          await ctx.state.harness.switchReflectorModel({ modelId });
-          persistOmModelOverride(modelId);
-          ctx.showInfo(`Reflector model → ${modelId}`);
+        onReflectorModelChange: async model => {
+          await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
+          await ctx.state.harness.switchReflectorModel({ modelId: model.id });
+          persistOmModelOverride(model.id);
+          ctx.showInfo(`Reflector model → ${model.id}`);
         },
         onObservationThresholdChange: async value => {
           await ctx.state.harness.setState({ observationThreshold: value } as any);
@@ -80,7 +69,7 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
           resolve();
         },
       },
-      modelOptions,
+      availableModels,
       ctx.state.ui,
     );
 
