@@ -1,7 +1,7 @@
 import { matchesPermission } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
 
-import { MASTRA_RESOURCE_ID_KEY } from '../constants';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_USER_KEY, MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 
 /**
@@ -26,7 +26,7 @@ export function getCallerAuthorId(requestContext: RequestContext): string | null
     return resourceId;
   }
 
-  const user = requestContext.get('user');
+  const user = requestContext.get(MASTRA_USER_KEY);
   if (user && typeof user === 'object' && 'id' in user) {
     const id = (user as { id: unknown }).id;
     if (typeof id === 'string' && id.length > 0) {
@@ -42,7 +42,7 @@ export function getCallerAuthorId(requestContext: RequestContext): string | null
  * the RBAC provider. Returns an empty array when RBAC isn't configured.
  */
 export function getCallerPermissions(requestContext: RequestContext): string[] {
-  const raw = requestContext.get('userPermissions');
+  const raw = requestContext.get(MASTRA_USER_PERMISSIONS_KEY);
   if (Array.isArray(raw)) {
     return raw.filter((p): p is string => typeof p === 'string');
   }

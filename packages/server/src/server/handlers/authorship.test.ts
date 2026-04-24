@@ -1,5 +1,7 @@
 import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '@mastra/core/request-context';
+
 import { describe, expect, it } from 'vitest';
+import { MASTRA_USER_KEY, MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 
 import { HTTPException } from '../http-exception';
 import {
@@ -27,13 +29,13 @@ describe('authorship', () => {
     it('prefers MASTRA_RESOURCE_ID_KEY over user.id', () => {
       const ctx = ctxWith({
         [MASTRA_RESOURCE_ID_KEY]: 'resource-123',
-        user: { id: 'user-xyz' },
+        [MASTRA_USER_KEY]: { id: 'user-xyz' },
       });
       expect(getCallerAuthorId(ctx)).toBe('resource-123');
     });
 
     it('falls back to user.id when resource id is missing', () => {
-      const ctx = ctxWith({ user: { id: 'user-xyz' } });
+      const ctx = ctxWith({ [MASTRA_USER_KEY]: { id: 'user-xyz' } });
       expect(getCallerAuthorId(ctx)).toBe('user-xyz');
     });
 
@@ -42,29 +44,29 @@ describe('authorship', () => {
     });
 
     it('returns null when resource id is empty or non-string', () => {
-      const ctx = ctxWith({ [MASTRA_RESOURCE_ID_KEY]: '', user: { id: 123 } });
+      const ctx = ctxWith({ [MASTRA_RESOURCE_ID_KEY]: '', [MASTRA_USER_KEY]: { id: 123 } });
       expect(getCallerAuthorId(ctx)).toBeNull();
     });
   });
 
   describe('hasAdminBypass', () => {
     it('grants bypass for `*`', () => {
-      const ctx = ctxWith({ userPermissions: ['*'] });
+      const ctx = ctxWith({ [MASTRA_USER_PERMISSIONS_KEY]: ['*'] });
       expect(hasAdminBypass(ctx, 'stored-agents')).toBe(true);
     });
 
     it('grants bypass for `<resource>:*`', () => {
-      const ctx = ctxWith({ userPermissions: ['stored-agents:*'] });
+      const ctx = ctxWith({ [MASTRA_USER_PERMISSIONS_KEY]: ['stored-agents:*'] });
       expect(hasAdminBypass(ctx, 'stored-agents')).toBe(true);
     });
 
     it('grants bypass for `<resource>:admin`', () => {
-      const ctx = ctxWith({ userPermissions: ['stored-agents:admin'] });
+      const ctx = ctxWith({ [MASTRA_USER_PERMISSIONS_KEY]: ['stored-agents:admin'] });
       expect(hasAdminBypass(ctx, 'stored-agents')).toBe(true);
     });
 
     it('denies bypass for unrelated wildcards or read-only perms', () => {
-      const ctx = ctxWith({ userPermissions: ['stored-agents:read', 'workflows:*'] });
+      const ctx = ctxWith({ [MASTRA_USER_PERMISSIONS_KEY]: ['stored-agents:read', 'workflows:*'] });
       expect(hasAdminBypass(ctx, 'stored-agents')).toBe(false);
     });
 
@@ -76,8 +78,8 @@ describe('authorship', () => {
   describe('resolveAuthorFilter', () => {
     it('returns unrestricted for admins without a query override', () => {
       const ctx = ctxWith({
-        user: { id: 'admin' },
-        userPermissions: ['*'],
+        [MASTRA_USER_KEY]: { id: 'admin' },
+        [MASTRA_USER_PERMISSIONS_KEY]: ['*'],
       });
       const filter = resolveAuthorFilter({ requestContext: ctx, resource: 'stored-agents' });
       expect(filter).toEqual({ kind: 'unrestricted' });
@@ -85,8 +87,8 @@ describe('authorship', () => {
 
     it('returns exact filter for admins with ?authorId=', () => {
       const ctx = ctxWith({
-        user: { id: 'admin' },
-        userPermissions: ['stored-agents:admin'],
+        [MASTRA_USER_KEY]: { id: 'admin' },
+        [MASTRA_USER_PERMISSIONS_KEY]: ['stored-agents:admin'],
       });
       const filter = resolveAuthorFilter({
         requestContext: ctx,
@@ -97,13 +99,13 @@ describe('authorship', () => {
     });
 
     it('returns ownedOrPublic for a plain caller without a query override', () => {
-      const ctx = ctxWith({ user: { id: 'user-1' } });
+      const ctx = ctxWith({ [MASTRA_USER_KEY]: { id: 'user-1' } });
       const filter = resolveAuthorFilter({ requestContext: ctx, resource: 'stored-agents' });
       expect(filter).toEqual({ kind: 'ownedOrPublic', callerAuthorId: 'user-1' });
     });
 
     it('returns exact filter when caller queries their own authorId', () => {
-      const ctx = ctxWith({ user: { id: 'user-1' } });
+      const ctx = ctxWith({ [MASTRA_USER_KEY]: { id: 'user-1' } });
       const filter = resolveAuthorFilter({
         requestContext: ctx,
         resource: 'stored-agents',
@@ -113,7 +115,7 @@ describe('authorship', () => {
     });
 
     it("scopes to another author's public records when caller queries someone else's authorId", () => {
-      const ctx = ctxWith({ user: { id: 'user-1' } });
+      const ctx = ctxWith({ [MASTRA_USER_KEY]: { id: 'user-1' } });
       const filter = resolveAuthorFilter({
         requestContext: ctx,
         resource: 'stored-agents',
@@ -123,7 +125,7 @@ describe('authorship', () => {
     });
 
     it('returns publicOnly when ?visibility=public is supplied', () => {
-      const ctx = ctxWith({ user: { id: 'user-1' } });
+      const ctx = ctxWith({ [MASTRA_USER_KEY]: { id: 'user-1' } });
       const filter = resolveAuthorFilter({
         requestContext: ctx,
         resource: 'stored-agents',
@@ -188,42 +190,42 @@ describe('authorship', () => {
       // Broad role grants (e.g. `agents:execute` in the WorkOS `member` role)
       // must not short-circuit per-record ownership checks. They gate route
       // access at the `requiresPermission` layer instead.
-      const ctx = ctxWith({ userPermissions: ['agents:edit'] });
+      const ctx = ctxWith({ [MASTRA_USER_PERMISSIONS_KEY]: ['agents:edit'] });
       expect(hasScopedPermission({ requestContext: ctx, resource: 'agents', action: 'edit', resourceId: 'a1' })).toBe(
         false,
       );
     });
 
     it('matches when caller holds `<resource>:<action>:<resourceId>`', () => {
-      const ctx = ctxWith({ userPermissions: ['agents:edit:a1'] });
+      const ctx = ctxWith({ [MASTRA_USER_PERMISSIONS_KEY]: ['agents:edit:a1'] });
       expect(hasScopedPermission({ requestContext: ctx, resource: 'agents', action: 'edit', resourceId: 'a1' })).toBe(
         true,
       );
     });
 
     it('does not match a different resourceId', () => {
-      const ctx = ctxWith({ userPermissions: ['agents:edit:a1'] });
+      const ctx = ctxWith({ [MASTRA_USER_PERMISSIONS_KEY]: ['agents:edit:a1'] });
       expect(hasScopedPermission({ requestContext: ctx, resource: 'agents', action: 'edit', resourceId: 'a2' })).toBe(
         false,
       );
     });
 
     it('does not match a different action', () => {
-      const ctx = ctxWith({ userPermissions: ['agents:read:a1'] });
+      const ctx = ctxWith({ [MASTRA_USER_PERMISSIONS_KEY]: ['agents:read:a1'] });
       expect(hasScopedPermission({ requestContext: ctx, resource: 'agents', action: 'edit', resourceId: 'a1' })).toBe(
         false,
       );
     });
 
     it('falls back to broad-grant matching when called without a resourceId', () => {
-      const ctx = ctxWith({ userPermissions: ['agents:edit'] });
+      const ctx = ctxWith({ [MASTRA_USER_PERMISSIONS_KEY]: ['agents:edit'] });
       expect(hasScopedPermission({ requestContext: ctx, resource: 'agents', action: 'edit' })).toBe(true);
     });
   });
 
   describe('assertReadAccess', () => {
     it('passes for public records even when caller is not the owner', () => {
-      const ctx = ctxWith({ user: { id: 'someone-else' } });
+      const ctx = ctxWith({ [MASTRA_USER_KEY]: { id: 'someone-else' } });
       expect(() =>
         assertReadAccess({
           requestContext: ctx,
@@ -236,8 +238,8 @@ describe('authorship', () => {
 
     it('passes when caller holds scoped read permission', () => {
       const ctx = ctxWith({
-        user: { id: 'someone-else' },
-        userPermissions: ['agents:read:a1'],
+        [MASTRA_USER_KEY]: { id: 'someone-else' },
+        [MASTRA_USER_PERMISSIONS_KEY]: ['agents:read:a1'],
       });
       expect(() =>
         assertReadAccess({
@@ -250,7 +252,7 @@ describe('authorship', () => {
     });
 
     it('throws 404 for private records from another owner without perms', () => {
-      const ctx = ctxWith({ user: { id: 'someone-else' } });
+      const ctx = ctxWith({ [MASTRA_USER_KEY]: { id: 'someone-else' } });
       expect(() =>
         assertReadAccess({
           requestContext: ctx,
@@ -263,8 +265,8 @@ describe('authorship', () => {
 
     it('throws 404 when caller has a broad `agents:read` grant but not id-scoped', () => {
       const ctx = ctxWith({
-        user: { id: 'someone-else' },
-        userPermissions: ['agents:read'],
+        [MASTRA_USER_KEY]: { id: 'someone-else' },
+        [MASTRA_USER_PERMISSIONS_KEY]: ['agents:read'],
       });
       expect(() =>
         assertReadAccess({
@@ -279,7 +281,7 @@ describe('authorship', () => {
 
   describe('assertExecuteAccess', () => {
     it('passes for public records even when caller is not the owner', () => {
-      const ctx = ctxWith({ user: { id: 'someone-else' } });
+      const ctx = ctxWith({ [MASTRA_USER_KEY]: { id: 'someone-else' } });
       expect(() =>
         assertExecuteAccess({
           requestContext: ctx,
@@ -292,8 +294,8 @@ describe('authorship', () => {
 
     it('passes when caller holds scoped `agents:execute:<id>`', () => {
       const ctx = ctxWith({
-        user: { id: 'someone-else' },
-        userPermissions: ['agents:execute:a1'],
+        [MASTRA_USER_KEY]: { id: 'someone-else' },
+        [MASTRA_USER_PERMISSIONS_KEY]: ['agents:execute:a1'],
       });
       expect(() =>
         assertExecuteAccess({
@@ -307,8 +309,8 @@ describe('authorship', () => {
 
     it('passes when caller holds scoped `agents:read:<id>` (read implies execute)', () => {
       const ctx = ctxWith({
-        user: { id: 'someone-else' },
-        userPermissions: ['agents:read:a1'],
+        [MASTRA_USER_KEY]: { id: 'someone-else' },
+        [MASTRA_USER_PERMISSIONS_KEY]: ['agents:read:a1'],
       });
       expect(() =>
         assertExecuteAccess({
@@ -321,7 +323,7 @@ describe('authorship', () => {
     });
 
     it('throws 404 for private records from another owner without perms', () => {
-      const ctx = ctxWith({ user: { id: 'someone-else' } });
+      const ctx = ctxWith({ [MASTRA_USER_KEY]: { id: 'someone-else' } });
       expect(() =>
         assertExecuteAccess({
           requestContext: ctx,
@@ -337,8 +339,8 @@ describe('authorship', () => {
       // code-defined / public / owned agents, but it must NOT let the caller
       // execute a private agent owned by somebody else.
       const ctx = ctxWith({
-        user: { id: 'someone-else' },
-        userPermissions: ['agents:read', 'agents:execute'],
+        [MASTRA_USER_KEY]: { id: 'someone-else' },
+        [MASTRA_USER_PERMISSIONS_KEY]: ['agents:read', 'agents:execute'],
       });
       expect(() =>
         assertExecuteAccess({
@@ -352,8 +354,8 @@ describe('authorship', () => {
 
     it('rejects execute when scoped permission is only for a different id', () => {
       const ctx = ctxWith({
-        user: { id: 'someone-else' },
-        userPermissions: ['agents:execute:a2'],
+        [MASTRA_USER_KEY]: { id: 'someone-else' },
+        [MASTRA_USER_PERMISSIONS_KEY]: ['agents:execute:a2'],
       });
       expect(() =>
         assertExecuteAccess({
@@ -368,7 +370,7 @@ describe('authorship', () => {
 
   describe('assertWriteAccess', () => {
     it('denies access to public records owned by someone else', () => {
-      const ctx = ctxWith({ user: { id: 'someone-else' } });
+      const ctx = ctxWith({ [MASTRA_USER_KEY]: { id: 'someone-else' } });
       expect(() =>
         assertWriteAccess({
           requestContext: ctx,
@@ -382,8 +384,8 @@ describe('authorship', () => {
 
     it('allows edit when caller holds scoped `agents:edit:<id>`', () => {
       const ctx = ctxWith({
-        user: { id: 'someone-else' },
-        userPermissions: ['agents:edit:a1'],
+        [MASTRA_USER_KEY]: { id: 'someone-else' },
+        [MASTRA_USER_PERMISSIONS_KEY]: ['agents:edit:a1'],
       });
       expect(() =>
         assertWriteAccess({
@@ -398,8 +400,8 @@ describe('authorship', () => {
 
     it('allows delete when caller holds scoped `agents:delete:<id>`', () => {
       const ctx = ctxWith({
-        user: { id: 'someone-else' },
-        userPermissions: ['agents:delete:a1'],
+        [MASTRA_USER_KEY]: { id: 'someone-else' },
+        [MASTRA_USER_PERMISSIONS_KEY]: ['agents:delete:a1'],
       });
       expect(() =>
         assertWriteAccess({
@@ -414,8 +416,8 @@ describe('authorship', () => {
 
     it('rejects delete when scoped permission is only for a different id', () => {
       const ctx = ctxWith({
-        user: { id: 'someone-else' },
-        userPermissions: ['agents:delete:a2'],
+        [MASTRA_USER_KEY]: { id: 'someone-else' },
+        [MASTRA_USER_PERMISSIONS_KEY]: ['agents:delete:a2'],
       });
       expect(() =>
         assertWriteAccess({
@@ -441,7 +443,7 @@ describe('authorship', () => {
     });
 
     it('passes when caller owns the record', () => {
-      const ctx = ctxWith({ user: { id: 'a' } });
+      const ctx = ctxWith({ [MASTRA_USER_KEY]: { id: 'a' } });
       expect(() =>
         assertOwnership({ requestContext: ctx, resource: 'stored-agents', record: { authorId: 'a' } }),
       ).not.toThrow();
@@ -449,8 +451,8 @@ describe('authorship', () => {
 
     it('passes with admin bypass regardless of owner', () => {
       const ctx = ctxWith({
-        user: { id: 'admin' },
-        userPermissions: ['*'],
+        [MASTRA_USER_KEY]: { id: 'admin' },
+        [MASTRA_USER_PERMISSIONS_KEY]: ['*'],
       });
       expect(() =>
         assertOwnership({ requestContext: ctx, resource: 'stored-agents', record: { authorId: 'someone' } }),
@@ -458,7 +460,7 @@ describe('authorship', () => {
     });
 
     it('throws 404 on ownership mismatch without bypass', () => {
-      const ctx = ctxWith({ user: { id: 'a' } });
+      const ctx = ctxWith({ [MASTRA_USER_KEY]: { id: 'a' } });
       expect(() =>
         assertOwnership({ requestContext: ctx, resource: 'stored-agents', record: { authorId: 'b' } }),
       ).toThrow(HTTPException);
