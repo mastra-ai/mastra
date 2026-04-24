@@ -847,6 +847,76 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     });
   });
 
+  it('syncs outputStream.messageId with the rotated id on the API-error retry path', async () => {
+    const doStream = vi.fn(async () => {
+      throw new APICallError({
+        message: 'upstream failed',
+        url: 'https://model.example.com/v1/messages',
+        requestBodyValues: {},
+        statusCode: 500,
+        isRetryable: false,
+      });
+    });
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      maxProcessorRetries: 1,
+      errorProcessors: [
+        {
+          id: 'rotate-on-api-error',
+          processAPIError: vi.fn(async ({ rotateResponseMessageId }) => {
+            rotateResponseMessageId?.();
+            return { retry: true };
+          }),
+        },
+      ],
+      models: [
+        {
+          id: 'only-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'only-model',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'rotated-response-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const result = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    // The retry payload reports outputStream.messageId; if rotateResponseMessageId
+    // did not sync it, the retry would be tagged with the stale `msg-0` and any
+    // subsequent chunks written through the stream would split across two ids.
+    expect(result.stepResult.reason).toBe('retry');
+    expect(result.messageId).toBe('rotated-response-id');
+  });
+
   it('passes the rotated response message id to processor custom data writers', async () => {
     const outputWriter = vi.fn(async () => {});
     const doStream = vi.fn(async () => ({

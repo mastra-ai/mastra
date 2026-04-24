@@ -1,13 +1,12 @@
 'use client';
 
 import type { SpanRecord } from '@mastra/core/storage';
-import { TextAndIcon, getShortId } from '@mastra/playground-ui';
+import { TextAndIcon, getShortId, useSpanDetail } from '@mastra/playground-ui';
 import type { SideDialogRootProps } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { EyeIcon } from 'lucide-react';
 import { SaveAsDatasetItemDialog } from '@/domains/datasets/components/save-as-dataset-item-dialog';
-import { useSpanDetail } from '@/domains/traces/hooks/use-span-detail';
 
 type TraceAsItemDialogProps = {
   /** Full span record — if provided, used directly (no fetch). */

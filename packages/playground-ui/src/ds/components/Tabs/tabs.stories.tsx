@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Tabs } from './tabs-root';
-import { TabList } from './tabs-list';
-import { Tab } from './tabs-tab';
 import { TabContent } from './tabs-content';
+import { TabList } from './tabs-list';
+import { Tabs } from './tabs-root';
+import { Tab } from './tabs-tab';
 
 const meta: Meta<typeof Tabs> = {
   title: 'Navigation/Tabs',
