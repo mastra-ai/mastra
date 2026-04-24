@@ -10,11 +10,9 @@ import {
   LOGS_ROOT_ENTITY_TYPE_OPTIONS,
   LOGS_ROOT_ENTITY_TYPE_PARAM,
   applyLogsPropertyFilterTokens,
-  getLogsPropertyFilterTokens
-  
-  
+  getLogsPropertyFilterTokens,
 } from '../log-filters';
-import type {LogsDatePreset, LogsEntityOptions} from '../log-filters';
+import type { LogsDatePreset, LogsEntityOptions } from '../log-filters';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
 const LOG_PARAM = 'logId';
@@ -121,9 +119,7 @@ export function useLogsUrlState(
 
   const selectedEntityOption = useMemo(
     () =>
-      LOGS_ROOT_ENTITY_TYPE_OPTIONS.find(
-        option => option.entityType === searchParams.get(LOGS_ROOT_ENTITY_TYPE_PARAM),
-      ),
+      LOGS_ROOT_ENTITY_TYPE_OPTIONS.find(option => option.entityType === searchParams.get(LOGS_ROOT_ENTITY_TYPE_PARAM)),
     [searchParams],
   );
 
