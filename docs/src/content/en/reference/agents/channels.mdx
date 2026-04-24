@@ -158,10 +158,24 @@ const agent = new Agent({
   },
   {
     name: 'formatToolCall',
-    type: '(info: { toolName, args, result, isError? }) => PostableMessage | null',
+    type: '(info: ChannelToolEndContext) => PostableMessage | null',
     isOptional: true,
     description:
-      'Override how tool calls are rendered in the chat. Called once per tool invocation after the result is available. Return `null` to suppress the message entirely.',
+      'Override how completed tool calls are rendered in the chat. Called once per tool invocation after the result is available. Return `null` to suppress the message entirely.',
+  },
+  {
+    name: 'onToolStart',
+    type: '(ctx: ChannelToolStartContext) => Promise<void> | void',
+    isOptional: true,
+    description:
+      'Run side effects when a tool starts. Use this to set channel status, log lifecycle events, or update external systems before the tool result is available.',
+  },
+  {
+    name: 'onToolEnd',
+    type: '(ctx: ChannelToolEndContext) => Promise<void> | void',
+    isOptional: true,
+    description:
+      'Run side effects when a tool finishes. The context includes `result`, `durationMs`, and `isError` for failed tool results.',
   },
   {
     name: 'formatError',
@@ -173,6 +187,128 @@ const agent = new Agent({
   },
 ]}
 />
+
+## Tool lifecycle hooks
+
+Use `onToolStart` and `onToolEnd` for side effects during tool execution. Use `formatToolCall` only to render the final tool message.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+export const supportAgent = new Agent({
+  name: 'Support Agent',
+  instructions: 'Help users in Slack.',
+  model: 'openai/gpt-5.4',
+  channels: {
+    adapters: {
+      slack: {
+        adapter: createSlackAdapter(),
+        onToolStart: async ({ displayName, channel }) => {
+          await channel.status.set(`Running ${displayName}…`)
+        },
+        onToolEnd: async ({ channel }) => {
+          await channel.status.clear()
+        },
+      },
+    },
+  },
+})
+```
+
+`channel.status` is best-effort. Adapters that support status map it to the platform capability, such as assistant status or typing indicators. Adapters without status support no-op. Mastra clears channel status when the stream finishes or errors.
+
+### `ChannelToolStartContext`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'toolName',
+    type: 'string',
+    description: 'The raw tool name from the model stream.',
+  },
+  {
+    name: 'displayName',
+    type: 'string',
+    description: 'The tool name formatted for display, with internal Mastra prefixes stripped.',
+  },
+  {
+    name: 'toolCallId',
+    type: 'string',
+    description: 'The tool invocation ID.',
+  },
+  {
+    name: 'args',
+    type: 'Record<string, unknown>',
+    description: 'The tool arguments.',
+  },
+  {
+    name: 'argsSummary',
+    type: 'string',
+    description: 'A short summary of the arguments for display.',
+  },
+  {
+    name: 'channel',
+    type: 'ChannelRuntime',
+    description: 'Runtime channel helpers, including `channel.status`.',
+  },
+  {
+    name: 'thread',
+    type: 'Thread',
+    description: 'The Chat SDK thread for the active channel conversation.',
+  },
+  {
+    name: 'platform',
+    type: 'string',
+    description: 'The channel platform key, such as `slack` or `discord`.',
+  },
+]}
+/>
+
+### `ChannelToolEndContext`
+
+`ChannelToolEndContext` includes all `ChannelToolStartContext` properties and these result fields:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'result',
+    type: 'unknown',
+    description: 'The tool result from the model stream.',
+  },
+  {
+    name: 'isError',
+    type: 'boolean',
+    isOptional: true,
+    description: 'Whether the tool result represents an error. Use this instead of a separate error hook.',
+  },
+  {
+    name: 'durationMs',
+    type: 'number',
+    isOptional: true,
+    description: 'Approximate tool runtime in milliseconds when Mastra observed the tool start.',
+  },
+]}
+/>
+
+### `ChannelRuntime.status`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'set',
+    type: '(text: string) => Promise<ChannelStatusHandle>',
+    description: 'Set the active channel status and return a handle that can clear that status if it is still active.',
+  },
+  {
+    name: 'clear',
+    type: '() => Promise<void>',
+    description: 'Clear the active channel status.',
+  },
+]}
+/>
+
+`ChannelStatusHandle.clear()` only clears the status created by that handle. This prevents an older tool status from clearing a newer status.
 
 ## Handlers
 

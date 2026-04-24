@@ -121,6 +121,36 @@ When the agent calls this tool, users see a card with the tool name, arguments, 
 
 Set `cards: false` on an adapter to render tool calls as plain text instead of interactive cards. When cards are disabled and a tool requires approval, the agent uses `autoResumeSuspendedTools` to let the LLM decide based on the conversation context.
 
+## Tool lifecycle status
+
+Use per-adapter tool lifecycle hooks to run side effects when tools start and finish. For example, set a channel status while a tool runs:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+export const supportAgent = new Agent({
+  name: 'Support Agent',
+  instructions: 'Help users in Slack.',
+  model: 'openai/gpt-5.4',
+  channels: {
+    adapters: {
+      slack: {
+        adapter: createSlackAdapter(),
+        onToolStart: async ({ displayName, channel }) => {
+          await channel.status.set(`Running ${displayName}…`)
+        },
+        onToolEnd: async ({ channel }) => {
+          await channel.status.clear()
+        },
+      },
+    },
+  },
+})
+```
+
+`channel.status` is best-effort. Platforms with status support show the update. Other platforms no-op. Mastra also clears status when the stream finishes or errors. Use `isError` in `onToolEnd` to handle failed tool results.
+
 ## Multi-user awareness
 
 In group conversations, Mastra automatically prefixes each message with the sender's name and platform ID so the agent can distinguish between speakers:
