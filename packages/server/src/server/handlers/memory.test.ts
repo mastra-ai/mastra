@@ -18,6 +18,7 @@ import {
   DELETE_MESSAGES_ROUTE,
   DELETE_THREAD_ROUTE,
   UPDATE_THREAD_ROUTE,
+  SEARCH_MEMORY_ROUTE,
   getTextContent,
 } from './memory';
 import { createTestServerContext } from './test-utils';
@@ -720,6 +721,48 @@ describe('Memory Handlers', () => {
       );
     });
 
+    it('should deny message writes for a new thread when FGA denies creation', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'test-agent': mockAgent,
+        },
+      });
+      const require = vi.fn().mockRejectedValue(Object.assign(new Error('FGA denied'), { status: 403 }));
+      vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { require } } as any);
+
+      const ctx = createTestContextWithReservedKeys({ mastra });
+      ctx.requestContext.set('user', { id: 'user-1' });
+
+      await expect(
+        SAVE_MESSAGES_ROUTE.handler({
+          ...ctx,
+          agentId: 'test-agent',
+          messages: [
+            {
+              id: 'msg-1',
+              content: 'blocked',
+              role: 'user',
+              createdAt: new Date(),
+              threadId: 'new-thread',
+              type: 'text',
+              resourceId: 'test-resource',
+            },
+          ] as MastraDBMessage[],
+        }),
+      ).rejects.toMatchObject({ status: 403, message: 'FGA denied' });
+      expect(require).toHaveBeenCalledWith(
+        { id: 'user-1' },
+        {
+          resource: { type: 'thread', id: 'new-thread' },
+          permission: 'memory:write',
+          context: expect.objectContaining({
+            resourceId: 'test-resource',
+          }),
+        },
+      );
+    });
+
     it('should accept, save, and retrieve both v1 and v2 format messages', async () => {
       const threadId = 'test-thread-123';
       const resourceId = 'test-resource-123';
@@ -968,6 +1011,101 @@ describe('Memory Handlers', () => {
       expect(spy).toHaveBeenCalledWith({
         resourceId: 'test-resource',
         title: 'Test Thread',
+        threadId: expect.any(String),
+      });
+    });
+
+    it('should deny thread creation when FGA denies memory writes', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'test-agent': mockAgent,
+        },
+      });
+      const require = vi.fn().mockRejectedValue(Object.assign(new Error('FGA denied'), { status: 403 }));
+      vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { require } } as any);
+
+      const ctx = createTestContextWithReservedKeys({ mastra });
+      ctx.requestContext.set('user', { id: 'user-1' });
+
+      await expect(
+        CREATE_THREAD_ROUTE.handler({
+          ...ctx,
+          agentId: 'test-agent',
+          resourceId: 'test-resource',
+          threadId: 'new-thread',
+          title: 'Test Thread',
+        }),
+      ).rejects.toMatchObject({ status: 403, message: 'FGA denied' });
+      expect(require).toHaveBeenCalledWith(
+        { id: 'user-1' },
+        {
+          resource: { type: 'thread', id: 'new-thread' },
+          permission: 'memory:write',
+          context: expect.objectContaining({
+            resourceId: 'test-resource',
+          }),
+        },
+      );
+    });
+  });
+
+  describe('searchMemoryHandler', () => {
+    it('should filter resource-scoped search results to FGA-accessible threads', async () => {
+      await mockMemory.createThread({ threadId: 'allowed-thread', resourceId: 'test-resource', title: 'Allowed' });
+      await mockMemory.createThread({ threadId: 'blocked-thread', resourceId: 'test-resource', title: 'Blocked' });
+      await mockMemory.saveMessages({
+        messages: [
+          {
+            id: 'allowed-msg',
+            content: 'allowed content',
+            role: 'user',
+            type: 'text',
+            createdAt: new Date(),
+            threadId: 'allowed-thread',
+            resourceId: 'test-resource',
+          },
+          {
+            id: 'blocked-msg',
+            content: 'blocked content',
+            role: 'user',
+            type: 'text',
+            createdAt: new Date(),
+            threadId: 'blocked-thread',
+            resourceId: 'test-resource',
+          },
+        ] as MastraDBMessage[],
+        memoryConfig: {},
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'test-agent': mockAgent,
+        },
+        storage,
+      });
+      const filterAccessible = vi.fn().mockImplementation(async (_user, threads: StorageThreadType[]) => {
+        return threads.filter(thread => thread.id === 'allowed-thread');
+      });
+      vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { filterAccessible } } as any);
+
+      const ctx = createTestContextWithReservedKeys({ mastra });
+      ctx.requestContext.set('user', { id: 'user-1' });
+
+      const result = await SEARCH_MEMORY_ROUTE.handler({
+        ...ctx,
+        agentId: 'test-agent',
+        resourceId: 'test-resource',
+        searchQuery: 'content',
+        limit: 20,
+      });
+
+      expect(filterAccessible).toHaveBeenCalled();
+      expect(result.results).toHaveLength(1);
+      expect(result.results[0]).toMatchObject({
+        threadId: 'allowed-thread',
+        content: 'allowed content',
       });
     });
   });

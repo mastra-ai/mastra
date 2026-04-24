@@ -74,6 +74,21 @@ You can omit the constructor parameters if you have the appropriately named envi
     isOptional: true,
     defaultValue: 'false',
   },
+  {
+    name: 'trustJwtClaims',
+    type: 'boolean',
+    description:
+      'Trusts verified bearer-token claims enough to construct a `WorkOSUser` even when `workos.userManagement.getUser()` does not apply. Use this for service-account or machine-to-machine tokens backed by a WorkOS custom JWT template.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'jwtClaims',
+    type: '{ userId?: string; workosId?: string; email?: string; name?: string; organizationId?: string; organizationMembershipId?: string }',
+    description:
+      'Maps verified bearer JWT claims into the authenticated `WorkOSUser`. Useful for custom JWT templates that include `organizationMembershipId` or other FGA-specific claims.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -119,6 +134,27 @@ This means that by default, `MastraAuthWorkos` acts as an authentication provide
 Set `fetchMemberships: true` when you use `MastraFGAWorkos`. This loads the user's WorkOS organization memberships during authentication so FGA checks can resolve the correct organization membership ID.
 
 When `fetchMemberships` is `false`, Mastra skips the extra WorkOS `listOrganizationMemberships()` call on each authenticated request.
+
+## Service tokens and JWT claims
+
+If your WorkOS JWT template includes custom claims, you can map them directly into the authenticated `WorkOSUser`.
+
+```typescript title="src/mastra/auth.ts"
+import { MastraAuthWorkos } from '@mastra/auth-workos'
+
+const auth = new MastraAuthWorkos({
+  apiKey: process.env.WORKOS_API_KEY,
+  clientId: process.env.WORKOS_CLIENT_ID,
+  redirectUri: process.env.WORKOS_REDIRECT_URI,
+  trustJwtClaims: true,
+  jwtClaims: {
+    organizationId: 'org_id',
+    organizationMembershipId: 'urn:mastra:organization_membership_id',
+  },
+})
+```
+
+When `trustJwtClaims` is enabled, Mastra can authenticate verified bearer tokens for service principals even if `getUser()` is not the right lookup path. This is the preferred way to pass pre-resolved `organizationMembershipId` values into FGA checks for machine-to-machine flows.
 
 ## Custom authorization
 

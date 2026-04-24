@@ -50,9 +50,9 @@ export class WorkOSFGAMembershipResolutionError extends Error {
  *
  * const fga = new MastraFGAWorkos({
  *   resourceMapping: {
- *     agents: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
- *     workflows: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
- *     memory: { fgaResourceType: 'user', deriveId: (ctx) => ctx.user.userId },
+ *     agent: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
+ *     workflow: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
+ *     thread: { fgaResourceType: 'workspace-thread', deriveId: ({ resourceId }) => resourceId },
  *   },
  *   permissionMapping: {
  *     'agents:execute': 'manage-workflows',
@@ -153,7 +153,7 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
     if (!membershipId) return [];
 
     const permissionSlug = this.resolvePermission(permission);
-    const parentResource = this.resolveParentResource(user, resourceType);
+    const parentResource = resourceType === 'thread' ? undefined : this.resolveParentResource(user, resourceType);
     if (parentResource) {
       const accessibleIds = await this.listAccessibleResourceExternalIds({
         organizationMembershipId: membershipId,
@@ -384,7 +384,7 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
     user: WorkOSUser,
     resourceType: string,
   ): { externalId: string; typeSlug: string } | undefined {
-    const mapping = this.resourceMapping[resourceType];
+    const mapping = this.getResourceMapping(resourceType);
     const externalId = mapping?.deriveId?.({ user });
     if (!mapping?.fgaResourceType || !externalId) {
       return undefined;
@@ -406,7 +406,7 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
     resourceId: string,
     context?: FGACheckParams['context'],
   ): string | undefined {
-    const mapping = this.resourceMapping[resourceType];
+    const mapping = this.getResourceMapping(resourceType);
     const derivedId = mapping?.deriveId?.({
       user,
       resourceId: context?.resourceId ?? resourceId,
@@ -435,7 +435,7 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
       return checkOptions;
     }
 
-    const mapping = this.resourceMapping[params.resource.type];
+    const mapping = this.getResourceMapping(params.resource.type);
     if (mapping) {
       checkOptions.resourceExternalId = resourceId;
       checkOptions.resourceTypeSlug = mapping.fgaResourceType;
@@ -445,6 +445,28 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
     }
 
     return checkOptions;
+  }
+
+  private getResourceMapping(resourceType: string): FGAResourceMappingEntry | undefined {
+    const aliases =
+      resourceType === 'agent'
+        ? ['agent', 'agents']
+        : resourceType === 'workflow'
+          ? ['workflow', 'workflows']
+          : resourceType === 'tool'
+            ? ['tool', 'tools']
+            : resourceType === 'thread'
+              ? ['thread', 'threads', 'memory']
+              : [resourceType];
+
+    for (const key of aliases) {
+      const mapping = this.resourceMapping[key];
+      if (mapping) {
+        return mapping;
+      }
+    }
+
+    return undefined;
   }
 
   /**

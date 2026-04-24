@@ -5,6 +5,7 @@
  * cookie-based sessions that persist across server restarts.
  */
 
+import type { JwtPayload } from '@mastra/auth';
 import { verifyJwks } from '@mastra/auth';
 import type {
   IUserProvider,
@@ -65,6 +66,9 @@ export class MastraAuthWorkos
   protected authService: AuthService<Request, Response>;
   protected config: AuthKitConfig;
   protected fetchMemberships: boolean;
+  protected trustJwtClaims: boolean;
+  protected jwtClaimOptions?: MastraAuthWorkosOptions['jwtClaims'];
+  protected mapJwtPayloadToUser?: MastraAuthWorkosOptions['mapJwtPayloadToUser'];
   protected membershipCache: LRUCache<string, Promise<OrganizationMembership[]>>;
 
   constructor(options?: MastraAuthWorkosOptions) {
@@ -101,6 +105,9 @@ export class MastraAuthWorkos
     this.redirectUri = redirectUri;
     this.ssoConfig = options?.sso;
     this.fetchMemberships = options?.fetchMemberships ?? false;
+    this.trustJwtClaims = options?.trustJwtClaims ?? false;
+    this.jwtClaimOptions = options?.jwtClaims;
+    this.mapJwtPayloadToUser = options?.mapJwtPayloadToUser;
     this.membershipCache = new LRUCache<string, Promise<OrganizationMembership[]>>({
       max: MEMBERSHIP_CACHE_MAX_SIZE,
       ttl: MEMBERSHIP_CACHE_TTL_MS,
@@ -182,26 +189,48 @@ export class MastraAuthWorkos
       if (token) {
         const jwksUri = this.workos.userManagement.getJwksUrl(this.clientId);
         const payload = await verifyJwks(token, jwksUri);
+        const jwtUser = this.resolveJwtPayloadUser(payload);
+
+        if (this.trustJwtClaims && jwtUser?.id && jwtUser?.workosId) {
+          return await this.attachMembershipsIfNeeded(jwtUser);
+        }
 
         if (payload?.sub) {
-          const user = await this.workos.userManagement.getUser(payload.sub);
+          try {
+            const user = await this.workos.userManagement.getUser(payload.sub);
 
-          // Fetch memberships only when FGA is configured (fetchMemberships: true).
-          if (this.fetchMemberships) {
-            const memberships = await this.getMemberships(user.id);
+            // Fetch memberships only when FGA is configured (fetchMemberships: true).
+            if (this.fetchMemberships) {
+              const memberships = await this.getMemberships(user.id);
 
-            return {
-              ...mapWorkOSUserToEEUser(user),
-              workosId: user.id,
-              organizationId: memberships[0]?.organizationId,
-              memberships,
-            };
+              return this.mergeJwtPayloadUser(
+                {
+                  ...mapWorkOSUserToEEUser(user),
+                  workosId: user.id,
+                  organizationId: memberships[0]?.organizationId,
+                  memberships,
+                },
+                jwtUser,
+              );
+            }
+
+            return this.mergeJwtPayloadUser(
+              {
+                ...mapWorkOSUserToEEUser(user),
+                workosId: user.id,
+              },
+              jwtUser,
+            );
+          } catch {
+            if (this.trustJwtClaims && jwtUser?.id && jwtUser?.workosId) {
+              return await this.attachMembershipsIfNeeded(jwtUser);
+            }
+            return null;
           }
+        }
 
-          return {
-            ...mapWorkOSUserToEEUser(user),
-            workosId: user.id,
-          };
+        if (this.trustJwtClaims && jwtUser?.id && jwtUser?.workosId) {
+          return await this.attachMembershipsIfNeeded(jwtUser);
         }
       }
 
@@ -306,6 +335,121 @@ export class MastraAuthWorkos
 
     this.membershipCache.set(userId, membershipsPromise);
     return membershipsPromise;
+  }
+
+  private async attachMembershipsIfNeeded(user: WorkOSUser): Promise<WorkOSUser> {
+    if (!this.fetchMemberships || user.organizationMembershipId) {
+      return user;
+    }
+
+    try {
+      const memberships = await this.getMemberships(user.workosId);
+      return {
+        ...user,
+        organizationId: user.organizationId ?? memberships[0]?.organizationId,
+        memberships,
+      };
+    } catch {
+      return user;
+    }
+  }
+
+  private resolveJwtPayloadUser(payload: JwtPayload | null): WorkOSUser | null {
+    if (!payload) {
+      return null;
+    }
+
+    const mappedClaims = this.buildUserFromJwtClaims(payload);
+    const customMappedClaims = this.mapJwtPayloadToUser?.(payload) ?? undefined;
+    const combined = {
+      ...(payload as Record<string, unknown>),
+      ...(mappedClaims ?? {}),
+      ...(customMappedClaims ?? {}),
+    } as Partial<WorkOSUser> & Record<string, unknown>;
+
+    const id = typeof combined.id === 'string' ? combined.id : undefined;
+    const workosId = typeof combined.workosId === 'string' ? combined.workosId : id;
+    if (!id || !workosId) {
+      return null;
+    }
+
+    const metadata =
+      combined.metadata && typeof combined.metadata === 'object' && !Array.isArray(combined.metadata)
+        ? combined.metadata
+        : undefined;
+
+    return {
+      ...combined,
+      id,
+      workosId,
+      email: typeof combined.email === 'string' ? combined.email : undefined,
+      name:
+        typeof combined.name === 'string' ? combined.name : typeof combined.email === 'string' ? combined.email : id,
+      organizationId: typeof combined.organizationId === 'string' ? combined.organizationId : undefined,
+      organizationMembershipId:
+        typeof combined.organizationMembershipId === 'string' ? combined.organizationMembershipId : undefined,
+      metadata: {
+        ...(metadata ?? {}),
+        workosId,
+        ...(typeof combined.organizationId === 'string' ? { organizationId: combined.organizationId } : {}),
+        ...(typeof combined.organizationMembershipId === 'string'
+          ? { organizationMembershipId: combined.organizationMembershipId }
+          : {}),
+      },
+    };
+  }
+
+  private buildUserFromJwtClaims(payload: JwtPayload): Partial<WorkOSUser> | null {
+    const userId = this.readJwtClaim(payload, this.jwtClaimOptions?.userId) ?? this.readJwtClaim(payload, 'sub');
+    const workosId = this.readJwtClaim(payload, this.jwtClaimOptions?.workosId) ?? userId;
+
+    if (!userId || !workosId) {
+      return null;
+    }
+
+    return {
+      id: userId,
+      workosId,
+      email: this.readJwtClaim(payload, this.jwtClaimOptions?.email) ?? this.readJwtClaim(payload, 'email'),
+      name: this.readJwtClaim(payload, this.jwtClaimOptions?.name) ?? this.readJwtClaim(payload, 'name'),
+      organizationId:
+        this.readJwtClaim(payload, this.jwtClaimOptions?.organizationId) ?? this.readJwtClaim(payload, 'org_id'),
+      organizationMembershipId: this.readJwtClaim(payload, this.jwtClaimOptions?.organizationMembershipId),
+    };
+  }
+
+  private mergeJwtPayloadUser(user: WorkOSUser, jwtUser: WorkOSUser | null): WorkOSUser {
+    if (!jwtUser) {
+      return user;
+    }
+
+    return {
+      ...jwtUser,
+      ...user,
+      organizationId: jwtUser.organizationId ?? user.organizationId,
+      organizationMembershipId: jwtUser.organizationMembershipId ?? user.organizationMembershipId,
+      memberships: user.memberships ?? jwtUser.memberships,
+      metadata: {
+        ...(jwtUser.metadata ?? {}),
+        ...(user.metadata ?? {}),
+      },
+    };
+  }
+
+  private readJwtClaim(payload: JwtPayload, claimPath?: string): string | undefined {
+    if (!claimPath) {
+      return undefined;
+    }
+
+    let current: unknown = payload;
+    for (const segment of claimPath.split('.')) {
+      if (!current || typeof current !== 'object' || !(segment in current)) {
+        return undefined;
+      }
+      current = (current as Record<string, unknown>)[segment];
+    }
+
+    return typeof current === 'string' ? current : undefined;
   }
 
   // ============================================================================

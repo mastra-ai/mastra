@@ -1222,6 +1222,16 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Messages should be an array' });
       }
 
+      const resourceIdByThread = new Map<string, string>();
+      for (const message of messages) {
+        if (!message.threadId || !message.resourceId) {
+          continue;
+        }
+        if (!resourceIdByThread.has(message.threadId)) {
+          resourceIdByThread.set(message.threadId, message.resourceId);
+        }
+      }
+
       // Validate that all messages have threadId and resourceId
       const invalidMessages = messages.filter(message => !message.threadId || !message.resourceId);
       if (invalidMessages.length > 0) {
@@ -1243,32 +1253,27 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
         const threadIds = [...new Set(messages.map(m => m.threadId).filter(Boolean))] as string[];
         for (const threadId of threadIds) {
           const thread = await memory.getThreadById({ threadId });
-          // Thread may not exist yet (will be created on first message save), which is allowed
-          // But if it exists, it must belong to the same resource
-          if (thread) {
-            await enforceThreadAccess({
-              mastra,
-              requestContext,
-              threadId,
-              thread,
-              effectiveResourceId,
-              permission: 'memory:write',
-            });
-          }
+          await enforceThreadAccess({
+            mastra,
+            requestContext,
+            threadId,
+            thread,
+            effectiveResourceId,
+            permission: 'memory:write',
+          });
         }
       } else {
         const threadIds = [...new Set(messages.map(m => m.threadId).filter(Boolean))] as string[];
         for (const threadId of threadIds) {
           const thread = await memory.getThreadById({ threadId });
-          if (thread) {
-            await enforceThreadAccess({
-              mastra,
-              requestContext,
-              threadId,
-              thread,
-              permission: 'memory:write',
-            });
-          }
+          await enforceThreadAccess({
+            mastra,
+            requestContext,
+            threadId,
+            thread,
+            effectiveResourceId: resourceIdByThread.get(threadId),
+            permission: 'memory:write',
+          });
         }
       }
 
@@ -1300,15 +1305,24 @@ export const CREATE_THREAD_ROUTE = createRoute({
   handler: async ({ mastra, agentId, resourceId, title, metadata, threadId, requestContext }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+      const effectiveThreadId = threadId ?? mastra.generateId();
+      validateBody({ resourceId: effectiveResourceId });
+
+      await enforceThreadAccess({
+        mastra,
+        requestContext,
+        threadId: effectiveThreadId,
+        effectiveResourceId,
+        permission: 'memory:write',
+      });
 
       // Gateway proxy: create thread via gateway API
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
       if (agent && (await isGatewayAgentAsync(agent))) {
         const gwClient = getGatewayClient();
         if (gwClient) {
-          validateBody({ resourceId: effectiveResourceId });
           const result = await gwClient.createThread({
-            id: threadId,
+            id: effectiveThreadId,
             resourceId: effectiveResourceId!,
             title,
             metadata,
@@ -1323,13 +1337,11 @@ export const CREATE_THREAD_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Memory is not initialized' });
       }
 
-      validateBody({ resourceId: effectiveResourceId });
-
       const result = await memory.createThread({
         resourceId: effectiveResourceId!,
         title,
         metadata,
-        threadId,
+        threadId: effectiveThreadId,
       });
       return result;
     } catch (error) {
@@ -1507,6 +1519,7 @@ export const CLONE_THREAD_ROUTE = createRoute({
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+      const effectiveNewThreadId = newThreadId ?? mastra.generateId();
       validateBody({ threadId: effectiveThreadId });
 
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
@@ -1526,10 +1539,17 @@ export const CLONE_THREAD_ROUTE = createRoute({
         thread: sourceThread,
         effectiveResourceId,
       });
+      await enforceThreadAccess({
+        mastra,
+        requestContext,
+        threadId: effectiveNewThreadId,
+        effectiveResourceId,
+        permission: 'memory:write',
+      });
 
       const result = await memory.cloneThread({
         sourceThreadId: effectiveThreadId!,
-        newThreadId,
+        newThreadId: effectiveNewThreadId,
         // Use effective resourceId for the cloned thread
         resourceId: effectiveResourceId,
         title,
@@ -1761,6 +1781,32 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
         typeof config?.semanticRecall === 'object' ? config?.semanticRecall?.scope !== 'thread' : true;
 
       const searchResults: SearchResult[] = [];
+      let accessibleThreadsForResource: StorageThreadType[] | undefined;
+      let accessibleThreadIds: Set<string> | undefined;
+
+      if (resourceScope && effectiveResourceId && hasFGAUser(requestContext)) {
+        const { threads } = await memory.listThreads({
+          filter: { resourceId: effectiveResourceId },
+          perPage: false,
+          orderBy: { field: 'updatedAt', direction: 'DESC' },
+        });
+        accessibleThreadsForResource = await filterAccessibleThreads({
+          mastra,
+          requestContext,
+          threads,
+        });
+        accessibleThreadIds = new Set(accessibleThreadsForResource.map(thread => thread.id));
+
+        if (accessibleThreadsForResource.length === 0) {
+          return {
+            results: [],
+            count: 0,
+            query: searchQuery,
+            searchScope: resourceScope ? 'resource' : 'thread',
+            searchType: hasSemanticRecall ? 'semantic' : 'text',
+          };
+        }
+      }
 
       // If threadId is provided and scope is thread-based, check if the thread exists
       if (effectiveThreadId && !resourceScope) {
@@ -1789,12 +1835,16 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
 
       // If no threadId provided, get one from the resource
       if (!searchThreadId) {
-        const { threads } = await memory.listThreads({
-          filter: { resourceId: effectiveResourceId },
-          page: 0,
-          perPage: 1,
-          orderBy: { field: 'updatedAt', direction: 'DESC' },
-        });
+        const threads =
+          accessibleThreadsForResource ??
+          (
+            await memory.listThreads({
+              filter: { resourceId: effectiveResourceId },
+              page: 0,
+              perPage: 1,
+              orderBy: { field: 'updatedAt', direction: 'DESC' },
+            })
+          ).threads;
 
         if (threads.length === 0) {
           return {
@@ -1846,17 +1896,32 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
         threadConfig: config,
         vectorSearchString: threadConfig.semanticRecall && searchQuery ? searchQuery : undefined,
       });
+      const accessibleMessages = accessibleThreadIds
+        ? result.messages.filter((message: MastraDBMessage) =>
+            accessibleThreadIds!.has(message.threadId || searchThreadId!),
+          )
+        : result.messages;
+
+      if (accessibleMessages.length === 0) {
+        return {
+          results: [],
+          count: 0,
+          query: searchQuery,
+          searchScope: resourceScope ? 'resource' : 'thread',
+          searchType: hasSemanticRecall ? 'semantic' : 'text',
+        };
+      }
 
       // Get all threads to build context and show which thread each message is from
       // Fetch threads by IDs from the actual messages to avoid truncation
       const threadIds = Array.from(
-        new Set(result.messages.map((m: MastraDBMessage) => m.threadId || searchThreadId!).filter(Boolean)),
+        new Set(accessibleMessages.map((m: MastraDBMessage) => m.threadId || searchThreadId!).filter(Boolean)),
       );
       const fetched = await Promise.all(threadIds.map((id: string) => memory.getThreadById({ threadId: id })));
       const threadMap = new Map(fetched.filter(Boolean).map(t => [t!.id, t!]));
 
       // Process each message in the results
-      for (const msg of result.messages) {
+      for (const msg of accessibleMessages) {
         const content = getTextContent(msg);
 
         const msgThreadId = msg.threadId || searchThreadId;

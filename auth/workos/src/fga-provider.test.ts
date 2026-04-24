@@ -177,6 +177,30 @@ describe('MastraFGAWorkos', () => {
       );
     });
 
+    it('should honor the legacy memory mapping alias for thread checks', async () => {
+      mockAuthorization.check.mockResolvedValue({ authorized: true });
+      const legacyFga = new MastraFGAWorkos({
+        apiKey: 'sk_test_123',
+        clientId: 'client_test_123',
+        resourceMapping: {
+          memory: { fgaResourceType: 'workspace-thread', deriveId: ({ resourceId }: any) => resourceId },
+        },
+      });
+
+      await legacyFga.check(testUser, {
+        resource: { type: 'thread', id: 'thread-1' },
+        permission: 'memory:read',
+        context: { resourceId: 'tenant-a:thread-1' },
+      });
+
+      expect(mockAuthorization.check).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resourceExternalId: 'tenant-a:thread-1',
+          resourceTypeSlug: 'workspace-thread',
+        }),
+      );
+    });
+
     it('should return false when no organization membership ID found', async () => {
       const userWithoutMembership = { id: 'user-1' };
       const result = await fga.check(userWithoutMembership, {
@@ -324,15 +348,10 @@ describe('MastraFGAWorkos', () => {
       expect(result).toEqual([{ id: 'thread-1', resourceId: 'tenant-a:thread-1' }]);
       expect(deriveId).toHaveBeenNthCalledWith(1, {
         user: testUser,
-        resourceId: undefined,
-        requestContext: undefined,
-      });
-      expect(deriveId).toHaveBeenNthCalledWith(2, {
-        user: testUser,
         resourceId: 'tenant-a:thread-1',
         requestContext: undefined,
       });
-      expect(deriveId).toHaveBeenNthCalledWith(3, {
+      expect(deriveId).toHaveBeenNthCalledWith(2, {
         user: testUser,
         resourceId: 'tenant-a:thread-2',
         requestContext: undefined,

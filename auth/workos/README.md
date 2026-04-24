@@ -73,6 +73,8 @@ const fga = new MastraFGAWorkos({
 });
 ```
 
+`thread` is the canonical Mastra resource key for memory authorization. `MastraFGAWorkos` also accepts the legacy alias `memory` for backward compatibility.
+
 ## Configuration
 
 The package requires the following configuration:
@@ -93,8 +95,36 @@ interface MastraAuthWorkosOptions {
   clientId?: string;
   redirectUri?: string;
   fetchMemberships?: boolean;
+  trustJwtClaims?: boolean;
+  jwtClaims?: {
+    userId?: string;
+    workosId?: string;
+    email?: string;
+    name?: string;
+    organizationId?: string;
+    organizationMembershipId?: string;
+  };
 }
 ```
+
+### Service tokens and custom JWT claims
+
+If your WorkOS JWT template includes custom claims for service principals or pre-resolved FGA context, you can map them directly into the authenticated `WorkOSUser`:
+
+```typescript
+const auth = new MastraAuthWorkos({
+  apiKey: 'your_workos_api_key',
+  clientId: 'your_workos_client_id',
+  redirectUri: 'https://your-app.com/auth/callback',
+  trustJwtClaims: true,
+  jwtClaims: {
+    organizationMembershipId: 'urn:mastra:organization_membership_id',
+    organizationId: 'org_id',
+  },
+});
+```
+
+With `trustJwtClaims: true`, Mastra can authenticate verified bearer tokens from a WorkOS custom JWT template even when `workos.userManagement.getUser()` is not the right lookup path, such as machine-to-machine or service-account tokens.
 
 ## API
 

@@ -5,6 +5,7 @@ import { MastraAuthWorkos } from './index';
 
 // Mock the WorkOS class
 const mockListOrganizationMemberships = vi.fn();
+const mockGetUser = vi.fn();
 const mockWorkOSConstructor = vi.fn();
 
 vi.mock('@workos-inc/node', () => {
@@ -17,6 +18,7 @@ vi.mock('@workos-inc/node', () => {
       this.userManagement = {
         getJwksUrl: vi.fn().mockReturnValue('https://mock-jwks-url'),
         listOrganizationMemberships: mockListOrganizationMemberships,
+        getUser: mockGetUser,
       };
     }
   }
@@ -79,6 +81,15 @@ describe('MastraAuthWorkos', () => {
     // Reset default mock behavior
     mockListOrganizationMemberships.mockResolvedValue({
       data: [{ role: { slug: 'admin' } }, { role: { slug: 'member' } }],
+    });
+    mockGetUser.mockResolvedValue({
+      id: 'user123',
+      email: 'test@example.com',
+      firstName: 'Test',
+      lastName: 'User',
+      profilePictureUrl: null,
+      emailVerified: true,
+      createdAt: new Date().toISOString(),
     });
   });
 
@@ -172,6 +183,73 @@ describe('MastraAuthWorkos', () => {
       const _result = await auth.authenticateToken(mockToken, mockRequest);
 
       expect(verifyJwks).toHaveBeenCalledWith(mockToken, 'https://mock-jwks-url');
+    });
+
+    it('should merge configured JWT claims onto a fetched WorkOS user', async () => {
+      mockWithAuth.mockResolvedValueOnce({
+        auth: { user: null },
+      });
+      vi.mocked(verifyJwks).mockResolvedValueOnce({
+        sub: 'user123',
+        org_id: 'org_123',
+        'urn:mastra:organization_membership_id': 'om_123',
+      } as JwtPayload);
+
+      const auth = new MastraAuthWorkos({
+        apiKey: mockApiKey,
+        clientId: mockClientId,
+        redirectUri: mockRedirectUri,
+        session: { cookiePassword: mockCookiePassword },
+        jwtClaims: {
+          organizationMembershipId: 'urn:mastra:organization_membership_id',
+        },
+      });
+
+      const result = await auth.authenticateToken('valid-token', mockRequest);
+
+      expect(mockGetUser).toHaveBeenCalledWith('user123');
+      expect(result).toMatchObject({
+        id: 'user123',
+        workosId: 'user123',
+        organizationId: 'org_123',
+        organizationMembershipId: 'om_123',
+      });
+    });
+
+    it('should trust configured JWT claims for service tokens when getUser lookup does not apply', async () => {
+      mockWithAuth.mockResolvedValueOnce({
+        auth: { user: null },
+      });
+      mockGetUser.mockRejectedValueOnce(new Error('not a WorkOS user'));
+      vi.mocked(verifyJwks).mockResolvedValueOnce({
+        sub: 'svc_automation',
+        email: 'automation@example.com',
+        org_id: 'org_service',
+        'urn:mastra:organization_membership_id': 'om_service',
+        'urn:mastra:team_id': 'team_a',
+      } as JwtPayload);
+
+      const auth = new MastraAuthWorkos({
+        apiKey: mockApiKey,
+        clientId: mockClientId,
+        redirectUri: mockRedirectUri,
+        session: { cookiePassword: mockCookiePassword },
+        trustJwtClaims: true,
+        jwtClaims: {
+          organizationMembershipId: 'urn:mastra:organization_membership_id',
+        },
+      });
+
+      const result = await auth.authenticateToken('service-token', mockRequest);
+
+      expect(result).toMatchObject({
+        id: 'svc_automation',
+        workosId: 'svc_automation',
+        email: 'automation@example.com',
+        organizationId: 'org_service',
+        organizationMembershipId: 'om_service',
+      });
+      expect((result as any)?.['urn:mastra:team_id']).toBe('team_a');
     });
 
     it('should return null for invalid token', async () => {

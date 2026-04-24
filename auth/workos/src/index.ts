@@ -61,6 +61,7 @@ export type {
   MastraAuthWorkosOptions,
   WorkOSSSOConfig,
   WorkOSSessionConfig,
+  WorkOSJwtClaimsConfig,
 
   // RBAC options
   MastraRBACWorkosOptions,

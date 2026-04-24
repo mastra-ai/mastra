@@ -2,6 +2,7 @@
  * Shared types for WorkOS integration.
  */
 
+import type { JwtPayload } from '@mastra/auth';
 import type { EEUser, RoleMapping } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
 import type { User, OrganizationMembership } from '@workos-inc/node';
@@ -80,6 +81,27 @@ export interface WorkOSSessionConfig {
 }
 
 /**
+ * Mapping from a verified bearer JWT payload into a WorkOSUser.
+ *
+ * Use this when your WorkOS JWT template includes custom claims such as
+ * `organizationMembershipId`, tenant IDs, or service-account identifiers.
+ */
+export interface WorkOSJwtClaimsConfig {
+  /** Claim path for the Mastra user ID. Defaults to `sub`. */
+  userId?: string;
+  /** Claim path for the WorkOS user ID. Defaults to the resolved userId. */
+  workosId?: string;
+  /** Claim path for the user's email. Defaults to `email`. */
+  email?: string;
+  /** Claim path for the user's display name. Defaults to `name`. */
+  name?: string;
+  /** Claim path for the organization ID. Defaults to `org_id`. */
+  organizationId?: string;
+  /** Claim path for the organization membership ID used by FGA. */
+  organizationMembershipId?: string;
+}
+
+/**
  * Options for MastraAuthWorkos.
  */
 export interface MastraAuthWorkosOptions {
@@ -105,6 +127,28 @@ export interface MastraAuthWorkosOptions {
    * Defaults to `false`. Set to `true` when using `MastraFGAWorkos`.
    */
   fetchMemberships?: boolean;
+  /**
+   * Claim mapping for verified bearer JWTs.
+   *
+   * This is useful when your WorkOS JWT template includes custom claims such as
+   * `organizationMembershipId`, team IDs, or service-account identity fields.
+   */
+  jwtClaims?: WorkOSJwtClaimsConfig;
+  /**
+   * When `true`, trust the verified bearer JWT claims enough to construct a
+   * `WorkOSUser` even if `workos.userManagement.getUser()` does not apply.
+   *
+   * Use this for machine-to-machine or service-account tokens backed by a
+   * WorkOS custom JWT template.
+   *
+   * Defaults to `false`.
+   */
+  trustJwtClaims?: boolean;
+  /**
+   * Optional escape hatch for advanced bearer-token claim mapping.
+   * Runs after `jwtClaims` mapping and can override or augment the resolved user.
+   */
+  mapJwtPayloadToUser?: (payload: JwtPayload) => Partial<WorkOSUser> | null | undefined;
 }
 
 // ============================================================================
@@ -165,9 +209,9 @@ export interface MastraRBACWorkosOptions {
  * @example
  * ```typescript
  * {
- *   agents: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
- *   workflows: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
- *   memory: { fgaResourceType: 'user', deriveId: (ctx) => ctx.user.userId },
+ *   agent: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
+ *   workflow: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
+ *   thread: { fgaResourceType: 'workspace-thread', deriveId: ({ resourceId }) => resourceId },
  * }
  * ```
  */
@@ -188,7 +232,7 @@ export interface FGAResourceMappingEntry {
  * ```typescript
  * new MastraFGAWorkos({
  *   resourceMapping: {
- *     agents: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
+ *     agent: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
  *   },
  *   permissionMapping: {
  *     'agents:execute': 'manage-workflows',
@@ -210,7 +254,8 @@ export interface MastraFGAWorkosOptions {
   organizationId?: string;
   /**
    * Map Mastra resource types to WorkOS FGA resource types.
-   * Keys are Mastra resource types (e.g., 'agent', 'workflow', 'memory').
+   * Keys are Mastra resource types (e.g., 'agent', 'workflow', 'thread').
+   * Legacy aliases such as 'agents', 'workflows', and 'memory' are also accepted.
    */
   resourceMapping?: Record<string, FGAResourceMappingEntry>;
   /**

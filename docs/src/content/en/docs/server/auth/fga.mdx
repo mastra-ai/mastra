@@ -34,7 +34,7 @@ const mastra = new Mastra({
       resourceMapping: {
         agent: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
         workflow: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
-        memory: { fgaResourceType: 'user', deriveId: (ctx) => ctx.user.userId },
+        thread: { fgaResourceType: 'workspace-thread', deriveId: ({ resourceId }) => resourceId },
       },
       permissionMapping: {
         'agents:execute': 'manage-workflows',
@@ -48,6 +48,8 @@ const mastra = new Mastra({
 ```
 
 When using `MastraFGAWorkos`, set `fetchMemberships: true` on `MastraAuthWorkos`. WorkOS FGA checks need the user's organization memberships to resolve the correct membership ID for authorization.
+
+Use `thread` as the resource-mapping key for memory authorization. `MastraFGAWorkos` still accepts the legacy alias `memory`, but new configs should prefer `thread`.
 
 ### Resource mapping
 
