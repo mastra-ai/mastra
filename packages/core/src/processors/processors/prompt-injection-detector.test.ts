@@ -752,7 +752,7 @@ describe('PromptInjectionDetector', () => {
       expect(schemaJson).not.toContain('maximum');
     });
 
-    it('should reject scores outside the 0-1 range at runtime', async () => {
+    it('should fail open and warn when scores are outside the 0-1 range', async () => {
       const model = setupMockModel({
         categories: [{ type: 'injection', score: 1.2 }],
         reason: 'Attack detected',
