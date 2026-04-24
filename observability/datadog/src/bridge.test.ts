@@ -128,17 +128,6 @@ vi.mock('dd-trace', () => {
 
 import { DatadogBridge } from './bridge';
 
-function createMockLogger() {
-  return {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    trackException: vi.fn(),
-    getTransports: vi.fn(() => new Map()),
-  };
-}
-
 function createMockSpan(overrides: Partial<AnyExportedSpan> = {}): AnyExportedSpan {
   return {
     id: '0000000000000001',
@@ -400,21 +389,6 @@ describe('DatadogBridge', () => {
         modelProvider: 'openai',
       });
     });
-
-    it('logs dd span open events when span lifecycle debug is enabled', () => {
-      const logger = createMockLogger();
-      const bridge = new DatadogBridge({
-        mlApp: 'test',
-        agentless: false,
-        spanLifecycleDebug: true,
-        logger: logger as any,
-      });
-
-      bridge.createSpan(createMockSpanOptions({ name: 'debug-span' }));
-
-      expect(logger.info).toHaveBeenCalledWith('[DatadogBridge] Enabled dd-trace span lifecycle debug logging');
-      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('[DatadogBridge.span.open] name=debug-span'));
-    });
   });
 
   describe('executeInContext', () => {
@@ -436,26 +410,6 @@ describe('DatadogBridge', () => {
 
       expect(result).toBe(42);
       expect(mockScopeActivate).not.toHaveBeenCalled();
-    });
-
-    it('logs a call stack for missing-span fallback when span lifecycle debug is enabled', async () => {
-      const logger = createMockLogger();
-      const bridge = new DatadogBridge({
-        mlApp: 'test',
-        agentless: false,
-        spanLifecycleDebug: true,
-        logger: logger as any,
-      });
-
-      await bridge.executeInContext('nonexistent-span', async () => 42);
-
-      expect(logger.debug).toHaveBeenCalledWith(
-        '[DatadogBridge.executeWithSpanContext] Falling back to raw execution because dd span is missing',
-        expect.objectContaining({
-          spanId: 'nonexistent-span',
-          callStack: expect.stringContaining('DatadogBridge.executeWithSpanContext'),
-        }),
-      );
     });
   });
 
