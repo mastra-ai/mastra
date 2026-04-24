@@ -34,7 +34,8 @@ export const WorkspaceLayout = ({
           </IconButton>
         </div>
         <AgentBuilderBreadcrumb className="justify-self-center" isLoading={isLoading} />
-        <div className="justify-self-end">
+        <div className="justify-self-end flex items-center gap-2">
+          {toolbarAction}
           <IconButton
             tooltip={expanded ? 'Hide configuration' : 'Show configuration'}
             className="rounded-full"
@@ -47,9 +48,8 @@ export const WorkspaceLayout = ({
       <div className="flex flex-1 min-h-0 min-w-0 flex-col px-6 pb-6 pt-4">
         <div className={cn('grid relative h-full min-h-0 agent-builder-panel-grid', gridClass)}>
           <BrowserFrame>
-            <div className="h-full w-full min-w-0 overflow-hidden grid grid-rows-[auto_1fr]">
-              <div className="flex gap-2 items-center pl-6 pt-6 pr-6">{toolbarAction}</div>
-              <div className="min-h-0 min-w-0 overflow-hidden pb-6 max-w-[80ch] mx-auto w-full">{chat}</div>
+            <div className="h-full w-full min-w-0 overflow-hidden">
+              <div className="min-h-0 min-w-0 h-full overflow-hidden pb-6 max-w-[80ch] mx-auto w-full">{chat}</div>
             </div>
           </BrowserFrame>
 

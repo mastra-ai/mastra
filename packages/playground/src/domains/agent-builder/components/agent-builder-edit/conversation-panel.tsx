@@ -5,8 +5,7 @@ import { useMemo } from 'react';
 
 import type { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
 import { ChatComposer } from '../chat-primitives/chat-composer';
-import { MessageRow } from '../chat-primitives/messages';
-import { ConversationHeader } from './conversation-header';
+import { MessageRow, MessagesSkeleton } from '../chat-primitives/messages';
 import { useAgentBuilderTool } from './hooks/use-agent-builder-tool';
 import type { AvailableTool, AvailableWorkspace } from './hooks/use-agent-builder-tool';
 import { useAutoScroll } from './hooks/use-auto-scroll';
@@ -74,14 +73,16 @@ export const ConversationPanel = ({
 
   return (
     <div className="flex h-full min-h-0 flex-col px-6 pt-6">
-      <ConversationHeader />
-
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto pb-4">
-        <div className="flex flex-col gap-3">
-          {chatMessages.map(message => (
-            <MessageRow key={message.id} message={message} />
-          ))}
-        </div>
+        {isConversationLoading && chatMessages.length === 0 ? (
+          <MessagesSkeleton testId="agent-builder-conversation-messages-skeleton" />
+        ) : (
+          <div className="flex flex-col gap-6">
+            {chatMessages.map(message => (
+              <MessageRow key={message.id} message={message} />
+            ))}
+          </div>
+        )}
       </div>
 
       <ChatComposer

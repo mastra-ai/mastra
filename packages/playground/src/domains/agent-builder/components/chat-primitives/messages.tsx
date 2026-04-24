@@ -1,4 +1,4 @@
-import { Txt } from '@mastra/playground-ui';
+import { Skeleton, Txt } from '@mastra/playground-ui';
 import type { MastraUIMessage } from '@mastra/react';
 import { useState } from 'react';
 import Markdown from 'react-markdown';
@@ -33,8 +33,8 @@ export const Txtmessage = ({ txt, role }: { txt: string; role: MastraUIMessage['
     return (
       <div className="flex justify-end">
         <Txt
-          variant="ui-sm"
-          className="whitespace-pre-wrap text-neutral6 rounded-md bg-surface3 px-2 py-1 max-w-[80%]"
+          variant="ui-md"
+          className="whitespace-pre-wrap text-neutral6 rounded-2xl bg-surface3 px-4 py-2.5 max-w-[80%]"
           as="div"
         >
           <Markdown>{txt}</Markdown>
@@ -45,7 +45,7 @@ export const Txtmessage = ({ txt, role }: { txt: string; role: MastraUIMessage['
 
   if (role === 'assistant' || role === 'system') {
     return (
-      <Txt variant="ui-sm" className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%]" as="div">
+      <Txt variant="ui-md" className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%]" as="div">
         <Markdown>{txt}</Markdown>
       </Txt>
     );
@@ -56,7 +56,7 @@ export const Txtmessage = ({ txt, role }: { txt: string; role: MastraUIMessage['
 
 export const ReasoningMessage = ({ text }: { text: string }) => {
   return (
-    <Txt variant="ui-sm" className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%]">
+    <Txt variant="ui-md" className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%]">
       {text}
     </Txt>
   );
@@ -115,10 +115,26 @@ const words = [
   'settling',
 ];
 
+export const MessagesSkeleton = ({ testId }: { testId?: string }) => {
+  return (
+    <div className="flex flex-col gap-6" data-testid={testId}>
+      <div className="flex justify-end">
+        <Skeleton className="h-8 w-56 rounded-md" />
+      </div>
+      <Skeleton className="h-5 w-[70%] rounded-md" />
+      <Skeleton className="h-5 w-[55%] rounded-md" />
+      <div className="flex justify-end">
+        <Skeleton className="h-8 w-40 rounded-md" />
+      </div>
+      <Skeleton className="h-5 w-[65%] rounded-md" />
+    </div>
+  );
+};
+
 export const ToolExecutionMessage = () => {
   const [randomWord] = useState(() => words[Math.floor(Math.random() * words.length)]);
   return (
-    <Txt variant="ui-sm" className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%]">
+    <Txt variant="ui-md" className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%]">
       {randomWord.charAt(0).toUpperCase() + randomWord.slice(1)}...
     </Txt>
   );
