@@ -352,6 +352,46 @@ describe('AgentChannels', () => {
       expect(thread.post).toHaveBeenCalledWith('custom result');
     });
 
+    it('uses tool-result args when approval resume pre-seeds a placeholder', async () => {
+      const formatToolCall = vi.fn().mockReturnValue('custom result');
+      const adapter = createMockAdapter('slack');
+      const channels = new AgentChannels({
+        adapters: {
+          slack: { adapter, formatToolCall },
+        },
+      });
+      const thread = createThread();
+
+      await (channels as any).consumeAgentStream(
+        {
+          fullStream: chunks({
+            type: 'tool-result',
+            payload: {
+              toolName: 'mastra_workspace_search_docs',
+              toolCallId: 'call-1',
+              args: { query: 'channels' },
+              result: 'done',
+              isError: false,
+            },
+          }),
+        },
+        thread,
+        'slack',
+        { toolCallId: 'call-1', messageId: 'approval-msg-1' },
+      );
+
+      expect(formatToolCall).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolName: 'mastra_workspace_search_docs',
+          displayName: 'search_docs',
+          args: { query: 'channels' },
+          argsSummary: 'channels',
+          toolCallId: 'call-1',
+        }),
+      );
+      expect(adapter.editMessage).toHaveBeenCalledWith('thread-1', 'approval-msg-1', 'custom result');
+    });
+
     it('maps channel status to adapter status capabilities', async () => {
       const adapter = {
         ...createMockAdapter('slack'),

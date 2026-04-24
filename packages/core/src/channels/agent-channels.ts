@@ -1217,7 +1217,7 @@ export class AgentChannels {
     let typingStarted = false;
     interface TrackedTool {
       displayName: string;
-      args: Record<string, unknown>;
+      args?: Record<string, unknown>;
       argsSummary: string;
       startedAt: number;
       messageId?: string; // platform message ID for editing
@@ -1228,7 +1228,6 @@ export class AgentChannels {
     if (approvalContext) {
       toolCalls.set(approvalContext.toolCallId, {
         displayName: '',
-        args: {},
         argsSummary: '',
         startedAt: Date.now(),
         messageId: approvalContext.messageId,
