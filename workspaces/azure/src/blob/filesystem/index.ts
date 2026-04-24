@@ -692,6 +692,12 @@ export class AzureBlobFilesystem extends MastraFilesystem {
   async init(): Promise<void> {
     const containerClient = await this.getContainerClient();
     try {
+      if (this.sasToken) {
+        const iter = containerClient.listBlobsFlat({ prefix: this.prefix });
+        await iter.next();
+        return;
+      }
+
       const exists = await containerClient.exists();
       if (!exists) {
         const err = new Error(`Container "${this.containerName}" does not exist`) as Error & { status?: number };
