@@ -235,9 +235,12 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     if ('workflow' in scorerInput && scorerInput.workflow) flat.push(...scorerInput.workflow);
     if ('trajectory' in scorerInput && scorerInput.trajectory) flat.push(...scorerInput.trajectory);
     if ('steps' in scorerInput && scorerInput.steps) {
-      for (const stepScorers of Object.values(scorerInput.steps)) {
-        flat.push(...stepScorers);
-      }
+      throw new MastraError({
+        id: 'STEP_SCORERS_NOT_SUPPORTED',
+        domain: 'SCORER',
+        category: 'USER',
+        text: 'Per-step scorers are not yet supported in dataset.startExperiment. Use workflow: [...] or trajectory: [...] instead, or use runEvals for per-step scoring.',
+      });
     }
     return flat;
   })();

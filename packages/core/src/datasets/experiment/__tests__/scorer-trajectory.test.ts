@@ -171,6 +171,35 @@ describe('trajectory scorer dispatch', () => {
   });
 });
 
+describe('steps scorer config — not yet supported', () => {
+  let storage: MastraCompositeStore;
+  let datasetsStorage: DatasetsInMemory;
+  let mastra: Mastra;
+  let datasetId: string;
+
+  beforeEach(async () => {
+    ({ storage, datasetsStorage } = buildStorage());
+    ({ mastra } = buildMastra(storage));
+
+    const dataset = await datasetsStorage.createDataset({ name: 'Test', description: '' });
+    datasetId = dataset.id;
+    await datasetsStorage.addItem({ datasetId, input: 'Hello' });
+  });
+
+  it('throws STEP_SCORERS_NOT_SUPPORTED when steps config is passed', async () => {
+    const scorer = createAgentScorer('step-scorer');
+
+    await expect(
+      runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        scorers: { steps: { 'my-step': [scorer] } } as any,
+      }),
+    ).rejects.toMatchObject({ id: 'STEP_SCORERS_NOT_SUPPORTED' });
+  });
+});
+
 describe('categorised scorer config (AgentScorerConfig)', () => {
   let storage: MastraCompositeStore;
   let datasetsStorage: DatasetsInMemory;
