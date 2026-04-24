@@ -3,7 +3,6 @@ import { useChat } from '@mastra/react';
 import type { MastraUIMessage } from '@mastra/react';
 import { useMemo } from 'react';
 
-import { useAgentMessages } from '@/hooks/use-agent-messages';
 import type { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
 import { ChatComposer } from '../chat-primitives/chat-composer';
 import { MessageRow } from '../chat-primitives/messages';
@@ -13,6 +12,7 @@ import type { AvailableTool } from './hooks/use-agent-builder-tool';
 import { useAutoScroll } from './hooks/use-auto-scroll';
 import { useChatDraft } from './hooks/use-chat-draft';
 import { useInitialMessage } from './hooks/use-initial-message';
+import { useAgentMessages } from '@/hooks/use-agent-messages';
 
 interface ConversationPanelProps {
   initialUserMessage?: string;
@@ -22,6 +22,8 @@ interface ConversationPanelProps {
   agentId: string;
 }
 
+const BUILDER_AGENT_ID = 'builder-agent';
+
 export const ConversationPanel = ({
   initialUserMessage,
   features,
@@ -30,7 +32,7 @@ export const ConversationPanel = ({
   agentId,
 }: ConversationPanelProps) => {
   const { data, isLoading: isConversationLoading } = useAgentMessages({
-    agentId: 'builder-agent',
+    agentId: BUILDER_AGENT_ID,
     threadId: agentId,
     memory: true,
   });
@@ -40,14 +42,15 @@ export const ConversationPanel = ({
   // changes (allowing useChat to reset when switching agents).
   const emptyMessages = useMemo(() => [] as never[], [agentId]);
   const storedMessages = data?.messages ?? emptyMessages;
-  const v5Messages = useMemo(
-    () => toAISdkV5Messages(storedMessages) as MastraUIMessage[],
-    [storedMessages],
-  );
+  const v5Messages = useMemo(() => toAISdkV5Messages(storedMessages) as MastraUIMessage[], [storedMessages]);
   const hasExistingConversation = (data?.messages?.length ?? 0) > 0;
 
-  const { messages: chatMessages, sendMessage, isRunning } = useChat({
-    agentId: 'builder-agent',
+  const {
+    messages: chatMessages,
+    sendMessage,
+    isRunning,
+  } = useChat({
+    agentId: BUILDER_AGENT_ID,
     initialMessages: v5Messages,
   });
 

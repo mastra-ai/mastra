@@ -149,8 +149,8 @@ export const mastra = new Mastra({
         },
       },
       configuration: {
-        workspace: { type: 'id', workspaceId: 'builder-workspace' },
         agent: {
+          workspace: { type: 'id', workspaceId: 'builder-workspace' },
           memory: {
             options: {
               lastMessages: 10,
