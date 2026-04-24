@@ -2,7 +2,12 @@ import { Agent } from '@mastra/core/agent';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
+import {
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+  MASTRA_VERSIONS_KEY,
+  RequestContext,
+} from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
@@ -843,6 +848,36 @@ describe('Agent Routes Authorization', () => {
 
       expect(capturedOptions.requestContext).toBeDefined();
       expect(capturedOptions.requestContext.get('custom-key')).toBe('resume-value');
+    });
+
+    it('should stash version overrides on requestContext before calling agent.resumeStream()', async () => {
+      const requestContext = createContextWithReservedKeys({});
+
+      let capturedOptions: any;
+      vi.spyOn(mockAgent, 'resumeStream').mockImplementation(async (_resumeData, options) => {
+        capturedOptions = options;
+        return { fullStream: new ReadableStream() } as any;
+      });
+
+      await RESUME_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        runId: 'test-run-id',
+        resumeData: { step: 'next' },
+        versions: {
+          agents: {
+            'sub-agent': { versionId: 'version-1' },
+          },
+        },
+      } as any);
+
+      expect(capturedOptions.requestContext.get(MASTRA_VERSIONS_KEY)).toEqual({
+        agents: {
+          'sub-agent': { versionId: 'version-1' },
+        },
+      });
     });
 
     it('should pass abortSignal to agent.resumeStream()', async () => {

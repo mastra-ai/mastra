@@ -1322,9 +1322,12 @@ export class Agent extends BaseResource {
     const threadId = processedParams.threadId ?? (typeof thread === 'string' ? thread : thread?.id);
     const resourceId = processedParams.resourceId ?? resource;
 
+    const requestBody =
+      route === 'resume-stream' ? (({ messages: _messages, ...body }) => body)(processedParams) : processedParams;
+
     const response: Response = await this.request(`/agents/${this.agentId}/${route}`, {
       method: 'POST',
-      body: processedParams,
+      body: requestBody,
       stream: true,
     });
 
@@ -1900,10 +1903,6 @@ export class Agent extends BaseResource {
     const processedParams = {
       ...options,
       resumeData,
-      // Provide an empty messages seed so that processStreamResponse's stateless
-      // client-tool continuation path (which spreads processedParams.messages)
-      // starts from an empty array rather than undefined.
-      messages: [] as any[],
       requestContext: parseClientRequestContext(options.requestContext),
       clientTools: processClientTools(options.clientTools),
       structuredOutput: options.structuredOutput

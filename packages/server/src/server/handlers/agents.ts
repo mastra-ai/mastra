@@ -1525,7 +1525,11 @@ export const RESUME_STREAM_ROUTE = createRoute({
   requiresPermission: 'agents:execute',
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(serverRequestContext),
+      });
 
       if (!params.runId) {
         throw new HTTPException(400, { message: 'Run id is required' });
@@ -1539,6 +1543,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
         toolCallId,
         memory: memoryOption,
         requestContext: bodyRequestContext,
+        versions,
         ...rest
       } = params;
 
@@ -1549,6 +1554,8 @@ export const RESUME_STREAM_ROUTE = createRoute({
           }
         }
       }
+
+      stashVersionOverrides(serverRequestContext, versions);
 
       let authorizedMemoryOption = memoryOption;
       if (memoryOption) {
