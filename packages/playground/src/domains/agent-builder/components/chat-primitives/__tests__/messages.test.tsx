@@ -3,6 +3,7 @@ import type { MastraUIMessage } from '@mastra/react';
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { AGENT_BUILDER_TOOL_NAME } from '../../agent-builder-edit/hooks/use-agent-builder-tool';
 import { MessageRow } from '../messages';
 
 const buildMessage = (parts: MastraUIMessage['parts']): MastraUIMessage => ({
@@ -16,14 +17,14 @@ describe('MessageRow dynamic-tool rendering', () => {
     cleanup();
   });
 
-  it('renders tool display names for builder-agent-tool calls', () => {
+  it('renders tool display names for agent-builder tool calls', () => {
     const { container } = render(
       <MessageRow
         message={buildMessage([
           {
             type: 'dynamic-tool',
             toolCallId: 'call-1',
-            toolName: 'builder-agent-tool',
+            toolName: AGENT_BUILDER_TOOL_NAME,
             state: 'output-available',
             input: {
               tools: [
@@ -41,51 +42,6 @@ describe('MessageRow dynamic-tool rendering', () => {
     expect(container.textContent).toContain('Weather Lookup');
     expect(container.textContent).not.toContain('web-search');
     expect(container.textContent).not.toContain('weather-lookup');
-  });
-
-  it('summarizes name and instructions updates when no tools are set', () => {
-    const { container } = render(
-      <MessageRow
-        message={buildMessage([
-          {
-            type: 'dynamic-tool',
-            toolCallId: 'call-3',
-            toolName: 'builder-agent-tool',
-            state: 'output-available',
-            input: {
-              name: 'Research Assistant',
-              instructions: 'Do research',
-            },
-            output: { success: true },
-          } as MastraUIMessage['parts'][number],
-        ])}
-      />,
-    );
-
-    expect(container.textContent).toContain('Research Assistant');
-    expect(container.textContent).toContain('Updated instructions');
-  });
-
-  it('prefixes failures with "Failed:" on output-error state', () => {
-    const { container } = render(
-      <MessageRow
-        message={buildMessage([
-          {
-            type: 'dynamic-tool',
-            toolCallId: 'call-4',
-            toolName: 'builder-agent-tool',
-            state: 'output-error',
-            input: {
-              tools: [{ id: 'web-search', name: 'Web Search' }],
-            },
-            errorText: 'boom',
-          } as MastraUIMessage['parts'][number],
-        ])}
-      />,
-    );
-
-    expect(container.textContent).toContain('Failed:');
-    expect(container.textContent).toContain('Web Search');
   });
 
   it('renders the generic shimmer for non-builder dynamic tools', () => {

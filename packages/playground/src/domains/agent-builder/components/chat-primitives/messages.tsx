@@ -18,7 +18,7 @@ export const MessageRow = ({ message }: { message: MastraUIMessage }) => {
 
           case 'reasoning':
             return part.state === 'streaming' ? (
-              <ReasoningMessage key={key} text="Anayzing the agents requirements..." streaming />
+              <ReasoningMessage key={key} text="Anayzing the agent requirements..." streaming />
             ) : (
               <ReasoningMessage key={key} text="Requirements analyzed, preparing the agent." />
             );

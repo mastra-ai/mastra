@@ -45,10 +45,14 @@ export const useStoredAgentMutations = (agentId?: string) => {
 
   const createMutation = useMutation({
     mutationFn: (params: CreateStoredAgentParams) => client.createStoredAgent(params),
-    onSuccess: () => {
+    onSuccess: created => {
       // Invalidate both stored-agents list and the merged agents list
       void queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
       void queryClient.invalidateQueries({ queryKey: ['agents'] });
+      // Invalidate the specific agent details so the freshly-created id resolves
+      // instead of staying stuck on the initial `null` from the 404 lookup.
+      void queryClient.invalidateQueries({ queryKey: ['stored-agent', created.id] });
+      void queryClient.invalidateQueries({ queryKey: ['agent', created.id] });
     },
   });
 

@@ -1,4 +1,4 @@
-import { Avatar, Button, IconButton, Skeleton, TextFieldBlock, Txt } from '@mastra/playground-ui';
+import { Avatar, Skeleton, TextFieldBlock, Txt } from '@mastra/playground-ui';
 import { ChevronRight, FileText, GraduationCap, Plus, Wrench } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
@@ -32,8 +32,6 @@ interface AgentConfigurePanelProps {
   onDraftAvatarUrlChange?: (next: string) => void;
   onDraftInstructionsChange?: (next: string) => void;
   availableTools?: AvailableTool[];
-  onSave?: () => void;
-  isSaving?: boolean;
   isLoading?: boolean;
 }
 
@@ -48,8 +46,6 @@ export const AgentConfigurePanel = ({
   onDraftAvatarUrlChange = () => {},
   onDraftInstructionsChange = () => {},
   availableTools = [],
-  onSave,
-  isSaving = false,
   isLoading = false,
 }: AgentConfigurePanelProps) => {
   const features = useBuilderAgentFeatures();
@@ -81,7 +77,7 @@ export const AgentConfigurePanel = ({
   };
 
   if (isLoading) {
-    return <AgentConfigurePanelSkeleton showSaveButton={Boolean(onSave) && editable} />;
+    return <AgentConfigurePanelSkeleton />;
   }
 
   return (
@@ -166,20 +162,6 @@ export const AgentConfigurePanel = ({
         </div>
       </div>
 
-      {onSave && editable && (
-        <div className="border-t border-border1 px-6 py-4">
-          <Button
-            variant="primary"
-            className="w-full justify-center"
-            onClick={onSave}
-            disabled={isSaving}
-            data-testid="agent-builder-edit-save"
-          >
-            {isSaving ? 'Saving…' : 'Save'}
-          </Button>
-        </div>
-      )}
-
       <SystemPromptDialog
         open={systemPromptOpen}
         onOpenChange={setSystemPromptOpen}
@@ -230,11 +212,7 @@ const ConfigRow = ({ icon, label, description, count, total, onClick, testId }: 
   </button>
 );
 
-interface AgentConfigurePanelSkeletonProps {
-  showSaveButton: boolean;
-}
-
-const AgentConfigurePanelSkeleton = ({ showSaveButton }: AgentConfigurePanelSkeletonProps) => (
+const AgentConfigurePanelSkeleton = () => (
   <div
     className="flex h-full flex-col border border-border1 bg-surface2 rounded-3xl overflow-hidden"
     data-testid="agent-configure-panel-skeleton"
@@ -260,11 +238,6 @@ const AgentConfigurePanelSkeleton = ({ showSaveButton }: AgentConfigurePanelSkel
         ))}
       </div>
     </div>
-    {showSaveButton && (
-      <div className="border-t border-border1 px-6 py-4">
-        <Skeleton className="h-9 w-full rounded-lg" />
-      </div>
-    )}
   </div>
 );
 

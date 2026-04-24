@@ -126,6 +126,7 @@ const AgentBuilderAgentViewReady = ({ id, storedAgent, toolsData }: AgentBuilder
           tooltip="Edit agent"
           className="rounded-full"
           onClick={() => navigate(`/agent-builder/agents/${id}/edit`, { viewTransition: true })}
+          data-testid="agent-builder-view-edit"
         >
           <PencilIcon />
         </IconButton>

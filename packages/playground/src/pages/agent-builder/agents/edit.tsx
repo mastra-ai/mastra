@@ -1,6 +1,6 @@
-import { IconButton } from '@mastra/playground-ui';
+import { Button, IconButton } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
-import { EyeIcon } from 'lucide-react';
+import { EyeIcon, SaveIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 import { useLocation, useNavigate, useParams } from 'react-router';
@@ -102,13 +102,16 @@ const AgentBuilderAgentEditSkeleton = () => (
   <WorkspaceLayout
     isLoading
     chat={null}
+    toolbarAction={
+      <Button size="sm" variant="primary" disabled data-testid="agent-builder-edit-save">
+        <SaveIcon /> Save
+      </Button>
+    }
     configure={
       <EditableAgentConfigurePanel
         agent={{ id: '', name: '', systemPrompt: '' }}
         onAgentChange={() => {}}
         availableTools={[]}
-        onSave={() => {}}
-        isSaving={false}
         isLoading
       />
     }
@@ -163,13 +166,26 @@ const AgentBuilderAgentEditReady = ({
       isLoading={false}
       defaultExpanded
       toolbarAction={
-        <IconButton
-          tooltip="View agent"
-          className="rounded-full"
-          onClick={() => navigate(`/agent-builder/agents/${id}/view`, { viewTransition: true })}
-        >
-          <EyeIcon />
-        </IconButton>
+        <>
+          {mode === 'edit' && (
+            <IconButton
+              tooltip="View agent"
+              className="rounded-full"
+              onClick={() => navigate(`/agent-builder/agents/${id}/view`, { viewTransition: true })}
+            >
+              <EyeIcon />
+            </IconButton>
+          )}
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={handleSave}
+            disabled={isSaving}
+            data-testid="agent-builder-edit-save"
+          >
+            <SaveIcon /> {isSaving ? 'Saving…' : mode === 'edit' ? 'Save' : 'Create'}
+          </Button>
+        </>
       }
       chat={
         <MastraReactProvider baseUrl="http://localhost:4112">
@@ -188,8 +204,6 @@ const AgentBuilderAgentEditReady = ({
           agent={agent}
           onAgentChange={setAgent}
           availableTools={availableTools}
-          onSave={handleSave}
-          isSaving={isSaving}
           isLoading={false}
         />
       }
