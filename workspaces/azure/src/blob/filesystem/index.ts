@@ -449,7 +449,11 @@ export class AzureBlobFilesystem extends MastraFilesystem {
 
       // SAS generation fails without StorageSharedKeyCredential (e.g. DefaultAzureCredential).
       // Fall back to download+reupload.
-      if (error instanceof Error && error.message.includes('generateSasUrl')) {
+      if (
+        error instanceof Error &&
+        (error.message.includes('generateSasUrl') ||
+          (error.message.includes('SAS') && error.message.includes('shared key credential')))
+      ) {
         const content = await this.readFile(src);
         await this.writeFile(dest, content);
         return;

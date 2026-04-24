@@ -657,6 +657,21 @@ describe('AzureBlobFilesystem SDK Operations', () => {
       expect(mockBlockBlobClient.upload).toHaveBeenCalled();
     });
 
+    it('falls back to download+reupload for the Azure SDK shared key error', async () => {
+      mockBlobClient.generateSasUrl.mockRejectedValueOnce(
+        new RangeError('Can only generate the SAS when the client is initialized with a shared key credential'),
+      );
+      mockBlockBlobClient.download.mockResolvedValueOnce({
+        readableStreamBody: createReadableStream(Buffer.from('content')),
+      });
+      mockBlockBlobClient.upload.mockResolvedValueOnce({});
+
+      await fs.copyFile('/src.txt', '/dest.txt');
+
+      expect(mockBlockBlobClient.download).toHaveBeenCalled();
+      expect(mockBlockBlobClient.upload).toHaveBeenCalled();
+    });
+
     it('throws FileNotFoundError when source does not exist', async () => {
       const error = Object.assign(new Error('BlobNotFound'), { statusCode: 404 });
       mockBlobClient.generateSasUrl.mockRejectedValueOnce(error);
