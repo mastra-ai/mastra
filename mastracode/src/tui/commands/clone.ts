@@ -83,6 +83,14 @@ export function askCloneName(state: TUIState): Promise<string | null> {
  * Shared post-clone UI reset: clears chat, tools, tasks, re-renders messages,
  * and shows an info banner. Every clone path should call this after
  * `harness.cloneThread()` succeeds.
+ *
+ * NOTE: Ephemeral per-thread harness state (tasks, activePlan,
+ * sandboxAllowedPaths) is cleared by the `thread_created` event handler in
+ * `event-dispatch.ts`, which `harness.cloneThread()` emits before this
+ * function runs (see packages/core/src/harness/harness.ts cloneThread).
+ * If clone ever stops emitting `thread_created`/`thread_changed`, this
+ * function must call `harness.setState({ tasks: [], activePlan: null,
+ * sandboxAllowedPaths: [] })` directly.
  */
 export async function resetUIAfterClone(ctx: CloneResetContext, clonedTitle: string): Promise<void> {
   const { state } = ctx;

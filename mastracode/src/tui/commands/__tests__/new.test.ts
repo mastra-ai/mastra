@@ -4,9 +4,14 @@ import { handleNewCommand } from '../new.js';
 import type { SlashCommandContext } from '../types.js';
 
 function createContext() {
-  const harnessState: { tasks: unknown[]; activePlan: unknown | null } = {
+  const harnessState: {
+    tasks: unknown[];
+    activePlan: unknown | null;
+    sandboxAllowedPaths: string[];
+  } = {
     tasks: [{ content: 'leftover', status: 'pending', activeForm: 'leftover' }],
     activePlan: { title: 'stale', plan: 'stale', approvedAt: '2026-01-01T00:00:00.000Z' },
+    sandboxAllowedPaths: ['/tmp/leftover-allowed-path'],
   };
   const setState = vi.fn(async (updates: Record<string, unknown>) => {
     Object.assign(harnessState, updates);
@@ -40,14 +45,19 @@ function createContext() {
 }
 
 describe('handleNewCommand', () => {
-  it('clears ephemeral per-thread harness state (tasks, activePlan)', async () => {
+  it('clears ephemeral per-thread harness state (tasks, activePlan, sandboxAllowedPaths)', async () => {
     const { ctx, harnessState, setState } = createContext();
 
     await handleNewCommand(ctx);
 
-    expect(setState).toHaveBeenCalledWith({ tasks: [], activePlan: null });
+    expect(setState).toHaveBeenCalledWith({
+      tasks: [],
+      activePlan: null,
+      sandboxAllowedPaths: [],
+    });
     expect(harnessState.tasks).toEqual([]);
     expect(harnessState.activePlan).toBeNull();
+    expect(harnessState.sandboxAllowedPaths).toEqual([]);
     expect(ctx.state.pendingNewThread).toBe(true);
     expect(ctx.state.taskWriteInsertIndex).toBe(-1);
   });

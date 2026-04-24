@@ -125,7 +125,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       // Clear ephemeral per-thread harness state so it does not leak
       // from the previous thread (Harness.state is a single global snapshot
       // and is not reset by switchThread itself).
-      await state.harness.setState({ tasks: [], activePlan: null });
+      await state.harness.setState({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
       await ectx.renderExistingMessages();
       await state.harness.loadOMProgress();
       // Refresh git branch so TUI status line reflects the current branch
@@ -152,9 +152,10 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       ectx.showInfo(`Created thread: ${event.thread.id}`);
       // Update current thread title for status line display
       state.currentThreadTitle = event.thread.title;
-      // Clear ephemeral per-thread harness state (tasks, activePlan) so the
-      // new thread does not inherit stale values from the previous thread.
-      await state.harness.setState({ tasks: [], activePlan: null });
+      // Clear ephemeral per-thread harness state (tasks, activePlan,
+      // sandboxAllowedPaths) so the new thread does not inherit stale
+      // values from the previous thread.
+      await state.harness.setState({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
       // Sync inherited resource-level settings
       const tState = state.harness.getState() as any;
       if (typeof tState?.escapeAsCancel === 'boolean') {

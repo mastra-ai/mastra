@@ -9,11 +9,17 @@ vi.mock('../../utils/project.js', () => ({
 }));
 
 function createHarness() {
-  const state: { tasks: unknown[]; activePlan: unknown | null; escapeAsCancel?: boolean } = {
+  const state: {
+    tasks: unknown[];
+    activePlan: unknown | null;
+    sandboxAllowedPaths: string[];
+    escapeAsCancel?: boolean;
+  } = {
     tasks: [
       { content: 'leftover task', status: 'pending', activeForm: 'leftover task' },
     ],
     activePlan: { title: 'stale plan', plan: 'stale', approvedAt: new Date().toISOString() },
+    sandboxAllowedPaths: ['/tmp/leftover-allowed-path'],
   };
 
   return {
@@ -64,7 +70,7 @@ describe('event-dispatch thread state clearing', () => {
     state = createState(harness);
   });
 
-  it('clears tasks and activePlan on thread_changed', async () => {
+  it('clears tasks, activePlan, and sandboxAllowedPaths on thread_changed', async () => {
     const event: HarnessEvent = {
       type: 'thread_changed',
       threadId: 'thread-1',
@@ -73,14 +79,19 @@ describe('event-dispatch thread state clearing', () => {
 
     await dispatchEvent(event, createEctx(), state);
 
-    expect(harness.setState).toHaveBeenCalledWith({ tasks: [], activePlan: null });
+    expect(harness.setState).toHaveBeenCalledWith({
+      tasks: [],
+      activePlan: null,
+      sandboxAllowedPaths: [],
+    });
     expect(harness.state.tasks).toEqual([]);
     expect(harness.state.activePlan).toBeNull();
+    expect(harness.state.sandboxAllowedPaths).toEqual([]);
     expect((state.taskProgress!.updateTasks as any)).toHaveBeenCalledWith([]);
     expect(state.taskWriteInsertIndex).toBe(-1);
   });
 
-  it('clears tasks and activePlan on thread_created', async () => {
+  it('clears tasks, activePlan, and sandboxAllowedPaths on thread_created', async () => {
     const event: HarnessEvent = {
       type: 'thread_created',
       thread: {
@@ -95,9 +106,14 @@ describe('event-dispatch thread state clearing', () => {
 
     await dispatchEvent(event, createEctx(), state);
 
-    expect(harness.setState).toHaveBeenCalledWith({ tasks: [], activePlan: null });
+    expect(harness.setState).toHaveBeenCalledWith({
+      tasks: [],
+      activePlan: null,
+      sandboxAllowedPaths: [],
+    });
     expect(harness.state.tasks).toEqual([]);
     expect(harness.state.activePlan).toBeNull();
+    expect(harness.state.sandboxAllowedPaths).toEqual([]);
     expect((state.taskProgress!.updateTasks as any)).toHaveBeenCalledWith([]);
     expect(state.taskWriteInsertIndex).toBe(-1);
     expect(state.currentThreadTitle).toBe('Thread 2');
