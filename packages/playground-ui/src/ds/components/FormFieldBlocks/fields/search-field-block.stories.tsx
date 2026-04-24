@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { SearchFieldBlock, type SearchFieldBlockProps } from './search-field-block';
 import { TooltipProvider } from '../../Tooltip';
+import { SearchFieldBlock } from './search-field-block';
+import type { SearchFieldBlockProps } from './search-field-block';
 
 function SearchFieldBlockControlled(props: SearchFieldBlockProps) {
   const [value, setValue] = useState(props.value ?? '');

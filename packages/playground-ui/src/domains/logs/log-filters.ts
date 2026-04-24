@@ -1,11 +1,11 @@
 import { EntityType } from '@mastra/core/observability';
 import type { ListLogsArgs } from '@mastra/core/storage';
-import type { PropertyFilterField, PropertyFilterToken } from '@mastra/playground-ui';
 import type { LogLevel } from './types';
+import type { PropertyFilterField, PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
 export type LogsDatePreset = 'all' | 'last-24h' | 'last-3d' | 'last-7d' | 'last-14d' | 'last-30d' | 'custom';
 
-export type EntityOptions = { label: string; entityType: EntityType };
+export type LogsEntityOptions = { label: string; entityType: EntityType };
 
 export const LOGS_ROOT_ENTITY_TYPES = {
   AGENT: EntityType.AGENT,
@@ -19,7 +19,7 @@ export const LOGS_ROOT_ENTITY_TYPE_OPTIONS = [
   { label: 'Workflow', entityType: LOGS_ROOT_ENTITY_TYPES.WORKFLOW },
   { label: 'Scorer', entityType: LOGS_ROOT_ENTITY_TYPES.SCORER },
   { label: 'Ingest', entityType: LOGS_ROOT_ENTITY_TYPES.INGEST },
-] as const satisfies readonly EntityOptions[];
+] as const satisfies readonly LogsEntityOptions[];
 
 export const LOG_LEVEL_VALUES: readonly LogLevel[] = ['debug', 'info', 'warn', 'error', 'fatal'] as const;
 
@@ -75,9 +75,12 @@ export const LOGS_PROPERTY_FILTER_FIELD_IDS = Object.keys(LOGS_PROPERTY_FILTER_P
 /** Fields stored as repeated URL params (value is string[]). */
 const LOGS_ARRAY_FIELD_IDS = new Set<string>(['tags']);
 
-const LOGS_FILTERS_STORAGE_KEY = 'mastra:logs:saved-filters';
+export const DEFAULT_LOGS_FILTERS_STORAGE_KEY = 'mastra:logs:saved-filters';
 
-export function saveLogsFiltersToStorage(params: URLSearchParams): void {
+export function saveLogsFiltersToStorage(
+  params: URLSearchParams,
+  storageKey: string = DEFAULT_LOGS_FILTERS_STORAGE_KEY,
+): void {
   const serialized = getPreservedLogsFilterParams(params);
   const preset = params.get(LOGS_DATE_PRESET_PARAM);
   if (preset) serialized.set(LOGS_DATE_PRESET_PARAM, preset);
@@ -87,23 +90,25 @@ export function saveLogsFiltersToStorage(params: URLSearchParams): void {
   if (to) serialized.set(LOGS_DATE_TO_PARAM, to);
 
   try {
-    localStorage.setItem(LOGS_FILTERS_STORAGE_KEY, serialized.toString());
+    localStorage.setItem(storageKey, serialized.toString());
   } catch {
     // localStorage may be unavailable (private mode / quota) — silently skip.
   }
 }
 
-export function clearSavedLogsFilters(): void {
+export function clearSavedLogsFilters(storageKey: string = DEFAULT_LOGS_FILTERS_STORAGE_KEY): void {
   try {
-    localStorage.removeItem(LOGS_FILTERS_STORAGE_KEY);
+    localStorage.removeItem(storageKey);
   } catch {
     // ignore
   }
 }
 
-export function loadLogsFiltersFromStorage(): URLSearchParams | null {
+export function loadLogsFiltersFromStorage(
+  storageKey: string = DEFAULT_LOGS_FILTERS_STORAGE_KEY,
+): URLSearchParams | null {
   try {
-    const raw = localStorage.getItem(LOGS_FILTERS_STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (!raw) return null;
     const parsed = new URLSearchParams(raw);
     return parsed.toString() ? parsed : null;
@@ -403,4 +408,24 @@ export function buildLogsListFilters({
   }
 
   return filters;
+}
+
+/**
+ * "Clear" semantics for the logs toolbar: keep all filter pills but neutralize each value.
+ * '' for text fields, 'Any' for single-select pick-multi, [] for multi-select pick-multi.
+ * Date range is intentionally NOT touched here — that's a separate concern.
+ */
+export function neutralizeLogsFilterTokens(
+  filterFields: PropertyFilterField[],
+  filterTokens: PropertyFilterToken[],
+): PropertyFilterToken[] {
+  return filterTokens.map(token => {
+    const field = filterFields.find(f => f.id === token.fieldId);
+    if (!field) return token;
+    if (field.kind === 'text') return { fieldId: token.fieldId, value: '' };
+    if (field.kind === 'pick-multi') {
+      return field.multi ? { fieldId: token.fieldId, value: [] } : { fieldId: token.fieldId, value: 'Any' };
+    }
+    return token;
+  });
 }
