@@ -3,10 +3,17 @@ import { OMSettingsComponent } from '../components/om-settings.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import type { SlashCommandContext } from './types.js';
 
-function persistOmModelOverride(modelId: string): void {
+function persistObserverModelOverride(modelId: string): void {
   const settings = loadSettings();
   settings.models.activeOmPackId = 'custom';
-  settings.models.omModelOverride = modelId;
+  settings.models.observerModelOverride = modelId;
+  saveSettings(settings);
+}
+
+function persistReflectorModelOverride(modelId: string): void {
+  const settings = loadSettings();
+  settings.models.activeOmPackId = 'custom';
+  settings.models.reflectorModelOverride = modelId;
   saveSettings(settings);
 }
 
@@ -44,13 +51,13 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
         onObserverModelChange: async model => {
           await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
           await ctx.state.harness.switchObserverModel({ modelId: model.id });
-          persistOmModelOverride(model.id);
+          persistObserverModelOverride(model.id);
           ctx.showInfo(`Observer model → ${model.id}`);
         },
         onReflectorModelChange: async model => {
           await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
           await ctx.state.harness.switchReflectorModel({ modelId: model.id });
-          persistOmModelOverride(model.id);
+          persistReflectorModelOverride(model.id);
           ctx.showInfo(`Reflector model → ${model.id}`);
         },
         onObservationThresholdChange: async value => {
