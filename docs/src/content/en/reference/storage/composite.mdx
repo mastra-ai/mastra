@@ -298,8 +298,6 @@ const storage = new MastraCompositeStore({
       engine: {
         type: 'replicated',
         cluster: 'production_cluster',
-        zooPath: '/clickhouse/tables/{shard}/{database}/{table}',
-        replica: '{replica}',
       },
     }),
   },
