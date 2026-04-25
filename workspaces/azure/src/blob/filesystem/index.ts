@@ -109,6 +109,11 @@ async function streamToBuffer(stream: NodeJS.ReadableStream | undefined): Promis
   return Buffer.concat(chunks);
 }
 
+function toBuffer(content: FileContent): Buffer {
+  if (Buffer.isBuffer(content)) return content;
+  return typeof content === 'string' ? Buffer.from(content, 'utf-8') : Buffer.from(content);
+}
+
 export interface AzureBlobFilesystemOptions extends MastraFilesystemOptions {
   /** Unique identifier for this filesystem instance */
   id?: string;
@@ -362,7 +367,7 @@ export class AzureBlobFilesystem extends MastraFilesystem {
       throw new FileExistsError(path);
     }
 
-    const body = typeof content === 'string' ? Buffer.from(content, 'utf-8') : Buffer.from(content);
+    const body = toBuffer(content);
     const contentType = getMimeType(path);
     const blobClient = containerClient.getBlockBlobClient(this.toKey(path));
 
@@ -385,7 +390,7 @@ export class AzureBlobFilesystem extends MastraFilesystem {
       }
     }
 
-    const appendBuffer = typeof content === 'string' ? Buffer.from(content, 'utf-8') : Buffer.from(content);
+    const appendBuffer = toBuffer(content);
     await this.writeFile(path, Buffer.concat([existing, appendBuffer]));
   }
 
@@ -473,8 +478,7 @@ export class AzureBlobFilesystem extends MastraFilesystem {
   // Directory Operations
   // ---------------------------------------------------------------------------
 
-  async mkdir(path: string, _options?: { recursive?: boolean }): Promise<void> {
-    this.assertWritable(path, 'mkdir');
+  async mkdir(_path: string, _options?: { recursive?: boolean }): Promise<void> {
     // Azure Blob Storage doesn't have real directories - they're just key prefixes.
     // No-op, directories are created implicitly when files are written.
   }
@@ -510,7 +514,8 @@ export class AzureBlobFilesystem extends MastraFilesystem {
   }
 
   private async deleteBlobBatch(containerClient: ContainerClient, blobNames: string[]): Promise<void> {
-    await Promise.all(blobNames.map(name => containerClient.getBlobClient(name).delete()));
+    const blobClients = blobNames.map(name => containerClient.getBlobClient(name));
+    await containerClient.getBlobBatchClient().deleteBlobs(blobClients);
   }
 
   async readdir(path: string, options?: ListOptions): Promise<FileEntry[]> {

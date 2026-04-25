@@ -35,6 +35,7 @@ vi.mock('@azure/storage-blob', () => {
   const mockContainerClient = {
     getBlockBlobClient: vi.fn().mockReturnValue(mockBlockBlobClient),
     getBlobClient: vi.fn().mockReturnValue(mockBlobClient),
+    getBlobBatchClient: vi.fn().mockReturnValue({ deleteBlobs: vi.fn() }),
     listBlobsFlat: vi.fn().mockReturnValue({ next: vi.fn().mockResolvedValue({ done: true }) }),
     listBlobsByHierarchy: vi.fn().mockReturnValue({
       [Symbol.asyncIterator]: () => ({ next: vi.fn().mockResolvedValue({ done: true }) }),
@@ -286,13 +287,13 @@ describe('AzureBlobFilesystem', () => {
       await expect(fs.moveFile('/src.txt', '/dest.txt')).rejects.toThrow(/read-only/);
     });
 
-    it('throws PermissionError on mkdir when readOnly', async () => {
+    it('allows mkdir when readOnly because Azure directories are implicit', async () => {
       const fs = new AzureBlobFilesystem({
         container: 'test',
         connectionString: 'fake',
         readOnly: true,
       });
-      await expect(fs.mkdir('/new-dir')).rejects.toThrow(/read-only/);
+      await expect(fs.mkdir('/new-dir')).resolves.not.toThrow();
     });
 
     it('throws PermissionError on rmdir when readOnly', async () => {
@@ -400,6 +401,7 @@ describe('AzureBlobFilesystem SDK Operations', () => {
     mockContainerClient = {
       getBlockBlobClient: vi.fn().mockReturnValue(mockBlockBlobClient),
       getBlobClient: vi.fn().mockReturnValue(mockBlobClient),
+      getBlobBatchClient: vi.fn().mockReturnValue({ deleteBlobs: vi.fn().mockResolvedValue({}) }),
       listBlobsFlat: vi.fn(),
       listBlobsByHierarchy: vi.fn(),
       exists: vi.fn().mockResolvedValue(true),
@@ -697,8 +699,9 @@ describe('AzureBlobFilesystem SDK Operations', () => {
       await expect(fs.rmdir('/dir')).rejects.toThrow('Directory not empty');
     });
 
-    it('recursive deletes all blobs with prefix', async () => {
+    it('recursive deletes all blobs with prefix using Azure batch delete', async () => {
       const blobs = [{ name: 'dir/a.txt' }, { name: 'dir/b.txt' }];
+      const mockBatchClient = { deleteBlobs: vi.fn().mockResolvedValue({}) };
       mockContainerClient.listBlobsFlat.mockReturnValueOnce({
         [Symbol.asyncIterator]: () => {
           let i = 0;
@@ -708,13 +711,13 @@ describe('AzureBlobFilesystem SDK Operations', () => {
           };
         },
       });
-      mockBlobClient.delete.mockResolvedValue({});
+      mockContainerClient.getBlobBatchClient.mockReturnValueOnce(mockBatchClient);
 
       await fs.rmdir('/dir', { recursive: true });
 
-      // getBlobClient called for each blob to delete
       expect(mockContainerClient.getBlobClient).toHaveBeenCalledWith('dir/a.txt');
       expect(mockContainerClient.getBlobClient).toHaveBeenCalledWith('dir/b.txt');
+      expect(mockBatchClient.deleteBlobs).toHaveBeenCalledWith([mockBlobClient, mockBlobClient]);
     });
   });
 
