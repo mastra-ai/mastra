@@ -882,7 +882,7 @@ export type ProviderModelsMap = {
     'MiniMax-M2.7-highspeed',
   ];
   readonly perplexity: readonly ['sonar', 'sonar-deep-research', 'sonar-pro', 'sonar-reasoning-pro'];
-  readonly deepseek: readonly ['deepseek-chat', 'deepseek-reasoner'];
+  readonly deepseek: readonly ['deepseek-chat', 'deepseek-reasoner', 'deepseek-v4-flash', 'deepseek-v4-pro'];
   readonly llama: readonly [
     'cerebras-llama-4-maverick-17b-128e-instruct',
     'cerebras-llama-4-scout-17b-16e-instruct',
@@ -920,6 +920,8 @@ export type ProviderModelsMap = {
     'deepseek/deepseek-v3.1-terminus:exacto',
     'deepseek/deepseek-v3.2',
     'deepseek/deepseek-v3.2-speciale',
+    'deepseek/deepseek-v4-flash',
+    'deepseek/deepseek-v4-pro',
     'google/gemini-2.0-flash-001',
     'google/gemini-2.5-flash',
     'google/gemini-2.5-flash-lite',
@@ -1010,6 +1012,7 @@ export type ProviderModelsMap = {
     'openai/gpt-5.4-mini',
     'openai/gpt-5.4-nano',
     'openai/gpt-5.4-pro',
+    'openai/gpt-5.5',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-120b:exacto',
     'openai/gpt-oss-120b:free',
@@ -1089,6 +1092,8 @@ export type ProviderModelsMap = {
   readonly 'kimi-for-coding': readonly ['k2p5', 'k2p6', 'kimi-k2-thinking'];
   readonly moark: readonly ['GLM-4.7', 'MiniMax-M2.1'];
   readonly 'opencode-go': readonly [
+    'deepseek-v4-flash',
+    'deepseek-v4-pro',
     'glm-5',
     'glm-5.1',
     'kimi-k2.5',
@@ -2128,6 +2133,8 @@ export type ProviderModelsMap = {
     'gpt-5.4-mini',
     'gpt-5.4-nano',
     'gpt-5.4-pro',
+    'gpt-5.5',
+    'gpt-5.5-pro',
     'hy3-preview-free',
     'kimi-k2.5',
     'kimi-k2.6',
@@ -2651,6 +2658,7 @@ export type ProviderModelsMap = {
     'deepseek-ai/deepseek-v3.1',
     'deepseek-ai/deepseek-v3.1-terminus',
     'deepseek-ai/deepseek-v3.2',
+    'deepseek-ai/deepseek-v4-pro',
     'google/codegemma-1.1-7b',
     'google/codegemma-7b',
     'google/gemma-2-27b-it',
@@ -3053,6 +3061,7 @@ export type ProviderModelsMap = {
     'alibaba/qwen-3-235b',
     'alibaba/qwen-3-30b',
     'alibaba/qwen-3-32b',
+    'alibaba/qwen-3.6-max-preview',
     'alibaba/qwen3-235b-a22b-thinking',
     'alibaba/qwen3-coder',
     'alibaba/qwen3-coder-30b-a3b',
@@ -3110,6 +3119,8 @@ export type ProviderModelsMap = {
     'deepseek/deepseek-v3.2',
     'deepseek/deepseek-v3.2-exp',
     'deepseek/deepseek-v3.2-thinking',
+    'deepseek/deepseek-v4-flash',
+    'deepseek/deepseek-v4-pro',
     'google/gemini-2.0-flash',
     'google/gemini-2.0-flash-lite',
     'google/gemini-2.5-flash',
@@ -3181,6 +3192,7 @@ export type ProviderModelsMap = {
     'moonshotai/kimi-k2-thinking-turbo',
     'moonshotai/kimi-k2-turbo',
     'moonshotai/kimi-k2.5',
+    'moonshotai/kimi-k2.6',
     'morph/morph-v3-fast',
     'morph/morph-v3-large',
     'nvidia/nemotron-3-nano-30b-a3b',
@@ -3218,6 +3230,8 @@ export type ProviderModelsMap = {
     'openai/gpt-5.4-mini',
     'openai/gpt-5.4-nano',
     'openai/gpt-5.4-pro',
+    'openai/gpt-5.5',
+    'openai/gpt-5.5-pro',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
     'openai/gpt-oss-safeguard-20b',
@@ -3839,6 +3853,10 @@ export type ProviderModelsMap = {
     'openai/gpt-5.4-nano-2026-03-17',
     'openai/gpt-5.4-pro',
     'openai/gpt-5.4-pro-2026-03-05',
+    'openai/gpt-5.5',
+    'openai/gpt-5.5-2026-04-23',
+    'openai/gpt-5.5-pro',
+    'openai/gpt-5.5-pro-2026-04-23',
     'openai/o3',
     'openai/o3-mini',
     'openai/o4-mini',
