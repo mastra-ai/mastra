@@ -94,9 +94,19 @@ export class GoogleDriveFilesystem extends MastraFilesystem {
   }
 
   async init(): Promise<void> {
-    await this.request<DriveFile>(`${DRIVE_API}/files/${encodeURIComponent(this.folderId)}`, {
+    const driveFile = await this.request<DriveFile>(`${DRIVE_API}/files/${encodeURIComponent(this.folderId)}`, {
       searchParams: { fields: 'id,name,mimeType,trashed', supportsAllDrives: 'true' },
     });
+
+    if (driveFile.trashed) {
+      throw new Error(`Google Drive folder ${this.folderId} is trashed and cannot be used as a filesystem root.`);
+    }
+
+    if (driveFile.mimeType !== FOLDER_MIME_TYPE) {
+      throw new Error(
+        `Google Drive root ${this.folderId} must be a folder, but received mimeType ${driveFile.mimeType ?? 'unknown'}.`,
+      );
+    }
   }
 
   async destroy(): Promise<void> {}
@@ -146,7 +156,9 @@ export class GoogleDriveFilesystem extends MastraFilesystem {
     if (existing) {
       if (existing.mimeType === FOLDER_MIME_TYPE) throw new IsDirectoryError(path);
       if (options?.overwrite === false) throw new FileExistsError(path);
-      if (options?.expectedMtime && existing.modifiedTime) {
+      if (options?.expectedMtime) {
+        if (!existing.modifiedTime) throw new StaleFileError(path, options.expectedMtime, new Date(0));
+
         const actual = new Date(existing.modifiedTime);
         if (actual.getTime() !== options.expectedMtime.getTime())
           throw new StaleFileError(path, options.expectedMtime, actual);
@@ -183,7 +195,7 @@ export class GoogleDriveFilesystem extends MastraFilesystem {
     if (source.mimeType === FOLDER_MIME_TYPE) throw new IsDirectoryError(src);
     const existing = await this.findFile(dest);
     if (existing) {
-      if (options?.overwrite === false) throw new FileExistsError(dest);
+      if (existing.mimeType === FOLDER_MIME_TYPE || options?.overwrite === false) throw new FileExistsError(dest);
       await this.deleteAny(existing, dest, true);
     }
     const { parentId, name } = await this.resolveParent(dest, options?.recursive ?? true);
@@ -199,7 +211,10 @@ export class GoogleDriveFilesystem extends MastraFilesystem {
     const source = await this.getFile(src);
     if (options?.overwrite === false && (await this.exists(dest))) throw new FileExistsError(dest);
     const existing = await this.findFile(dest);
-    if (existing && existing.id !== source.id) await this.deleteAny(existing, dest, true);
+    if (existing && existing.id !== source.id) {
+      if (existing.mimeType === FOLDER_MIME_TYPE || options?.overwrite === false) throw new FileExistsError(dest);
+      await this.deleteAny(existing, dest, true);
+    }
     const { parentId, name } = await this.resolveParent(dest, options?.recursive ?? true);
     const searchParams: Record<string, string> = { addParents: parentId, fields: 'id', supportsAllDrives: 'true' };
     const oldParents = source.parents?.join(',');
@@ -373,16 +388,25 @@ export class GoogleDriveFilesystem extends MastraFilesystem {
     const query = [`'${this.escapeQuery(parentId)}' in parents`, 'trashed = false', extraQuery]
       .filter(Boolean)
       .join(' and ');
-    const result = await this.request<{ files: DriveFile[] }>(`${DRIVE_API}/files`, {
-      searchParams: {
-        q: query,
-        fields: 'files(id,name,mimeType,size,createdTime,modifiedTime,parents)',
-        pageSize: '1000',
-        supportsAllDrives: 'true',
-        includeItemsFromAllDrives: 'true',
-      },
-    });
-    return result.files;
+    const files: DriveFile[] = [];
+    let pageToken: string | undefined;
+
+    do {
+      const result = await this.request<{ files: DriveFile[]; nextPageToken?: string }>(`${DRIVE_API}/files`, {
+        searchParams: {
+          q: query,
+          fields: 'nextPageToken,files(id,name,mimeType,size,createdTime,modifiedTime,parents)',
+          pageSize: '1000',
+          supportsAllDrives: 'true',
+          includeItemsFromAllDrives: 'true',
+          ...(pageToken ? { pageToken } : {}),
+        },
+      });
+      files.push(...(result.files ?? []));
+      pageToken = result.nextPageToken;
+    } while (pageToken);
+
+    return files;
   }
 
   private async readdirRecursive(

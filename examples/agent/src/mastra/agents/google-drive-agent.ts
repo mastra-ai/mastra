@@ -6,22 +6,26 @@ import { GoogleDriveFilesystem, Workspace } from '@mastra/core/workspace';
  *
  * Required environment variables:
  * - GOOGLE_DRIVE_FOLDER_ID — ID of the folder that acts as the workspace root
- * - GOOGLE_DRIVE_ACCESS_TOKEN — OAuth access token with the `drive.file` scope
  *
- * For service account auth, swap `accessToken` for a `serviceAccount` option with
- * { clientEmail, privateKey, scopes }. Make sure the target folder is shared with
- * the service account email.
+ * Auth options:
+ * - Service account: Set GOOGLE_SERVICE_ACCOUNT_KEY and GOOGLE_SERVICE_ACCOUNT_EMAIL.
+ *   Share the target folder with the service account email.
+ * - OAuth access token: Set GOOGLE_DRIVE_ACCESS_TOKEN with the `drive` scope.
+ *   When present, this takes priority over the service account variables.
  */
 const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID ?? 'replace-with-folder-id';
-const serviceAccount = {
-  privateKey: process.env.GOOGLE_SERVICE_ACCOUNT_KEY!,
-  clientEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!,
-};
+const accessToken = process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+const serviceAccount = accessToken
+  ? undefined
+  : {
+      privateKey: process.env.GOOGLE_SERVICE_ACCOUNT_KEY!,
+      clientEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!,
+    };
 
 const workspace = new Workspace({
   filesystem: new GoogleDriveFilesystem({
     folderId,
-    serviceAccount,
+    ...(accessToken ? { accessToken } : { serviceAccount }),
   }),
 });
 

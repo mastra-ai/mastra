@@ -7,6 +7,7 @@ import {
   FileExistsError,
   FileNotFoundError,
   IsDirectoryError,
+  StaleFileError,
   WorkspaceReadOnlyError,
 } from '../errors';
 import { GoogleDriveFilesystem } from './google-drive-filesystem';
@@ -21,7 +22,7 @@ interface FakeFile {
   size?: number;
   content?: Buffer;
   createdTime: string;
-  modifiedTime: string;
+  modifiedTime?: string;
   trashed?: boolean;
 }
 
@@ -58,6 +59,7 @@ class FakeDrive {
       createdTime: file.createdTime,
       modifiedTime: file.modifiedTime,
       parents: file.parents,
+      trashed: file.trashed,
     };
   }
 }
@@ -195,10 +197,14 @@ function installFakeFetch(drive: FakeDrive): ReturnType<typeof vi.fn> {
         const q = searchParams.get('q') ?? '';
         const parentMatch = q.match(/'([^']+)' in parents/);
         const nameMatch = q.match(/name = '([^']+)'/);
+        const pageSize = Number(searchParams.get('pageSize') ?? '1000');
+        const pageToken = Number(searchParams.get('pageToken') ?? '0');
         let results = [...drive.files.values()].filter(file => !file.trashed);
         if (parentMatch) results = results.filter(file => file.parents.includes(parentMatch[1]));
         if (nameMatch) results = results.filter(file => file.name === nameMatch[1]);
-        return jsonResponse({ files: results.map(file => drive.fileFields(file)) });
+        const page = results.slice(pageToken, pageToken + pageSize);
+        const nextPageToken = pageToken + pageSize < results.length ? String(pageToken + pageSize) : undefined;
+        return jsonResponse({ files: page.map(file => drive.fileFields(file)), nextPageToken });
       }
     }
 
@@ -245,6 +251,20 @@ describe('GoogleDriveFilesystem', () => {
       expect(fs.getInstructions()).toContain('Google Drive');
     });
 
+    it('rejects a trashed root folder during initialization', async () => {
+      drive.files.get('root-folder')!.trashed = true;
+      const trashedRoot = new GoogleDriveFilesystem({ folderId: 'root-folder', accessToken: 'token' });
+
+      await expect(trashedRoot._init()).rejects.toThrow('is trashed');
+    });
+
+    it('rejects a non-folder root during initialization', async () => {
+      drive.files.get('root-folder')!.mimeType = 'text/plain';
+      const fileRoot = new GoogleDriveFilesystem({ folderId: 'root-folder', accessToken: 'token' });
+
+      await expect(fileRoot._init()).rejects.toThrow('must be a folder');
+    });
+
     it('honors read-only instructions override', () => {
       const readOnly = new GoogleDriveFilesystem({
         folderId: 'root-folder',
@@ -268,6 +288,16 @@ describe('GoogleDriveFilesystem', () => {
       await fs.writeFile('/doc.txt', 'first');
       await fs.writeFile('/doc.txt', 'second');
       expect(await fs.readFile('/doc.txt', { encoding: 'utf-8' })).toBe('second');
+    });
+
+    it('throws StaleFileError when expectedMtime is set and Drive omits modifiedTime', async () => {
+      await fs.writeFile('/doc.txt', 'first');
+      const file = [...drive.files.values()].find(file => file.name === 'doc.txt');
+      delete file!.modifiedTime;
+
+      await expect(fs.writeFile('/doc.txt', 'second', { expectedMtime: new Date() })).rejects.toBeInstanceOf(
+        StaleFileError,
+      );
     });
 
     it('appends to files', async () => {
@@ -307,11 +337,28 @@ describe('GoogleDriveFilesystem', () => {
       expect(await fs.exists('/a.txt')).toBe(true);
     });
 
+    it('does not overwrite destination directories when copying files', async () => {
+      await fs.writeFile('/a.txt', 'content');
+      await fs.mkdir('/existing-dir');
+
+      await expect(fs.copyFile('/a.txt', '/existing-dir', { overwrite: true })).rejects.toBeInstanceOf(FileExistsError);
+      expect(await fs.exists('/existing-dir')).toBe(true);
+    });
+
     it('moves files across folders', async () => {
       await fs.writeFile('/src/file.txt', 'payload');
       await fs.moveFile('/src/file.txt', '/dest/file.txt');
       expect(await fs.exists('/src/file.txt')).toBe(false);
       expect(await fs.readFile('/dest/file.txt', { encoding: 'utf-8' })).toBe('payload');
+    });
+
+    it('does not overwrite destination directories when moving files', async () => {
+      await fs.writeFile('/a.txt', 'content');
+      await fs.mkdir('/existing-dir');
+
+      await expect(fs.moveFile('/a.txt', '/existing-dir', { overwrite: true })).rejects.toBeInstanceOf(FileExistsError);
+      expect(await fs.exists('/a.txt')).toBe(true);
+      expect(await fs.exists('/existing-dir')).toBe(true);
     });
   });
 
@@ -363,6 +410,55 @@ describe('GoogleDriveFilesystem', () => {
       await fs.writeFile('/b.md', '2');
       const entries = await fs.readdir('/', { extension: '.md' });
       expect(entries.map(e => e.name)).toEqual(['b.md']);
+    });
+
+    it('reads children across paginated Drive results', async () => {
+      const now = new Date().toISOString();
+      for (let i = 0; i < 1001; i += 1) {
+        drive.files.set(`seed-${i}`, {
+          id: `seed-${i}`,
+          name: `seed-${i}.txt`,
+          mimeType: 'application/octet-stream',
+          parents: ['root-folder'],
+          size: 1,
+          content: Buffer.from('x'),
+          createdTime: now,
+          modifiedTime: now,
+        });
+      }
+
+      const entries = await fs.readdir('/');
+
+      expect(entries).toHaveLength(1001);
+      expect(entries.at(-1)?.name).toBe('seed-1000.txt');
+    });
+
+    it('finds existing files on later Drive result pages', async () => {
+      const now = new Date().toISOString();
+      for (let i = 0; i < 1000; i += 1) {
+        drive.files.set(`seed-${i}`, {
+          id: `seed-${i}`,
+          name: `seed-${i}.txt`,
+          mimeType: 'application/octet-stream',
+          parents: ['root-folder'],
+          size: 1,
+          content: Buffer.from('x'),
+          createdTime: now,
+          modifiedTime: now,
+        });
+      }
+      drive.files.set('target-file', {
+        id: 'target-file',
+        name: 'target.txt',
+        mimeType: 'application/octet-stream',
+        parents: ['root-folder'],
+        size: 6,
+        content: Buffer.from('target'),
+        createdTime: now,
+        modifiedTime: now,
+      });
+
+      await expect(fs.exists('/target.txt')).resolves.toBe(true);
     });
   });
 
