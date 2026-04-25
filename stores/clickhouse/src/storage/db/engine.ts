@@ -24,8 +24,12 @@ export type ClickhouseTableEngineConfig =
       replica?: string;
     };
 
-function isReplicatedEngineConfig(config?: ClickhouseTableEngineConfig): boolean {
+export function isReplicatedEngineConfig(config?: ClickhouseTableEngineConfig): boolean {
   return config === 'replicated' || (typeof config === 'object' && config.type === 'replicated');
+}
+
+export function isReplicatedTableEngineName(engine: string): boolean {
+  return engine.startsWith('Replicated') || engine.startsWith('Shared');
 }
 
 function getReplicatedEngineConfig(

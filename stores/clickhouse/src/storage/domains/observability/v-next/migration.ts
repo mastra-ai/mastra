@@ -3,7 +3,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { createStorageErrorId } from '@mastra/core/storage';
 import type { ClickhouseTableEngineConfig } from '../../../db/engine';
-import { applyClickhouseDDLConfig } from '../../../db/engine';
+import { isReplicatedEngineConfig, isReplicatedTableEngineName } from '../../../db/engine';
 
 import {
   TABLE_METRIC_EVENTS,
@@ -118,12 +118,24 @@ export async function migrateSignalTables(
     const currentEngine = await getTableEngine(client, table);
     if (!currentEngine || isReplacingMergeTreeEngine(currentEngine)) continue;
 
+    if (isReplicatedEngineConfig(engine) || isReplicatedTableEngineName(currentEngine)) {
+      throw new MastraError({
+        id: createStorageErrorId('CLICKHOUSE', 'MIGRATE_SIGNAL_TABLES', 'REPLICATED_ENGINE_UNSUPPORTED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text:
+          `ClickHouse signal-ID migration cannot run automatically with replicated table engines. ` +
+          `Run the migration before enabling replicated engines, or recreate the replicated table manually with the signal-ID schema.`,
+        details: { table, currentEngine, idColumn },
+      });
+    }
+
     logger?.info?.(`Migrating ${table} from ${currentEngine} to ReplacingMergeTree with ${idColumn} column`);
 
     const temp = `${table}_migrating_${Date.now()}`;
 
     try {
-      await client.command({ query: applyClickhouseDDLConfig(buildTemporaryTableDDL(createDDL, table, temp), engine) });
+      await client.command({ query: buildTemporaryTableDDL(createDDL, table, temp) });
 
       const newColumns = await getTableColumns(client, temp);
       const currentColumns = new Set(await getTableColumns(client, table));

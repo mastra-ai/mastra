@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { applyClickhouseDDLConfig, buildClickhouseTableEngine } from './engine';
+import {
+  applyClickhouseDDLConfig,
+  buildClickhouseTableEngine,
+  isReplicatedEngineConfig,
+  isReplicatedTableEngineName,
+} from './engine';
 
 describe('buildClickhouseTableEngine', () => {
   it('keeps plain engines by default', () => {
@@ -29,6 +34,20 @@ describe('buildClickhouseTableEngine', () => {
         replica: '{replica_name}',
       }),
     ).toBe("ReplicatedReplacingMergeTree('/clickhouse/custom/mastra_span_events', '{replica_name}')");
+  });
+});
+
+describe('replicated engine detection', () => {
+  it('detects replicated config and table engine names', () => {
+    expect(isReplicatedEngineConfig('replicated')).toBe(true);
+    expect(isReplicatedEngineConfig({ type: 'replicated' })).toBe(true);
+    expect(isReplicatedEngineConfig('default')).toBe(false);
+
+    expect(isReplicatedTableEngineName('ReplicatedMergeTree')).toBe(true);
+    expect(isReplicatedTableEngineName('ReplicatedReplacingMergeTree')).toBe(true);
+    expect(isReplicatedTableEngineName('SharedReplacingMergeTree')).toBe(true);
+    expect(isReplicatedTableEngineName('ReplacingMergeTree')).toBe(false);
+    expect(isReplicatedTableEngineName('MergeTree')).toBe(false);
   });
 });
 

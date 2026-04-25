@@ -12,7 +12,12 @@ import {
 } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import type { ClickhouseTableEngineConfig } from './engine';
-import { applyClickhouseDDLConfig, buildClickhouseTableEngine } from './engine';
+import {
+  applyClickhouseDDLConfig,
+  buildClickhouseTableEngine,
+  isReplicatedEngineConfig,
+  isReplicatedTableEngineName,
+} from './engine';
 import type { ClickhouseConfig } from './utils';
 import { TABLE_ENGINES, transformRow } from './utils';
 
@@ -202,6 +207,20 @@ export class ClickhouseDB extends MastraBase {
     }
   }
 
+  async getTableEngineName(tableName: string): Promise<string | null> {
+    try {
+      const result = await this.client.query({
+        query: `SELECT engine FROM system.tables WHERE database = currentDatabase() AND name = {tableName:String}`,
+        query_params: { tableName },
+        format: 'JSONEachRow',
+      });
+      const rows = (await result.json()) as Array<{ engine: string }>;
+      return rows[0]?.engine ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   /**
    * Checks if migration is needed for the spans table.
    * Returns information about the current state.
@@ -320,6 +339,19 @@ export class ClickhouseDB extends MastraBase {
 
     const backupTableName = `${tableName}_backup_${Date.now()}`;
     const rowTtl = this.ttl?.[tableName]?.row;
+    const currentEngine = await this.getTableEngineName(tableName);
+
+    if (isReplicatedEngineConfig(this.engine) || (currentEngine && isReplicatedTableEngineName(currentEngine))) {
+      throw new MastraError({
+        id: createStorageErrorId('CLICKHOUSE', 'MIGRATE_SPANS_SORTING_KEY', 'REPLICATED_ENGINE_UNSUPPORTED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text:
+          `ClickHouse spans sorting-key migration cannot run automatically with replicated table engines. ` +
+          `Run the migration before enabling replicated engines, or recreate the replicated table manually with the updated schema.`,
+        details: { tableName, currentEngine: currentEngine ?? 'unknown' },
+      });
+    }
 
     try {
       // Step 1: Rename old table to backup
@@ -363,7 +395,7 @@ export class ClickhouseDB extends MastraBase {
       `;
 
       await this.client.command({
-        query: this.applyDDLConfig(createSql),
+        query: createSql,
       });
 
       // Step 3: Copy data from backup to new table, deduplicating by (traceId, spanId)
