@@ -2,7 +2,7 @@ import { spawn } from 'child_process';
 import { globby } from 'globby';
 import fs from 'fs/promises';
 import path from 'path';
-import { statSync } from 'fs';
+import { existsSync, statSync } from 'fs';
 import { replaceTypes } from './replace-types.js';
 
 const rgxFrom = /(?<=from )['|"](.*)['|"]/gm;
@@ -23,6 +23,103 @@ const pnpmSpecificEnvVars = new Set([
  */
 function getFilteredEnv() {
   return Object.fromEntries(Object.entries(process.env).filter(([key]) => !pnpmSpecificEnvVars.has(key)));
+}
+
+/**
+ * Remove orphaned index.d.ts files that have no corresponding index.js.
+ *
+ * tsup bundles JS into single entry files (e.g. dist/auth/ee/index.js) but tsc
+ * emits individual .d.ts files for every source file (e.g. dist/auth/ee/defaults/index.d.ts).
+ * When a package uses a wildcard export like "./*", TypeScript resolves deep imports
+ * that don't actually exist at runtime, causing MODULE_NOT_FOUND errors at deploy time.
+ *
+ * @param {string} rootDir
+ * @returns {Promise<void>}
+ */
+async function cleanOrphanedDts(rootDir) {
+  const indexDtsFiles = await globby('dist/**/index.d.ts', {
+    cwd: rootDir,
+    onlyFiles: true,
+  });
+
+  let removed = 0;
+
+  for (const dtsFile of indexDtsFiles) {
+    const dir = path.dirname(dtsFile);
+    const jsFile = path.join(rootDir, dir, 'index.js');
+
+    if (existsSync(jsFile)) {
+      continue;
+    }
+
+    // Remove the orphaned index.d.ts and its sourcemap
+    const fullDtsPath = path.join(rootDir, dtsFile);
+    const fullMapPath = fullDtsPath + '.map';
+
+    await fs.rm(fullDtsPath, { force: true });
+    await fs.rm(fullMapPath, { force: true });
+    removed++;
+  }
+
+  // Clean up directories that are now empty or contain only orphaned .d.ts/.d.ts.map files
+  if (removed > 0) {
+    await cleanEmptyDtsDirs(rootDir);
+    // eslint-disable-next-line no-console
+    console.log(`\u2713 Removed ${removed} orphaned index.d.ts files (no matching index.js)`);
+  }
+}
+
+/**
+ * Recursively remove directories under dist/ that contain only .d.ts and .d.ts.map files
+ * but no .js files. These are leftover directories from tsc that had their index.d.ts removed.
+ *
+ * @param {string} rootDir
+ * @returns {Promise<void>}
+ */
+async function cleanEmptyDtsDirs(rootDir) {
+  const distDir = path.join(rootDir, 'dist');
+
+  async function cleanDir(dir) {
+    let entries;
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    // Recurse into subdirectories first (bottom-up)
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        await cleanDir(path.join(dir, entry.name));
+      }
+    }
+
+    // Re-read after child cleanup
+    entries = await fs.readdir(dir, { withFileTypes: true });
+
+    if (entries.length === 0) {
+      await fs.rmdir(dir);
+      return;
+    }
+
+    // Check if directory only has .d.ts and .d.ts.map files (no .js, no subdirs)
+    const hasNonDts = entries.some(e => {
+      if (e.isDirectory()) return true;
+      return !e.name.endsWith('.d.ts') && !e.name.endsWith('.d.ts.map');
+    });
+
+    if (!hasNonDts) {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  }
+
+  // Only clean subdirectories of dist, not dist itself
+  const topEntries = await fs.readdir(distDir, { withFileTypes: true });
+  for (const entry of topEntries) {
+    if (entry.isDirectory()) {
+      await cleanDir(path.join(distDir, entry.name));
+    }
+  }
 }
 
 // @see https://blog.devgenius.io/compiling-from-typescript-with-js-extension-e2b6de3e6baf
@@ -101,6 +198,9 @@ export async function generateTypes(rootDir, bundledPackages = new Set()) {
 
       await fs.writeFile(fullPath, code);
     }
+
+    // Remove orphaned index.d.ts files that would create phantom exports
+    await cleanOrphanedDts(rootDir);
   } catch (err) {
     // TypeScript errors are already printed to console via stdio: 'inherit'
     // Just exit with the same code as tsc
