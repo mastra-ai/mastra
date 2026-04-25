@@ -54,8 +54,8 @@ export interface ModelSelectorOptions {
  * derived from any sibling model that already lives under the same provider
  * so the API-key prompt still fires for known providers without a key.
  *
- * If no sibling is found (truly novel provider), we default `hasApiKey: true`
- * so the user can proceed without a noisy prompt for an unknown provider.
+ * If no sibling is found (truly novel provider), we default `hasApiKey: false`
+ * so the user is still prompted for a key by provider name.
  */
 export function makeCustomModelItem(id: string, models: ModelItem[]): ModelItem {
   const parts = id.split('/');
@@ -66,7 +66,7 @@ export function makeCustomModelItem(id: string, models: ModelItem[]): ModelItem 
     id,
     provider,
     modelName,
-    hasApiKey: sibling?.hasApiKey ?? true,
+    hasApiKey: sibling?.hasApiKey ?? false,
     apiKeyEnvVar: sibling?.apiKeyEnvVar,
   };
 }

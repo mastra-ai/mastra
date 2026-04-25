@@ -42,24 +42,24 @@ describe('makeCustomModelItem', () => {
     });
   });
 
-  it('falls back to hasApiKey: true with no env var when no sibling provider exists', () => {
+  it('falls back to hasApiKey: false with no env var when no sibling provider exists', () => {
     const item = makeCustomModelItem('fakeprovider/totally-not-real', models);
     expect(item).toEqual({
       id: 'fakeprovider/totally-not-real',
       provider: 'fakeprovider',
       modelName: 'totally-not-real',
-      hasApiKey: true,
+      hasApiKey: false,
       apiKeyEnvVar: undefined,
     });
   });
 
-  it('treats a bare id without slash as provider="custom"', () => {
+  it('treats a bare id without slash as provider="custom" and falls back to hasApiKey: false', () => {
     const item = makeCustomModelItem('weird-id', models);
     expect(item).toEqual({
       id: 'weird-id',
       provider: 'custom',
       modelName: 'weird-id',
-      hasApiKey: true,
+      hasApiKey: false,
       apiKeyEnvVar: undefined,
     });
   });
