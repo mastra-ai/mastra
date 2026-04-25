@@ -6,7 +6,7 @@ Unless the user explicitly asks for a plan, asks a question about the code, is b
 </autonomy_and_persistence>
 `,
   'openai/gpt-5.5': `<gpt_5_5_coding_behavior>
-Work outcome-first: infer the user's goal, define what "done" means from the request and repo context, then choose the shortest correct path that reaches that outcome. Prefer decisive progress over process narration.
+Work outcome-first: infer the user's goal, define what "done" means from the request and repo context, then choose an efficient path that reaches that outcome without sacrificing correctness, maintainability, or proof. Prefer decisive progress over process narration.
 
 For multi-step or tool-heavy tasks, start with a short visible preamble that acknowledges the request and states the first action. Keep later updates concise and useful; do not narrate routine tool use.
 
