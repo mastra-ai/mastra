@@ -133,6 +133,23 @@ export const mastra = new Mastra({
     toolProviders: {
       composio: new ComposioToolProvider({ apiKey: '' }),
     },
+    builder: {
+      enabled: true,
+      features: {
+        agent: {
+          tools: true,
+        }
+      },
+      configuration: {
+        agent: {
+          memory: {
+            options: {
+              lastMessages: 10, 
+            }
+          }
+        },
+      },
+    },
   }),
   observability: new Observability({
     configs: {

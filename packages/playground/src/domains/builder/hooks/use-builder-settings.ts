@@ -1,16 +1,22 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
+interface UseBuilderSettingsOptions {
+  /** Skip fetch when false (default: true) */
+  enabled?: boolean;
+}
+
 /**
  * Fetches agent builder settings from the server.
  * Returns feature flags and configuration set by admin.
  */
-export const useBuilderSettings = () => {
+export const useBuilderSettings = (options?: UseBuilderSettingsOptions) => {
   const client = useMastraClient();
 
   return useQuery({
     queryKey: ['builder-settings'],
     queryFn: () => client.getBuilderSettings(),
+    enabled: options?.enabled ?? true,
   });
 };
 
@@ -25,5 +31,23 @@ export const useIsBuilderEnabled = () => {
     isEnabled: data?.enabled === true,
     isLoading,
     error,
+  };
+};
+
+/**
+ * Returns feature flags for agent builder sections.
+ * Supports tools, memory, skills, workflows, agents.
+ * Scorers and variables deferred (always false).
+ */
+export const useBuilderAgentFeatures = () => {
+  const { data } = useBuilderSettings();
+  const features = data?.features?.agent;
+
+  return {
+    tools: features?.tools === true,
+    memory: features?.memory === true,
+    skills: features?.skills === true,
+    workflows: features?.workflows === true,
+    agents: features?.agents === true,
   };
 };

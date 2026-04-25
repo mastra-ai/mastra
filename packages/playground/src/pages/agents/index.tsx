@@ -22,10 +22,9 @@ import { useLinkComponent } from '@/lib/framework';
 function Agents() {
   const { data: agents = {}, isLoading, error } = useAgents();
   const [search, setSearch] = useState('');
-  const { canCreateAgent } = useCanCreateAgent();
-  const { Link: FrameworkLink, paths } = useLinkComponent();
-  const createAgentPath = paths.cmsAgentCreateLink();
-  const showCreateCta = canCreateAgent && Boolean(createAgentPath);
+  const { canCreateAgent, createRoute } = useCanCreateAgent();
+  const { Link: FrameworkLink } = useLinkComponent();
+  const showCreateCta = canCreateAgent && Boolean(createRoute);
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -72,7 +71,7 @@ function Agents() {
           </PageLayout.Column>
           <PageLayout.Column className="flex justify-end gap-2">
             {showCreateCta && (
-              <ButtonWithTooltip as={FrameworkLink} to={createAgentPath} tooltipContent="Create an agent">
+              <ButtonWithTooltip as={FrameworkLink} to={createRoute} tooltipContent="Create an agent">
                 <Plus />
               </ButtonWithTooltip>
             )}
