@@ -386,7 +386,7 @@ const sidebars = {
         { type: 'doc', id: 'processors/language-detector', label: 'LanguageDetector' },
         { type: 'doc', id: 'processors/message-history-processor', label: 'MessageHistory' },
         { type: 'doc', id: 'processors/moderation-processor', label: 'ModerationProcessor' },
-        { type: 'doc', id: 'processors/openai-transient-error-retry', label: 'OpenAITransientErrorRetry' },
+        { type: 'doc', id: 'processors/openai-error-processor', label: 'OpenAIErrorProcessor' },
         { type: 'doc', id: 'processors/pii-detector', label: 'PIIDetector' },
         { type: 'doc', id: 'processors/prefill-error-handler', label: 'PrefillErrorHandler' },
         { type: 'doc', id: 'processors/processor-interface', label: 'Processor Interface' },

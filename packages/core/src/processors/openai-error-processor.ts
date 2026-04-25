@@ -2,7 +2,7 @@ import { APICallError } from '@internal/ai-sdk-v5';
 
 import type { Processor, ProcessAPIErrorArgs, ProcessAPIErrorResult } from './index';
 
-export type OpenAITransientErrorRetryOptions = {
+export type OpenAIErrorProcessorOptions = {
   maxRetries?: number;
 };
 
@@ -121,7 +121,7 @@ function isRetryableOpenAIStreamError(error: unknown): boolean {
   return hasRetryableOpenAIErrorCode(payload) || hasExplicitRetryMessage(payload);
 }
 
-export function isOpenAITransientError(error: unknown): boolean {
+export function isRetryableOpenAIError(error: unknown): boolean {
   const visited = new WeakSet<object>();
 
   function visit(candidate: unknown): boolean {
@@ -152,19 +152,19 @@ export function isOpenAITransientError(error: unknown): boolean {
   return visit(error);
 }
 
-export class OpenAITransientErrorRetry implements Processor<'openai-transient-error-retry'> {
-  readonly id = 'openai-transient-error-retry' as const;
-  readonly name = 'OpenAI Transient Error Retry';
+export class OpenAIErrorProcessor implements Processor<'openai-error-processor'> {
+  readonly id = 'openai-error-processor' as const;
+  readonly name = 'OpenAI Error Processor';
 
   readonly #maxRetries: number;
 
-  constructor(options: OpenAITransientErrorRetryOptions = {}) {
+  constructor(options: OpenAIErrorProcessorOptions = {}) {
     this.#maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
   }
 
   async processAPIError({ error, retryCount }: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
     if (retryCount >= this.#maxRetries) return;
-    if (!isOpenAITransientError(error)) return;
+    if (!isRetryableOpenAIError(error)) return;
 
     return { retry: true };
   }

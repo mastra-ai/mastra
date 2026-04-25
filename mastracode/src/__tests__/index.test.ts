@@ -89,8 +89,8 @@ vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {
     readonly id = 'agents-md-injector';
   },
-  OpenAITransientErrorRetry: class {
-    readonly id = 'openai-transient-error-retry';
+  OpenAIErrorProcessor: class {
+    readonly id = 'openai-error-processor';
   },
   PrefillErrorHandler: class {
     readonly id = 'prefill-error-handler';
@@ -278,6 +278,6 @@ describe('createMastraCode', () => {
     const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
       | { errorProcessors?: Array<{ id?: string }> }
       | undefined;
-    expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('openai-transient-error-retry');
+    expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('openai-error-processor');
   });
 });

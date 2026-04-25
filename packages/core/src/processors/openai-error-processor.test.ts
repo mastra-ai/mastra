@@ -2,7 +2,7 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
 
 import { MessageList } from '../agent/message-list';
-import { isOpenAITransientError, OpenAITransientErrorRetry } from './openai-transient-error-retry';
+import { isRetryableOpenAIError, OpenAIErrorProcessor } from './openai-error-processor';
 import type { ProcessAPIErrorArgs } from './index';
 
 function makeArgs(overrides: Partial<ProcessAPIErrorArgs> = {}): ProcessAPIErrorArgs {
@@ -24,16 +24,16 @@ function makeArgs(overrides: Partial<ProcessAPIErrorArgs> = {}): ProcessAPIError
   };
 }
 
-describe('OpenAITransientErrorRetry', () => {
+describe('OpenAIErrorProcessor', () => {
   it('has correct id and name', () => {
-    const processor = new OpenAITransientErrorRetry();
+    const processor = new OpenAIErrorProcessor();
 
-    expect(processor.id).toBe('openai-transient-error-retry');
-    expect(processor.name).toBe('OpenAI Transient Error Retry');
+    expect(processor.id).toBe('openai-error-processor');
+    expect(processor.name).toBe('OpenAI Error Processor');
   });
 
   it('retries provider errors with retryable metadata', async () => {
-    const processor = new OpenAITransientErrorRetry();
+    const processor = new OpenAIErrorProcessor();
     const error = new APICallError({
       message: 'server failed',
       url: 'https://api.openai.com/v1/responses',
@@ -46,7 +46,7 @@ describe('OpenAITransientErrorRetry', () => {
   });
 
   it('does not retry provider errors with non-retryable metadata', async () => {
-    const processor = new OpenAITransientErrorRetry();
+    const processor = new OpenAIErrorProcessor();
     const error = new APICallError({
       message: 'bad request',
       url: 'https://api.openai.com/v1/responses',
@@ -65,11 +65,11 @@ describe('OpenAITransientErrorRetry', () => {
       },
     });
 
-    expect(isOpenAITransientError(error)).toBe(true);
+    expect(isRetryableOpenAIError(error)).toBe(true);
   });
 
   it('retries OpenAI Responses stream error chunks with retryable codes', async () => {
-    const processor = new OpenAITransientErrorRetry();
+    const processor = new OpenAIErrorProcessor();
     const error = {
       type: 'error',
       sequence_number: 1,
@@ -84,7 +84,7 @@ describe('OpenAITransientErrorRetry', () => {
   });
 
   it('retries OpenAI Responses failed chunks with explicit retry guidance', async () => {
-    const processor = new OpenAITransientErrorRetry();
+    const processor = new OpenAIErrorProcessor();
     const error = {
       type: 'response.failed',
       response: {
@@ -100,7 +100,7 @@ describe('OpenAITransientErrorRetry', () => {
   });
 
   it('does not retry non-transient OpenAI Responses stream error chunks', async () => {
-    const processor = new OpenAITransientErrorRetry();
+    const processor = new OpenAIErrorProcessor();
     const error = {
       type: 'error',
       sequence_number: 1,
@@ -115,7 +115,7 @@ describe('OpenAITransientErrorRetry', () => {
   });
 
   it('respects maxRetries', async () => {
-    const processor = new OpenAITransientErrorRetry({ maxRetries: 1 });
+    const processor = new OpenAIErrorProcessor({ maxRetries: 1 });
     const error = {
       type: 'error',
       error: {
