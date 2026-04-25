@@ -14,6 +14,9 @@ import { requestContextDemoAgent } from './request-context-demo-agent';
 // Export Dynamic Tools Agent
 export { dynamicToolsAgent } from './dynamic-tools-agent.js';
 
+// Export Google Drive Agent (uses the GoogleDriveFilesystem workspace provider)
+export { googleDriveAgent } from './google-drive-agent.js';
+
 const memory = new Memory();
 
 // Define schema directly compatible with OpenAI's requirements

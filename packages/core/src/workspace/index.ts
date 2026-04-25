@@ -6,6 +6,7 @@ export type { CustomLSPServer, LSPConfig, LSPDiagnostic, DiagnosticSeverity, LSP
 
 // Built-in Providers
 export { LocalFilesystem, type LocalFilesystemOptions } from './filesystem';
+export { GoogleDriveFilesystem, type GoogleDriveFilesystemOptions, type GoogleDriveServiceAccount } from './filesystem';
 export { CompositeFilesystem, type CompositeFilesystemConfig } from './filesystem';
 export { LocalSandbox, type LocalSandboxOptions } from './sandbox';
 

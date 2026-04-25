@@ -17,6 +17,7 @@ import {
   dynamicAgent,
   evalAgent,
   dynamicToolsAgent,
+  googleDriveAgent,
   schemaValidatedAgent,
   requestContextDemoAgent,
 } from './agents/index';
@@ -73,6 +74,7 @@ const config = {
     chefAgentResponses,
     dynamicAgent,
     dynamicToolsAgent, // Dynamic tool search example
+    googleDriveAgent, // Google Drive filesystem workspace example
     agentThatHarassesYou,
     evalAgent,
     schemaValidatedAgent,
