@@ -13,7 +13,7 @@ export type ClickhouseTableEngineConfig =
       /**
        * Keeper path for replicated tables. Supports a {table} placeholder.
        *
-       * Defaults to /clickhouse/tables/{shard}/{table}.
+       * Defaults to /clickhouse/tables/{shard}/{database}/{table}.
        */
       zooPath?: string;
       /**
@@ -58,7 +58,7 @@ export function buildClickhouseTableEngine(
 
   const [, engineName, engineArgs] = match;
   const replicatedConfig = getReplicatedEngineConfig(config);
-  const zooPathTemplate = replicatedConfig.zooPath ?? '/clickhouse/tables/{shard}/{table}';
+  const zooPathTemplate = replicatedConfig.zooPath ?? '/clickhouse/tables/{shard}/{database}/{table}';
   const zooPath = zooPathTemplate.includes('{table}')
     ? zooPathTemplate.replaceAll('{table}', tableName)
     : `${zooPathTemplate}/${tableName}`;

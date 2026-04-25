@@ -16,13 +16,13 @@ describe('buildClickhouseTableEngine', () => {
 
   it('maps MergeTree engines to replicated variants', () => {
     expect(buildClickhouseTableEngine('MergeTree', 'mastra_discovery_pairs', 'replicated')).toBe(
-      "ReplicatedMergeTree('/clickhouse/tables/{shard}/mastra_discovery_pairs', '{replica}')",
+      "ReplicatedMergeTree('/clickhouse/tables/{shard}/{database}/mastra_discovery_pairs', '{replica}')",
     );
     expect(buildClickhouseTableEngine('ReplacingMergeTree', 'mastra_log_events', 'replicated')).toBe(
-      "ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/mastra_log_events', '{replica}')",
+      "ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/{database}/mastra_log_events', '{replica}')",
     );
     expect(buildClickhouseTableEngine('ReplacingMergeTree(updatedAt)', 'mastra_spans', 'replicated')).toBe(
-      "ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/mastra_spans', '{replica}', updatedAt)",
+      "ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/{database}/mastra_spans', '{replica}', updatedAt)",
     );
   });
 
@@ -79,7 +79,7 @@ ORDER BY kind
         cluster: 'prod_cluster',
       }),
     ).toBe(
-      `CREATE TABLE mastra_spans ON CLUSTER 'prod_cluster' (id String) ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/mastra_spans', '{replica}', updatedAt)`,
+      `CREATE TABLE mastra_spans ON CLUSTER 'prod_cluster' (id String) ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/{database}/mastra_spans', '{replica}', updatedAt)`,
     );
   });
 

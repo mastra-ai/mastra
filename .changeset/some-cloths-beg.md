@@ -13,7 +13,7 @@ const storage = new ClickhouseStore({
   engine: {
     type: 'replicated',
     cluster: 'production_cluster',
-    zooPath: '/clickhouse/tables/{shard}/{table}',
+    zooPath: '/clickhouse/tables/{shard}/{database}/{table}',
     replica: '{replica}',
   },
 });

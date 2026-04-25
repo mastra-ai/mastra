@@ -72,7 +72,7 @@ type ClickhouseConfig = {
     | {
         type: 'replicated';
         cluster?: string;
-        zooPath?: string; // Supports {table}; defaults to /clickhouse/tables/{shard}/{table}
+        zooPath?: string; // Supports {table}; defaults to /clickhouse/tables/{shard}/{database}/{table}
         replica?: string; // Defaults to {replica}
       };
 };
