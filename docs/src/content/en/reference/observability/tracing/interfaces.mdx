@@ -178,6 +178,13 @@ interface ObservabilityExporter {
 }
 ```
 
+Event callback payloads use observability event bus envelopes:
+`TracingEvent` carries span lifecycle events with `exportedSpan`, `LogEvent`
+wraps `ExportedLog` in `log`, `MetricEvent` wraps `ExportedMetric` in
+`metric`, `ScoreEvent` wraps `ExportedScore` in `score`, and `FeedbackEvent`
+wraps `ExportedFeedback` in `feedback`. For Cloud exporter behavior for these
+callbacks, see [CloudExporter](/reference/observability/tracing/exporters/cloud-exporter).
+
 ### `SpanOutputProcessor`
 
 Interface for span output processors.
