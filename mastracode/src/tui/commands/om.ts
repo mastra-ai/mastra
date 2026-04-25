@@ -21,8 +21,7 @@ export function applyOmRoleOverride(
   modelId: string,
   otherRoleCurrentModelId: string | null,
 ): void {
-  const wasBuiltinPack =
-    settings.models.activeOmPackId !== null && settings.models.activeOmPackId !== 'custom';
+  const wasBuiltinPack = settings.models.activeOmPackId !== null && settings.models.activeOmPackId !== 'custom';
 
   if (role === 'observer') {
     if (wasBuiltinPack && otherRoleCurrentModelId && !settings.models.reflectorModelOverride) {
