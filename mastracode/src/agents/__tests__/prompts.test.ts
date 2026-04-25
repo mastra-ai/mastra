@@ -48,8 +48,11 @@ describe('buildFullPrompt', () => {
 
     expect(prompt).toContain('<gpt_5_5_coding_behavior>');
     expect(prompt).toContain('Work outcome-first');
-    expect(prompt).toContain('Use efficient retrieval');
+    expect(prompt).toContain('without sacrificing correctness, maintainability, or proof');
+    expect(prompt).toContain('Read enough code, docs, logs, and command output to act correctly');
     expect(prompt).toContain('Validate before claiming completion');
+    expect(prompt).not.toContain('<autonomy_and_persistence>');
+    expect(prompt).not.toContain('shortest correct path');
   });
 
   it('does not include model-specific prompt content for other models', () => {
@@ -72,5 +75,6 @@ describe('buildFullPrompt', () => {
     });
 
     expect(prompt).not.toContain('<autonomy_and_persistence>');
+    expect(prompt).not.toContain('<gpt_5_5_coding_behavior>');
   });
 });
