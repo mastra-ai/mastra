@@ -1,0 +1,79 @@
+---
+title: "FuturMix"
+description: "Use FuturMix's unified AI gateway with Mastra for access to 22+ models across Claude, GPT, and Gemini families."
+---
+
+# FuturMix
+
+[FuturMix](https://futurmix.ai) is a unified AI gateway providing access to 22+ models across Anthropic, OpenAI, and Google families through a single OpenAI-compatible API endpoint with 99.99% SLA.
+
+Use `@ai-sdk/openai-compatible` to integrate FuturMix with Mastra.
+
+## Setup
+
+Set up your environment variable:
+
+```bash title=".env"
+FUTURMIX_API_KEY=your-api-key
+```
+
+## Usage with Mastra
+
+```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+
+const futurmix = createOpenAICompatible({
+  name: "futurmix",
+  baseURL: "https://futurmix.ai/v1",
+  headers: {
+    Authorization: `Bearer ${process.env.FUTURMIX_API_KEY}`,
+  },
+});
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant.",
+  model: futurmix("claude-sonnet-4-20250514"),
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+console.log(response.text);
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+## Available models
+
+FuturMix provides access to models from multiple providers:
+
+| Family | Example models |
+|--------|---------------|
+| Anthropic | `claude-sonnet-4-20250514`, `claude-opus-4-20250514`, `claude-haiku-4-5-20251001` |
+| OpenAI | `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano` |
+| Google | `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-2.0-flash` |
+
+## Dynamic model selection
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  name: "dynamic-agent",
+  instructions: "You are a helpful assistant.",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? futurmix("claude-opus-4-20250514")
+      : futurmix("claude-sonnet-4-20250514");
+  },
+});
+```
+
+## Links
+
+- [FuturMix documentation](https://futurmix.ai)
+- [FuturMix GitHub](https://github.com/FuturMix)

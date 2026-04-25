@@ -238,6 +238,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/futurmix',
+          label: 'FuturMix',
+        },
+        {
+          type: 'doc',
           id: 'providers/github-models',
           label: 'GitHub Models',
         },

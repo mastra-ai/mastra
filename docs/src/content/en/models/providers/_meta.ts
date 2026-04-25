@@ -19,6 +19,7 @@ const meta = {
   deepinfra: 'Deep Infra',
   fastrouter: 'FastRouter',
   'fireworks-ai': 'Fireworks AI',
+  futurmix: 'FuturMix',
   'github-models': 'GitHub Models',
   'google-vertex': 'Google Vertex AI',
   huggingface: 'Hugging Face',
