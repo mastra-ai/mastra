@@ -278,7 +278,7 @@ This approach is also required when using storage providers that don't support o
 
 :::
 
-For multi-replica ClickHouse clusters behind a load balancer, configure replicated table engines when Mastra initializes the ClickHouse tables. Without replicated engines, ClickHouse stores each table locally on the replica that receives the write, so Studio can show different observability data depending on which replica serves a read.
+For multi-replica ClickHouse clusters behind a load balancer, configure replicated table engines when Mastra initializes the ClickHouse tables. Without replicated engines, ClickHouse stores each table locally on the replica that receives the write, so Studio can show different observability data depending on which replica serves a read. For self-managed clusters, set `cluster` so DDL includes `ON CLUSTER` and creates the tables on every replica.
 
 ```typescript
 import { MastraCompositeStore } from '@mastra/core/storage'
