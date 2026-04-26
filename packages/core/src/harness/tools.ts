@@ -647,7 +647,6 @@ Use this tool when:
       });
 
       let partialText = '';
-      const toolCallLog: Array<{ name: string; toolCallId: string; isError?: boolean }> = [];
 
       try {
         const response = await subagentToRun.stream(task, {
@@ -675,7 +674,6 @@ Use this tool when:
               break;
 
             case 'tool-call':
-              toolCallLog.push({ name: chunk.payload.toolName, toolCallId: chunk.payload.toolCallId });
               emitEvent?.({
                 type: 'subagent_tool_start',
                 toolCallId,
@@ -687,12 +685,6 @@ Use this tool when:
 
             case 'tool-result': {
               const isErr = chunk.payload.isError ?? false;
-              for (let i = toolCallLog.length - 1; i >= 0; i--) {
-                if (toolCallLog[i]!.toolCallId === chunk.payload.toolCallId && toolCallLog[i]!.isError === undefined) {
-                  toolCallLog[i]!.isError = isErr;
-                  break;
-                }
-              }
               emitEvent?.({
                 type: 'subagent_tool_end',
                 toolCallId,
@@ -713,8 +705,15 @@ Use this tool when:
             : '[Aborted by user]';
 
           emitEvent?.({ type: 'subagent_end', toolCallId, agentType, result: abortResult, isError: false, durationMs });
-          const meta = buildSubagentMeta(resolvedModelId, durationMs, toolCallLog);
-          return { content: abortResult + meta, isError: false };
+          // Intentionally do NOT append `<subagent-meta />` to model-facing
+          // content: when the parent model can see the tag in a tool result
+          // it sometimes echoes the literal markup back into its own assistant
+          // text on the next turn. Live UIs get model/duration/tool data from
+          // the structured `subagent_*` events emitted above; history UIs read
+          // the persisted `tool_call.args.modelId`. Older persisted threads
+          // that still carry the tag are handled by `parseSubagentMeta` for
+          // backward compatibility.
+          return { content: abortResult, isError: false };
         }
 
         const fullOutput = await response.getFullOutput();
@@ -723,8 +722,7 @@ Use this tool when:
         const durationMs = Date.now() - startTime;
         emitEvent?.({ type: 'subagent_end', toolCallId, agentType, result: resultText, isError: false, durationMs });
 
-        const meta = buildSubagentMeta(resolvedModelId, durationMs, toolCallLog);
-        return { content: resultText + meta, isError: false };
+        return { content: resultText, isError: false };
       } catch (err) {
         const isAbort =
           err instanceof Error &&
@@ -738,37 +736,32 @@ Use this tool when:
 
           emitEvent?.({ type: 'subagent_end', toolCallId, agentType, result: abortResult, isError: false, durationMs });
 
-          const meta = buildSubagentMeta(resolvedModelId, durationMs, toolCallLog);
-          return { content: abortResult + meta, isError: false };
+          return { content: abortResult, isError: false };
         }
 
         const message = err instanceof Error ? err.message : String(err);
         emitEvent?.({ type: 'subagent_end', toolCallId, agentType, result: message, isError: true, durationMs });
 
-        const meta = buildSubagentMeta(resolvedModelId, durationMs, toolCallLog);
-        return { content: `Subagent "${definition.name}" failed: ${message}` + meta, isError: true };
+        return { content: `Subagent "${definition.name}" failed: ${message}`, isError: true };
       }
     },
   });
 }
 
 /**
- * Build a metadata tag appended to subagent results.
- * UIs can parse this to display model ID, duration, and tool calls
- * when loading from history (where live events aren't available).
- */
-function buildSubagentMeta(
-  modelId: string,
-  durationMs: number,
-  toolCalls: Array<{ name: string; isError?: boolean }>,
-): string {
-  const tools = toolCalls.map(tc => `${tc.name}:${tc.isError ? 'err' : 'ok'}`).join(',');
-  return `\n<subagent-meta modelId="${modelId}" durationMs="${durationMs}" tools="${tools}" />`;
-}
-
-/**
  * Parse subagent metadata from a tool result string.
- * Returns the metadata and the cleaned result text (without the tag).
+ *
+ * Older persisted threads may have an internal `<subagent-meta />` tag
+ * appended to the subagent tool result content (carrying modelId / durationMs
+ * / sub-tool-call summary, used by history-render UIs to reconstruct the
+ * subagent activity box when live events aren't available).
+ *
+ * New runs no longer append the tag — the metadata leaked into model context
+ * and could be echoed back as visible assistant text — but this parser is
+ * retained so existing threads continue to render cleanly. It also strips the
+ * tag so callers never display it to users.
+ *
+ * Returns the cleaned text plus any parsed metadata.
  */
 export function parseSubagentMeta(content: string): {
   text: string;

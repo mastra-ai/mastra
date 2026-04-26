@@ -84,6 +84,48 @@ describe('createSubagentTool requestContext forwarding', () => {
     vi.restoreAllMocks();
   });
 
+  it('does NOT append the internal `<subagent-meta />` tag to model-facing content (success path)', async () => {
+    // Regression: when the parent model can see this tag in a tool result it
+    // sometimes echoes the literal markup back into its own assistant text on
+    // the next turn. The metadata must travel via structured events only.
+    mockStream.mockResolvedValue(createMockStreamResponse('clean result text'));
+
+    const tool = createSubagentTool({
+      subagents,
+      resolveModel,
+      fallbackModelId: 'test-model',
+    });
+
+    const result = await (tool as any).execute(
+      { agentType: 'explore', task: 'task' },
+      { requestContext: new RequestContext(), agent: { toolCallId: 'tc-meta' } },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(result.content).toBe('clean result text');
+    expect(result.content).not.toContain('<subagent-meta');
+    expect(result.content).not.toContain('modelId=');
+    expect(result.content).not.toContain('durationMs=');
+  });
+
+  it('does NOT append the internal `<subagent-meta />` tag on the error path either', async () => {
+    mockStream.mockRejectedValue(new Error('boom'));
+
+    const tool = createSubagentTool({
+      subagents,
+      resolveModel,
+      fallbackModelId: 'test-model',
+    });
+
+    const result = await (tool as any).execute(
+      { agentType: 'explore', task: 'task' },
+      { requestContext: new RequestContext(), agent: { toolCallId: 'tc-meta-err' } },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content).not.toContain('<subagent-meta');
+  });
+
   it('forwards a copy of requestContext with threadId/resourceId stripped', async () => {
     mockStream.mockResolvedValue(createMockStreamResponse('result text'));
 
