@@ -1128,9 +1128,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         const messages = {
           all: messageList.get.all.aiV5.model(),
           user: messageList.get.input.aiV5.model(),
-          // Keep assistant messages out of the retry payload so agentic-execution/index.ts
-          // does not replay failed step output back into messageList. Error processors own
-          // any cleanup or replacement of assistant responses before the next attempt.
+          // Do not return failed assistant output as new response messages for this retry step.
+          // That output was already added to messageList while processing the failed stream;
+          // returning it in messages.nonUser would make agentic-execution/index.ts append it again.
           nonUser: [],
         };
 
