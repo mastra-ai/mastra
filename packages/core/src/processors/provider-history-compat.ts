@@ -1,6 +1,7 @@
 import { APICallError } from '@internal/ai-sdk-v5';
 
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
+import type { JSONValue } from '../stream';
 import type { Processor, ProcessAPIErrorArgs, ProcessAPIErrorResult } from './index';
 
 // ---------------------------------------------------------------------------
@@ -51,6 +52,74 @@ function matchesRule(error: unknown, rule: CompatRule): boolean {
   }
 
   return false;
+}
+
+type CompatToolResultOutput =
+  | { type: 'text'; value: string }
+  | { type: 'json'; value: JSONValue }
+  | { type: 'error-text'; value: string }
+  | { type: 'error-json'; value: JSONValue }
+  | { type: 'content'; value: JSONValue[] };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function stringifyOutput(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value == null) return '';
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function isValidToolResultOutput(value: unknown): value is CompatToolResultOutput {
+  if (!isRecord(value) || typeof value.type !== 'string' || !('value' in value)) return false;
+
+  switch (value.type) {
+    case 'text':
+    case 'error-text':
+      return typeof value.value === 'string';
+    case 'json':
+    case 'error-json':
+      return value.value !== undefined;
+    case 'content':
+      return Array.isArray(value.value);
+    default:
+      return false;
+  }
+}
+
+function toJSONValue(value: unknown): JSONValue {
+  if (value === undefined) return null;
+
+  try {
+    return JSON.parse(JSON.stringify(value)) as JSONValue;
+  } catch {
+    return stringifyOutput(value);
+  }
+}
+
+function normalizeToolResultOutput(modelOutput: unknown, result: unknown): CompatToolResultOutput {
+  if (isValidToolResultOutput(modelOutput)) return modelOutput;
+
+  if (isRecord(modelOutput) && typeof modelOutput.type === 'string') {
+    switch (modelOutput.type) {
+      case 'text':
+      case 'error-text':
+        return { type: modelOutput.type, value: stringifyOutput(result) };
+      case 'json':
+      case 'error-json':
+        return { type: modelOutput.type, value: toJSONValue(result) };
+      case 'content':
+        return { type: 'json', value: toJSONValue(result) };
+    }
+  }
+
+  return typeof result === 'string' ? { type: 'text', value: result } : { type: 'json', value: toJSONValue(result) };
 }
 
 // ---------------------------------------------------------------------------
@@ -135,6 +204,40 @@ export const anthropicToolIdFormat: CompatRule = {
   },
 };
 
+export const openaiMissingToolResultOutput: CompatRule = {
+  name: 'openai-missing-tool-result-output',
+  errorPatterns: [/Missing required parameter:\s*['"]?input\[\d+\]\.output['"]?/i],
+  fix(messages) {
+    let changed = false;
+
+    for (const msg of messages) {
+      if (!msg.content?.parts) continue;
+
+      for (const part of msg.content.parts) {
+        if (part.type !== 'tool-invocation' || part.toolInvocation?.state !== 'result') continue;
+
+        const mastraMetadata = part.providerMetadata?.mastra;
+        const metadataRecord = isRecord(mastraMetadata) ? mastraMetadata : {};
+        const modelOutput = metadataRecord.modelOutput;
+        const normalizedOutput = normalizeToolResultOutput(modelOutput, part.toolInvocation.result);
+
+        if (modelOutput === normalizedOutput) continue;
+
+        part.providerMetadata = {
+          ...part.providerMetadata,
+          mastra: {
+            ...metadataRecord,
+            modelOutput: normalizedOutput,
+          },
+        };
+        changed = true;
+      }
+    }
+
+    return changed;
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Default rule set
 // ---------------------------------------------------------------------------
@@ -143,7 +246,7 @@ export const anthropicToolIdFormat: CompatRule = {
  * All built-in compat rules. Extend by passing additional rules to the
  * `ProviderHistoryCompat` constructor.
  */
-export const DEFAULT_COMPAT_RULES: CompatRule[] = [anthropicToolIdFormat];
+export const DEFAULT_COMPAT_RULES: CompatRule[] = [anthropicToolIdFormat, openaiMissingToolResultOutput];
 
 // ---------------------------------------------------------------------------
 // Processor

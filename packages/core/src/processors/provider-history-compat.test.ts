@@ -80,6 +80,50 @@ function createRateLimitError() {
   });
 }
 
+function createOpenAIMissingOutputError() {
+  return new APICallError({
+    message: "Invalid request: Missing required parameter: 'input[9].output'.",
+    url: 'https://api.openai.com/v1/responses',
+    requestBodyValues: {},
+    statusCode: 400,
+    responseBody: JSON.stringify({
+      error: {
+        message: "Missing required parameter: 'input[9].output'.",
+      },
+    }),
+    isRetryable: false,
+  });
+}
+
+function createAssistantMessageWithToolResult(
+  toolCallId: string,
+  toolName: string,
+  result: unknown,
+  providerMetadata?: Record<string, unknown>,
+) {
+  return {
+    id: `msg-${Math.random()}`,
+    role: 'assistant' as const,
+    content: {
+      format: 2 as const,
+      parts: [
+        {
+          type: 'tool-invocation' as const,
+          toolInvocation: {
+            toolCallId,
+            toolName,
+            args: {},
+            state: 'result' as const,
+            result,
+          },
+          ...(providerMetadata ? { providerMetadata } : {}),
+        },
+      ],
+    },
+    createdAt: new Date(),
+  };
+}
+
 function makeArgs(overrides: Partial<ProcessAPIErrorArgs> = {}): ProcessAPIErrorArgs {
   const messageList = new MessageList({ threadId: 'test-thread' });
   messageList.add([createUserMessage('hello')], 'input');
@@ -273,5 +317,66 @@ describe('ProviderHistoryCompat', () => {
 
     expect(result).toBeUndefined();
     expect(JSON.stringify(messageList.get.all.db())).toBe(messagesBefore);
+  });
+
+  it('should add modelOutput to historical tool results when OpenAI rejects missing output', async () => {
+    const handler = new ProviderHistoryCompat();
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    messageList.add([createUserMessage('run command')], 'input');
+    messageList.add([createAssistantMessageWithToolResult('call-openai-1', 'execute_command', 'ok')], 'response');
+
+    const args = makeArgs({
+      error: createOpenAIMissingOutputError(),
+      messageList,
+      messages: messageList.get.all.db(),
+    });
+
+    const result = await handler.processAPIError(args);
+
+    expect(result).toEqual({ retry: true });
+
+    const messages = messageList.get.all.db();
+    const assistantMsg = messages.find(m => m.role === 'assistant');
+    const toolPart = assistantMsg!.content.parts.find(p => p.type === 'tool-invocation');
+    expect(toolPart!.type).toBe('tool-invocation');
+    if (toolPart!.type === 'tool-invocation') {
+      expect(toolPart.providerMetadata?.mastra).toEqual({
+        modelOutput: { type: 'text', value: 'ok' },
+      });
+    }
+  });
+
+  it('should repair malformed modelOutput shells for OpenAI missing output errors', async () => {
+    const handler = new ProviderHistoryCompat();
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    messageList.add([createUserMessage('run command')], 'input');
+    messageList.add(
+      [
+        createAssistantMessageWithToolResult('call-openai-2', 'execute_command', 'clean output', {
+          mastra: { modelOutput: { type: 'text' } },
+        }),
+      ],
+      'response',
+    );
+
+    const args = makeArgs({
+      error: createOpenAIMissingOutputError(),
+      messageList,
+      messages: messageList.get.all.db(),
+    });
+
+    const result = await handler.processAPIError(args);
+
+    expect(result).toEqual({ retry: true });
+
+    const messages = messageList.get.all.db();
+    const assistantMsg = messages.find(m => m.role === 'assistant');
+    const toolPart = assistantMsg!.content.parts.find(p => p.type === 'tool-invocation');
+    expect(toolPart!.type).toBe('tool-invocation');
+    if (toolPart!.type === 'tool-invocation') {
+      expect(toolPart.providerMetadata?.mastra).toEqual({
+        modelOutput: { type: 'text', value: 'clean output' },
+      });
+    }
   });
 });
