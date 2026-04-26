@@ -571,8 +571,11 @@ export class ProcessorRunner {
             processorStates.set(workflowId, state);
           }
 
-          // Track input chunk (before processor transformation)
-          state.addInputPart(processedPart);
+          // Track input BEFORE workflow transformation to preserve original stream history.
+          // This ensures streamParts reflects raw input, while output tracking reflects transformed chunks.
+          if (processedPart != null) {
+            state.addInputPart(processedPart);
+          }
 
           try {
             const result = await this.executeWorkflowAsProcessor(

@@ -717,6 +717,52 @@ describe('ProcessorRunner', () => {
       expect(result.part?.type === 'text-delta' ? result.part?.payload.text : '').toBe('original text');
       expect(result.blocked).toBe(false);
     });
+
+    it('should track input before workflow transformation and output after', async () => {
+      const mockWorkflow = {
+        id: 'test-workflow',
+        createRun: async () => ({
+          start: async ({ inputData }: any) => {
+            return {
+              status: 'success',
+              result: {
+                phase: 'outputStream',
+                part: {
+                  type: 'text-delta',
+                  payload: { text: inputData.part.payload.text.toUpperCase() },
+                },
+              },
+            };
+          },
+        }),
+      };
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors: [mockWorkflow as any],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const processorStates = new Map();
+
+      const inputPart = {
+        type: 'text-delta',
+        payload: { text: 'hello', id: 'text-1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      } as ChunkType;
+
+      const result = await runner.processPart(inputPart, processorStates);
+
+      expect(result.part?.type === 'text-delta' ? result.part.payload.text : '').toBe('HELLO');
+
+      const state = processorStates.get('test-workflow');
+
+      expect(state?.streamParts[0].payload.text).toBe('hello');
+
+      expect(state?.getFinalOutput().accumulatedText).toBe('HELLO');
+    });
   });
 
   describe('Stateful Stream Processing', () => {
