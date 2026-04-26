@@ -15,7 +15,16 @@ export const executeCommandInputSchema = z.object({
   command: z
     .string()
     .describe('The shell command to execute (e.g., "npm install", "ls -la src/", "cat file.txt | grep error")'),
-  timeout: z.number().nullish().describe('Maximum execution time in seconds. Example: 60 for 1 minute.'),
+  timeout: z
+    .preprocess(value => {
+      if (typeof value !== 'string') {
+        return value;
+      }
+      const trimmed = value.trim();
+      return /^\d+(?:\.\d+)?$/.test(trimmed) ? Number(trimmed) : value;
+    }, z.number())
+    .nullish()
+    .describe('Maximum execution time in seconds. Example: 60 for 1 minute.'),
   cwd: z.string().nullish().describe('Working directory for the command'),
   tail: z
     .number()
