@@ -50,6 +50,44 @@ If you're new to AI agents, check out our [templates](https://mastra.ai/docs/get
 
 Visit our [official documentation](https://mastra.ai/docs).
 
+
+## Frequently Asked Questions
+
+### Which LLM providers does Mastra support?
+
+Mastra integrates with 40+ providers through a single standard interface, including OpenAI, Anthropic, Google Gemini, Azure, AWS Bedrock, and many more. Model routing is built-in, so you can switch or fallback between providers with minimal code changes. See the [model routing documentation](https://mastra.ai/docs/models) for the full list.
+
+### How do I handle agent tool failures?
+
+Mastra agents include built-in retry and error handling. When a tool call fails, the agent receives the error and can attempt recovery or report the issue. You can configure retry behavior per tool and add custom error handlers. For critical operations, use the human-in-the-loop pattern to get user confirmation before retrying.
+
+### Can I deploy Mastra without a frontend framework?
+
+Yes. Mastra can run as a standalone server using `mastra dev` or `mastra start`. This is useful for backend-only integrations, API services, or when you want to build your own frontend. The standalone server exposes REST endpoints for agent execution and workflow management.
+
+### What is the difference between agents and workflows?
+
+**Agents** are autonomous — they reason about goals, decide which tools to use, and iterate internally. Use agents for open-ended tasks where the path isn't predetermined. **Workflows** give you explicit control over execution flow with `.then()`, `.branch()`, and `.parallel()` syntax. Use workflows when you need deterministic orchestration of multiple steps.
+
+### How do I add memory to my agents?
+
+Mastra provides three memory layers: [conversation history](https://mastra.ai/docs/memory/conversation-history) for short-term context, [working memory](https://mastra.ai/docs/memory/working-memory) for task-specific state, and [semantic recall](https://mastra.ai/docs/memory/semantic-recall) for long-term knowledge retrieval via RAG. Configure the memory layer that fits your use case when creating an agent.
+
+### How do I debug and monitor my agents?
+
+Mastra includes built-in [observability](https://mastra.ai/docs/observability/overview) with tracing, logging, and metrics. Use `mastra dev` for local debugging with the interactive TUI. For production, integrate with your preferred observability platform — Mastra exports traces in OpenTelemetry format. The [evals](https://mastra.ai/docs/evals/overview) system lets you continuously measure agent quality.
+
+### Is Mastra production-ready?
+
+Yes. Mastra is designed for production use with built-in observability, evals, error handling, and scalable architecture. It integrates with existing React/Next.js/Node.js applications or can be deployed standalone. Review the [deployment guides](https://mastra.ai/docs/getting-started/installation) for production setup.
+
+### Where can I get help?
+
+- **Documentation**: [mastra.ai/docs](https://mastra.ai/docs)
+- **Discord**: [Join the community](https://discord.gg/BTYqqHKUrf)
+- **YouTube**: [mastra.ai YouTube channel](https://youtube.com/@mastra-ai)
+- **GitHub Issues**: [Report bugs or request features](https://github.com/mastra-ai/mastra/issues)
+
 ## Build with AI
 
 Learn how to make your agent a Mastra expert by following the [Build with AI guide](https://mastra.ai/docs/getting-started/build-with-ai).
