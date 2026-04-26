@@ -1,6 +1,7 @@
 import { APICallError } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
 import { MessageList } from '../agent/message-list';
+import { MastraLanguageModelV2Mock } from '../loop/test-utils/MastraLanguageModelV2Mock';
 import { ProviderHistoryCompat } from './provider-history-compat';
 import type { ProcessAPIErrorArgs } from './index';
 
@@ -134,6 +135,7 @@ function makeArgs(overrides: Partial<ProcessAPIErrorArgs> = {}): ProcessAPIError
     error: createToolIdError(),
     messages: messageList.get.all.db(),
     messageList,
+    model: new MastraLanguageModelV2Mock({ provider: 'anthropic', modelId: 'claude-test' }),
     stepNumber: 0,
     steps: [],
     state: {},
@@ -328,6 +330,7 @@ describe('ProviderHistoryCompat', () => {
     const args = makeArgs({
       error: createOpenAIMissingOutputError(),
       messageList,
+      model: new MastraLanguageModelV2Mock({ provider: 'openai.responses', modelId: 'gpt-5.5' }),
       messages: messageList.get.all.db(),
     });
 
@@ -362,6 +365,7 @@ describe('ProviderHistoryCompat', () => {
     const args = makeArgs({
       error: createOpenAIMissingOutputError(),
       messageList,
+      model: new MastraLanguageModelV2Mock({ provider: 'openai.responses', modelId: 'gpt-5.5' }),
       messages: messageList.get.all.db(),
     });
 
@@ -377,6 +381,30 @@ describe('ProviderHistoryCompat', () => {
       expect(toolPart.providerMetadata?.mastra).toEqual({
         modelOutput: { type: 'text', value: 'clean output' },
       });
+    }
+  });
+
+  it('should skip provider-scoped rules when the active provider does not match', async () => {
+    const handler = new ProviderHistoryCompat();
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    messageList.add([createUserMessage('run command')], 'input');
+    messageList.add([createAssistantMessageWithToolResult('call-openai-3', 'execute_command', 'ok')], 'response');
+
+    const args = makeArgs({
+      error: createOpenAIMissingOutputError(),
+      messageList,
+      model: new MastraLanguageModelV2Mock({ provider: 'anthropic', modelId: 'claude-test' }),
+      messages: messageList.get.all.db(),
+    });
+
+    const result = await handler.processAPIError(args);
+
+    expect(result).toBeUndefined();
+    const assistantMsg = messageList.get.all.db().find(m => m.role === 'assistant');
+    const toolPart = assistantMsg!.content.parts.find(p => p.type === 'tool-invocation');
+    expect(toolPart!.type).toBe('tool-invocation');
+    if (toolPart!.type === 'tool-invocation') {
+      expect(toolPart.providerMetadata?.mastra).toBeUndefined();
     }
   });
 });

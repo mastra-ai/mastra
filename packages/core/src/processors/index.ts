@@ -284,6 +284,8 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
 export interface ProcessAPIErrorArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
   /** The error that occurred during the LLM API call */
   error: unknown;
+  /** Current model for this step. */
+  model?: MastraLanguageModel;
   /** The current step number (0-indexed) */
   stepNumber: number;
   /** All completed steps so far */

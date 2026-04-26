@@ -1,6 +1,7 @@
 import { APICallError } from '@internal/ai-sdk-v5';
 
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
+import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { JSONValue } from '../stream';
 import type { Processor, ProcessAPIErrorArgs, ProcessAPIErrorResult } from './index';
 
@@ -20,6 +21,8 @@ import type { Processor, ProcessAPIErrorArgs, ProcessAPIErrorResult } from './in
 export interface CompatRule {
   /** Human-readable identifier for logging/debugging. */
   name: string;
+  /** Optional provider prefixes this rule applies to, e.g. `openai` or `anthropic`. */
+  providers?: string[];
   /** Regexes matched against the error message and response body. */
   errorPatterns: RegExp[];
   /** Mutate messages to resolve the incompatibility. Return `true` if changes were made. */
@@ -52,6 +55,13 @@ function matchesRule(error: unknown, rule: CompatRule): boolean {
   }
 
   return false;
+}
+
+function matchesProvider(model: MastraLanguageModel | undefined, rule: CompatRule): boolean {
+  if (!rule.providers?.length) return true;
+  if (!model?.provider) return false;
+
+  return rule.providers.some(provider => model.provider === provider || model.provider.startsWith(`${provider}.`));
 }
 
 type CompatToolResultOutput =
@@ -195,6 +205,7 @@ function rewriteToolIds(messages: MastraDBMessage[], idMap: Map<string, string>)
  */
 export const anthropicToolIdFormat: CompatRule = {
   name: 'anthropic-tool-id-format',
+  providers: ['anthropic'],
   errorPatterns: [/tool_use\.id:.*should match pattern/i, /tool_call_id.*invalid/i],
   fix(messages) {
     const idMap = buildToolIdMap(messages);
@@ -206,6 +217,7 @@ export const anthropicToolIdFormat: CompatRule = {
 
 export const openaiMissingToolResultOutput: CompatRule = {
   name: 'openai-missing-tool-result-output',
+  providers: ['openai'],
   errorPatterns: [/Missing required parameter:\s*['"]?input\[\d+\]\.output['"]?/i],
   fix(messages) {
     let changed = false;
@@ -284,6 +296,7 @@ export class ProviderHistoryCompat implements Processor<'provider-history-compat
   async processAPIError({
     error,
     messageList,
+    model,
     retryCount,
   }: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
     if (retryCount > 0) return;
@@ -291,6 +304,8 @@ export class ProviderHistoryCompat implements Processor<'provider-history-compat
     const messages = messageList.get.all.db();
 
     for (const rule of this.rules) {
+      if (!matchesProvider(model, rule)) continue;
+
       if (matchesRule(error, rule)) {
         const changed = rule.fix(messages);
         if (changed) {

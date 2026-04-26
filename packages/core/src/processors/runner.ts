@@ -6,6 +6,7 @@ import type { TripWireOptions } from '../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../agent/utils';
 import { MastraError } from '../error';
 import { resolveModelConfig } from '../llm';
+import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import { EntityType, SpanType, createObservabilityContext, resolveObservabilityContext } from '../observability';
 import type { ObservabilityContext, Span } from '../observability';
@@ -1259,6 +1260,7 @@ export class ProcessorRunner {
       steps: Array<StepResult<any>>;
       messages: MastraDBMessage[];
       messageList: MessageList;
+      model?: MastraLanguageModel;
       stepNumber: number;
       finishReason?: string;
       toolCalls?: ToolCallInfo[];
@@ -1467,6 +1469,7 @@ export class ProcessorRunner {
       error: unknown;
       messages: MastraDBMessage[];
       messageList: MessageList;
+      model?: MastraLanguageModel;
       stepNumber: number;
       steps: Array<StepResult<any>>;
       messageId?: string;
@@ -1477,7 +1480,7 @@ export class ProcessorRunner {
       rotateResponseMessageId?: () => string;
     } & Partial<ObservabilityContext>,
   ): Promise<{ retry: boolean }> {
-    const { error, messageList, stepNumber, steps, requestContext, retryCount = 0, writer, abortSignal } = args;
+    const { error, messageList, model, stepNumber, steps, requestContext, retryCount = 0, writer, abortSignal } = args;
     const observabilityContext = resolveObservabilityContext(args);
 
     const allProcessors: ProcessorOrWorkflow[] = [
@@ -1538,6 +1541,7 @@ export class ProcessorRunner {
         const result = await processMethod({
           messages: processableMessages,
           messageList,
+          model,
           stepNumber,
           steps,
           state: processorState.customState,
