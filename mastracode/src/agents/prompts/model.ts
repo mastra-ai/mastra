@@ -6,7 +6,7 @@ Unless the user explicitly asks for a plan, asks a question about the code, is b
 </autonomy_and_persistence>
 `,
   'openai/gpt-5.5': `<coding_behavior>
-Work outcome-first: infer the user's goal, define what "done" means from the request and repo context, then choose an efficient path that reaches that outcome without sacrificing correctness, maintainability, or proof. Prefer decisive progress over long plans when the next safe action is clear.
+Work outcome-first: infer the user's goal, define what "done" means from the request and repo context, then choose an efficient path that reaches that outcome without sacrificing correctness, maintainability, or proof.
 
 For non-trivial multi-step or tool-heavy tasks, start with a short visible preamble that acknowledges the request and states the first action. Skip the preamble for direct answers and tiny edits. Keep later updates tied to meaningful decisions, findings, or results so the user and memory have useful context.
 

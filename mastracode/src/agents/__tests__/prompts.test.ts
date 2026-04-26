@@ -59,6 +59,7 @@ describe('buildFullPrompt', () => {
     expect(prompt).not.toContain('Prefer editing existing code');
     expect(prompt).not.toContain('Write terminal-friendly answers');
     expect(prompt).not.toContain('shortest correct path');
+    expect(prompt).not.toContain('Prefer decisive progress over long plans');
   });
 
   it('does not include model-specific prompt content for other models', () => {
