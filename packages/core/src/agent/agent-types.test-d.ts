@@ -175,6 +175,14 @@ describe('Agent Type Tests', () => {
 
       // @ts-expect-error — a nested resolver function is not a valid static tool entry
       const bad: ToolsInput = { myTool: () => realTool };
+
+      // Extra guard: resolvers returning non-tool values should also be rejected.
+      // This prevents a future relaxation that accidentally passes the narrow
+      // `() => realTool` shape while still letting through arbitrary functions.
+      // @ts-expect-error — resolver returning a primitive is not a valid tool entry
+      const badPrimitive: ToolsInput = { myTool: () => 42 };
+      // @ts-expect-error — async resolver returning an empty object is not a valid tool entry
+      const badAsync: ToolsInput = { myTool: async () => ({}) };
     });
 
     it('should still accept valid static tool objects created via createTool', () => {
