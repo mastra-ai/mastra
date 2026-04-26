@@ -825,6 +825,81 @@ describe('createSubagentTool forked subagent behavior', () => {
     expect(parentStream).not.toHaveBeenCalled();
   });
 
+  it('forks: inherits parent toolsets via getParentToolsets but strips the `subagent` tool', async () => {
+    // Without inheriting toolsets, forks lose harness-injected tools like
+    // `ask_user` / `submit_plan` (the parent Agent's base config doesn't carry
+    // them — they're injected per-stream by the harness).
+    // Stripping `subagent` is intentional: forks must not recursively fork.
+    const { parentAgent, parentStream } = makeParentAgent('with toolsets');
+    const cloneThreadForFork = vi.fn().mockResolvedValue({ id: 'fork-with-toolsets', resourceId: 'rid' });
+
+    const askUser = { id: 'ask_user' } as any;
+    const submitPlan = { id: 'submit_plan' } as any;
+    const subagentTool = { id: 'subagent' } as any;
+    const userTool = { id: 'view' } as any;
+
+    const getParentToolsets = vi.fn().mockResolvedValue({
+      harnessBuiltIn: { ask_user: askUser, submit_plan: submitPlan, subagent: subagentTool },
+      harness: { view: userTool },
+    });
+
+    const tool = createSubagentTool({
+      subagents,
+      resolveModel,
+      fallbackModelId: 'test-model',
+      getParentAgent: () => parentAgent,
+      cloneThreadForFork,
+      getParentToolsets,
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set('harness', { emitEvent: vi.fn(), threadId: 'p-thread', resourceId: 'rid' });
+
+    const result = await (tool as any).execute(
+      { agentType: 'explore', task: 'Inherit but no recursion', forked: true },
+      { requestContext, agent: { toolCallId: 'tc-fork-toolsets' } },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(getParentToolsets).toHaveBeenCalledTimes(1);
+
+    const [, streamOpts] = parentStream.mock.calls[0]!;
+    expect(streamOpts.toolsets).toBeDefined();
+    expect(streamOpts.toolsets.harnessBuiltIn).toEqual({ ask_user: askUser, submit_plan: submitPlan });
+    // subagent must be stripped to prevent the fork from spawning further forks.
+    expect(streamOpts.toolsets.harnessBuiltIn.subagent).toBeUndefined();
+    // User-configured harness tools come through untouched.
+    expect(streamOpts.toolsets.harness).toEqual({ view: userTool });
+  });
+
+  it('forks: omitting getParentToolsets keeps `toolsets` unset on the stream call (back-compat)', async () => {
+    // If a harness doesn't wire getParentToolsets, the fork should still run
+    // (just without inherited harness toolsets) — no breaking change.
+    const { parentAgent, parentStream } = makeParentAgent('no toolsets wired');
+    const cloneThreadForFork = vi.fn().mockResolvedValue({ id: 'fork-no-toolsets', resourceId: 'rid' });
+
+    const tool = createSubagentTool({
+      subagents,
+      resolveModel,
+      fallbackModelId: 'test-model',
+      getParentAgent: () => parentAgent,
+      cloneThreadForFork,
+      // getParentToolsets intentionally omitted.
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set('harness', { emitEvent: vi.fn(), threadId: 'p-thread', resourceId: 'rid' });
+
+    const result = await (tool as any).execute(
+      { agentType: 'explore', task: 'No toolsets', forked: true },
+      { requestContext, agent: { toolCallId: 'tc-fork-no-toolsets' } },
+    );
+
+    expect(result.isError).toBe(false);
+    const [, streamOpts] = parentStream.mock.calls[0]!;
+    expect(streamOpts.toolsets).toBeUndefined();
+  });
+
   it('non-forked path is unchanged: strips threadId/resourceId and constructs a fresh Agent', async () => {
     // Sanity check that wiring fork helpers does NOT affect the default path.
     const { parentAgent, parentStream } = makeParentAgent();

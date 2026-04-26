@@ -1,7 +1,7 @@
 import { z } from 'zod/v4';
 
 import { Agent } from '../agent';
-import type { ToolsInput } from '../agent/types';
+import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import { RequestContext } from '../request-context';
 import { createTool } from '../tools/tool';
@@ -386,6 +386,16 @@ export interface CreateSubagentToolOptions {
     resourceId?: string;
     title?: string;
   }) => Promise<{ id: string; resourceId: string }>;
+  /**
+   * Resolves the toolsets the parent agent runs with for the current request.
+   * When set, forked subagents inherit the parent's toolsets (with `subagent`
+   * stripped) so harness-injected tools like `ask_user` / `submit_plan` /
+   * user-configured harness tools remain available inside the fork.
+   *
+   * Stripping `subagent` is intentional: it prevents a fork from spawning
+   * further forks (unbounded fan-out) by accident.
+   */
+  getParentToolsets?: () => Promise<ToolsetsInput | undefined>;
 }
 
 /**
@@ -459,6 +469,7 @@ Use this tool when:
       let streamMaxSteps: number | undefined;
       let streamStopWhen: HarnessSubagent['stopWhen'];
       let streamPrepareStep: ((args: { tools?: Record<string, unknown> }) => { activeTools: string[] }) | undefined;
+      let forkedToolsets: ToolsetsInput | undefined;
 
       if (runAsForked) {
         // Forked path: reuse the parent agent + a clone of the parent thread so the
@@ -520,6 +531,24 @@ Use this tool when:
         streamMaxSteps = undefined;
         streamStopWhen = undefined;
         streamPrepareStep = undefined;
+
+        // Inherit the parent's toolsets (ask_user / submit_plan / user-configured
+        // harness tools / etc.) but strip `subagent` to prevent recursive forks.
+        // The parent Agent's base `tools` config does not include the harness
+        // toolsets, so without this the fork would run with a noticeably smaller
+        // tool set than the parent it cloned from.
+        const inheritedToolsets = await opts.getParentToolsets?.();
+        if (inheritedToolsets) {
+          forkedToolsets = {};
+          for (const [setName, setTools] of Object.entries(inheritedToolsets)) {
+            const filtered: ToolsInput = {};
+            for (const [toolId, tool] of Object.entries(setTools as ToolsInput)) {
+              if (toolId === 'subagent') continue;
+              filtered[toolId] = tool;
+            }
+            forkedToolsets[setName] = filtered;
+          }
+        }
 
         if (context?.requestContext) {
           subagentRequestContext = new RequestContext(context.requestContext.entries());
@@ -628,6 +657,7 @@ Use this tool when:
           requireToolApproval: false,
           requestContext: subagentRequestContext,
           ...(streamMemory && { memory: streamMemory }),
+          ...(forkedToolsets && { toolsets: forkedToolsets }),
           ...(context?.tracingContext && { tracingContext: context.tracingContext }),
           prepareStep: streamPrepareStep,
         });
