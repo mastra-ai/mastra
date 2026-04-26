@@ -1149,6 +1149,8 @@
         "xiaomi/mimo-v2-flash",
         "xiaomi/mimo-v2-omni",
         "xiaomi/mimo-v2-pro",
+        "xiaomi/mimo-v2.5",
+        "xiaomi/mimo-v2.5-pro",
         "z-ai/glm-4.5",
         "z-ai/glm-4.5-air",
         "z-ai/glm-4.5-air:free",
@@ -2416,7 +2418,6 @@
       "name": "OpenCode Zen",
       "models": [
         "big-pickle",
-        "claude-3-5-haiku",
         "claude-haiku-4-5",
         "claude-opus-4-1",
         "claude-opus-4-5",
@@ -4464,7 +4465,7 @@
       "apiKeyEnvVar": "XIAOMI_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Xiaomi",
-      "models": ["mimo-v2-flash", "mimo-v2-omni", "mimo-v2-pro"],
+      "models": ["mimo-v2-flash", "mimo-v2-omni", "mimo-v2-pro", "mimo-v2.5", "mimo-v2.5-pro"],
       "docUrl": "https://platform.xiaomimimo.com/#/docs",
       "gateway": "models.dev"
     },
@@ -5695,6 +5696,8 @@
       "xiaomi/mimo-v2-flash",
       "xiaomi/mimo-v2-omni",
       "xiaomi/mimo-v2-pro",
+      "xiaomi/mimo-v2.5",
+      "xiaomi/mimo-v2.5-pro",
       "z-ai/glm-4.5",
       "z-ai/glm-4.5-air",
       "z-ai/glm-4.5-air:free",
@@ -6743,7 +6746,6 @@
     ],
     "opencode": [
       "big-pickle",
-      "claude-3-5-haiku",
       "claude-haiku-4-5",
       "claude-opus-4-1",
       "claude-opus-4-5",
@@ -8348,7 +8350,7 @@
       "ZhipuAI/GLM-4.6"
     ],
     "hpc-ai": ["minimax/minimax-m2.5", "moonshotai/kimi-k2.5", "zai-org/glm-5.1"],
-    "xiaomi": ["mimo-v2-flash", "mimo-v2-omni", "mimo-v2-pro"],
+    "xiaomi": ["mimo-v2-flash", "mimo-v2-omni", "mimo-v2-pro", "mimo-v2.5", "mimo-v2.5-pro"],
     "clarifai": [
       "arcee_ai/AFM/models/trinity-mini",
       "clarifai/main/models/mm-poly-8b",
