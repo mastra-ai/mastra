@@ -31,6 +31,23 @@
         "default": "./dist/*/index.cjs"
       }
     },
+    "./auth/defaults": null,
+    "./auth/interfaces": null,
+    "./auth/ee/defaults": null,
+    "./auth/ee/interfaces": null,
+    "./agent/message-list/adapters": null,
+    "./agent/message-list/cache": null,
+    "./evals/run": null,
+    "./llm/model": null,
+    "./llm/model/gateways": null,
+    "./processors/memory": null,
+    "./processors/processors": null,
+    "./stream/aisdk/v5/compat": null,
+    "./storage/domains": null,
+    "./workspace/filesystem": null,
+    "./workspace/sandbox": null,
+    "./workspace/skills": null,
+    "./workspace/tools": null,
     "./auth/ee": {
       "import": {
         "types": "./dist/auth/ee/index.d.ts",
