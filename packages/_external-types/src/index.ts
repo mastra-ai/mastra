@@ -30,10 +30,16 @@ export type ProviderDefinedTool =
     }
   | {
       // ToolV5 structure
+      // `id` is required so that plain functions (which have no `id` property
+      // on their type) are rejected at compile time. This matches the runtime
+      // check in `isProviderDefinedTool`, which also requires `id: string`.
+      // Real provider tools (e.g. `google.tools.googleSearch()`,
+      // `openai.tools.webSearch()`) always carry an `id` of the form
+      // `'<provider>.<tool_name>'`, so this tightening is backwards-compatible.
+      id: string;
       inputSchema?: unknown;
       description?: string;
       type?: string;
-      id?: string;
       name?: string;
       providerOptions?: any;
       execute?: ((...args: any[]) => any) | undefined;

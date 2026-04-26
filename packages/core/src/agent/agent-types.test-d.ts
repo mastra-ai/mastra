@@ -3,8 +3,9 @@ import { assertType, describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod/v4';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
+import { createTool } from '../tools';
 import type { AgentExecutionOptions } from './agent.types';
-import type { AgentConfig } from './types';
+import type { AgentConfig, ToolsInput } from './types';
 
 /**
  * Type tests for Agent configuration types
@@ -149,6 +150,63 @@ describe('Agent Type Tests', () => {
       };
 
       expectTypeOf(config.id).toEqualTypeOf<'test-agent'>();
+    });
+  });
+
+  describe('Issue #15229: AgentConfig.tools typing should reject function values as individual tool entries', () => {
+    // Background: `ToolsInput` values are `ToolAction | VercelTool | VercelToolV5 |
+    // ProviderDefinedTool`. Previously every variant had only optional properties
+    // plus an `[key: string]: any` index signature on `ProviderDefinedTool`, so a
+    // plain function (e.g. `myTool: () => realTool`) silently satisfied the union
+    // at compile time. The runtime then crashed inside `agent.listTools()` because
+    // no runtime type-guard matches a bare function.
+    //
+    // Fix: require `id: string` on the V5 variant of `ProviderDefinedTool`. Plain
+    // functions do not declare an `id` property on their type, so TypeScript now
+    // rejects them. This mirrors the existing runtime check in
+    // `isProviderDefinedTool` (`toolchecks.ts`), which already requires
+    // `id: string`.
+    it('should reject a function value as an individual tool entry', () => {
+      const realTool = createTool({
+        id: 'my-tool',
+        description: 'noop',
+        execute: async () => ({}),
+      });
+
+      // @ts-expect-error — a nested resolver function is not a valid static tool entry
+      const bad: ToolsInput = { myTool: () => realTool };
+    });
+
+    it('should still accept valid static tool objects created via createTool', () => {
+      const realTool = createTool({
+        id: 'my-tool',
+        description: 'noop',
+        execute: async () => ({}),
+      });
+
+      const good: ToolsInput = { myTool: realTool };
+      expectTypeOf(good).toExtend<ToolsInput>();
+    });
+
+    it('should still accept a dynamic tools resolver on AgentConfig.tools (DynamicArgument pattern)', () => {
+      const realTool = createTool({
+        id: 'my-tool',
+        description: 'noop',
+        execute: async () => ({}),
+      });
+
+      // The whole-map resolver pattern remains valid — `AgentConfig.tools` accepts
+      // `DynamicArgument<ToolsInput>`, i.e. a function returning a `ToolsInput`
+      // map. Only function values as *individual* Record entries are rejected.
+      const config: AgentConfig = {
+        id: 'test-agent',
+        name: 'Test Agent',
+        model: {} as any,
+        instructions: '',
+        tools: ({ requestContext }) => ({ myTool: realTool }),
+      };
+
+      expectTypeOf(config.tools).not.toBeUndefined();
     });
   });
 });
