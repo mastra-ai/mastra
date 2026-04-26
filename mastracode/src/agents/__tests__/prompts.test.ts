@@ -46,12 +46,18 @@ describe('buildFullPrompt', () => {
       },
     });
 
-    expect(prompt).toContain('<gpt_5_5_coding_behavior>');
+    expect(prompt).toContain('<coding_behavior>');
     expect(prompt).toContain('Work outcome-first');
     expect(prompt).toContain('without sacrificing correctness, maintainability, or proof');
+    expect(prompt).toContain('meaningful decisions, findings, or results');
     expect(prompt).toContain('Read enough code, docs, logs, and command output to act correctly');
-    expect(prompt).toContain('Validate before claiming completion');
+    expect(prompt).toContain('positive contribution');
     expect(prompt).not.toContain('<autonomy_and_persistence>');
+    expect(prompt).not.toContain('<gpt_5_5_coding_behavior>');
+    expect(prompt).not.toContain('Use common-sense autonomy');
+    expect(prompt).not.toContain('do not narrate routine tool use');
+    expect(prompt).not.toContain('Prefer editing existing code');
+    expect(prompt).not.toContain('Write terminal-friendly answers');
     expect(prompt).not.toContain('shortest correct path');
   });
 
@@ -75,6 +81,6 @@ describe('buildFullPrompt', () => {
     });
 
     expect(prompt).not.toContain('<autonomy_and_persistence>');
-    expect(prompt).not.toContain('<gpt_5_5_coding_behavior>');
+    expect(prompt).not.toContain('<coding_behavior>');
   });
 });
