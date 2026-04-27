@@ -1057,6 +1057,8 @@ export type ProviderModelsMap = {
     'xiaomi/mimo-v2-flash',
     'xiaomi/mimo-v2-omni',
     'xiaomi/mimo-v2-pro',
+    'xiaomi/mimo-v2.5',
+    'xiaomi/mimo-v2.5-pro',
     'z-ai/glm-4.5',
     'z-ai/glm-4.5-air',
     'z-ai/glm-4.5-air:free',
@@ -1196,6 +1198,7 @@ export type ProviderModelsMap = {
     'qwen3.5-397b-a17b',
     'qwen3.5-flash',
     'qwen3.5-plus',
+    'qwen3.6-max-preview',
     'qwen3.6-plus',
     'qwq-32b',
     'qwq-plus',
@@ -2117,7 +2120,6 @@ export type ProviderModelsMap = {
   ];
   readonly opencode: readonly [
     'big-pickle',
-    'claude-3-5-haiku',
     'claude-haiku-4-5',
     'claude-opus-4-1',
     'claude-opus-4-5',
@@ -3728,7 +3730,7 @@ export type ProviderModelsMap = {
     'ZhipuAI/GLM-4.6',
   ];
   readonly 'hpc-ai': readonly ['minimax/minimax-m2.5', 'moonshotai/kimi-k2.5', 'zai-org/glm-5.1'];
-  readonly xiaomi: readonly ['mimo-v2-flash', 'mimo-v2-omni', 'mimo-v2-pro'];
+  readonly xiaomi: readonly ['mimo-v2-flash', 'mimo-v2-omni', 'mimo-v2-pro', 'mimo-v2.5', 'mimo-v2.5-pro'];
   readonly clarifai: readonly [
     'arcee_ai/AFM/models/trinity-mini',
     'clarifai/main/models/mm-poly-8b',
