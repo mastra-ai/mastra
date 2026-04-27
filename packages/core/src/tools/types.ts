@@ -10,7 +10,8 @@ import type {
 import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { ElicitRequest, ElicitResult } from '@modelcontextprotocol/sdk/types.js';
 
-import type { MastraUnion } from '../action';
+import type { MastraPrimitives, MastraUnion } from '../action';
+export type { MastraPrimitives, MastraUnion };
 import type { ToolBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser/browser';
 import type { Mastra } from '../mastra';
