@@ -1,3 +1,4 @@
+import type { ISessionProvider } from '@mastra/core/auth';
 import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraAuthConfig } from '@mastra/core/server';
@@ -237,7 +238,9 @@ export interface AuthMiddlewareContext {
   buildAuthorizeContext: () => unknown;
 }
 
-export type AuthResult = { action: 'next' } | { action: 'error'; status: number; body: Record<string, unknown> };
+export type AuthResult =
+  | { action: 'next'; headers?: Record<string, string> }
+  | { action: 'error'; status: number; body: Record<string, unknown> };
 
 const pass: AuthResult = { action: 'next' };
 
@@ -264,6 +267,21 @@ export const getAuthenticatedUser = async <TUser = unknown>({
 
   return (await authConfig.authenticateToken(normalizedToken, request as any)) as TUser | null;
 };
+
+/**
+ * Check if an auth config object supports transparent session refresh.
+ * Returns true if the auth provider implements the necessary ISessionProvider methods.
+ */
+function supportsSessionRefresh(
+  authConfig: MastraAuthConfig,
+): authConfig is MastraAuthConfig &
+  Pick<ISessionProvider, 'refreshSession' | 'getSessionIdFromRequest' | 'getSessionHeaders'> {
+  return (
+    typeof (authConfig as any).getSessionIdFromRequest === 'function' &&
+    typeof (authConfig as any).refreshSession === 'function' &&
+    typeof (authConfig as any).getSessionHeaders === 'function'
+  );
+}
 
 /**
  * Single auth middleware: authenticate → authorize.
@@ -293,12 +311,51 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
   // ── Authentication ──
 
   let user: unknown;
+  let refreshHeaders: Record<string, string> | undefined;
 
   try {
     if (typeof authConfig.authenticateToken === 'function') {
       user = await authConfig.authenticateToken(token ?? '', rawRequest as any);
     } else {
       throw new Error('No token verification method configured');
+    }
+
+    // If authentication failed, attempt transparent session refresh before returning 401.
+    // This handles expired access tokens without requiring client-side refresh logic.
+    if (!user && supportsSessionRefresh(authConfig) && rawRequest instanceof Request) {
+      try {
+        const sessionId = authConfig.getSessionIdFromRequest(rawRequest);
+        if (sessionId) {
+          const newSession = await authConfig.refreshSession(sessionId);
+          if (newSession) {
+            // Refresh succeeded — build updated session headers and re-authenticate.
+            // We create a synthetic request with the new session cookie so
+            // authenticateToken (which reads cookies from the request) picks up
+            // the refreshed session instead of the expired one.
+            refreshHeaders = authConfig.getSessionHeaders(newSession);
+            const refreshedCookie = Object.entries(refreshHeaders)
+              .filter(([k]) => k.toLowerCase() === 'set-cookie')
+              .map(([, v]) => v.split(';')[0]) // Extract name=value before attributes
+              .join('; ');
+            if (refreshedCookie) {
+              const refreshedRequest = new Request(rawRequest.url, {
+                method: rawRequest.method,
+                headers: new Headers(rawRequest.headers),
+              });
+              refreshedRequest.headers.set('Cookie', refreshedCookie);
+              user = await authConfig.authenticateToken(token ?? '', refreshedRequest as any);
+            }
+            if (!user) {
+              refreshHeaders = undefined;
+            }
+          }
+        }
+      } catch (refreshErr) {
+        refreshHeaders = undefined;
+        mastra.getLogger()?.debug('Session refresh failed, falling back to 401', {
+          error: refreshErr instanceof Error ? { message: refreshErr.message } : refreshErr,
+        });
+      }
     }
 
     if (!user) {
@@ -403,7 +460,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     }
   }
 
-  return pass;
+  return refreshHeaders ? { action: 'next', headers: refreshHeaders } : pass;
 };
 
 // Check authorization rules

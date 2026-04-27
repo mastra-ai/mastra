@@ -562,9 +562,19 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       });
 
       if (authError) {
-        ctx.status = authError.status;
-        ctx.body = { error: authError.error };
-        return;
+        // Apply any refresh headers (e.g. Set-Cookie from transparent session refresh)
+        if (authError.headers) {
+          for (const [key, value] of Object.entries(authError.headers)) {
+            ctx.set(key, value);
+          }
+        }
+
+        // If this is an auth error (not just a success-with-headers), return error response
+        if (authError.error) {
+          ctx.status = authError.status;
+          ctx.body = { error: authError.error };
+          return;
+        }
       }
 
       const params = await this.getParams(route, ctx);
@@ -764,9 +774,16 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         });
 
         if (authError) {
-          ctx.status = authError.status;
-          ctx.body = { error: authError.error };
-          return;
+          if (authError.headers) {
+            for (const [key, value] of Object.entries(authError.headers)) {
+              ctx.set(key, value);
+            }
+          }
+          if (authError.error) {
+            ctx.status = authError.status;
+            ctx.body = { error: authError.error };
+            return;
+          }
         }
 
         const authConfig = this.mastra.getServer()?.auth;

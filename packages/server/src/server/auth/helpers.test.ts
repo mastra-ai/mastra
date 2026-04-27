@@ -706,4 +706,258 @@ describe('auth helpers', () => {
       expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
     });
   });
+
+  describe('coreAuthMiddleware - transparent session refresh', () => {
+    const user = { id: 'user-123', email: 'test@example.com' };
+
+    function createMockMastra() {
+      return {
+        getServer: () => ({}),
+        getLogger: () => null,
+      } as any;
+    }
+
+    function createRequestContext() {
+      const store = new Map<string, unknown>();
+      return {
+        get: (key: string) => store.get(key),
+        set: (key: string, value: unknown) => store.set(key, value),
+        _store: store,
+      };
+    }
+
+    function createRawRequest() {
+      return new Request('http://localhost/api/agents', {
+        method: 'GET',
+        headers: { Cookie: 'wos-session=expired-token' },
+      });
+    }
+
+    const baseCtx = {
+      path: '/api/agents',
+      method: 'GET',
+      getHeader: () => undefined,
+      token: 'valid-token',
+      buildAuthorizeContext: () => null,
+    };
+
+    it('should transparently refresh expired session and proceed', async () => {
+      let callCount = 0;
+      const requestContext = createRequestContext();
+
+      const authConfig: any = {
+        protected: ['/api/*'],
+        // First call: returns null (expired). Second call (with refreshed cookie): returns user.
+        authenticateToken: async (_token: string, req: any) => {
+          callCount++;
+          if (callCount === 1) return null;
+          // Second call should have the refreshed cookie
+          const cookie = req?.headers?.get?.('Cookie') || '';
+          if (cookie.includes('wos-session=refreshed-token')) return user;
+          return null;
+        },
+        // ISessionProvider methods
+        getSessionIdFromRequest: (req: Request) => {
+          const cookie = req.headers.get('Cookie') || '';
+          const match = cookie.match(/wos-session=([^;]+)/);
+          return match ? match[1] : null;
+        },
+        refreshSession: async (_sessionId: string) => ({
+          id: 'refreshed-token',
+          userId: user.id,
+          expiresAt: new Date(Date.now() + 86400000),
+          createdAt: new Date(),
+        }),
+        getSessionHeaders: (session: any) => ({
+          'Set-Cookie': `wos-session=${session.id}; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400`,
+        }),
+      };
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig,
+        requestContext,
+        rawRequest: createRawRequest(),
+      });
+
+      expect(result.action).toBe('next');
+      expect(result).toHaveProperty('headers');
+      expect((result as any).headers['Set-Cookie']).toContain('wos-session=refreshed-token');
+      expect(requestContext.get('user')).toBe(user);
+      expect(callCount).toBe(2); // authenticateToken called twice
+    });
+
+    it('should set new session cookie headers after refresh', async () => {
+      let callCount = 0;
+      const requestContext = createRequestContext();
+
+      const authConfig: any = {
+        protected: ['/api/*'],
+        authenticateToken: async (_token: string, req: any) => {
+          callCount++;
+          if (callCount === 1) return null;
+          const cookie = req?.headers?.get?.('Cookie') || '';
+          if (cookie.includes('new-session')) return user;
+          return null;
+        },
+        getSessionIdFromRequest: () => 'old-session',
+        refreshSession: async () => ({
+          id: 'new-session',
+          userId: user.id,
+          expiresAt: new Date(Date.now() + 86400000),
+          createdAt: new Date(),
+        }),
+        getSessionHeaders: (session: any) => ({
+          'Set-Cookie': `wos-session=${session.id}; HttpOnly; Secure; Domain=.example.com`,
+        }),
+      };
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig,
+        requestContext,
+        rawRequest: createRawRequest(),
+      });
+
+      expect(result.action).toBe('next');
+      const headers = (result as any).headers;
+      expect(headers).toBeDefined();
+      expect(headers['Set-Cookie']).toContain('wos-session=new-session');
+      expect(headers['Set-Cookie']).toContain('Secure');
+      expect(headers['Set-Cookie']).toContain('Domain=.example.com');
+    });
+
+    it('should return 401 when refresh token is also expired', async () => {
+      const requestContext = createRequestContext();
+
+      const authConfig: any = {
+        protected: ['/api/*'],
+        authenticateToken: async () => null,
+        getSessionIdFromRequest: () => 'expired-session',
+        refreshSession: async () => null, // Refresh failed
+        getSessionHeaders: () => ({}),
+      };
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig,
+        requestContext,
+        rawRequest: createRawRequest(),
+      });
+
+      expect(result).toEqual({
+        action: 'error',
+        status: 401,
+        body: { error: 'Invalid or expired token' },
+      });
+    });
+
+    it('should return 401 when refresh throws an error', async () => {
+      const requestContext = createRequestContext();
+
+      const authConfig: any = {
+        protected: ['/api/*'],
+        authenticateToken: async () => null,
+        getSessionIdFromRequest: () => 'some-session',
+        refreshSession: async () => {
+          throw new Error('Network error during refresh');
+        },
+        getSessionHeaders: () => ({}),
+      };
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig,
+        requestContext,
+        rawRequest: createRawRequest(),
+      });
+
+      expect(result).toEqual({
+        action: 'error',
+        status: 401,
+        body: { error: 'Invalid or expired token' },
+      });
+    });
+
+    it('should not attempt refresh when auth provider lacks ISessionProvider methods', async () => {
+      const requestContext = createRequestContext();
+
+      const authConfig: any = {
+        protected: ['/api/*'],
+        authenticateToken: async () => null,
+        // No getSessionIdFromRequest, refreshSession, or getSessionHeaders
+      };
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig,
+        requestContext,
+        rawRequest: createRawRequest(),
+      });
+
+      expect(result).toEqual({
+        action: 'error',
+        status: 401,
+        body: { error: 'Invalid or expired token' },
+      });
+    });
+
+    it('should not attempt refresh when no session ID found in request', async () => {
+      const requestContext = createRequestContext();
+
+      const authConfig: any = {
+        protected: ['/api/*'],
+        authenticateToken: async () => null,
+        getSessionIdFromRequest: () => null, // No session cookie
+        refreshSession: async () => {
+          throw new Error('Should not be called');
+        },
+        getSessionHeaders: () => ({}),
+      };
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig,
+        requestContext,
+        rawRequest: createRawRequest(),
+      });
+
+      expect(result).toEqual({
+        action: 'error',
+        status: 401,
+        body: { error: 'Invalid or expired token' },
+      });
+    });
+
+    it('should not return refresh headers when valid on first try (no refresh needed)', async () => {
+      const requestContext = createRequestContext();
+
+      const authConfig: any = {
+        protected: ['/api/*'],
+        authenticateToken: async () => user,
+        getSessionIdFromRequest: () => 'valid-session',
+        refreshSession: async () => {
+          throw new Error('Should not be called');
+        },
+        getSessionHeaders: () => ({}),
+      };
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig,
+        requestContext,
+        rawRequest: createRawRequest(),
+      });
+
+      expect(result).toEqual({ action: 'next' });
+      expect(result).not.toHaveProperty('headers');
+    });
+  });
 });
