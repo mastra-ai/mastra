@@ -48,6 +48,8 @@ describe('API_COMMANDS', () => {
       inputRequired: true,
     });
     expect(API_COMMANDS.workflowRunResume.positionals).toEqual(['workflowId', 'runId']);
+    expect(API_COMMANDS.workflowRunStart.defaultTimeoutMs).toBe(120_000);
+    expect(API_COMMANDS.workflowRunResume.defaultTimeoutMs).toBe(120_000);
   });
 });
 
@@ -197,6 +199,36 @@ describe('api command executor', () => {
       headers: { 'content-type': 'application/json' },
       signal: expect.any(AbortSignal),
       body: JSON.stringify({ resumeData: { ok: true } }),
+    });
+  });
+
+  it('uses longer default timeout for workflow execution unless overridden', async () => {
+    fetchMock.mockRejectedValueOnce(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+
+    await executeDescriptor(API_COMMANDS.workflowRunStart, ['workflow-1'], '{"inputData":{"city":"seoul"}}', {
+      url: 'https://example.com',
+      header: [],
+      pretty: false,
+    });
+
+    expect(JSON.parse(stderr)).toMatchObject({
+      error: { code: 'REQUEST_TIMEOUT', message: 'Request timed out after 120000ms', details: { timeoutMs: 120_000 } },
+    });
+
+    fetchMock.mockRejectedValueOnce(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+    stdout = '';
+    stderr = '';
+    process.exitCode = undefined;
+
+    await executeDescriptor(API_COMMANDS.workflowRunStart, ['workflow-1'], '{"inputData":{"city":"seoul"}}', {
+      url: 'https://example.com',
+      header: [],
+      timeout: '5000',
+      pretty: false,
+    });
+
+    expect(JSON.parse(stderr)).toMatchObject({
+      error: { code: 'REQUEST_TIMEOUT', message: 'Request timed out after 5000ms', details: { timeoutMs: 5_000 } },
     });
   });
 

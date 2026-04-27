@@ -178,7 +178,11 @@ describe('requestApi', () => {
         descriptor: getListDescriptor,
         pathParams: { itemId: 'item-1' },
       }),
-    ).rejects.toMatchObject({ code: 'REQUEST_TIMEOUT' });
+    ).rejects.toMatchObject({
+      code: 'REQUEST_TIMEOUT',
+      message: 'Request timed out after 1ms',
+      details: { timeoutMs: 1 },
+    });
   });
 });
 

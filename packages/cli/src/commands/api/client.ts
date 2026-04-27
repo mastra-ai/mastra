@@ -45,6 +45,11 @@ export async function requestApi(options: ApiRequestOptions): Promise<unknown> {
 
     return body;
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new ApiCliError('REQUEST_TIMEOUT', `Request timed out after ${options.timeoutMs}ms`, {
+        timeoutMs: options.timeoutMs,
+      });
+    }
     throw toApiCliError(error);
   } finally {
     clearTimeout(timeout);

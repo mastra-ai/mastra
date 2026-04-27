@@ -133,7 +133,7 @@ export async function executeDescriptor(
     const response = await requestApi({
       baseUrl: target.baseUrl,
       headers: target.headers,
-      timeoutMs: target.timeoutMs,
+      timeoutMs: descriptor.defaultTimeoutMs && !options.timeout ? descriptor.defaultTimeoutMs : target.timeoutMs,
       descriptor,
       pathParams,
       input: requestInput,

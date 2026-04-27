@@ -19,6 +19,7 @@ export interface ApiCommandDescriptor {
   inputRequired: boolean;
   list: boolean;
   responseShape: ApiResponseShape;
+  defaultTimeoutMs?: number;
 }
 
 interface ApiCommandSpec {
@@ -29,6 +30,7 @@ interface ApiCommandSpec {
   list?: boolean;
   pathParamsFromInput?: string[];
   extraPositionals?: string[];
+  defaultTimeoutMs?: number;
 }
 
 function defineCommandSpecs<const Specs extends Record<string, ApiCommandSpec>>(specs: Specs): Specs {
@@ -49,6 +51,7 @@ const API_COMMAND_SPECS = defineCommandSpecs({
     route: 'POST /workflows/:workflowId/start-async',
     description: 'Start a workflow run',
     inputRequired: true,
+    defaultTimeoutMs: 120_000,
   },
   workflowRunList: {
     route: 'GET /workflows/:workflowId/runs',
@@ -62,6 +65,7 @@ const API_COMMAND_SPECS = defineCommandSpecs({
     description: 'Resume a suspended workflow run',
     inputRequired: true,
     extraPositionals: ['runId'],
+    defaultTimeoutMs: 120_000,
   },
   workflowRunCancel: { route: 'POST /workflows/:workflowId/runs/:runId/cancel', description: 'Cancel a workflow run' },
   toolList: { route: 'GET /tools', description: 'List available tools', acceptsInput: true, list: true },
@@ -185,6 +189,7 @@ export const API_COMMANDS = Object.fromEntries(
         inputRequired: spec.inputRequired ?? false,
         list: spec.list ?? false,
         responseShape: route.responseShape,
+        defaultTimeoutMs: spec.defaultTimeoutMs,
       },
     ];
   }),
