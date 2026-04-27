@@ -446,10 +446,7 @@ export interface StorageAgentSnapshotType {
  */
 export type StorageVisibility = 'private' | 'public';
 
-export const STORAGE_VISIBILITY_VALUES = [
-  'private',
-  'public',
-] as const satisfies readonly StorageVisibility[];
+export const STORAGE_VISIBILITY_VALUES = ['private', 'public'] as const satisfies readonly StorageVisibility[];
 
 export interface StorageAgentType {
   /** Unique, immutable identifier */
