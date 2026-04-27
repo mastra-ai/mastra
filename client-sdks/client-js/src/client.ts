@@ -1134,6 +1134,9 @@ export class MastraClient extends BaseResource {
     if (params?.authorId) {
       searchParams.set('authorId', params.authorId);
     }
+    if (params?.visibility) {
+      searchParams.set('visibility', params.visibility);
+    }
     if (params?.metadata) {
       searchParams.set('metadata', JSON.stringify(params.metadata));
     }
@@ -1368,6 +1371,9 @@ export class MastraClient extends BaseResource {
     }
     if (params?.authorId) {
       searchParams.set('authorId', params.authorId);
+    }
+    if (params?.visibility) {
+      searchParams.set('visibility', params.visibility);
     }
     if (params?.metadata) {
       searchParams.set('metadata', JSON.stringify(params.metadata));
