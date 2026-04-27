@@ -840,7 +840,7 @@ export class Mastra<
   }
 
   #ensureBackgroundTaskManager(): void {
-    if (!this.#backgroundTaskConfig?.enabled || !this.#storage) {
+    if (!this.#backgroundTaskConfig?.enabled || !this.#storage || this.#backgroundTaskManager) {
       return;
     }
 
@@ -850,6 +850,31 @@ export class Mastra<
     void bgManager.init(this.#pubsub).catch(error => {
       this.#logger?.error('Failed to initialize background task manager', error);
     });
+  }
+
+  /**
+   * Auto-enables the background task manager when an agent with sub-agents is
+   * registered. Sub-agent delegation runs in the background by default so the
+   * parent stream stays responsive; that requires the manager to be available.
+   * No-op when the user explicitly opted out via `backgroundTasks.enabled: false`.
+   *
+   * Eligible agents: any agent whose `agents` field is either a static record
+   * with at least one entry OR a dynamic (function-based) resolver. Function
+   * resolvers are evaluated per request, so we can't inspect their contents
+   * here — but if the caller bothered to wire one up, we enable defensively
+   * so those resolved sub-agents also dispatch in the background.
+   */
+  #maybeEnableBackgroundTasksForAgent(agent: Agent<any>): void {
+    // Already running — nothing to do
+    if (this.#backgroundTaskManager) return;
+
+    // Explicit opt-out
+    if (this.#backgroundTaskConfig?.enabled === false) return;
+
+    if (!agent.__hasSubAgentsConfigured?.()) return;
+
+    this.#backgroundTaskConfig = { ...(this.#backgroundTaskConfig ?? {}), enabled: true };
+    this.#ensureBackgroundTaskManager();
   }
 
   /**

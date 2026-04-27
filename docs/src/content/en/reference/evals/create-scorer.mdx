@@ -96,6 +96,13 @@ const scorer = createScorer({
     description:
       "Type specification for input/output. Use 'agent' for automatic agent types. For custom types, use the generic approach instead.",
   },
+  {
+    name: 'prepareRun',
+    type: '(run: ScorerRun) => ScorerRun | Promise<ScorerRun>',
+    isOptional: true,
+    description:
+      "Transform the scorer run data before the pipeline executes. Use this to filter messages, limit context size, or drop fields the scorer doesn't need. The [`filterRun()`](/reference/evals/filter-run) utility creates this function from declarative options. Can be async.",
+  },
 ]}
 />
 
@@ -248,9 +255,9 @@ The method can return any value. The returned value will be available to subsequ
   },
   {
     name: 'outputSchema',
-    type: 'ZodSchema',
+    type: 'StandardJSONSchemaV1',
     isOptional: false,
-    description: 'Zod schema for the expected output of the preprocess step.',
+    description: 'Standard JSON Schema for the expected output of the preprocess step.',
   },
   {
     name: 'createPrompt',
@@ -326,9 +333,9 @@ The method can return any value. The returned value will be available to subsequ
   },
   {
     name: 'outputSchema',
-    type: 'ZodSchema',
+    type: 'StandardJSONSchemaV1',
     isOptional: false,
-    description: 'Zod schema for the expected output of the analyze step.',
+    description: 'Standard JSON Schema for the expected output of the analyze step.',
   },
   {
     name: 'createPrompt',
@@ -410,9 +417,9 @@ The method must return a numerical score.
   },
   {
     name: 'outputSchema',
-    type: 'ZodSchema',
+    type: 'StandardJSONSchemaV1',
     isOptional: false,
-    description: 'Zod schema for the expected output of the generateScore step.',
+    description: 'Standard JSON Schema for the expected output of the generateScore step.',
   },
   {
     name: 'createPrompt',

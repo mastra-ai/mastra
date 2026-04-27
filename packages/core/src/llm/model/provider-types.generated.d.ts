@@ -882,7 +882,7 @@ export type ProviderModelsMap = {
     'MiniMax-M2.7-highspeed',
   ];
   readonly perplexity: readonly ['sonar', 'sonar-deep-research', 'sonar-pro', 'sonar-reasoning-pro'];
-  readonly deepseek: readonly ['deepseek-chat', 'deepseek-reasoner'];
+  readonly deepseek: readonly ['deepseek-chat', 'deepseek-reasoner', 'deepseek-v4-flash', 'deepseek-v4-pro'];
   readonly llama: readonly [
     'cerebras-llama-4-maverick-17b-128e-instruct',
     'cerebras-llama-4-scout-17b-16e-instruct',
@@ -920,6 +920,8 @@ export type ProviderModelsMap = {
     'deepseek/deepseek-v3.1-terminus:exacto',
     'deepseek/deepseek-v3.2',
     'deepseek/deepseek-v3.2-speciale',
+    'deepseek/deepseek-v4-flash',
+    'deepseek/deepseek-v4-pro',
     'google/gemini-2.0-flash-001',
     'google/gemini-2.5-flash',
     'google/gemini-2.5-flash-lite',
@@ -930,6 +932,7 @@ export type ProviderModelsMap = {
     'google/gemini-2.5-pro-preview-06-05',
     'google/gemini-3-flash-preview',
     'google/gemini-3-pro-preview',
+    'google/gemini-3.1-flash-image-preview',
     'google/gemini-3.1-flash-lite-preview',
     'google/gemini-3.1-pro-preview',
     'google/gemini-3.1-pro-preview-customtools',
@@ -1010,6 +1013,7 @@ export type ProviderModelsMap = {
     'openai/gpt-5.4-mini',
     'openai/gpt-5.4-nano',
     'openai/gpt-5.4-pro',
+    'openai/gpt-5.5',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-120b:exacto',
     'openai/gpt-oss-120b:free',
@@ -1019,6 +1023,7 @@ export type ProviderModelsMap = {
     'openai/o4-mini',
     'openrouter/elephant-alpha',
     'openrouter/free',
+    'openrouter/pareto-code',
     'prime-intellect/intellect-3',
     'qwen/qwen-2.5-coder-32b-instruct',
     'qwen/qwen2.5-vl-72b-instruct',
@@ -1054,6 +1059,8 @@ export type ProviderModelsMap = {
     'xiaomi/mimo-v2-flash',
     'xiaomi/mimo-v2-omni',
     'xiaomi/mimo-v2-pro',
+    'xiaomi/mimo-v2.5',
+    'xiaomi/mimo-v2.5-pro',
     'z-ai/glm-4.5',
     'z-ai/glm-4.5-air',
     'z-ai/glm-4.5-air:free',
@@ -1089,6 +1096,8 @@ export type ProviderModelsMap = {
   readonly 'kimi-for-coding': readonly ['k2p5', 'k2p6', 'kimi-k2-thinking'];
   readonly moark: readonly ['GLM-4.7', 'MiniMax-M2.1'];
   readonly 'opencode-go': readonly [
+    'deepseek-v4-flash',
+    'deepseek-v4-pro',
     'glm-5',
     'glm-5.1',
     'kimi-k2.5',
@@ -1135,6 +1144,8 @@ export type ProviderModelsMap = {
     'deepseek-v3',
     'deepseek-v3-1',
     'deepseek-v3-2-exp',
+    'deepseek-v4-flash',
+    'deepseek-v4-pro',
     'glm-5',
     'glm-5.1',
     'kimi-k2-thinking',
@@ -1191,6 +1202,7 @@ export type ProviderModelsMap = {
     'qwen3.5-397b-a17b',
     'qwen3.5-flash',
     'qwen3.5-plus',
+    'qwen3.6-max-preview',
     'qwen3.6-plus',
     'qwq-32b',
     'qwq-plus',
@@ -1303,6 +1315,7 @@ export type ProviderModelsMap = {
     'XiaomiMiMo/MiMo-V2-Flash',
     'deepseek-ai/DeepSeek-R1-0528',
     'deepseek-ai/DeepSeek-V3.2',
+    'deepseek-ai/DeepSeek-V4-Pro',
     'moonshotai/Kimi-K2-Instruct',
     'moonshotai/Kimi-K2-Instruct-0905',
     'moonshotai/Kimi-K2-Thinking',
@@ -1428,6 +1441,8 @@ export type ProviderModelsMap = {
     'deepseek/deepseek-v3.1-terminus',
     'deepseek/deepseek-v3.2',
     'deepseek/deepseek-v3.2-exp',
+    'deepseek/deepseek-v4-flash',
+    'deepseek/deepseek-v4-pro',
     'google/gemma-3-12b-it',
     'google/gemma-3-27b-it',
     'google/gemma-4-26b-a4b-it',
@@ -1487,6 +1502,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3.5-27b',
     'qwen/qwen3.5-35b-a3b',
     'qwen/qwen3.5-397b-a17b',
+    'qwen/qwen3.6-27b',
     'sao10k/L3-8B-Stheno-v3.2',
     'sao10k/l3-70b-euryale-v2.1',
     'sao10k/l3-8b-lunaris',
@@ -1503,7 +1519,13 @@ export type ProviderModelsMap = {
     'zai-org/glm-5',
     'zai-org/glm-5.1',
   ];
-  readonly 'xiaomi-token-plan-cn': readonly ['mimo-v2-omni', 'mimo-v2-pro', 'mimo-v2-tts'];
+  readonly 'xiaomi-token-plan-cn': readonly [
+    'mimo-v2-omni',
+    'mimo-v2-pro',
+    'mimo-v2-tts',
+    'mimo-v2.5',
+    'mimo-v2.5-pro',
+  ];
   readonly wandb: readonly [
     'MiniMaxAI/MiniMax-M2.5',
     'OpenPipe/Qwen3-14B-Instruct',
@@ -2082,7 +2104,13 @@ export type ProviderModelsMap = {
     'qwen/qwen3.5-397b-a17b',
     'qwen/qwen3.5-9b',
   ];
-  readonly 'xiaomi-token-plan-sgp': readonly ['mimo-v2-omni', 'mimo-v2-pro', 'mimo-v2-tts'];
+  readonly 'xiaomi-token-plan-sgp': readonly [
+    'mimo-v2-omni',
+    'mimo-v2-pro',
+    'mimo-v2-tts',
+    'mimo-v2.5',
+    'mimo-v2.5-pro',
+  ];
   readonly zai: readonly [
     'glm-4.5',
     'glm-4.5-air',
@@ -2100,7 +2128,6 @@ export type ProviderModelsMap = {
   ];
   readonly opencode: readonly [
     'big-pickle',
-    'claude-3-5-haiku',
     'claude-haiku-4-5',
     'claude-opus-4-1',
     'claude-opus-4-5',
@@ -2128,6 +2155,8 @@ export type ProviderModelsMap = {
     'gpt-5.4-mini',
     'gpt-5.4-nano',
     'gpt-5.4-pro',
+    'gpt-5.5',
+    'gpt-5.5-pro',
     'hy3-preview-free',
     'kimi-k2.5',
     'kimi-k2.6',
@@ -2284,6 +2313,7 @@ export type ProviderModelsMap = {
     'openai/gpt-image-1',
     'openai/gpt-image-1-mini',
     'openai/gpt-image-1.5',
+    'openai/gpt-image-2',
     'openai/o1',
     'openai/o1-pro',
     'openai/o3',
@@ -2407,6 +2437,7 @@ export type ProviderModelsMap = {
     'cogito-2.1:671b',
     'deepseek-v3.1:671b',
     'deepseek-v3.2',
+    'deepseek-v4-flash',
     'devstral-2:123b',
     'devstral-small-2:24b',
     'gemini-3-flash-preview',
@@ -2442,21 +2473,7 @@ export type ProviderModelsMap = {
     'qwen3.5:397b',
     'rnj-1:8b',
   ];
-  readonly 'zai-coding-plan': readonly [
-    'glm-4.5',
-    'glm-4.5-air',
-    'glm-4.5-flash',
-    'glm-4.5v',
-    'glm-4.6',
-    'glm-4.6v',
-    'glm-4.7',
-    'glm-4.7-flash',
-    'glm-4.7-flashx',
-    'glm-5',
-    'glm-5-turbo',
-    'glm-5.1',
-    'glm-5v-turbo',
-  ];
+  readonly 'zai-coding-plan': readonly ['glm-4.5-air', 'glm-4.7', 'glm-5-turbo', 'glm-5.1'];
   readonly 'the-grid-ai': readonly ['text-max', 'text-prime', 'text-standard'];
   readonly baseten: readonly [
     'MiniMaxAI/MiniMax-M2.5',
@@ -2470,22 +2487,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.7',
     'zai-org/GLM-5',
   ];
-  readonly 'zhipuai-coding-plan': readonly [
-    'glm-4.5',
-    'glm-4.5-air',
-    'glm-4.5-flash',
-    'glm-4.5v',
-    'glm-4.6',
-    'glm-4.6v',
-    'glm-4.6v-flash',
-    'glm-4.7',
-    'glm-4.7-flash',
-    'glm-4.7-flashx',
-    'glm-5',
-    'glm-5-turbo',
-    'glm-5.1',
-    'glm-5v-turbo',
-  ];
+  readonly 'zhipuai-coding-plan': readonly ['glm-4.5-air', 'glm-4.7', 'glm-5-turbo', 'glm-5.1'];
   readonly 'alibaba-coding-plan': readonly [
     'MiniMax-M2.5',
     'glm-4.7',
@@ -2536,6 +2538,7 @@ export type ProviderModelsMap = {
     'kimi-k2.5',
     'kimi-k2.6',
   ];
+  readonly 'abliteration-ai': readonly ['abliterated-model'];
   readonly 'wafer.ai': readonly ['GLM-5.1', 'Qwen3.5-397B-A17B'];
   readonly 'cloudferro-sherlock': readonly [
     'MiniMaxAI/MiniMax-M2.5',
@@ -2650,6 +2653,8 @@ export type ProviderModelsMap = {
     'deepseek-ai/deepseek-v3.1',
     'deepseek-ai/deepseek-v3.1-terminus',
     'deepseek-ai/deepseek-v3.2',
+    'deepseek-ai/deepseek-v4-flash',
+    'deepseek-ai/deepseek-v4-pro',
     'google/codegemma-1.1-7b',
     'google/codegemma-7b',
     'google/gemma-2-27b-it',
@@ -2768,6 +2773,7 @@ export type ProviderModelsMap = {
     'gpt-5.4-mini',
     'gpt-5.4-nano',
     'gpt-5.4-pro',
+    'gpt-5.5',
     'gpt-image-1',
     'gpt-image-1-mini',
     'gpt-image-1.5',
@@ -2958,6 +2964,7 @@ export type ProviderModelsMap = {
     'kimi-k2-instruct',
     'kimi-k2-thinking',
     'kimi-k2.5',
+    'kimi-k2.6',
     'llama-3.1-405b-instruct',
     'minimax-M2.7',
     'minimax-m2',
@@ -3050,6 +3057,7 @@ export type ProviderModelsMap = {
     'alibaba/qwen-3-235b',
     'alibaba/qwen-3-30b',
     'alibaba/qwen-3-32b',
+    'alibaba/qwen-3.6-max-preview',
     'alibaba/qwen3-235b-a22b-thinking',
     'alibaba/qwen3-coder',
     'alibaba/qwen3-coder-30b-a3b',
@@ -3107,6 +3115,8 @@ export type ProviderModelsMap = {
     'deepseek/deepseek-v3.2',
     'deepseek/deepseek-v3.2-exp',
     'deepseek/deepseek-v3.2-thinking',
+    'deepseek/deepseek-v4-flash',
+    'deepseek/deepseek-v4-pro',
     'google/gemini-2.0-flash',
     'google/gemini-2.0-flash-lite',
     'google/gemini-2.5-flash',
@@ -3178,6 +3188,7 @@ export type ProviderModelsMap = {
     'moonshotai/kimi-k2-thinking-turbo',
     'moonshotai/kimi-k2-turbo',
     'moonshotai/kimi-k2.5',
+    'moonshotai/kimi-k2.6',
     'morph/morph-v3-fast',
     'morph/morph-v3-large',
     'nvidia/nemotron-3-nano-30b-a3b',
@@ -3215,6 +3226,8 @@ export type ProviderModelsMap = {
     'openai/gpt-5.4-mini',
     'openai/gpt-5.4-nano',
     'openai/gpt-5.4-pro',
+    'openai/gpt-5.5',
+    'openai/gpt-5.5-pro',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
     'openai/gpt-oss-safeguard-20b',
@@ -3311,6 +3324,8 @@ export type ProviderModelsMap = {
     'deepseek-r1-0528',
     'deepseek-v3.1',
     'deepseek-v3.2',
+    'deepseek-v4-flash',
+    'deepseek-v4-pro',
     'devstral-2512',
     'devstral-small-2507',
     'gemini-2.0-flash',
@@ -3393,6 +3408,7 @@ export type ProviderModelsMap = {
     'kimi-k2-thinking',
     'kimi-k2-thinking-turbo',
     'kimi-k2.5',
+    'kimi-k2.6',
     'llama-3-70b-instruct',
     'llama-3-8b-instruct',
     'llama-3.1-70b-instruct',
@@ -3668,6 +3684,7 @@ export type ProviderModelsMap = {
     'deepseek-ai/DeepSeek-R1',
     'deepseek-ai/DeepSeek-V3',
     'deepseek-ai/DeepSeek-V3-1',
+    'deepseek-ai/DeepSeek-V4-Pro',
     'essentialai/Rnj-1-Instruct',
     'google/gemma-4-31B-it',
     'meta-llama/Llama-3.3-70B-Instruct-Turbo',
@@ -3723,7 +3740,7 @@ export type ProviderModelsMap = {
     'ZhipuAI/GLM-4.6',
   ];
   readonly 'hpc-ai': readonly ['minimax/minimax-m2.5', 'moonshotai/kimi-k2.5', 'zai-org/glm-5.1'];
-  readonly xiaomi: readonly ['mimo-v2-flash', 'mimo-v2-omni', 'mimo-v2-pro'];
+  readonly xiaomi: readonly ['mimo-v2-flash', 'mimo-v2-omni', 'mimo-v2-pro', 'mimo-v2.5', 'mimo-v2.5-pro'];
   readonly clarifai: readonly [
     'arcee_ai/AFM/models/trinity-mini',
     'clarifai/main/models/mm-poly-8b',
@@ -3760,7 +3777,13 @@ export type ProviderModelsMap = {
     'qwen3.5-122b',
     'qwen3.5-9b',
   ];
-  readonly 'xiaomi-token-plan-ams': readonly ['mimo-v2-omni', 'mimo-v2-pro', 'mimo-v2-tts'];
+  readonly 'xiaomi-token-plan-ams': readonly [
+    'mimo-v2-omni',
+    'mimo-v2-pro',
+    'mimo-v2-tts',
+    'mimo-v2.5',
+    'mimo-v2.5-pro',
+  ];
   readonly zhipuai: readonly [
     'glm-4.5',
     'glm-4.5-air',
@@ -3836,6 +3859,10 @@ export type ProviderModelsMap = {
     'openai/gpt-5.4-nano-2026-03-17',
     'openai/gpt-5.4-pro',
     'openai/gpt-5.4-pro-2026-03-05',
+    'openai/gpt-5.5',
+    'openai/gpt-5.5-2026-04-23',
+    'openai/gpt-5.5-pro',
+    'openai/gpt-5.5-pro-2026-04-23',
     'openai/o3',
     'openai/o3-mini',
     'openai/o4-mini',

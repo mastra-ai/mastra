@@ -191,6 +191,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'evals/create-scorer', label: 'createScorer()' },
+        { type: 'doc', id: 'evals/filter-run', label: 'filterRun()' },
         { type: 'doc', id: 'evals/mastra-scorer', label: 'MastraScorer' },
         { type: 'doc', id: 'evals/run-evals', label: 'runEvals()' },
         { type: 'doc', id: 'evals/scorer-utils', label: 'Scorer Utils' },
@@ -609,6 +610,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'workspace/agentfs-filesystem', label: 'AgentFSFilesystem' },
+        { type: 'doc', id: 'workspace/azure-blob-filesystem', label: 'AzureBlobFilesystem' },
         { type: 'doc', id: 'workspace/blaxel-sandbox', label: 'BlaxelSandbox' },
         { type: 'doc', id: 'workspace/daytona-sandbox', label: 'DaytonaSandbox' },
         { type: 'doc', id: 'workspace/docker-sandbox', label: 'DockerSandbox' },
@@ -616,6 +618,7 @@ const sidebars = {
         { type: 'doc', id: 'workspace/gcs-filesystem', label: 'GCSFilesystem' },
         { type: 'doc', id: 'workspace/local-filesystem', label: 'LocalFilesystem' },
         { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
+        { type: 'doc', id: 'workspace/modal-sandbox', label: 'ModalSandbox' },
         { type: 'doc', id: 'workspace/s3-filesystem', label: 'S3Filesystem' },
         { type: 'doc', id: 'workspace/process-manager', label: 'SandboxProcessManager' },
         { type: 'doc', id: 'workspace/vercel', label: 'VercelSandbox' },

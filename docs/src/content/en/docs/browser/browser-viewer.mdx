@@ -120,34 +120,11 @@ const viewer = new BrowserViewer({
 })
 ```
 
-## Configuration
+:::note
 
-| Option | Type | Default | Description |
-| - | - | - | - |
-| `cli` | `'agent-browser' \| 'browser-use' \| 'browse-cli'` | Required | Which CLI the agent uses |
-| `headless` | `boolean` | `false` | Run browser in headless mode |
-| `cdpUrl` | `string` | — | Connect to an existing browser instead of launching one |
-| `cdpPort` | `number` | `0` (auto) | Port for Chrome remote debugging |
-| `viewport` | `{ width, height }` | `1280×720` | Browser viewport size |
-| `userDataDir` | `string` | — | Chrome profile directory for persistent state |
-| `executablePath` | `string` | — | Path to a Chrome executable |
+See [BrowserViewer reference](/reference/browser/browser-viewer) for all configuration options, advanced connection modes, and method details.
 
-## Connecting to an existing browser
-
-To connect to a browser that is already running, pass a `cdpUrl`:
-
-```typescript
-const viewer = new BrowserViewer({
-  cli: 'browser-use',
-  cdpUrl: 'ws://127.0.0.1:9222/devtools/browser/abc123',
-})
-```
-
-BrowserViewer connects via the CDP endpoint and enables screencast without launching its own browser.
-
-## External CDP connections
-
-When the agent provides its own CDP URL in a command (for example, `browser-use --cdp-url wss://cloud.example.com/session`), BrowserViewer detects this and skips injection. It connects to the external browser for screencast only, without managing the browser lifecycle.
+:::
 
 ## Related
 
