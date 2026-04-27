@@ -12,6 +12,47 @@ export type ToolResultWithInput = ToolResultPart & {
 };
 
 // ============================================================================
+// System Message Ordering
+// ============================================================================
+
+/**
+ * Ensures all system messages are grouped at the start of the message array.
+ *
+ * Some providers (e.g. Qwen, certain OpenAI-compatible APIs) require that
+ * all system messages appear at the very beginning of the conversation.
+ * When Memory or Workspace features are enabled, system messages from those
+ * sources may be stored in the DB and later appear mixed into the historical
+ * messages array, violating this ordering constraint.
+ *
+ * This function hoists any system messages found in non-leading positions to
+ * the front of the array, preserving the relative order of non-system messages.
+ *
+ * @param messages - Array of model messages that may have out-of-order system messages
+ * @returns New array with all system messages at the start
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/15764 - Qwen system message ordering
+ * @see https://github.com/mastra-ai/mastra/issues/14384 - Original report
+ */
+export function ensureSystemMessagesAtStart<T extends ModelMessage | CoreMessageV4>(messages: T[]): T[] {
+  // Fast path: if all leading messages are already system messages and none appear later, return as-is
+  let firstNonSystem = messages.findIndex(m => m.role !== 'system');
+  if (firstNonSystem === -1) {
+    // All messages are system messages (or empty)
+    return messages;
+  }
+  const hasOutOfOrderSystem = messages.slice(firstNonSystem).some(m => m.role === 'system');
+  if (!hasOutOfOrderSystem) {
+    // All system messages already at the front
+    return messages;
+  }
+
+  // Partition: collect all system messages first, then the rest
+  const systemMessages = messages.filter(m => m.role === 'system');
+  const nonSystemMessages = messages.filter(m => m.role !== 'system');
+  return [...systemMessages, ...nonSystemMessages];
+}
+
+// ============================================================================
 // Gemini Compatibility
 // ============================================================================
 
