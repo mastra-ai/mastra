@@ -39,6 +39,7 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
         packages,
         isDev: process.env.MASTRA_DEV === 'true',
         cmsEnabled: !!mastra.getEditor(),
+        observabilityEnabled: mastra.hasObservability(),
         storageType,
         observabilityStorageType,
         observabilityRuntimeStrategy,
