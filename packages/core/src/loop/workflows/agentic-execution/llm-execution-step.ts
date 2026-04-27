@@ -569,6 +569,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                         requestContext: requestContext || new RequestContext(),
                         outputWriter,
                         workspace: currentStep.workspace,
+                        requireApproval: (tool as any).requireApproval,
+                        backgroundConfig: (tool as any).background,
                       },
                       undefined,
                       autoResumeSuspendedTools,
