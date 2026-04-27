@@ -174,8 +174,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             // Check if model is supported
             if (!isSupportedLanguageModel(model)) {
+              const hint = (model as any).__metadataOnly
+                ? ' The model could not be resolved from the run registry or Mastra instance.'
+                : '';
               throw new Error(
-                `Unsupported model version: ${(model as any).specificationVersion}. Model must implement doStream.`,
+                `Unsupported model version: ${(model as any).specificationVersion}. Model must implement doStream.${hint}`,
               );
             }
 

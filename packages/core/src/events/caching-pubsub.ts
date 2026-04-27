@@ -107,10 +107,8 @@ export class CachingPubSub extends PubSub {
       index,
     };
 
-    // Cache the event (non-blocking, errors are logged but don't fail publish)
-    this.cache.listPush(cacheKey, fullEvent).catch(err => {
-      this.logError(`[CachingPubSub] Failed to cache event for topic ${topic}:`, err);
-    });
+    // Cache BEFORE live publish so late-joining observers never miss events
+    await this.cache.listPush(cacheKey, fullEvent);
 
     // Publish to inner PubSub with the full event (including index)
     await this.inner.publish(topic, fullEvent);

@@ -124,12 +124,10 @@ export function createDurableLLMMappingStep() {
       }
 
       // 3. Determine if we should continue
-      const hasToolCalls = llmOutput.toolCalls.length > 0;
+      // Preserve the LLM step's isContinued (which respects finishReason),
+      // but force-stop if all tools errored (no point re-calling LLM)
       const allToolsErrored = toolResults.length > 0 && toolResults.every(r => r.error !== undefined);
-
-      // Continue if there were tool calls and not all errored
-      // The finish reason 'tool-calls' or having pending tool calls indicates we should continue
-      const isContinued = hasToolCalls && !allToolsErrored;
+      const isContinued = llmOutput.stepResult.isContinued && !allToolsErrored;
 
       // 4. Build the output
       const output: DurableAgenticExecutionOutput = {

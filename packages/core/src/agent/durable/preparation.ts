@@ -188,7 +188,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     outputProcessors = await typedAgent.listOutputProcessors(requestContext);
     errorProcessors = await typedAgent.listErrorProcessors(requestContext);
   } catch (error) {
-    logger?.debug?.(`[DurableAgent] Error resolving processors: ${error}`);
+    logger?.warn?.(`[DurableAgent] Error resolving processors: ${error}`);
   }
 
   // Run processInput (once, before execution) if we have any processors
@@ -230,7 +230,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
     });
   } catch (error) {
-    logger?.debug?.(`[DurableAgent] Error converting tools: ${error}`);
+    logger?.warn?.(`[DurableAgent] Error converting tools: ${error}`);
   }
 
   // 8. Get model (and model list if configured)

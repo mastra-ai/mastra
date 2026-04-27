@@ -174,20 +174,15 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
  * The preferred approach is to store the actual model instance in the
  * run registry during preparation and retrieve it via runRegistry.getModel().
  *
- * This fallback returns a metadata-only object that may not work for
- * actual LLM execution (no doStream method).
+ * This fallback returns a metadata-only stub that will fail the
+ * isSupportedLanguageModel check with a descriptive error message.
  */
 export function resolveModel(config: SerializableModelConfig, _mastra?: Mastra): MastraLanguageModel {
-  // Try to get model from Mastra's model registry if available
-  // This would work if Mastra has a global model registry
-  // const model = mastra?.getModel?.(config.modelId);
-
-  // Fallback: return metadata-only object
-  // This should only be used for serialization/logging, not actual execution
   return {
     provider: config.provider,
     modelId: config.modelId,
     specificationVersion: config.specificationVersion ?? 'v2',
+    __metadataOnly: true,
   } as MastraLanguageModel;
 }
 

@@ -41,8 +41,6 @@ export const DurableAgentDefaults = {
   MAX_STEPS: 5,
   /** Default tool call concurrency */
   TOOL_CALL_CONCURRENCY: 10,
-  /** Default temperature for LLM sampling */
-  TEMPERATURE: 0,
 } as const;
 
 /**

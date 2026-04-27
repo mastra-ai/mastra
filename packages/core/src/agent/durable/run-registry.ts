@@ -1,3 +1,4 @@
+import { TTLCache } from '@isaacs/ttlcache';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { CoreTool } from '../../tools/types';
 import type { MessageList } from '../message-list';
@@ -10,8 +11,16 @@ import type { RunRegistryEntry } from './types';
  * the DurableAgent instance's registry.
  *
  * Entries are keyed by runId (which are unique UUIDs).
+ *
+ * Uses TTLCache to prevent unbounded memory growth: entries auto-expire
+ * after 10 minutes (refreshed on access) and the registry is hard-capped
+ * at 1000 concurrent entries.
  */
-export const globalRunRegistry = new Map<string, RunRegistryEntry>();
+export const globalRunRegistry = new TTLCache<string, RunRegistryEntry>({
+  max: 1000,
+  ttl: 10 * 60 * 1000,
+  updateAgeOnGet: true,
+});
 
 /**
  * Registry for per-run non-serializable state.

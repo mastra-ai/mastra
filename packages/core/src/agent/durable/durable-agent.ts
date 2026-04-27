@@ -449,7 +449,7 @@ export class DurableAgent<
 
     // 2. Register non-serializable state (both local and global registries)
     this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
-    globalRunRegistry.set(runId, { ...registryEntry, messageList });
+    globalRunRegistry.set(runId, { ...registryEntry, cleanup: registryEntry.cleanup, messageList });
 
     // Track cleanup state to avoid double cleanup
     let cleanedUp = false;
@@ -801,26 +801,21 @@ export class DurableAgent<
   /**
    * Set the Mastra instance.
    * Called by the durable agent registration path in addAgent().
-   * Only sets this.#mastra — the underlying agent is registered separately.
-   *
-   * Also wires mastra.pubsub as the inner pubsub (if the user didn't provide
-   * a custom one), so that the OBSERVE_AGENT_STREAM_ROUTE handler can subscribe
-   * to the same PubSub instance that this agent publishes to.
+   * Delegates to __registerMastra so the pubsub wiring and agent
+   * registration happen regardless of which entry point is called first.
    * @internal
    */
   __setMastra(mastra: Mastra): void {
-    this.#mastra = mastra;
-
-    // Wire mastra.pubsub as the inner pubsub if user didn't provide a custom one.
-    // This must happen before CachingPubSub initialization.
-    if (!this.#hasCustomPubsub && !this.#cachingPubsub) {
-      this.#innerPubsub = mastra.pubsub;
-    }
+    this.__registerMastra(mastra);
   }
 
   /**
    * Register the Mastra instance.
    * Called by Mastra during agent registration (normal Agent path).
+   *
+   * Also wires mastra.pubsub as the inner pubsub (if the user didn't provide
+   * a custom one), so that the OBSERVE_AGENT_STREAM_ROUTE handler can subscribe
+   * to the same PubSub instance that this agent publishes to.
    * @internal
    */
   __registerMastra(mastra: Mastra): void {
@@ -828,5 +823,11 @@ export class DurableAgent<
     this.#mastra = mastra;
     // Also set on wrapped agent
     this.#wrappedAgent.__registerMastra(mastra);
+
+    // Wire mastra.pubsub as the inner pubsub if user didn't provide a custom one.
+    // This must happen before CachingPubSub initialization.
+    if (!this.#hasCustomPubsub && !this.#cachingPubsub) {
+      this.#innerPubsub = mastra.pubsub;
+    }
   }
 }

@@ -438,14 +438,18 @@ export function createDurableToolCallStep() {
           },
         });
 
-        // Emit tool-result chunk
+        // Emit tool-result chunk (non-fatal — result is returned regardless)
         if (pubsub) {
-          await emitChunkEvent(pubsub, runId, {
-            type: 'tool-result',
-            runId,
-            from: ChunkFrom.AGENT,
-            payload: { toolCallId, toolName, args, result },
-          });
+          try {
+            await emitChunkEvent(pubsub, runId, {
+              type: 'tool-result',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: { toolCallId, toolName, args, result },
+            });
+          } catch (emitError) {
+            logger?.warn?.(`[DurableAgent] Failed to emit tool-result chunk for ${toolName}: ${emitError}`);
+          }
         }
 
         return {
@@ -455,14 +459,18 @@ export function createDurableToolCallStep() {
       } catch (error) {
         const toolError = serializeError(error);
 
-        // Emit tool-error chunk
+        // Emit tool-error chunk (non-fatal — error result is returned regardless)
         if (pubsub) {
-          await emitChunkEvent(pubsub, runId, {
-            type: 'tool-error',
-            runId,
-            from: ChunkFrom.AGENT,
-            payload: { toolCallId, toolName, args, error: toolError },
-          });
+          try {
+            await emitChunkEvent(pubsub, runId, {
+              type: 'tool-error',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: { toolCallId, toolName, args, error: toolError },
+            });
+          } catch (emitError) {
+            logger?.warn?.(`[DurableAgent] Failed to emit tool-error chunk for ${toolName}: ${emitError}`);
+          }
         }
 
         return {
