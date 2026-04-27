@@ -36,7 +36,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.27.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "exit-hook": "^5.1.0",
     "fast-deep-equal": "^3.1.3"
   },
