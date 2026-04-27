@@ -436,7 +436,7 @@ export async function deployAction(
   if (envCount > 0) {
     p.log.step(`Found ${envCount} env var(s)`);
   } else {
-    p.log.step('No .env file found');
+    p.log.step('No env vars found in selected env file');
   }
 
   t = performance.now();
