@@ -2,6 +2,4 @@
 '@mastra/mcp': patch
 ---
 
-Fixed MCP tool execution authorization so direct `executeTool()` calls also enforce FGA when a request user is present.
-
-This keeps MCP transport execution and direct server-side execution on the same permission boundary instead of only protecting the transport-specific path.
+Added Fine-Grained Authorization (FGA) enforcement to MCP tool execution. Both transport-driven calls and direct `executeTool()` calls now run the same authorization checks when a request user is present, and typed FGA permission constants are accepted in MCP server authorization config.

@@ -2,6 +2,9 @@
 '@mastra/server': patch
 ---
 
-Added route-level and thread-level FGA enforcement for server handlers, memory APIs, and protected custom routes.
+Added Fine-Grained Authorization (FGA) enforcement across server handlers and memory APIs:
 
-This closes authorization gaps where callers could access detail endpoints by ID, custom-route FGA checks could miss path parameters, or memory thread filtering could leak unviewable totals and pagination metadata.
+- Route-level checks on detail endpoints, custom routes (including path parameters), and resource-scoped search
+- Thread-level checks on reads, writes, creation, cloning, message saving, and listing — with unviewable threads hidden from totals and pagination
+- Authenticated user context preserved through thread authorization, and the thread's owning `resourceId` forwarded into the FGA context so providers can derive composite tenant-scoped resource IDs
+- Typed FGA permission constants accepted in route and thread authorization config

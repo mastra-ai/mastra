@@ -8,6 +8,10 @@ Added `MastraFGAWorkos` provider for Fine-Grained Authorization using the WorkOS
 - Resource management (`createResource()`, `getResource()`, `listResources()`, `updateResource()`, `deleteResource()`)
 - Role assignments (`assignRole()`, `removeRole()`, `listRoleAssignments()`)
 - `resourceMapping` and `permissionMapping` for translating Mastra resource types and permissions to WorkOS resource type slugs and permission slugs
+- Organization scoping that denies access when the user is not a member of the configured organization
+- Bearer-token / verified JWT support that carries service-token FGA context such as organization membership IDs
+- Membership caching and batched accessible-resource discovery for lower per-request latency
+- Typed permission constants accepted in `permissionMapping`
 
 ```typescript
 import { MastraFGAWorkos } from '@mastra/auth-workos';

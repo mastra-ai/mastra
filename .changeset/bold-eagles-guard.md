@@ -10,6 +10,8 @@ Added Fine-Grained Authorization (FGA) support for relationship-based, resource-
 
 **New utility:** `checkFGA()` provides centralized FGA enforcement with `FGADeniedError` for denied checks. `MastraMemory.checkThreadFGA()` adds thread-level access control.
 
+**Typed permission constants:** Strongly-typed permission identifiers (e.g. `'agents:execute'`, `'workflows:execute'`, `'memory:threads:read'`) for use in authorization config and `permissionMapping`.
+
 ```typescript
 const mastra = new Mastra({
   server: {
