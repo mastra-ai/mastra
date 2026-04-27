@@ -341,6 +341,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
         onError: options.onError,
         onAbort: options.onAbort,
         abortSignal: options.abortSignal,
+        executionTimeoutRuntime: options.executionTimeoutRuntime,
       },
       activeTools: options.activeTools,
       structuredOutput: options.structuredOutput,

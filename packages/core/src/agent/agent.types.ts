@@ -10,6 +10,7 @@ import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { OutputWriter } from '../workflows/types';
+import type { AgentExecutionTimeoutOptions, AgentExecutionTimeoutRuntime } from './execution-timeout';
 import type { MessageListInput } from './message-list';
 import type {
   AgentMemoryOption,
@@ -489,6 +490,11 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    */
   abortSignal?: LoopConfig<OUTPUT>['abortSignal'];
 
+  /**
+   * Maximum wall-clock budget for this agent execution.
+   */
+  execution?: AgentExecutionTimeoutOptions;
+
   /** Input processors to use for this execution (overrides agent's default) */
   inputProcessors?: InputProcessorOrWorkflow[];
   /** Output processors to use for this execution (overrides agent's default) */
@@ -641,6 +647,8 @@ export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptions
   outputWriter?: OutputWriter;
   messages: MessageListInput;
   methodType: AgentMethodType;
+  /** Internal runtime used to enforce the wall-clock execution timeout. */
+  executionTimeoutRuntime?: AgentExecutionTimeoutRuntime;
   /** Internal: Model override for when structuredOutput.model is used with maxSteps=1 */
   model?: MastraLanguageModel;
   /** Internal: Whether the execution is a resume */

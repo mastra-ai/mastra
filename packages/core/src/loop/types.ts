@@ -9,6 +9,7 @@ import type {
 import type { StopCondition as StopConditionV6 } from '@internal/ai-v6';
 import { z } from 'zod/v4';
 import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/agent.types';
+import type { AgentExecutionTimeoutRuntime } from '../agent/execution-timeout';
 import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
 import type { StructuredOutputOptions } from '../agent/types';
@@ -101,6 +102,11 @@ export type LoopConfig<OUTPUT = undefined> = {
   onStepFinish?: MastraOnStepFinishCallback<OUTPUT>;
   onAbort?: (event: any) => Promise<void> | void;
   abortSignal?: AbortSignal;
+  /**
+   * @internal
+   * Runtime state for agent-level wall-clock execution timeout handling.
+   */
+  executionTimeoutRuntime?: AgentExecutionTimeoutRuntime;
   returnScorerData?: boolean;
   prepareStep?: PrepareStepFunction;
 };
