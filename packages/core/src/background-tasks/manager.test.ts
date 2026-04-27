@@ -845,19 +845,15 @@ describe('BackgroundTaskManager', () => {
       const first = await reader.read();
       expect(first.done).toBe(false);
       expect(first.value).toMatchObject({
-        type: 'task.running',
-        status: 'running',
-        toolName: 'tool',
-        agentId: 'a1',
+        type: 'background-task-running',
+        payload: { toolName: 'tool', agentId: 'a1' },
       });
 
       // Second event: completed
       const second = await reader.read();
       expect(second.value).toMatchObject({
-        type: 'task.completed',
-        status: 'completed',
-        toolName: 'tool',
-        result: 'streamed-result',
+        type: 'background-task-completed',
+        payload: { toolName: 'tool', result: 'streamed-result' },
       });
 
       abortController.abort();
@@ -881,9 +877,8 @@ describe('BackgroundTaskManager', () => {
 
       const { value } = await reader.read();
       expect(value).toMatchObject({
-        type: 'task.failed',
-        status: 'failed',
-        error: expect.objectContaining({ message: 'boom' }),
+        type: 'background-task-failed',
+        payload: { toolName: 'tool', error: expect.objectContaining({ message: 'boom' }) },
       });
 
       abortController.abort();
@@ -918,9 +913,8 @@ describe('BackgroundTaskManager', () => {
 
       const { value } = await reader.read();
       expect(value).toMatchObject({
-        type: 'task.cancelled',
-        status: 'cancelled',
-        taskId: task.id,
+        type: 'background-task-cancelled',
+        payload: { toolName: 'tool', taskId: task.id },
       });
 
       abortController.abort();
@@ -946,15 +940,16 @@ describe('BackgroundTaskManager', () => {
 
       // First event for a2: dispatch
       const first = await reader.read();
-      expect(first.value).toMatchObject({ type: 'task.running', status: 'running', agentId: 'a2' });
+      expect(first.value).toMatchObject({
+        type: 'background-task-running',
+        payload: { toolName: 'tool', agentId: 'a2' },
+      });
 
       // Second event for a2: completed
       const second = await reader.read();
       expect(second.value).toMatchObject({
-        type: 'task.completed',
-        status: 'completed',
-        agentId: 'a2',
-        result: 'for-a2',
+        type: 'background-task-completed',
+        payload: { toolName: 'tool', agentId: 'a2', result: 'for-a2' },
       });
 
       abortController.abort();
@@ -978,11 +973,17 @@ describe('BackgroundTaskManager', () => {
 
       // dispatch for run-target
       const first = await reader.read();
-      expect(first.value).toMatchObject({ status: 'running', runId: 'run-target' });
+      expect(first.value).toMatchObject({
+        type: 'background-task-running',
+        payload: { toolName: 'tool', runId: 'run-target' },
+      });
 
       // completed for run-target
       const second = await reader.read();
-      expect(second.value).toMatchObject({ status: 'completed', runId: 'run-target', result: 'target' });
+      expect(second.value).toMatchObject({
+        type: 'background-task-completed',
+        payload: { toolName: 'tool', runId: 'run-target', result: 'target' },
+      });
 
       abortController.abort();
     });
@@ -1014,8 +1015,8 @@ describe('BackgroundTaskManager', () => {
 
       const snapshot = await reader.read();
       expect(snapshot.value).toMatchObject({
-        status: 'running',
-        toolName: 'slow',
+        type: 'background-task-running',
+        payload: { toolName: 'slow' },
       });
 
       // Complete the running task — live event should come through
@@ -1024,9 +1025,8 @@ describe('BackgroundTaskManager', () => {
 
       const live = await reader.read();
       expect(live.value).toMatchObject({
-        status: 'completed',
-        toolName: 'slow',
-        result: 'late-result',
+        type: 'background-task-completed',
+        payload: { toolName: 'slow', result: 'late-result' },
       });
 
       abortController.abort();
@@ -1053,14 +1053,20 @@ describe('BackgroundTaskManager', () => {
       const reader = stream.getReader();
 
       const snapshot = await reader.read();
-      expect(snapshot.value).toMatchObject({ status: 'running', toolName: 'tool' });
+      expect(snapshot.value).toMatchObject({
+        type: 'background-task-running',
+        payload: { toolName: 'tool' },
+      });
 
       // Complete the task — should get live completion event
       resolver('late-result');
       await tick();
 
       const live = await reader.read();
-      expect(live.value).toMatchObject({ status: 'completed', result: 'late-result' });
+      expect(live.value).toMatchObject({
+        type: 'background-task-completed',
+        payload: { toolName: 'tool', result: 'late-result' },
+      });
 
       abortController.abort();
     });
