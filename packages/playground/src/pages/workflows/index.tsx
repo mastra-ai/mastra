@@ -7,12 +7,17 @@ import {
   PageLayout,
   PermissionDenied,
   SessionExpired,
+  Tab,
+  TabContent,
+  TabList,
+  Tabs,
   WorkflowIcon,
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { BookIcon } from 'lucide-react';
 import { useState } from 'react';
+import { SchedulesPage } from '@/domains/schedules/components/schedules-page';
 import { NoWorkflowsInfo } from '@/domains/workflows/components/workflows-list/no-workflows-info';
 import { WorkflowsList } from '@/domains/workflows/components/workflows-list/workflows-list';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
@@ -76,12 +81,25 @@ function Workflows() {
             </ButtonWithTooltip>
           </PageLayout.Column>
         </PageLayout.Row>
-        <div className="max-w-120">
-          <ListSearch onSearch={setSearch} label="Filter workflows" placeholder="Filter by name or description" />
-        </div>
       </PageLayout.TopArea>
 
-      <WorkflowsList workflows={workflows || {}} isLoading={isLoading} search={search} />
+      <Tabs defaultTab="workflows" className="grid grid-rows-[auto_1fr] h-full overflow-hidden">
+        <TabList>
+          <Tab value="workflows">All Workflows</Tab>
+          <Tab value="schedules">Schedules</Tab>
+        </TabList>
+
+        <TabContent value="workflows" className="overflow-y-auto mt-5">
+          <div className="max-w-120 mb-4">
+            <ListSearch onSearch={setSearch} label="Filter workflows" placeholder="Filter by name or description" />
+          </div>
+          <WorkflowsList workflows={workflows || {}} isLoading={isLoading} search={search} />
+        </TabContent>
+
+        <TabContent value="schedules" className="overflow-hidden mt-5">
+          <SchedulesPage />
+        </TabContent>
+      </Tabs>
     </PageLayout>
   );
 }

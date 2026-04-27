@@ -2715,6 +2715,60 @@ export interface StreamBackgroundTasksParams {
   taskId?: string;
 }
 
+export type ScheduleStatus = 'active' | 'paused';
+
+export interface ScheduleTarget {
+  type: 'workflow';
+  workflowId: string;
+  inputData?: unknown;
+  initialState?: unknown;
+  requestContext?: Record<string, unknown>;
+}
+
+export interface ScheduleResponse {
+  id: string;
+  target: ScheduleTarget;
+  cron: string;
+  timezone?: string;
+  status: ScheduleStatus;
+  nextFireAt: number;
+  lastFireAt?: number;
+  lastRunId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type ScheduleTriggerStatus = 'published' | 'failed';
+
+export interface ScheduleTriggerResponse {
+  scheduleId: string;
+  runId: string;
+  scheduledFireAt: number;
+  actualFireAt: number;
+  status: ScheduleTriggerStatus;
+  error?: string;
+}
+
+export interface ListSchedulesParams {
+  workflowId?: string;
+  status?: ScheduleStatus;
+}
+
+export interface ListSchedulesResponse {
+  schedules: ScheduleResponse[];
+}
+
+export interface ListScheduleTriggersParams {
+  limit?: number;
+  fromActualFireAt?: number;
+  toActualFireAt?: number;
+}
+
+export interface ListScheduleTriggersResponse {
+  triggers: ScheduleTriggerResponse[];
+}
+
 export interface ExperimentReviewCounts {
   experimentId: string;
   total: number;
