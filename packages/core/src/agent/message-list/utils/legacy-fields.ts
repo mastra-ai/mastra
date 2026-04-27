@@ -151,9 +151,11 @@ function mergeLegacyContentIntoParts(
 ): MastraMessagePart[] {
   if (legacyContent === undefined) return parts;
 
-  const existingTextPart = parts.find(part => part.type === 'text');
-  if (existingTextPart) {
-    existingTextPart.text = legacyContent;
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    const part = parts[index];
+    if (!part || part.type !== 'text') continue;
+
+    part.text = legacyContent;
     return parts;
   }
 
