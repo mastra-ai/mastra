@@ -52,6 +52,7 @@ import type { MessageList } from './message-list/index';
 export type {
   MastraDBMessage,
   MastraMessageContentV2,
+  MastraMessageContentV2WithLegacyFields,
   MastraMessagePart,
   UIMessageWithMetadata,
   MessageList,

@@ -523,7 +523,13 @@ export class StoreMemoryLance extends MemoryStorage {
           ...rest,
           thread_id: threadId,
           type: type ?? 'v2',
-          content: JSON.stringify(getLegacyContentForStorage(message.content, { mergeLegacyFields: false })!),
+          content: JSON.stringify(
+            typeof message.content === 'string'
+              ? message.content
+              : getLegacyContentForStorage(message.content as MastraDBMessage['content'], {
+                  mergeLegacyFields: false,
+                })!,
+          ),
         };
       });
 
