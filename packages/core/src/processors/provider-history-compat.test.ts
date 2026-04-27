@@ -1,7 +1,6 @@
 import { APICallError } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
 import { MessageList } from '../agent/message-list';
-import { MastraLanguageModelV2Mock } from '../loop/test-utils/MastraLanguageModelV2Mock';
 import { ProviderHistoryCompat } from './provider-history-compat';
 import type { ProcessAPIErrorArgs } from './index';
 
@@ -135,7 +134,7 @@ function makeArgs(overrides: Partial<ProcessAPIErrorArgs> = {}): ProcessAPIError
     error: createToolIdError(),
     messages: messageList.get.all.db(),
     messageList,
-    model: new MastraLanguageModelV2Mock({ provider: 'anthropic', modelId: 'claude-test' }),
+    provider: 'anthropic',
     stepNumber: 0,
     steps: [],
     state: {},
@@ -330,7 +329,7 @@ describe('ProviderHistoryCompat', () => {
     const args = makeArgs({
       error: createOpenAIMissingOutputError(),
       messageList,
-      model: new MastraLanguageModelV2Mock({ provider: 'openai.responses', modelId: 'gpt-5.5' }),
+      provider: 'openai.responses',
       messages: messageList.get.all.db(),
     });
 
@@ -365,7 +364,7 @@ describe('ProviderHistoryCompat', () => {
     const args = makeArgs({
       error: createOpenAIMissingOutputError(),
       messageList,
-      model: new MastraLanguageModelV2Mock({ provider: 'openai.responses', modelId: 'gpt-5.5' }),
+      provider: 'openai.responses',
       messages: messageList.get.all.db(),
     });
 
@@ -393,7 +392,7 @@ describe('ProviderHistoryCompat', () => {
     const args = makeArgs({
       error: createOpenAIMissingOutputError(),
       messageList,
-      model: new MastraLanguageModelV2Mock({ provider: 'anthropic', modelId: 'claude-test' }),
+      provider: 'anthropic',
       messages: messageList.get.all.db(),
     });
 

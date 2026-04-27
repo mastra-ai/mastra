@@ -1469,7 +1469,7 @@ export class ProcessorRunner {
       error: unknown;
       messages: MastraDBMessage[];
       messageList: MessageList;
-      model?: MastraLanguageModel;
+      provider?: string;
       stepNumber: number;
       steps: Array<StepResult<any>>;
       messageId?: string;
@@ -1480,7 +1480,17 @@ export class ProcessorRunner {
       rotateResponseMessageId?: () => string;
     } & Partial<ObservabilityContext>,
   ): Promise<{ retry: boolean }> {
-    const { error, messageList, model, stepNumber, steps, requestContext, retryCount = 0, writer, abortSignal } = args;
+    const {
+      error,
+      messageList,
+      provider,
+      stepNumber,
+      steps,
+      requestContext,
+      retryCount = 0,
+      writer,
+      abortSignal,
+    } = args;
     const observabilityContext = resolveObservabilityContext(args);
 
     const allProcessors: ProcessorOrWorkflow[] = [
@@ -1541,7 +1551,7 @@ export class ProcessorRunner {
         const result = await processMethod({
           messages: processableMessages,
           messageList,
-          model,
+          provider,
           stepNumber,
           steps,
           state: processorState.customState,

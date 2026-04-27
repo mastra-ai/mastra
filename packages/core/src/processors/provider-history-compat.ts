@@ -1,7 +1,6 @@
 import { APICallError } from '@internal/ai-sdk-v5';
 
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
-import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { JSONValue } from '../stream';
 import type { Processor, ProcessAPIErrorArgs, ProcessAPIErrorResult } from './index';
 
@@ -57,11 +56,11 @@ function matchesRule(error: unknown, rule: CompatRule): boolean {
   return false;
 }
 
-function matchesProvider(model: MastraLanguageModel | undefined, rule: CompatRule): boolean {
+function matchesProvider(provider: string | undefined, rule: CompatRule): boolean {
   if (!rule.providers?.length) return true;
-  if (!model?.provider) return false;
+  if (!provider) return false;
 
-  return rule.providers.some(provider => model.provider === provider || model.provider.startsWith(`${provider}.`));
+  return rule.providers.some(ruleProvider => provider === ruleProvider || provider.startsWith(`${ruleProvider}.`));
 }
 
 type CompatToolResultOutput =
@@ -296,7 +295,7 @@ export class ProviderHistoryCompat implements Processor<'provider-history-compat
   async processAPIError({
     error,
     messageList,
-    model,
+    provider,
     retryCount,
   }: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
     if (retryCount > 0) return;
@@ -304,7 +303,7 @@ export class ProviderHistoryCompat implements Processor<'provider-history-compat
     const messages = messageList.get.all.db();
 
     for (const rule of this.rules) {
-      if (!matchesProvider(model, rule)) continue;
+      if (!matchesProvider(provider, rule)) continue;
 
       if (matchesRule(error, rule)) {
         const changed = rule.fix(messages);
