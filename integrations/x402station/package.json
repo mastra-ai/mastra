@@ -1,0 +1,74 @@
+{
+  "name": "@mastra/x402station",
+  "version": "0.1.0",
+  "description": "x402station pre-flight oracle tools for Mastra agents — preflight, forensics, decoy catalog, and webhook-watch alerts for x402 endpoints",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:watch": "pnpm build:lib --watch",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "mastra",
+    "x402",
+    "x402station",
+    "agent-payments",
+    "usdc",
+    "base",
+    "oracle",
+    "preflight",
+    "tools",
+    "ai-agent"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "integrations/x402station"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "homepage": "https://x402station.io",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@x402/evm": "^2.10.0",
+    "@x402/fetch": "^2.10.0",
+    "viem": "^2.48.4"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
+    "zod": ">=3.0.0 || >=4.0.0"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "tsup": "^8.5.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "catalog:"
+  }
+}
