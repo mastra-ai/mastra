@@ -179,6 +179,7 @@ interface RouteConfig<
   fga?: {
     resourceType: string;
     resourceIdParam?: string;
+    resourceId?: string | ((params: Record<string, unknown>) => string | undefined);
     permission?: string;
   };
   onValidationError?: ValidationErrorHook;

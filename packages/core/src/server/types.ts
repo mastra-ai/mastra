@@ -11,6 +11,7 @@ import type { MastraAuthProvider } from './auth';
 type RouteFGAConfig = {
   resourceType: string;
   resourceIdParam?: string;
+  resourceId?: string | ((params: Record<string, unknown>) => string | undefined);
   permission?: string;
 };
 

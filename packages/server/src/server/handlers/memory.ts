@@ -87,6 +87,10 @@ function hasFGAUser(requestContext?: RequestContext): requestContext is RequestC
   return !!user && typeof user === 'object';
 }
 
+function shouldFilterThreadsWithFGA(mastra: any, requestContext?: RequestContext): requestContext is RequestContext {
+  return !!mastra.getServer?.()?.fga && hasFGAUser(requestContext);
+}
+
 async function filterAccessibleThreads({
   mastra,
   requestContext,
@@ -775,7 +779,7 @@ export const LIST_THREADS_ROUTE = createRoute({
       if (agent && isGateway) {
         const gwClient = getGatewayClient();
         if (gwClient) {
-          if (hasFGAUser(requestContext)) {
+          if (shouldFilterThreadsWithFGA(mastra, requestContext)) {
             const initialResult = await gwClient.listThreads({
               resourceId: effectiveResourceId,
               limit: 1,
@@ -836,7 +840,7 @@ export const LIST_THREADS_ROUTE = createRoute({
 
       if (memory) {
         const result = await memory.listThreads(
-          hasFGAUser(requestContext)
+          shouldFilterThreadsWithFGA(mastra, requestContext)
             ? {
                 filter,
                 perPage: false,
@@ -849,7 +853,7 @@ export const LIST_THREADS_ROUTE = createRoute({
                 orderBy,
               },
         );
-        if (!hasFGAUser(requestContext)) {
+        if (!shouldFilterThreadsWithFGA(mastra, requestContext)) {
           return result;
         }
 
@@ -871,7 +875,7 @@ export const LIST_THREADS_ROUTE = createRoute({
         const memoryStore = await storage.getStore('memory');
         if (memoryStore) {
           const result = await memoryStore.listThreads(
-            hasFGAUser(requestContext)
+            shouldFilterThreadsWithFGA(mastra, requestContext)
               ? {
                   filter,
                   perPage: false,
@@ -884,7 +888,7 @@ export const LIST_THREADS_ROUTE = createRoute({
                   orderBy,
                 },
           );
-          if (!hasFGAUser(requestContext)) {
+          if (!shouldFilterThreadsWithFGA(mastra, requestContext)) {
             return result;
           }
 
@@ -1784,7 +1788,7 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
       let accessibleThreadsForResource: StorageThreadType[] | undefined;
       let accessibleThreadIds: Set<string> | undefined;
 
-      if (resourceScope && effectiveResourceId && hasFGAUser(requestContext)) {
+      if (resourceScope && effectiveResourceId && shouldFilterThreadsWithFGA(mastra, requestContext)) {
         const { threads } = await memory.listThreads({
           filter: { resourceId: effectiveResourceId },
           perPage: false,

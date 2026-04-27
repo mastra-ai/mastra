@@ -239,7 +239,11 @@ export const GET_AGENT_TOOL_ROUTE = createRoute({
   description: 'Returns details for a specific tool assigned to the agent',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
-  fga: { resourceType: 'tool', resourceIdParam: 'toolId', permission: 'tools:read' },
+  fga: {
+    resourceType: 'tool',
+    resourceId: ({ agentId, toolId }) => `${String(agentId)}:${String(toolId)}`,
+    permission: 'tools:read',
+  },
   handler: async ({ mastra, agentId, toolId, requestContext }) => {
     try {
       if (!agentId) {
@@ -273,7 +277,11 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
   description: 'Executes a specific tool assigned to the agent with the provided input data',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
-  fga: { resourceType: 'tool', resourceIdParam: 'toolId', permission: 'tools:execute' },
+  fga: {
+    resourceType: 'tool',
+    resourceId: ({ agentId, toolId }) => `${String(agentId)}:${String(toolId)}`,
+    permission: 'tools:execute',
+  },
   handler: async ({ mastra, agentId, toolId, data, requestContext }) => {
     try {
       if (!agentId) {

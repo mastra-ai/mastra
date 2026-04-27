@@ -775,13 +775,15 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       // Check if this request matches a protected custom route and run auth
       const path = String(ctx.path || '/');
       const method = String(ctx.method || 'GET');
+      const matchedRoute = findMatchingCustomRoute(
+        path,
+        method,
+        this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes,
+      );
+      const shouldRunCustomRouteAuth = isProtectedCustomRoute(path, method, this.customRouteAuthConfig);
+      const shouldRunCustomRouteFGA = !!matchedRoute?.route.fga;
 
-      if (isProtectedCustomRoute(path, method, this.customRouteAuthConfig)) {
-        const matchedRoute = findMatchingCustomRoute(
-          path,
-          method,
-          this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes,
-        );
+      if (shouldRunCustomRouteAuth || shouldRunCustomRouteFGA) {
         const serverRoute: ServerRoute = {
           method: (matchedRoute?.route.method ?? method) as any,
           path: matchedRoute?.route.path ?? path,
@@ -792,50 +794,44 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           fga: matchedRoute?.route.fga,
         };
 
-        const authError = await this.checkRouteAuth(serverRoute, {
-          path,
-          method,
-          getHeader: name => ctx.headers[name.toLowerCase()] as string | undefined,
-          getQuery: name => (ctx.query as Record<string, string>)[name],
-          requestContext: ctx.state.requestContext,
-          request: toWebRequest(ctx),
-          buildAuthorizeContext: () => toWebRequest(ctx),
-        });
+        if (shouldRunCustomRouteAuth) {
+          const authError = await this.checkRouteAuth(serverRoute, {
+            path,
+            method,
+            getHeader: name => ctx.headers[name.toLowerCase()] as string | undefined,
+            getQuery: name => (ctx.query as Record<string, string>)[name],
+            requestContext: ctx.state.requestContext,
+            request: toWebRequest(ctx),
+            buildAuthorizeContext: () => toWebRequest(ctx),
+          });
 
-        if (authError) {
-          if (authError.headers) {
-            for (const [key, value] of Object.entries(authError.headers)) {
-              ctx.set(key, value);
+          if (authError) {
+            if (authError.headers) {
+              for (const [key, value] of Object.entries(authError.headers)) {
+                ctx.set(key, value);
+              }
+            }
+            if (authError.error) {
+              ctx.status = authError.status;
+              ctx.body = { error: authError.error };
+              return;
             }
           }
-          if (authError.error) {
-            ctx.status = authError.status;
-            ctx.body = { error: authError.error };
-            return;
-          }
-        }
 
-        const authConfig = this.mastra.getServer()?.auth;
-        if (authConfig) {
-          let hasPermission: ((userPerms: string[], required: string) => boolean) | undefined;
-          try {
-            ({ hasPermission } = await import('@mastra/core/auth/ee'));
-          } catch {
-            console.error(
-              '[@mastra/koa] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
-            );
-          }
-
-          if (hasPermission) {
-            const userPermissions = ctx.state.requestContext.get('userPermissions') as string[] | undefined;
-            const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
-            if (permissionError) {
-              ctx.status = permissionError.status;
-              ctx.body = {
-                error: permissionError.error,
-                message: permissionError.message,
-              };
-              return;
+          const authConfig = this.mastra.getServer()?.auth;
+          if (authConfig) {
+            const hasPermission = await loadHasPermission();
+            if (hasPermission) {
+              const userPermissions = ctx.state.requestContext.get('userPermissions') as string[] | undefined;
+              const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+              if (permissionError) {
+                ctx.status = permissionError.status;
+                ctx.body = {
+                  error: permissionError.error,
+                  message: permissionError.message,
+                };
+                return;
+              }
             }
           }
         }

@@ -424,13 +424,18 @@ describe('MCP Registry Handlers', () => {
       } as unknown as Mastra;
 
       const result = await checkRouteFGA(mastra, EXECUTE_MCP_SERVER_TOOL_ROUTE as any, requestContext as any, {
+        serverId: 'server1',
         toolId: 'tool1',
       });
 
       expect(result).toBeNull();
       expect(check).toHaveBeenCalledWith(
         { id: 'user-1' },
-        { resource: { type: 'tool', id: 'tool1' }, permission: 'tools:execute' },
+        {
+          resource: { type: 'tool', id: 'server1:tool1' },
+          permission: 'tools:execute',
+          context: { resourceId: 'server1:tool1', requestContext },
+        },
       );
     });
 

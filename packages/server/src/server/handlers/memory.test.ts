@@ -353,6 +353,35 @@ describe('Memory Handlers', () => {
       });
     });
 
+    it('should preserve storage pagination for authenticated users when no FGA provider is configured', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        agents: { 'test-agent': mockAgent },
+      });
+
+      await mockMemory.createThread({ resourceId: 'test-resource' });
+
+      const spy = vi.spyOn(mockMemory, 'listThreads');
+      const ctx = createTestContextWithReservedKeys({ mastra });
+      ctx.requestContext.set('user', { id: 'user-1' });
+
+      const result = await LIST_THREADS_ROUTE.handler({
+        ...ctx,
+        resourceId: 'test-resource',
+        agentId: 'test-agent',
+        page: 0,
+        perPage: 10,
+      });
+
+      expect(result.total).toEqual(1);
+      expect(spy).toHaveBeenCalledWith({
+        filter: { resourceId: 'test-resource' },
+        page: 0,
+        perPage: 10,
+        orderBy: undefined,
+      });
+    });
+
     it('should respect custom pagination parameters', async () => {
       // Create a thread via mockMemory
       await mockMemory.createThread({ threadId: 'test-thread-1', resourceId: 'test-resource' });

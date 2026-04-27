@@ -837,12 +837,16 @@ export async function checkRouteFGA(
   const user = requestContext?.get('user');
   if (!user) return null;
 
-  const resourceId = fgaConfig.resourceIdParam ? (params[fgaConfig.resourceIdParam] as string) : undefined;
+  const resourceId =
+    typeof fgaConfig.resourceId === 'function'
+      ? fgaConfig.resourceId(params)
+      : fgaConfig.resourceId || (fgaConfig.resourceIdParam ? (params[fgaConfig.resourceIdParam] as string) : undefined);
   const permission = fgaConfig.permission || `${fgaConfig.resourceType}:read`;
 
   const authorized = await fgaProvider.check(user, {
     resource: { type: fgaConfig.resourceType, id: resourceId || '*' },
     permission,
+    context: { resourceId, requestContext },
   });
 
   if (!authorized) {

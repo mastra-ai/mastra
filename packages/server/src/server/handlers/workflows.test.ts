@@ -250,7 +250,11 @@ describe('vNext Workflow Handlers', () => {
       expect(result).toBeNull();
       expect(check).toHaveBeenCalledWith(
         { id: 'user-1' },
-        { resource: { type: 'workflow', id: 'test-workflow' }, permission: 'workflows:read' },
+        {
+          resource: { type: 'workflow', id: 'test-workflow' },
+          permission: 'workflows:read',
+          context: { resourceId: 'test-workflow', requestContext },
+        },
       );
     });
 

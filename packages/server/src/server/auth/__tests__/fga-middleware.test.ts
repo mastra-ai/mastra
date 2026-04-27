@@ -57,7 +57,11 @@ describe('FGA Middleware - checkRouteFGA', () => {
     expect(result).toBeNull();
     expect(fgaProvider.check).toHaveBeenCalledWith(
       { id: 'user-1' },
-      { resource: { type: 'agent', id: 'agent-1' }, permission: 'agents:execute' },
+      {
+        resource: { type: 'agent', id: 'agent-1' },
+        permission: 'agents:execute',
+        context: { resourceId: 'agent-1', requestContext },
+      },
     );
   });
 
@@ -94,7 +98,40 @@ describe('FGA Middleware - checkRouteFGA', () => {
     await checkRouteFGA(mastra, route, requestContext as any, {});
     expect(fgaProvider.check).toHaveBeenCalledWith(
       { id: 'user-1' },
-      { resource: { type: 'agent', id: '*' }, permission: 'agents:read' },
+      {
+        resource: { type: 'agent', id: '*' },
+        permission: 'agents:read',
+        context: { resourceId: undefined, requestContext },
+      },
+    );
+  });
+
+  it('should use a custom resource ID resolver when configured', async () => {
+    const fgaProvider = createMockFGAProvider(true);
+    const mastra = { getServer: () => ({ fga: fgaProvider }) };
+    const route = {
+      fga: {
+        resourceType: 'tool',
+        permission: 'tools:execute',
+        resourceId: ({ agentId, toolId }: Record<string, unknown>) => `${String(agentId)}:${String(toolId)}`,
+      },
+    } as any;
+    const requestContext = new Map<string, unknown>();
+    requestContext.set('user', { id: 'user-1' });
+
+    const result = await checkRouteFGA(mastra, route, requestContext as any, {
+      agentId: 'agent-1',
+      toolId: 'search',
+    });
+
+    expect(result).toBeNull();
+    expect(fgaProvider.check).toHaveBeenCalledWith(
+      { id: 'user-1' },
+      {
+        resource: { type: 'tool', id: 'agent-1:search' },
+        permission: 'tools:execute',
+        context: { resourceId: 'agent-1:search', requestContext },
+      },
     );
   });
 });

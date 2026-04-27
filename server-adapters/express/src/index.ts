@@ -592,13 +592,15 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       // Check if this request matches a protected custom route and run auth
       const path = String(req.path || '/');
       const method = String(req.method || 'GET');
+      const matchedRoute = findMatchingCustomRoute(
+        path,
+        method,
+        this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes,
+      );
+      const shouldRunCustomRouteAuth = isProtectedCustomRoute(path, method, this.customRouteAuthConfig);
+      const shouldRunCustomRouteFGA = !!matchedRoute?.route.fga;
 
-      if (isProtectedCustomRoute(path, method, this.customRouteAuthConfig)) {
-        const matchedRoute = findMatchingCustomRoute(
-          path,
-          method,
-          this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes,
-        );
+      if (shouldRunCustomRouteAuth || shouldRunCustomRouteFGA) {
         const serverRoute: ServerRoute = {
           method: (matchedRoute?.route.method ?? method) as any,
           path: matchedRoute?.route.path ?? path,
@@ -609,38 +611,40 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           fga: matchedRoute?.route.fga,
         };
 
-        const authError = await this.checkRouteAuth(serverRoute, {
-          path,
-          method,
-          getHeader: name => req.headers[name.toLowerCase()] as string | undefined,
-          getQuery: name => req.query[name] as string | undefined,
-          requestContext: res.locals.requestContext,
-          request: toWebRequest(req),
-          buildAuthorizeContext: () => toWebRequest(req),
-        });
+        if (shouldRunCustomRouteAuth) {
+          const authError = await this.checkRouteAuth(serverRoute, {
+            path,
+            method,
+            getHeader: name => req.headers[name.toLowerCase()] as string | undefined,
+            getQuery: name => req.query[name] as string | undefined,
+            requestContext: res.locals.requestContext,
+            request: toWebRequest(req),
+            buildAuthorizeContext: () => toWebRequest(req),
+          });
 
-        if (authError) {
-          if (authError.headers) {
-            for (const [key, value] of Object.entries(authError.headers)) {
-              res.setHeader(key, value);
+          if (authError) {
+            if (authError.headers) {
+              for (const [key, value] of Object.entries(authError.headers)) {
+                res.setHeader(key, value);
+              }
+            }
+            if (authError.error) {
+              return res.status(authError.status).json({ error: authError.error });
             }
           }
-          if (authError.error) {
-            return res.status(authError.status).json({ error: authError.error });
-          }
-        }
 
-        const authConfig = this.mastra.getServer()?.auth;
-        if (authConfig) {
-          const hasPermission = await loadHasPermission();
-          if (hasPermission) {
-            const userPermissions = res.locals.requestContext.get('userPermissions') as string[] | undefined;
-            const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
-            if (permissionError) {
-              return res.status(permissionError.status).json({
-                error: permissionError.error,
-                message: permissionError.message,
-              });
+          const authConfig = this.mastra.getServer()?.auth;
+          if (authConfig) {
+            const hasPermission = await loadHasPermission();
+            if (hasPermission) {
+              const userPermissions = res.locals.requestContext.get('userPermissions') as string[] | undefined;
+              const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+              if (permissionError) {
+                return res.status(permissionError.status).json({
+                  error: permissionError.error,
+                  message: permissionError.message,
+                });
+              }
             }
           }
         }

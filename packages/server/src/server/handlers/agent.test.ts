@@ -440,7 +440,11 @@ describe('Agent Handlers', () => {
       expect(result).toBeNull();
       expect(check).toHaveBeenCalledWith(
         { id: 'user-1' },
-        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:read' },
+        {
+          resource: { type: 'agent', id: 'test-agent' },
+          permission: 'agents:read',
+          context: { resourceId: 'test-agent', requestContext: fgaRequestContext },
+        },
       );
     });
 
