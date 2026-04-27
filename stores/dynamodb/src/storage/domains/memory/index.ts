@@ -554,7 +554,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         role: msg.role,
         type: msg.type,
         resourceId: msg.resourceId,
-        content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+        content:
+          typeof msg.content === 'string'
+            ? msg.content
+            : JSON.stringify(getLegacyContentForStorage(msg.content, { mergeLegacyFields: false })),
         toolCallArgs: `toolCallArgs` in msg && msg.toolCallArgs ? JSON.stringify(msg.toolCallArgs) : undefined,
         toolCallIds: `toolCallIds` in msg && msg.toolCallIds ? JSON.stringify(msg.toolCallIds) : undefined,
         toolNames: `toolNames` in msg && msg.toolNames ? JSON.stringify(msg.toolNames) : undefined,

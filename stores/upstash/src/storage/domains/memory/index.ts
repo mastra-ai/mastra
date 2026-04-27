@@ -433,7 +433,13 @@ export class StoreMemoryUpstash extends MemoryStorage {
           }
 
           // Store the message data
-          pipeline.set(key, message);
+          pipeline.set(key, {
+            ...message,
+            content:
+              typeof message.content === 'string'
+                ? message.content
+                : getLegacyContentForStorage(message.content, { mergeLegacyFields: false }),
+          });
 
           // Store the message ID -> threadId index for fast lookups
           pipeline.set(getMessageIndexKey(message.id), message.threadId!);

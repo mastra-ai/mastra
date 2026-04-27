@@ -1210,7 +1210,9 @@ export class MemoryPG extends MemoryStorage {
             [
               message.id,
               message.threadId,
-              typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+              typeof message.content === 'string'
+                ? message.content
+                : JSON.stringify(getLegacyContentForStorage(message.content, { mergeLegacyFields: false })),
               message.createdAt || new Date(),
               message.createdAt || new Date(),
               message.role,

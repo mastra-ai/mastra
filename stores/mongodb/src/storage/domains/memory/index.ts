@@ -637,7 +637,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
               $set: {
                 id: message.id,
                 thread_id: message.threadId!,
-                content: typeof message.content === 'object' ? JSON.stringify(message.content) : message.content,
+                content:
+                  typeof message.content === 'object'
+                    ? JSON.stringify(getLegacyContentForStorage(message.content, { mergeLegacyFields: false }))
+                    : message.content,
                 role: message.role,
                 type: message.type || 'v2',
                 resourceId: message.resourceId,

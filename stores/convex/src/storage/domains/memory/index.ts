@@ -337,7 +337,7 @@ export class MemoryConvex extends MemoryStorage {
       return {
         id: message.id,
         thread_id: message.threadId,
-        content: JSON.stringify(message.content),
+        content: JSON.stringify(getLegacyContentForStorage(message.content, { mergeLegacyFields: false })!),
         role: message.role,
         type: message.type || 'v2',
         createdAt,

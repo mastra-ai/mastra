@@ -894,7 +894,9 @@ export class MemoryMSSQL extends MemoryStorage {
           request.input('thread_id', message.threadId);
           request.input(
             'content',
-            typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+            typeof message.content === 'string'
+              ? message.content
+              : JSON.stringify(getLegacyContentForStorage(message.content, { mergeLegacyFields: false })),
           );
           request.input('createdAt', sql.DateTime2, message.createdAt);
           request.input('role', message.role);

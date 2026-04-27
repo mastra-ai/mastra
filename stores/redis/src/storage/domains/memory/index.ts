@@ -386,7 +386,16 @@ export class StoreMemoryRedis extends MemoryStorage {
             multi.zRem(getThreadMessagesKey(existingThreadId), message.id);
           }
 
-          multi.set(key, JSON.stringify(message));
+          multi.set(
+            key,
+            JSON.stringify({
+              ...message,
+              content:
+                typeof message.content === 'string'
+                  ? message.content
+                  : getLegacyContentForStorage(message.content, { mergeLegacyFields: false }),
+            }),
+          );
           multi.set(getMessageIndexKey(message.id), message.threadId!);
           multi.zAdd(getThreadMessagesKey(message.threadId!), { score, value: message.id });
         }

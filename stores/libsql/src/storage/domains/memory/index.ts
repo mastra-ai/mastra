@@ -644,7 +644,9 @@ export class MemoryLibSQL extends MemoryStorage {
           args: [
             message.id,
             message.threadId!,
-            typeof message.content === 'object' ? JSON.stringify(message.content) : message.content,
+            typeof message.content === 'object'
+              ? JSON.stringify(getLegacyContentForStorage(message.content, { mergeLegacyFields: false }))
+              : message.content,
             message.role,
             message.type || 'v2',
             time instanceof Date ? time.toISOString() : time,

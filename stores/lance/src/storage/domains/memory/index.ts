@@ -523,7 +523,7 @@ export class StoreMemoryLance extends MemoryStorage {
           ...rest,
           thread_id: threadId,
           type: type ?? 'v2',
-          content: JSON.stringify(message.content),
+          content: JSON.stringify(getLegacyContentForStorage(message.content, { mergeLegacyFields: false })!),
         };
       });
 

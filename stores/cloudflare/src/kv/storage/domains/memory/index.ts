@@ -524,6 +524,10 @@ export class MemoryStorageCloudflare extends MemoryStorage {
                 const { _index, ...cleanMessage } = message;
                 const serializedMessage = {
                   ...cleanMessage,
+                  content:
+                    typeof cleanMessage.content === 'string'
+                      ? cleanMessage.content
+                      : getLegacyContentForStorage(cleanMessage.content, { mergeLegacyFields: false }),
                   createdAt: serializeDate(cleanMessage.createdAt),
                 };
                 this.logger?.debug(`Saving message ${message.id}`, {

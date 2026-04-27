@@ -553,7 +553,10 @@ export class MemoryStorageDO extends MemoryStorage {
         return {
           id: message.id,
           thread_id: message.threadId!,
-          content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+          content:
+            typeof message.content === 'string'
+              ? message.content
+              : JSON.stringify(getLegacyContentForStorage(message.content, { mergeLegacyFields: false })),
           createdAt: createdAt.toISOString(),
           role: message.role,
           type: message.type || 'v2',

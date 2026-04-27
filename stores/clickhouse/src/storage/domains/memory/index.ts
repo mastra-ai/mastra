@@ -657,7 +657,10 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       WHERE id = {var_id:String} AND thread_id = {var_thread_id:String}
     `,
           query_params: {
-            var_content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+            var_content:
+              typeof message.content === 'string'
+                ? message.content
+                : JSON.stringify(getLegacyContentForStorage(message.content, { mergeLegacyFields: false })),
             var_role: message.role,
             var_type: message.type || 'v2',
             var_resourceId: message.resourceId,
@@ -683,7 +686,10 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             id: message.id,
             thread_id: message.threadId,
             resourceId: message.resourceId,
-            content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+            content:
+              typeof message.content === 'string'
+                ? message.content
+                : JSON.stringify(getLegacyContentForStorage(message.content, { mergeLegacyFields: false })),
             createdAt: message.createdAt.toISOString(),
             role: message.role,
             type: message.type || 'v2',

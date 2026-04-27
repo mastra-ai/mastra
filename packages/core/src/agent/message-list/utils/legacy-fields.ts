@@ -61,8 +61,20 @@ function getContentFromParts(parts: MastraMessagePart[]): MastraLegacyMessageCon
   return content === '' ? undefined : content;
 }
 
-function getParts(content?: MastraMessageContentV2): MastraMessagePart[] {
+function getPartsFromValue(content?: MastraMessageContentV2): MastraMessagePart[] {
   return Array.isArray(content?.parts) ? content.parts : [];
+}
+
+function getParts(content?: MastraMessageContentV2): MastraMessagePart[] {
+  const parts = getPartsFromValue(content);
+  if (parts.length > 0) return parts;
+
+  const descriptor = content ? Object.getOwnPropertyDescriptor(content, 'content') : undefined;
+  if (descriptor && 'value' in descriptor && descriptor.value !== undefined) {
+    return [{ type: 'text', text: descriptor.value }];
+  }
+
+  return parts;
 }
 
 function isMastraMessageContentV2(content: unknown): content is MastraMessageContentV2 {
@@ -171,6 +183,7 @@ function updatePartsFromLegacyFields(content?: MastraMessageContentV2WithLegacyF
   if (!content) return parts;
 
   const descriptors = Object.getOwnPropertyDescriptors(content);
+  const legacyContent = descriptors.content && 'value' in descriptors.content ? descriptors.content.value : undefined;
 
   const legacyToolInvocations =
     descriptors.toolInvocations && 'value' in descriptors.toolInvocations
@@ -194,14 +207,22 @@ function updatePartsFromLegacyFields(content?: MastraMessageContentV2WithLegacyF
     parts.push(legacyReasoningToPart(legacyReasoning));
   }
 
-  const legacyContent = descriptors.content && 'value' in descriptors.content ? descriptors.content.value : undefined;
+  if (getPartsFromValue(content).length === 0 && legacyContent !== undefined) return parts;
+
   return mergeLegacyContentIntoParts(parts, legacyContent);
 }
 
 export function getLegacyContent(content: MastraMessageContentV2): MastraLegacyMessageContent | undefined {
   const parts = getParts(content);
   const descriptor = Object.getOwnPropertyDescriptor(content, 'content');
-  if (descriptor && 'value' in descriptor && descriptor.value !== undefined) return descriptor.value;
+  if (
+    descriptor &&
+    'value' in descriptor &&
+    descriptor.value !== undefined &&
+    getPartsFromValue(content).length === 0
+  ) {
+    return descriptor.value;
+  }
 
   return getContentFromParts(parts);
 }
@@ -232,11 +253,13 @@ export function getLegacyAnnotations(_content: MastraMessageContentV2): MastraLe
 
 export function getLegacyContentForStorage(
   content?: MastraMessageContentV2WithLegacyFields,
+  options: { mergeLegacyFields?: boolean } = {},
 ): MastraMessageContentV2 | undefined {
   const nextContent = cloneContentWithoutLegacyFields(content);
   if (!nextContent) return nextContent;
 
-  nextContent.parts = updatePartsFromLegacyFields(content);
+  nextContent.parts =
+    options.mergeLegacyFields === false ? getParts(content).map(clonePart) : updatePartsFromLegacyFields(content);
 
   return nextContent;
 }
@@ -248,14 +271,18 @@ export function stripLegacyMessageFields<T extends MastraDBMessage>(message: T):
 
   return {
     ...message,
-    content: getLegacyContentForStorage(message.content as MastraMessageContentV2WithLegacyFields),
+    content: getLegacyContentForStorage(message.content as MastraMessageContentV2WithLegacyFields, {
+      mergeLegacyFields: false,
+    }),
   };
 }
 
 export function stripLegacyMessageFieldsPreservingInstance<T extends MastraDBMessage>(message: T): T {
   if (!isMastraMessageContentV2(message.content)) return message;
 
-  const nextContent = getLegacyContentForStorage(message.content as MastraMessageContentV2WithLegacyFields);
+  const nextContent = getLegacyContentForStorage(message.content as MastraMessageContentV2WithLegacyFields, {
+    mergeLegacyFields: false,
+  });
   message.content = nextContent as T['content'];
   return message;
 }
