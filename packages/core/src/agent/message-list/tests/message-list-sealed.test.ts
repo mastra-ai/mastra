@@ -220,6 +220,103 @@ describe('MessageList sealed message handling', () => {
     expect(unsavedOutput[0]?.id).toBe('assistant-retry-msg');
   });
 
+  it('should not merge a new response into the latest assistant message loaded from memory', () => {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+
+    messageList.add(
+      {
+        id: 'assistant-memory-msg',
+        role: 'assistant',
+        threadId: 'test-thread',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Persisted assistant reply' }],
+        },
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      } as MastraDBMessage,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'assistant-retry-msg',
+        role: 'assistant',
+        threadId: 'test-thread',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Retried assistant reply' }],
+        },
+        createdAt: new Date('2024-01-01T00:00:01.000Z'),
+      } as MastraDBMessage,
+      'response',
+    );
+
+    const allMessages = messageList.get.all.db();
+    expect(allMessages.length).toBe(2);
+
+    const persistedAssistant = allMessages.find(m => m.id === 'assistant-memory-msg');
+    const retriedAssistant = allMessages.find(m => m.id === 'assistant-retry-msg');
+
+    expect(persistedAssistant?.content.parts).toHaveLength(1);
+    expect((persistedAssistant?.content.parts[0] as { text?: string })?.text).toBe('Persisted assistant reply');
+    expect(retriedAssistant?.content.parts).toHaveLength(1);
+    expect((retriedAssistant?.content.parts[0] as { text?: string })?.text).toBe('Retried assistant reply');
+
+    const unsavedOutput = messageList.get.response.db();
+    expect(unsavedOutput).toHaveLength(1);
+    expect(unsavedOutput[0]?.id).toBe('assistant-retry-msg');
+  });
+
+  it('should not replace an assistant message loaded from memory with a same-id response', () => {
+    const messageList = new MessageList({
+      threadId: 'test-thread',
+      generateMessageId: () => 'assistant-response-msg',
+    });
+
+    messageList.add(
+      {
+        id: 'assistant-memory-msg',
+        role: 'assistant',
+        threadId: 'test-thread',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Persisted assistant reply' }],
+        },
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      } as MastraDBMessage,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'assistant-memory-msg',
+        role: 'assistant',
+        threadId: 'test-thread',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Retried assistant reply' }],
+        },
+        createdAt: new Date('2024-01-01T00:00:01.000Z'),
+      } as MastraDBMessage,
+      'response',
+    );
+
+    const allMessages = messageList.get.all.db();
+    expect(allMessages.length).toBe(2);
+
+    const persistedAssistant = allMessages.find(m => m.id === 'assistant-memory-msg');
+    const retriedAssistant = allMessages.find(m => m.id === 'assistant-response-msg');
+
+    expect(persistedAssistant?.content.parts).toHaveLength(1);
+    expect((persistedAssistant?.content.parts[0] as { text?: string })?.text).toBe('Persisted assistant reply');
+    expect(retriedAssistant?.content.parts).toHaveLength(1);
+    expect((retriedAssistant?.content.parts[0] as { text?: string })?.text).toBe('Retried assistant reply');
+
+    const unsavedOutput = messageList.get.response.db();
+    expect(unsavedOutput).toHaveLength(1);
+    expect(unsavedOutput[0]?.id).toBe('assistant-response-msg');
+  });
+
   it('should add text flushed independently to a sealed message as a new message', () => {
     const messageList = new MessageList({ threadId: 'test-thread' });
 
