@@ -449,7 +449,7 @@ export class DurableAgent<
 
     // 2. Register non-serializable state (both local and global registries)
     this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
-    globalRunRegistry.set(runId, { ...registryEntry, cleanup: registryEntry.cleanup, messageList });
+    globalRunRegistry.set(runId, { ...registryEntry, messageList });
 
     // Track cleanup state to avoid double cleanup
     let cleanedUp = false;
@@ -569,6 +569,9 @@ export class DurableAgent<
       }, this.#cleanupTimeoutMs);
     };
 
+    const globalEntry = globalRunRegistry.get(runId);
+    const resumeModel = globalEntry?.model as any;
+
     const {
       output,
       cleanup: streamCleanup,
@@ -578,8 +581,8 @@ export class DurableAgent<
       runId,
       messageId: crypto.randomUUID(),
       model: {
-        modelId: undefined,
-        provider: undefined,
+        modelId: resumeModel?.modelId,
+        provider: resumeModel?.provider,
         version: 'v3',
       },
       threadId: memoryInfo?.threadId,
@@ -640,6 +643,12 @@ export class DurableAgent<
   /**
    * Observe an existing stream.
    * Use this to reconnect to a stream after a network disconnection.
+   *
+   * **Warning:** The returned `cleanup()` function destroys the run's registry
+   * entries and cached PubSub events. Only call it when you are done with the
+   * run entirely. If the workflow is suspended and you intend to resume later,
+   * do not call cleanup — let the auto-cleanup timer handle it after
+   * FINISH/ERROR. Auto-cleanup does not fire on SUSPENDED events.
    */
   async observe(
     runId: string,
@@ -777,6 +786,10 @@ export class DurableAgent<
     this.#runRegistry.registerWithMessageList(preparation.runId, preparation.registryEntry, preparation.messageList, {
       threadId: preparation.threadId,
       resourceId: preparation.resourceId,
+    });
+    globalRunRegistry.set(preparation.runId, {
+      ...preparation.registryEntry,
+      messageList: preparation.messageList,
     });
 
     return {

@@ -54,6 +54,10 @@ export class LocalWorkflowExecutor implements WorkflowExecutor {
 
   /**
    * Resume a suspended workflow locally.
+   *
+   * `createRun` here binds a Run instance for the existing runId (reusing
+   * an in-memory run if present). The actual state restoration happens in
+   * `run.resume()`, which loads the persisted snapshot for this runId.
    */
   async resume(
     workflow: any,

@@ -95,10 +95,13 @@ export class CachingPubSub extends PubSub {
     const cacheKey = this.getCacheKey(topic);
     const counterKey = this.getCounterKey(topic);
 
-    // Atomically get next index (increment returns value after incrementing, so subtract 1 for 0-based index)
-    // First event: increment returns 1, index is 0
-    // Second event: increment returns 2, index is 1
-    const index = (await this.cache.increment(counterKey)) - 1;
+    let index = 0;
+    try {
+      // Atomically get next index (increment returns value after incrementing, so subtract 1 for 0-based index)
+      index = (await this.cache.increment(counterKey)) - 1;
+    } catch (error) {
+      this.logError(`[CachingPubSub] Failed to increment counter for ${topic}`, error);
+    }
 
     const fullEvent: Event = {
       ...event,
@@ -107,10 +110,14 @@ export class CachingPubSub extends PubSub {
       index,
     };
 
-    // Cache BEFORE live publish so late-joining observers never miss events
-    await this.cache.listPush(cacheKey, fullEvent);
+    try {
+      // Cache BEFORE live publish so late-joining observers never miss events
+      await this.cache.listPush(cacheKey, fullEvent);
+    } catch (error) {
+      this.logError(`[CachingPubSub] Failed to cache event for ${topic}`, error);
+    }
 
-    // Publish to inner PubSub with the full event (including index)
+    // Always publish to inner PubSub — cache failure must not block live delivery
     await this.inner.publish(topic, fullEvent);
   }
 
@@ -136,12 +143,17 @@ export class CachingPubSub extends PubSub {
     // Each subscriber gets its own seen set for deduplication
     // This prevents the same event from being delivered twice to THIS subscriber
     // (once via cache replay and once via live subscription)
-    const seen = new Set<string>();
+    let seen: Set<string> | null = new Set<string>();
 
-    // Wrap callback to deduplicate events
+    // Wrap callback to deduplicate events during replay/live overlap.
+    // After replay completes, seen is nulled out and the wrapper becomes a passthrough.
     const wrappedCb: EventCallback = (event, ack) => {
-      if (!seen.has(event.id)) {
-        seen.add(event.id);
+      if (seen) {
+        if (!seen.has(event.id)) {
+          seen.add(event.id);
+          cb(event, ack);
+        }
+      } else {
         cb(event, ack);
       }
     };
@@ -153,14 +165,15 @@ export class CachingPubSub extends PubSub {
     // 2. Fetch and replay cached history
     const history = await this.getHistory(topic);
     for (const event of history) {
-      if (!seen.has(event.id)) {
-        seen.add(event.id);
+      if (!seen!.has(event.id)) {
+        seen!.add(event.id);
         cb(event);
       }
     }
 
-    // Deduplication only needed during replay/live overlap — clear to free memory
-    seen.clear();
+    // Deduplication only needed during replay/live overlap — null out to free memory
+    // and skip unnecessary has/add for all subsequent live events
+    seen = null;
   }
 
   /**
@@ -173,12 +186,17 @@ export class CachingPubSub extends PubSub {
    */
   async subscribeFromOffset(topic: string, offset: number, cb: EventCallback): Promise<void> {
     // Each subscriber gets its own seen set for deduplication
-    const seen = new Set<string>();
+    let seen: Set<string> | null = new Set<string>();
 
-    // Wrap callback to deduplicate events by ID
+    // Wrap callback to deduplicate events during replay/live overlap.
+    // After replay completes, seen is nulled out and the wrapper becomes a passthrough.
     const wrappedCb: EventCallback = (event, ack) => {
-      if (!seen.has(event.id)) {
-        seen.add(event.id);
+      if (seen) {
+        if (!seen.has(event.id)) {
+          seen.add(event.id);
+          cb(event, ack);
+        }
+      } else {
         cb(event, ack);
       }
     };
@@ -190,14 +208,14 @@ export class CachingPubSub extends PubSub {
     // 2. Fetch and replay cached history FROM the specified index
     const history = await this.getHistory(topic, offset);
     for (const event of history) {
-      if (!seen.has(event.id)) {
-        seen.add(event.id);
+      if (!seen!.has(event.id)) {
+        seen!.add(event.id);
         cb(event);
       }
     }
 
-    // Deduplication only needed during replay/live overlap — clear to free memory
-    seen.clear();
+    // Deduplication only needed during replay/live overlap — null out to free memory
+    seen = null;
   }
 
   /**

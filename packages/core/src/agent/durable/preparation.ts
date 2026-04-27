@@ -212,7 +212,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       });
       await runner.runInputProcessors(messageList, {} as any, requestContext, 0);
     } catch (error) {
-      logger?.debug?.(`[DurableAgent] Error running input processors: ${error}`);
+      logger?.warn?.(`[DurableAgent] Error running input processors: ${error}`);
     }
   }
 

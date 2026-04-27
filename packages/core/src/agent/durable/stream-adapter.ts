@@ -110,6 +110,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
   // Track subscription state
   let isSubscribed = false;
+  let cancelled = false;
   let controller: ReadableStreamDefaultController<ChunkType<OUTPUT>> | null = null;
 
   // Promise that resolves when subscription is established
@@ -201,6 +202,10 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           break;
       }
     } catch (error) {
+      // Intentional catch-and-continue: callback errors (onChunk, onStepFinish,
+      // onSuspended) must not kill the stream. onFinish/onError have their own
+      // inner try/catch and close/error the stream before invoking callbacks,
+      // so they are not affected by this outer handler.
       logError(`[DurableAgentStream] Error handling event ${streamEvent.type}:`, error);
     }
   };
@@ -221,6 +226,14 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
       subscribePromise
         .then(() => {
+          if (cancelled) {
+            // cleanup() was called before subscribe resolved — unsubscribe now
+            void pubsub.unsubscribe(topic, handleEvent).catch(error => {
+              logError(`[DurableAgentStream] Failed to unsubscribe from ${topic}:`, error);
+            });
+            resolveReady();
+            return;
+          }
           isSubscribed = true;
           resolveReady();
         })
@@ -235,11 +248,13 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     },
   });
 
-  // Cleanup function - intentionally fire-and-forget for unsubscribe
-  // Multiple calls are safe - isSubscribed flag prevents duplicate unsubscribe
+  // Cleanup function - intentionally fire-and-forget for unsubscribe.
+  // Sets cancelled=true so the subscribe .then() handler will unsubscribe
+  // if cleanup runs before the subscription promise resolves.
   const cleanup = () => {
+    cancelled = true;
     if (isSubscribed) {
-      isSubscribed = false; // Set before async call to prevent race
+      isSubscribed = false;
       const topic = AGENT_STREAM_TOPIC(runId);
       void pubsub.unsubscribe(topic, handleEvent).catch(error => {
         logError(`[DurableAgentStream] Failed to unsubscribe from ${topic}:`, error);

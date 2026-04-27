@@ -1,6 +1,6 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { createTool } from '../../../tools';
@@ -8,7 +8,7 @@ import { Agent } from '../../agent';
 import { MessageList } from '../../message-list';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
-import { RunRegistry, ExtendedRunRegistry } from '../run-registry';
+import { RunRegistry, ExtendedRunRegistry, globalRunRegistry } from '../run-registry';
 import type { AgentStreamEvent } from '../types';
 
 // ============================================================================
@@ -349,6 +349,41 @@ describe('DurableAgent', () => {
       expect(durableAgent.runRegistry.has(result2.runId)).toBe(false);
     });
   });
+
+  describe('globalRunRegistry', () => {
+    it('should populate globalRunRegistry in prepare() for consistency with stream()', async () => {
+      const mockModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'text-delta', textDelta: 'Hello' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        }),
+      });
+
+      const baseAgent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'You are a test assistant',
+        model: mockModel as LanguageModelV2,
+      });
+
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const result = await durableAgent.prepare('Hello!');
+
+      // globalRunRegistry should have the entry (matching stream() behavior)
+      expect(globalRunRegistry.has(result.runId)).toBe(true);
+
+      const entry = globalRunRegistry.get(result.runId);
+      expect(entry).toBeDefined();
+      expect(entry!.model).toBeDefined();
+
+      // Cleanup
+      globalRunRegistry.delete(result.runId);
+    });
+  });
 });
 
 // ============================================================================
@@ -628,6 +663,33 @@ describe('createDurableAgentStream', () => {
 
     // Clean up
     cleanup();
+  });
+
+  it('should unsubscribe from pubsub even when cleanup is called before subscribe resolves', async () => {
+    const { createDurableAgentStream } = await import('../stream-adapter');
+
+    const runId = 'test-cancel-race';
+    const topic = AGENT_STREAM_TOPIC(runId);
+
+    const { cleanup } = createDurableAgentStream({
+      pubsub,
+      runId,
+      messageId: 'msg-race',
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+    });
+
+    // Call cleanup synchronously — before the subscribe promise's .then() fires
+    cleanup();
+
+    // Let microtasks settle so the .then() handler fires
+    await new Promise(resolve => setTimeout(resolve, 20));
+
+    // The handler should be unsubscribed. Verify by checking that publishing
+    // to the topic does not invoke any listener. We spy on the pubsub to detect
+    // whether a listener callback was invoked.
+    const emitter = (pubsub as any).emitter;
+    const listenerCount = emitter.listenerCount(topic);
+    expect(listenerCount).toBe(0);
   });
 
   it('should invoke callbacks for different event types', async () => {
@@ -958,5 +1020,67 @@ describe('emit helper functions', () => {
     expect(received[0].type).toBe(AgentStreamEventTypes.SUSPENDED);
     expect(received[0].data.toolName).toBe('myTool');
     expect(received[0].data.type).toBe('approval');
+  });
+});
+
+// ============================================================================
+// Log Level Tests (H4/M3)
+// ============================================================================
+
+// ============================================================================
+// Resume model metadata (L3)
+// ============================================================================
+
+describe('DurableAgent resume model metadata', () => {
+  it('should pass model info from registry to the resume stream', async () => {
+    const streamAdapter = await import('../stream-adapter');
+    const createStreamSpy = vi.spyOn(streamAdapter, 'createDurableAgentStream');
+
+    const pubsub = new EventEmitterPubSub();
+    const runId = 'test-resume-model';
+
+    const mockModel = { modelId: 'gpt-4', provider: 'openai' };
+    globalRunRegistry.set(runId, {
+      tools: {},
+      model: mockModel as any,
+      cleanup: () => {},
+    });
+
+    const mockLM = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'text-delta', textDelta: 'Hi' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1 } },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      }),
+    });
+
+    const baseAgent = new Agent({
+      id: 'test-agent',
+      instructions: 'Test',
+      model: mockLM as LanguageModelV2,
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub, cache: false });
+
+    durableAgent.runRegistry.register(runId, {
+      tools: {},
+      model: mockModel as any,
+      cleanup: () => {},
+    });
+
+    const result = await durableAgent.resume(runId, { approved: true });
+
+    // Verify createDurableAgentStream was called with model info from the registry
+    expect(createStreamSpy).toHaveBeenCalledTimes(1);
+    const streamArgs = createStreamSpy.mock.calls[0]![0];
+    expect(streamArgs.model.modelId).toBe('gpt-4');
+    expect(streamArgs.model.provider).toBe('openai');
+
+    result.cleanup();
+    globalRunRegistry.delete(runId);
+    createStreamSpy.mockRestore();
+    await pubsub.close();
   });
 });

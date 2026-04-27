@@ -253,7 +253,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
               outputMessageList.deserialize(state.messageListState);
               await runner.runOutputProcessors(outputMessageList, {} as any, requestContext ?? new RequestContext(), 0);
             } catch (error) {
-              logger?.debug?.(`[DurableAgent] Error running output processors: ${error}`);
+              logger?.warn?.(`[DurableAgent] Error running output processors: ${error}`);
             }
           }
 
@@ -286,7 +286,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
                 durableState.memoryConfig,
               );
             } catch (error) {
-              logger?.debug?.(`[DurableAgent] Error persisting messages: ${error}`);
+              logger?.warn?.(`[DurableAgent] Error persisting messages: ${error}`);
             }
           }
 

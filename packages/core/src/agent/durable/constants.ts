@@ -39,7 +39,13 @@ export const AgentStreamEventTypes = {
 export const DurableAgentDefaults = {
   /** Default maximum number of agentic loop iterations */
   MAX_STEPS: 5,
-  /** Default tool call concurrency */
+  /**
+   * Default tool call concurrency.
+   * NOTE: Currently unused — durable workflows run tool calls sequentially
+   * (concurrency: 1) because tool approval and suspension require sequential
+   * execution. The serialized toolCallConcurrency option is preserved in
+   * workflow input for future use when dynamic foreach concurrency is supported.
+   */
   TOOL_CALL_CONCURRENCY: 10,
 } as const;
 

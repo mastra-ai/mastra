@@ -412,6 +412,100 @@ describe('CachingPubSub', () => {
     });
   });
 
+  describe('publish resilience', () => {
+    it('should still deliver to live subscribers when cache.listPush fails', async () => {
+      const topic = 'cache-fail-topic';
+      const callback = vi.fn();
+
+      // Create a cache that throws on listPush
+      const failingCache = new InMemoryServerCache();
+      failingCache.listPush = async (_key: string, _value: unknown) => {
+        throw new Error('Cache write failed');
+      };
+
+      const failingCachingPubsub = new CachingPubSub(innerPubsub, failingCache);
+
+      await failingCachingPubsub.subscribe(topic, callback);
+      await failingCachingPubsub.publish(topic, { type: 'test', runId: 'run-1', data: { hello: 'world' } });
+
+      // Live subscriber should still receive the event even though cache failed
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'test', data: { hello: 'world' } }),
+        expect.any(Function),
+        expect.any(Function),
+      );
+    });
+
+    it('should still deliver to live subscribers when cache.increment fails', async () => {
+      const topic = 'increment-fail-topic';
+      const callback = vi.fn();
+
+      const failingCache = new InMemoryServerCache();
+      failingCache.increment = async (_key: string) => {
+        throw new Error('Increment failed');
+      };
+
+      const failingCachingPubsub = new CachingPubSub(innerPubsub, failingCache);
+
+      await failingCachingPubsub.subscribe(topic, callback);
+      await failingCachingPubsub.publish(topic, { type: 'test', runId: 'run-1', data: {} });
+
+      // Live subscriber should still receive the event
+      expect(callback).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('seen set after replay', () => {
+    it('should not track event IDs in dedup set after replay completes', async () => {
+      const topic = 'seen-set-topic';
+
+      // Publish a cached event before subscribing
+      await cachingPubsub.publish(topic, { type: 'cached', runId: 'run-1', data: {} });
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Subscribe with replay — wrappedCb is stored in callbackMap
+      const callback = vi.fn();
+      await cachingPubsub.subscribeWithReplay(topic, callback);
+
+      // Verify we received the cached event
+      expect(callback).toHaveBeenCalledTimes(1);
+
+      // Now send 50 live events
+      for (let i = 0; i < 50; i++) {
+        await cachingPubsub.publish(topic, { type: `live-${i}`, runId: 'run-1', data: {} });
+      }
+      expect(callback).toHaveBeenCalledTimes(51); // 1 cached + 50 live
+
+      // Get the wrappedCb from the callbackMap (internal state)
+      const callbackMap = (cachingPubsub as any).callbackMap as Map<any, any>;
+      const wrappedCb = callbackMap.get(callback);
+      expect(wrappedCb).toBeDefined();
+
+      // The wrappedCb closure captures a `seen` variable.
+      // After replay, `seen` should be nulled out (not growing with each live event).
+      // We can verify this by checking that the wrapper is a passthrough:
+      // calling it with a duplicate ID should still forward it (no dedup after replay).
+      const duplicateEvent = {
+        id: 'already-seen-id',
+        type: 'test',
+        runId: 'run-1',
+        data: {},
+        createdAt: new Date(),
+        index: 999,
+      };
+
+      // Call wrappedCb twice with the same event ID
+      callback.mockClear();
+      wrappedCb(duplicateEvent);
+      wrappedCb(duplicateEvent);
+
+      // After replay, the seen set should be null — wrappedCb should be a passthrough
+      // Both calls should forward to cb (no dedup on live events post-replay)
+      expect(callback).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('concurrent operations', () => {
     it('should handle concurrent publishes', async () => {
       const topic = 'concurrent-topic';
