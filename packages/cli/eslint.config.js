@@ -6,6 +6,6 @@ const config = await createConfig();
 export default [
   ...config,
   {
-    ignores: ['src/public/**'],
+    ignores: ['src/public/**', 'src/commands/api/route-metadata.generated.ts'],
   },
 ];

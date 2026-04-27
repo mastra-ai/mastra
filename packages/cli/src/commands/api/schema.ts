@@ -105,7 +105,7 @@ export function buildCommandExamples(descriptor: ApiCommandDescriptor): CliSchem
       return [
         {
           description: 'Start a workflow run',
-          command: `${command} data-pipeline '{"input":{"source":"s3://bucket/data.csv"}}'`,
+          command: `${command} data-pipeline '{"inputData":{"source":"s3://bucket/data.csv"}}'`,
         },
       ];
     case 'workflowRunResume':
