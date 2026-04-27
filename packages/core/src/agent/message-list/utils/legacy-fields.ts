@@ -54,7 +54,7 @@ function getContentFromParts(parts: MastraMessagePart[]): MastraLegacyMessageCon
   let content = '';
   for (const part of parts) {
     if (part.type === 'text') {
-      content = content ? `${content} ${part.text}` : part.text;
+      content = part.text;
     }
   }
 
@@ -157,7 +157,11 @@ function mergeLegacyContentIntoParts(
     return parts;
   }
 
-  return [{ type: 'text', text: legacyContent }, ...parts];
+  if (parts.length === 0) {
+    return [{ type: 'text', text: legacyContent }];
+  }
+
+  return parts;
 }
 
 function updatePartsFromLegacyFields(content?: MastraMessageContentV2WithLegacyFields): MastraMessagePart[] {
