@@ -58,4 +58,15 @@ describe('AgentBuilderBreadcrumb', () => {
     expect(screen.getByTestId('agent-builder-breadcrumb-skeleton')).toBeTruthy();
     expect(screen.queryByText('Support agent')).toBeNull();
   });
+
+  it('renders "New agent" as a static label when creating, ignoring the form name', () => {
+    render(
+      <FormWrapper>
+        <AgentBuilderBreadcrumb creating />
+      </FormWrapper>,
+    );
+
+    expect(screen.getByText('New agent')).toBeTruthy();
+    expect(screen.queryByText('Support agent')).toBeNull();
+  });
 });

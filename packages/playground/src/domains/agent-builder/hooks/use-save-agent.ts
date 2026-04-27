@@ -1,81 +1,52 @@
-import type {
-  CreateStoredAgentParams,
-  StoredAgentToolConfig,
-  StoredWorkspaceRef,
-  UpdateStoredAgentParams,
-} from '@mastra/client-js';
 import { toast } from '@mastra/playground-ui';
 import { useCallback } from 'react';
+import { formValuesToSaveParams } from '../mappers/form-values-to-save-params';
 import type { AgentBuilderEditFormValues } from '../schemas';
+import type { AgentTool } from '../types/agent-tool';
 import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
-
-interface AvailableTool {
-  id: string;
-  description?: string;
-}
 
 interface UseSaveAgentArgs {
   agentId: string;
   mode: 'create' | 'edit';
-  availableTools?: AvailableTool[];
+  availableAgentTools?: AgentTool[];
   onSuccess?: (agentId: string) => void;
 }
 
-export const useSaveAgent = ({ agentId, mode, availableTools = [], onSuccess }: UseSaveAgentArgs) => {
+export function useSaveAgent({ agentId, mode, availableAgentTools = [], onSuccess }: UseSaveAgentArgs) {
   const { createStoredAgent, updateStoredAgent } = useStoredAgentMutations(agentId);
 
   const save = useCallback(
     async (values: AgentBuilderEditFormValues) => {
-      const descriptionById = new Map(availableTools.map(t => [t.id, t.description]));
-
-      const tools: Record<string, StoredAgentToolConfig> = Object.fromEntries(
-        Object.entries(values.tools ?? {})
-          .filter(([, enabled]) => enabled)
-          .map(([id]) => {
-            const description = descriptionById.get(id);
-            return [id, description ? { description } : {}];
-          }),
-      );
-
-      const skills = Object.fromEntries((values.skills ?? []).map(skillId => [skillId, {}]));
-
-      const toolsOrUndefined = Object.keys(tools).length > 0 ? tools : undefined;
-      const skillsOrUndefined = Object.keys(skills).length > 0 ? skills : undefined;
-
-      const workspaceRef: StoredWorkspaceRef | undefined =
-        typeof values.workspaceId === 'string' && values.workspaceId.length > 0
-          ? { type: 'id', workspaceId: values.workspaceId }
-          : undefined;
-
-      const description = values.description?.trim() ? values.description.trim() : undefined;
+      const params = formValuesToSaveParams(values, availableAgentTools);
+      const workspaceField = params.workspace ? { workspace: params.workspace } : {};
 
       try {
         if (mode === 'edit') {
-          const params: UpdateStoredAgentParams = {
-            name: values.name,
-            description,
-            instructions: values.instructions,
-            tools: toolsOrUndefined,
-            skills: skillsOrUndefined,
-            ...(workspaceRef ? { workspace: workspaceRef } : {}),
-          };
-          const updated = await updateStoredAgent.mutateAsync(params);
+          const updated = await updateStoredAgent.mutateAsync({
+            name: params.name,
+            description: params.description,
+            instructions: params.instructions,
+            tools: params.tools,
+            agents: params.agents,
+            skills: params.skills,
+            ...workspaceField,
+          });
           toast.success('Agent updated');
           onSuccess?.(agentId);
           return updated;
         }
 
-        const params: CreateStoredAgentParams = {
+        const created = await createStoredAgent.mutateAsync({
           id: agentId,
-          name: values.name,
-          description,
-          instructions: values.instructions,
+          name: params.name,
+          description: params.description,
+          instructions: params.instructions,
           model: { provider: 'google', name: 'gemini-2.5-flash' },
-          tools: toolsOrUndefined,
-          skills: skillsOrUndefined,
-          ...(workspaceRef ? { workspace: workspaceRef } : {}),
-        };
-        const created = await createStoredAgent.mutateAsync(params);
+          tools: params.tools,
+          agents: params.agents,
+          skills: params.skills,
+          ...workspaceField,
+        });
         toast.success('Agent created');
         onSuccess?.(created.id);
         return created;
@@ -84,8 +55,8 @@ export const useSaveAgent = ({ agentId, mode, availableTools = [], onSuccess }: 
         throw error;
       }
     },
-    [agentId, mode, availableTools, createStoredAgent, updateStoredAgent, onSuccess],
+    [agentId, mode, availableAgentTools, createStoredAgent, updateStoredAgent, onSuccess],
   );
 
   return { save, isSaving: createStoredAgent.isPending || updateStoredAgent.isPending };
-};
+}

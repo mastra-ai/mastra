@@ -7,6 +7,7 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AgentBuilderEditFormValues } from '../../../schemas';
+import type { AgentTool } from '../../../types/agent-tool';
 import { ConversationPanel } from '../conversation-panel';
 
 type Features = {
@@ -56,9 +57,18 @@ const FormWrapper = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+const toAgentTools = (tools: Array<{ id: string; description?: string; type?: AgentTool['type'] }>): AgentTool[] =>
+  tools.map(t => ({
+    id: t.id,
+    name: t.id,
+    description: t.description,
+    isChecked: false,
+    type: t.type ?? 'tool',
+  }));
+
 const renderPanel = (
   features: Features,
-  availableTools: Array<{ id: string; description?: string }> = [],
+  availableTools: Array<{ id: string; description?: string; type?: AgentTool['type'] }> = [],
   availableWorkspaces: Array<{ id: string; name: string }> = [],
 ) =>
   render(
@@ -66,7 +76,7 @@ const renderPanel = (
       <ConversationPanel
         initialUserMessage="hello"
         features={features}
-        availableTools={availableTools}
+        availableAgentTools={toAgentTools(availableTools)}
         availableWorkspaces={availableWorkspaces}
         agentId="agent-test"
       />
@@ -240,7 +250,7 @@ describe('ConversationPanel agent-builder client tool', () => {
         <ConversationPanel
           initialUserMessage="hello"
           features={{ ...allOff, tools: true }}
-          availableTools={[]}
+          availableAgentTools={[]}
           toolsReady={false}
           agentId="agent-test"
         />
@@ -254,7 +264,7 @@ describe('ConversationPanel agent-builder client tool', () => {
         <ConversationPanel
           initialUserMessage="hello"
           features={{ ...allOff, tools: true }}
-          availableTools={[{ id: 'web-search', description: 'Search the web' }]}
+          availableAgentTools={toAgentTools([{ id: 'web-search', description: 'Search the web' }])}
           toolsReady={true}
           agentId="agent-test"
         />

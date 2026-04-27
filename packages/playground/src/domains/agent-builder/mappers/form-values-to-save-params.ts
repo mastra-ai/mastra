@@ -1,0 +1,67 @@
+import type { StoredAgentToolConfig, StoredWorkspaceRef } from '@mastra/client-js';
+import type { AgentBuilderEditFormValues } from '../schemas';
+import type { AgentTool } from '../types/agent-tool';
+
+export interface SaveParams {
+  name: string;
+  description: string | undefined;
+  instructions: string;
+  tools: Record<string, StoredAgentToolConfig> | undefined;
+  agents: Record<string, StoredAgentToolConfig> | undefined;
+  skills: Record<string, {}> | undefined;
+  workspace: StoredWorkspaceRef | undefined;
+}
+
+function buildEnabledRecord(
+  selectedById: Record<string, boolean> | undefined,
+  descriptionById: Map<string, string | undefined>,
+): Record<string, StoredAgentToolConfig> {
+  return Object.fromEntries(
+    Object.entries(selectedById ?? {})
+      .filter(([, enabled]) => enabled)
+      .map(([id]) => {
+        const description = descriptionById.get(id);
+        return [id, description ? { description } : {}];
+      }),
+  );
+}
+
+function emptyToUndefined<T extends Record<string, unknown>>(record: T): T | undefined {
+  return Object.keys(record).length > 0 ? record : undefined;
+}
+
+export function formValuesToSaveParams(
+  values: AgentBuilderEditFormValues,
+  availableAgentTools: AgentTool[],
+): SaveParams {
+  const toolDescriptionById = new Map<string, string | undefined>();
+  const agentDescriptionById = new Map<string, string | undefined>();
+  for (const item of availableAgentTools) {
+    if (item.type === 'tool') {
+      toolDescriptionById.set(item.id, item.description);
+    } else {
+      agentDescriptionById.set(item.id, item.description);
+    }
+  }
+
+  const tools = buildEnabledRecord(values.tools, toolDescriptionById);
+  const agents = buildEnabledRecord(values.agents, agentDescriptionById);
+  const skills = Object.fromEntries((values.skills ?? []).map(skillId => [skillId, {}]));
+
+  const workspace: StoredWorkspaceRef | undefined =
+    typeof values.workspaceId === 'string' && values.workspaceId.length > 0
+      ? { type: 'id', workspaceId: values.workspaceId }
+      : undefined;
+
+  const description = values.description?.trim() ? values.description.trim() : undefined;
+
+  return {
+    name: values.name,
+    description,
+    instructions: values.instructions,
+    tools: emptyToUndefined(tools),
+    agents: emptyToUndefined(agents),
+    skills: emptyToUndefined(skills),
+    workspace,
+  };
+}

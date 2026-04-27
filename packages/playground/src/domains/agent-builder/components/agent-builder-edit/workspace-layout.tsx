@@ -10,6 +10,7 @@ export type WorkspaceMode = 'build' | 'test';
 interface WorkspaceLayoutProps {
   isLoading: boolean;
   mode: WorkspaceMode;
+  creating?: boolean;
   modeAction?: ReactNode;
   primaryAction?: ReactNode;
   chat: ReactNode;
@@ -21,6 +22,7 @@ interface WorkspaceLayoutProps {
 export const WorkspaceLayout = ({
   isLoading,
   mode,
+  creating = false,
   modeAction,
   primaryAction,
   chat,
@@ -45,7 +47,7 @@ export const WorkspaceLayout = ({
             <ArrowLeftIcon />
           </IconButton>
         </div>
-        <AgentBuilderBreadcrumb className="justify-self-center" isLoading={isLoading} mode={mode} />
+        <AgentBuilderBreadcrumb className="justify-self-center" isLoading={isLoading} mode={mode} creating={creating} />
         <div className="justify-self-end flex items-center gap-2">
           {modeAction}
           <IconButton
