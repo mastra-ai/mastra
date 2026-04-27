@@ -787,6 +787,15 @@ describe('Express Server Adapter', () => {
   });
 
   describe('Custom route prefix validation', () => {
+    let server: Server | null = null;
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>(resolve => server!.close(() => resolve()));
+        server = null;
+      }
+    });
+
     it('should throw when a custom route path starts with the server prefix', async () => {
       const customRoutes = [
         registerApiRoute('/mastra/custom', {
