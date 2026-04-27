@@ -1143,29 +1143,21 @@ export class MessageList {
           this.messages.push(messageV2);
         } else {
           const isExistingFromMemory = this.memoryMessages.has(existingMessage);
-          if (messageSource === 'response' && isExistingFromMemory) {
-            messageV2.id = this.generateNewMessageId(messageV2.role);
-            if (messageV2.createdAt <= existingMessage.createdAt) {
-              messageV2.createdAt = new Date(existingMessage.createdAt.getTime() + 1);
-            }
-            this.messages.push(messageV2);
-          } else {
-            const shouldMergeIntoExisting = MessageMerger.shouldMerge(
-              existingMessage,
-              messageV2,
-              messageSource,
-              isExistingFromMemory,
-              this._agentNetworkAppend,
-            );
-            if (shouldMergeIntoExisting) {
-              MessageMerger.merge(existingMessage, messageV2);
-              this.pushMessageToSource(existingMessage, messageSource);
-              // Sort messages and return early — existingMessage stays in messages[] and its Sets
-              this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-              return this;
-            }
-            this.messages[existingIndex] = messageV2;
+          const shouldMergeIntoExisting = MessageMerger.shouldMerge(
+            existingMessage,
+            messageV2,
+            messageSource,
+            isExistingFromMemory,
+            this._agentNetworkAppend,
+          );
+          if (shouldMergeIntoExisting) {
+            MessageMerger.merge(existingMessage, messageV2);
+            this.pushMessageToSource(existingMessage, messageSource);
+            // Sort messages and return early — existingMessage stays in messages[] and its Sets
+            this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+            return this;
           }
+          this.messages[existingIndex] = messageV2;
         }
       } else if (!exists) {
         this.messages.push(messageV2);
@@ -1182,18 +1174,6 @@ export class MessageList {
 
   private pushMessageToSource(messageV2: MastraDBMessage, messageSource: MessageSource) {
     this.stateManager.addToSource(messageV2, messageSource);
-  }
-
-  private generateNewMessageId(role?: string) {
-    return (
-      this.generateMessageId?.({
-        idType: 'message',
-        source: 'agent',
-        threadId: this.memoryInfo?.threadId,
-        resourceId: this.memoryInfo?.resourceId,
-        role,
-      }) ?? randomUUID()
-    );
   }
 
   private lastCreatedAt?: number;

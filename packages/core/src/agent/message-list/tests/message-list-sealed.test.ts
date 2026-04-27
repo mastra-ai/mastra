@@ -220,7 +220,7 @@ describe('MessageList sealed message handling', () => {
     expect(unsavedOutput[0]?.id).toBe('assistant-retry-msg');
   });
 
-  it('should not merge a new response into the latest assistant message loaded from memory', () => {
+  it('should not merge a new response into the latest sealed assistant message loaded from memory', () => {
     const messageList = new MessageList({ threadId: 'test-thread' });
 
     messageList.add(
@@ -230,7 +230,14 @@ describe('MessageList sealed message handling', () => {
         threadId: 'test-thread',
         content: {
           format: 2,
-          parts: [{ type: 'text', text: 'Persisted assistant reply' }],
+          parts: [
+            {
+              type: 'text',
+              text: 'Persisted assistant reply',
+              metadata: { mastra: { sealedAt: 1 } },
+            } as MastraDBMessage['content']['parts'][number],
+          ],
+          metadata: { mastra: { sealed: true } },
         },
         createdAt: new Date('2024-01-01T00:00:00.000Z'),
       } as MastraDBMessage,
@@ -267,10 +274,10 @@ describe('MessageList sealed message handling', () => {
     expect(unsavedOutput[0]?.id).toBe('assistant-retry-msg');
   });
 
-  it('should not replace an assistant message loaded from memory with a same-id response', () => {
+  it('should not replace a sealed assistant message loaded from memory with a same-id response', () => {
     const messageList = new MessageList({
       threadId: 'test-thread',
-      generateMessageId: () => 'assistant-response-msg',
+      generateMessageId: ({ source }) => (source === 'memory' ? 'assistant-response-msg' : 'unused-id'),
     });
 
     messageList.add(
@@ -280,7 +287,14 @@ describe('MessageList sealed message handling', () => {
         threadId: 'test-thread',
         content: {
           format: 2,
-          parts: [{ type: 'text', text: 'Persisted assistant reply' }],
+          parts: [
+            {
+              type: 'text',
+              text: 'Persisted assistant reply',
+              metadata: { mastra: { sealedAt: 1 } },
+            } as MastraDBMessage['content']['parts'][number],
+          ],
+          metadata: { mastra: { sealed: true } },
         },
         createdAt: new Date('2024-01-01T00:00:00.000Z'),
       } as MastraDBMessage,

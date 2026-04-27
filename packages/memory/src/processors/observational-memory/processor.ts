@@ -306,6 +306,11 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         // and output processors are separate instances (see comment in processInputStep).
         const turn = (state.__omTurn as ObservationTurn | undefined) ?? this.turn;
         if (turn) {
+          const responseMessages = messageList.get.response.db();
+          if (responseMessages.length > 0) {
+            this.engine.sealMessagesForBuffering(responseMessages);
+            await this.engine.persistSealedMessages(responseMessages, context.threadId, context.resourceId);
+          }
           await turn.end();
           this.turn = undefined;
           state.__omTurn = undefined;

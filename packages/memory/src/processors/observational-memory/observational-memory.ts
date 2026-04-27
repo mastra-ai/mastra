@@ -1685,6 +1685,22 @@ export class ObservationalMemory {
     }
   }
 
+  async persistSealedMessages(
+    messagesToSave: MastraDBMessage[],
+    threadId: string,
+    resourceId: string | undefined,
+  ): Promise<void> {
+    if (messagesToSave.length === 0) {
+      return;
+    }
+
+    await this.messageHistory.persistMessages({
+      messages: messagesToSave,
+      threadId,
+      resourceId,
+    });
+  }
+
   /**
    * Load messages from storage that haven't been observed yet.
    * Uses cursor-based query with lastObservedAt timestamp for efficiency.

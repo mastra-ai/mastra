@@ -67,9 +67,7 @@ export class MessageMerger {
       latestMessage.role === 'assistant' &&
       incomingMessage.role === 'assistant' &&
       latestMessage.threadId === incomingMessage.threadId &&
-      // Preserve source boundaries: a new response should not mutate stored history.
-      !isLatestFromMemory &&
-      // If the incoming message is from memory, don't append to the last assistant message
+      // If the message is from memory, don't append to the last assistant message
       messageSource !== 'memory';
 
     // Agent network append flag handling

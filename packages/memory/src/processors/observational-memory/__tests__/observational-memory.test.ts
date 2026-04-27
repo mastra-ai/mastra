@@ -13450,6 +13450,124 @@ describe('Processor behavioral regressions', () => {
     ).toHaveLength(1);
   });
 
+  it('should seal and persist final response messages before the turn end save', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const storage = createInMemoryStorage();
+    const threadId = 'final-seal-thread';
+    const resourceId = 'final-seal-resource';
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      } as any,
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [{ type: 'text' as const, text: 'ok' }],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: { messageTokens: 500000, bufferTokens: 5000, bufferActivation: 0.8 },
+      reflection: { observationTokens: 200000 },
+    });
+
+    const memoryProvider = {
+      getContext: async () => ({
+        systemMessage: undefined,
+        messages: [],
+        hasObservations: false,
+        omRecord: null,
+        continuationMessage: undefined,
+        otherThreadsContext: undefined,
+      }),
+      getMemoryConfig: async () => ({ lastMessages: 20, semanticRecall: false }),
+      persistMessages: async (_messages: MastraDBMessage[]) => {},
+    } as any;
+
+    const processor = new ObservationalMemoryProcessor(om, memoryProvider);
+    const state: Record<string, unknown> = {};
+    const abort = vi.fn();
+    const makeCtx = () =>
+      new RequestContext({
+        runtimeContext: {
+          threadId,
+          resourceId,
+        } as any,
+      });
+    const messageList = new MessageList({ threadId, resourceId });
+
+    messageList.add(
+      {
+        id: 'assistant-msg-final',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Final assistant response' }],
+        },
+        createdAt: new Date('2025-01-01T10:00:01Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'response',
+    );
+
+    await processor.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: makeCtx(),
+      stepNumber: 0,
+      state,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort,
+    });
+
+    await processor.processOutputResult({
+      messageList,
+      messages: messageList.get.response.db(),
+      requestContext: makeCtx(),
+      state,
+      abort,
+      result: {
+        text: 'Final assistant response',
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        finishReason: 'stop',
+        steps: [],
+      } as any,
+      retryCount: 0,
+    });
+
+    const { messages: saved } = await storage.listMessages({
+      threadId,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      perPage: false,
+    });
+
+    const assistantMsg = saved.find(m => m.id === 'assistant-msg-final');
+    expect(assistantMsg).toBeDefined();
+    expect((assistantMsg!.content.metadata as any)?.mastra?.sealed).toBe(true);
+    const lastPart = assistantMsg!.content.parts.at(-1) as any;
+    expect(lastPart?.metadata?.mastra?.sealedAt).toBeTypeOf('number');
+  });
+
   it('should reset stale step-0 boundary when only small unobserved context remains', async () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
