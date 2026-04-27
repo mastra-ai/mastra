@@ -2,26 +2,24 @@ import { describe, expect, it } from 'vitest';
 import type { AgentTool } from '../../../types/agent-tool';
 import { buildAgentBuilderToolSchema } from '../build-tool-schema';
 
-const allOff = { tools: false, skills: false, memory: false, workflows: false, agents: false };
-const allOn = { tools: true, skills: true, memory: false, workflows: false, agents: false };
+const allOff = { tools: false, memory: false, workflows: false, agents: false };
+const allOn = { tools: true, memory: false, workflows: false, agents: false };
 
 describe('buildAgentBuilderToolSchema', () => {
-  it('exposes name and instructions as required and omits tools/skills when their flags are off', () => {
+  it('exposes name and instructions as required and omits tools when its flag is off', () => {
     const schema = buildAgentBuilderToolSchema(allOff, [], []);
     const shape = schema.shape;
 
     expect(shape.name).toBeDefined();
     expect(shape.instructions).toBeDefined();
     expect(shape.tools).toBeUndefined();
-    expect(shape.skills).toBeUndefined();
   });
 
-  it('adds tools and skills shape entries when the flags are on', () => {
+  it('adds tools shape entry when the flag is on', () => {
     const schema = buildAgentBuilderToolSchema(allOn, [], []);
     const shape = schema.shape;
 
     expect(shape.tools).toBeDefined();
-    expect(shape.skills).toBeDefined();
   });
 
   it('constrains tool ids to the provided ids when available', () => {

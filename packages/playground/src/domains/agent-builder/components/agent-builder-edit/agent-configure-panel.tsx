@@ -1,14 +1,12 @@
 import { Avatar, cn, Skeleton, TextFieldBlock, Txt } from '@mastra/playground-ui';
-import { ChevronRight, FileText, GraduationCap, Plus, Wrench } from 'lucide-react';
+import { ChevronRight, FileText, Plus, Wrench } from 'lucide-react';
 import { useRef } from 'react';
-import { useFormContext, useWatch } from 'react-hook-form';
+import { useFormContext } from 'react-hook-form';
 import { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import type { AgentTool } from '../../types/agent-tool';
 import { InstructionsDetail } from './details/instructions-detail';
-import { SkillsDetail } from './details/skills-detail';
 import { ToolsDetail } from './details/tools-detail';
-import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 
 export interface AgentConfig {
   id: string;
@@ -18,7 +16,7 @@ export interface AgentConfig {
   systemPrompt: string;
 }
 
-export type ActiveDetail = 'instructions' | 'tools' | 'skills' | null;
+export type ActiveDetail = 'instructions' | 'tools' | null;
 
 interface BaseProps {
   availableAgentTools?: AgentTool[];
@@ -70,12 +68,10 @@ function EditableConfigurePanel({
   const features = useBuilderAgentFeatures();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
-  const { data: storedSkillsResponse } = useStoredSkills();
 
   const draftName = formMethods.watch('name') ?? '';
   const draftDescription = formMethods.watch('description') ?? '';
   const draftInstructions = formMethods.watch('instructions') ?? '';
-  const selectedSkills = useWatch({ control: formMethods.control, name: 'skills' }) ?? {};
 
   const setDraftName = (value: string) => formMethods.setValue('name', value);
   const setDraftDescription = (value: string) => formMethods.setValue('description', value);
@@ -83,8 +79,6 @@ function EditableConfigurePanel({
 
   const activeToolsCount = availableAgentTools.filter(item => item.isChecked).length;
   const totalToolsCount = availableAgentTools.length;
-  const activeSkillsCount = Object.keys(selectedSkills).length;
-  const totalSkillsCount = storedSkillsResponse?.skills.length ?? 0;
 
   const toggleDetail = (next: ActiveDetail) => {
     onActiveDetailChange(activeDetail === next ? null : next);
@@ -157,8 +151,6 @@ function EditableConfigurePanel({
             instructionsDescription={instructionsDescription}
             activeToolsCount={activeToolsCount}
             totalToolsCount={totalToolsCount}
-            activeSkillsCount={activeSkillsCount}
-            totalSkillsCount={totalSkillsCount}
             activeDetail={activeDetail}
             toggleDetail={toggleDetail}
           />
@@ -189,12 +181,9 @@ function ReadOnlyConfigurePanel({
   onActiveDetailChange,
 }: ReadOnlyConfigurePanelProps) {
   const features = useBuilderAgentFeatures();
-  const { data: storedSkillsResponse } = useStoredSkills();
 
   const activeToolsCount = availableAgentTools.filter(item => item.isChecked).length;
   const totalToolsCount = availableAgentTools.length;
-  const activeSkillsCount = 0;
-  const totalSkillsCount = storedSkillsResponse?.skills.length ?? 0;
 
   const toggleDetail = (next: ActiveDetail) => {
     onActiveDetailChange(activeDetail === next ? null : next);
@@ -231,8 +220,6 @@ function ReadOnlyConfigurePanel({
             instructionsDescription={instructionsDescription}
             activeToolsCount={activeToolsCount}
             totalToolsCount={totalToolsCount}
-            activeSkillsCount={activeSkillsCount}
-            totalSkillsCount={totalSkillsCount}
             activeDetail={activeDetail}
             toggleDetail={toggleDetail}
           />
@@ -264,8 +251,6 @@ interface ConfigRowsProps {
   instructionsDescription: string;
   activeToolsCount: number;
   totalToolsCount: number;
-  activeSkillsCount: number;
-  totalSkillsCount: number;
   activeDetail: ActiveDetail;
   toggleDetail: (next: ActiveDetail) => void;
 }
@@ -275,8 +260,6 @@ function ConfigRows({
   instructionsDescription,
   activeToolsCount,
   totalToolsCount,
-  activeSkillsCount,
-  totalSkillsCount,
   activeDetail,
   toggleDetail,
 }: ConfigRowsProps) {
@@ -300,18 +283,6 @@ function ConfigRows({
           isActive={activeDetail === 'tools'}
           onClick={() => toggleDetail('tools')}
           testId="agent-preview-tools-button"
-        />
-      )}
-      {features.skills && (
-        <ConfigRow
-          icon={<GraduationCap className="h-4 w-4" />}
-          label="Skills"
-          description="Reusable knowledge and behaviors"
-          count={activeSkillsCount}
-          total={totalSkillsCount}
-          isActive={activeDetail === 'skills'}
-          onClick={() => toggleDetail('skills')}
-          testId="agent-preview-skills-button"
         />
       )}
     </div>
@@ -353,7 +324,6 @@ function DetailPane({
       {activeDetail === 'tools' && features.tools && (
         <ToolsDetail onClose={onClose} editable={editable} availableAgentTools={availableAgentTools} />
       )}
-      {activeDetail === 'skills' && features.skills && <SkillsDetail onClose={onClose} editable={editable} />}
     </div>
   );
 }

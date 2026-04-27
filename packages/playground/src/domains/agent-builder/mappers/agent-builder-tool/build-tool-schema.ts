@@ -49,10 +49,6 @@ export function buildAgentBuilderToolSchema(
       );
   }
 
-  if (features.skills) {
-    shape.skills = z.array(z.string());
-  }
-
   const workspaceIdSchema = workspaceIds.length > 0 ? z.enum(workspaceIds as [string, ...string[]]) : z.string();
   shape.workspaceId = workspaceIdSchema
     .optional()

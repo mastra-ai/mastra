@@ -15,7 +15,6 @@ export function buildAgentBuilderToolDescription(
 ): string {
   const descriptionParts = ['name', 'description', 'instructions'];
   if (features.tools) descriptionParts.push('tools');
-  if (features.skills) descriptionParts.push('skills');
   descriptionParts.push('workspaceId');
 
   const availableToolsBlock =

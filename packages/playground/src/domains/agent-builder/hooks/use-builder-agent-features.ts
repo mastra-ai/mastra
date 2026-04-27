@@ -7,7 +7,6 @@ export const useBuilderAgentFeatures = () => {
   return {
     tools: features?.tools === true,
     memory: features?.memory === true,
-    skills: features?.skills === true,
     workflows: features?.workflows === true,
     agents: features?.agents === true,
   };

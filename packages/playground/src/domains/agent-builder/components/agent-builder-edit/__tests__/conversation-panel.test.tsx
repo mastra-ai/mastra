@@ -12,7 +12,6 @@ import { ConversationPanel } from '../conversation-panel';
 
 type Features = {
   tools: boolean;
-  skills: boolean;
   memory: boolean;
   workflows: boolean;
   agents: boolean;
@@ -44,7 +43,6 @@ const FormWrapper = ({ children }: { children: React.ReactNode }) => {
       name: 'Initial',
       instructions: '',
       tools: {},
-      skills: {},
     },
   });
   formMethodsRef = methods;
@@ -90,8 +88,8 @@ const getAgentBuilderTool = () => {
   return tool;
 };
 
-const allOff: Features = { tools: false, skills: false, memory: false, workflows: false, agents: false };
-const allOn: Features = { tools: true, skills: true, memory: false, workflows: false, agents: false };
+const allOff: Features = { tools: false, memory: false, workflows: false, agents: false };
+const allOn: Features = { tools: true, memory: false, workflows: false, agents: false };
 
 describe('ConversationPanel agent-builder client tool', () => {
   beforeEach(() => {
@@ -111,7 +109,6 @@ describe('ConversationPanel agent-builder client tool', () => {
     expect(shape.name).toBeDefined();
     expect(shape.instructions).toBeDefined();
     expect(shape.tools).toBeUndefined();
-    expect(shape.skills).toBeUndefined();
 
     const valid = tool.inputSchema.safeParse({ name: 'Foo', instructions: 'Do X' });
     expect(valid.success).toBe(true);
@@ -119,7 +116,7 @@ describe('ConversationPanel agent-builder client tool', () => {
     expect(missing.success).toBe(false);
   });
 
-  it('adds tools and skills to the schema when both feature flags are on', () => {
+  it('adds tools to the schema when the feature flag is on', () => {
     renderPanel(allOn);
     const tool = getAgentBuilderTool();
     const shape = tool.inputSchema.shape;
@@ -127,7 +124,6 @@ describe('ConversationPanel agent-builder client tool', () => {
     expect(shape.name).toBeDefined();
     expect(shape.instructions).toBeDefined();
     expect(shape.tools).toBeDefined();
-    expect(shape.skills).toBeDefined();
   });
 
   it('only includes tools when features.tools is true', () => {
@@ -136,7 +132,6 @@ describe('ConversationPanel agent-builder client tool', () => {
     const shape = tool.inputSchema.shape;
 
     expect(shape.tools).toBeDefined();
-    expect(shape.skills).toBeUndefined();
   });
 
   it('execute writes name and instructions to the form', async () => {
@@ -149,7 +144,7 @@ describe('ConversationPanel agent-builder client tool', () => {
     expect(formMethodsRef!.getValues('instructions')).toBe('New instructions');
   });
 
-  it('execute writes tools and skills only when feature flags enable them', async () => {
+  it('execute writes tools only when the feature flag enables it', async () => {
     renderPanel(allOn, [{ id: 'web-search' }]);
     const tool = getAgentBuilderTool();
 
@@ -157,11 +152,9 @@ describe('ConversationPanel agent-builder client tool', () => {
       name: 'N',
       instructions: 'I',
       tools: [{ id: 'web-search', name: 'Web Search' }],
-      skills: ['summarize'],
     });
 
     expect(formMethodsRef!.getValues('tools')).toEqual({ 'web-search': true });
-    expect(formMethodsRef!.getValues('skills')).toEqual({ summarize: {} });
   });
 
   it('lists available tools in the tool description so the LLM can pick ids', () => {
@@ -229,7 +222,7 @@ describe('ConversationPanel agent-builder client tool', () => {
     expect(invalid.success).toBe(false);
   });
 
-  it('execute ignores tools and skills when feature flags are off', async () => {
+  it('execute ignores tools when the feature flag is off', async () => {
     renderPanel(allOff);
     const tool = getAgentBuilderTool();
 
@@ -237,11 +230,9 @@ describe('ConversationPanel agent-builder client tool', () => {
       name: 'N',
       instructions: 'I',
       tools: [{ id: 'web-search', name: 'Web Search' }],
-      skills: ['summarize'],
     });
 
     expect(formMethodsRef!.getValues('tools')).toEqual({});
-    expect(formMethodsRef!.getValues('skills')).toEqual({});
   });
 
   it('drops agent and workflow ids when those features are gated off but tools is on', async () => {

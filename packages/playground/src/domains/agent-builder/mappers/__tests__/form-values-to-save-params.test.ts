@@ -9,7 +9,6 @@ const baseValues = {
   tools: {},
   agents: {},
   workflows: {},
-  skills: {},
 };
 
 describe('formValuesToSaveParams', () => {
@@ -55,13 +54,12 @@ describe('formValuesToSaveParams', () => {
     expect(result.agents).toEqual({ 'agent-x': { description: 'Agent X desc' } });
   });
 
-  it('returns undefined for tools/agents/workflows/skills when their resolved record is empty', () => {
+  it('returns undefined for tools/agents/workflows when their resolved record is empty', () => {
     const result = formValuesToSaveParams(baseValues, []);
 
     expect(result.tools).toBeUndefined();
     expect(result.agents).toBeUndefined();
     expect(result.workflows).toBeUndefined();
-    expect(result.skills).toBeUndefined();
   });
 
   it('builds a workflow entry with description when the available workflow has one', () => {
@@ -94,24 +92,6 @@ describe('formValuesToSaveParams', () => {
     );
 
     expect(result.workflows).toEqual({ 'wf-1': {} });
-  });
-
-  it('passes through the skills record preserving per-skill config', () => {
-    const result = formValuesToSaveParams(
-      {
-        ...baseValues,
-        skills: {
-          summarize: { description: 'Summarize text', strategy: 'latest' },
-          plan: {},
-        },
-      },
-      [],
-    );
-
-    expect(result.skills).toEqual({
-      summarize: { description: 'Summarize text', strategy: 'latest' },
-      plan: {},
-    });
   });
 
   it('returns undefined workspace when workspaceId is missing or empty', () => {

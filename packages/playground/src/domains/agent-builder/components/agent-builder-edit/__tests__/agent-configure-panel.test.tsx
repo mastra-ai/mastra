@@ -2,15 +2,13 @@
 import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, cleanup, fireEvent, act, waitFor } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 import type { UseFormReturn } from 'react-hook-form';
 import { FormProvider, useForm } from 'react-hook-form';
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import type { AgentTool } from '../../../types/agent-tool';
 import { AgentConfigurePanel } from '../agent-configure-panel';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4112';
 
@@ -36,7 +34,6 @@ const FormWrapper = ({ children }: { children: React.ReactNode }) => {
       name: 'Draft name',
       instructions: 'Draft instructions',
       tools: {},
-      skills: {},
     },
   });
   formMethodsRef = methods;
@@ -104,90 +101,6 @@ describe('AgentConfigurePanel feature gating', () => {
 
     expect(screen.getByTestId('agent-preview-tools-button')).toBeTruthy();
     expect(screen.queryByTestId('agent-preview-skills-button')).toBeNull();
-  });
-
-  it('renders Skills row only when features.skills is true', () => {
-    mockUseBuilderAgentFeatures.mockReturnValue({
-      tools: false,
-      skills: true,
-      memory: false,
-      workflows: false,
-      agents: false,
-    });
-
-    renderPanel();
-
-    expect(screen.getByTestId('agent-preview-skills-button')).toBeTruthy();
-    expect(screen.queryByTestId('agent-preview-tools-button')).toBeNull();
-  });
-
-  it('renders both Tools and Skills rows when both flags are true', () => {
-    mockUseBuilderAgentFeatures.mockReturnValue({
-      tools: true,
-      skills: true,
-      memory: false,
-      workflows: false,
-      agents: false,
-    });
-
-    renderPanel();
-
-    expect(screen.getByTestId('agent-preview-tools-button')).toBeTruthy();
-    expect(screen.getByTestId('agent-preview-skills-button')).toBeTruthy();
-  });
-
-  it('shows the skills count badge based on stored skills total', async () => {
-    mockUseBuilderAgentFeatures.mockReturnValue({
-      tools: false,
-      skills: true,
-      memory: false,
-      workflows: false,
-      agents: false,
-    });
-
-    server.use(
-      http.get(`${BASE_URL}/api/stored/skills`, () =>
-        HttpResponse.json({
-          skills: [
-            {
-              id: 'a',
-              name: 'A',
-              description: '',
-              license: '',
-              files: [],
-              status: 'published',
-              authorId: null,
-              metadata: {},
-              createdAt: '',
-              updatedAt: '',
-              instructions: '',
-            },
-            {
-              id: 'b',
-              name: 'B',
-              description: '',
-              license: '',
-              files: [],
-              status: 'published',
-              authorId: null,
-              metadata: {},
-              createdAt: '',
-              updatedAt: '',
-              instructions: '',
-            },
-          ],
-          total: 2,
-          page: 1,
-          perPage: 50,
-          hasMore: false,
-        }),
-      ),
-    );
-
-    renderPanel();
-
-    const skillsButton = screen.getByTestId('agent-preview-skills-button');
-    await waitFor(() => expect(skillsButton.textContent).toMatch(/0\s*\/\s*2/));
   });
 });
 

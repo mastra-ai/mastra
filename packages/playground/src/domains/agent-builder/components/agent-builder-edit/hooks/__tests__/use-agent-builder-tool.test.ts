@@ -8,10 +8,10 @@ import type { AgentTool } from '../../../../types/agent-tool';
 import { useAgentBuilderTool } from '../use-agent-builder-tool';
 
 vi.mock('../../../../hooks/use-builder-agent-features', () => ({
-  useBuilderAgentFeatures: () => ({ tools: true, skills: false, memory: false, workflows: false, agents: true }),
+  useBuilderAgentFeatures: () => ({ tools: true, memory: false, workflows: false, agents: true }),
 }));
 
-const features = { tools: true, skills: false, memory: false, workflows: false, agents: true } as const;
+const features = { tools: true, memory: false, workflows: false, agents: true } as const;
 
 const renderBuilderTool = (availableAgentTools: AgentTool[]) => {
   const formRef: { current: ReturnType<typeof useForm<AgentBuilderEditFormValues>> | null } = {
@@ -20,7 +20,7 @@ const renderBuilderTool = (availableAgentTools: AgentTool[]) => {
 
   const Wrapper = ({ children }: { children: React.ReactNode }) => {
     const methods = useForm<AgentBuilderEditFormValues>({
-      defaultValues: { name: '', description: '', instructions: '', tools: {}, agents: {}, skills: {} },
+      defaultValues: { name: '', description: '', instructions: '', tools: {}, agents: {} },
     });
     formRef.current = methods;
     return React.createElement(FormProvider, methods, children);

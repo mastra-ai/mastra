@@ -29,7 +29,7 @@ export function useAgentBuilderTool({
   availableWorkspaces = [],
 }: UseAgentBuilderToolArgs) {
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
-  const { tools: toolsEnabled, skills: skillsEnabled } = features;
+  const { tools: toolsEnabled } = features;
 
   return useMemo(
     () =>
@@ -54,14 +54,6 @@ export function useAgentBuilderTool({
             formMethods.setValue('agents', agents);
             formMethods.setValue('workflows', workflows);
           }
-          if (skillsEnabled && Array.isArray(inputData?.skills)) {
-            const existing = formMethods.getValues('skills') ?? {};
-            const next: Record<string, (typeof existing)[string]> = {};
-            for (const skillId of inputData.skills as string[]) {
-              next[skillId] = existing[skillId] ?? {};
-            }
-            formMethods.setValue('skills', next);
-          }
           if (typeof inputData?.workspaceId === 'string' && inputData.workspaceId.length > 0) {
             formMethods.setValue('workspaceId', inputData.workspaceId);
           }
@@ -69,7 +61,7 @@ export function useAgentBuilderTool({
           return { success: true };
         },
       }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only features.tools/features.skills affect the schema/description (matches prior behavior)
-    [formMethods, toolsEnabled, skillsEnabled, availableAgentTools, availableWorkspaces],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only features.tools affects the schema/description (matches prior behavior)
+    [formMethods, toolsEnabled, availableAgentTools, availableWorkspaces],
   );
 }

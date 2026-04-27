@@ -18,7 +18,6 @@ import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
-import { useStoredSkills } from '@/domains/agents/hooks/use-stored-skills';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import { useWorkspaces } from '@/domains/workspace/hooks';
@@ -36,15 +35,13 @@ export default function AgentBuilderAgentEdit() {
   const { data: toolsData, isPending: isToolsPending } = useTools();
   const { data: agentsData, isPending: isAgentsPending } = useAgents({ enabled: features.agents });
   const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({ enabled: features.workflows });
-  const { isPending: isSkillsPending } = useStoredSkills({ enabled: features.skills });
   const { data: workspacesData } = useWorkspaces();
   const isReady =
     Boolean(id) &&
     (fromStarter || !isStoredAgentLoading) &&
     !isToolsPending &&
     (!features.agents || !isAgentsPending) &&
-    (!features.workflows || !isWorkflowsPending) &&
-    (!features.skills || !isSkillsPending);
+    (!features.workflows || !isWorkflowsPending);
 
   const availableWorkspaces = useMemo<AvailableWorkspace[]>(
     () => (workspacesData?.workspaces ?? []).map(ws => ({ id: ws.id, name: ws.name })),
