@@ -8,16 +8,17 @@ import type { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-feat
 import { ChatComposer } from '../chat-primitives/chat-composer';
 import { MessageList } from '../chat-primitives/message-list';
 import { useAgentBuilderTool } from './hooks/use-agent-builder-tool';
-import type { AvailableTool, AvailableWorkspace } from './hooks/use-agent-builder-tool';
+import type { AvailableWorkspace } from './hooks/use-agent-builder-tool';
 import { useChatDraft } from './hooks/use-chat-draft';
 import { useInitialMessage } from './hooks/use-initial-message';
+import type { AgentTool } from '@/domains/agent-builder/types/agent-tool';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 
 interface ConversationPanelProps {
   initialUserMessage?: string;
   isFreshThread?: boolean;
   features: ReturnType<typeof useBuilderAgentFeatures>;
-  availableTools?: AvailableTool[];
+  availableAgentTools?: AgentTool[];
   availableWorkspaces?: AvailableWorkspace[];
   toolsReady?: boolean;
   agentId: string;
@@ -29,7 +30,7 @@ export const ConversationPanel = ({
   initialUserMessage,
   isFreshThread = false,
   features,
-  availableTools = [],
+  availableAgentTools = [],
   availableWorkspaces = [],
   toolsReady = true,
   agentId,
@@ -43,6 +44,7 @@ export const ConversationPanel = ({
   // Stable empty array per agentId: stays the same reference across re-renders
   // (preventing useChat from wiping streamed messages), but changes when agentId
   // changes (allowing useChat to reset when switching agents).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const emptyMessages = useMemo(() => [] as never[], [agentId]);
   const storedMessages = data?.messages ?? emptyMessages;
   const v5Messages = useMemo(() => toAISdkV5Messages(storedMessages) as MastraUIMessage[], [storedMessages]);
@@ -57,7 +59,7 @@ export const ConversationPanel = ({
     initialMessages: v5Messages,
   });
 
-  const agentBuilderTool = useAgentBuilderTool({ features, availableTools, availableWorkspaces });
+  const agentBuilderTool = useAgentBuilderTool({ features, availableAgentTools, availableWorkspaces });
 
   const send = (message: string) => {
     void sendMessage({ message, threadId: agentId, clientTools: { agentBuilderTool } });
@@ -77,6 +79,7 @@ export const ConversationPanel = ({
       <MessageList
         messages={chatMessages}
         isLoading={isConversationLoading}
+        isRunning={isRunning}
         skeletonTestId="agent-builder-conversation-messages-skeleton"
       />
 
@@ -86,6 +89,7 @@ export const ConversationPanel = ({
         onSubmit={handleFormSubmit}
         onKeyDown={handleKeyDown}
         disabled={isRunning}
+        isRunning={isRunning}
         canSubmit={trimmed.length > 0 && !isRunning}
         placeholder="Tell the builder what to change…"
         inputTestId="agent-builder-conversation-input"

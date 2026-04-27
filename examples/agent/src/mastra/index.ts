@@ -146,6 +146,8 @@ export const mastra = new Mastra({
       features: {
         agent: {
           tools: true,
+          agents: true,
+          workflows: true,
         },
       },
       configuration: {
