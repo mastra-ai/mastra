@@ -5314,6 +5314,10 @@ export class Agent<
       ...defaultNetworkOptions,
       ...options,
       // Deep merge nested objects
+      memory: deepMerge(
+        (defaultNetworkOptions?.memory ?? {}) as Record<string, unknown>,
+        (options?.memory ?? {}) as Record<string, unknown>,
+      ) as MultiPrimitiveExecutionOptions<OUTPUT>['memory'],
       routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
       completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
     };
@@ -5392,6 +5396,10 @@ export class Agent<
       ...defaultNetworkOptions,
       ...options,
       // Deep merge nested objects
+      memory: deepMerge(
+        (defaultNetworkOptions?.memory ?? {}) as Record<string, unknown>,
+        (options?.memory ?? {}) as Record<string, unknown>,
+      ) as MultiPrimitiveExecutionOptions['memory'],
       routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
       completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
     };
