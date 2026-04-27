@@ -47,7 +47,7 @@ import type { MastraVector } from '../vector';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import { WorkflowScheduler, computeNextFireAt } from '../workflows/scheduler';
-import type { WorkflowSchedulerConfig } from '../workflows/scheduler';
+import type { WorkflowScheduleConfig, WorkflowSchedulerConfig } from '../workflows/scheduler';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
 import type { VersionOverrides, VersionSelector } from './types';
@@ -94,6 +94,43 @@ function targetsEqual(a: Schedule['target'] | undefined, b: Schedule['target']):
   if (a === b) return true;
   if (!a) return false;
   return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/**
+ * Reads the declarative schedule configs off a workflow. Supports both the
+ * new `getScheduleConfigs(): WorkflowScheduleConfig[]` accessor on the evented
+ * engine and a legacy `getScheduleConfig(): WorkflowScheduleConfig | undefined`
+ * fallback used in tests that inject a fake getter.
+ */
+function collectWorkflowScheduleConfigs(workflow: unknown): WorkflowScheduleConfig[] {
+  const w = workflow as {
+    getScheduleConfigs?: () => WorkflowScheduleConfig[] | undefined;
+    getScheduleConfig?: () => WorkflowScheduleConfig | WorkflowScheduleConfig[] | undefined;
+  };
+  if (typeof w.getScheduleConfigs === 'function') {
+    return w.getScheduleConfigs() ?? [];
+  }
+  if (typeof w.getScheduleConfig === 'function') {
+    const cfg = w.getScheduleConfig();
+    if (!cfg) return [];
+    return Array.isArray(cfg) ? cfg : [cfg];
+  }
+  return [];
+}
+
+/**
+ * Determines whether a stored schedule row id belongs to one of the registered
+ * workflows. Returns the owning workflow id when the row id either equals
+ * `wf_<workflowId>` (single-schedule form) or starts with `wf_<workflowId>__`
+ * (array form). Returns undefined when no registered workflow owns the row.
+ */
+function ownerWorkflowIdForRow(rowId: string, byWorkflow: Map<string, Set<string>>): string | undefined {
+  for (const workflowId of byWorkflow.keys()) {
+    if (rowId === `wf_${workflowId}` || rowId.startsWith(`wf_${workflowId}__`)) {
+      return workflowId;
+    }
+  }
+  return undefined;
 }
 
 /** See {@link targetsEqual}. Same approach for free-form metadata. */
@@ -912,19 +949,27 @@ export class Mastra<
   }
 
   /**
-   * Returns the list of declarative schedules sourced from currently
-   * registered workflows. Each entry is keyed by a stable schedule id
-   * derived from the workflow id so re-registration is idempotent.
+   * Returns the flat list of declarative schedules sourced from currently
+   * registered workflows. Single-schedule workflows yield one entry keyed by
+   * `wf_${workflowId}`. Array-form workflows yield one entry per array entry
+   * keyed by `wf_${workflowId}__${scheduleId}` so the prefix uniquely
+   * identifies "all rows owned by this workflow's declarative config".
    */
-  #collectDeclarativeSchedules(): Array<{ scheduleId: string; workflowId: string; workflow: AnyWorkflow }> {
-    const out: Array<{ scheduleId: string; workflowId: string; workflow: AnyWorkflow }> = [];
+  #collectDeclarativeSchedules(): Array<{
+    scheduleId: string;
+    workflowId: string;
+    cfg: WorkflowScheduleConfig;
+  }> {
+    const out: Array<{ scheduleId: string; workflowId: string; cfg: WorkflowScheduleConfig }> = [];
     const workflows = this.#workflows as Record<string, AnyWorkflow>;
     for (const workflow of Object.values(workflows ?? {})) {
-      const getter = (workflow as { getScheduleConfig?: () => unknown }).getScheduleConfig;
-      if (typeof getter !== 'function') continue;
-      const cfg = getter.call(workflow);
-      if (!cfg) continue;
-      out.push({ scheduleId: `wf_${workflow.id}`, workflowId: workflow.id, workflow });
+      const configs = collectWorkflowScheduleConfigs(workflow);
+      if (configs.length === 0) continue;
+      const isArrayForm = configs.length > 1 || (configs.length === 1 && configs[0]!.id !== undefined);
+      for (const cfg of configs) {
+        const scheduleId = isArrayForm ? `wf_${workflow.id}__${cfg.id}` : `wf_${workflow.id}`;
+        out.push({ scheduleId, workflowId: workflow.id, cfg });
+      }
     }
     return out;
   }
@@ -986,9 +1031,18 @@ export class Mastra<
   }
 
   async #registerDeclarativeSchedules(schedulesStore: SchedulesStorage): Promise<void> {
-    for (const { scheduleId, workflowId, workflow } of this.#collectDeclarativeSchedules()) {
-      const cfg = (workflow as { getScheduleConfig?: () => undefined | Record<string, any> }).getScheduleConfig?.();
-      if (!cfg) continue;
+    const declared = this.#collectDeclarativeSchedules();
+    const declaredIds = new Set(declared.map(d => d.scheduleId));
+
+    // Group declared ids by workflow so we can detect orphans (rows that
+    // start with `wf_<workflowId>` but aren't in the current declared set).
+    const declaredIdsByWorkflow = new Map<string, Set<string>>();
+    for (const { workflowId, scheduleId } of declared) {
+      if (!declaredIdsByWorkflow.has(workflowId)) declaredIdsByWorkflow.set(workflowId, new Set());
+      declaredIdsByWorkflow.get(workflowId)!.add(scheduleId);
+    }
+
+    for (const { scheduleId, workflowId, cfg } of declared) {
       try {
         const existing = await schedulesStore.getSchedule(scheduleId);
         const now = Date.now();
@@ -1038,6 +1092,30 @@ export class Mastra<
         }
       } catch (error) {
         this.#logger?.error('Failed to register declarative schedule', { scheduleId, workflowId, error });
+      }
+    }
+
+    // Orphan deletion: drop any storage rows owned by a registered workflow
+    // (id starts with `wf_<workflowId>` or `wf_<workflowId>__`) but not
+    // present in the current declared set. This keeps the storage in sync
+    // when array-form entries are removed across deploys. We only consider
+    // workflows we actually have registered — schedules belonging to a
+    // removed workflow are left alone (the workflow may be coming back).
+    if (declaredIdsByWorkflow.size > 0) {
+      const allRows = await schedulesStore.listSchedules();
+      for (const row of allRows) {
+        if (declaredIds.has(row.id)) continue;
+        const ownerWorkflowId = ownerWorkflowIdForRow(row.id, declaredIdsByWorkflow);
+        if (!ownerWorkflowId) continue;
+        try {
+          await schedulesStore.deleteSchedule(row.id);
+        } catch (error) {
+          this.#logger?.error('Failed to delete orphaned declarative schedule', {
+            scheduleId: row.id,
+            workflowId: ownerWorkflowId,
+            error,
+          });
+        }
       }
     }
   }
@@ -2771,8 +2849,9 @@ export class Mastra<
 
     // Reject declarative schedules on non-evented workflows. The scheduler
     // publishes `workflow.start` events which only the evented engine consumes.
-    const scheduleConfig = (workflow as { getScheduleConfig?: () => unknown }).getScheduleConfig?.();
-    if (scheduleConfig && workflow.engineType !== 'evented') {
+    const scheduleConfigs = collectWorkflowScheduleConfigs(workflow);
+    const hasSchedule = scheduleConfigs.length > 0;
+    if (hasSchedule && workflow.engineType !== 'evented') {
       throw new MastraError({
         id: 'MASTRA_WORKFLOW_SCHEDULE_REQUIRES_EVENTED_ENGINE',
         domain: ErrorDomain.MASTRA,
@@ -2795,7 +2874,7 @@ export class Mastra<
 
     // If a schedule is declared, mark the flag and either register into the
     // running scheduler or trigger a lazy ensure.
-    if (scheduleConfig) {
+    if (hasSchedule) {
       this.#hasScheduledWorkflow = true;
       if (this.#scheduler) {
         void (async () => {

@@ -1463,7 +1463,24 @@ export function createWorkflow<
   >[],
 >(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
   if (params.schedule) {
-    validateCron(params.schedule.cron, params.schedule.timezone);
+    const schedules = Array.isArray(params.schedule) ? params.schedule : [params.schedule];
+    if (Array.isArray(params.schedule)) {
+      const seenIds = new Set<string>();
+      for (const entry of schedules) {
+        if (!entry.id) {
+          throw new Error(
+            `Workflow "${params.id}" declares an array of schedules but one entry is missing the required \`id\` field. Every entry in a schedule array must have a unique stable id.`,
+          );
+        }
+        if (seenIds.has(entry.id)) {
+          throw new Error(`Workflow "${params.id}" declares duplicate schedule id "${entry.id}".`);
+        }
+        seenIds.add(entry.id);
+      }
+    }
+    for (const entry of schedules) {
+      validateCron(entry.cron, entry.timezone);
+    }
   }
   const eventProcessor = new WorkflowEventProcessor({ mastra: params.mastra! });
   const executionEngine = new EventedExecutionEngine({
@@ -1492,20 +1509,27 @@ export class EventedWorkflow<
   TOutput = unknown,
   TPrevSchema = TInput,
 > extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
-  #schedule?: WorkflowScheduleConfig;
+  #schedules: WorkflowScheduleConfig[];
 
   constructor(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
     super(params);
     this.engineType = 'evented';
-    this.#schedule = params.schedule;
+    if (!params.schedule) {
+      this.#schedules = [];
+    } else if (Array.isArray(params.schedule)) {
+      this.#schedules = params.schedule;
+    } else {
+      this.#schedules = [params.schedule];
+    }
   }
 
   /**
-   * Returns the cron schedule configuration declared on this workflow, if any.
-   * Used by the Mastra scheduler to register declarative schedules at boot.
+   * Returns the cron schedule configurations declared on this workflow as a
+   * normalized array. Used by the Mastra scheduler to register declarative
+   * schedules at boot. Returns an empty array when no schedule is declared.
    */
-  getScheduleConfig(): WorkflowScheduleConfig | undefined {
-    return this.#schedule;
+  getScheduleConfigs(): WorkflowScheduleConfig[] {
+    return this.#schedules;
   }
 
   __registerMastra(mastra: Mastra) {

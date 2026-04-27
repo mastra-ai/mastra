@@ -1,3 +1,3 @@
 export { computeNextFireAt, validateCron } from './cron';
 export { WorkflowScheduler } from './scheduler';
-export type { WorkflowScheduleConfig, WorkflowSchedulerConfig } from './types';
+export type { WorkflowScheduleConfig, WorkflowScheduleInput, WorkflowSchedulerConfig } from './types';

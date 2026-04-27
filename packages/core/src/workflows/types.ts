@@ -15,7 +15,7 @@ import type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 import type { Tool, ToolExecutionContext } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { ExecutionEngine } from './execution-engine';
-import type { WorkflowScheduleConfig } from './scheduler/types';
+import type { WorkflowScheduleInput } from './scheduler/types';
 import type { ConditionFunction, ExecuteFunction, ExecuteFunctionParams, LoopConditionFunction, Step } from './step';
 
 export type OutputWriter<TChunk = any> = (chunk: TChunk, options?: { messageId?: string }) => Promise<void>;
@@ -816,8 +816,11 @@ export type WorkflowConfig<
    * Optional cron schedule configuration. When set, the Mastra scheduler will
    * publish a `workflow.start` event on the cron schedule.
    * Only supported on the evented engine.
+   *
+   * Accepts either a single schedule object or an array of schedule objects.
+   * Array entries must each specify a unique stable `id`.
    */
-  schedule?: WorkflowScheduleConfig;
+  schedule?: WorkflowScheduleInput;
 };
 
 /**
