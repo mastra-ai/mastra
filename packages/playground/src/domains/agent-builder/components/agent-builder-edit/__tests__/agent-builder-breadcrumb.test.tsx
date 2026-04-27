@@ -59,14 +59,15 @@ describe('AgentBuilderBreadcrumb', () => {
     expect(screen.queryByText('Support agent')).toBeNull();
   });
 
-  it('renders "New agent" as a static label when creating, ignoring the form name', () => {
+  it('renders "New agent" as a standalone title when creating, with no breadcrumb trail', () => {
     render(
       <FormWrapper>
         <AgentBuilderBreadcrumb creating />
       </FormWrapper>,
     );
 
-    expect(screen.getByText('New agent')).toBeTruthy();
+    expect(screen.getByTestId('agent-builder-create-title').textContent).toBe('New agent');
+    expect(screen.queryByText('Agents')).toBeNull();
     expect(screen.queryByText('Support agent')).toBeNull();
   });
 });

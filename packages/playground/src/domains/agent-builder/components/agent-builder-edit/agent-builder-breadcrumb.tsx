@@ -24,7 +24,22 @@ export const AgentBuilderBreadcrumb = ({
 }: AgentBuilderBreadcrumbProps) => {
   const { control } = useFormContext<AgentBuilderEditFormValues>();
   const name = useWatch({ control, name: 'name' });
-  const displayName = creating ? 'New agent' : name && name.trim() ? name : 'Untitled';
+
+  if (creating) {
+    return (
+      <div className={className} data-testid="agent-builder-breadcrumb">
+        <span
+          aria-current="page"
+          className="text-ui-md leading-ui-md text-white"
+          data-testid="agent-builder-create-title"
+        >
+          New agent
+        </span>
+      </div>
+    );
+  }
+
+  const displayName = name && name.trim() ? name : 'Untitled';
 
   return (
     <div className={className} data-testid="agent-builder-breadcrumb">
