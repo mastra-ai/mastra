@@ -1,4 +1,7 @@
+import type { Agent } from '@mastra/core/agent';
 import type { AgentBuilderOptions, IAgentBuilder } from '@mastra/core/agent-builder/ee';
+
+import { builderAgent } from './builder-agent';
 
 /**
  * Concrete implementation of the Agent Builder EE feature.
@@ -21,5 +24,10 @@ export class EditorAgentBuilder implements IAgentBuilder {
 
   getConfiguration(): AgentBuilderOptions['configuration'] {
     return this.options.configuration;
+  }
+
+  /** EE-internal: the Agent instance to register on the user's Mastra. */
+  getAgent(): Agent {
+    return builderAgent;
   }
 }

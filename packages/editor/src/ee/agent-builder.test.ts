@@ -65,4 +65,13 @@ describe('EditorAgentBuilder', () => {
       expect(builder.getConfiguration()).toBe(configuration);
     });
   });
+
+  describe('getAgent', () => {
+    it('returns the pre-built builder agent', () => {
+      const builder = new EditorAgentBuilder({});
+      const agent = builder.getAgent();
+      expect(agent).toBeDefined();
+      expect(agent.id).toBe('agent-builder');
+    });
+  });
 });

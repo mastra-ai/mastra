@@ -157,8 +157,17 @@ export class MastraEditor implements IMastraEditor {
     }
 
     const { EditorAgentBuilder } = await import('./ee');
-    this.__builderInstance = new EditorAgentBuilder(this.__builderConfig);
+    const instance = new EditorAgentBuilder(this.__builderConfig);
+    this.__builderInstance = instance;
     this.__builderResolved = true;
+
+    // Implicitly register the builder agent on the user's Mastra instance.
+    // mastra.addAgent is idempotent (no-ops on duplicate keys), so re-resolves
+    // and reload scenarios are safe.
+    if (this.__mastra) {
+      this.__mastra.addAgent(instance.getAgent(), 'agent-builder');
+    }
+
     return this.__builderInstance;
   }
 

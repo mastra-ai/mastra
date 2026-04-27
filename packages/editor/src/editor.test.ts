@@ -1445,6 +1445,39 @@ describe('MastraEditor.resolveBuilder', () => {
     expect(result?.getFeatures()).toBe(features);
     expect(result?.getConfiguration()).toBe(configuration);
   });
+
+  it('implicitly registers the builder agent on the attached Mastra instance', async () => {
+    const editor = new MastraEditor({ builder: { enabled: true } });
+    const mastra = new Mastra({ editor });
+    await editor.resolveBuilder();
+    const agent = mastra.getAgent('agent-builder');
+    expect(agent).toBeDefined();
+    expect(agent.id).toBe('agent-builder');
+  });
+
+  it('does not double-register the builder agent on repeat resolveBuilder calls', async () => {
+    const editor = new MastraEditor({ builder: { enabled: true } });
+    const mastra = new Mastra({ editor });
+    await editor.resolveBuilder();
+    const first = mastra.getAgent('agent-builder');
+    await editor.resolveBuilder();
+    const second = mastra.getAgent('agent-builder');
+    expect(first).toBe(second);
+  });
+
+  it('does not register the builder agent when builder is disabled', async () => {
+    const editor = new MastraEditor({ builder: { enabled: false } });
+    const mastra = new Mastra({ editor });
+    await editor.resolveBuilder();
+    expect(() => mastra.getAgent('agent-builder')).toThrow();
+  });
+
+  it('does not register the builder agent when builder config is omitted', async () => {
+    const editor = new MastraEditor({});
+    const mastra = new Mastra({ editor });
+    await editor.resolveBuilder();
+    expect(() => mastra.getAgent('agent-builder')).toThrow();
+  });
 });
 
 // ============================================================================
