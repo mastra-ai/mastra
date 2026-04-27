@@ -1,6 +1,6 @@
 import type { StoredAgentResponse } from '@mastra/client-js';
-import { AgentIcon, EmptyState } from '@mastra/playground-ui';
-import { SearchIcon } from 'lucide-react';
+import { AgentIcon, Badge, EmptyState } from '@mastra/playground-ui';
+import { Globe, SearchIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -76,7 +76,8 @@ export function AgentBuilderList({ agents, search }: AgentBuilderListProps) {
             <div className="text-ui-md text-neutral6 truncate">{agent.name}</div>
             <div className="text-ui-sm text-neutral3 line-clamp-1 mt-0.5">{agent.description || 'No description'}</div>
           </div>
-          <div className="hidden sm:flex items-center gap-6 text-ui-sm text-neutral3 shrink-0">
+          <div className="hidden sm:flex items-center gap-4 text-ui-sm text-neutral3 shrink-0">
+            {agent.visibility === 'public' && <Badge icon={<Globe className="h-3 w-3" />}>Public</Badge>}
             <span className="truncate max-w-[16rem]">{getModelLabel(agent.model)}</span>
             <span>Updated {formatRelativeTime(agent.updatedAt)}</span>
           </div>

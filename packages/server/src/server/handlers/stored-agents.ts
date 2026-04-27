@@ -69,7 +69,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
   description: 'Returns a paginated list of all agents stored in the database',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, requestContext, page, perPage, orderBy, status, authorId, metadata }) => {
+  handler: async ({ mastra, requestContext, page, perPage, orderBy, status, authorId, visibility, metadata }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -89,6 +89,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
         requestContext,
         resource: 'agents',
         queryAuthorId: authorId,
+        queryVisibility: visibility === 'public' ? 'public' : undefined,
       });
 
       const result = await agentsStore.listResolved({
@@ -186,6 +187,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
     requestContext,
     id: providedId,
     metadata,
+    visibility: bodyVisibility,
     name,
     description,
     instructions,
@@ -233,13 +235,14 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       }
 
       // Force authorId from the authenticated caller; ignore any body-provided value.
-      // Default visibility to 'private' so the caller owns this agent exclusively.
+      // Use body-supplied visibility if provided, default to 'private'.
       const authorId = getCallerAuthorId(requestContext) ?? undefined;
+      const visibility = bodyVisibility ?? 'private';
 
       const input = {
         id,
         authorId,
-        visibility: 'private' as const,
+        visibility,
         metadata,
         name,
         description,
@@ -270,22 +273,9 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         await agentsStore.create({ agent: input });
       }
 
-      // Publish the initial version so the agent is immediately usable.
-      // Without this, the thin record stays as status='draft' with activeVersionId=null,
-      // which makes the agent unreachable via status='published' resolution.
-      const { versions } = await agentsStore.listVersions({ agentId: id, perPage: 1 });
-      const initialVersion = versions[0];
-      if (initialVersion) {
-        await agentsStore.update({
-          id,
-          activeVersionId: initialVersion.id,
-          status: 'published',
-        });
-        editor?.agent.clearCache(id);
-      }
-
-      // Return the resolved agent (thin record + version config) using the newly published version
-      const resolved = await agentsStore.getByIdResolved(id, { status: 'published' });
+      // Return the resolved agent (thin record + version config)
+      // Use draft status since newly created entities start as drafts
+      const resolved = await agentsStore.getByIdResolved(id, { status: 'draft' });
       if (!resolved) {
         throw new HTTPException(500, { message: 'Failed to resolve created agent' });
       }

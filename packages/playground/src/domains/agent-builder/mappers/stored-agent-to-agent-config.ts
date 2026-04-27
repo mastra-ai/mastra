@@ -7,5 +7,6 @@ export function storedAgentToAgentConfig(storedAgent: StoredAgent | null | undef
     name: storedAgent?.name ?? '',
     description: storedAgent?.description ?? '',
     systemPrompt: typeof storedAgent?.instructions === 'string' ? storedAgent.instructions : '',
+    visibility: storedAgent?.visibility ?? 'private',
   };
 }

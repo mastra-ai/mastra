@@ -41,6 +41,7 @@ export const listStoredAgentsQuerySchema = createPagePaginationSchema(100).exten
     .default('published')
     .describe('Filter agents by status (defaults to published)'),
   authorId: z.string().optional().describe('Filter agents by author identifier'),
+  visibility: z.enum(['public']).optional().describe('Filter to only public agents'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Filter agents by metadata key-value pairs'),
 });
 
