@@ -260,7 +260,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
       busboy.on(
         'file',
-        (fieldname: string, file: NodeJS.ReadableStream, filename: string, encoding: string, mimetype: string) => {
+        (fieldname: string, file: NodeJS.ReadableStream, _filename: string, _encoding: string, _mimetype: string) => {
           const chunks: Buffer[] = [];
           let limitExceeded = false;
 
@@ -276,12 +276,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
           file.on('end', () => {
             if (!limitExceeded) {
-              result[fieldname] = {
-                buffer: Buffer.concat(chunks),
-                filename,
-                encoding,
-                mimetype,
-              };
+              result[fieldname] = Buffer.concat(chunks);
             }
           });
         },
