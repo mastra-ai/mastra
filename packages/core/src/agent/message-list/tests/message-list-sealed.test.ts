@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
+import { MessageMerger } from '../merge/MessageMerger';
 import { MessageList } from '../message-list';
 import type { MastraDBMessage, MastraMessagePart } from '../state/types';
 
@@ -490,6 +491,52 @@ describe('MessageList sealed message handling', () => {
     });
     const textPart = resultAssistant?.content.parts.find(part => part.type === 'text');
     expect(textPart?.text).toBe('Tool result summary');
+  });
+
+  it('should preserve agent network response-to-memory behavior', () => {
+    const mergeSpy = vi.spyOn(MessageMerger, 'merge');
+    const messageList = new MessageList({
+      threadId: 'test-thread',
+      // @ts-expect-error Internal flag used by agent network.
+      _agentNetworkAppend: true,
+    });
+
+    messageList.add(
+      {
+        id: 'assistant-memory-msg',
+        role: 'assistant',
+        threadId: 'test-thread',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Network routing started.' }],
+        },
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      } as MastraDBMessage,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'assistant-memory-msg',
+        role: 'assistant',
+        threadId: 'test-thread',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Sub-agent response.' }],
+        },
+        createdAt: new Date('2024-01-01T00:00:01.000Z'),
+      } as MastraDBMessage,
+      'response',
+    );
+
+    const allMessages = messageList.get.all.db();
+    expect(allMessages).toHaveLength(1);
+    expect(allMessages[0]?.id).toBe('assistant-memory-msg');
+    expect(allMessages[0]?.content.parts.map(part => part.type === 'text' && part.text)).toEqual([
+      'Sub-agent response.',
+    ]);
+    expect(mergeSpy).not.toHaveBeenCalled();
+    mergeSpy.mockRestore();
   });
 
   it('should not replace a sealed assistant message loaded from memory with a same-id response', () => {
