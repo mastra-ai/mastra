@@ -10,26 +10,26 @@ The `feat/fga` branch now has a working end-to-end Fine-Grained Authorization im
 
 ### What's built
 
-| Layer | Status | Files |
-| --- | --- | --- |
-| `IFGAProvider` and `IFGAManager` interfaces | Done | `packages/core/src/auth/ee/interfaces/fga.ts` |
-| `checkFGA` utility and `FGADeniedError` | Done | `packages/core/src/auth/ee/fga-check.ts` |
-| `server.fga` config on `ServerConfig` | Done | `packages/core/src/server/types.ts` |
-| Capabilities endpoint reports `fga: boolean` | Done | `packages/core/src/auth/ee/capabilities.ts` |
-| Agent `generate()` and `stream()` enforcement | Done | `packages/core/src/agent/agent.ts` |
-| Workflow execution enforcement | Done | `packages/core/src/workflows/workflow.ts` |
-| Tool execution enforcement | Done | `packages/core/src/loop/.../tool-call-step.ts` |
-| MCP tool execution enforcement | Done | `packages/mcp/src/server/server.ts` |
-| Route-level declarative FGA checks | Done | `packages/server/src/server/server-adapter/index.ts`, server adapters |
-| List endpoint filtering for agents, tools, workflows | Done | `packages/server/src/server/handlers/` |
-| Thread and memory read/write/delete enforcement | Done | `packages/server/src/server/handlers/memory.ts`, `packages/core/src/memory/memory.ts` |
-| Memory list/search filtering | Done | `packages/server/src/server/handlers/memory.ts` |
-| `MastraFGAWorkos` adapter | Done | `auth/workos/src/fga-provider.ts` |
-| WorkOS FGA types and exports | Done | `auth/workos/src/types.ts`, `auth/workos/src/index.ts` |
-| WorkOS membership fetch gating and caching | Done | `auth/workos/src/auth-provider.ts` |
-| WorkOS bearer JWT claim mapping for service tokens | Done | `auth/workos/src/auth-provider.ts`, `auth/workos/src/types.ts` |
-| Tests for core, server, MCP, memory, and WorkOS adapter paths | Done | Various `__tests__/` and `*.test.ts` files |
-| FGA docs | Done | `docs/src/content/en/docs/server/auth/fga.mdx` |
+| Layer                                                         | Status | Files                                                                                 |
+| ------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------- |
+| `IFGAProvider` and `IFGAManager` interfaces                   | Done   | `packages/core/src/auth/ee/interfaces/fga.ts`                                         |
+| `checkFGA` utility and `FGADeniedError`                       | Done   | `packages/core/src/auth/ee/fga-check.ts`                                              |
+| `server.fga` config on `ServerConfig`                         | Done   | `packages/core/src/server/types.ts`                                                   |
+| Capabilities endpoint reports `fga: boolean`                  | Done   | `packages/core/src/auth/ee/capabilities.ts`                                           |
+| Agent `generate()` and `stream()` enforcement                 | Done   | `packages/core/src/agent/agent.ts`                                                    |
+| Workflow execution enforcement                                | Done   | `packages/core/src/workflows/workflow.ts`                                             |
+| Tool execution enforcement                                    | Done   | `packages/core/src/loop/.../tool-call-step.ts`                                        |
+| MCP tool execution enforcement                                | Done   | `packages/mcp/src/server/server.ts`                                                   |
+| Route-level declarative FGA checks                            | Done   | `packages/server/src/server/server-adapter/index.ts`, server adapters                 |
+| List endpoint filtering for agents, tools, workflows          | Done   | `packages/server/src/server/handlers/`                                                |
+| Thread and memory read/write/delete enforcement               | Done   | `packages/server/src/server/handlers/memory.ts`, `packages/core/src/memory/memory.ts` |
+| Memory list/search filtering                                  | Done   | `packages/server/src/server/handlers/memory.ts`                                       |
+| `MastraFGAWorkos` adapter                                     | Done   | `auth/workos/src/fga-provider.ts`                                                     |
+| WorkOS FGA types and exports                                  | Done   | `auth/workos/src/types.ts`, `auth/workos/src/index.ts`                                |
+| WorkOS membership fetch gating and caching                    | Done   | `auth/workos/src/auth-provider.ts`                                                    |
+| WorkOS bearer JWT claim mapping for service tokens            | Done   | `auth/workos/src/auth-provider.ts`, `auth/workos/src/types.ts`                        |
+| Tests for core, server, MCP, memory, and WorkOS adapter paths | Done   | Various `__tests__/` and `*.test.ts` files                                            |
+| FGA docs                                                      | Done   | `docs/src/content/en/docs/server/auth/fga.mdx`                                        |
 
 ---
 
@@ -103,27 +103,27 @@ No remaining work. The provider interfaces, config wiring, and shared enforcemen
 
 All planned enforcement points are wired:
 
-| Enforcement Point | Status | Notes |
-| --- | --- | --- |
-| Route middleware | Done | Declarative `route.fga` config is enforced in the server adapters |
-| Agent execution | Done | `generate()` and `stream()` enforce `agents:execute` |
-| Tool execution | Done | Tool-call execution enforces `tools:execute` |
-| Memory/thread access | Done | Read, write, delete, create, clone, list, and search paths are covered |
-| Workflow execution | Done | `workflows:execute` enforced |
-| MCP tools | Done | MCP server execution enforces `tools:execute` |
-| Resource listing | Done | Agents, tools, workflows, and threads are filtered |
+| Enforcement Point    | Status | Notes                                                                  |
+| -------------------- | ------ | ---------------------------------------------------------------------- |
+| Route middleware     | Done   | Declarative `route.fga` config is enforced in the server adapters      |
+| Agent execution      | Done   | `generate()` and `stream()` enforce `agents:execute`                   |
+| Tool execution       | Done   | Tool-call execution enforces `tools:execute`                           |
+| Memory/thread access | Done   | Read, write, delete, create, clone, list, and search paths are covered |
+| Workflow execution   | Done   | `workflows:execute` enforced                                           |
+| MCP tools            | Done   | MCP server execution enforces `tools:execute`                          |
+| Resource listing     | Done   | Agents, tools, workflows, and threads are filtered                     |
 
 ### Phase 3: WorkOS FGA Adapter — Complete for the planned integration
 
 The WorkOS implementation now covers the branch plan:
 
-| Item | Status | Notes |
-| --- | --- | --- |
-| `MastraFGAWorkos` class | Done | Uses `workos.authorization.*` |
-| `resourceMapping` and `permissionMapping` | Done | Supports canonical keys and legacy aliases |
-| Batch listing where parent resource is derivable | Done | Uses `listResourcesForMembership()` when that optimization is valid |
-| Membership fetch performance | Done | Gated behind `fetchMemberships` and cached |
-| Service token / machine-to-machine bearer flow | Done | Supported through verified JWT claim mapping and `trustJwtClaims` |
+| Item                                             | Status | Notes                                                               |
+| ------------------------------------------------ | ------ | ------------------------------------------------------------------- |
+| `MastraFGAWorkos` class                          | Done   | Uses `workos.authorization.*`                                       |
+| `resourceMapping` and `permissionMapping`        | Done   | Supports canonical keys and legacy aliases                          |
+| Batch listing where parent resource is derivable | Done   | Uses `listResourcesForMembership()` when that optimization is valid |
+| Membership fetch performance                     | Done   | Gated behind `fetchMemberships` and cached                          |
+| Service token / machine-to-machine bearer flow   | Done   | Supported through verified JWT claim mapping and `trustJwtClaims`   |
 
 The only remaining WorkOS-side follow-up would be future optimization for thread filtering if WorkOS exposes a better bulk query for resource IDs derived per thread. The current thread path intentionally uses per-resource checks because it depends on each thread's owning `resourceId`.
 
@@ -163,10 +163,10 @@ The remaining work is outside the main WorkOS adapter phase:
 
 ### Summary
 
-| Phase | Completion | Notes |
-| --- | --- | --- |
-| 1. Core Interfaces | 100% | Complete |
-| 2. Enforcement Points | 100% | Complete |
-| 3. WorkOS Adapter | 100% | Complete for the planned WorkOS integration |
-| 4. OpenFGA Adapter | 0% | Not started |
-| 5. Studio Integration | 0% | Not started |
+| Phase                 | Completion | Notes                                       |
+| --------------------- | ---------- | ------------------------------------------- |
+| 1. Core Interfaces    | 100%       | Complete                                    |
+| 2. Enforcement Points | 100%       | Complete                                    |
+| 3. WorkOS Adapter     | 100%       | Complete for the planned WorkOS integration |
+| 4. OpenFGA Adapter    | 0%         | Not started                                 |
+| 5. Studio Integration | 0%         | Not started                                 |
