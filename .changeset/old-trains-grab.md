@@ -3,4 +3,4 @@
 '@mastra/core': patch
 ---
 
-Fixed Observational Memory duplicate assistant messages when a thread is rerun without a new user message.
+Fixed Observational Memory duplicate assistant messages when a thread is rerun or an agent continues a long-running loop.

@@ -321,7 +321,7 @@ describe('MessageList sealed message handling', () => {
     expect(unsavedOutput[0]?.id).toBe('assistant-loop-msg');
   });
 
-  it('should still merge a tool result response into a matching unsealed assistant tool call loaded from memory', () => {
+  it('should not merge a tool result response into a matching unsealed assistant tool call loaded from memory', () => {
     const messageList = new MessageList({ threadId: 'test-thread' });
 
     messageList.add(
@@ -374,30 +374,42 @@ describe('MessageList sealed message handling', () => {
     );
 
     const allMessages = messageList.get.all.db();
-    expect(allMessages).toHaveLength(1);
+    expect(allMessages).toHaveLength(2);
 
-    const assistant = allMessages[0]!;
-    expect(assistant.id).toBe('assistant-memory-msg');
-    expect(assistant.content.parts).toHaveLength(1);
-    const toolPart = assistant.content.parts[0];
-    expect(toolPart?.type).toBe('tool-invocation');
-    if (toolPart?.type !== 'tool-invocation') {
+    const memoryAssistant = allMessages.find(m => m.id === 'assistant-memory-msg');
+    const resultAssistant = allMessages.find(m => m.id === 'assistant-tool-result-msg');
+    expect(memoryAssistant?.content.parts).toHaveLength(1);
+    const memoryToolPart = memoryAssistant?.content.parts[0];
+    expect(memoryToolPart?.type).toBe('tool-invocation');
+    if (memoryToolPart?.type !== 'tool-invocation') {
       throw new Error('Expected tool invocation part');
     }
-    expect(toolPart.toolInvocation).toMatchObject({
-      state: 'result',
+    expect(memoryToolPart.toolInvocation).toMatchObject({
+      state: 'call',
       toolCallId: 'call-1',
       toolName: 'search',
       args: { query: 'mastra' },
+    });
+
+    expect(resultAssistant?.content.parts).toHaveLength(1);
+    const resultToolPart = resultAssistant?.content.parts[0];
+    expect(resultToolPart?.type).toBe('tool-invocation');
+    if (resultToolPart?.type !== 'tool-invocation') {
+      throw new Error('Expected tool invocation part');
+    }
+    expect(resultToolPart.toolInvocation).toMatchObject({
+      state: 'result',
+      toolCallId: 'call-1',
+      toolName: 'search',
       result: 'result',
     });
 
     const unsavedOutput = messageList.get.response.db();
     expect(unsavedOutput).toHaveLength(1);
-    expect(unsavedOutput[0]?.id).toBe('assistant-memory-msg');
+    expect(unsavedOutput[0]?.id).toBe('assistant-tool-result-msg');
   });
 
-  it('should merge a text response attached to a tool result into a matching assistant tool call loaded from memory', () => {
+  it('should not merge a text response attached to a tool result into a matching assistant tool call loaded from memory', () => {
     const messageList = new MessageList({ threadId: 'test-thread' });
 
     messageList.add(
@@ -451,21 +463,32 @@ describe('MessageList sealed message handling', () => {
     );
 
     const allMessages = messageList.get.all.db();
-    expect(allMessages).toHaveLength(1);
+    expect(allMessages).toHaveLength(2);
 
-    const assistant = allMessages[0]!;
-    expect(assistant.id).toBe('assistant-memory-msg');
-    const toolPart = assistant.content.parts[0];
-    expect(toolPart?.type).toBe('tool-invocation');
-    if (toolPart?.type !== 'tool-invocation') {
+    const memoryAssistant = allMessages.find(m => m.id === 'assistant-memory-msg');
+    const resultAssistant = allMessages.find(m => m.id === 'assistant-tool-result-msg');
+    const memoryToolPart = memoryAssistant?.content.parts[0];
+    expect(memoryToolPart?.type).toBe('tool-invocation');
+    if (memoryToolPart?.type !== 'tool-invocation') {
       throw new Error('Expected tool invocation part');
     }
-    expect(toolPart.toolInvocation).toMatchObject({
+    expect(memoryToolPart.toolInvocation).toMatchObject({
+      state: 'call',
+      toolCallId: 'call-1',
+    });
+
+    expect(resultAssistant?.content.parts).toHaveLength(2);
+    const resultToolPart = resultAssistant?.content.parts[0];
+    expect(resultToolPart?.type).toBe('tool-invocation');
+    if (resultToolPart?.type !== 'tool-invocation') {
+      throw new Error('Expected tool invocation part');
+    }
+    expect(resultToolPart.toolInvocation).toMatchObject({
       state: 'result',
       toolCallId: 'call-1',
       result: 'result',
     });
-    const textPart = assistant.content.parts.find(part => part.type === 'text');
+    const textPart = resultAssistant?.content.parts.find(part => part.type === 'text');
     expect(textPart?.text).toBe('Tool result summary');
   });
 

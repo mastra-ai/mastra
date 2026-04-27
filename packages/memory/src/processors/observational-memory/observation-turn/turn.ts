@@ -169,12 +169,15 @@ export class ObservationTurn {
     this._ended = true;
 
     // Save any unsaved messages from the last step
-    const unsavedInput = this.messageList.get.input.db();
-    const unsavedOutput = this.messageList.get.response.db();
+    const unsavedInput = this.messageList.clear.input.db();
+    const unsavedOutput = this.messageList.clear.response.db();
     const unsavedMessages = [...unsavedInput, ...unsavedOutput];
     if (unsavedMessages.length > 0) {
       this.om.sealMessagesForBuffering(unsavedOutput);
-      await this.om.persistMessages(unsavedMessages, this.threadId, this.resourceId, { includeSealed: true });
+      await this.om.persistMessages(unsavedMessages, this.threadId, this.resourceId);
+      for (const msg of unsavedMessages) {
+        this.messageList.add(msg, 'memory');
+      }
     }
 
     return { record: this._record! };

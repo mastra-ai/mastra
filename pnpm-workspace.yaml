@@ -37,8 +37,6 @@ blockExoticSubdeps: true
 trustPolicy: no-downgrade
 trustPolicyIgnoreAfter: 43200 # 30 days
 trustPolicyExclude:
-  # 0.7.4 is published with provenance attestation rather than trusted publisher.
-  - 'prettier-plugin-tailwindcss@0.7.4'
   # Security fix for GHSA middleware-based route protection bypass (CVE).
   # 3.47.4 is published with provenance attestation rather than trusted publisher,
   # but it is the official fix published on the @clerk/shared latest-v5 tag.
