@@ -3,8 +3,11 @@ import { describe, it, expect } from 'vitest';
 import { MastraServer } from './index';
 
 describe('Multipart Size Limit (Bug Fix)', () => {
-  it('should reject when file exceeds maxFileSize', async () => {
-    const app = Fastify();
+  it('should reject when file exceeds maxFileSize (busboy limit)', async () => {
+    //  Increase Fastify bodyLimit so it DOES NOT block first
+    const app = Fastify({
+      bodyLimit: 10 * 1024 * 1024, // 10MB
+    });
 
     const adapter = new MastraServer({
       app,
@@ -13,13 +16,12 @@ describe('Multipart Size Limit (Bug Fix)', () => {
           error: () => {}, // stub logger to avoid crashes
         }),
       } as any,
-      bodyLimitOptions: { maxSize: 100 }, // very small limit
+      bodyLimitOptions: { maxSize: 100 }, // small file limit (busboy)
     });
 
-    // Register middleware
-    app.addHook('preHandler', adapter.createContextMiddleware());
+    //registers multipart parser + context middleware
+    adapter.registerContextMiddleware();
 
-    // Register route
     await adapter.registerRoute(
       app,
       {
@@ -34,9 +36,8 @@ describe('Multipart Size Limit (Bug Fix)', () => {
     const address = await app.listen({ port: 0 });
 
     try {
-      // Create multipart payload exceeding limit
       const boundary = '----testboundary';
-      const bigData = 'a'.repeat(1000); // exceeds 100 bytes
+      const bigData = 'a'.repeat(1000); // exceeds 100 bytes (busboy limit)
 
       const payload =
         `--${boundary}\r\n` +
@@ -53,8 +54,10 @@ describe('Multipart Size Limit (Bug Fix)', () => {
         body: payload,
       });
 
-      // Should fail due to file size limit
       expect(res.status).toBeGreaterThanOrEqual(400);
+
+      const text = await res.text();
+      expect(text.toLowerCase()).toContain('size');
     } finally {
       await app.close();
     }
