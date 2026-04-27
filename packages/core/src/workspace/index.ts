@@ -2,7 +2,7 @@
 export * from './workspace';
 
 // LSP
-export type { LSPConfig, LSPDiagnostic, DiagnosticSeverity, LSPServerDef } from './lsp/types';
+export type { CustomLSPServer, LSPConfig, LSPDiagnostic, DiagnosticSeverity, LSPServerDef } from './lsp/types';
 
 // Built-in Providers
 export { LocalFilesystem, type LocalFilesystemOptions } from './filesystem';
@@ -37,6 +37,10 @@ export {
   type BackgroundProcessConfig,
   type BackgroundProcessMeta,
   type BackgroundProcessExitMeta,
+  type ToolConfigContext,
+  type ToolConfigWithArgsContext,
+  type DynamicToolConfigValue,
+  type ResolvedToolConfig,
   // Individual standalone tools
   readFileTool,
   writeFileTool,

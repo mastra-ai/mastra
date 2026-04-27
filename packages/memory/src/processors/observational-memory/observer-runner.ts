@@ -31,11 +31,31 @@ type ObservationModelResolver = (inputTokens: number) => {
  * Runs the Observer agent for extracting observations from messages.
  * Handles single-thread and multi-thread modes, degenerate detection, and retry logic.
  */
+export interface ObserverExchange {
+  systemPrompt: string;
+  observerMessages: Array<{ role: string; content: unknown }>;
+  rawOutput: string;
+  parsedResult: {
+    observations: string;
+    currentTask?: string;
+    suggestedContinuation?: string;
+    threadTitle?: string;
+    degenerate?: boolean;
+  };
+  model: string;
+  inputTokens: number;
+  isMultiThread: boolean;
+  retriedDueToDegenerate: boolean;
+}
+
 export class ObserverRunner {
   private readonly observationConfig: ResolvedObservationConfig;
   private readonly observedMessageIds: Set<string>;
   private readonly resolveModel: ObservationModelResolver;
   private readonly tokenCounter: TokenCounter;
+
+  /** Captured prompt/response from the last observer call (for repro capture). */
+  lastExchange?: ObserverExchange;
 
   constructor(opts: {
     observationConfig: ResolvedObservationConfig;
@@ -146,16 +166,40 @@ export class ObserverRunner {
 
     let result = await doGenerate();
     let parsed = parseObserverOutput(result.text);
+    let retriedDueToDegenerate = false;
 
     if (parsed.degenerate) {
       omDebug(`[OM:callObserver] degenerate repetition detected, retrying once`);
       result = await doGenerate();
       parsed = parseObserverOutput(result.text);
+      retriedDueToDegenerate = true;
       if (parsed.degenerate) {
         omDebug(`[OM:callObserver] degenerate repetition on retry, failing`);
         throw new Error('Observer produced degenerate output after retry');
       }
     }
+
+    const systemPrompt = buildObserverSystemPrompt(
+      false,
+      this.observationConfig.instruction,
+      this.observationConfig.threadTitle,
+    );
+    this.lastExchange = {
+      systemPrompt,
+      observerMessages,
+      rawOutput: result.text,
+      parsedResult: {
+        observations: parsed.observations,
+        currentTask: parsed.currentTask,
+        suggestedContinuation: parsed.suggestedContinuation,
+        threadTitle: parsed.threadTitle,
+        degenerate: parsed.degenerate,
+      },
+      model: String(resolvedModel.model),
+      inputTokens,
+      isMultiThread: false,
+      retriedDueToDegenerate,
+    };
 
     const usage = result.totalUsage ?? result.usage;
 
@@ -250,16 +294,43 @@ export class ObserverRunner {
 
     let result = await doGenerate();
     let parsed = parseMultiThreadObserverOutput(result.text);
+    let retriedDueToDegenerate = false;
 
     if (parsed.degenerate) {
       omDebug(`[OM:callMultiThreadObserver] degenerate repetition detected, retrying once`);
       result = await doGenerate();
       parsed = parseMultiThreadObserverOutput(result.text);
+      retriedDueToDegenerate = true;
       if (parsed.degenerate) {
         omDebug(`[OM:callMultiThreadObserver] degenerate repetition on retry, failing`);
         throw new Error('Multi-thread observer produced degenerate output after retry');
       }
     }
+
+    const systemPrompt = buildObserverSystemPrompt(
+      true,
+      this.observationConfig.instruction,
+      this.observationConfig.threadTitle,
+    );
+    this.lastExchange = {
+      systemPrompt,
+      observerMessages,
+      rawOutput: result.text,
+      parsedResult: {
+        observations: Array.from(parsed.threads.values())
+          .map(t => t.observations)
+          .join('\n'),
+        threadTitle: Array.from(parsed.threads.values())
+          .map(t => t.threadTitle)
+          .filter(Boolean)
+          .join(', '),
+        degenerate: parsed.degenerate,
+      },
+      model: String(resolvedModel.model),
+      inputTokens,
+      isMultiThread: true,
+      retriedDueToDegenerate,
+    };
 
     const results = new Map<
       string,

@@ -143,4 +143,8 @@ export class VersionedSkillSource implements SkillSource {
 
     return entries;
   }
+
+  async realpath(path: string): Promise<string> {
+    return this.#normalizePath(path);
+  }
 }

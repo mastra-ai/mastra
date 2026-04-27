@@ -75,6 +75,11 @@ export type GetEntityTypesResponse = z.infer<typeof getEntityTypesResponseSchema
 
 // --- getEntityNames ---
 
+// TODO(observability): Extend entity-name discovery with query/prefix and limit support.
+// The current UI autocomplete can only refine against a capped result set, which is
+// enough for "take the top hit" but not enough for globally-correct shell-style
+// completion. A richer discovery contract should support prefix filtering and bounded
+// result windows, and may also want a root-only mode for root-entity name UX.
 export const getEntityNamesArgsSchema = z
   .object({
     entityType: entityTypeField.optional().describe('Optional entity type filter'),

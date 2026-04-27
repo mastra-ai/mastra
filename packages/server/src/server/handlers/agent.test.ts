@@ -21,6 +21,7 @@ import {
   STREAM_GENERATE_LEGACY_ROUTE,
   STREAM_GENERATE_ROUTE,
   ENHANCE_INSTRUCTIONS_ROUTE,
+  STREAM_UNTIL_IDLE_GENERATE_ROUTE,
 } from './agents';
 import { createTestServerContext } from './test-utils';
 class MockAgent extends Agent {
@@ -29,6 +30,7 @@ class MockAgent extends Agent {
 
     this.generate = vi.fn();
     this.stream = vi.fn();
+    this.streamUntilIdle = vi.fn();
     this.__updateInstructions = vi.fn();
   }
 
@@ -38,6 +40,10 @@ class MockAgent extends Agent {
 
   stream(args: any) {
     return this.stream(args);
+  }
+
+  streamUntilIdle(args: any) {
+    return this.streamUntilIdle(args);
   }
 
   __updateInstructions(args: any) {
@@ -111,6 +117,7 @@ describe('Agent Handlers', () => {
           workflows: {},
           skills: [],
           workspaceTools: [],
+          browserTools: [],
           workspaceId: undefined,
           inputProcessors: [],
           outputProcessors: [],
@@ -137,6 +144,7 @@ describe('Agent Handlers', () => {
           requestContextSchema: undefined,
           skills: [],
           workspaceTools: [],
+          browserTools: [],
           inputProcessors: [],
           outputProcessors: [],
           provider: 'openai.responses',
@@ -481,6 +489,8 @@ describe('Agent Handlers', () => {
         },
         skills: [],
         workspaceTools: [],
+        browserTools: [],
+        workspaceId: undefined,
         inputProcessors: [],
         outputProcessors: [],
         provider: 'openai.chat',
@@ -490,6 +500,7 @@ describe('Agent Handlers', () => {
         defaultGenerateOptionsLegacy: {},
         defaultStreamOptionsLegacy: {},
         modelList: undefined,
+        requestContextSchema: undefined,
         source: 'code',
       });
     });
@@ -566,6 +577,34 @@ describe('Agent Handlers', () => {
         }),
       );
     });
+
+    it('should return serialized agent with browser tools when browser is configured', async () => {
+      const mockBrowser = {
+        providerType: 'sdk' as const,
+        getTools: () => ({
+          navigate: { name: 'navigate' },
+          click: { name: 'click' },
+          screenshot: { name: 'screenshot' },
+        }),
+      };
+
+      const agentWithBrowser = makeMockAgent({
+        name: 'browser-agent',
+        browser: mockBrowser as any,
+      });
+
+      const mastraWithBrowser = makeMastraMock({
+        agents: { 'browser-agent': agentWithBrowser },
+      });
+
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithBrowser }),
+        agentId: 'browser-agent',
+        requestContext,
+      });
+
+      expect(result?.browserTools).toEqual(['navigate', 'click', 'screenshot']);
+    });
   });
 
   describe('generateHandler', () => {
@@ -622,6 +661,43 @@ describe('Agent Handlers', () => {
     it('should throw 404 when agent not found', async () => {
       await expect(
         STREAM_GENERATE_LEGACY_ROUTE.handler({
+          ...createTestServerContext({ mastra: mockMastra }),
+          agentId: 'non-existing',
+          messages: ['test message'],
+          resourceId: 'test-resource',
+          threadId: 'test-thread',
+          experimental_output: undefined,
+        }),
+      ).rejects.toThrow(new HTTPException(404, { message: 'Agent with id non-existing not found' }));
+    });
+  });
+
+  describe('streamUntilIdleGenerateHandler', () => {
+    it('should stream response from agent', async () => {
+      const mockStreamResult = {
+        toTextStreamResponse: vi.fn().mockReturnValue(new Response()),
+        toDataStreamResponse: vi.fn().mockReturnValue(new Response()),
+        fullStream: new ReadableStream(),
+      };
+      (mockAgent.streamUntilIdle as any).mockResolvedValue(mockStreamResult);
+
+      const result = await STREAM_UNTIL_IDLE_GENERATE_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        agentId: 'test-agent',
+        messages: ['test message'],
+        resourceId: 'test-resource',
+        threadId: 'test-thread',
+        experimental_output: undefined,
+      });
+
+      expect(result).toBeDefined();
+      expect(result).toBeInstanceOf(ReadableStream);
+      expect(mockAgent.streamUntilIdle).toHaveBeenCalled();
+    });
+
+    it('should throw 404 when agent not found', async () => {
+      await expect(
+        STREAM_UNTIL_IDLE_GENERATE_ROUTE.handler({
           ...createTestServerContext({ mastra: mockMastra }),
           agentId: 'non-existing',
           messages: ['test message'],

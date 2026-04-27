@@ -62,13 +62,16 @@ export interface FeedbackInput {
  * User-defined metadata is inherited from the span/trace receiving feedback.
  */
 export interface ExportedFeedback {
+  /** Unique identifier for this feedback event, generated at emission time */
+  feedbackId: string;
+
   /** When the feedback was recorded */
   timestamp: Date;
 
-  /** Trace receiving feedback */
-  traceId: string;
+  /** Trace that anchors the feedback target when available */
+  traceId?: string;
 
-  /** Specific span receiving feedback (undefined = trace-level feedback) */
+  /** Span anchor when the feedback is about a specific span */
   spanId?: string;
 
   /**

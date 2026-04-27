@@ -1,9 +1,11 @@
 import { z } from 'zod/v4';
+import { browserCliHandler } from '../../browser/cli-handler';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
 import { emitWorkspaceMetadata, requireSandbox } from './helpers';
 import { DEFAULT_TAIL_LINES, truncateOutput, sandboxToModelOutput } from './output-helpers';
+import { startWorkspaceSpan } from './tracing';
 
 /**
  * Base input schema for execute_command (no background param).
@@ -73,16 +75,71 @@ async function executeCommand(input: Record<string, any>, context: any) {
     }
   }
 
+  // Lazy browser launch and CDP URL injection for browser CLI commands
+  const browser = workspace.browser;
+  const { browserClis, usingExternalCdp, externalCdpUrl } = browserCliHandler.analyzeCommand(command);
+
+  if (browser && browserClis.length > 0 && !usingExternalCdp) {
+    const threadId = context?.agent?.threadId ?? context?.threadId ?? 'default';
+
+    // Launch browser if not already running (for this thread if thread-scoped)
+    if (!browser.isBrowserRunning(threadId)) {
+      await browser.launch(threadId);
+    }
+
+    const cdpUrl = browser.getCdpUrl(threadId);
+    const browserId = browser.id;
+
+    if (cdpUrl) {
+      // Run warmup commands for CLIs that need them
+      const warmups = browserCliHandler.getWarmupCommands(browserId, browserClis, cdpUrl, threadId);
+      for (const { cliName, command: warmupCmd } of warmups) {
+        try {
+          if (sandbox.executeCommand) {
+            await sandbox.executeCommand(warmupCmd, [], { timeout: 10000 });
+          }
+          // Only mark as warmed up after successful warmup
+          browserCliHandler.markWarmedUp(browserId, cliName, threadId);
+          // Register cleanup when browser closes
+          browserCliHandler.registerWarmupCleanup(browserId, cliName, threadId, browser);
+        } catch {
+          // Don't mark as warmed up - will retry on next command
+          // This allows recovery if the CLI daemon wasn't ready
+        }
+      }
+
+      // Inject CDP URL into all browser CLI commands in the chain
+      command = browserCliHandler.injectCdpUrl(command, cdpUrl, threadId);
+    }
+  } else if (browser && browserClis.length > 0 && usingExternalCdp && externalCdpUrl) {
+    // Agent is using their own external CDP - connect BrowserViewer to it for screencast
+    const threadId = context?.agent?.threadId ?? context?.threadId ?? 'default';
+    try {
+      await browser.connectToExternalCdp(externalCdpUrl, threadId);
+    } catch {
+      // Non-fatal - agent can still use the external CDP, just no screencast
+    }
+  }
+
   await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
   const toolCallId = context?.agent?.toolCallId;
   const toolConfig = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND];
   const tokenLimit = toolConfig?.maxOutputTokens;
   const tokenFrom = 'sandwich' as const;
 
+  const span = startWorkspaceSpan(context, workspace, {
+    category: 'sandbox',
+    operation: background ? 'spawnProcess' : 'executeCommand',
+    input: { command, cwd, timeout: input.timeout, background },
+    attributes: { sandboxProvider: sandbox.provider },
+  });
+
   // Background mode: spawn via process manager and return immediately
   if (background) {
     if (!sandbox.processes) {
-      throw new SandboxFeatureNotSupportedError('processes');
+      const err = new SandboxFeatureNotSupportedError('processes');
+      span.error(err);
+      throw err;
     }
 
     const bgConfig = toolConfig?.backgroundProcesses;
@@ -119,12 +176,15 @@ async function executeCommand(input: Record<string, any>, context: any) {
       });
     }
 
+    span.end({ success: true }, { pid: Number(handle.pid) || undefined });
     return `Started background process (PID: ${handle.pid})`;
   }
 
   // Foreground mode: execute and wait for completion
   if (!sandbox.executeCommand) {
-    throw new SandboxFeatureNotSupportedError('executeCommand');
+    const err = new SandboxFeatureNotSupportedError('executeCommand');
+    span.error(err);
+    throw err;
   }
 
   const startedAt = Date.now();
@@ -163,6 +223,8 @@ async function executeCommand(input: Record<string, any>, context: any) {
       },
     });
 
+    span.end({ success: result.success }, { exitCode: result.exitCode });
+
     if (!result.success) {
       const parts = [
         await truncateOutput(result.stdout, tail, tokenLimit, tokenFrom),
@@ -183,6 +245,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
         toolCallId,
       },
     });
+    span.end({ success: false }, { exitCode: -1 });
     const parts = [
       await truncateOutput(stdout, tail, tokenLimit, tokenFrom),
       await truncateOutput(stderr, tail, tokenLimit, tokenFrom),

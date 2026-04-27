@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { MarkdownRenderer } from './markdown-renderer';
 import { TooltipProvider } from '../Tooltip';
+import { MarkdownRenderer } from './markdown-renderer';
 
 const meta: Meta<typeof MarkdownRenderer> = {
   title: 'Composite/MarkdownRenderer',

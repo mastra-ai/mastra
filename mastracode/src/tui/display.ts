@@ -39,6 +39,12 @@ export function showFormattedError(
 
   // Show the main error message
   let errorText = `Error: ${parsed.message}`;
+  if (parsed.detail && parsed.detail !== parsed.message) {
+    errorText += theme.fg('muted', ` (${parsed.detail})`);
+  }
+  if (parsed.requestUrl) {
+    errorText += theme.fg('muted', ` [url: ${parsed.requestUrl}]`);
+  }
 
   // Add retry info if applicable
   const retryable = 'retryable' in event ? event.retryable : parsed.retryable;

@@ -1,5 +1,5 @@
-import { EntityListPageLayout, MainHeader } from '@mastra/playground-ui';
-import { BookIcon, EarthIcon, MessageSquareIcon, ExternalLinkIcon, CloudUploadIcon } from 'lucide-react';
+import { PageHeader, PageLayout } from '@mastra/playground-ui';
+import { BookIcon, EarthIcon, MessageSquareIcon, ExternalLinkIcon, CloudUploadIcon, BuildingIcon } from 'lucide-react';
 
 const resources = [
   {
@@ -37,22 +37,28 @@ const resources = [
     href: 'https://mastra.ai/cloud',
     external: true,
   },
+  {
+    title: 'Talk to our Sales team',
+    description:
+      'Get a custom demo, discuss on-prem deployments, and how we can help you accelerate getting agents into production.',
+    icon: BuildingIcon,
+    href: 'https://mastra.ai/contact?ref=studio',
+    external: true,
+  },
 ];
 
 export default function Resources() {
   return (
-    <EntityListPageLayout>
-      <EntityListPageLayout.Top>
-        <MainHeader withMargins={false}>
-          <MainHeader.Column>
-            <MainHeader.Title>
-              <BookIcon /> Resources
-            </MainHeader.Title>
-          </MainHeader.Column>
-        </MainHeader>
-      </EntityListPageLayout.Top>
+    <PageLayout width="narrow">
+      <PageLayout.TopArea>
+        <PageHeader>
+          <PageHeader.Title>
+            <BookIcon /> Resources
+          </PageHeader.Title>
+        </PageHeader>
+      </PageLayout.TopArea>
 
-      <div className="px-6 pt-6 overflow-y-auto">
+      <PageLayout.MainArea>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl">
           {resources.map(resource => (
             <a
@@ -72,7 +78,7 @@ export default function Resources() {
             </a>
           ))}
         </div>
-      </div>
-    </EntityListPageLayout>
+      </PageLayout.MainArea>
+    </PageLayout>
   );
 }

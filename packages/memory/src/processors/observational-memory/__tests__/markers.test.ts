@@ -289,6 +289,9 @@ describe('markers', () => {
         threadId: 'thread-1',
         generationCount: 2,
         observations: '- Activated obs 1\n- Activated obs 2',
+        triggeredBy: 'ttl',
+        lastActivityAt: 1750000000000,
+        ttlExpiredMs: 301000,
         config: DEFAULT_CONFIG,
       });
 
@@ -307,6 +310,9 @@ describe('markers', () => {
           generationCount: 2,
           config: DEFAULT_CONFIG,
           observations: '- Activated obs 1\n- Activated obs 2',
+          triggeredBy: 'ttl',
+          lastActivityAt: 1750000000000,
+          ttlExpiredMs: 301000,
         },
       });
     });

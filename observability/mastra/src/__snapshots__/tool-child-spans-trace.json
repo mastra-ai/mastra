@@ -54,9 +54,7 @@
               "model": "mock-model-id",
               "provider": "mock-provider",
               "streaming": true,
-              "parameters": {
-                "temperature": 0
-              },
+              "parameters": {},
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -254,9 +252,6 @@
                       "runId": "<runId-1>",
                       "toolCallId": "call-child-span-1",
                       "toolName": "childSpanTool"
-                    },
-                    "output": {
-                      "output": "Tool processed: test-data"
                     }
                   }
                 }

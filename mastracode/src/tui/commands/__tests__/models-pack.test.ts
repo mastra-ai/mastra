@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import type { ModePack } from '../../../onboarding/packs.js';
 import type { GlobalSettings, StorageSettings } from '../../../onboarding/settings.js';
-import { removeCustomPackFromSettings, upsertCustomPackInSettings } from '../models-pack.js';
+import {
+  deserializePack,
+  removeCustomPackFromSettings,
+  serializePack,
+  upsertCustomPackInSettings,
+} from '../models-pack.js';
 
 function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
   const storage: StorageSettings = { backend: 'libsql', libsql: {}, pg: {} };
@@ -19,6 +24,10 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       modeDefaults: {},
       activeOmPackId: null,
       omModelOverride: null,
+      observerModelOverride: null,
+      reflectorModelOverride: null,
+      omObservationThreshold: null,
+      omReflectionThreshold: null,
       subagentModels: {},
     },
     preferences: { yolo: null, theme: 'auto', thinkingLevel: 'off', quietMode: false },
@@ -27,6 +36,14 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     customProviders: [],
     modelUseCounts: {},
     updateDismissedVersion: null,
+    memoryGateway: {},
+    browser: {
+      enabled: false,
+      provider: 'stagehand',
+      headless: false,
+      viewport: { width: 1280, height: 720 },
+      stagehand: { env: 'LOCAL' },
+    },
     ...overrides,
   };
 }
@@ -293,5 +310,63 @@ describe('removeCustomPackFromSettings', () => {
     expect(settings.customModelPacks).toHaveLength(1);
     expect(settings.models.activeModelPackId).toBe('custom:Alpha');
     expect(settings.onboarding.modePackId).toBe('custom:Alpha');
+  });
+});
+
+describe('serializePack / deserializePack', () => {
+  it('round-trips a custom pack', () => {
+    const serialized = serializePack(alphaPack);
+    expect(serialized).toMatch(/^mastra-pack:/);
+
+    const deserialized = deserializePack(serialized);
+    expect(deserialized).not.toBeNull();
+    expect(deserialized!.name).toBe('Alpha');
+    expect(deserialized!.id).toBe('custom:Alpha');
+    expect(deserialized!.models).toEqual(alphaPack.models);
+  });
+
+  it('round-trips a built-in pack', () => {
+    const builtIn: ModePack = {
+      id: 'anthropic',
+      name: 'Anthropic',
+      description: 'All Anthropic models',
+      models: {
+        build: 'anthropic/claude-sonnet-4-5',
+        plan: 'anthropic/claude-sonnet-4-5',
+        fast: 'anthropic/claude-haiku-4-5',
+      },
+    };
+    const serialized = serializePack(builtIn);
+    const deserialized = deserializePack(serialized);
+    expect(deserialized).not.toBeNull();
+    expect(deserialized!.name).toBe('Anthropic');
+    expect(deserialized!.models).toEqual(builtIn.models);
+    // Imported packs always get the custom: prefix
+    expect(deserialized!.id).toBe('custom:Anthropic');
+  });
+
+  it('returns null for invalid strings', () => {
+    expect(deserializePack('')).toBeNull();
+    expect(deserializePack('not-a-pack')).toBeNull();
+    expect(deserializePack('mastra-pack:!!invalid-base64!!')).toBeNull();
+  });
+
+  it('returns null when required fields are missing', () => {
+    const noName = Buffer.from(JSON.stringify({ models: { build: 'a', plan: 'b', fast: 'c' } })).toString('base64');
+    expect(deserializePack(`mastra-pack:${noName}`)).toBeNull();
+
+    const noModels = Buffer.from(JSON.stringify({ name: 'Test' })).toString('base64');
+    expect(deserializePack(`mastra-pack:${noModels}`)).toBeNull();
+
+    const partialModels = Buffer.from(JSON.stringify({ name: 'Test', models: { build: 'a' } })).toString('base64');
+    expect(deserializePack(`mastra-pack:${partialModels}`)).toBeNull();
+  });
+
+  it('trims whitespace from pasted input', () => {
+    const serialized = serializePack(alphaPack);
+    const padded = `  \n  ${serialized}  \n  `;
+    const deserialized = deserializePack(padded);
+    expect(deserialized).not.toBeNull();
+    expect(deserialized!.name).toBe('Alpha');
   });
 });

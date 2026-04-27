@@ -2,12 +2,68 @@ import { convertToCoreMessages as convertToCoreMessagesV4 } from '@internal/ai-s
 import type { CoreMessage as CoreMessageV4, UIMessage as UIMessageV4 } from '@internal/ai-sdk-v4';
 import * as AIV5 from '@internal/ai-sdk-v5';
 
-import { AIV4Adapter, AIV5Adapter } from '../adapters';
+import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from '../adapters';
 import type { AdapterContext } from '../adapters';
 import { TypeDetector } from '../detection/TypeDetector';
 import type { MastraDBMessage, MessageSource } from '../state/types';
-import type { AIV5Type } from '../types';
+import type { AIV5Type, AIV6Type } from '../types';
 import { ensureAnthropicCompatibleMessages } from '../utils/provider-compat';
+
+/**
+ * Merges text parts that share the same OpenAI itemId.
+ *
+ * When OpenAI streams a response with web search, it interleaves `source` chunks
+ * with text-deltas. If the streaming pipeline flushes text on these source chunks,
+ * it creates multiple text parts all sharing the same `providerMetadata.openai.itemId`.
+ *
+ * When these parts are later converted to model messages, each part with an itemId
+ * becomes an `item_reference` pointing to the same ID, causing OpenAI to reject
+ * the request with: "Duplicate item found with id msg_*"
+ *
+ * This function merges consecutive text parts with the same itemId into a single part,
+ * concatenating their text content and keeping the metadata from the first part.
+ */
+function mergeTextPartsWithDuplicateItemIds<T extends { type: string }>(parts: T[]): T[] {
+  const result: T[] = [];
+
+  for (const part of parts) {
+    // Only process text parts with OpenAI itemId
+    if (part.type !== 'text') {
+      result.push(part);
+      continue;
+    }
+
+    const textPart = part as T & { text: string; providerMetadata?: Record<string, unknown> };
+    const itemId = (textPart.providerMetadata?.openai as Record<string, unknown> | undefined)?.itemId as
+      | string
+      | undefined;
+    if (!itemId) {
+      result.push(part);
+      continue;
+    }
+
+    // Find an existing text part in result with the same itemId
+    const existingIndex = result.findIndex(p => {
+      if (p.type !== 'text') return false;
+      const existingTextPart = p as T & { providerMetadata?: Record<string, unknown> };
+      const existingItemId = (existingTextPart.providerMetadata?.openai as Record<string, unknown> | undefined)?.itemId;
+      return existingItemId === itemId;
+    });
+
+    if (existingIndex !== -1) {
+      // Merge: concatenate text into the existing part
+      const existing = result[existingIndex] as T & { text: string };
+      result[existingIndex] = {
+        ...existing,
+        text: existing.text + textPart.text,
+      };
+    } else {
+      result.push(part);
+    }
+  }
+
+  return result;
+}
 
 /**
  * Sanitizes AIV4 UI messages by filtering out incomplete tool calls.
@@ -56,21 +112,6 @@ export function sanitizeV5UIMessages(
     .map(m => {
       if (m.parts.length === 0) return false;
 
-      // When building a prompt TO the LLM (filterIncompleteToolCalls=true),
-      // check if this message contains OpenAI reasoning parts (rs_* itemIds).
-      // If so, we need to strip them AND clear providerMetadata.openai from remaining
-      // parts to prevent item_reference linking to the stripped reasoning items.
-      const hasOpenAIReasoning =
-        filterIncompleteToolCalls &&
-        m.parts.some(
-          p =>
-            p.type === 'reasoning' &&
-            'providerMetadata' in p &&
-            p.providerMetadata &&
-            typeof p.providerMetadata === 'object' &&
-            'openai' in (p.providerMetadata as Record<string, unknown>),
-        );
-
       // Filter out streaming states and optionally input-available (which aren't supported by convertToModelMessages)
       const safeParts = m.parts.filter(p => {
         // Filter out data-* parts (custom streaming data from writer.custom())
@@ -81,21 +122,14 @@ export function sanitizeV5UIMessages(
           return false;
         }
 
-        // Strip OpenAI reasoning parts when building a prompt TO the LLM.
-        // OpenAI's Responses API uses item_reference linking (rs_*/msg_* itemIds) that
-        // creates mandatory pairing between reasoning and message items. Replaying
-        // reasoning from history causes:
-        //   "Item 'rs_*' of type 'reasoning' was provided without its required following item"
-        //   "Item 'msg_*' of type 'message' was provided without its required 'reasoning' item"
-        // Reasoning data is preserved in the database — only stripped from LLM input.
-        // See: https://github.com/mastra-ai/mastra/issues/12980
-        if (p.type === 'reasoning' && hasOpenAIReasoning) {
-          return false;
-        }
-
-        // Filter out empty text parts to handle legacy data from before this filtering was implemented
-        // But preserve them if they are the only parts (legitimate placeholder messages)
+        // Filter out empty text parts to handle legacy data from before this filtering was implemented.
+        // For assistant messages, preserve empty text parts if they are the only parts (placeholder messages).
+        // For user messages, always filter them out — Anthropic rejects empty user text content blocks.
         if (p.type === 'text' && (!('text' in p) || p.text === '' || p.text?.trim() === '')) {
+          // Always filter empty text parts from user messages
+          if (m.role === 'user') return false;
+
+          // For non-user messages, only filter if there are other non-empty parts
           const hasNonEmptyParts = m.parts.some(
             part => !(part.type === 'text' && (!('text' in part) || part.text === '' || part.text?.trim() === '')),
           );
@@ -124,42 +158,14 @@ export function sanitizeV5UIMessages(
 
       if (!safeParts.length) return false;
 
+      // Merge text parts with duplicate OpenAI itemIds to prevent "Duplicate item found" errors.
+      // This can happen when streaming flushes text multiple times for the same response
+      // (e.g., when source citations are interleaved with text-deltas).
+      const mergedParts = mergeTextPartsWithDuplicateItemIds(safeParts);
+
       const sanitized = {
         ...m,
-        parts: safeParts.map(part => {
-          // When OpenAI reasoning was stripped, clear openai metadata from ALL remaining
-          // parts so the SDK sends inline content instead of item_reference. This covers:
-          //   - providerMetadata.openai on text/reasoning parts (msg_*/rs_* itemIds)
-          //   - callProviderMetadata.openai on tool parts (fc_* itemIds used by convertToModelMessages)
-          // Without paired reasoning items, OpenAI rejects orphaned item_references with:
-          //   "function_call was provided without its required reasoning item"
-          if (hasOpenAIReasoning) {
-            if ('providerMetadata' in part && part.providerMetadata) {
-              const meta = part.providerMetadata as Record<string, unknown>;
-              if ('openai' in meta) {
-                const { openai: _, ...restMeta } = meta;
-                part = {
-                  ...part,
-                  providerMetadata:
-                    Object.keys(restMeta).length > 0 ? (restMeta as typeof part.providerMetadata) : undefined,
-                };
-              }
-            }
-            if ('callProviderMetadata' in part && part.callProviderMetadata) {
-              const callMeta = part.callProviderMetadata as Record<string, unknown>;
-              if ('openai' in callMeta) {
-                const { openai: _, ...restCallMeta } = callMeta;
-                part = {
-                  ...part,
-                  callProviderMetadata:
-                    Object.keys(restCallMeta).length > 0
-                      ? (restCallMeta as typeof part.callProviderMetadata)
-                      : undefined,
-                } as typeof part;
-              }
-            }
-          }
-
+        parts: mergedParts.map(part => {
           if (AIV5.isToolUIPart(part) && part.state === 'output-available') {
             return {
               ...part,
@@ -225,6 +231,55 @@ export function aiV4UIMessagesToAIV4CoreMessages(messages: UIMessageV4[]): CoreM
 }
 
 /**
+ * Restores `providerOptions` on assistant file parts after `convertToModelMessages`.
+ *
+ * The vendored AI SDK v5 `convertToModelMessages` drops `providerMetadata` from
+ * assistant file parts (fixed in v6 but not backported). This causes providers
+ * like Google Gemini to reject round-tripped responses that require metadata
+ * (e.g. `thoughtSignature` on generated images).
+ *
+ * We collect all `providerMetadata` values from assistant `file` UI parts in
+ * order, then walk the model messages and assign them to assistant `file` parts
+ * in the same order. The ordering is guaranteed to be preserved.
+ */
+function restoreAssistantFileProviderMetadata(
+  modelMessages: AIV5Type.ModelMessage[],
+  uiMessages: AIV5Type.UIMessage[],
+): AIV5Type.ModelMessage[] {
+  // Collect providerMetadata from ALL assistant file UI parts in order,
+  // using undefined as a placeholder for parts without metadata so that
+  // the indices stay aligned with the model-side file parts.
+  const fileMetadata: (AIV5Type.ProviderMetadata | undefined)[] = [];
+  for (const msg of uiMessages) {
+    if (msg.role !== 'assistant') continue;
+    for (const part of msg.parts) {
+      if (part.type === 'file') {
+        fileMetadata.push(part.providerMetadata ?? undefined);
+      }
+    }
+  }
+
+  if (fileMetadata.length === 0 || fileMetadata.every(m => m == null)) return modelMessages;
+
+  // Walk model messages and restore providerOptions on assistant file parts
+  let metadataIndex = 0;
+  return modelMessages.map(msg => {
+    if (msg.role !== 'assistant' || typeof msg.content === 'string') return msg;
+
+    let modified = false;
+    const content = msg.content.map(part => {
+      if (part.type !== 'file' || metadataIndex >= fileMetadata.length) return part;
+      const metadata = fileMetadata[metadataIndex++];
+      if (part.providerOptions || !metadata) return part;
+      modified = true;
+      return { ...part, providerOptions: metadata };
+    });
+
+    return modified ? { ...msg, content } : msg;
+  });
+}
+
+/**
  * Converts AIV5 UI messages to AIV5 Model messages.
  * Handles sanitization, step-start insertion, provider options restoration, and Anthropic compatibility.
  *
@@ -239,47 +294,8 @@ export function aiV5UIMessagesToAIV5ModelMessages(
 ): AIV5Type.ModelMessage[] {
   const sanitized = sanitizeV5UIMessages(messages, filterIncompleteToolCalls);
   const preprocessed = addStartStepPartsForAIV5(sanitized);
-  const result = AIV5.convertToModelMessages(preprocessed);
 
-  // Build a lookup of toolCallId → stored modelOutput from providerMetadata.mastra.modelOutput.
-  // This allows toModelOutput results computed at tool execution time to be preserved
-  // in the model prompt without re-running the transformation.
-  const storedModelOutputs = new Map<string, unknown>();
-  for (const dbMsg of dbMessages) {
-    if (dbMsg.content?.format === 2 && dbMsg.content.parts) {
-      for (const part of dbMsg.content.parts) {
-        if (
-          part.type === 'tool-invocation' &&
-          part.toolInvocation?.state === 'result' &&
-          part.providerMetadata?.mastra &&
-          typeof part.providerMetadata.mastra === 'object' &&
-          'modelOutput' in (part.providerMetadata.mastra as Record<string, unknown>)
-        ) {
-          storedModelOutputs.set(
-            part.toolInvocation.toolCallId,
-            (part.providerMetadata.mastra as Record<string, unknown>).modelOutput,
-          );
-        }
-      }
-    }
-  }
-
-  // Apply stored modelOutput to tool-result parts in model messages
-  if (storedModelOutputs.size > 0) {
-    for (const modelMsg of result) {
-      if (modelMsg.role === 'tool' && Array.isArray(modelMsg.content)) {
-        for (let i = 0; i < modelMsg.content.length; i++) {
-          const part = modelMsg.content[i]!;
-          if (part.type === 'tool-result' && storedModelOutputs.has(part.toolCallId)) {
-            modelMsg.content[i] = {
-              ...part,
-              output: storedModelOutputs.get(part.toolCallId) as any,
-            };
-          }
-        }
-      }
-    }
-  }
+  const result = restoreAssistantFileProviderMetadata(AIV5.convertToModelMessages(preprocessed), preprocessed);
 
   // Restore message-level providerOptions from metadata.providerMetadata
   // This preserves providerOptions through the DB → UI → Model conversion
@@ -325,10 +341,15 @@ export function aiV4CoreMessagesToAIV5ModelMessages(
  * Supports string, MastraDBMessage, or AI SDK message types.
  */
 export function systemMessageToAIV4Core(
-  message: CoreMessageV4 | AIV5Type.ModelMessage | MastraDBMessage | string,
+  message: CoreMessageV4 | AIV5Type.ModelMessage | AIV6Type.ModelMessage | MastraDBMessage | string,
 ): CoreMessageV4 {
   if (typeof message === `string`) {
     return { role: 'system', content: message };
+  }
+
+  if (TypeDetector.isAIV6CoreMessage(message)) {
+    const dbMsg = AIV6Adapter.fromModelMessage(message as AIV6Type.ModelMessage, 'system');
+    return AIV4Adapter.systemToV4Core(dbMsg);
   }
 
   if (TypeDetector.isAIV5CoreMessage(message)) {

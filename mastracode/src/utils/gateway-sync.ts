@@ -7,8 +7,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { ModelsDevGateway, NetlifyGateway } from '@mastra/core/llm';
-import type { ProviderConfig } from '@mastra/core/llm';
+import { MastraGateway, ModelsDevGateway, NetlifyGateway } from '@mastra/core/llm';
+import type { MastraModelGateway, ProviderConfig } from '@mastra/core/llm';
 
 // Cache paths (same as Mastra uses)
 const CACHE_DIR = path.join(os.homedir(), '.cache', 'mastra');
@@ -45,17 +45,21 @@ async function atomicWriteFile(filePath: string, content: string): Promise<void>
 /**
  * Fetch providers from all gateways
  */
-async function fetchProvidersFromGateways(): Promise<{
+export async function fetchProvidersFromGateways(
+  gateways: MastraModelGateway[] = [new ModelsDevGateway({}), new NetlifyGateway(), new MastraGateway()],
+): Promise<{
   providers: Record<string, ProviderConfig>;
   models: Record<string, string[]>;
 }> {
   const allProviders: Record<string, ProviderConfig> = {};
   const allModels: Record<string, string[]> = {};
 
-  const gateways = [new ModelsDevGateway({}), new NetlifyGateway()];
-
   for (const gateway of gateways) {
     try {
+      if (!(await gateway.shouldEnable())) {
+        continue;
+      }
+
       const providers = await gateway.fetchProviders();
 
       // models.dev is a provider registry, not a true gateway - don't prefix its providers
@@ -82,7 +86,7 @@ async function fetchProvidersFromGateways(): Promise<{
 /**
  * Generate TypeScript type definitions content
  */
-function generateTypesContent(models: Record<string, string[]>): string {
+export function generateTypesContent(models: Record<string, string[]>): string {
   const providerModelsEntries = Object.entries(models)
     .map(([provider, modelList]) => {
       const modelsList = modelList.map(m => `'${m}'`);

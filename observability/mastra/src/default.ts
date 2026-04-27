@@ -4,6 +4,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { RegisteredLogger } from '@mastra/core/logger';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type {
+  CorrelationContext,
   ConfigSelector,
   ConfigSelectorOptions,
   FeedbackInput,
@@ -21,6 +22,8 @@ import type { ObservabilityInstanceConfig, ObservabilityRegistryConfig } from '.
 import { CloudExporter, DefaultExporter } from './exporters';
 import { BaseObservabilityInstance, DefaultObservabilityInstance } from './instances';
 import {
+  buildFeedbackEvent,
+  buildScoreEvent,
   buildRecordedFeedbackEventFromTrace,
   buildRecordedScoreEventFromTrace,
   hydrateRecordedTrace,
@@ -210,7 +213,31 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     });
   }
 
-  async addScore(args: { traceId: string; spanId?: string; score: ScoreInput }): Promise<void> {
+  async addScore(args: {
+    traceId?: string;
+    spanId?: string;
+    correlationContext?: CorrelationContext;
+    score: ScoreInput;
+  }): Promise<void> {
+    const targetTraceId = args.traceId ?? args.correlationContext?.traceId;
+    const targetSpanId = args.spanId ?? args.correlationContext?.spanId;
+
+    if (args.correlationContext) {
+      await this.#emitRecordedEvent(
+        buildScoreEvent({
+          ...(targetTraceId ? { traceId: targetTraceId } : {}),
+          ...(targetSpanId ? { spanId: targetSpanId } : {}),
+          correlationContext: args.correlationContext,
+          score: args.score,
+        }),
+      );
+      return;
+    }
+
+    if (!args.traceId) {
+      return;
+    }
+
     const trace = await this.#getStoredTrace(args.traceId);
     if (!trace) {
       return;
@@ -229,7 +256,31 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     await this.#emitRecordedEvent(event);
   }
 
-  async addFeedback(args: { traceId: string; spanId?: string; feedback: FeedbackInput }): Promise<void> {
+  async addFeedback(args: {
+    traceId?: string;
+    spanId?: string;
+    correlationContext?: CorrelationContext;
+    feedback: FeedbackInput;
+  }): Promise<void> {
+    const targetTraceId = args.traceId ?? args.correlationContext?.traceId;
+    const targetSpanId = args.spanId ?? args.correlationContext?.spanId;
+
+    if (args.correlationContext) {
+      await this.#emitRecordedEvent(
+        buildFeedbackEvent({
+          ...(targetTraceId ? { traceId: targetTraceId } : {}),
+          ...(targetSpanId ? { spanId: targetSpanId } : {}),
+          correlationContext: args.correlationContext,
+          feedback: args.feedback,
+        }),
+      );
+      return;
+    }
+
+    if (!args.traceId) {
+      return;
+    }
+
     const trace = await this.#getStoredTrace(args.traceId);
     if (!trace) {
       return;

@@ -476,9 +476,9 @@ const response = await agent.generate('Help me organize my day', {
                 parameters: [
                   {
                     name: 'schema',
-                    type: 'z.ZodSchema<S>',
+                    type: 'StandardJSONSchemaV1',
                     isOptional: false,
-                    description: 'Zod schema defining the expected output structure.',
+                    description: 'Standard JSON Schema defining the expected output structure.',
                   },
                 ],
               },
@@ -633,7 +633,7 @@ const response = await agent.generate('Help me organize my day', {
                     type: 'MemoryConfig',
                     isOptional: true,
                     description:
-                      'Additional memory configuration options including lastMessages, readOnly, semanticRecall, and workingMemory.',
+                      'Additional memory configuration options including lastMessages, readOnly, semanticRecall, workingMemory, and filterIncompleteToolCalls.',
                   },
                 ],
               },
@@ -766,7 +766,8 @@ const response = await agent.generate('Help me organize my day', {
             name: 'savePerStep',
             type: 'boolean',
             isOptional: true,
-            description: 'Save messages incrementally after each generation step completes (default: false).',
+            description:
+              'Save messages incrementally after each generation step completes (default: false). Disabled internally when observational memory is enabled.',
           },
           {
             name: 'providerOptions',
@@ -914,6 +915,49 @@ const response = await agent.generate('Help me organize my day', {
             ],
           },
           {
+            name: 'versions',
+            type: 'VersionOverrides',
+            isOptional: true,
+            description:
+              'Per-invocation version overrides for sub-agent delegation. Merged on top of Mastra instance-level versions and propagated automatically through sub-agent calls via requestContext. Requires the editor package. See [Sub-agent versioning](/docs/editor/overview#sub-agent-versioning).',
+            properties: [
+              {
+                type: 'VersionOverrides',
+                parameters: [
+                  {
+                    name: 'agents',
+                    type: 'Record<string, VersionSelector>',
+                    isOptional: true,
+                    description: 'A map of agent IDs to their version selectors.',
+                    properties: [
+                      {
+                        type: 'VersionSelector',
+                        parameters: [
+                          {
+                            name: 'versionId',
+                            type: 'string',
+                            isOptional: true,
+                            description: 'Target a specific version by ID.',
+                          },
+                        ],
+                      },
+                      {
+                        parameters: [
+                          {
+                            name: 'status',
+                            type: "'draft' | 'published'",
+                            isOptional: true,
+                            description: 'Target the latest version with this publication status.',
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+          {
             name: 'includeRawChunks',
             type: 'boolean',
             isOptional: true,
@@ -925,6 +969,34 @@ const response = await agent.generate('Help me organize my day', {
   },
 ]}
 />
+
+## Response structure
+
+`Agent.generate()` returns the final data collected during execution. `steps` is an array of step objects. The tool arrays in the result, including top-level `toolCalls` and `toolResults` and the nested `step.toolCalls` and `step.toolResults` arrays, use Mastra's chunk format.
+
+That means tool data is wrapped in `payload`:
+
+```ts
+const response = await agent.generate('Check the weather in Lagos')
+
+for (const toolCall of response.toolCalls) {
+  console.log(toolCall.type) // 'tool-call'
+  console.log(toolCall.runId)
+  console.log(toolCall.from)
+  console.log(toolCall.payload.toolName)
+  console.log(toolCall.payload.args)
+}
+
+for (const step of response.steps) {
+  for (const toolResult of step.toolResults) {
+    console.log(toolResult.type) // 'tool-result'
+    console.log(toolResult.payload.toolName)
+    console.log(toolResult.payload.result)
+  }
+}
+```
+
+For the streaming version of the same chunk shape, see the [ChunkType reference](/reference/streaming/ChunkType).
 
 ## Returns
 
@@ -949,13 +1021,124 @@ const response = await agent.generate('Help me organize my day', {
   },
   {
     name: 'toolCalls',
-    type: 'ToolCall[]',
-    description: 'Array of tool calls made during generation.',
+    type: 'ToolCallChunk[]',
+    description: 'Array of tool call chunks made during generation.',
+    properties: [
+      {
+        type: 'ToolCallChunk',
+        parameters: [
+          {
+            name: 'type',
+            type: "'tool-call'",
+            description: 'Chunk type identifier.',
+          },
+          {
+            name: 'runId',
+            type: 'string',
+            description: 'Execution run identifier.',
+          },
+          {
+            name: 'from',
+            type: 'ChunkFrom',
+            description: 'Source of the chunk, such as AGENT or WORKFLOW.',
+          },
+          {
+            name: 'payload',
+            type: 'ToolCallPayload',
+            description: 'Tool call data.',
+            properties: [
+              {
+                type: 'ToolCallPayload',
+                parameters: [
+                  {
+                    name: 'toolCallId',
+                    type: 'string',
+                    description: 'Unique identifier for the tool call.',
+                  },
+                  {
+                    name: 'toolName',
+                    type: 'string',
+                    description: 'Name of the tool that was called.',
+                  },
+                  {
+                    name: 'args',
+                    type: 'Record<string, unknown>',
+                    isOptional: true,
+                    description: 'Arguments passed to the tool.',
+                  },
+                  {
+                    name: 'providerExecuted',
+                    type: 'boolean',
+                    isOptional: true,
+                    description: 'Whether the model provider executed the tool directly.',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
   },
   {
     name: 'toolResults',
-    type: 'ToolResult[]',
-    description: 'Array of results from tool executions.',
+    type: 'ToolResultChunk[]',
+    description: 'Array of tool result chunks from tool executions.',
+    properties: [
+      {
+        type: 'ToolResultChunk',
+        parameters: [
+          {
+            name: 'type',
+            type: "'tool-result'",
+            description: 'Chunk type identifier.',
+          },
+          {
+            name: 'runId',
+            type: 'string',
+            description: 'Execution run identifier.',
+          },
+          {
+            name: 'from',
+            type: 'ChunkFrom',
+            description: 'Source of the chunk, such as AGENT or WORKFLOW.',
+          },
+          {
+            name: 'payload',
+            type: 'ToolResultPayload',
+            description: 'Tool result data.',
+            properties: [
+              {
+                type: 'ToolResultPayload',
+                parameters: [
+                  {
+                    name: 'toolCallId',
+                    type: 'string',
+                    description: 'Unique identifier for the tool call.',
+                  },
+                  {
+                    name: 'toolName',
+                    type: 'string',
+                    description: 'Name of the tool that produced the result.',
+                  },
+                  {
+                    name: 'result',
+                    type: 'unknown',
+                    description: 'Value returned by the tool.',
+                  },
+                  {
+                    name: 'isError',
+                    type: 'boolean',
+                    isOptional: true,
+                    description: 'Whether the tool execution failed.',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
   },
   {
     name: 'usage',
@@ -964,8 +1147,51 @@ const response = await agent.generate('Help me organize my day', {
   },
   {
     name: 'steps',
-    type: 'Step[]',
+    type: 'object[]',
     description: 'Array of execution steps, useful for debugging multi-step generations.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'text',
+            type: 'string',
+            description: 'Text generated in this step.',
+          },
+          {
+            name: 'toolCalls',
+            type: 'ToolCallChunk[]',
+            description: 'Tool calls emitted during this step.',
+          },
+          {
+            name: 'toolResults',
+            type: 'ToolResultChunk[]',
+            description: 'Tool results emitted during this step.',
+          },
+          {
+            name: 'finishReason',
+            type: 'string',
+            isOptional: true,
+            description: 'Why this step finished.',
+          },
+          {
+            name: 'usage',
+            type: 'LanguageModelUsage',
+            description: 'Token usage for this step.',
+          },
+          {
+            name: 'request',
+            type: '{ body?: unknown }',
+            description: 'Request metadata for this step.',
+          },
+          {
+            name: 'response',
+            type: 'object',
+            description: 'Response metadata for this step.',
+          },
+        ],
+      },
+    ],
   },
   {
     name: 'finishReason',

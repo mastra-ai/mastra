@@ -1,31 +1,30 @@
 import {
-  useLinkComponent,
-  useAgent,
-  useStoredAgent,
-  useAgentVersion,
-  useAgentVersions,
-  useAgentCmsForm,
-  AgentCmsFormShell,
-  AgentVersionPanel,
-  Header,
-  HeaderTitle,
-  HeaderAction,
-  Icon,
   AgentIcon,
-  Spinner,
-  MainContentLayout,
-  Skeleton,
   Alert,
-  Button,
+  AlertDescription,
   AlertTitle,
   Badge,
-  mapAgentResponseToDataSource,
-  AlertDescription,
+  Button,
+  Header,
+  HeaderAction,
+  HeaderTitle,
+  Icon,
+  MainContentLayout,
+  Skeleton,
+  Spinner,
 } from '@mastra/playground-ui';
-import type { AgentDataSource } from '@mastra/playground-ui';
 import { Check, Save } from 'lucide-react';
 import { useCallback, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
+import { AgentCmsFormShell } from '@/domains/agents/components/agent-cms-form-shell';
+import { AgentVersionPanel } from '@/domains/agents/components/agent-version-panel';
+import { useAgent } from '@/domains/agents/hooks/use-agent';
+import { useAgentCmsForm } from '@/domains/agents/hooks/use-agent-cms-form';
+import { useAgentVersion, useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
+import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
+import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
+import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
+import { useLinkComponent } from '@/lib/framework';
 
 function EditFormContent({
   agentId,
@@ -117,14 +116,25 @@ function EditLayoutWrapper() {
 
   // Fetch the code/merged agent (GET /agents/:id) to determine source
   const { data: codeAgent, isLoading: isLoadingCodeAgent } = useAgent(agentId);
-  // If a stored override exists, fetch it for form data
-  const { data: storedAgent, isLoading: isLoadingStoredAgent } = useStoredAgent(agentId, { status: 'draft' });
+
+  // Fetch versions first — this endpoint returns an empty array for code-only agents
+  const { data: versionsData } = useAgentVersions({
+    agentId: agentId ?? '',
+    params: { sortDirection: 'DESC' },
+  });
+
+  // Only fetch stored agent details when versions exist (avoids 404 for code-only agents)
+  const hasVersions = (versionsData?.versions?.length ?? 0) > 0;
+  const { data: storedAgent, isLoading: isLoadingStoredAgent } = useStoredAgent(agentId, {
+    status: 'draft',
+    enabled: hasVersions,
+  });
 
   // A code agent override is when the underlying agent is code-defined,
   // regardless of whether a stored override record already exists
   const isCodeAgentOverride = codeAgent?.source === 'code';
   const agent = storedAgent ?? null;
-  const isLoading = isLoadingCodeAgent || isLoadingStoredAgent;
+  const isLoading = isLoadingCodeAgent || (hasVersions && isLoadingStoredAgent);
 
   // Redirect code agent overrides from the Identity page to Instructions
   const basePath = `/cms/agents/${agentId}/edit`;
@@ -140,16 +150,13 @@ function EditLayoutWrapper() {
     agentId: agentId ?? '',
     versionId: selectedVersionId ?? '',
   });
-  const { data: versionsData } = useAgentVersions({
-    agentId: agentId ?? '',
-    params: { sortDirection: 'DESC' },
-  });
 
   const activeVersionId = agent?.activeVersionId;
   const latestVersion = versionsData?.versions?.[0];
   const hasDraft = !!(latestVersion && latestVersion.id !== activeVersionId);
 
   const isViewingVersion = !!selectedVersionId && !!versionData;
+  const isViewingPreviousVersion = isViewingVersion && selectedVersionId !== latestVersion?.id;
   const dataSource = useMemo<AgentDataSource>(() => {
     if (isViewingVersion && versionData) return versionData;
     if (agent) return agent;
@@ -167,6 +174,14 @@ function EditLayoutWrapper() {
     hasStoredOverride: isCodeAgentOverride && !!storedAgent,
     onSuccess: id => navigate(paths.agentLink(id)),
   });
+
+  const handlePublishVersion = useCallback(async () => {
+    if (isViewingPreviousVersion && selectedVersionId) {
+      await handlePublish(selectedVersionId);
+    } else {
+      await handlePublish();
+    }
+  }, [handlePublish, isViewingPreviousVersion, selectedVersionId]);
 
   const handleVersionSelect = useCallback(
     (versionId: string) => {
@@ -211,8 +226,12 @@ function EditLayoutWrapper() {
             </Button>
             <Button
               variant="primary"
-              onClick={handlePublish}
-              disabled={(!hasDraft && !isDirty) || isSubmitting || isSavingDraft}
+              onClick={handlePublishVersion}
+              disabled={
+                isViewingPreviousVersion
+                  ? selectedVersionId === activeVersionId || isSubmitting || isSavingDraft
+                  : !hasDraft || isSubmitting || isSavingDraft
+              }
             >
               {isSubmitting ? (
                 <>
@@ -222,7 +241,7 @@ function EditLayoutWrapper() {
               ) : (
                 <>
                   <Check />
-                  Publish
+                  {isViewingPreviousVersion ? 'Publish This Version' : 'Publish'}
                 </>
               )}
             </Button>

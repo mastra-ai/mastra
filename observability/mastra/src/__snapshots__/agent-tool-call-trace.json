@@ -56,9 +56,7 @@
               "model": "mock-model-id",
               "provider": "mock-provider",
               "streaming": true,
-              "parameters": {
-                "temperature": 0
-              },
+              "parameters": {},
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -76,7 +74,8 @@
             },
             "metadata": {
               "runId": "<runId-1>",
-              "resourceId": "test-resource-id"
+              "resourceId": "test-resource-id",
+              "threadId": "test-thread-id"
             },
             "input": {
               "messages": [
@@ -137,6 +136,7 @@
                 "metadata": {
                   "runId": "<runId-1>",
                   "resourceId": "test-resource-id",
+                  "threadId": "test-thread-id",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -178,7 +178,8 @@
                     },
                     "metadata": {
                       "runId": "<runId-1>",
-                      "resourceId": "test-resource-id"
+                      "resourceId": "test-resource-id",
+                      "threadId": "test-thread-id"
                     },
                     "output": {
                       "toolName": "calculator",
@@ -210,7 +211,8 @@
                     },
                     "metadata": {
                       "runId": "<runId-1>",
-                      "resourceId": "test-resource-id"
+                      "resourceId": "test-resource-id",
+                      "threadId": "test-thread-id"
                     },
                     "input": {
                       "operation": "add",
@@ -241,11 +243,9 @@
                     "metadata": {
                       "runId": "<runId-1>",
                       "resourceId": "test-resource-id",
+                      "threadId": "test-thread-id",
                       "toolCallId": "call-calc-1",
                       "toolName": "calculator"
-                    },
-                    "output": {
-                      "result": 8
                     }
                   }
                 }
@@ -282,6 +282,7 @@
                 "metadata": {
                   "runId": "<runId-1>",
                   "resourceId": "test-resource-id",
+                  "threadId": "test-thread-id",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -315,7 +316,8 @@
                     },
                     "metadata": {
                       "runId": "<runId-1>",
-                      "resourceId": "test-resource-id"
+                      "resourceId": "test-resource-id",
+                      "threadId": "test-thread-id"
                     },
                     "output": {
                       "text": {

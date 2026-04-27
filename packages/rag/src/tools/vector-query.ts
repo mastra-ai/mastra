@@ -1,3 +1,4 @@
+import { createObservabilityContext } from '@mastra/core/observability';
 import { createTool } from '@mastra/core/tools';
 import type { MastraEmbeddingModel } from '@mastra/core/vector';
 import { z } from 'zod';
@@ -32,7 +33,13 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
     inputSchema,
     outputSchema,
     execute: async (inputData, context) => {
-      const { requestContext, mastra } = context || {};
+      // The `context` parameter from `createTool` is loosely typed and the
+      // generated tool types don't always surface `tracingContext`. The cast
+      // is intentional: when `context` or `tracingContext` is undefined,
+      // `createObservabilityContext` falls back to `noOpTracingContext`, so
+      // downstream span creation safely no-ops.
+      const { requestContext, mastra, tracingContext } = (context as any) || {};
+      const observabilityContext = createObservabilityContext(tracingContext);
       const indexName: string = requestContext?.get('indexName') ?? options.indexName;
       const vectorStoreName: string =
         'vectorStore' in options ? storeName : (requestContext?.get('vectorStoreName') ?? storeName);
@@ -62,7 +69,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
         const vectorStore = await resolveVectorStore(options, { requestContext, mastra, vectorStoreName });
         if (!vectorStore) {
           if (logger) {
-            logger.error(`Vector store '${vectorStoreName}' not found`);
+            logger.error('Vector store not found', { vectorStore: vectorStoreName });
           }
           // Return empty results for graceful degradation when store is not found
           return { relevantContext: [], sources: [] };
@@ -83,6 +90,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
           includeVectors,
           databaseConfig,
           providerOptions,
+          observabilityContext,
         });
         if (logger) {
           logger.debug('vectorQuerySearch returned results', { count: results.length });
@@ -103,12 +111,14 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
               options: {
                 ...reranker.options,
                 topK: reranker.options?.topK || topKValue,
+                observabilityContext,
               },
             });
           } else {
             rerankedResults = await rerank(results, queryText, reranker.model, {
               ...reranker.options,
               topK: reranker.options?.topK || topKValue,
+              observabilityContext,
             });
           }
 

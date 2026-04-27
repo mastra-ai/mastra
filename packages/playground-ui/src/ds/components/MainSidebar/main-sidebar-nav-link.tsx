@@ -2,7 +2,7 @@ import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { CircleAlertIcon } from 'lucide-react';
 import type { SidebarState } from './main-sidebar-context';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { useLinkComponent } from '@/lib/framework';
+import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
 export type NavLink = {
@@ -23,6 +23,7 @@ export type MainSidebarNavLinkProps = {
   state?: SidebarState;
   children?: React.ReactNode;
   className?: string;
+  LinkComponent: LinkComponent;
 };
 export function MainSidebarNavLink({
   link,
@@ -30,8 +31,8 @@ export function MainSidebarNavLink({
   children,
   isActive,
   className,
+  LinkComponent: Link,
 }: MainSidebarNavLinkProps) {
-  const { Link } = useLinkComponent();
   const isCollapsed = state === 'collapsed';
   const isFeatured = link?.variant === 'featured';
   const isExternal = link?.url?.startsWith('http');
@@ -53,7 +54,7 @@ export function MainSidebarNavLink({
           '[&>a]:text-neutral5 [&>a]:bg-surface3': isActive,
           '[&_svg]:text-neutral5': isActive,
           // Active indicator bar
-          'before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-5 before:bg-accent1 before:rounded-r-full before:transition-all before:duration-normal':
+          'before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-0.5 before:h-5 before:bg-black dark:before:bg-white before:rounded-r-full before:transition-all before:duration-normal':
             isActive && !isCollapsed,
           '[&>a]:justify-start': !isCollapsed,
           '[&_svg]:text-neutral3': isCollapsed,

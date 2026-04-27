@@ -372,6 +372,69 @@ describe('Tracing', () => {
       expect(testExporter.events).toHaveLength(2); // start + update
       expect(testExporter.events[1].type).toBe(TracingEventType.SPAN_UPDATED);
     });
+
+    it('should prefer original cause stack when error is a MastraError wrapper', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const span = tracing.startSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'error-tool',
+        attributes: { toolId: 'failing-tool' },
+      });
+
+      const originalError = new Error('Original failure');
+      const originalStack =
+        'Error: Original failure\n    at userCode (/app/src/tool.ts:42:7)\n    at run (/app/src/runner.ts:10:3)';
+      originalError.stack = originalStack;
+
+      const wrappedError = new MastraError(
+        {
+          id: 'TOOL_ERROR',
+          text: 'Tool failed',
+          domain: 'TOOL',
+          category: 'SYSTEM',
+        },
+        originalError,
+      );
+
+      span.error({ error: wrappedError });
+
+      // errorInfo should carry the original cause's stack, not the wrapper's
+      expect(span.errorInfo?.stack).toBe(originalStack);
+      expect(span.errorInfo?.message).toBe('Tool failed');
+      expect(span.errorInfo?.id).toBe('TOOL_ERROR');
+    });
+
+    it('should fall back to MastraError stack when there is no cause', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+
+      const span = tracing.startSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'error-tool',
+        attributes: { toolId: 'failing-tool' },
+      });
+
+      const wrappedError = new MastraError({
+        id: 'TOOL_ERROR',
+        text: 'Tool failed',
+        domain: 'TOOL',
+        category: 'SYSTEM',
+      });
+
+      span.error({ error: wrappedError });
+
+      expect(span.errorInfo?.stack).toBe(wrappedError.stack);
+    });
   });
 
   describe('Sampling Strategies', () => {
@@ -1449,6 +1512,41 @@ describe('Tracing', () => {
 
       childSpan.end();
       rootSpan.end();
+    });
+
+    it('getLoggerContext should respect logging.level config', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+        logging: { level: 'warn' },
+      });
+
+      const loggerCtx = observability.getLoggerContext();
+      loggerCtx.debug('should be filtered');
+      loggerCtx.info('should be filtered');
+      loggerCtx.warn('should pass');
+      loggerCtx.error('should pass');
+
+      expect(testExporter.logEvents).toHaveLength(2);
+      expect(testExporter.logEvents.map(e => e.log.level)).toEqual(['warn', 'error']);
+    });
+
+    it('getLoggerContext should return noOp when logging.enabled is false', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+        logging: { enabled: false },
+      });
+
+      const loggerCtx = observability.getLoggerContext();
+      loggerCtx.debug('should not emit');
+      loggerCtx.info('should not emit');
+      loggerCtx.warn('should not emit');
+      loggerCtx.error('should not emit');
+
+      expect(testExporter.logEvents).toHaveLength(0);
     });
 
     it('getMetricsContext should emit user metrics with correlationContext only', () => {

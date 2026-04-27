@@ -10,6 +10,7 @@ describe('record-builders', () => {
       const event: MetricEvent = {
         type: 'metric',
         metric: {
+          metricId: 'metric-builder-1',
           timestamp,
           traceId: 'trace-1',
           spanId: 'span-1',
@@ -56,6 +57,7 @@ describe('record-builders', () => {
       };
 
       expect(buildMetricRecord(event)).toEqual({
+        metricId: 'metric-builder-1',
         timestamp,
         name: 'mastra_agent_duration_ms',
         value: 42,
@@ -68,6 +70,9 @@ describe('record-builders', () => {
         entityType: EntityType.AGENT,
         entityId: 'agent-1',
         entityName: 'research-agent',
+        entityVersionId: null,
+        parentEntityVersionId: null,
+        rootEntityVersionId: null,
         parentEntityType: EntityType.WORKFLOW_RUN,
         parentEntityId: 'workflow-1',
         parentEntityName: 'daily-workflow',
@@ -102,6 +107,7 @@ describe('record-builders', () => {
       const event: MetricEvent = {
         type: 'metric',
         metric: {
+          metricId: 'metric-builder-2',
           timestamp: new Date('2026-01-01T00:00:00.000Z'),
           name: 'mastra_tokens',
           value: 10,
@@ -112,6 +118,7 @@ describe('record-builders', () => {
       };
 
       expect(buildMetricRecord(event)).toEqual({
+        metricId: 'metric-builder-2',
         timestamp: new Date('2026-01-01T00:00:00.000Z'),
         name: 'mastra_tokens',
         value: 10,
@@ -124,6 +131,9 @@ describe('record-builders', () => {
         entityType: null,
         entityId: null,
         entityName: null,
+        entityVersionId: null,
+        parentEntityVersionId: null,
+        rootEntityVersionId: null,
         parentEntityType: null,
         parentEntityId: null,
         parentEntityName: null,
@@ -155,6 +165,7 @@ describe('record-builders', () => {
       const event: MetricEvent = {
         type: 'metric',
         metric: {
+          metricId: 'metric-builder-3',
           timestamp: new Date('2026-01-01T00:00:00.000Z'),
           name: 'mastra_agent_duration_ms',
           value: 1,
@@ -170,6 +181,7 @@ describe('record-builders', () => {
       };
 
       expect(buildMetricRecord(event)).toEqual({
+        metricId: 'metric-builder-3',
         timestamp: new Date('2026-01-01T00:00:00.000Z'),
         name: 'mastra_agent_duration_ms',
         value: 1,
@@ -182,6 +194,9 @@ describe('record-builders', () => {
         entityType: EntityType.AGENT,
         entityId: null,
         entityName: 'my-agent',
+        entityVersionId: null,
+        parentEntityVersionId: null,
+        rootEntityVersionId: null,
         parentEntityType: EntityType.WORKFLOW_RUN,
         parentEntityId: null,
         parentEntityName: 'my-workflow',
@@ -210,12 +225,246 @@ describe('record-builders', () => {
     });
   });
 
+  describe('buildScoreRecord', () => {
+    it('builds a complete score record with all context fields', () => {
+      const timestamp = new Date('2026-01-01T00:00:00.000Z');
+      const event: ScoreEvent = {
+        type: 'score',
+        score: {
+          scoreId: 'score-builder-1',
+          timestamp,
+          traceId: 'trace-1',
+          spanId: 'span-1',
+          scorerId: 'judge-1',
+          scorerVersion: 'v1',
+          scoreSource: 'eval',
+          score: 0.91,
+          reason: 'good answer',
+          experimentId: 'exp-1',
+          scoreTraceId: 'score-trace-1',
+          correlationContext: {
+            organizationId: 'org-1',
+          },
+          metadata: {
+            kept: true,
+          },
+        },
+      };
+
+      expect(buildScoreRecord(event)).toEqual({
+        scoreId: 'score-builder-1',
+        timestamp,
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        scorerId: 'judge-1',
+        scorerVersion: 'v1',
+        scoreSource: 'eval',
+        source: 'eval',
+        score: 0.91,
+        reason: 'good answer',
+        experimentId: 'exp-1',
+        scoreTraceId: 'score-trace-1',
+        tags: null,
+        entityType: null,
+        entityId: null,
+        entityName: null,
+        entityVersionId: null,
+        parentEntityVersionId: null,
+        rootEntityVersionId: null,
+        parentEntityType: null,
+        parentEntityId: null,
+        parentEntityName: null,
+        rootEntityType: null,
+        rootEntityId: null,
+        rootEntityName: null,
+        userId: null,
+        organizationId: 'org-1',
+        resourceId: null,
+        runId: null,
+        sessionId: null,
+        threadId: null,
+        requestId: null,
+        environment: null,
+        executionSource: null,
+        serviceName: null,
+        scope: null,
+        metadata: {
+          kept: true,
+        },
+      });
+    });
+
+    it('keeps deprecated score source alias support', () => {
+      const timestamp = new Date('2026-01-01T00:00:00.000Z');
+      const event: ScoreEvent = {
+        type: 'score',
+        score: {
+          scoreId: 'score-builder-legacy',
+          timestamp,
+          traceId: 'trace-legacy-score-source',
+          scorerId: 'judge-legacy',
+          source: 'legacy-eval',
+          score: 0.42,
+        },
+      };
+
+      expect(buildScoreRecord(event)).toEqual(
+        expect.objectContaining({
+          scoreId: 'score-builder-legacy',
+          scoreSource: 'legacy-eval',
+          source: 'legacy-eval',
+        }),
+      );
+    });
+
+    it('allows unanchored scores without traceId', () => {
+      const timestamp = new Date('2026-01-01T00:00:00.000Z');
+      const event: ScoreEvent = {
+        type: 'score',
+        score: {
+          scoreId: 'score-builder-unanchored',
+          timestamp,
+          scorerId: 'judge-unanchored',
+          score: 0.42,
+        },
+      };
+
+      expect(buildScoreRecord(event)).toEqual(
+        expect.objectContaining({
+          scoreId: 'score-builder-unanchored',
+          traceId: null,
+          spanId: null,
+          scorerId: 'judge-unanchored',
+          score: 0.42,
+        }),
+      );
+    });
+  });
+
+  describe('buildFeedbackRecord', () => {
+    it('builds a complete feedback record with explicit feedback context fields', () => {
+      const timestamp = new Date('2026-01-01T00:00:00.000Z');
+      const event: FeedbackEvent = {
+        type: 'feedback',
+        feedback: {
+          feedbackId: 'feedback-builder-1',
+          timestamp,
+          traceId: 'trace-1',
+          spanId: 'span-1',
+          feedbackSource: 'playground',
+          feedbackType: 'thumbs-up',
+          value: 'positive',
+          comment: 'helpful',
+          experimentId: 'exp-1',
+          feedbackUserId: 'user-1',
+          correlationContext: {
+            organizationId: 'org-1',
+          },
+          metadata: {
+            kept: true,
+          },
+        },
+      };
+
+      expect(buildFeedbackRecord(event)).toEqual({
+        feedbackId: 'feedback-builder-1',
+        timestamp,
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        feedbackSource: 'playground',
+        source: 'playground',
+        feedbackType: 'thumbs-up',
+        value: 'positive',
+        comment: 'helpful',
+        experimentId: 'exp-1',
+        feedbackUserId: 'user-1',
+        sourceId: null,
+        tags: null,
+        entityType: null,
+        entityId: null,
+        entityName: null,
+        entityVersionId: null,
+        parentEntityVersionId: null,
+        rootEntityVersionId: null,
+        parentEntityType: null,
+        parentEntityId: null,
+        parentEntityName: null,
+        rootEntityType: null,
+        rootEntityId: null,
+        rootEntityName: null,
+        userId: null,
+        organizationId: 'org-1',
+        resourceId: null,
+        runId: null,
+        sessionId: null,
+        threadId: null,
+        requestId: null,
+        environment: null,
+        executionSource: null,
+        serviceName: null,
+        scope: null,
+        metadata: {
+          kept: true,
+        },
+      });
+    });
+
+    it('keeps deprecated feedback source alias support', () => {
+      const timestamp = new Date('2026-01-01T00:00:00.000Z');
+      const event: FeedbackEvent = {
+        type: 'feedback',
+        feedback: {
+          feedbackId: 'feedback-builder-legacy',
+          timestamp,
+          traceId: 'trace-legacy-feedback-source',
+          source: 'legacy-api',
+          feedbackType: 'rating',
+          value: 3,
+        },
+      };
+
+      expect(buildFeedbackRecord(event)).toEqual(
+        expect.objectContaining({
+          feedbackId: 'feedback-builder-legacy',
+          feedbackSource: 'legacy-api',
+          source: 'legacy-api',
+        }),
+      );
+    });
+
+    it('allows unanchored feedback without traceId', () => {
+      const timestamp = new Date('2026-01-01T00:00:00.000Z');
+      const event: FeedbackEvent = {
+        type: 'feedback',
+        feedback: {
+          feedbackId: 'feedback-builder-unanchored',
+          timestamp,
+          feedbackSource: 'user',
+          feedbackType: 'thumbs',
+          value: 1,
+        },
+      };
+
+      expect(buildFeedbackRecord(event)).toEqual(
+        expect.objectContaining({
+          feedbackId: 'feedback-builder-unanchored',
+          traceId: null,
+          spanId: null,
+          feedbackSource: 'user',
+          feedbackType: 'thumbs',
+          value: 1,
+        }),
+      );
+    });
+  });
+
   describe('buildLogRecord', () => {
     it('maps top-level trace ids and contextual fields from correlationContext', () => {
       const timestamp = new Date('2026-01-01T00:00:00.000Z');
       const event: LogEvent = {
         type: 'log',
         log: {
+          logId: 'log-builder-1',
           timestamp,
           traceId: 'trace-1',
           spanId: 'span-1',
@@ -250,6 +499,7 @@ describe('record-builders', () => {
       };
 
       expect(buildLogRecord(event)).toEqual({
+        logId: 'log-builder-1',
         timestamp,
         level: 'info',
         message: 'hello',
@@ -260,6 +510,9 @@ describe('record-builders', () => {
         entityType: EntityType.AGENT,
         entityId: 'agent-1',
         entityName: 'research-agent',
+        entityVersionId: null,
+        parentEntityVersionId: null,
+        rootEntityVersionId: null,
         parentEntityType: EntityType.WORKFLOW_RUN,
         parentEntityId: 'workflow-1',
         parentEntityName: 'daily-workflow',
@@ -287,6 +540,7 @@ describe('record-builders', () => {
       const event: LogEvent = {
         type: 'log',
         log: {
+          logId: 'log-builder-legacy-tags',
           timestamp,
           level: 'info',
           message: 'legacy',
@@ -297,6 +551,7 @@ describe('record-builders', () => {
       };
 
       expect(buildLogRecord(event)).toEqual({
+        logId: 'log-builder-legacy-tags',
         timestamp,
         level: 'info',
         message: 'legacy',
@@ -307,6 +562,9 @@ describe('record-builders', () => {
         entityType: null,
         entityId: null,
         entityName: null,
+        entityVersionId: null,
+        parentEntityVersionId: null,
+        rootEntityVersionId: null,
         parentEntityType: null,
         parentEntityId: null,
         parentEntityName: null,
@@ -334,6 +592,7 @@ describe('record-builders', () => {
       const event: LogEvent = {
         type: 'log',
         log: {
+          logId: 'log-builder-legacy-metadata',
           timestamp,
           level: 'info',
           message: 'legacy-metadata',
@@ -352,6 +611,7 @@ describe('record-builders', () => {
       };
 
       expect(buildLogRecord(event)).toEqual({
+        logId: 'log-builder-legacy-metadata',
         timestamp,
         level: 'info',
         message: 'legacy-metadata',
@@ -362,6 +622,9 @@ describe('record-builders', () => {
         entityType: EntityType.AGENT,
         entityId: null,
         entityName: 'my-agent',
+        entityVersionId: null,
+        parentEntityVersionId: null,
+        rootEntityVersionId: null,
         parentEntityType: EntityType.WORKFLOW_RUN,
         parentEntityId: null,
         parentEntityName: 'my-workflow',
@@ -398,6 +661,7 @@ describe('record-builders', () => {
       const event: LogEvent = {
         type: 'log',
         log: {
+          logId: 'log-builder-warning',
           timestamp: new Date('2026-01-01T00:00:00.000Z'),
           level: 'warn',
           message: 'warning',
@@ -405,6 +669,7 @@ describe('record-builders', () => {
       };
 
       expect(buildLogRecord(event)).toEqual({
+        logId: 'log-builder-warning',
         timestamp: new Date('2026-01-01T00:00:00.000Z'),
         level: 'warn',
         message: 'warning',
@@ -415,6 +680,9 @@ describe('record-builders', () => {
         entityType: null,
         entityId: null,
         entityName: null,
+        entityVersionId: null,
+        parentEntityVersionId: null,
+        rootEntityVersionId: null,
         parentEntityType: null,
         parentEntityId: null,
         parentEntityName: null,
@@ -444,10 +712,12 @@ describe('record-builders', () => {
       const event: ScoreEvent = {
         type: 'score',
         score: {
+          scoreId: 'score-builder-relevance',
           timestamp,
           traceId: 'trace-1',
           spanId: 'span-1',
           scorerId: 'relevance',
+          scorerName: 'Relevance Scorer',
           score: 0.92,
           experimentId: 'deprecated-exp',
           correlationContext: {
@@ -478,6 +748,7 @@ describe('record-builders', () => {
       };
 
       expect(buildScoreRecord(event)).toEqual({
+        scoreId: 'score-builder-relevance',
         timestamp,
         traceId: 'trace-1',
         spanId: 'span-1',
@@ -491,6 +762,9 @@ describe('record-builders', () => {
         entityType: EntityType.AGENT,
         entityId: 'agent-1',
         entityName: 'research-agent',
+        entityVersionId: null,
+        parentEntityVersionId: null,
+        rootEntityVersionId: null,
         parentEntityType: EntityType.WORKFLOW_RUN,
         parentEntityId: 'workflow-1',
         parentEntityName: 'daily-workflow',
@@ -510,7 +784,7 @@ describe('record-builders', () => {
         experimentId: 'context-exp',
         scope: null,
         scoreTraceId: null,
-        metadata: { kept: true },
+        metadata: { kept: true, scorerName: 'Relevance Scorer' },
       });
     });
   });
@@ -521,6 +795,7 @@ describe('record-builders', () => {
       const event: FeedbackEvent = {
         type: 'feedback',
         feedback: {
+          feedbackId: 'feedback-builder-derived',
           timestamp,
           traceId: 'trace-1',
           spanId: 'span-1',
@@ -558,6 +833,7 @@ describe('record-builders', () => {
       };
 
       expect(buildFeedbackRecord(event)).toEqual({
+        feedbackId: 'feedback-builder-derived',
         timestamp,
         traceId: 'trace-1',
         spanId: 'span-1',
@@ -570,6 +846,9 @@ describe('record-builders', () => {
         entityType: EntityType.AGENT,
         entityId: 'agent-1',
         entityName: 'research-agent',
+        entityVersionId: null,
+        parentEntityVersionId: null,
+        rootEntityVersionId: null,
         parentEntityType: EntityType.WORKFLOW_RUN,
         parentEntityId: 'workflow-1',
         parentEntityName: 'daily-workflow',

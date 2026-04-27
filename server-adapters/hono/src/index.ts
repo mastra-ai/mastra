@@ -17,6 +17,8 @@ import { stream } from 'hono/streaming';
 import { ZodError } from 'zod';
 export { createAuthMiddleware } from './auth-middleware';
 export type { HonoAuthMiddlewareOptions } from './auth-middleware';
+// Browser stream setup (Hono-specific WebSocket implementation)
+export { setupBrowserStream } from './browser-stream';
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
@@ -557,21 +559,11 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
   }
 
   async registerCustomApiRoutes(): Promise<void> {
-    const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
-    if (!routes || routes.length === 0) return;
+    if (!(await this.buildCustomRouteHandler())) return;
+
+    const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes ?? [];
 
     for (const route of routes) {
-      const handler =
-        'handler' in route && route.handler
-          ? route.handler
-          : 'createHandler' in route
-            ? await route.createHandler({ mastra: this.mastra })
-            : undefined;
-      if (!handler) continue;
-
-      const middlewares: MiddlewareHandler[] = [];
-
-      // Add per-route auth check middleware (same pattern as registerRoute)
       const serverRoute: ServerRoute = {
         method: route.method as any,
         path: route.path,
@@ -580,7 +572,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         requiresAuth: route.requiresAuth,
       };
 
-      middlewares.push(async (c: Context, next) => {
+      const routeHandler: MiddlewareHandler = async (c: Context) => {
+        // Per-route auth check (same pattern as registerRoute)
         const authError = await this.checkRouteAuth(serverRoute, {
           path: c.req.path,
           method: c.req.method,
@@ -610,16 +603,25 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           }
         }
 
-        return next();
-      });
+        const reqHeaders: Record<string, string | string[] | undefined> = {};
+        c.req.raw.headers.forEach((v, k) => {
+          reqHeaders[k] = v;
+        });
+        const response = await this.handleCustomRouteRequest(
+          c.req.url,
+          c.req.method,
+          reqHeaders,
+          c.req.raw.body,
+          c.get('requestContext'),
+        );
+        if (!response) {
+          return c.json({ error: 'Not Found' }, 404);
+        }
+        return response;
+      };
 
-      if (route.middleware) {
-        middlewares.push(...(Array.isArray(route.middleware) ? route.middleware : [route.middleware]));
-      }
-
-      const allHandlers = [...middlewares, handler];
       const method = route.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete' | 'patch' | 'all';
-      this.app[method](route.path, allHandlers[0]!, ...allHandlers.slice(1));
+      this.app[method](route.path, routeHandler);
     }
   }
 

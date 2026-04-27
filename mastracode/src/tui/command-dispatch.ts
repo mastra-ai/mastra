@@ -31,8 +31,11 @@ import {
   handleReviewCommand as handleReviewCmd,
   handleReportIssueCommand as handleReportIssueCmd,
   handleSetupCommand,
+  handleBrowserCommand,
   handleThemeCommand,
   handleUpdateCommand,
+  handleMemoryGatewayCommand,
+  handleApiKeysCommand,
 } from './commands/index.js';
 import type { SlashCommandContext } from './commands/types.js';
 import { SlashCommandComponent } from './components/slash-command.js';
@@ -70,7 +73,7 @@ export async function dispatchSlashCommand(
 
   switch (command) {
     case 'new':
-      handleNewCommand(buildCtx());
+      await handleNewCommand(buildCtx());
       return true;
     case 'clone':
       await handleCloneCommand(buildCtx());
@@ -156,11 +159,20 @@ export async function dispatchSlashCommand(
     case 'setup':
       await handleSetupCommand(buildCtx());
       return true;
+    case 'browser':
+      await handleBrowserCommand(buildCtx(), args);
+      return true;
     case 'theme':
       await handleThemeCommand(buildCtx(), args);
       return true;
     case 'update':
       await handleUpdateCommand(buildCtx());
+      return true;
+    case 'memory-gateway':
+      await handleMemoryGatewayCommand(buildCtx());
+      return true;
+    case 'api-keys':
+      await handleApiKeysCommand(buildCtx());
       return true;
     default: {
       const customCommand = state.customSlashCommands.find(cmd => cmd.name === command);
@@ -192,6 +204,11 @@ async function handleCustomSlashCommand(
       state.allSlashCommandComponents.push(slashComp);
       state.chatContainer.addChild(slashComp);
       state.ui.requestRender();
+
+      if (state.pendingNewThread) {
+        await state.harness.createThread();
+        state.pendingNewThread = false;
+      }
 
       // Wrap in <slash-command> tags so the assistant sees the full
       // content but addUserMessage won't double-render it.

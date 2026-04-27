@@ -3,7 +3,7 @@ import { MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { resolveModelConfig } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
-import type { TargetType } from '@mastra/core/storage';
+import type { DatasetItemSource, TargetType } from '@mastra/core/storage';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import type { StatusCode } from '../http-exception';
@@ -359,14 +359,16 @@ export const ADD_ITEM_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { input, groundTruth, requestContext, metadata } = params as {
+      const { input, groundTruth, requestContext, metadata, source, expectedTrajectory } = params as {
         input: unknown;
         groundTruth?: unknown;
         requestContext?: Record<string, unknown>;
         metadata?: Record<string, unknown>;
+        source?: DatasetItemSource;
+        expectedTrajectory?: unknown;
       };
       const ds = await mastra.datasets.get({ id: datasetId });
-      return await ds.addItem({ input, groundTruth, requestContext, metadata });
+      return await ds.addItem({ input, groundTruth, requestContext, metadata, source, expectedTrajectory });
     } catch (error) {
       if (isSchemaValidationError(error)) {
         throw new HTTPException(400, {
@@ -424,11 +426,12 @@ export const UPDATE_ITEM_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, itemId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { input, groundTruth, requestContext, metadata } = params as {
+      const { input, groundTruth, requestContext, metadata, expectedTrajectory } = params as {
         input?: unknown;
         groundTruth?: unknown;
         requestContext?: Record<string, unknown>;
         metadata?: Record<string, unknown>;
+        expectedTrajectory?: unknown;
       };
       const ds = await mastra.datasets.get({ id: datasetId });
       // Check if item exists and belongs to dataset
@@ -436,7 +439,7 @@ export const UPDATE_ITEM_ROUTE = createRoute({
       if (!existing || (existing as any).datasetId !== datasetId) {
         throw new HTTPException(404, { message: `Item not found: ${itemId}` });
       }
-      return await ds.updateItem({ itemId, input, groundTruth, requestContext, metadata });
+      return await ds.updateItem({ itemId, input, groundTruth, requestContext, metadata, expectedTrajectory });
     } catch (error) {
       if (isSchemaValidationError(error)) {
         throw new HTTPException(400, {
@@ -601,6 +604,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         agentVersion,
         maxConcurrency,
         requestContext: rawRequestContext,
+        versions,
       } = params as {
         targetType: 'agent' | 'workflow' | 'scorer';
         targetId: string;
@@ -609,6 +613,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         agentVersion?: string;
         maxConcurrency?: number;
         requestContext?: Record<string, unknown> | RequestContext;
+        versions?: { agents?: Record<string, { versionId: string } | { status: 'draft' | 'published' }> };
       };
       // The adapter middleware merges body + query requestContext into a RequestContext instance.
       // startExperimentAsync expects a plain Record, so convert it.
@@ -622,6 +627,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         agentVersion,
         maxConcurrency,
         requestContext,
+        versions,
       });
       // Return shape matching experimentSummaryResponseSchema
       return {
@@ -894,7 +900,13 @@ export const BATCH_INSERT_ITEMS_ROUTE = createRoute({
     assertDatasetsAvailable();
     try {
       const { items } = params as {
-        items: Array<{ input: unknown; groundTruth?: unknown; metadata?: Record<string, unknown> }>;
+        items: Array<{
+          input: unknown;
+          groundTruth?: unknown;
+          expectedTrajectory?: unknown;
+          metadata?: Record<string, unknown>;
+          source?: DatasetItemSource;
+        }>;
       };
       const ds = await mastra.datasets.get({ id: datasetId });
       const addedItems = await ds.addItems({ items });
