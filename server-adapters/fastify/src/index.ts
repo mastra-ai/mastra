@@ -249,6 +249,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
    */
   private parseMultipartFormData(request: FastifyRequest, maxFileSize?: number): Promise<Record<string, unknown>> {
     return new Promise((resolve, reject) => {
+      let done = false;
+
       const result: Record<string, unknown> = {};
 
       const busboy = new Busboy({
@@ -294,8 +296,6 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           result[fieldname] = value;
         }
       });
-
-      let done = false;
 
       busboy.on('finish', () => {
         if (!done) {
