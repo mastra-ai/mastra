@@ -30,10 +30,10 @@ await store.getMetricBreakdown({
   groupBy: 'threadId',
   limit: 20,
   orderBy: 'value',
-  orderDirection: 'desc',
+  orderDirection: 'DESC',
 });
 ```
 
 **ClickHouse skip indexes**
 
-`metric_events` gains `bloom_filter` skip indexes on `threadId`, `resourceId`, `userId`, and `organizationId`. New deployments pick them up automatically on `init`; existing deployments get them via an additive `ALTER TABLE … ADD INDEX IF NOT EXISTS` migration and materialize lazily on merges. No manual `MATERIALIZE INDEX` is required.
+`metric_events` gains `bloom_filter` skip indexes on `threadId`, `resourceId`, `userId`, and `organizationId`. New deployments pick them up automatically on `init`. Existing deployments get them via an additive `ALTER TABLE … ADD INDEX IF NOT EXISTS` migration; new parts and lazy merges populate them automatically. To populate existing parts immediately, run `ALTER TABLE mastra_metric_events MATERIALIZE INDEX <name>` during a maintenance window — it rewrites part data and can be expensive on large tables.
