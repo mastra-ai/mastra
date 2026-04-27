@@ -1,5 +1,27 @@
 # mastracode
 
+## 0.15.3-alpha.1
+
+### Patch Changes
+
+- Enable ProviderHistoryCompat error processor by default in mastracode ([#15730](https://github.com/mastra-ai/mastra/pull/15730))
+
+- Fixed task lists, active plans, and sandbox paths leaking across threads. These per-thread state values are now properly cleared when switching threads, creating new threads, cloning threads, or using the /new command. ([#15749](https://github.com/mastra-ai/mastra/pull/15749))
+
+- Allow typing a custom model string in `/om` (Observational Memory settings). The observer and reflector model pickers now use the same picker as `/models` — type a model id like `deepseek/deepseek-v4-flash` to use it directly if it's not in the list. ([#15703](https://github.com/mastra-ai/mastra/pull/15703))
+
+  Observer and reflector model overrides are now persisted independently — changing one in `/om` no longer overwrites the other. Legacy `omModelOverride` is preserved as a shared fallback for settings files written before this change.
+
+- Updated dependencies [[`7a7b313`](https://github.com/mastra-ai/mastra/commit/7a7b3138fb3bcf0b0c740eaea07971e43d330ef3), [`a6dac0a`](https://github.com/mastra-ai/mastra/commit/a6dac0a40c7181161b1add4e8534f962bcbc9aa7), [`9cef83b`](https://github.com/mastra-ai/mastra/commit/9cef83b8a642b8098747772921e3523b492bafbc), [`d30e215`](https://github.com/mastra-ai/mastra/commit/d30e2156c746bc9fd791745cec1cc24377b66789), [`73b45fa`](https://github.com/mastra-ai/mastra/commit/73b45facdef4fbcb8af710c50f0646f18619dbaa), [`7a7b313`](https://github.com/mastra-ai/mastra/commit/7a7b3138fb3bcf0b0c740eaea07971e43d330ef3)]:
+  - @mastra/core@1.29.0-alpha.1
+
+## 0.15.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`b510d36`](https://github.com/mastra-ai/mastra/commit/b510d368f73dab6be2e2c2bc99035aaef1fb7d7a)]:
+  - @mastra/core@1.29.0-alpha.0
+
 ## 0.15.2
 
 ### Patch Changes

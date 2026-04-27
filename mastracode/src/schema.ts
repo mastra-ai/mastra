@@ -32,7 +32,7 @@ export const stateSchema = z.object({
   smartEditing: z.boolean().default(true),
   // Notification mode — alert when TUI needs user attention
   notifications: z.enum(['bell', 'system', 'both', 'off']).default('off'),
-  // Task list (persisted per-thread)
+  // Task list (ephemeral per-thread, cleared on thread switch/creation)
   tasks: z
     .array(
       z.object({

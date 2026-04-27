@@ -10,7 +10,7 @@ import type {
 } from '@mastra/core/harness';
 import { GatewayRegistry, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { LanguageModel, ProviderConfig } from '@mastra/core/llm';
-import { AgentsMDInjector, PrefillErrorHandler } from '@mastra/core/processors';
+import { AgentsMDInjector, PrefillErrorHandler, ProviderHistoryCompat } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { getDynamicInstructions } from './agents/instructions.js';
@@ -34,7 +34,7 @@ import {
   loadSettings,
   MEMORY_GATEWAY_PROVIDER,
   resolveModelDefaults,
-  resolveOmModel,
+  resolveOmRoleModel,
   saveSettings,
   toCustomProviderModelId,
 } from './onboarding/settings.js';
@@ -207,7 +207,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         },
       }),
     ],
-    errorProcessors: [new PrefillErrorHandler()],
+    errorProcessors: [new PrefillErrorHandler(), new ProviderHistoryCompat()],
   });
 
   const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];
@@ -290,7 +290,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const builtinPacks = getAvailableModePacks(startupAccess);
   const builtinOmPacks = getAvailableOmPacks(startupAccess);
   const effectiveDefaults = resolveModelDefaults(globalSettings, builtinPacks);
-  const effectiveOmModel = resolveOmModel(globalSettings, builtinOmPacks);
+  const effectiveObserverModel = resolveOmRoleModel(globalSettings, 'observer', builtinOmPacks);
+  const effectiveReflectorModel = resolveOmRoleModel(globalSettings, 'reflector', builtinOmPacks);
   const effectiveObservationThreshold = globalSettings.models.omObservationThreshold ?? undefined;
   const effectiveReflectionThreshold = globalSettings.models.omReflectionThreshold ?? undefined;
 
@@ -327,9 +328,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   // Build initial state with global preferences
   const globalInitialState: Record<string, unknown> = {};
-  if (effectiveOmModel) {
-    globalInitialState.observerModelId = effectiveOmModel;
-    globalInitialState.reflectorModelId = effectiveOmModel;
+  if (effectiveObserverModel) {
+    globalInitialState.observerModelId = effectiveObserverModel;
+  }
+  if (effectiveReflectorModel) {
+    globalInitialState.reflectorModelId = effectiveReflectorModel;
   }
   if (effectiveObservationThreshold !== undefined) {
     globalInitialState.observationThreshold = effectiveObservationThreshold;

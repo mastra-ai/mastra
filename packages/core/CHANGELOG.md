@@ -1,5 +1,27 @@
 # @mastra/core
 
+## 1.29.0-alpha.1
+
+### Patch Changes
+
+- Enable ProviderHistoryCompat error processor by default in mastracode ([#15730](https://github.com/mastra-ai/mastra/pull/15730))
+
+- Fixed agents forcing `temperature: 0` when the user did not explicitly set it. Previously, every `agent.stream()` / `agent.generate()` call silently injected `temperature: 0` into model settings, which broke models that restrict acceptable temperature values (for example Moonshot Kimi K2.5, which only accepts `temperature=1` and rejects any other value with `400 Bad Request`). The model provider's own default is now used when the user does not configure a temperature. Users who explicitly set `temperature` (including `temperature: 0` for deterministic output) are unaffected. Fixes [#15240](https://github.com/mastra-ai/mastra/issues/15240). ([#15611](https://github.com/mastra-ai/mastra/pull/15611))
+
+- Improved skills discovery performance by parallelizing filesystem I/O operations. Discovery of multiple skills, subdirectory scanning, reference file reads, and staleness checks now run concurrently instead of sequentially. Also fixed a bug in CompositeVersionedSkillSource where the root directory stat always returned the current time, causing unnecessary re-discovery on every refresh cycle. ([#14360](https://github.com/mastra-ai/mastra/pull/14360))
+
+- Fixed tool `strict: true` being silently dropped when routing through V2 (AI SDK v5) OpenAI providers. V2 providers use a global `strictJsonSchema` provider option instead of per-tool `strict`, so Mastra now propagates the intent automatically — when any tool on a call has `strict: true`, `providerOptions.openai.strictJsonSchema` is set to `true` before the request is sent. Explicit user-supplied `strictJsonSchema` values are respected and never overridden. ([#15450](https://github.com/mastra-ai/mastra/pull/15450))
+
+- Fixed AI SDK v5 message rehydration so suspended and approval tool state data parts are restored from persisted message metadata after reload. ([#14246](https://github.com/mastra-ai/mastra/pull/14246))
+
+- Added ProviderHistoryCompat error processor that automatically sanitizes tool-call IDs when switching between LLM providers. When a provider rejects tool IDs from another provider's history (e.g. Anthropic enforces `^[a-zA-Z0-9_-]+$`), the processor rewrites invalid characters and retries the request. ([#15730](https://github.com/mastra-ai/mastra/pull/15730))
+
+## 1.29.0-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`b510d36`](https://github.com/mastra-ai/mastra/commit/b510d368f73dab6be2e2c2bc99035aaef1fb7d7a))
+
 ## 1.28.0
 
 ### Minor Changes

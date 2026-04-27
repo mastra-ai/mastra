@@ -1,5 +1,33 @@
 # @mastra/playground-ui
 
+## 24.0.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`7a7b313`](https://github.com/mastra-ai/mastra/commit/7a7b3138fb3bcf0b0c740eaea07971e43d330ef3), [`a6dac0a`](https://github.com/mastra-ai/mastra/commit/a6dac0a40c7181161b1add4e8534f962bcbc9aa7), [`9cef83b`](https://github.com/mastra-ai/mastra/commit/9cef83b8a642b8098747772921e3523b492bafbc), [`d30e215`](https://github.com/mastra-ai/mastra/commit/d30e2156c746bc9fd791745cec1cc24377b66789), [`73b45fa`](https://github.com/mastra-ai/mastra/commit/73b45facdef4fbcb8af710c50f0646f18619dbaa), [`7a7b313`](https://github.com/mastra-ai/mastra/commit/7a7b3138fb3bcf0b0c740eaea07971e43d330ef3)]:
+  - @mastra/core@1.29.0-alpha.1
+  - @mastra/client-js@1.15.0-alpha.1
+  - @mastra/react@0.2.30-alpha.1
+
+## 24.0.0-alpha.0
+
+### Patch Changes
+
+- Migrated color tokens to oklch() for perceptually uniform, wide-gamut (P3) ready colors. Light theme neutrals and surfaces no longer have a blue tint (slate → true gray). Dark theme is visually unchanged. ([#15713](https://github.com/mastra-ai/mastra/pull/15713))
+
+- Added shared Logs components and hooks under `@mastra/playground-ui`. Consumers can now reuse the Logs page building blocks together with the data hooks and the URL-state / filter-persistence helpers instead of duplicating them per app. ([#15723](https://github.com/mastra-ai/mastra/pull/15723))
+
+- Added shared metrics components and hooks under `@mastra/playground-ui`. Consumers can now reuse the metrics dashboard building blocks (KPI, Latency, Scores, Token Usage, Trace Volume, Model Usage Cost cards), their data hooks, and the `MetricsProvider` / `DateRangeSelector` primitives instead of duplicating them per app. ([#15705](https://github.com/mastra-ai/mastra/pull/15705))
+
+  **New peer dependency:** `@tanstack/react-query ^5.90.21`. Add it alongside your existing playground-ui install.
+
+- Added shared Traces components and hooks under `@mastra/playground-ui`. Consumers can now reuse the Traces page building blocks together with the data hooks and the URL-state / filter-persistence helpers instead of duplicating them per app. ([#15714](https://github.com/mastra-ai/mastra/pull/15714))
+
+- Updated dependencies [[`b1888da`](https://github.com/mastra-ai/mastra/commit/b1888da8fb00c2ebe8404350303c10a289ba9838), [`b510d36`](https://github.com/mastra-ai/mastra/commit/b510d368f73dab6be2e2c2bc99035aaef1fb7d7a)]:
+  - @mastra/client-js@1.15.0-alpha.0
+  - @mastra/core@1.29.0-alpha.0
+  - @mastra/react@0.2.30-alpha.0
+
 ## 23.0.2
 
 ### Patch Changes

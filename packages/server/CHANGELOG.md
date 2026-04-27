@@ -1,5 +1,39 @@
 # @mastra/server
 
+## 1.29.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`7a7b313`](https://github.com/mastra-ai/mastra/commit/7a7b3138fb3bcf0b0c740eaea07971e43d330ef3), [`a6dac0a`](https://github.com/mastra-ai/mastra/commit/a6dac0a40c7181161b1add4e8534f962bcbc9aa7), [`9cef83b`](https://github.com/mastra-ai/mastra/commit/9cef83b8a642b8098747772921e3523b492bafbc), [`d30e215`](https://github.com/mastra-ai/mastra/commit/d30e2156c746bc9fd791745cec1cc24377b66789), [`73b45fa`](https://github.com/mastra-ai/mastra/commit/73b45facdef4fbcb8af710c50f0646f18619dbaa), [`7a7b313`](https://github.com/mastra-ai/mastra/commit/7a7b3138fb3bcf0b0c740eaea07971e43d330ef3)]:
+  - @mastra/core@1.29.0-alpha.1
+
+## 1.29.0-alpha.0
+
+### Minor Changes
+
+- Added support for resuming suspended agent streams over HTTP with custom data. This adds the `POST /agents/:agentId/resume-stream` server endpoint and the client SDK `agent.resumeStream()` method, so apps can continue a suspended agent run through the Mastra client. ([#14579](https://github.com/mastra-ai/mastra/pull/14579))
+
+  **Usage example (client SDK):**
+
+  ```typescript
+  const agent = mastraClient.getAgent('my-agent');
+
+  // Resume a suspended agent stream with custom data
+  const response = await agent.resumeStream(
+    { approved: true, selectedOption: 'plan-b' },
+    { runId: 'previous-run-id', toolCallId: 'tool-123' },
+  );
+
+  await response.processDataStream({
+    onChunk: chunk => console.log(chunk),
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`b510d36`](https://github.com/mastra-ai/mastra/commit/b510d368f73dab6be2e2c2bc99035aaef1fb7d7a)]:
+  - @mastra/core@1.29.0-alpha.0
+
 ## 1.28.0
 
 ### Patch Changes
