@@ -1,8 +1,10 @@
-import { Alert, AlertTitle } from '@mastra/playground-ui';
+import { Notice } from '@mastra/playground-ui';
+import { OctagonAlertIcon } from 'lucide-react';
 import React from 'react';
 
 export const ErrorMessage: React.FC<{ error: string }> = ({ error }) => (
-  <Alert variant="destructive">
-    <AlertTitle>{error}</AlertTitle>
-  </Alert>
+  <Notice variant="destructive">
+    <OctagonAlertIcon />
+    <Notice.Title>{error}</Notice.Title>
+  </Notice>
 );

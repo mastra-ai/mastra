@@ -1,12 +1,9 @@
 import { AlertCircle, InfoIcon, TriangleAlert } from 'lucide-react';
 import React from 'react';
+import { Notice, type NoticeVariant } from '../Notice';
 import type { TxtProps } from '../Txt';
-import { Txt } from '../Txt';
-import { Icon } from '@/ds/icons';
-import { transitions } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
 
-type AlertVariant = 'warning' | 'destructive' | 'info';
+type AlertVariant = Extract<NoticeVariant, 'warning' | 'destructive' | 'info'>;
 
 export interface AlertProps {
   children: React.ReactNode;
@@ -14,52 +11,36 @@ export interface AlertProps {
   className?: string;
 }
 
-const variantClasses: Record<AlertVariant, string> = {
-  warning: 'bg-accent6Darker border-accent6/30 text-accent6',
-  destructive: 'bg-accent2Darker border-accent2/30 text-accent2',
-  info: 'bg-accent5Darker border-accent5/30 text-accent5',
-};
-
 const variantIcons: Record<AlertVariant, React.FC<React.SVGProps<SVGSVGElement>>> = {
   warning: TriangleAlert,
   destructive: AlertCircle,
   info: InfoIcon,
 };
 
+/**
+ * @deprecated Use `<Notice>` from `@/ds/components/Notice` instead. Alert is a thin
+ * compatibility wrapper and will be removed in a future major release.
+ */
 export const Alert = ({ children, variant = 'destructive', className }: AlertProps) => {
   const Ico = variantIcons[variant];
   return (
-    <div
-      className={cn(
-        variantClasses[variant],
-        'p-3 rounded-md border shadow-sm',
-        transitions.all,
-        'animate-in fade-in-0 slide-in-from-top-2 duration-200',
-        className,
-      )}
-    >
-      <div className="flex items-start gap-2">
-        <Icon className="mt-0.5 shrink-0">
-          <Ico />
-        </Icon>
-        <div className="text-neutral4">{children}</div>
-      </div>
-    </div>
+    <Notice variant={variant} className={className}>
+      <Ico />
+      <Notice.Column>{children}</Notice.Column>
+    </Notice>
   );
 };
 
-export const AlertTitle = ({ children, as: As = 'h5' }: { children: React.ReactNode; as?: TxtProps['as'] }) => {
-  return (
-    <Txt as={As} variant="ui-md" className="font-semibold">
-      {children}
-    </Txt>
-  );
+/**
+ * @deprecated Use `<Notice.Title>` instead.
+ */
+export const AlertTitle = ({ children }: { children: React.ReactNode; as?: TxtProps['as'] }) => {
+  return <Notice.Title>{children}</Notice.Title>;
 };
 
-export const AlertDescription = ({ children, as: As = 'p' }: { children: React.ReactNode; as: TxtProps['as'] }) => {
-  return (
-    <Txt as={As} variant="ui-sm">
-      {children}
-    </Txt>
-  );
+/**
+ * @deprecated Use `<Notice.Message>` instead.
+ */
+export const AlertDescription = ({ children }: { children: React.ReactNode; as?: TxtProps['as'] }) => {
+  return <Notice.Message>{children}</Notice.Message>;
 };

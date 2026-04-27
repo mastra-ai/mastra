@@ -1,7 +1,5 @@
 import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
+  Notice,
   Button,
   ButtonWithTooltip,
   DateRangeSelector,
@@ -20,7 +18,7 @@ import {
   useAgentRunsKpiMetrics,
 } from '@mastra/playground-ui';
 import type { DatePreset } from '@mastra/playground-ui';
-import { BarChart3Icon, BookIcon, CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
+import { BarChart3Icon, BookIcon, CircleSlashIcon, ExternalLinkIcon, InfoIcon } from 'lucide-react';
 import { useCallback } from 'react';
 import { useSearchParams } from 'react-router';
 import { useMastraPackages } from '@/domains/configuration/hooks/use-mastra-packages';
@@ -153,13 +151,16 @@ function MetricsContent() {
       ) : (
         <div className="grid gap-8 content-start pb-10">
           {isInMemory && (
-            <Alert variant="info">
-              <AlertTitle>Metrics are not persisted</AlertTitle>
-              <AlertDescription as="p">
-                This project uses in-memory storage for observability. Metrics will be lost on every server restart. For
-                persistent metrics, switch the observability storage to ClickHouse or DuckDB.
-              </AlertDescription>
-            </Alert>
+            <Notice variant="info">
+              <InfoIcon />
+              <Notice.Column>
+                <Notice.Title>Metrics are not persisted</Notice.Title>
+                <Notice.Message>
+                  This project uses in-memory storage for observability. Metrics will be lost on every server restart.
+                  For persistent metrics, switch the observability storage to ClickHouse or DuckDB.
+                </Notice.Message>
+              </Notice.Column>
+            </Notice>
           )}
 
           <MetricsFlexGrid>

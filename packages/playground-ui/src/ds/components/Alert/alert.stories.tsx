@@ -1,11 +1,21 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Alert, AlertTitle, AlertDescription } from './Alert';
 
+/**
+ * @deprecated `<Alert>` is kept as a thin wrapper over `<Notice>` for backwards
+ * compatibility. New code should use `<Notice>` directly — see the Notice stories.
+ */
 const meta: Meta<typeof Alert> = {
-  title: 'Elements/Alert',
+  title: 'Elements/Alert (deprecated)',
   component: Alert,
   parameters: {
     layout: 'centered',
+    docs: {
+      description: {
+        component:
+          '**Deprecated.** Use `<Notice>` instead. This component now renders a `<Notice>` under the hood and will be removed in a future major release.',
+      },
+    },
   },
   tags: ['autodocs'],
   argTypes: {
@@ -14,6 +24,13 @@ const meta: Meta<typeof Alert> = {
       options: ['warning', 'destructive', 'info'],
     },
   },
+  decorators: [
+    Story => (
+      <div className="bg-surface2 rounded-lg p-6" style={{ width: 800 }}>
+        <Story />
+      </div>
+    ),
+  ],
 };
 
 export default meta;
