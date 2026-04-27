@@ -83,8 +83,8 @@ export function buildCommandExamples(descriptor: ApiCommandDescriptor): CliSchem
           command: `${command} weather-agent '{"messages":"What is the weather in London?"}'`,
         },
         {
-          description: 'Run an agent with chat messages',
-          command: `${command} weather-agent '{"messages":[{"role":"user","content":"What is the weather in London?"}]}'`,
+          description: 'Run an agent and persist messages to a thread',
+          command: `${command} weather-agent '{"messages":"What is the weather in London?","memory":{"thread":"thread_abc123","resource":"user_123"}}'`,
         },
       ];
     case 'toolExecute':

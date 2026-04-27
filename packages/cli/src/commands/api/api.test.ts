@@ -369,9 +369,9 @@ describe('api command executor', () => {
           command: 'mastra api agent run weather-agent \'{"messages":"What is the weather in London?"}\'',
         },
         {
-          description: 'Run an agent with chat messages',
+          description: 'Run an agent and persist messages to a thread',
           command:
-            'mastra api agent run weather-agent \'{"messages":[{"role":"user","content":"What is the weather in London?"}]}\'',
+            'mastra api agent run weather-agent \'{"messages":"What is the weather in London?","memory":{"thread":"thread_abc123","resource":"user_123"}}\'',
         },
       ],
     });

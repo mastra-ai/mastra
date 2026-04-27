@@ -18,6 +18,14 @@ describe('buildCommandUsage', () => {
 });
 
 describe('buildCommandExamples', () => {
+  it('includes an agent memory example for persisting messages to a thread', () => {
+    expect(buildCommandExamples(API_COMMANDS.agentRun)).toContainEqual({
+      description: 'Run an agent and persist messages to a thread',
+      command:
+        'mastra api agent run weather-agent \'{"messages":"What is the weather in London?","memory":{"thread":"thread_abc123","resource":"user_123"}}\'',
+    });
+  });
+
   it('uses page and perPage for generic list examples', () => {
     expect(buildCommandExamples(API_COMMANDS.scoreList)).toEqual([
       { description: 'List scores', command: 'mastra api score list \'{"page":0,"perPage":50}\'' },
