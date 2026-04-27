@@ -453,7 +453,7 @@ describe('Workflow schema type inference', () => {
       expectTypeOf(workflow).not.toBeNever();
     });
 
-    it('should allow commit after object-style map regardless of workflow outputSchema', () => {
+    it('should reject commit after object-style map when outputSchema does not match', () => {
       const step = createStep({
         id: 'some-step',
         inputSchema: z.object({ query: z.string() }),
@@ -461,8 +461,7 @@ describe('Workflow schema type inference', () => {
         execute: async () => ({ value: 1 }),
       });
 
-      // Object-style map({ key: { step, path } }) cannot statically infer its output shape
-      // because `path` is a runtime string. commit() must always be allowed after it.
+      // Object-style map({ key: { step, path } }) does not bypass outputSchema validation.
       // `as any` is required here: the map overload's mappingConfig is a wide union of several
       // variant shapes, and TS cannot narrow a plain object literal to the correct variant
       // without an explicit cast.
@@ -473,6 +472,7 @@ describe('Workflow schema type inference', () => {
       })
         .then(step)
         .map({ summary: { step, path: 'value' } } as any)
+        // @ts-expect-error object-style map output does not satisfy outputSchema
         .commit();
 
       expectTypeOf(workflow).not.toBeNever();
