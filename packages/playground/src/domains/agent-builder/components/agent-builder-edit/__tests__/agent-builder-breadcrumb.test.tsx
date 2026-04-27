@@ -19,7 +19,7 @@ const FormWrapper = ({
       name: 'Support agent',
       instructions: '',
       tools: {},
-      skills: [],
+      skills: {},
       ...defaults,
     },
   });
@@ -56,6 +56,18 @@ describe('AgentBuilderBreadcrumb', () => {
     );
 
     expect(screen.getByTestId('agent-builder-breadcrumb-skeleton')).toBeTruthy();
+    expect(screen.queryByText('Support agent')).toBeNull();
+  });
+
+  it('renders "New agent" as a standalone title when creating, with no breadcrumb trail', () => {
+    render(
+      <FormWrapper>
+        <AgentBuilderBreadcrumb creating />
+      </FormWrapper>,
+    );
+
+    expect(screen.getByTestId('agent-builder-create-title').textContent).toBe('New agent');
+    expect(screen.queryByText('Agents')).toBeNull();
     expect(screen.queryByText('Support agent')).toBeNull();
   });
 });

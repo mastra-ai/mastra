@@ -9,7 +9,13 @@ import { z } from 'zod/v4';
 
 import type { InMemoryTaskStore } from '../a2a/store';
 import { coreAuthMiddleware } from '../auth/helpers';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../constants';
+import {
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+  MASTRA_USER_KEY,
+  MASTRA_USER_PERMISSIONS_KEY,
+  MASTRA_USER_ROLES_KEY,
+} from '../constants';
 import { formatZodError } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
@@ -328,15 +334,16 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
 
   // Keys that must never be populated from client-supplied request bodies or params.
   // These are authoritative values set by the auth middleware from the verified token
-  // (user, userPermissions, userRoles) or server-derived (MASTRA_RESOURCE_ID_KEY,
-  // MASTRA_THREAD_ID_KEY). Accepting them from the body would let a client spoof
-  // identity or permissions on routes without auth/RBAC configured.
+  // (MASTRA_USER_KEY, MASTRA_USER_PERMISSIONS_KEY, MASTRA_USER_ROLES_KEY) or
+  // server-derived (MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY). Accepting them
+  // from the body would let a client spoof identity or permissions on routes without
+  // auth/RBAC configured.
   private static readonly RESERVED_CONTEXT_KEYS = new Set([
     MASTRA_RESOURCE_ID_KEY,
     MASTRA_THREAD_ID_KEY,
-    'user',
-    'userPermissions',
-    'userRoles',
+    MASTRA_USER_KEY,
+    MASTRA_USER_PERMISSIONS_KEY,
+    MASTRA_USER_ROLES_KEY,
   ]);
 
   protected mergeRequestContext({

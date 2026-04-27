@@ -8,6 +8,7 @@ export interface AgentBuilderBreadcrumbProps {
   className?: string;
   isLoading?: boolean;
   mode?: WorkspaceMode;
+  creating?: boolean;
 }
 
 const MODE_LABELS: Record<WorkspaceMode, string> = {
@@ -15,9 +16,29 @@ const MODE_LABELS: Record<WorkspaceMode, string> = {
   test: 'Chat',
 };
 
-export const AgentBuilderBreadcrumb = ({ className, isLoading = false, mode }: AgentBuilderBreadcrumbProps) => {
+export const AgentBuilderBreadcrumb = ({
+  className,
+  isLoading = false,
+  mode,
+  creating = false,
+}: AgentBuilderBreadcrumbProps) => {
   const { control } = useFormContext<AgentBuilderEditFormValues>();
   const name = useWatch({ control, name: 'name' });
+
+  if (creating) {
+    return (
+      <div className={className} data-testid="agent-builder-breadcrumb">
+        <span
+          aria-current="page"
+          className="text-ui-md leading-ui-md text-white"
+          data-testid="agent-builder-create-title"
+        >
+          New agent
+        </span>
+      </div>
+    );
+  }
+
   const displayName = name && name.trim() ? name : 'Untitled';
 
   return (

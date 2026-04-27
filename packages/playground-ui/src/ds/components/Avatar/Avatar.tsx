@@ -34,12 +34,7 @@ export const Avatar = ({ src, name, size = 'sm', interactive = false }: AvatarPr
       )}
     >
       {showImage ? (
-        <img
-          src={src}
-          alt={name}
-          className="h-full w-full object-cover"
-          onError={() => setDidError(true)}
-        />
+        <img src={src} alt={name} className="h-full w-full object-cover" onError={() => setDidError(true)} />
       ) : (
         <Txt variant="ui-md" className="text-center text-neutral4">
           {initial}

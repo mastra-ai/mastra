@@ -329,19 +329,38 @@ th:has(header) {
   }
 
   @keyframes starter-drift {
-    0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
-    33%      { transform: translate3d(-2%, 1.5%, 0) scale(1.04); }
-    66%      { transform: translate3d(1.5%, -2%, 0) scale(0.98); }
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    33% {
+      transform: translate3d(-2%, 1.5%, 0) scale(1.04);
+    }
+    66% {
+      transform: translate3d(1.5%, -2%, 0) scale(0.98);
+    }
   }
 
   @keyframes starter-enter {
-    from { opacity: 0; transform: translateY(10px); }
-    to   { opacity: 1; transform: translateY(0); }
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
-  .starter-heading { animation: starter-enter 520ms var(--ease-out-custom) both; }
-  .starter-prompt  { animation: starter-enter 520ms var(--ease-out-custom) 120ms both; }
-  .starter-chip    { animation: starter-enter 420ms var(--ease-out-custom) both; }
+  .starter-heading {
+    animation: starter-enter 520ms var(--ease-out-custom) both;
+  }
+  .starter-prompt {
+    animation: starter-enter 520ms var(--ease-out-custom) 120ms both;
+  }
+  .starter-chip {
+    animation: starter-enter 420ms var(--ease-out-custom) both;
+  }
 
   @media (prefers-reduced-motion: reduce) {
     .starter-aurora::before,

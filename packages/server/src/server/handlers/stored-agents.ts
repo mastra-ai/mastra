@@ -234,7 +234,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
 
       // Force authorId from the authenticated caller; ignore any body-provided value.
       // Default visibility to 'private' so the caller owns this agent exclusively.
-      const authorId = getCallerAuthorId(requestContext);
+      const authorId = getCallerAuthorId(requestContext) ?? undefined;
 
       const input = {
         id,

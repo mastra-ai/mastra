@@ -73,7 +73,7 @@ export async function dispatchSlashCommand(
 
   switch (command) {
     case 'new':
-      handleNewCommand(buildCtx());
+      await handleNewCommand(buildCtx());
       return true;
     case 'clone':
       await handleCloneCommand(buildCtx());

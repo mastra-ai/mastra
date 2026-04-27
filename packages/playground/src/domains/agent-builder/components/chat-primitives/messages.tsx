@@ -71,6 +71,20 @@ export const Txtmessage = ({ txt, role }: { txt: string; role: MastraUIMessage['
   return null;
 };
 
+export const PendingIndicator = () => {
+  return (
+    <Txt
+      variant="ui-md"
+      className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%] flex items-center gap-2"
+      as="div"
+      data-testid="agent-builder-chat-pending"
+    >
+      <Loader2 className="animate-spin size-4 text-neutral3" />
+      <Shimmer>Thinking…</Shimmer>
+    </Txt>
+  );
+};
+
 export const ReasoningMessage = ({ text, streaming = false }: { text: string; streaming?: boolean }) => {
   return (
     <Txt

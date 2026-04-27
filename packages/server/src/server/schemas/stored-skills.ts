@@ -22,6 +22,7 @@ const storageOrderBySchema = z.object({
 export const listStoredSkillsQuerySchema = createPagePaginationSchema(100).extend({
   orderBy: storageOrderBySchema.optional(),
   authorId: z.string().optional().describe('Filter skills by author identifier'),
+  visibility: z.enum(['public']).optional().describe('Filter to only public skills'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Filter skills by metadata key-value pairs'),
 });
 
@@ -61,12 +62,20 @@ export const createStoredSkillBodySchema = z
   .object({
     id: z.string().optional().describe('Unique identifier. If not provided, derived from name.'),
     authorId: z.string().optional().describe('Author identifier for multi-tenant filtering'),
+    visibility: z
+      .enum(['private', 'public'])
+      .optional()
+      .describe('Skill visibility: private (owner/admin only) or public (any reader)'),
   })
   .merge(snapshotConfigSchema);
 
 export const updateStoredSkillBodySchema = z
   .object({
     authorId: z.string().optional(),
+    visibility: z
+      .enum(['private', 'public'])
+      .optional()
+      .describe('Skill visibility: private (owner/admin only) or public (any reader)'),
   })
   .partial()
   .merge(snapshotConfigSchema.partial());
@@ -80,6 +89,7 @@ export const storedSkillSchema = z.object({
   status: z.string().describe('Skill status: draft, published, or archived'),
   activeVersionId: z.string().optional(),
   authorId: z.string().optional(),
+  visibility: z.enum(['private', 'public']).optional(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
   name: z.string().describe('Name of the skill'),
@@ -107,6 +117,7 @@ export const updateStoredSkillResponseSchema = z.union([
     status: z.string(),
     activeVersionId: z.string().optional(),
     authorId: z.string().optional(),
+    visibility: z.enum(['private', 'public']).optional(),
     createdAt: z.coerce.date(),
     updatedAt: z.coerce.date(),
   }),

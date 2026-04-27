@@ -1,72 +1,75 @@
-import { IconButton, Spinner } from '@mastra/playground-ui';
-import { PencilIcon } from 'lucide-react';
+import { Button, Spinner } from '@mastra/playground-ui';
 import { useMemo, useState } from 'react';
-import { FormProvider, useForm } from 'react-hook-form';
+import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router';
+import { useBuilderAgentFeatures } from '@/domains/agent-builder';
 import { AgentChatPanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-chat-panel';
 import { AgentConfigurePanel } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
-import type {
-  ActiveDetail,
-  AgentConfig,
-} from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
+import type { ActiveDetail } from '@/domains/agent-builder/components/agent-builder-edit/agent-configure-panel';
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
+import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
+import { storedAgentToAgentConfig } from '@/domains/agent-builder/mappers/stored-agent-to-agent-config';
+import { storedAgentToFormValues } from '@/domains/agent-builder/mappers/stored-agent-to-form-values';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
+import { useAgents } from '@/domains/agents/hooks/use-agents';
 import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
-
-interface AvailableTool {
-  id: string;
-  description?: string;
-}
+import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 type ToolsData = NonNullable<ReturnType<typeof useTools>['data']>;
+type AgentsData = NonNullable<ReturnType<typeof useAgents>['data']>;
+type WorkflowsData = NonNullable<ReturnType<typeof useWorkflows>['data']>;
 
 export default function AgentBuilderAgentView() {
   const { id } = useParams<{ id: string }>();
+  const features = useBuilderAgentFeatures();
   const { data: storedAgent, isLoading: isStoredAgentLoading } = useStoredAgent(id);
   const { data: toolsData, isPending: isToolsPending } = useTools();
-  const isReady = Boolean(id) && !isStoredAgentLoading && !isToolsPending;
+  const { data: agentsData, isPending: isAgentsPending } = useAgents({ enabled: features.agents });
+  const { data: workflowsData, isPending: isWorkflowsPending } = useWorkflows({ enabled: features.workflows });
+  const isReady =
+    Boolean(id) &&
+    !isStoredAgentLoading &&
+    !isToolsPending &&
+    (!features.agents || !isAgentsPending) &&
+    (!features.workflows || !isWorkflowsPending);
 
   if (!isReady) return <AgentBuilderAgentViewSkeleton />;
 
-  return <AgentBuilderAgentViewPage id={id} storedAgent={storedAgent} toolsData={toolsData} />;
+  return (
+    <AgentBuilderAgentViewPage
+      id={id}
+      storedAgent={storedAgent}
+      toolsData={toolsData}
+      agentsData={agentsData}
+      workflowsData={workflowsData}
+    />
+  );
 }
 
 interface PageProps {
   id: string | undefined;
   storedAgent: StoredAgent | null | undefined;
   toolsData: ToolsData | undefined;
+  agentsData: AgentsData | undefined;
+  workflowsData: WorkflowsData | undefined;
 }
 
-const extractWorkspaceId = (workspace: StoredAgent['workspace']): string | undefined => {
-  if (
-    workspace &&
-    typeof workspace === 'object' &&
-    'type' in workspace &&
-    (workspace as { type: string }).type === 'id'
-  ) {
-    const wsId = (workspace as { workspaceId?: unknown }).workspaceId;
-    return typeof wsId === 'string' ? wsId : undefined;
-  }
-  return undefined;
-};
-
-const AgentBuilderAgentViewPage = ({ id, storedAgent, toolsData }: PageProps) => {
+const AgentBuilderAgentViewPage = ({ id, storedAgent, toolsData, agentsData, workflowsData }: PageProps) => {
   const formMethods = useForm<AgentBuilderEditFormValues>({
-    defaultValues: {
-      name: storedAgent?.name ?? '',
-      instructions: typeof storedAgent?.instructions === 'string' ? storedAgent.instructions : '',
-      tools: Object.fromEntries(Object.keys(storedAgent?.tools ?? {}).map(k => [k, true])),
-      skills: Object.keys(storedAgent?.skills ?? {}),
-      workspaceId: extractWorkspaceId(storedAgent?.workspace),
-      description: storedAgent?.description ?? '',
-    },
+    defaultValues: storedAgentToFormValues(storedAgent),
   });
 
   return (
     <FormProvider {...formMethods}>
-      <AgentBuilderAgentViewReady id={id!} storedAgent={storedAgent} toolsData={toolsData ?? {}} />
+      <AgentBuilderAgentViewReady
+        id={id!}
+        storedAgent={storedAgent}
+        toolsData={toolsData ?? {}}
+        agentsData={agentsData ?? {}}
+        workflowsData={workflowsData ?? {}}
+      />
     </FormProvider>
   );
 };
@@ -81,30 +84,35 @@ interface AgentBuilderAgentViewReadyProps {
   id: string;
   storedAgent: StoredAgent | null | undefined;
   toolsData: ToolsData;
+  agentsData: AgentsData;
+  workflowsData: WorkflowsData;
 }
 
-const AgentBuilderAgentViewReady = ({ id, storedAgent, toolsData }: AgentBuilderAgentViewReadyProps) => {
+const AgentBuilderAgentViewReady = ({
+  id,
+  storedAgent,
+  toolsData,
+  agentsData,
+  workflowsData,
+}: AgentBuilderAgentViewReadyProps) => {
   const navigate = useNavigate();
   const [activeDetail, setActiveDetail] = useState<ActiveDetail>(null);
+  const formMethods = useFormContext<AgentBuilderEditFormValues>();
+  const selectedTools = useWatch({ control: formMethods.control, name: 'tools' });
+  const selectedAgents = useWatch({ control: formMethods.control, name: 'agents' });
+  const selectedWorkflows = useWatch({ control: formMethods.control, name: 'workflows' });
 
-  const availableTools = useMemo<AvailableTool[]>(
-    () =>
-      Object.entries(toolsData).map(([toolId, tool]) => ({
-        id: toolId,
-        description: (tool as { description?: string }).description,
-      })),
-    [toolsData],
-  );
+  const availableAgentTools = useAvailableAgentTools({
+    toolsData,
+    agentsData,
+    workflowsData,
+    selectedTools,
+    selectedAgents,
+    selectedWorkflows,
+    excludeAgentId: id,
+  });
 
-  const agent = useMemo<AgentConfig>(
-    () => ({
-      id: storedAgent?.id ?? id ?? '',
-      name: storedAgent?.name ?? '',
-      description: storedAgent?.description ?? '',
-      systemPrompt: typeof storedAgent?.instructions === 'string' ? storedAgent.instructions : '',
-    }),
-    [storedAgent, id],
-  );
+  const agent = useMemo(() => storedAgentToAgentConfig(storedAgent, id ?? ''), [storedAgent, id]);
 
   return (
     <WorkspaceLayout
@@ -112,24 +120,23 @@ const AgentBuilderAgentViewReady = ({ id, storedAgent, toolsData }: AgentBuilder
       mode="test"
       defaultExpanded={false}
       detailOpen={activeDetail !== null}
-      modeAction={
-        <IconButton
-          tooltip="Edit configuration"
-          className="rounded-full"
+      primaryAction={
+        <Button
+          size="sm"
+          variant="default"
           onClick={() => navigate(`/agent-builder/agents/${id}/edit`, { viewTransition: true })}
           data-testid="agent-builder-view-edit"
         >
-          <PencilIcon />
-        </IconButton>
+          Edit configuration
+        </Button>
       }
-      chat={<AgentChatPanel agentId={id} />}
+      chat={<AgentChatPanel agentId={id} agentName={storedAgent?.name} agentDescription={storedAgent?.description} />}
       configure={
         <AgentConfigurePanel
           agent={agent}
-          onAgentChange={() => {}}
           editable={false}
           isLoading={false}
-          availableTools={availableTools}
+          availableAgentTools={availableAgentTools}
           activeDetail={activeDetail}
           onActiveDetailChange={setActiveDetail}
         />

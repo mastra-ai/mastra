@@ -117,7 +117,9 @@ test.describe('Login Flow', () => {
       await expect(page.getByRole('link', { name: 'Workflows', exact: true })).toBeVisible();
     });
 
-    test('unauthenticated agent-builder access redirects through login and returns to the requested route', async ({ page }) => {
+    test('unauthenticated agent-builder access redirects through login and returns to the requested route', async ({
+      page,
+    }) => {
       // USER STORY: As a signed-out user, I should be sent to login before using agent-builder,
       // so that signing in returns me to the exact builder route I requested.
       // BEHAVIOR UNDER TEST: The agent-builder layout protects the route by redirecting to

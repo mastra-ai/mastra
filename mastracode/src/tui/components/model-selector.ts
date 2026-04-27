@@ -45,6 +45,33 @@ export interface ModelSelectorOptions {
 }
 
 // =============================================================================
+// Helpers
+// =============================================================================
+
+/**
+ * Build a synthetic "Use: <id>" ModelItem for an arbitrary model id typed by
+ * the user. The provider prefix is parsed from the id; key metadata is
+ * derived from any sibling model that already lives under the same provider
+ * so the API-key prompt still fires for known providers without a key.
+ *
+ * If no sibling is found (truly novel provider), we default `hasApiKey: false`
+ * so the user is still prompted for a key by provider name.
+ */
+export function makeCustomModelItem(id: string, models: ModelItem[]): ModelItem {
+  const parts = id.split('/');
+  const provider = parts.length > 1 ? parts[0]! : 'custom';
+  const modelName = parts.length > 1 ? parts.slice(1).join('/') : id;
+  const sibling = models.find(m => m.provider === provider);
+  return {
+    id,
+    provider,
+    modelName,
+    hasApiKey: sibling?.hasApiKey ?? false,
+    apiKeyEnvVar: sibling?.apiKeyEnvVar,
+  };
+}
+
+// =============================================================================
 // ModelSelectorComponent
 // =============================================================================
 
@@ -175,10 +202,7 @@ export class ModelSelectorComponent extends Box implements Focusable {
   }
 
   private makeCustomModelItem(id: string): ModelItem {
-    const parts = id.split('/');
-    const provider = parts.length > 1 ? parts[0]! : 'custom';
-    const modelName = parts.length > 1 ? parts.slice(1).join('/') : id;
-    return { id, provider, modelName, hasApiKey: true };
+    return makeCustomModelItem(id, this.allModels);
   }
 
   private updateList(): void {

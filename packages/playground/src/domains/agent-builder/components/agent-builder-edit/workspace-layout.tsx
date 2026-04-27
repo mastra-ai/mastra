@@ -1,5 +1,5 @@
 import { cn, IconButton } from '@mastra/playground-ui';
-import { ArrowLeftIcon, Columns2 } from 'lucide-react';
+import { ArrowLeftIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router';
@@ -10,6 +10,7 @@ export type WorkspaceMode = 'build' | 'test';
 interface WorkspaceLayoutProps {
   isLoading: boolean;
   mode: WorkspaceMode;
+  creating?: boolean;
   modeAction?: ReactNode;
   primaryAction?: ReactNode;
   chat: ReactNode;
@@ -21,6 +22,7 @@ interface WorkspaceLayoutProps {
 export const WorkspaceLayout = ({
   isLoading,
   mode,
+  creating = false,
   modeAction,
   primaryAction,
   chat,
@@ -45,17 +47,26 @@ export const WorkspaceLayout = ({
             <ArrowLeftIcon />
           </IconButton>
         </div>
-        <AgentBuilderBreadcrumb className="justify-self-center" isLoading={isLoading} mode={mode} />
+        <AgentBuilderBreadcrumb className="justify-self-center" isLoading={isLoading} mode={mode} creating={creating} />
         <div className="justify-self-end flex items-center gap-2">
           {modeAction}
+          {primaryAction}
           <IconButton
             tooltip={expanded ? 'Hide configuration' : 'Show configuration'}
             className="rounded-full"
             onClick={() => setExpanded(prev => !prev)}
+            aria-pressed={expanded}
           >
-            <Columns2 />
+            <div
+              className={cn(
+                'size-4 border border-current rounded-lg grid divide-x divide-current transition-all duration-200 ease-out overflow-hidden',
+                expanded ? 'grid-cols-[1fr_40%]' : 'grid-cols-[1fr_10%]',
+              )}
+            >
+              <div />
+              <div className="bg-neutral1 h-full w-full" />
+            </div>
           </IconButton>
-          {primaryAction}
         </div>
       </div>
       <div className="flex flex-1 min-h-0 min-w-0 flex-col px-6 pb-6 pt-4">

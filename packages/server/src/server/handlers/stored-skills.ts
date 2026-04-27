@@ -17,6 +17,13 @@ import {
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { toSlug } from '../utils';
 
+import {
+  assertReadAccess,
+  assertWriteAccess,
+  getCallerAuthorId,
+  matchesAuthorFilter,
+  resolveAuthorFilter,
+} from './authorship';
 import { handleError } from './error';
 
 // ============================================================================
@@ -36,7 +43,7 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
   description: 'Returns a paginated list of all skill configurations stored in the database',
   tags: ['Stored Skills'],
   requiresAuth: true,
-  handler: async ({ mastra, page, perPage, orderBy, authorId, metadata }) => {
+  handler: async ({ mastra, requestContext, page, perPage, orderBy, authorId, visibility, metadata }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -49,15 +56,24 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Skills storage domain is not available' });
       }
 
+      const filter = resolveAuthorFilter({
+        requestContext,
+        resource: 'skills',
+        queryAuthorId: authorId,
+        queryVisibility: visibility,
+      });
+
       const result = await skillStore.listResolved({
         page,
         perPage,
         orderBy,
-        authorId,
+        authorId: filter.kind === 'exact' ? filter.authorId : undefined,
         metadata,
       });
 
-      return result;
+      const skills = result.skills.filter(record => matchesAuthorFilter(record, filter));
+
+      return { ...result, skills };
     } catch (error) {
       return handleError(error, 'Error listing stored skills');
     }
@@ -77,7 +93,7 @@ export const GET_STORED_SKILL_ROUTE = createRoute({
   description: 'Returns a specific skill from storage by its unique identifier (resolved with active version config)',
   tags: ['Stored Skills'],
   requiresAuth: true,
-  handler: async ({ mastra, storedSkillId }) => {
+  handler: async ({ mastra, requestContext, storedSkillId }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -95,6 +111,8 @@ export const GET_STORED_SKILL_ROUTE = createRoute({
       if (!skill) {
         throw new HTTPException(404, { message: `Stored skill with id ${storedSkillId} not found` });
       }
+
+      assertReadAccess({ requestContext, resource: 'skills', resourceId: storedSkillId, record: skill });
 
       return skill;
     } catch (error) {
@@ -118,8 +136,8 @@ export const CREATE_STORED_SKILL_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({
     mastra,
+    requestContext,
     id: providedId,
-    authorId,
     name,
     description,
     instructions,
@@ -158,10 +176,15 @@ export const CREATE_STORED_SKILL_ROUTE = createRoute({
         throw new HTTPException(409, { message: `Skill with id ${id} already exists` });
       }
 
+      // Force authorId from the authenticated caller; ignore any body-provided value.
+      // Default visibility to 'private' so the caller owns this skill exclusively.
+      const authorId = getCallerAuthorId(requestContext) ?? undefined;
+
       await skillStore.create({
         skill: {
           id,
           authorId,
+          visibility: 'private' as const,
           name,
           description,
           instructions,
@@ -204,9 +227,11 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({
     mastra,
+    requestContext,
     storedSkillId,
     // Entity-level fields
     authorId,
+    visibility,
     // Config fields (snapshot-level)
     name,
     description,
@@ -237,11 +262,21 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Stored skill with id ${storedSkillId} not found` });
       }
 
+      // Throws 404 if the caller isn't the owner, admin, or `skills:edit[:<id>]` holder.
+      assertWriteAccess({
+        requestContext,
+        resource: 'skills',
+        resourceId: storedSkillId,
+        action: 'edit',
+        record: existing,
+      });
+
       // Update the skill with both entity-level and config-level fields
       // The storage layer handles separating these into record updates vs new-version creation
       await skillStore.update({
         id: storedSkillId,
         authorId,
+        visibility,
         name,
         description,
         instructions,
@@ -280,7 +315,7 @@ export const DELETE_STORED_SKILL_ROUTE = createRoute({
   description: 'Deletes a skill from storage by its unique identifier',
   tags: ['Stored Skills'],
   requiresAuth: true,
-  handler: async ({ mastra, storedSkillId }) => {
+  handler: async ({ mastra, requestContext, storedSkillId }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -298,6 +333,15 @@ export const DELETE_STORED_SKILL_ROUTE = createRoute({
       if (!existing) {
         throw new HTTPException(404, { message: `Stored skill with id ${storedSkillId} not found` });
       }
+
+      // Throws 404 if the caller isn't the owner, admin, or `skills:delete[:<id>]` holder.
+      assertWriteAccess({
+        requestContext,
+        resource: 'skills',
+        resourceId: storedSkillId,
+        action: 'delete',
+        record: existing,
+      });
 
       await skillStore.delete(storedSkillId);
 
@@ -328,7 +372,7 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
     'Snapshots the skill directory from the filesystem into content-addressable blob storage, creates a new version with a tree manifest, and marks the skill as published',
   tags: ['Stored Skills'],
   requiresAuth: true,
-  handler: async ({ mastra, storedSkillId, skillPath }) => {
+  handler: async ({ mastra, requestContext, storedSkillId, skillPath }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -351,6 +395,15 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
       if (!existing) {
         throw new HTTPException(404, { message: `Stored skill with id ${storedSkillId} not found` });
       }
+
+      // Throws 404 if the caller isn't the owner, admin, or `skills:edit[:<id>]` holder.
+      assertWriteAccess({
+        requestContext,
+        resource: 'skills',
+        resourceId: storedSkillId,
+        action: 'edit',
+        record: existing,
+      });
 
       // Validate skillPath to prevent path traversal
       const path = await import('node:path');

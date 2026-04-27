@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AgentBuilderEditFormSchema } from '../schemas';
 
 describe('AgentBuilderEditFormSchema', () => {
-  it('accepts name and instructions without tools or skills', () => {
+  it('accepts name and instructions without tools', () => {
     const result = AgentBuilderEditFormSchema.safeParse({
       name: 'My agent',
       instructions: 'Do things',
@@ -10,12 +10,11 @@ describe('AgentBuilderEditFormSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('accepts tools as a record and skills as a string array', () => {
+  it('accepts tools as a record', () => {
     const result = AgentBuilderEditFormSchema.safeParse({
       name: 'My agent',
       instructions: 'Do things',
       tools: { 'web-search': true },
-      skills: ['summarize'],
     });
     expect(result.success).toBe(true);
   });

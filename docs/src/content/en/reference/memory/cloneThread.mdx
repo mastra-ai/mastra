@@ -193,8 +193,10 @@ const { thread: dateFilteredClone } = await memory.cloneThread({
 
 // Continue conversation on the cloned thread
 const response = await agent.generate("Let's try a different approach", {
-  threadId: fullClone.id,
-  resourceId: fullClone.resourceId,
+  memory: {
+    thread: fullClone.id,
+    resource: fullClone.resourceId,
+  },
 })
 ```
 
