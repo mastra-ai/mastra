@@ -2254,7 +2254,7 @@ export class Agent<
           [
             {
               role: 'user',
-              content: JSON.stringify(partsToGen),
+              content: partsToGen.map(p => p.text).join('\n'),
             },
           ],
           'input',
@@ -2280,7 +2280,7 @@ export class Agent<
           },
           {
             role: 'user',
-            content: JSON.stringify(partsToGen),
+            content: partsToGen.map(p => p.text).join('\n'),
           },
         ],
       });
