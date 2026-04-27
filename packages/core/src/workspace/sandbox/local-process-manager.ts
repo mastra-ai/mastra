@@ -165,7 +165,22 @@ async function killProcessTree(pid: number, subprocess: ResultPromise, signal: N
  */
 export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
-    const cwd = options.cwd ? path.resolve(this.sandbox.workingDirectory, options.cwd) : this.sandbox.workingDirectory;
+    let cwd = this.sandbox.workingDirectory;
+    if (options.cwd) {
+      if (path.isAbsolute(options.cwd)) {
+        cwd = options.cwd;
+      } else {
+        // Prevent duplicate nesting when agent passes cwd that's already workspace-relative
+        const normalizedWorkingDir = path.resolve(this.sandbox.workingDirectory);
+        const normalizedOptionsCwd = path.resolve(options.cwd);
+        // Check if path is already under workspace (exact match or nested subpath)
+        const isAlreadyWorkspacePath =
+          normalizedOptionsCwd === normalizedWorkingDir ||
+          normalizedOptionsCwd.startsWith(`${normalizedWorkingDir}${path.sep}`);
+
+        cwd = isAlreadyWorkspacePath ? normalizedOptionsCwd : path.resolve(this.sandbox.workingDirectory, options.cwd);
+      }
+    }
     const env = this.sandbox.buildEnv(options.env);
     const wrapped = this.sandbox.wrapCommandForIsolation(command);
 

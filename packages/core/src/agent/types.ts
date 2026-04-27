@@ -28,6 +28,7 @@ import type {
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { VersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../memory/types';
 import type { Span, SpanType, TracingOptions, TracingPolicy, ObservabilityContext } from '../observability';
@@ -88,6 +89,13 @@ export type StructuredOutputOptionsBase<OUTPUT = {}> = {
    * If not provided, will generate instructions based on the schema.
    */
   instructions?: string;
+
+  /**
+   * When true and `model` is also provided, reuse the parent agent for the separate
+   * structuring pass. If a thread is available, Mastra attaches read-only memory so
+   * the structuring model has full conversation context.
+   */
+  useAgent?: boolean;
 
   /**
    * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
@@ -414,7 +422,7 @@ export interface AgentConfig<
 
 export type AgentMemoryOption = {
   thread: string | (Partial<StorageThreadType> & { id: string });
-  resource: string;
+  resource?: string;
   options?: MemoryConfigInternal;
 };
 
@@ -450,6 +458,15 @@ export type AgentGenerateOptions<
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** RequestContext for dependency injection */
   requestContext?: RequestContext;
+  /**
+   * Per-invocation version overrides for sub-agents (and future primitives).
+   * Merged on top of Mastra instance-level versions and propagated via requestContext.
+   *
+   * NOTE: This field is intentionally duplicated across AgentGenerateOptions,
+   * AgentStreamOptions, and AgentExecutionOptionsBase because these types are
+   * independent (generate/stream options do not extend the base). Do not remove.
+   */
+  versions?: VersionOverrides;
   /** Scorers to use for this generation */
   scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
   /** Whether to return the input required to run scorers for agents, defaults to false */
@@ -540,6 +557,15 @@ export type AgentStreamOptions<
   experimental_output?: EXPERIMENTAL_OUTPUT;
   /** RequestContext for dependency injection */
   requestContext?: RequestContext;
+  /**
+   * Per-invocation version overrides for sub-agents (and future primitives).
+   * Merged on top of Mastra instance-level versions and propagated via requestContext.
+   *
+   * NOTE: This field is intentionally duplicated across AgentGenerateOptions,
+   * AgentStreamOptions, and AgentExecutionOptionsBase because these types are
+   * independent (generate/stream options do not extend the base). Do not remove.
+   */
+  versions?: VersionOverrides;
   /**
    * Whether to save messages incrementally on step finish
    * @default false

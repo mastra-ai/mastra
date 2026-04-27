@@ -121,3 +121,61 @@ Verify: Validation error shown
 Navigate to: /this-page-does-not-exist
 Verify: 404 or redirect, not crash
 ```
+
+## Curl / API (for `--skip-browser`)
+
+Same curls for local and cloud; cloud needs `Authorization: Bearer <api-key>`.
+
+```bash
+# Unknown agent
+curl -sw "\nHTTP %{http_code}\n" -X POST \
+  http://localhost:4111/api/agents/nonexistent/generate \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"hi"}]}'
+
+# Workflow with missing required input field
+curl -sw "\nHTTP %{http_code}\n" -X POST \
+  http://localhost:4111/api/workflows/<workflowId>/start-async \
+  -H "Content-Type: application/json" \
+  -d '{"inputData":{}}'
+
+# Tool with missing required input field
+curl -sw "\nHTTP %{http_code}\n" -X POST \
+  http://localhost:4111/api/tools/<toolId>/execute \
+  -H "Content-Type: application/json" \
+  -d '{"data":{}}'
+
+# Unknown tool
+curl -sw "\nHTTP %{http_code}\n" -X POST \
+  http://localhost:4111/api/tools/nonexistent/execute \
+  -H "Content-Type: application/json" \
+  -d '{"data":{}}'
+```
+
+### Expected behavior
+
+The current server returns the following. These are the values to assert
+against — flag any deviation as a regression.
+
+| Case                            | HTTP | Body shape                                               |
+| ------------------------------- | ---- | -------------------------------------------------------- |
+| Unknown agent id                | 404  | `{ error: "Agent with id <id> not found" }` (or similar) |
+| Unknown tool id                 | 404  | `{ error: "Tool not found" }`                            |
+| Unknown workflow id             | 404  | `{ error: "Workflow not found" }`                        |
+| Workflow missing required input | 500  | `{ error: "Invalid input data: <field> expected ..." }`  |
+| Tool missing required input     | 200  | `{ error: true, validationErrors: { ... } }`             |
+| Invalid JSON body               | 400  | `{ error: "..." }` (Hono body parse failure)             |
+
+**Known inconsistencies** (document if you observe, don't treat as
+failures unless they change):
+
+- Workflow invalid input returns **500** (arguably should be 400)
+- Tool invalid input returns **200** with `error: true` in the body
+  (inconsistent with HTTP semantics vs. workflow/agent error responses)
+
+### Pass criteria
+
+- Every error response includes a readable `error` field (or
+  `validationErrors` for tools)
+- No stack traces leak into the response body
+- HTTP status codes match the table above (or are documented deviations)

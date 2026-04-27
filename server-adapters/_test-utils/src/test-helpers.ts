@@ -177,6 +177,9 @@ export function mockAgentMethods(agent: Agent) {
   // Mock stream method - returns object with fullStream property
   vi.spyOn(agent, 'stream').mockResolvedValue({ fullStream: createMockStream() } as any);
 
+  // Mock resumeStream method - returns object with fullStream property
+  vi.spyOn(agent, 'resumeStream').mockResolvedValue({ fullStream: createMockStream() } as any);
+
   // Mock legacy generate - returns GenerateTextResult (JSON object, not stream)
   vi.spyOn(agent, 'generateLegacy').mockResolvedValue({
     text: 'test response',
@@ -522,7 +525,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     if (observability) {
       await observability.createSpan({
         span: {
-          spanId: 'test-span-1',
+          spanId: 'test-span',
           traceId: 'test-trace',
           name: 'test-span',
           spanType: SpanType.GENERIC,

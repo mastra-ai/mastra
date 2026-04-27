@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CombinedButtons } from './combined-buttons';
-import { Button } from '../Button';
 import { ChevronDown, Plus, Settings, Trash } from 'lucide-react';
+import { Button } from '../Button';
+import { CombinedButtons } from './combined-buttons';
 
 const meta: Meta<typeof CombinedButtons> = {
   title: 'Composite/CombinedButtons',

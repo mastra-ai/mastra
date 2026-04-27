@@ -1,5 +1,54 @@
 # create-mastra
 
+## 1.6.4-alpha.1
+
+## 1.6.4-alpha.0
+
+### Patch Changes
+
+- Removed Prettier from the CLI install path so generated project setup no longer pulls in the prettier dependency. ([#15711](https://github.com/mastra-ai/mastra/pull/15711))
+
+- Improved `create-mastra` package size by reducing runtime dependency overhead. ([#15721](https://github.com/mastra-ai/mastra/pull/15721))
+  This decreases install surface while preserving existing CLI behavior.
+
+## 1.6.3
+
+## 1.6.3-alpha.2
+
+## 1.6.3-alpha.1
+
+## 1.6.3-alpha.0
+
+## 1.6.2
+
+## 1.6.2-alpha.2
+
+## 1.6.2-alpha.1
+
+## 1.6.2-alpha.0
+
+## 1.6.1
+
+### Patch Changes
+
+- dependencies updates: ([#15525](https://github.com/mastra-ai/mastra/pull/15525))
+  - Updated dependency [`prettier@^3.8.3` ↗︎](https://www.npmjs.com/package/prettier/v/3.8.3) (from `^3.8.1`, in `dependencies`)
+
+## 1.6.1-alpha.13
+
+## 1.6.1-alpha.12
+
+## 1.6.1-alpha.11
+
+## 1.6.1-alpha.10
+
+## 1.6.1-alpha.9
+
+### Patch Changes
+
+- dependencies updates: ([#15525](https://github.com/mastra-ai/mastra/pull/15525))
+  - Updated dependency [`prettier@^3.8.3` ↗︎](https://www.npmjs.com/package/prettier/v/3.8.3) (from `^3.8.1`, in `dependencies`)
+
 ## 1.6.1-alpha.8
 
 ## 1.6.1-alpha.7

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "1.16.0-alpha.2",
+  "version": "1.17.1",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -71,7 +71,7 @@
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.39.4",
+    "eslint": "^10.2.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "typescript-eslint": "^8.57.0",

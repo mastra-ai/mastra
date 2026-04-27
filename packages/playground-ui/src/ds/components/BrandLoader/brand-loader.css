@@ -1,5 +1,7 @@
 .brand-loader svg {
-  filter: drop-shadow(0 0 0.7px currentcolor);
+  display: block;
+  width: 100%;
+  height: auto;
   shape-rendering: geometricprecision;
 }
 
@@ -9,7 +11,7 @@
 
 .brand-loader line {
   stroke: currentcolor;
-  stroke-width: 2.8;
+  stroke-width: var(--brand-loader-stroke, 2.9);
   stroke-linecap: round;
 }
 

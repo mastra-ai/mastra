@@ -181,6 +181,7 @@ export class Run extends BaseResource {
     resumeData,
     tracingOptions,
     perStep,
+    forEachIndex,
     ...rest
   }: {
     step?: string | string[];
@@ -188,6 +189,7 @@ export class Run extends BaseResource {
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
     perStep?: boolean;
+    forEachIndex?: number;
   }): Promise<{ message: string }> {
     const requestContext = parseClientRequestContext(rest.requestContext);
     return this.request(`/workflows/${this.workflowId}/resume?runId=${this.runId}`, {
@@ -198,6 +200,7 @@ export class Run extends BaseResource {
         requestContext,
         tracingOptions,
         perStep,
+        forEachIndex,
       },
     });
   }
@@ -317,6 +320,7 @@ export class Run extends BaseResource {
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
     perStep?: boolean;
+    forEachIndex?: number;
   }): Promise<WorkflowRunResult> {
     const requestContext = parseClientRequestContext(params.requestContext);
     return this.request<WorkflowRunResult>(`/workflows/${this.workflowId}/resume-async?runId=${this.runId}`, {
@@ -327,6 +331,7 @@ export class Run extends BaseResource {
         requestContext,
         tracingOptions: params.tracingOptions,
         perStep: params.perStep,
+        forEachIndex: params.forEachIndex,
       },
     }).then(deserializeWorkflowError);
   }
@@ -342,6 +347,7 @@ export class Run extends BaseResource {
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
     perStep?: boolean;
+    forEachIndex?: number;
   }): Promise<globalThis.ReadableStream<StreamVNextChunkType>> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', this.runId);
@@ -356,6 +362,7 @@ export class Run extends BaseResource {
           requestContext,
           tracingOptions: params.tracingOptions,
           perStep: params.perStep,
+          forEachIndex: params.forEachIndex,
         },
         stream: true,
       },

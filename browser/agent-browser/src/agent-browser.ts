@@ -68,7 +68,7 @@ export class AgentBrowser extends MastraBrowser {
     // Initialize thread manager
     this.threadManager = new AgentBrowserThreadManager({
       scope: effectiveScope,
-      browserConfig: config,
+      browserConfig: { ...config, headless: this.headless },
       resolveCdpUrl: this.resolveCdpUrl.bind(this),
       logger: this.logger,
       // When a new thread session is created, notify listeners so screencast can start
@@ -160,7 +160,7 @@ export class AgentBrowser extends MastraBrowser {
 
     const localConfig = this.config as BrowserConfig;
     const launchOptions: BrowserLaunchOptions = {
-      headless: localConfig.headless ?? true,
+      headless: this.headless,
       viewport: localConfig.viewport,
       profile: localConfig.profile,
       executablePath: localConfig.executablePath,
@@ -1298,9 +1298,7 @@ export class AgentBrowser extends MastraBrowser {
   ): Promise<{ success: true; result: unknown; hint: string } | BrowserToolError> {
     try {
       const page = await this.getPage(threadId);
-      // Wrap script in an async function to allow return statements
-      const wrappedScript = `(async () => { ${input.script} })()`;
-      const result = await page.evaluate(wrappedScript);
+      const result = await page.evaluate(input.script);
 
       return {
         success: true,
