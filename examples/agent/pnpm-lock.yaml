@@ -20,6 +20,7 @@ overrides:
   '@mastra/mcp': link:../../packages/mcp
   '@mastra/libsql': link:../../stores/libsql
   '@mastra/observability': link:../../observability/mastra
+  '@mastra/slack': link:../../channels/slack
   '@mastra/evals': link:../../packages/evals
   '@mastra/auth-studio': link:../../auth/studio
   mastra: link:../../packages/cli
@@ -88,6 +89,9 @@ importers:
       '@mastra/observability':
         specifier: link:../../observability/mastra
         version: link:../../observability/mastra
+      '@mastra/slack':
+        specifier: link:../../channels/slack
+        version: link:../../channels/slack
       '@mastra/voice-openai':
         specifier: link:../../voice/openai
         version: link:../../voice/openai

@@ -347,6 +347,7 @@ export class AgentChannels {
   private initPromise: Promise<void> | null = null;
   private agent!: Agent<any, any, any, any>;
   private logger?: IMastraLogger;
+  private mastra?: Mastra;
   private customState: StateAdapter | undefined;
   private stateAdapter!: StateAdapter;
   private userName: string;
@@ -366,6 +367,8 @@ export class AgentChannels {
   private toolsEnabled: boolean;
   /** Channel tool names whose effects are already visible on the platform (skip rendering cards). */
   private channelToolNames!: Set<string>;
+  /** Platforms whose routes are managed externally (e.g., by SlackChannel). */
+  private externallyManagedPlatforms: Set<string> = new Set();
 
   constructor(config: ChannelConfig) {
     // Normalize: extract adapters and per-adapter configs
@@ -414,6 +417,50 @@ export class AgentChannels {
   }
 
   /**
+   * Store Mastra reference for lazy initialization.
+   * Called by Mastra.addAgent so handleWebhookEvent can initialize on first use.
+   * @internal
+   */
+  __setMastra(mastra: Mastra): void {
+    this.mastra = mastra;
+  }
+
+  /**
+   * Register an adapter dynamically, typically from a MastraChannel like SlackChannel.
+   * When `managesRoutes` is true, AgentChannels will NOT create webhook routes for this platform
+   * (the MastraChannel handles routing and calls handleWebhookEvent directly).
+   * @internal
+   */
+  __registerAdapter(
+    platform: string,
+    adapter: Adapter,
+    config?: ChannelAdapterConfig,
+    options?: { managesRoutes?: boolean },
+  ): void {
+    // Skip if already registered
+    if (this.adapters[platform]) {
+      return;
+    }
+    // If Chat SDK is already initialized, we need to reinitialize with the new adapter
+    if (this.chat) {
+      this.chat = null;
+      this.initPromise = null;
+    }
+    this.adapters[platform] = adapter;
+    this.adapterConfigs[platform] = config ?? { adapter };
+    if (options?.managesRoutes) {
+      this.externallyManagedPlatforms.add(platform);
+    }
+  }
+
+  /**
+   * Check if an adapter is registered for the given platform.
+   */
+  hasAdapter(platform: string): boolean {
+    return platform in this.adapters;
+  }
+
+  /**
    * Get the underlying Chat SDK instance.
    * Available after Mastra initialization. Use this to register additional
    * event handlers or access adapter-specific methods.
@@ -434,6 +481,7 @@ export class AgentChannels {
    * Called by Mastra.addAgent after the server is ready.
    */
   async initialize(mastra: Mastra): Promise<void> {
+    this.mastra = mastra;
     if (this.chat) return;
     if (this.initPromise) {
       return this.initPromise;
@@ -681,6 +729,7 @@ export class AgentChannels {
   /**
    * Returns API routes for receiving webhook events from each adapter.
    * One POST route per adapter at `/api/agents/{agentId}/channels/{platform}/webhook`.
+   * Skips platforms that are externally managed (e.g., by SlackChannel).
    */
   getWebhookRoutes(): ApiRoute[] {
     if (!this.agent) return [];
@@ -689,6 +738,10 @@ export class AgentChannels {
     const routes: ApiRoute[] = [];
 
     for (const platform of Object.keys(this.adapters)) {
+      // Skip platforms where routes are managed externally (e.g., SlackChannel)
+      if (this.externallyManagedPlatforms.has(platform)) {
+        continue;
+      }
       const self = this;
       routes.push({
         path: `/api/agents/${agentId}/channels/${platform}/webhook`,
@@ -733,6 +786,51 @@ export class AgentChannels {
     }
 
     return routes;
+  }
+
+  /**
+   * Handle a webhook event from an external source (e.g., SlackChannel).
+   * Use this when a MastraChannel manages its own routes but wants AgentChannels
+   * to process the actual message handling (threading, agent responses, etc.).
+   *
+   * @param platform - The platform name (e.g., 'slack')
+   * @param request - The raw HTTP request
+   * @param options - Optional execution context for serverless environments
+   * @returns The response from the Chat SDK webhook handler
+   */
+  async handleWebhookEvent(
+    platform: string,
+    request: Request,
+    options?: { waitUntil?: (p: Promise<unknown>) => void },
+  ): Promise<Response> {
+    // Ensure initialization is complete
+    if (this.initPromise) {
+      await this.initPromise;
+    }
+
+    // If chat was reset (e.g., new adapter registered), re-initialize
+    if (!this.chat && this.mastra) {
+      await this.initialize(this.mastra);
+    }
+
+    const sdkInstance = this.chat;
+    if (!sdkInstance) {
+      return new Response(JSON.stringify({ error: 'Chat not initialized' }), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Access the internal webhook handler from Chat SDK
+    const webhookHandler = (sdkInstance as any).webhooks?.[platform] as Function | undefined;
+    if (!webhookHandler) {
+      return new Response(JSON.stringify({ error: `No webhook handler for ${platform}` }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    return webhookHandler(request, options);
   }
 
   /**

@@ -11,6 +11,7 @@ import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
 import type { BrowserContext } from '../browser/processor';
 import { AgentChannels } from '../channels/agent-channels';
+import type { ChannelConfig } from '../channels/agent-channels';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type {
   ScorerRunInputForAgent,
@@ -217,6 +218,13 @@ export class Agent<
   private _agentNetworkAppend = false;
 
   /**
+   * Raw platform channel configs (e.g., { slack: true, discord: {...} }).
+   * Used by Mastra to register agents with MastraChannels.
+   * @internal
+   */
+  __rawChannelsConfig?: Record<string, unknown>;
+
+  /**
    * Creates a new Agent instance with the specified configuration.
    *
    * @example
@@ -330,13 +338,26 @@ export class Agent<
     if (config.channels) {
       if (config.channels instanceof AgentChannels) {
         this.#agentChannels = config.channels;
-      } else if (config.channels.adapters && Object.keys(config.channels.adapters).length > 0) {
+      } else if (
+        'adapters' in config.channels &&
+        config.channels.adapters &&
+        Object.keys(config.channels.adapters).length > 0
+      ) {
+        // Legacy ChannelConfig with adapters
+        const channelConfig = config.channels as ChannelConfig;
         this.#agentChannels = new AgentChannels({
-          ...config.channels,
-          userName: config.channels.userName ?? config.name,
+          ...channelConfig,
+          userName: channelConfig.userName ?? config.name,
         });
+        this.#agentChannels.__setAgent(this);
+      } else if (typeof config.channels === 'object' && Object.keys(config.channels).length > 0) {
+        // Platform channel configs (e.g., { slack: true, discord: {...} })
+        // Store raw config for MastraChannel registration
+        this.__rawChannelsConfig = config.channels as Record<string, unknown>;
+        // Create an empty AgentChannels that MastraChannel implementations can populate
+        this.#agentChannels = new AgentChannels({ adapters: {}, userName: config.name });
+        this.#agentChannels.__setAgent(this);
       }
-      this.#agentChannels?.__setAgent(this);
     }
 
     if (config.browser) {
@@ -501,8 +522,24 @@ export class Agent<
   /**
    * Returns the AgentChannels instance that manages all channel adapters.
    * Returns null if no channels are configured.
+   *
+   * For legacy AgentChannels, returns the AgentChannels instance.
+   * For platform channel configs, returns the raw config record.
    */
-  getChannels(): AgentChannels | null {
+  getChannels(): AgentChannels | ChannelConfig | Record<string, unknown> | null {
+    if (this.#agentChannels) {
+      return this.#agentChannels;
+    }
+    // Return raw platform channel config if set
+    return this.#config.channels ?? null;
+  }
+
+  /**
+   * Returns the AgentChannels instance, or null if not configured.
+   * Use this when you specifically need the AgentChannels object
+   * (not the raw config).
+   */
+  get agentChannels(): AgentChannels | null {
     return this.#agentChannels;
   }
 
