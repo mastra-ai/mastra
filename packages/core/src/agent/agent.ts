@@ -96,6 +96,7 @@ import type {
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
+import { runStreamUntilIdle } from './stream-until-idle';
 import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
@@ -194,8 +195,20 @@ export class Agent<
   #maxProcessorRetries?: number;
   #errorProcessors?: DynamicArgument<ErrorProcessorOrWorkflow[], TRequestContext>;
   #browser?: MastraBrowser;
+  #hasExplicitBrowser = false;
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   #backgroundTasks?: AgentBackgroundConfig;
+  /**
+   * Tracks the active `streamUntilIdle` wrapper per `(threadId|resourceId)`
+   * scope on this Agent instance. A new call for the same scope aborts the
+   * prior one before subscribing so bg-task pubsub events aren't fanned into
+   * two concurrent wrappers (which would forward duplicate events and
+   * trigger duplicate continuation turns).
+   *
+   * Value is the prior wrapper's `forceClose`. Entries remove themselves on
+   * close if they're still the active one.
+   */
+  #activeStreamUntilIdle = new Map<string, () => void>();
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>;
@@ -327,7 +340,24 @@ export class Agent<
     }
 
     if (config.browser) {
+      // Runtime check: Agent requires SDK providers (AgentBrowser, StagehandBrowser)
+      // CLI providers (BrowserViewer) should be used with Workspace instead
+      if (config.browser.providerType !== 'sdk') {
+        const mastraError = new MastraError({
+          id: 'AGENT_INVALID_BROWSER_PROVIDER',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: config.name,
+            providerType: config.browser.providerType,
+          },
+          text: `Agent.browser requires an SDK provider (providerType: 'sdk'), but received '${config.browser.providerType}'. Use @mastra/agent-browser or @mastra/stagehand for Agent.browser. For CLI providers like @mastra/browser-viewer, use Workspace.browser instead.`,
+        });
+        this.logger.trackException(mastraError);
+        throw mastraError;
+      }
       this.#browser = config.browser;
+      this.#hasExplicitBrowser = true;
     }
 
     if (config.workspace) {
@@ -371,6 +401,32 @@ export class Agent<
    */
   getBackgroundTasksConfig(): AgentBackgroundConfig | undefined {
     return this.#backgroundTasks;
+  }
+
+  /**
+   * Returns the statically-configured sub-agents without executing dynamic
+   * resolvers. Used by Mastra at registration time to detect whether background
+   * tasks should be auto-enabled. Returns undefined when sub-agents are
+   * configured via a function (those get resolved per-request).
+   * @internal
+   */
+  __getStaticAgents(): Record<string, Agent> | undefined {
+    if (typeof this.#agents === 'function') return undefined;
+    return this.#agents as Record<string, Agent> | undefined;
+  }
+
+  /**
+   * True when this agent has any sub-agent registry configured — either a
+   * static record with entries OR a dynamic (function-based) resolver.
+   * Used by Mastra at registration time to decide whether to auto-enable
+   * background tasks; we can't know what a function resolver will return
+   * at request time, so we enable defensively.
+   * @internal
+   */
+  __hasSubAgentsConfigured(): boolean {
+    if (typeof this.#agents === 'function') return true;
+    const record = this.#agents as Record<string, Agent> | undefined;
+    return !!record && Object.keys(record).length > 0;
   }
 
   /**
@@ -469,6 +525,9 @@ export class Agent<
    */
   setBrowser(browser: MastraBrowser | undefined): void {
     this.#browser = browser;
+    // Mark as explicit so workspace browser doesn't overwrite
+    // Setting to undefined is also explicit (disabling browser tools)
+    this.#hasExplicitBrowser = true;
   }
 
   /**
@@ -476,7 +535,7 @@ export class Agent<
    * Used by Harness to avoid overwriting agent-level browser configuration.
    */
   hasOwnBrowser(): boolean {
-    return Boolean(this.#browser);
+    return this.#hasExplicitBrowser;
   }
 
   /**
@@ -1111,6 +1170,7 @@ export class Agent<
     // If agent has its own workspace configured, use it
     if (this.#workspace) {
       if (typeof this.#workspace !== 'function') {
+        this.#setBrowserFromWorkspace(this.#workspace);
         return this.#workspace;
       }
 
@@ -1121,6 +1181,10 @@ export class Agent<
       const resolvedWorkspace = await Promise.resolve(result);
 
       if (!resolvedWorkspace) {
+        // Clear derived browser when factory returns no workspace
+        if (!this.#hasExplicitBrowser) {
+          this.#browser = undefined;
+        }
         return undefined;
       }
 
@@ -1136,11 +1200,37 @@ export class Agent<
         });
       }
 
+      this.#setBrowserFromWorkspace(resolvedWorkspace);
+
       return resolvedWorkspace;
     }
 
     // Fall back to Mastra's global workspace
-    return this.#mastra?.getWorkspace();
+    const globalWorkspace = this.#mastra?.getWorkspace();
+    if (globalWorkspace) {
+      this.#setBrowserFromWorkspace(globalWorkspace);
+    } else if (!this.#hasExplicitBrowser) {
+      // Clear derived browser when no workspace available
+      this.#browser = undefined;
+    }
+    return globalWorkspace;
+  }
+
+  /**
+   * Sets the agent's browser from workspace if:
+   * 1. Agent doesn't already have a browser configured (SDK approach)
+   * 2. Workspace has a browser configured (CLI approach)
+   * @internal
+   */
+  #setBrowserFromWorkspace(workspace: AnyWorkspace): void {
+    // Skip if agent has an explicitly configured browser (SDK approach takes precedence)
+    if (this.#hasExplicitBrowser) {
+      return;
+    }
+
+    // Keep browser in sync with workspace per-request; clear when absent
+    // This allows factory workspaces to return different browsers per request
+    this.#browser = workspace.browser;
   }
 
   get voice() {
@@ -1360,7 +1450,6 @@ export class Agent<
         getMostRecentUserMessage: this.getMostRecentUserMessage.bind(this),
         genTitle: this.genTitle.bind(this),
         resolveTitleGenerationConfig: this.resolveTitleGenerationConfig.bind(this),
-        saveStepMessages: this.saveStepMessages.bind(this),
         convertInstructionsToString: this.#convertInstructionsToString.bind(this),
         tracingPolicy: this.#options?.tracingPolicy,
         resolvedVersionId: this.toRawConfig()?.resolvedVersionId as string | undefined,
@@ -2658,7 +2747,7 @@ export class Agent<
         processorStates,
       });
       try {
-        messageList = await runner.runInputProcessors(messageList, observabilityContext, requestContext);
+        messageList = await runner.runInputProcessors(messageList, observabilityContext, requestContext, 0);
       } catch (error) {
         if (error instanceof TripWire) {
           tripwire = {
@@ -4478,47 +4567,6 @@ export class Agent<
     return tools;
   }
 
-  /**
-   * Adds response messages from a step to the MessageList and schedules persistence.
-   * This is used for incremental saving: after each agent step, messages are added to a save queue
-   * and a debounced save operation is triggered to avoid redundant writes.
-   *
-   * @param result - The step result containing response messages.
-   * @param messageList - The MessageList instance for the current thread.
-   * @param threadId - The thread ID.
-   * @param memoryConfig - The memory configuration for saving.
-   * @param runId - (Optional) The run ID for logging.
-   * @internal
-   */
-  private async saveStepMessages({
-    result,
-    messageList,
-    runId,
-  }: {
-    result: any;
-    messageList: MessageList;
-    runId?: string;
-  }) {
-    try {
-      // Prefer dbMessages (MastraDBMessage[] with original IDs) over response.messages
-      // (ModelMessage[] without IDs) to avoid generating new IDs during format conversion
-      const stepResponseMessages = result.response.dbMessages?.length
-        ? result.response.dbMessages
-        : result.response.messages;
-      if (stepResponseMessages?.length) {
-        messageList.add(stepResponseMessages, 'response');
-      }
-      // Message saving is now handled by MessageHistory output processor
-    } catch (e) {
-      this.logger.error('Error adding messages on step finish', {
-        agent: this.name,
-        error: e,
-        runId,
-      });
-      throw e;
-    }
-  }
-
   async #runScorers({
     messageList,
     runId,
@@ -4800,8 +4848,13 @@ export class Agent<
       requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
     }
 
+    // Resolve workspace early so we can get browser from it if needed
+    const earlyWorkspace = await this.getWorkspace({ requestContext });
+
     // Inject browser context for BrowserContextProcessor
-    if (this.#browser && !requestContext.has('browser')) {
+    // Check both agent's browser (SDK providers) and workspace's browser (CLI providers)
+    const browser = this.#browser ?? earlyWorkspace?.browser;
+    if (browser && !requestContext.has('browser')) {
       // Get threadId early for browser context - can come from requestContext, options, or snapshot
       // Normalize memory.thread which can be a string or { id, ... } object
       const memoryThread = options.memory?.thread;
@@ -4814,14 +4867,21 @@ export class Agent<
       // Use thread-aware running check to avoid cross-thread state leakage
       // In thread scope, only report running if this specific thread has a session
       const isThreadRunning = browserThreadId
-        ? this.#browser.hasThreadSession(browserThreadId) && this.#browser.isBrowserRunning()
-        : this.#browser.isBrowserRunning();
+        ? browser.hasThreadSession(browserThreadId) && browser.isBrowserRunning(browserThreadId)
+        : browser.isBrowserRunning();
 
       const browserCtx: BrowserContext = {
-        provider: this.#browser.provider,
-        sessionId: this.#browser.getSessionId(browserThreadId),
-        headless: this.#browser.headless,
-        currentUrl: isThreadRunning ? ((await this.#browser.getCurrentUrl(browserThreadId)) ?? undefined) : undefined,
+        provider: browser.provider,
+        providerType: browser.providerType,
+        sessionId: browser.getSessionId(browserThreadId),
+        headless: browser.headless,
+        currentUrl: isThreadRunning ? ((await browser.getCurrentUrl(browserThreadId)) ?? undefined) : undefined,
+        // For CLI providers, include CDP URL so agent can pass it to CLI commands
+        // Only expose CDP URL if the thread is actually running to avoid stale endpoints
+        cdpUrl:
+          browser.providerType === 'cli' && isThreadRunning
+            ? (browser.getCdpUrl(browserThreadId) ?? undefined)
+            : undefined,
       };
       requestContext.set('browser', browserCtx);
     }
@@ -4927,7 +4987,9 @@ export class Agent<
     });
 
     const memory = await this.getMemory({ requestContext });
-    const workspace = await this.getWorkspace({ requestContext });
+    // Reuse early workspace (resolved earlier for browser context) to avoid
+    // duplicate factory resolution which could create different instances
+    const workspace = earlyWorkspace;
 
     const saveQueueManager = new SaveQueueManager({
       logger: this.logger,
@@ -4936,6 +4998,7 @@ export class Agent<
 
     // Create a capabilities object with bound methods
     const capabilities = {
+      agent: this,
       agentName: this.name,
       logger: this.logger,
       getMemory: this.getMemory.bind(this),
@@ -4946,7 +5009,6 @@ export class Agent<
         '_agentNetworkAppend' in this
           ? Boolean((this as unknown as { _agentNetworkAppend: unknown })._agentNetworkAppend)
           : undefined,
-      saveStepMessages: this.saveStepMessages.bind(this),
       convertTools: this.convertTools.bind(this),
       getMemoryMessages: this.getMemoryMessages.bind(this),
       runInputProcessors: this.__runInputProcessors.bind(this),
@@ -5009,6 +5071,7 @@ export class Agent<
             backgroundTaskManager: this.#mastra?.backgroundTaskManager,
             agentBackgroundConfig: this.#backgroundTasks,
           }),
+      skipBgTaskWait: options._skipBgTaskWait,
     });
 
     const run = await executionWorkflow.createRun();
@@ -5635,6 +5698,83 @@ export class Agent<
     }
 
     return result.result;
+  }
+
+  /**
+   * Streams the agent's response and keeps the stream open until all
+   * background tasks dispatched during this turn (and any triggered by
+   * follow-up turns) complete. When a background task finishes, its tool
+   * result is injected into memory by the tool-call-step's `onResult` hook,
+   * and this method re-enters the agentic loop via `agent.stream([], ...)`
+   * so the LLM can process the result immediately — without waiting for a
+   * new user message.
+   *
+   * Invariants:
+   * - Only one inner LLM stream runs at a time (a completion arriving
+   *   mid-turn is queued and processed after the current turn ends).
+   * - When there are no running background tasks and no queued completions,
+   *   the outer stream closes.
+   * - If the agent has no memory configured, this falls through to a plain
+   *   `stream()` call since continuation requires memory.
+   *
+   * Return shape: `streamUntilIdle` returns a `MastraModelOutput` that looks
+   * like the one from `stream()` — *only* `fullStream` spans the initial
+   * turn **and** any auto-continuations. Aggregate properties (`text`,
+   * `toolCalls`, `toolResults`, `finishReason`, `messageList`,
+   * `getFullOutput()`) still resolve against the **first turn's** internal
+   * buffer. If you need an aggregate view across continuations, consume
+   * `fullStream` yourself and accumulate — or follow up with `agent.generate`
+   * once the stream closes.
+   *
+   * @example
+   * ```typescript
+   * const stream = await agent.streamUntilIdle('Research solana for me', {
+   *   memory: { thread: 't1', resource: 'u1' },
+   * });
+   *
+   * for await (const chunk of stream.fullStream) {
+   *   // chunks from the initial turn AND any continuation turns
+   *   // triggered by background task completions flow through here
+   * }
+   * ```
+   */
+  async streamUntilIdle<
+    OUTPUT extends StandardSchemaWithJSON<any, any>,
+    T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
+  >(
+    messages: MessageListInput,
+    streamOptions: AgentExecutionOptionsBase<T> & {
+      structuredOutput: PublicStructuredOutputOptions<T>;
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
+  ): Promise<MastraModelOutput<T>>;
+  async streamUntilIdle<OUTPUT extends {}>(
+    messages: MessageListInput,
+    streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
+      structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
+  ): Promise<MastraModelOutput<OUTPUT>>;
+  async streamUntilIdle(
+    messages: MessageListInput,
+    streamOptions: AgentExecutionOptionsBase<unknown> & {
+      structuredOutput?: never;
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
+  ): Promise<MastraModelOutput<TOutput>>;
+  async streamUntilIdle(messages: MessageListInput): Promise<MastraModelOutput<TOutput>>;
+  async streamUntilIdle<OUTPUT = TOutput>(
+    messages: MessageListInput,
+    streamOptions?: AgentExecutionOptionsBase<any> & {
+      structuredOutput?: PublicStructuredOutputOptions<any>;
+      /** Close the outer stream after this many ms of idleness. Default: 5 minutes. */
+      maxIdleMs?: number;
+    } & { model?: DynamicArgument<MastraModelConfig> },
+  ): Promise<MastraModelOutput<OUTPUT>> {
+    return runStreamUntilIdle<OUTPUT>(this, messages, streamOptions, {
+      activeStreams: this.#activeStreamUntilIdle,
+      bgManager: this.#mastra?.backgroundTaskManager,
+    });
   }
 
   /**

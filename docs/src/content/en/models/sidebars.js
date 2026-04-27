@@ -27,7 +27,12 @@ const sidebars = {
         {
           type: 'doc',
           id: 'gateways/azure-openai',
-          label: 'Azure-openai',
+          label: 'Azure OpenAI',
+        },
+        {
+          type: 'doc',
+          id: 'gateways/mastra',
+          label: 'Mastra',
         },
         {
           type: 'doc',
@@ -458,6 +463,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/regolo-ai',
+          label: 'Regolo AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/requesty',
           label: 'Requesty',
         },
@@ -500,11 +510,6 @@ const sidebars = {
           type: 'doc',
           id: 'providers/tencent-coding-plan',
           label: 'Tencent Coding Plan (China)',
-        },
-        {
-          type: 'doc',
-          id: 'providers/tencent-token-plan',
-          label: 'Tencent Token Plan',
         },
         {
           type: 'doc',

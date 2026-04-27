@@ -476,9 +476,9 @@ const response = await agent.generate('Help me organize my day', {
                 parameters: [
                   {
                     name: 'schema',
-                    type: 'z.ZodSchema<S>',
+                    type: 'StandardJSONSchemaV1',
                     isOptional: false,
-                    description: 'Zod schema defining the expected output structure.',
+                    description: 'Standard JSON Schema defining the expected output structure.',
                   },
                 ],
               },
@@ -633,7 +633,7 @@ const response = await agent.generate('Help me organize my day', {
                     type: 'MemoryConfig',
                     isOptional: true,
                     description:
-                      'Additional memory configuration options including lastMessages, readOnly, semanticRecall, and workingMemory.',
+                      'Additional memory configuration options including lastMessages, readOnly, semanticRecall, workingMemory, and filterIncompleteToolCalls.',
                   },
                 ],
               },
@@ -766,7 +766,8 @@ const response = await agent.generate('Help me organize my day', {
             name: 'savePerStep',
             type: 'boolean',
             isOptional: true,
-            description: 'Save messages incrementally after each generation step completes (default: false).',
+            description:
+              'Save messages incrementally after each generation step completes (default: false). Disabled internally when observational memory is enabled.',
           },
           {
             name: 'providerOptions',

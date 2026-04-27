@@ -24,7 +24,8 @@ const browser = new StagehandBrowser({
 })
 
 export const browserAgent = new Agent({
-  name: 'browser-agent',
+  id: 'browser-agent',
+  name: 'Browser Agent',
   instructions: `You can browse the web using natural language.
 Use stagehand_act to perform actions like "click the login button".
 Use stagehand_extract to get data from pages.`,
@@ -123,9 +124,9 @@ Use stagehand_extract to get data from pages.`,
   {
     name: 'timeout',
     type: 'number',
-    description: 'Default timeout in milliseconds for browser operations.',
+    description: 'Default timeout in milliseconds for Stagehand operations.',
     isOptional: true,
-    defaultValue: '10000',
+    defaultValue: '30000',
   },
   {
     name: 'onLaunch',
@@ -352,11 +353,6 @@ const browser = new StagehandBrowser({
   },
 })
 ```
-
-Supported providers:
-
-- OpenAI: `"openai/gpt-5.4"`, `"openai/gpt-5.4-mini"`
-- Anthropic: `"anthropic/claude-3-5-sonnet-20241022"`
 
 ## AgentBrowser vs StagehandBrowser
 

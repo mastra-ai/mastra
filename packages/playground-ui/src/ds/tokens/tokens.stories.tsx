@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Txt } from '../components/Txt/Txt';
-import { FontSizes, LineHeights } from './fonts';
-import { Colors, BorderColors } from './colors';
-import { Spacings } from './spacings';
-import { BorderRadius } from './borders';
-import { Shadows, Glows } from './shadows';
 import { Animations } from './animations';
+import { BorderRadius } from './borders';
+import { Colors, BorderColors } from './colors';
+import { FontSizes, LineHeights } from './fonts';
+import { Shadows, Glows } from './shadows';
+import { Spacings } from './spacings';
 
 const meta: Meta = {
   title: 'Foundations/Tokens',

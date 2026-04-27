@@ -450,7 +450,7 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   /** Unique identifier for this execution run */
   runId?: string;
 
-  /** Save messages incrementally after each stream step completes (default: false). */
+  /** Save messages incrementally after each stream step completes (default: false). Is disabled internally when observational memory is enabled, as OM handles its own message saving */
   savePerStep?: boolean;
 
   /** Request Context containing dynamic configuration and state */
@@ -613,6 +613,14 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
 
   /** Whether to disable background tasks for this execution */
   disableBackgroundTasks?: boolean;
+
+  /**
+   * @internal
+   * When true, the in-loop `backgroundTaskCheckStep` returns immediately
+   * without waiting for running tasks to complete. Set by
+   * `agent.streamUntilIdle`, which drives continuation from outside the loop.
+   */
+  _skipBgTaskWait?: boolean;
 } & Partial<ObservabilityContext>;
 
 /**

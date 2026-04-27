@@ -69,11 +69,6 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
     return <ObservationMarkerBadge toolName={toolName} args={args} metadata={metadata} />;
   }
 
-  // Hide browser tools from chat when context is available
-  if (isBrowser && browserCtx) {
-    return null;
-  }
-
   // We need to handle the stream data even if the workflow is not resolved yet
   // The response from the fetch request resolving the workflow might theoretically
   // be resolved after we receive the first stream event
