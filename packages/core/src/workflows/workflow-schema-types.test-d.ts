@@ -478,4 +478,87 @@ describe('Workflow schema type inference', () => {
       expectTypeOf(workflow).not.toBeNever();
     });
   });
+
+  describe('.map() type inference', () => {
+    it('should infer return type of function-based .map and propagate to next .then()', () => {
+      const step = createStep({
+        id: 'needs-count',
+        inputSchema: z.object({ count: z.number() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async ({ inputData }) => ({ result: String(inputData.count) }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'map-workflow',
+        inputSchema: z.object({ name: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      })
+        .map(async () => ({ count: 42 }))
+        .then(step);
+
+      expectTypeOf(workflow).not.toBeNever();
+    });
+
+    it('should error when .map output does not match next step input', () => {
+      const step = createStep({
+        id: 'needs-count',
+        inputSchema: z.object({ count: z.number() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async ({ inputData }) => ({ result: String(inputData.count) }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'invalid-map-workflow',
+        inputSchema: z.object({ name: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      }).map(async () => 123);
+
+      // @ts-expect-error - map returns number, step expects { count: number }
+      workflow.then(step);
+    });
+
+    it('should work with sync function callbacks', () => {
+      const step = createStep({
+        id: 'sync-needs-count',
+        inputSchema: z.object({ count: z.number() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async ({ inputData }) => ({ result: String(inputData.count) }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'sync-map-workflow',
+        inputSchema: z.object({ name: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      })
+        .map(() => ({ count: 42 }))
+        .then(step);
+
+      expectTypeOf(workflow).not.toBeNever();
+    });
+  });
+
+  describe('.commit() output validation', () => {
+    it('should error when final step output does not match outputSchema', () => {
+      const workflow = createWorkflow({
+        id: 'invalid-commit-workflow',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({ summary: z.string(), items: z.array(z.string()) }),
+      }).map(async () => 123);
+
+      // @ts-expect-error - map returns number, outputSchema expects { summary, items }
+      workflow.commit();
+    });
+
+    it('should allow commit when final output matches outputSchema', () => {
+      const workflow = createWorkflow({
+        id: 'valid-commit-workflow',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      })
+        .map(async () => ({ result: 'done' }))
+        .commit();
+
+      expectTypeOf(workflow).not.toBeNever();
+    });
+  });
 });

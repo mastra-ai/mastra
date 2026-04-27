@@ -106,7 +106,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     isResume: !!resumeContext,
   });
 
-  const streamStep = createStreamStep({
+  const streamStep = createStreamStep<OUTPUT>({
     capabilities,
     runId,
     returnScorerData,
@@ -128,7 +128,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     skipBgTaskWait,
   });
 
-  const mapResultsStep = createMapResultsStep({
+  const mapResultsStep = createMapResultsStep<OUTPUT>({
     capabilities,
     options,
     resourceId,
