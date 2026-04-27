@@ -173,7 +173,8 @@ export class ObservationTurn {
     const unsavedOutput = this.messageList.get.response.db();
     const unsavedMessages = [...unsavedInput, ...unsavedOutput];
     if (unsavedMessages.length > 0) {
-      await this.om.persistMessages(unsavedMessages, this.threadId, this.resourceId);
+      this.om.sealMessagesForBuffering(unsavedOutput);
+      await this.om.persistMessages(unsavedMessages, this.threadId, this.resourceId, { includeSealed: true });
     }
 
     return { record: this._record! };

@@ -274,6 +274,201 @@ describe('MessageList sealed message handling', () => {
     expect(unsavedOutput[0]?.id).toBe('assistant-retry-msg');
   });
 
+  it('should not merge a new response into the latest unsealed assistant message loaded from memory', () => {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+
+    messageList.add(
+      {
+        id: 'assistant-memory-msg',
+        role: 'assistant',
+        threadId: 'test-thread',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Persisted assistant reply' }],
+        },
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      } as MastraDBMessage,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'assistant-loop-msg',
+        role: 'assistant',
+        threadId: 'test-thread',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Long-running loop continuation' }],
+        },
+        createdAt: new Date('2024-01-01T00:00:01.000Z'),
+      } as MastraDBMessage,
+      'response',
+    );
+
+    const allMessages = messageList.get.all.db();
+    expect(allMessages).toHaveLength(2);
+
+    const persistedAssistant = allMessages.find(m => m.id === 'assistant-memory-msg');
+    const loopAssistant = allMessages.find(m => m.id === 'assistant-loop-msg');
+
+    expect(persistedAssistant?.content.parts).toHaveLength(1);
+    expect((persistedAssistant?.content.parts[0] as { text?: string })?.text).toBe('Persisted assistant reply');
+    expect(loopAssistant?.content.parts).toHaveLength(1);
+    expect((loopAssistant?.content.parts[0] as { text?: string })?.text).toBe('Long-running loop continuation');
+
+    const unsavedOutput = messageList.get.response.db();
+    expect(unsavedOutput).toHaveLength(1);
+    expect(unsavedOutput[0]?.id).toBe('assistant-loop-msg');
+  });
+
+  it('should still merge a tool result response into a matching unsealed assistant tool call loaded from memory', () => {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+
+    messageList.add(
+      {
+        id: 'assistant-memory-msg',
+        role: 'assistant',
+        threadId: 'test-thread',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'call-1',
+                toolName: 'search',
+                args: { query: 'mastra' },
+              },
+            },
+          ],
+        },
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      } as MastraDBMessage,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'assistant-tool-result-msg',
+        role: 'assistant',
+        threadId: 'test-thread',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-1',
+                toolName: 'search',
+                args: {},
+                result: 'result',
+              },
+            },
+          ],
+        },
+        createdAt: new Date('2024-01-01T00:00:01.000Z'),
+      } as MastraDBMessage,
+      'response',
+    );
+
+    const allMessages = messageList.get.all.db();
+    expect(allMessages).toHaveLength(1);
+
+    const assistant = allMessages[0]!;
+    expect(assistant.id).toBe('assistant-memory-msg');
+    expect(assistant.content.parts).toHaveLength(1);
+    const toolPart = assistant.content.parts[0];
+    expect(toolPart?.type).toBe('tool-invocation');
+    if (toolPart?.type !== 'tool-invocation') {
+      throw new Error('Expected tool invocation part');
+    }
+    expect(toolPart.toolInvocation).toMatchObject({
+      state: 'result',
+      toolCallId: 'call-1',
+      toolName: 'search',
+      args: { query: 'mastra' },
+      result: 'result',
+    });
+
+    const unsavedOutput = messageList.get.response.db();
+    expect(unsavedOutput).toHaveLength(1);
+    expect(unsavedOutput[0]?.id).toBe('assistant-memory-msg');
+  });
+
+  it('should merge a text response attached to a tool result into a matching assistant tool call loaded from memory', () => {
+    const messageList = new MessageList({ threadId: 'test-thread' });
+
+    messageList.add(
+      {
+        id: 'assistant-memory-msg',
+        role: 'assistant',
+        threadId: 'test-thread',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'call-1',
+                toolName: 'search',
+                args: { query: 'mastra' },
+              },
+            },
+          ],
+        },
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      } as MastraDBMessage,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'assistant-tool-result-msg',
+        role: 'assistant',
+        threadId: 'test-thread',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-1',
+                toolName: 'search',
+                args: {},
+                result: 'result',
+              },
+            },
+            { type: 'text', text: 'Tool result summary' },
+          ],
+        },
+        createdAt: new Date('2024-01-01T00:00:01.000Z'),
+      } as MastraDBMessage,
+      'response',
+    );
+
+    const allMessages = messageList.get.all.db();
+    expect(allMessages).toHaveLength(1);
+
+    const assistant = allMessages[0]!;
+    expect(assistant.id).toBe('assistant-memory-msg');
+    const toolPart = assistant.content.parts[0];
+    expect(toolPart?.type).toBe('tool-invocation');
+    if (toolPart?.type !== 'tool-invocation') {
+      throw new Error('Expected tool invocation part');
+    }
+    expect(toolPart.toolInvocation).toMatchObject({
+      state: 'result',
+      toolCallId: 'call-1',
+      result: 'result',
+    });
+    const textPart = assistant.content.parts.find(part => part.type === 'text');
+    expect(textPart?.text).toBe('Tool result summary');
+  });
+
   it('should not replace a sealed assistant message loaded from memory with a same-id response', () => {
     const messageList = new MessageList({
       threadId: 'test-thread',

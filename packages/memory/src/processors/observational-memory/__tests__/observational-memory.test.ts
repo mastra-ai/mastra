@@ -13450,7 +13450,7 @@ describe('Processor behavioral regressions', () => {
     ).toHaveLength(1);
   });
 
-  it('should seal and persist final response messages before the turn end save', async () => {
+  it('should seal final response messages during the turn end save', async () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
 
@@ -13566,6 +13566,119 @@ describe('Processor behavioral regressions', () => {
     expect((assistantMsg!.content.metadata as any)?.mastra?.sealed).toBe(true);
     const lastPart = assistantMsg!.content.parts.at(-1) as any;
     expect(lastPart?.metadata?.mastra?.sealedAt).toBeTypeOf('number');
+  });
+
+  it('should seal long-running loop step output before re-adding it as memory', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const storage = createInMemoryStorage();
+    const threadId = 'long-loop-step-seal-thread';
+    const resourceId = 'long-loop-step-seal-resource';
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      } as any,
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [{ type: 'text' as const, text: 'ok' }],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: { messageTokens: 500000, bufferTokens: 5000, bufferActivation: 0.8 },
+      reflection: { observationTokens: 200000 },
+    });
+
+    const messageList = new MessageList({ threadId, resourceId });
+    const state: Record<string, unknown> = {};
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+    const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+
+    await processor.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 0,
+      state,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: vi.fn(),
+    });
+
+    messageList.add(
+      {
+        id: 'assistant-step-0',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Step 0 response' }],
+        },
+        createdAt: new Date('2025-01-01T10:00:01Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'response',
+    );
+
+    await processor.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 1,
+      state,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort: vi.fn(),
+    });
+
+    const savedStepOutput = messageList.get.remembered.db().find(m => m.id === 'assistant-step-0');
+    expect(savedStepOutput).toBeDefined();
+    expect((savedStepOutput!.content.metadata as any)?.mastra?.sealed).toBe(true);
+    expect((savedStepOutput!.content.parts.at(-1) as any)?.metadata?.mastra?.sealedAt).toBeTypeOf('number');
+
+    messageList.add(
+      {
+        id: 'assistant-step-1',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Step 1 response' }],
+        },
+        createdAt: new Date('2025-01-01T10:00:02Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'response',
+    );
+
+    const allMessages = messageList.get.all.db();
+    const step0 = allMessages.find(m => m.id === 'assistant-step-0');
+    const step1 = allMessages.find(m => m.id === 'assistant-step-1');
+    expect(step0?.content.parts).toHaveLength(1);
+    expect((step0?.content.parts[0] as any).text).toBe('Step 0 response');
+    expect(step1?.content.parts).toHaveLength(1);
+    expect((step1?.content.parts[0] as any).text).toBe('Step 1 response');
   });
 
   it('should reset stale step-0 boundary when only small unobserved context remains', async () => {

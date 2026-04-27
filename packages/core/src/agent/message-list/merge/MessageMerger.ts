@@ -62,6 +62,10 @@ export class MessageMerger {
       return false;
     }
 
+    if (messageSource === 'response' && isLatestFromMemory) {
+      return MessageMerger.isMemoryToolInvocationUpdate(latestMessage, incomingMessage);
+    }
+
     // Basic merge conditions: both messages must be assistant messages from the same thread
     const shouldAppendToLastAssistantMessage =
       latestMessage.role === 'assistant' &&
@@ -75,6 +79,38 @@ export class MessageMerger {
     const appendNetworkMessage = agentNetworkAppend ? !isLatestFromMemory : true;
 
     return shouldAppendToLastAssistantMessage && appendNetworkMessage;
+  }
+
+  static isMemoryToolInvocationUpdate(latestMessage: MastraDBMessage, incomingMessage: MastraDBMessage): boolean {
+    if (latestMessage.role !== 'assistant' || incomingMessage.role !== 'assistant') return false;
+    if (latestMessage.threadId !== incomingMessage.threadId) return false;
+
+    const incomingParts = incomingMessage.content?.parts ?? [];
+    if (incomingParts.length === 0) return false;
+
+    let hasToolInvocationUpdate = false;
+    for (const part of incomingParts) {
+      if (part.type !== 'tool-invocation') {
+        continue;
+      }
+
+      if (part.toolInvocation.state === 'call') {
+        return false;
+      }
+
+      const updatesExistingCall = latestMessage.content.parts.some(
+        latestPart =>
+          latestPart.type === 'tool-invocation' &&
+          latestPart.toolInvocation.toolCallId === part.toolInvocation.toolCallId &&
+          latestPart.toolInvocation.state === 'call',
+      );
+      if (!updatesExistingCall) {
+        return false;
+      }
+      hasToolInvocationUpdate = true;
+    }
+
+    return hasToolInvocationUpdate;
   }
 
   /**

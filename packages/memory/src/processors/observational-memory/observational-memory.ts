@@ -1661,11 +1661,12 @@ export class ObservationalMemory {
     messagesToSave: MastraDBMessage[],
     threadId: string,
     resourceId: string | undefined,
+    opts?: { includeSealed?: boolean },
   ): Promise<void> {
     const filteredMessages: MastraDBMessage[] = [];
     for (const msg of messagesToSave) {
       const isSealed = !!(msg.content?.metadata as { mastra?: { sealed?: boolean } })?.mastra?.sealed;
-      if (isSealed) {
+      if (isSealed && !opts?.includeSealed) {
         // Sealed messages were already persisted by buffer(). Only re-save if they
         // now have observation markers (need to upsert the markers to storage).
         if (findLastCompletedObservationBoundary(msg) !== -1) {
@@ -1683,22 +1684,6 @@ export class ObservationalMemory {
         resourceId,
       });
     }
-  }
-
-  async persistSealedMessages(
-    messagesToSave: MastraDBMessage[],
-    threadId: string,
-    resourceId: string | undefined,
-  ): Promise<void> {
-    if (messagesToSave.length === 0) {
-      return;
-    }
-
-    await this.messageHistory.persistMessages({
-      messages: messagesToSave,
-      threadId,
-      resourceId,
-    });
   }
 
   /**
