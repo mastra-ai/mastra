@@ -3,8 +3,8 @@ import type { StreamBackgroundTasksParams } from '@mastra/client-js';
 import type { BackgroundTaskStatus } from '@mastra/core/background-tasks';
 import type { AgentChunkType } from '@mastra/core/stream';
 import { useMastraClient } from '@mastra/react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 export interface BackgroundTaskEvent {
   taskId: string;

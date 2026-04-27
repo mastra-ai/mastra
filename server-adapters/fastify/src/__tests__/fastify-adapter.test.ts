@@ -11,6 +11,8 @@ import {
   consumeSSEStream,
   createMultipartTestSuite,
 } from '@internal/server-adapter-test-utils';
+import { Mastra } from '@mastra/core';
+import { registerApiRoute } from '@mastra/core/server';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
@@ -655,7 +657,7 @@ describe('Fastify Server Adapter', () => {
       const adapter = new MastraServer({
         app,
         mastra: context.mastra,
-        bodyLimitOptions: { maxSize: 1024 }, // 1KB limit
+        bodyLimitOptions: { maxSize: 1024 },
       });
 
       const testRoute: ServerRoute<any, any, any> = {
@@ -670,7 +672,7 @@ describe('Fastify Server Adapter', () => {
 
       const address = await app.listen({ port: 0 });
 
-      const bigBuffer = new Uint8Array(1024 * 10); // 10KB
+      const bigBuffer = new Uint8Array(1024 * 10);
 
       const form = new FormData();
       form.append('file', new Blob([bigBuffer]), 'big.txt');
@@ -681,6 +683,60 @@ describe('Fastify Server Adapter', () => {
       });
 
       expect(response.status).toBeGreaterThanOrEqual(400);
+    });
+  });
+
+
+  describe('Custom route prefix validation', () => {
+    it('should throw when a custom route path starts with the server prefix', async () => {
+      const customRoutes = [
+        registerApiRoute('/mastra/custom', {
+          method: 'GET',
+          handler: async c => c.json({ message: 'should not work' }),
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = Fastify();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+        prefix: '/mastra',
+      });
+
+      await expect(adapter.init()).rejects.toThrow(/must not start with "\/mastra"/);
+      await app.close();
+    });
+
+    it('should allow custom routes at paths not starting with the server prefix', async () => {
+      const customRoutes = [
+        registerApiRoute('/custom/hello', {
+          method: 'GET',
+          handler: async c => c.json({ message: 'Hello from custom route!' }),
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = Fastify();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+        prefix: '/mastra',
+      });
+
+      await adapter.init();
+      const address = await app.listen({ port: 0 });
+
+      const response = await fetch(`${address}/custom/hello`);
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({ message: 'Hello from custom route!' });
+      await app.close();
     });
   });
 });

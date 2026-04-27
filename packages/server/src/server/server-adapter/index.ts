@@ -518,6 +518,24 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   }
 
   /**
+   * Validates that no custom route path collides with the built-in route prefix.
+   * Throws if any route path starts with the server's `apiPrefix`.
+   */
+  protected validateCustomRoutePaths(routes: ApiRoute[]): void {
+    const prefix = this.prefix ?? '';
+    if (!prefix) return;
+    for (const route of routes) {
+      if (route.path.startsWith(`${prefix}/`) || route.path === prefix) {
+        throw new Error(
+          `Custom API route "${route.path}" must not start with "${prefix}" — ` +
+            `that path is reserved for built-in Mastra routes. ` +
+            `Choose a different path (e.g. "${route.path.replace(prefix, '/custom')}").`,
+        );
+      }
+    }
+  }
+
+  /**
    * Creates an internal Hono sub-app with all custom API routes registered.
    * Stores the handler on this instance for use by handleCustomRouteRequest().
    * Returns true if custom routes were found and registered.
@@ -550,6 +568,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       }
       return c.json({ error: 'Internal Server Error' }, 500);
     });
+
+    this.validateCustomRoutePaths(routes);
 
     // Register each custom route
     for (const route of routes) {
