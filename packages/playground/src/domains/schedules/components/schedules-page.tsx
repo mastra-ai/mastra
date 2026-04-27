@@ -6,8 +6,8 @@ import { useSchedules } from '../hooks/use-schedules';
 import { ScheduleTriggersList } from './schedule-triggers-list';
 import { SchedulesList } from './schedules-list';
 
-export function SchedulesPage() {
-  const { data: schedules, isLoading, error } = useSchedules();
+export function SchedulesPage({ workflowId }: { workflowId?: string } = {}) {
+  const { data: schedules, isLoading, error } = useSchedules(workflowId ? { workflowId } : {});
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<ScheduleResponse | null>(null);
   const { data: triggers, isLoading: triggersLoading } = useScheduleTriggers(selected?.id, { limit: 50 });

@@ -16,15 +16,42 @@ import {
   is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { BookIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { SchedulesPage } from '@/domains/schedules/components/schedules-page';
 import { NoWorkflowsInfo } from '@/domains/workflows/components/workflows-list/no-workflows-info';
 import { WorkflowsList } from '@/domains/workflows/components/workflows-list/workflows-list';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
+const VALID_TABS = ['workflows', 'schedules'] as const;
+type TabValue = (typeof VALID_TABS)[number];
+
 function Workflows() {
   const { data: workflows, isLoading, error } = useWorkflows();
   const [search, setSearch] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const activeTab: TabValue = (VALID_TABS as readonly string[]).includes(tabParam ?? '')
+    ? (tabParam as TabValue)
+    : 'workflows';
+
+  const handleTabChange = useCallback(
+    (value: string) => {
+      setSearchParams(
+        prev => {
+          const next = new URLSearchParams(prev);
+          if (value === 'workflows') {
+            next.delete('tab');
+          } else {
+            next.set('tab', value);
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -83,7 +110,12 @@ function Workflows() {
         </PageLayout.Row>
       </PageLayout.TopArea>
 
-      <Tabs defaultTab="workflows" className="grid grid-rows-[auto_1fr] h-full overflow-hidden">
+      <Tabs
+        defaultTab="workflows"
+        value={activeTab}
+        onValueChange={handleTabChange}
+        className="grid grid-rows-[auto_1fr] h-full overflow-hidden"
+      >
         <TabList>
           <Tab value="workflows">All Workflows</Tab>
           <Tab value="schedules">Schedules</Tab>
