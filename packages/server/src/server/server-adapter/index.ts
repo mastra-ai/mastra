@@ -541,6 +541,16 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       await next();
     });
 
+    // Propagate the server's onError handler so errors from custom route handlers
+    // are caught here (not swallowed by Hono's default plain-text 500).
+    const serverOnError = this.mastra.getServer()?.onError;
+    app.onError((err, c) => {
+      if (serverOnError) {
+        return serverOnError(err, c);
+      }
+      return c.json({ error: 'Internal Server Error' }, 500);
+    });
+
     // Register each custom route
     for (const route of routes) {
       const handler =
@@ -597,6 +607,9 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     if (['POST', 'PUT', 'PATCH'].includes(method) && body !== undefined) {
       if (body instanceof ArrayBuffer || body instanceof Uint8Array || body instanceof ReadableStream) {
         init.body = body as any;
+        if (body instanceof ReadableStream) {
+          (init as any).duplex = 'half';
+        }
       } else {
         const contentType = (typeof headers['content-type'] === 'string' ? headers['content-type'] : '') || '';
         if (contentType.includes('application/json')) {
