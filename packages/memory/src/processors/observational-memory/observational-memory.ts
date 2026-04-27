@@ -1650,19 +1650,24 @@ export class ObservationalMemory {
   }
 
   /**
-   * Save messages to storage, skipping sealed messages that were already
-   * persisted by async buffering unless the caller just sealed them.
+   * Save messages to storage, skipping messages that were already persisted by
+   * async buffering. Uses the message-level sealed flag (metadata.mastra.sealed)
+   * to detect already-persisted messages, avoiding redundant DB operations.
+   *
+   * Messages with observation markers are always saved (upserted) even if sealed,
+   * because the markers need to be persisted to storage.
    */
   async persistMessages(
     messagesToSave: MastraDBMessage[],
     threadId: string,
     resourceId: string | undefined,
-    opts?: { includeSealed?: boolean },
   ): Promise<void> {
     const filteredMessages: MastraDBMessage[] = [];
     for (const msg of messagesToSave) {
       const isSealed = !!(msg.content?.metadata as { mastra?: { sealed?: boolean } })?.mastra?.sealed;
-      if (isSealed && !opts?.includeSealed) {
+      if (isSealed) {
+        // Sealed messages were already persisted by buffer(). Only re-save if they
+        // now have observation markers (need to upsert the markers to storage).
         if (findLastCompletedObservationBoundary(msg) !== -1) {
           filteredMessages.push(msg);
         }

@@ -191,8 +191,7 @@ export class ObservationStep {
       const newOutput = messageList.clear.response.db();
       const messagesToSave = [...newInput, ...newOutput];
       if (messagesToSave.length > 0) {
-        om.sealMessagesForBuffering(newOutput);
-        await om.persistMessages(messagesToSave, threadId, resourceId, { includeSealed: newOutput.length > 0 });
+        await om.persistMessages(messagesToSave, threadId, resourceId);
         for (const msg of messagesToSave) {
           messageList.add(msg, 'memory');
         }
@@ -393,7 +392,7 @@ export class ObservationStep {
       }
 
       if (messagesToSeal.length > 0) {
-        await om.persistMessages(messagesToSeal, threadId, resourceId, { includeSealed: true });
+        await om.persistMessages(messagesToSeal, threadId, resourceId);
       }
     }
 
