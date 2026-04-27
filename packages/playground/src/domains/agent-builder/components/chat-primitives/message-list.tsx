@@ -42,7 +42,11 @@ export const MessageList = ({
     isRunning && !showSkeleton && (lastMessage?.role !== 'assistant' || !hasStreamingPart(lastMessage));
 
   return (
-    <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto pb-6 px-6">
+    <div
+      ref={scrollRef}
+      className="flex-1 min-h-0 overflow-y-auto pb-6 px-6"
+      style={{ viewTransitionName: 'agent-builder-messages' }}
+    >
       {showSkeleton ? (
         <MessagesSkeleton testId={skeletonTestId} />
       ) : showEmpty ? (

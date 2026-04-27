@@ -83,6 +83,7 @@ export const AgentChatPanel = ({ agentId, agentName, agentDescription }: AgentCh
         placeholder="Message your agent…"
         inputTestId="agent-builder-agent-chat-input"
         submitTestId="agent-builder-agent-chat-submit"
+        viewTransitionName="agent-builder-prompt"
       />
     </div>
   );
