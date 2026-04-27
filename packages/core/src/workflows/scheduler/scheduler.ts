@@ -1,41 +1,13 @@
-import { randomUUID } from 'node:crypto';
 import { MastraBase } from '../../base';
 import type { PubSub } from '../../events/pubsub';
 import { RegisteredLogger } from '../../logger/constants';
-import type {
-  Schedule,
-  ScheduleFilter,
-  ScheduleStatus,
-  ScheduleTarget,
-  ScheduleTrigger,
-  ScheduleTriggerListOptions,
-  SchedulesStorage,
-} from '../../storage/domains/schedules/base';
-import { computeNextFireAt, validateCron } from './cron';
+import type { Schedule, ScheduleTrigger, SchedulesStorage } from '../../storage/domains/schedules/base';
+import { computeNextFireAt } from './cron';
 import type { WorkflowSchedulerConfig } from './types';
 
 const TOPIC_WORKFLOWS = 'workflows';
 const DEFAULT_TICK_INTERVAL_MS = 10_000;
 const DEFAULT_BATCH_SIZE = 100;
-
-/**
- * Specification accepted by `WorkflowScheduler.create()`. The scheduler
- * computes `nextFireAt` from the cron expression and persists the row.
- */
-export type CreateScheduleInput = {
-  /**
-   * Optional explicit id. Defaults to a random uuid.
-   * Stable ids are recommended for declarative schedules so re-registration
-   * is idempotent.
-   */
-  id?: string;
-  target: ScheduleTarget;
-  cron: string;
-  timezone?: string;
-  /** Defaults to 'active'. */
-  status?: ScheduleStatus;
-  metadata?: Record<string, unknown>;
-};
 
 /**
  * Drives cron-based workflow triggers.
@@ -127,62 +99,6 @@ export class WorkflowScheduler extends MastraBase {
    */
   async tick(): Promise<void> {
     await this.#runTick();
-  }
-
-  // -------- Imperative API --------
-
-  async create(input: CreateScheduleInput): Promise<Schedule> {
-    validateCron(input.cron, input.timezone);
-
-    const now = Date.now();
-    const id = input.id ?? randomUUID();
-    const status: ScheduleStatus = input.status ?? 'active';
-    const nextFireAt = computeNextFireAt(input.cron, { timezone: input.timezone, after: now });
-
-    const schedule: Schedule = {
-      id,
-      target: input.target,
-      cron: input.cron,
-      timezone: input.timezone,
-      status,
-      nextFireAt,
-      createdAt: now,
-      updatedAt: now,
-      metadata: input.metadata,
-    };
-
-    return await this.#schedulesStore.createSchedule(schedule);
-  }
-
-  async pause(id: string): Promise<Schedule> {
-    return await this.#schedulesStore.updateSchedule(id, { status: 'paused' });
-  }
-
-  async resume(id: string): Promise<Schedule> {
-    const existing = await this.#schedulesStore.getSchedule(id);
-    if (!existing) {
-      throw new Error(`Schedule "${id}" not found`);
-    }
-    // Recompute nextFireAt from now so a long-paused schedule doesn't immediately
-    // fire for every missed slot.
-    const nextFireAt = computeNextFireAt(existing.cron, { timezone: existing.timezone, after: Date.now() });
-    return await this.#schedulesStore.updateSchedule(id, { status: 'active', nextFireAt });
-  }
-
-  async delete(id: string): Promise<void> {
-    await this.#schedulesStore.deleteSchedule(id);
-  }
-
-  async list(filter?: ScheduleFilter): Promise<Schedule[]> {
-    return await this.#schedulesStore.listSchedules(filter);
-  }
-
-  async get(id: string): Promise<Schedule | null> {
-    return await this.#schedulesStore.getSchedule(id);
-  }
-
-  async listTriggers(scheduleId: string, opts?: ScheduleTriggerListOptions): Promise<ScheduleTrigger[]> {
-    return await this.#schedulesStore.listTriggers(scheduleId, opts);
   }
 
   // -------- Internals --------

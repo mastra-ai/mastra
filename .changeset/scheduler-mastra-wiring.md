@@ -6,10 +6,9 @@ Wired the `WorkflowScheduler` into the `Mastra` lifecycle. Evented workflows tha
 
 **What's new:**
 
-- `Mastra` accepts a new optional `scheduler: WorkflowSchedulerConfig` for tuning the tick loop (`tickIntervalMs`, `batchSize`), forcing the scheduler on (`enabled: true`) when only imperative schedules are used, and supplying an `onError` callback.
-- The scheduler is auto-instantiated when any registered workflow declares a `schedule` config or when `scheduler.enabled` is `true`. It is **not** instantiated otherwise.
+- `Mastra` accepts a new optional `scheduler: WorkflowSchedulerConfig` for tuning the tick loop (`tickIntervalMs`, `batchSize`), forcing the scheduler on (`enabled: true`), and supplying an `onError` callback.
+- The scheduler is auto-instantiated when any registered workflow declares a `schedule` config or when `scheduler.enabled` is `true`. It is **not** instantiated otherwise — projects without scheduled workflows pay zero cost.
 - Declarative schedules from workflow configs are registered at boot under stable ids of the form `wf_${workflowId}` so re-registration is idempotent across restarts.
-- Imperative API exposed via `mastra.scheduler` — call `create`, `pause`, `resume`, `delete`, `list`, `get`, and `listTriggers` to manage schedules at runtime.
 - `mastra.shutdown()` now stops the scheduler before tearing down the event engine and observability.
 
 **Engine routing rule:**

@@ -14,19 +14,12 @@ The scheduler is constructable on its own and tested in isolation. It is **not y
 - Publishes a `workflow.start` event on the existing `workflows` pubsub topic — the existing `WorkflowEventProcessor` consumes it and runs the workflow
 - Records every trigger attempt in the schedule's history (`recordTrigger`)
 
-**Imperative API:**
+**Lifecycle:**
 
 ```ts
 const scheduler = new WorkflowScheduler({ schedulesStore, pubsub });
 await scheduler.start();
-await scheduler.create({
-  target: { type: 'workflow', workflowId: 'wf-id', inputData: { ... } },
-  cron: '*/5 * * * *',
-  timezone: 'America/New_York',
-});
-await scheduler.pause(id);
-await scheduler.resume(id);
-await scheduler.delete(id);
+// ...tick loop runs every `tickIntervalMs` (default 10s)
 await scheduler.stop();
 ```
 

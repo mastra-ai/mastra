@@ -35,7 +35,8 @@ describe('Mastra — workflow scheduler integration', () => {
     expect(scheduler).toBeDefined();
     expect(scheduler!.isRunning).toBe(true);
 
-    const schedules = await scheduler!.list();
+    const schedulesStore = await mastra.getStorage()!.getStore('schedules');
+    const schedules = await schedulesStore!.listSchedules();
     expect(schedules.find(s => s.id === 'wf_scheduled-wf')).toBeDefined();
 
     await mastra.shutdown();
@@ -125,7 +126,7 @@ describe('Mastra — workflow scheduler integration', () => {
     ).toThrow(/evented engine/i);
   });
 
-  it('exposes imperative schedule.create() through mastra.scheduler', async () => {
+  it('starts the scheduler when scheduler.enabled is true even with no scheduled workflows', async () => {
     const mastra = new Mastra({
       logger: false,
       storage: new MockStore(),
@@ -133,19 +134,10 @@ describe('Mastra — workflow scheduler integration', () => {
     });
 
     await new Promise(resolve => setTimeout(resolve, 50));
-    const scheduler = mastra.scheduler!;
-    expect(scheduler).toBeDefined();
-
-    const created = await scheduler.create({
-      id: 'manual-1',
-      cron: '*/5 * * * *',
-      target: { type: 'workflow', workflowId: 'some-workflow' },
-    });
-    expect(created.id).toBe('manual-1');
-
-    const fetched = await scheduler.get('manual-1');
-    expect(fetched).toBeDefined();
+    expect(mastra.scheduler).toBeDefined();
+    expect(mastra.scheduler!.isRunning).toBe(true);
 
     await mastra.shutdown();
+    expect(mastra.scheduler!.isRunning).toBe(false);
   });
 });

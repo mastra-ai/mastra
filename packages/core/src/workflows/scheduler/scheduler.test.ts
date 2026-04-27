@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { Event } from '../../events/types';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
-import type { Schedule } from '../../storage/domains/schedules/base';
 import { InMemorySchedulesStorage } from '../../storage/domains/schedules/inmemory';
 import { WorkflowScheduler } from './scheduler';
 
@@ -222,93 +221,5 @@ describe('WorkflowScheduler', () => {
 
     await scheduler.stop();
     expect(scheduler.isRunning).toBe(false);
-  });
-
-  it('imperative create persists the schedule with a computed nextFireAt', async () => {
-    const { store } = makeStore();
-    const pubsub = new EventEmitterPubSub();
-    const scheduler = new WorkflowScheduler({ schedulesStore: store, pubsub });
-
-    const created = await scheduler.create({
-      id: 'sched-cron',
-      target: { type: 'workflow', workflowId: 'wf-cron' },
-      cron: '*/5 * * * *',
-    });
-
-    expect(created.id).toBe('sched-cron');
-    expect(created.status).toBe('active');
-    expect(created.nextFireAt).toBeGreaterThan(Date.now());
-    const stored = await store.getSchedule('sched-cron');
-    expect(stored).toMatchObject({ id: 'sched-cron', cron: '*/5 * * * *' });
-  });
-
-  it('imperative create rejects an invalid cron expression', async () => {
-    const { store } = makeStore();
-    const pubsub = new EventEmitterPubSub();
-    const scheduler = new WorkflowScheduler({ schedulesStore: store, pubsub });
-
-    await expect(
-      scheduler.create({
-        target: { type: 'workflow', workflowId: 'wf' },
-        cron: 'not-a-cron',
-      }),
-    ).rejects.toThrow();
-  });
-
-  it('pause sets status=paused and resume recomputes nextFireAt', async () => {
-    const { store } = makeStore();
-    const pubsub = new EventEmitterPubSub();
-    const scheduler = new WorkflowScheduler({ schedulesStore: store, pubsub });
-
-    const created = await scheduler.create({
-      id: 'sched-pause',
-      target: { type: 'workflow', workflowId: 'wf' },
-      cron: '*/5 * * * *',
-    });
-
-    const paused = await scheduler.pause(created.id);
-    expect(paused.status).toBe('paused');
-
-    const before = Date.now() - 1;
-    const resumed = await scheduler.resume(created.id);
-    expect(resumed.status).toBe('active');
-    expect(resumed.nextFireAt).toBeGreaterThan(before);
-  });
-
-  it('delete removes the schedule', async () => {
-    const { store } = makeStore();
-    const pubsub = new EventEmitterPubSub();
-    const scheduler = new WorkflowScheduler({ schedulesStore: store, pubsub });
-
-    const created = await scheduler.create({
-      id: 'sched-del',
-      target: { type: 'workflow', workflowId: 'wf' },
-      cron: '*/5 * * * *',
-    });
-
-    await scheduler.delete(created.id);
-    expect(await store.getSchedule(created.id)).toBeNull();
-  });
-
-  it('list / get / listTriggers proxy to storage', async () => {
-    const { store } = makeStore();
-    const pubsub = new EventEmitterPubSub();
-    const scheduler = new WorkflowScheduler({ schedulesStore: store, pubsub });
-
-    await scheduler.create({
-      id: 'sched-a',
-      target: { type: 'workflow', workflowId: 'wf-a' },
-      cron: '*/5 * * * *',
-    });
-    await scheduler.create({
-      id: 'sched-b',
-      target: { type: 'workflow', workflowId: 'wf-b' },
-      cron: '*/5 * * * *',
-    });
-
-    const all: Schedule[] = await scheduler.list();
-    expect(all.map(s => s.id).sort()).toEqual(['sched-a', 'sched-b']);
-    expect((await scheduler.get('sched-a'))?.target).toMatchObject({ workflowId: 'wf-a' });
-    expect(await scheduler.listTriggers('sched-a')).toEqual([]);
   });
 });

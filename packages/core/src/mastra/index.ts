@@ -35,6 +35,7 @@ import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
+import type { Schedule, SchedulesStorage } from '../storage/domains/schedules/base';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType } from '../storage/types';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
@@ -45,7 +46,7 @@ import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
-import { WorkflowScheduler } from '../workflows/scheduler';
+import { WorkflowScheduler, computeNextFireAt } from '../workflows/scheduler';
 import type { WorkflowSchedulerConfig } from '../workflows/scheduler';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
@@ -957,19 +958,20 @@ export class Mastra<
     }
     this.#scheduler = scheduler;
 
-    await this.#registerDeclarativeSchedules(scheduler);
+    await this.#registerDeclarativeSchedules(schedulesStore);
 
     await scheduler.start();
   }
 
-  async #registerDeclarativeSchedules(scheduler: WorkflowScheduler): Promise<void> {
+  async #registerDeclarativeSchedules(schedulesStore: SchedulesStorage): Promise<void> {
     for (const { scheduleId, workflowId, workflow } of this.#collectDeclarativeSchedules()) {
       const cfg = (workflow as { getScheduleConfig?: () => undefined | Record<string, any> }).getScheduleConfig?.();
       if (!cfg) continue;
-      const existing = await scheduler.get(scheduleId);
+      const existing = await schedulesStore.getSchedule(scheduleId);
       if (existing) continue;
       try {
-        await scheduler.create({
+        const now = Date.now();
+        const schedule: Schedule = {
           id: scheduleId,
           target: {
             type: 'workflow',
@@ -980,8 +982,13 @@ export class Mastra<
           },
           cron: cfg.cron,
           timezone: cfg.timezone,
+          status: 'active',
+          nextFireAt: computeNextFireAt(cfg.cron, { timezone: cfg.timezone, after: now }),
+          createdAt: now,
+          updatedAt: now,
           metadata: cfg.metadata,
-        });
+        };
+        await schedulesStore.createSchedule(schedule);
       } catch (error) {
         this.#logger?.error('Failed to register declarative schedule', { scheduleId, workflowId, error });
       }
@@ -2744,13 +2751,18 @@ export class Mastra<
     if (scheduleConfig) {
       this.#hasScheduledWorkflow = true;
       if (this.#scheduler) {
-        const scheduler = this.#scheduler;
-        void this.#registerDeclarativeSchedules(scheduler).catch(error => {
-          this.#logger?.error('Failed to register declarative schedule for workflow', {
-            workflowId: workflow.id,
-            error,
-          });
-        });
+        void (async () => {
+          try {
+            const schedulesStore = await this.#storage?.getStore('schedules');
+            if (!schedulesStore) return;
+            await this.#registerDeclarativeSchedules(schedulesStore);
+          } catch (error) {
+            this.#logger?.error('Failed to register declarative schedule for workflow', {
+              workflowId: workflow.id,
+              error,
+            });
+          }
+        })();
       } else {
         this.#ensureScheduler();
       }
