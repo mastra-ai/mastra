@@ -348,7 +348,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
       outputProcessors: effectiveOutputProcessors,
       errorProcessors: effectiveErrorProcessors,
       modelSettings: {
-        temperature: 0,
         ...(options.modelSettings || {}),
       },
       messageList: memoryData.messageList!,
