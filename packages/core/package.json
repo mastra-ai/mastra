@@ -612,92 +612,74 @@
       }
     },
     "./package.json": "./package.json",
-    "./action": {
-      "import": {
-        "types": "./dist/action/index.d.ts"
-      },
-      "require": {
-        "types": "./dist/action/index.d.ts"
-      }
-    },
-    "./llm/model": {
-      "import": {
-        "types": "./dist/llm/model/index.d.ts"
-      },
-      "require": {
-        "types": "./dist/llm/model/index.d.ts"
-      }
-    },
-    "./storage/domains": {
-      "import": {
-        "types": "./dist/storage/domains/index.d.ts"
-      },
-      "require": {
-        "types": "./dist/storage/domains/index.d.ts"
-      }
-    },
     "./storage/domains/agents": {
       "import": {
-        "types": "./dist/storage/domains/agents/index.d.ts"
+        "types": "./dist/storage/domains/agents/index.d.ts",
+        "default": "./dist/storage/domains/agents/index.js"
       },
       "require": {
-        "types": "./dist/storage/domains/agents/index.d.ts"
+        "types": "./dist/storage/domains/agents/index.d.ts",
+        "default": "./dist/storage/domains/agents/index.cjs"
       }
     },
     "./storage/domains/mcp-clients": {
       "import": {
-        "types": "./dist/storage/domains/mcp-clients/index.d.ts"
+        "types": "./dist/storage/domains/mcp-clients/index.d.ts",
+        "default": "./dist/storage/domains/mcp-clients/index.js"
       },
       "require": {
-        "types": "./dist/storage/domains/mcp-clients/index.d.ts"
+        "types": "./dist/storage/domains/mcp-clients/index.d.ts",
+        "default": "./dist/storage/domains/mcp-clients/index.cjs"
       }
     },
     "./storage/domains/mcp-servers": {
       "import": {
-        "types": "./dist/storage/domains/mcp-servers/index.d.ts"
+        "types": "./dist/storage/domains/mcp-servers/index.d.ts",
+        "default": "./dist/storage/domains/mcp-servers/index.js"
       },
       "require": {
-        "types": "./dist/storage/domains/mcp-servers/index.d.ts"
+        "types": "./dist/storage/domains/mcp-servers/index.d.ts",
+        "default": "./dist/storage/domains/mcp-servers/index.cjs"
       }
     },
     "./storage/domains/prompt-blocks": {
       "import": {
-        "types": "./dist/storage/domains/prompt-blocks/index.d.ts"
+        "types": "./dist/storage/domains/prompt-blocks/index.d.ts",
+        "default": "./dist/storage/domains/prompt-blocks/index.js"
       },
       "require": {
-        "types": "./dist/storage/domains/prompt-blocks/index.d.ts"
+        "types": "./dist/storage/domains/prompt-blocks/index.d.ts",
+        "default": "./dist/storage/domains/prompt-blocks/index.cjs"
       }
     },
     "./storage/domains/scorer-definitions": {
       "import": {
-        "types": "./dist/storage/domains/scorer-definitions/index.d.ts"
+        "types": "./dist/storage/domains/scorer-definitions/index.d.ts",
+        "default": "./dist/storage/domains/scorer-definitions/index.js"
       },
       "require": {
-        "types": "./dist/storage/domains/scorer-definitions/index.d.ts"
+        "types": "./dist/storage/domains/scorer-definitions/index.d.ts",
+        "default": "./dist/storage/domains/scorer-definitions/index.cjs"
       }
     },
     "./storage/domains/skills": {
       "import": {
-        "types": "./dist/storage/domains/skills/index.d.ts"
+        "types": "./dist/storage/domains/skills/index.d.ts",
+        "default": "./dist/storage/domains/skills/index.js"
       },
       "require": {
-        "types": "./dist/storage/domains/skills/index.d.ts"
+        "types": "./dist/storage/domains/skills/index.d.ts",
+        "default": "./dist/storage/domains/skills/index.cjs"
       }
     },
     "./storage/domains/workspaces": {
       "import": {
-        "types": "./dist/storage/domains/workspaces/index.d.ts"
+        "types": "./dist/storage/domains/workspaces/index.d.ts",
+        "default": "./dist/storage/domains/workspaces/index.js"
       },
       "require": {
-        "types": "./dist/storage/domains/workspaces/index.d.ts"
-      }
-    },
-    "./workspace/constants": {
-      "import": {
-        "types": "./dist/workspace/constants/index.d.ts"
-      },
-      "require": {
-        "types": "./dist/workspace/constants/index.d.ts"
+        "types": "./dist/storage/domains/workspaces/index.d.ts",
+        "default": "./dist/storage/domains/workspaces/index.cjs"
       }
     }
   },

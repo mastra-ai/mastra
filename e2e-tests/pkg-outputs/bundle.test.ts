@@ -45,11 +45,6 @@ describe.for(
           const exportConfig = pkgJson.exports[importPath] as any;
           expect(exportConfig.import).toBeDefined();
           expect(exportConfig.import).not.toBe(expect.any(String));
-          // Type-only exports have types but no default runtime JS
-          if (!exportConfig.import.default) {
-            expect(exportConfig.import.types).toMatch(/\.d\.ts$/);
-            return;
-          }
           expect(extname(exportConfig.import.default)).toMatch(/\.js$/);
           expect(exportConfig.import.types).toMatch(/\.d\.ts$/);
 
@@ -73,11 +68,6 @@ describe.for(
           const exportConfig = pkgJson.exports[importPath] as any;
           expect(exportConfig.require).toBeDefined();
           expect(exportConfig.require).not.toBe(expect.any(String));
-          // Type-only exports have types but no default runtime JS
-          if (!exportConfig.require.default) {
-            expect(exportConfig.require.types).toMatch(/\.d\.ts$/);
-            return;
-          }
           expect(extname(exportConfig.require.default)).toMatch(/\.cjs$/);
           expect(exportConfig.require.types).toMatch(/\.d\.ts$/);
 
