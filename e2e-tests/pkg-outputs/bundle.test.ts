@@ -146,6 +146,22 @@ describe('@mastra/core phantom export validation', () => {
   const exports = corePkg.packageJson.exports as Record<string, unknown>;
 
   it('should block all phantom subpaths with null exports', async () => {
+    // Phantom subpaths used for type-only imports by workspace packages are
+    // intentionally left unblocked so tsc can resolve them during build.
+    const typeOnlyAllowlist = new Set([
+      './action',
+      './llm/model',
+      './storage/domains',
+      './storage/domains/agents',
+      './storage/domains/mcp-clients',
+      './storage/domains/mcp-servers',
+      './storage/domains/prompt-blocks',
+      './storage/domains/scorer-definitions',
+      './storage/domains/skills',
+      './storage/domains/workspaces',
+      './workspace/constants',
+    ]);
+
     // Find all index.d.ts files without a matching index.js (phantom subpaths)
     const dtsFiles = await globby(join(coreDistDir, '**/index.d.ts'));
     const phantoms: string[] = [];
@@ -163,7 +179,7 @@ describe('@mastra/core phantom export validation', () => {
       }
     }
 
-    const missing = phantoms.filter(p => exports[p] !== null);
+    const missing = phantoms.filter(p => exports[p] !== null && !typeOnlyAllowlist.has(p));
     if (missing.length > 0) {
       throw new Error(
         `Found ${missing.length} phantom subpath(s) without null exports in @mastra/core package.json:\n` +
