@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MockStore } from '../storage/mock';
 import { createWorkflow as createDefaultWorkflow } from '../workflows';
@@ -43,13 +43,51 @@ describe('Mastra — workflow scheduler integration', () => {
   });
 
   it('does not instantiate the scheduler when no schedules are configured', async () => {
+    const storage = new MockStore();
+    const getStoreSpy = vi.spyOn(storage, 'getStore');
+
     const mastra = new Mastra({
       logger: false,
-      storage: new MockStore(),
+      storage,
     });
 
     await new Promise(resolve => setTimeout(resolve, 50));
+
     expect(mastra.scheduler).toBeUndefined();
+    // Prove the scheduler never touched the schedules domain.
+    expect(getStoreSpy.mock.calls.some(call => call[0] === 'schedules')).toBe(false);
+
+    await mastra.shutdown();
+  });
+
+  it('does not instantiate the scheduler when only unscheduled workflows are registered', async () => {
+    const storage = new MockStore();
+    const getStoreSpy = vi.spyOn(storage, 'getStore');
+
+    const wf = createDefaultWorkflow({
+      id: 'plain-wf',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+    });
+    wf.then(
+      createStep({
+        id: 'noop',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async () => ({}),
+      }) as any,
+    ).commit();
+
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      workflows: { wf } as any,
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    expect(mastra.scheduler).toBeUndefined();
+    expect(getStoreSpy.mock.calls.some(call => call[0] === 'schedules')).toBe(false);
 
     await mastra.shutdown();
   });

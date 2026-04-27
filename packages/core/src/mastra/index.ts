@@ -388,6 +388,12 @@ export class Mastra<
   #schedulerConfig?: WorkflowSchedulerConfig;
   #scheduler?: WorkflowScheduler;
   #schedulerInitPromise?: Promise<void>;
+  /**
+   * Tracks whether any registered workflow has declared a `schedule` config.
+   * Used as a fast short-circuit so users without scheduled workflows pay
+   * zero cost beyond a boolean check.
+   */
+  #hasScheduledWorkflow = false;
   #gateways?: Record<string, MastraModelGateway>;
 
   #events: {
@@ -903,7 +909,7 @@ export class Mastra<
   #shouldEnableScheduler(): boolean {
     if (this.#schedulerConfig?.enabled === false) return false;
     if (this.#schedulerConfig?.enabled === true) return true;
-    return this.#collectDeclarativeSchedules().length > 0;
+    return this.#hasScheduledWorkflow;
   }
 
   #ensureScheduler(): void {
@@ -2733,9 +2739,10 @@ export class Mastra<
     }
     workflows[workflowKey] = workflow;
 
-    // If a schedule is declared and the scheduler is already running, register
-    // it now. If the scheduler has not yet been instantiated, ensure it.
+    // If a schedule is declared, mark the flag and either register into the
+    // running scheduler or trigger a lazy ensure.
     if (scheduleConfig) {
+      this.#hasScheduledWorkflow = true;
       if (this.#scheduler) {
         const scheduler = this.#scheduler;
         void this.#registerDeclarativeSchedules(scheduler).catch(error => {
