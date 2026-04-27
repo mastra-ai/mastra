@@ -1,4 +1,4 @@
-import { MessageList } from '@mastra/core/agent';
+import { getLegacyContentForStorage, MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
@@ -1052,7 +1052,7 @@ export class MemoryStorageD1 extends MemoryStorage {
         // Special handling for content: merge in code, then update the whole field
         if (updatableFields.content) {
           const existingContent = existingMessage.content || {};
-          const newContent = {
+          const newContent = getLegacyContentForStorage({
             ...existingContent,
             ...updatableFields.content,
             // Deep merge metadata if it exists on both
@@ -1064,7 +1064,7 @@ export class MemoryStorageD1 extends MemoryStorage {
                   },
                 }
               : {}),
-          };
+          })!;
           setClauses.push(`content = ?`);
           values.push(JSON.stringify(newContent));
           delete updatableFields.content;

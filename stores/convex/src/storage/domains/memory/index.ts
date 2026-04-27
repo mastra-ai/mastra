@@ -1,4 +1,4 @@
-import { MessageList } from '@mastra/core/agent';
+import { getLegacyContentForStorage, MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
@@ -410,13 +410,13 @@ export class MemoryConvex extends MemoryStorage {
       }
       if (update.content) {
         const existingContent = safelyParseJSON(current.content) || {};
-        const mergedContent = {
+        const mergedContent = getLegacyContentForStorage({
           ...existingContent,
           ...update.content,
           ...(existingContent.metadata && update.content.metadata
             ? { metadata: { ...existingContent.metadata, ...update.content.metadata } }
             : {}),
-        };
+        })!;
         current.content = JSON.stringify(mergedContent);
       }
 

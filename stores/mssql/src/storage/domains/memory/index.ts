@@ -1,4 +1,4 @@
-import { MessageList } from '@mastra/core/agent';
+import { getLegacyContentForStorage, MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
@@ -1007,13 +1007,13 @@ export class MemoryMSSQL extends MemoryStorage {
         const columnMapping: Record<string, string> = { threadId: 'thread_id' };
         const updatableFields = { ...fieldsToUpdate };
         if (updatableFields.content) {
-          const newContent = {
+          const newContent = getLegacyContentForStorage({
             ...existingMessage.content,
             ...updatableFields.content,
             ...(existingMessage.content?.metadata && updatableFields.content.metadata
               ? { metadata: { ...existingMessage.content.metadata, ...updatableFields.content.metadata } }
               : {}),
-          };
+          })!;
           setClauses.push(`content = @content`);
           req.input('content', JSON.stringify(newContent));
           delete updatableFields.content;

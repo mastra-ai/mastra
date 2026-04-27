@@ -1,4 +1,4 @@
-import { MessageList } from '@mastra/core/agent';
+import { getLegacyContentForStorage, MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType, MastraMessageV1, MastraDBMessage } from '@mastra/core/memory';
@@ -900,7 +900,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
             (newContent as any).parts = updates.content.parts;
           }
 
-          updatePayload.content = JSON.stringify(newContent);
+          updatePayload.content = JSON.stringify(getLegacyContentForStorage(newContent)!);
         }
 
         // Update the message

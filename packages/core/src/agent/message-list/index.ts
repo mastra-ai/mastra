@@ -36,6 +36,7 @@ export {
   addLegacyGettersToContent,
   getLegacyAnnotations,
   getLegacyContent,
+  getLegacyContentForStorage,
   getLegacyExperimentalAttachments,
   getLegacyReasoning,
   getLegacyToolInvocations,

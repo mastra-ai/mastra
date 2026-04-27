@@ -1,5 +1,5 @@
 import type { ClickHouseClient } from '@clickhouse/client';
-import { MessageList } from '@mastra/core/agent';
+import { getLegacyContentForStorage, MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
@@ -1156,7 +1156,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           const existingMetadata = existingContent.metadata || {};
           const updateMetadata = updatableFields.content.metadata || {};
 
-          newContent = {
+          newContent = getLegacyContentForStorage({
             ...existingContent,
             ...updatableFields.content,
             // Deep merge metadata
@@ -1164,7 +1164,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
               ...existingMetadata,
               ...updateMetadata,
             },
-          };
+          })!;
 
           // Ensure we're updating the content field
           setClauses.push(`content = {var_content_${paramIdx}:String}`);

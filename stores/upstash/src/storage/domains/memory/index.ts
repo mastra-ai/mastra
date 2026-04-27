@@ -1,4 +1,4 @@
-import { MessageList } from '@mastra/core/agent';
+import { getLegacyContentForStorage, MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
@@ -1084,7 +1084,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         // Special handling for the content field to merge instead of overwrite
         if (fieldsToUpdate.content) {
           const existingContent = existingMessage.content as MastraMessageContentV2;
-          const newContent = {
+          const newContent = getLegacyContentForStorage({
             ...existingContent,
             ...fieldsToUpdate.content,
             // Deep merge metadata if it exists on both
@@ -1096,7 +1096,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
                   },
                 }
               : {}),
-          };
+          })!;
           updatedMessage.content = newContent;
         }
 

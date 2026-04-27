@@ -1,4 +1,4 @@
-import { MessageList } from '@mastra/core/agent';
+import { getLegacyContentForStorage, MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
@@ -1108,6 +1108,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
               content: content.content,
             };
           }
+          updatedMessage.content = getLegacyContentForStorage(updatedMessage.content)!;
         }
 
         // If the message is being moved to a different thread, we need to handle it specially

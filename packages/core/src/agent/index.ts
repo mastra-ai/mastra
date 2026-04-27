@@ -6,6 +6,7 @@ export {
   TypeDetector,
   addLegacyGettersToMessage,
   getLegacyContent,
+  getLegacyContentForStorage,
   stripLegacyMessageFields,
 } from './message-list';
 export type { OutputFormat } from './message-list';

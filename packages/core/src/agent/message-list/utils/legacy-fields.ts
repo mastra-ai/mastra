@@ -145,6 +145,21 @@ function legacyReasoningToPart(reasoning: NonNullable<MastraLegacyReasoning>): M
   };
 }
 
+function mergeLegacyContentIntoParts(
+  parts: MastraMessagePart[],
+  legacyContent: MastraLegacyMessageContent | undefined,
+): MastraMessagePart[] {
+  if (legacyContent === undefined) return parts;
+
+  const existingTextPart = parts.find(part => part.type === 'text');
+  if (existingTextPart) {
+    existingTextPart.text = legacyContent;
+    return parts;
+  }
+
+  return [{ type: 'text', text: legacyContent }, ...parts];
+}
+
 function updatePartsFromLegacyFields(content?: MastraMessageContentV2WithLegacyFields): MastraMessagePart[] {
   const parts = getParts(content).map(clonePart);
   if (!content) return parts;
@@ -174,11 +189,7 @@ function updatePartsFromLegacyFields(content?: MastraMessageContentV2WithLegacyF
   }
 
   const legacyContent = descriptors.content && 'value' in descriptors.content ? descriptors.content.value : undefined;
-  if (legacyContent && parts.length === 0) {
-    parts.push({ type: 'text', text: legacyContent });
-  }
-
-  return parts;
+  return mergeLegacyContentIntoParts(parts, legacyContent);
 }
 
 export function getLegacyContent(content: MastraMessageContentV2): MastraLegacyMessageContent | undefined {
