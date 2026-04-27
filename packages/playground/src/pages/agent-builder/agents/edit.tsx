@@ -10,6 +10,7 @@ import type { ActiveDetail } from '@/domains/agent-builder/components/agent-buil
 import { ConversationPanel } from '@/domains/agent-builder/components/agent-builder-edit/conversation-panel';
 import type { AvailableWorkspace } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-agent-builder-tool';
 import { useStarterUserMessage } from '@/domains/agent-builder/components/agent-builder-edit/hooks/use-starter-user-message';
+import { VisibilitySelect } from '@/domains/agent-builder/components/agent-builder-edit/visibility-select';
 import { WorkspaceLayout } from '@/domains/agent-builder/components/agent-builder-edit/workspace-layout';
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
 import { useSaveAgent } from '@/domains/agent-builder/hooks/use-save-agent';
@@ -175,6 +176,7 @@ const AgentBuilderAgentEditReady = ({
       creating={mode === 'create'}
       defaultExpanded={mode === 'edit'}
       detailOpen={activeDetail !== null}
+      modeAction={<VisibilitySelect />}
       primaryAction={
         <>
           {mode === 'edit' && (
