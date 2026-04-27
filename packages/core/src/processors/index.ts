@@ -528,6 +528,8 @@ export function isProcessorWorkflow(obj: unknown): obj is ProcessorWorkflow {
 
 export * from './processors';
 export { PrefillErrorHandler } from './prefill-error-handler';
+export { ProviderHistoryCompat, anthropicToolIdFormat } from './provider-history-compat';
+export type { CompatRule } from './provider-history-compat';
 export { ProcessorState, ProcessorRunner } from './runner';
 export * from './memory';
 export type { TripWireOptions } from '../agent/trip-wire';

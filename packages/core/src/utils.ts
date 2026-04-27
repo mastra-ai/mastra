@@ -345,7 +345,12 @@ export interface ToolOptions extends Partial<ObservabilityContext> {
    * Optional async writer used to stream tool output chunks back to the caller. Tools should treat this as fire-and-forget I/O.
    */
   outputWriter?: OutputWriter;
-  requireApproval?: boolean;
+  requireApproval?:
+    | boolean
+    | ((
+        input: any,
+        ctx?: { requestContext?: Record<string, unknown>; workspace?: Workspace },
+      ) => boolean | Promise<boolean>);
   // Workflow-specific properties
   workflow?: any;
   workflowId?: string;

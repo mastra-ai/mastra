@@ -1,5 +1,11 @@
 # @mastra/redis
 
+## 1.0.2-alpha.0
+
+### Patch Changes
+
+- Fixed Redis package releases to include built files. ([#15763](https://github.com/mastra-ai/mastra/pull/15763))
+
 ## 1.0.1
 
 ### Patch Changes
