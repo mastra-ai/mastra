@@ -134,13 +134,22 @@
   "changesets": [
     "agent-resume-stream-endpoint",
     "automated-provider-registry-20260424-123542",
+    "brown-houses-cough",
     "cold-colts-write",
     "cuddly-snakes-think",
     "fast-windows-take",
     "fix-analyze-entry-dedup-cache",
+    "fix-remove-hardcoded-temperature-default",
+    "fluffy-tires-cover",
     "green-birds-knock",
     "neat-nails-smoke",
+    "odd-wolves-fly",
+    "olive-breads-dream",
+    "plain-areas-draw",
     "pretty-rice-travel",
+    "tiny-turtles-clap",
+    "twelve-shrimps-switch",
+    "vast-peaches-make",
     "young-cows-ring"
   ]
 }

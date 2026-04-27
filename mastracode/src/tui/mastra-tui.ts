@@ -932,6 +932,10 @@ export class MastraTUI {
 
     settings.models.activeOmPackId = omPack.id;
     settings.models.omModelOverride = omPack.id === 'custom' ? omPack.modelId : null;
+    // Clear any per-role overrides from prior /om use so the newly-selected
+    // pack (or custom modelId above) applies to both observer and reflector.
+    settings.models.observerModelOverride = null;
+    settings.models.reflectorModelOverride = null;
     settings.preferences.yolo = result.yolo;
 
     // Clear any manual subagent overrides so they derive from the active pack
