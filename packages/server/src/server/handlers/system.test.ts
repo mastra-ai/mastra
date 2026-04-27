@@ -18,7 +18,9 @@ const createMockMastra = (hasEditor: boolean, storage?: MockStorage, hasObservab
   ({
     getEditor: () => (hasEditor ? {} : undefined),
     getStorage: () => storage,
-    hasObservability: () => hasObservability,
+    observability: {
+      getDefaultInstance: () => (hasObservability ? {} : undefined),
+    },
   }) as any;
 
 describe('System Handlers', () => {

@@ -580,10 +580,6 @@ export class Mastra<
     }
   }
 
-  public hasObservability(): boolean {
-    return !(this.#observability instanceof NoOpObservability) && !!this.#observability.getDefaultInstance();
-  }
-
   /**
    * Creates a new Mastra instance with the provided configuration.
    *

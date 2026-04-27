@@ -65,7 +65,7 @@ describe('Mastra.registerExporter()', () => {
     expect(entrypoint.setLogger).toHaveBeenCalled();
     expect(entrypoint.setMastraContext).toHaveBeenCalledWith({ mastra });
     expect(entrypoint.registerInstance).toHaveBeenCalledWith('default', instance, true);
-    expect(mastra.hasObservability()).toBe(true);
+    expect(mastra.observability.getDefaultInstance()).toBe(instance);
   });
 
   it('should add exporter to existing default instance when observability is configured', () => {
@@ -85,7 +85,7 @@ describe('Mastra.registerExporter()', () => {
     expect(existingInstance.registerExporter).toHaveBeenCalledWith(exporter);
     // Should NOT have registered the fallback instance
     expect(entrypoint.registerInstance).not.toHaveBeenCalled();
-    expect(mastra.hasObservability()).toBe(true);
+    expect(mastra.observability.getDefaultInstance()).toBe(existingInstance);
   });
 
   it('should not call registerInstance when already has real observability', () => {
@@ -106,9 +106,9 @@ describe('Mastra.registerExporter()', () => {
     expect(entrypoint.setMastraContext).toHaveBeenCalledTimes(1); // constructor only
   });
 
-  it('should report no observability for default no-op configuration', () => {
+  it('should use no default observability instance for default no-op configuration', () => {
     const mastra = new Mastra({ logger: false });
 
-    expect(mastra.hasObservability()).toBe(false);
+    expect(mastra.observability.getDefaultInstance()).toBeUndefined();
   });
 });
