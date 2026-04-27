@@ -452,5 +452,27 @@ describe('Workflow schema type inference', () => {
 
       expectTypeOf(workflow).not.toBeNever();
     });
+
+    it('should allow commit after object-style map regardless of workflow outputSchema', () => {
+      const step = createStep({
+        id: 'some-step',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({ value: z.number() }),
+        execute: async () => ({ value: 1 }),
+      });
+
+      // Object-style map({ key: { step, path } }) cannot statically infer its output shape
+      // because `path` is a runtime string. commit() must always be allowed after it.
+      const workflow = createWorkflow({
+        id: 'object-map-workflow',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({ summary: z.string(), items: z.array(z.string()) }),
+      })
+        .then(step)
+        .map({ summary: { step, path: 'value' } } as any)
+        .commit();
+
+      expectTypeOf(workflow).not.toBeNever();
+    });
   });
 });

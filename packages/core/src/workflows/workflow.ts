@@ -107,18 +107,32 @@ type IsAny<T> = 0 extends 1 & T ? true : false;
 type IsUnknown<T> =
   IsAny<T> extends true ? false : unknown extends T ? ([keyof T] extends [never] ? true : false) : false;
 
+/**
+ * Opaque brand for the output type produced by object-style `map({ key: { step, path } })`.
+ * Because `path` is a runtime string, the output shape cannot be statically inferred.
+ * Using this brand instead of bare `any` lets `IsWorkflowOutputCompatible` recognise
+ * the case explicitly and skip the schema-compatibility check without making the entire
+ * object-style map branch invisible to TypeScript's type system.
+ */
+declare const _objectMapOutputBrand: unique symbol;
+type ObjectMapOutput = { readonly [_objectMapOutputBrand]: true } & Record<string, unknown>;
+
+type IsObjectMapOutput<T> = T extends ObjectMapOutput ? true : false;
+
 type IsWorkflowOutputCompatible<TPrevSchema, TOutput> =
   IsAny<TPrevSchema> extends true
     ? true
     : IsAny<TOutput> extends true
       ? true
-      : IsUnknown<TPrevSchema> extends true
+      : IsObjectMapOutput<TPrevSchema> extends true
         ? true
-        : IsUnknown<TOutput> extends true
+        : IsUnknown<TPrevSchema> extends true
           ? true
-          : [TPrevSchema] extends [TOutput]
+          : IsUnknown<TOutput> extends true
             ? true
-            : false;
+            : [TPrevSchema] extends [TOutput]
+              ? true
+              : false;
 
 // Options that can be passed when wrapping an agent with createStep
 // These work for both stream() (v2) and streamLegacy() (v1) methods
@@ -1863,7 +1877,7 @@ export class Workflow<
         | DynamicMapping<TPrevSchema, any>;
     },
     stepOptions?: { id?: string | null },
-  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any, TRequestContext>;
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, ObjectMapOutput, TRequestContext>;
   map(
     mappingConfig:
       | {
@@ -1887,7 +1901,16 @@ export class Workflow<
         }
       | WorkflowMapFunction<TState, TPrevSchema, TEngineType, TRequestContext>,
     stepOptions?: { id?: string | null },
-  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any, TRequestContext> {
+  ): Workflow<
+    TEngineType,
+    TSteps,
+    TWorkflowId,
+    TState,
+    TInput,
+    TOutput,
+    ObjectMapOutput | WorkflowMapOutput<any>,
+    TRequestContext
+  > {
     // Create an implicit step that handles the mapping
     if (typeof mappingConfig === 'function') {
       const mappingStep: any = createStep({
@@ -1917,7 +1940,7 @@ export class Workflow<
         TState,
         TInput,
         TOutput,
-        any,
+        WorkflowMapOutput<typeof mappingConfig>,
         TRequestContext
       >;
     }
@@ -2007,7 +2030,7 @@ export class Workflow<
       },
     });
 
-    type MappedOutputSchema = any;
+    type MappedOutputSchema = ObjectMapOutput;
 
     this.stepFlow.push({ type: 'step', step: mappingStep as any });
     this.serializedStepFlow.push({
