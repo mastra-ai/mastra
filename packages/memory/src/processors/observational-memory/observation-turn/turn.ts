@@ -174,7 +174,9 @@ export class ObservationTurn {
     const unsavedMessages = [...unsavedInput, ...unsavedOutput];
     if (unsavedMessages.length > 0) {
       this.om.sealMessagesForBuffering(unsavedOutput);
-      await this.om.persistMessages(unsavedMessages, this.threadId, this.resourceId);
+      await this.om.persistMessages(unsavedMessages, this.threadId, this.resourceId, {
+        includeSealed: unsavedOutput.length > 0,
+      });
       for (const msg of unsavedMessages) {
         this.messageList.add(msg, 'memory');
       }

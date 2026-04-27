@@ -1650,17 +1650,30 @@ export class ObservationalMemory {
   }
 
   /**
-   * Save messages to storage through MessageHistory so normal persistence
-   * filtering and thread upserts are applied.
+   * Save messages to storage, skipping sealed messages that were already
+   * persisted by async buffering unless the caller just sealed them.
    */
   async persistMessages(
     messagesToSave: MastraDBMessage[],
     threadId: string,
     resourceId: string | undefined,
+    opts?: { includeSealed?: boolean },
   ): Promise<void> {
-    if (messagesToSave.length > 0) {
+    const filteredMessages: MastraDBMessage[] = [];
+    for (const msg of messagesToSave) {
+      const isSealed = !!(msg.content?.metadata as { mastra?: { sealed?: boolean } })?.mastra?.sealed;
+      if (isSealed && !opts?.includeSealed) {
+        if (findLastCompletedObservationBoundary(msg) !== -1) {
+          filteredMessages.push(msg);
+        }
+      } else {
+        filteredMessages.push(msg);
+      }
+    }
+
+    if (filteredMessages.length > 0) {
       await this.messageHistory.persistMessages({
-        messages: messagesToSave,
+        messages: filteredMessages,
         threadId,
         resourceId,
       });
