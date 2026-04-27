@@ -1357,7 +1357,7 @@ export const recallTool = (
         });
       }
 
-      const usedDefaultThreadId = !explicitThreadId && !cursor && Boolean(currentThreadId);
+      const usedDefaultThreadId = isResourceScope && !explicitThreadId && !cursor && Boolean(currentThreadId);
       const defaultThreadNote = usedDefaultThreadId
         ? `threadId wasn't passed so used default ${currentThreadId}.\n\n`
         : '';
