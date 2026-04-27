@@ -1,3 +1,4 @@
+import { getLegacyContent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { MemoryConfigInternal } from '@mastra/core/memory';
 import { createTool } from '@mastra/core/tools';
@@ -571,8 +572,11 @@ function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): Formatt
         parts.push({ messageId: msg.id, partIndex: i, role: msg.role, type: partType, text: fullText, fullText });
       }
     }
-  } else if (msg.content?.content) {
-    parts.push(makePart(msg, 0, 'text', msg.content.content, detail));
+  } else {
+    const content = getLegacyContent(msg.content);
+    if (content) {
+      parts.push(makePart(msg, 0, 'text', content, detail));
+    }
   }
 
   return parts;

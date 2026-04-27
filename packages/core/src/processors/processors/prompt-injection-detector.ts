@@ -2,6 +2,7 @@ import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
+import { getLegacyContent } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
@@ -369,8 +370,8 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
       }
     }
 
-    if (!text.trim() && typeof message.content.content === 'string') {
-      text = message.content.content;
+    if (!text.trim()) {
+      text = getLegacyContent(message.content) ?? '';
     }
 
     return text.trim();

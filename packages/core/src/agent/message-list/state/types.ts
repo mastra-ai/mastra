@@ -25,6 +25,11 @@ type MastraMessageShared = {
 type LegacyToolInvocationPart = Extract<UIMessageV4['parts'][number], { type: 'tool-invocation' }>;
 type LegacySourcePart = Extract<UIMessageV4['parts'][number], { type: 'source' }>;
 type LegacyToolInvocation = NonNullable<UIMessageV4['toolInvocations']>[number];
+export type MastraLegacyMessageAnnotations = UIMessageV4['annotations'];
+export type MastraLegacyMessageContent = UIMessageV4['content'];
+export type MastraLegacyMessageAttachments = UIMessageV4['experimental_attachments'];
+export type MastraLegacyToolInvocations = UIMessageV4['toolInvocations'];
+export type MastraLegacyReasoning = UIMessageV4['reasoning'];
 export type MastraProviderMetadata = AIV5Type.ProviderMetadata;
 type MastraPartExtensions = { providerMetadata?: MastraProviderMetadata; createdAt?: number };
 type PartWithProviderMetadata<T> = T & MastraPartExtensions;
@@ -92,13 +97,22 @@ export type UIMessageV4Part = UIMessageV4['parts'][number] & MastraPartExtension
 export type MastraMessageContentV2 = {
   format: 2; // format 2 === UIMessage in AI SDK v4
   parts: MastraMessagePart[];
-  experimental_attachments?: UIMessageV4['experimental_attachments'];
-  content?: UIMessageV4['content'];
-  toolInvocations?: UIMessageV4['toolInvocations'];
-  reasoning?: UIMessageV4['reasoning'];
-  annotations?: UIMessageV4['annotations'];
   metadata?: Record<string, unknown>;
   providerMetadata?: MastraProviderMetadata;
+} & Readonly<{
+  experimental_attachments?: MastraLegacyMessageAttachments;
+  content?: MastraLegacyMessageContent;
+  toolInvocations?: MastraLegacyToolInvocations;
+  reasoning?: MastraLegacyReasoning;
+  annotations?: MastraLegacyMessageAnnotations;
+}>;
+
+export type MastraMessageContentV2WithLegacyFields = MastraMessageContentV2 & {
+  experimental_attachments?: MastraLegacyMessageAttachments;
+  content?: MastraLegacyMessageContent;
+  toolInvocations?: MastraLegacyToolInvocations;
+  reasoning?: MastraLegacyReasoning;
+  annotations?: MastraLegacyMessageAnnotations;
 };
 
 // maps to AI SDK V4 UIMessage

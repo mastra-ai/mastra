@@ -1,6 +1,7 @@
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import type { Tiktoken, TiktokenBPE } from 'js-tiktoken/lite';
 import type { MastraDBMessage } from '../../agent/message-list';
+import { getLegacyContent } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { ChunkType } from '../../stream';
 import { getTiktoken } from '../../utils/tiktoken';
@@ -196,11 +197,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', { syste
       // Simple string content
       tokenString += message.content;
     } else if (message.content && typeof message.content === 'object') {
-      // Object content with parts
-      // Use content.content as the primary text, or fall back to parts
-      if (message.content.content && !Array.isArray(message.content.parts)) {
-        tokenString += message.content.content;
-      } else if (Array.isArray(message.content.parts)) {
+      if (Array.isArray(message.content.parts)) {
         // Calculate tokens for each content part
         for (const part of message.content.parts) {
           if (part.type === 'text') {
@@ -237,6 +234,8 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', { syste
             tokenString += JSON.stringify(part);
           }
         }
+      } else {
+        tokenString += getLegacyContent(message.content) ?? '';
       }
     }
 

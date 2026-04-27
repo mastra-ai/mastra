@@ -14,6 +14,47 @@ const threadId = `one`;
 const resourceId = `user`;
 
 describe('MessageList', () => {
+  const getStoredShape = (value: unknown): unknown => {
+    if (value instanceof Date) return value;
+    if (Array.isArray(value)) return value.map(getStoredShape);
+    if (value && typeof value === 'object') {
+      const next: Record<string, unknown> = {};
+      for (const key of Object.keys(value)) {
+        next[key] = getStoredShape((value as Record<string, unknown>)[key]);
+      }
+      return next;
+    }
+    return value;
+  };
+
+  const getExpectedStoredShape = (value: unknown): unknown => {
+    if (value && typeof value === 'object' && 'asymmetricMatch' in value) return value;
+    if (value instanceof Date) return value;
+    if (Array.isArray(value)) return value.map(getExpectedStoredShape);
+    if (value && typeof value === 'object') {
+      const record = value as Record<string, unknown>;
+      const next: Record<string, unknown> = {};
+      const legacyKeys =
+        record.format === 2
+          ? ['content', 'toolInvocations', 'reasoning', 'annotations', 'experimental_attachments']
+          : [];
+      for (const key of Object.keys(record)) {
+        if (legacyKeys.includes(key)) continue;
+        next[key] = getExpectedStoredShape(record[key]);
+      }
+      return next;
+    }
+    return value;
+  };
+
+  const expectStoredMessage = (actual: unknown, expected: unknown) => {
+    expect(getStoredShape(actual)).toEqual(getExpectedStoredShape(expected));
+  };
+
+  const expectStoredMessages = (actual: unknown, expected: unknown) => {
+    expect(getStoredShape(actual)).toEqual(getExpectedStoredShape(expected));
+  };
+
   describe('Response message tracking', () => {
     it('should track all response messages including tool calls and results', () => {
       const messageList = new MessageList();
@@ -252,7 +293,7 @@ describe('MessageList', () => {
       const messages = list.get.all.db();
       expect(messages.length).toBe(1);
 
-      expect(messages[0]).toEqual({
+      expectStoredMessage(messages[0], {
         id: input.id,
         role: 'user',
         createdAt: input.createdAt,
@@ -280,7 +321,7 @@ describe('MessageList', () => {
       const messages = list.get.all.db();
       expect(messages.length).toBe(1);
 
-      expect(messages[0]).toEqual({
+      expectStoredMessage(messages[0], {
         id: expect.any(String),
         role: 'user',
         createdAt: expect.any(Date),
@@ -562,7 +603,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'response');
 
-      expect(list.get.all.db()).toEqual([
+      expectStoredMessages(list.get.all.db(), [
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
@@ -607,7 +648,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'input');
 
-      expect(list.get.all.db()).toEqual([
+      expectStoredMessages(list.get.all.db(), [
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
@@ -641,7 +682,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'input');
 
-      expect(list.get.all.db()).toEqual([
+      expectStoredMessages(list.get.all.db(), [
         {
           id: expect.any(String),
           role: 'assistant',
@@ -757,7 +798,8 @@ describe('MessageList', () => {
           resourceId,
         },
       ];
-      expect(new MessageList({ threadId, resourceId }).add(messageSequence, 'input').get.all.db()).toEqual(
+      expectStoredMessages(
+        new MessageList({ threadId, resourceId }).add(messageSequence, 'input').get.all.db(),
         expected.map(m => ({ ...m, createdAt: expect.any(Date) })),
       );
 
@@ -920,7 +962,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'input');
 
-      expect(list.get.all.db()).toEqual([
+      expectStoredMessages(list.get.all.db(), [
         {
           id: expect.any(String),
           role: 'assistant',
@@ -960,7 +1002,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'input');
 
-      expect(list.get.all.db()).toEqual([
+      expectStoredMessages(list.get.all.db(), [
         {
           id: expect.any(String),
           role: 'user',
@@ -1000,7 +1042,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'response');
 
-      expect(list.get.all.db()).toEqual([
+      expectStoredMessages(list.get.all.db(), [
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
@@ -1045,7 +1087,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'input');
 
-      expect(list.get.all.db()).toEqual([
+      expectStoredMessages(list.get.all.db(), [
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
@@ -1100,7 +1142,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'response');
 
-      expect(list.get.all.db()).toEqual([
+      expectStoredMessages(list.get.all.db(), [
         {
           id: expect.any(String),
           role: 'assistant',
@@ -1198,7 +1240,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'response');
 
-      expect(list.get.all.db()).toEqual([
+      expectStoredMessages(list.get.all.db(), [
         {
           id: expect.any(String),
           role: 'user',
@@ -1291,7 +1333,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'memory');
 
-      expect(list.get.all.db()).toEqual([
+      expectStoredMessages(list.get.all.db(), [
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
@@ -1330,7 +1372,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'input');
 
-      expect(list.get.all.db()).toEqual([
+      expectStoredMessages(list.get.all.db(), [
         {
           id: expect.any(String),
           role: 'user',
@@ -1379,7 +1421,7 @@ describe('MessageList', () => {
       const messages = list.get.all.db();
       expect(messages.length).toBe(1);
 
-      expect(messages[0]).toEqual({
+      expectStoredMessage(messages[0], {
         id: input.id,
         role: 'user',
         createdAt: expect.any(Date),
@@ -1387,6 +1429,12 @@ describe('MessageList', () => {
           format: 2,
           parts: [
             expect.objectContaining({ type: 'text', text: 'Message with attachment', createdAt: expect.any(Number) }),
+            expect.objectContaining({
+              type: 'file',
+              data: 'https://example.com/files/report.pdf',
+              mimeType: 'application/pdf',
+              createdAt: expect.any(Number),
+            }),
           ],
           experimental_attachments: [
             {
@@ -1422,7 +1470,7 @@ describe('MessageList', () => {
       const messages = list.get.all.db();
       expect(messages.length).toBe(1);
 
-      expect(messages[0]).toEqual({
+      expectStoredMessage(messages[0], {
         id: input.id,
         role: 'user',
         createdAt: expect.any(Date),
@@ -1430,6 +1478,12 @@ describe('MessageList', () => {
           format: 2,
           parts: [
             expect.objectContaining({ type: 'text', text: 'Check out this image:', createdAt: expect.any(Number) }),
+            expect.objectContaining({
+              type: 'file',
+              data: 'https://example.com/images/example.png',
+              mimeType: 'image/png',
+              createdAt: expect.any(Number),
+            }),
           ],
           experimental_attachments: [
             {
@@ -1493,7 +1547,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'response');
 
-      expect(list.get.all.db()).toEqual([
+      expectStoredMessages(list.get.all.db(), [
         {
           id: userMsgV1.id,
           role: 'user',
@@ -1585,7 +1639,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'response');
 
-      expect(list.get.all.db()).toEqual([
+      expectStoredMessages(list.get.all.db(), [
         {
           id: expect.any(String),
           role: 'user',
@@ -1666,7 +1720,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'input');
 
-      expect(list.get.all.db()).toEqual([
+      expectStoredMessages(list.get.all.db(), [
         {
           id: expect.any(String),
           role: 'user',
@@ -1706,7 +1760,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'memory');
 
-      expect(list.get.all.db()).toEqual([
+      expectStoredMessages(list.get.all.db(), [
         {
           id: expect.any(String),
           role: 'assistant',
@@ -1783,7 +1837,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'response');
 
-      expect(list.get.all.db()).toEqual([
+      expectStoredMessages(list.get.all.db(), [
         {
           id: expect.any(String),
           role: 'user',
@@ -1883,7 +1937,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'memory');
 
-      expect(list.get.all.db()).toEqual([
+      expectStoredMessages(list.get.all.db(), [
         {
           id: expect.any(String),
           role: 'assistant',

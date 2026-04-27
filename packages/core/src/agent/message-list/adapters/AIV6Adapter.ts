@@ -10,6 +10,7 @@ import type {
   MastraToolInvocationPart,
 } from '../state/types';
 import type { AIV5Type, AIV6Type, MessageSource } from '../types';
+import { addLegacyGettersToMessage } from '../utils/legacy-fields';
 import { sanitizeToolName } from '../utils/tool-name';
 import { AIV5Adapter } from './AIV5Adapter';
 
@@ -276,13 +277,13 @@ export class AIV6Adapter {
       );
     }
 
-    return {
+    return addLegacyGettersToMessage({
       ...baseDb,
       content: {
         ...baseDb.content,
         parts,
       },
-    };
+    });
   }
 
   static fromModelMessage(
@@ -379,13 +380,13 @@ export class AIV6Adapter {
       }
     }
 
-    return {
+    return addLegacyGettersToMessage({
       ...baseDb,
       content: {
         ...baseDb.content,
         parts,
       },
-    };
+    });
   }
 
   private static toUIPart(part: MastraMessagePart): AIV6Type.UIMessage['parts'][number] {

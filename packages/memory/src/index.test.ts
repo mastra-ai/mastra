@@ -268,7 +268,14 @@ describe('Memory', () => {
 
       expect(recalled.messages).toHaveLength(2);
       expect(recalled.messages.map(message => message.id)).toEqual(['save-msg-1', 'save-msg-2']);
-      expect(recalled.messages.map(message => message.content)).toEqual([messages[0].content, messages[1].content]);
+      expect(recalled.messages.map(message => message.content.parts)).toEqual([
+        [{ type: 'text', text: 'Hello from user' }],
+        [{ type: 'text', text: 'Hello from assistant' }],
+      ]);
+      expect(recalled.messages.map(message => message.content.content)).toEqual([
+        'Hello from user',
+        'Hello from assistant',
+      ]);
     });
   });
 

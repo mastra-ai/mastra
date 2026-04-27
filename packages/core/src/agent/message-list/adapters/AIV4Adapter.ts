@@ -16,6 +16,13 @@ import type {
   MessageSource,
   UIMessageWithMetadata,
 } from '../state/types';
+import {
+  addLegacyGettersToMessage,
+  getLegacyContent,
+  getLegacyExperimentalAttachments,
+  getLegacyReasoning,
+  getLegacyToolInvocations,
+} from '../utils/legacy-fields';
 import { findToolCallArgs } from '../utils/provider-compat';
 
 /**
@@ -66,20 +73,8 @@ export class AIV4Adapter {
    * Convert MastraDBMessage to AI SDK V4 UIMessage
    */
   static toUIMessage(m: MastraDBMessage): UIMessageWithMetadata {
-    const experimentalAttachments: UIMessageWithMetadata['experimental_attachments'] = m.content
-      .experimental_attachments
-      ? [...m.content.experimental_attachments]
-      : [];
-    const contentString =
-      typeof m.content.content === `string` && m.content.content !== ''
-        ? m.content.content
-        : (m.content.parts ?? []).reduce((prev, part) => {
-            if (part.type === `text`) {
-              // return only the last text part like AI SDK does
-              return part.text;
-            }
-            return prev;
-          }, '');
+    const experimentalAttachments: UIMessageWithMetadata['experimental_attachments'] = [];
+    const contentString = getLegacyContent(m.content) ?? '';
 
     const parts: MastraMessageContentV2['parts'] = [];
     const sourceParts = m.content.parts ?? [];
@@ -163,7 +158,7 @@ export class AIV4Adapter {
       const uiMessage: UIMessageWithMetadata = {
         id: m.id,
         role: m.role,
-        content: m.content.content || contentString,
+        content: contentString,
         createdAt: m.createdAt,
         parts: v4Parts,
         experimental_attachments: experimentalAttachments,
@@ -172,20 +167,20 @@ export class AIV4Adapter {
       if (m.content.metadata) {
         uiMessage.metadata = m.content.metadata;
       }
+      const legacyAttachments = getLegacyExperimentalAttachments(m.content);
+      if (legacyAttachments) {
+        uiMessage.experimental_attachments = legacyAttachments;
+      }
       return uiMessage;
     } else if (m.role === `assistant`) {
-      const isSingleTextContentArray =
-        Array.isArray(m.content.content) && m.content.content.length === 1 && m.content.content[0].type === `text`;
-
       const uiMessage: UIMessageWithMetadata = {
         id: m.id,
         role: m.role,
-        content: isSingleTextContentArray ? contentString : m.content.content || contentString,
+        content: contentString,
         createdAt: m.createdAt,
         parts: v4Parts,
-        reasoning: undefined,
-        toolInvocations:
-          `toolInvocations` in m.content ? m.content.toolInvocations?.filter(t => t.state === 'result') : undefined,
+        reasoning: getLegacyReasoning(m.content),
+        toolInvocations: getLegacyToolInvocations(m.content)?.filter(t => t.state === 'result'),
       };
       // Preserve metadata if present
       if (m.content.metadata) {
@@ -197,7 +192,7 @@ export class AIV4Adapter {
     const uiMessage: UIMessageWithMetadata = {
       id: m.id,
       role: m.role,
-      content: m.content.content || contentString,
+      content: contentString,
       createdAt: m.createdAt,
       parts: v4Parts,
       experimental_attachments: experimentalAttachments,
@@ -206,6 +201,10 @@ export class AIV4Adapter {
     if (m.content.metadata) {
       uiMessage.metadata = m.content.metadata;
     }
+    const legacyAttachments = getLegacyExperimentalAttachments(m.content);
+    if (legacyAttachments) {
+      uiMessage.experimental_attachments = legacyAttachments;
+    }
     return uiMessage;
   }
 
@@ -213,7 +212,8 @@ export class AIV4Adapter {
    * Converts a MastraDBMessage system message directly to AIV4 CoreMessage format
    */
   static systemToV4Core(message: MastraDBMessage): CoreMessageV4 {
-    if (message.role !== `system` || !message.content.content)
+    const content = getLegacyContent(message.content);
+    if (message.role !== `system` || !content)
       throw new MastraError({
         id: 'INVALID_SYSTEM_MESSAGE_FORMAT',
         domain: ErrorDomain.AGENT,
@@ -224,7 +224,7 @@ export class AIV4Adapter {
         },
       });
 
-    const coreMessage: CoreMessageV4 = { role: 'system', content: message.content.content };
+    const coreMessage: CoreMessageV4 = { role: 'system', content };
 
     // Preserve message-level providerMetadata as experimental_providerMetadata (V4 field name)
     if (message.content.providerMetadata) {
@@ -250,25 +250,29 @@ export class AIV4Adapter {
       parts: filteredParts,
     };
 
-    if (message.toolInvocations) content.toolInvocations = message.toolInvocations;
-    if (message.reasoning) content.reasoning = message.reasoning;
-    if (message.annotations) content.annotations = message.annotations;
-    if (message.experimental_attachments) {
-      content.experimental_attachments = message.experimental_attachments;
-    }
     // Preserve metadata field if present
     if ('metadata' in message && message.metadata !== null && message.metadata !== undefined) {
       content.metadata = message.metadata as Record<string, unknown>;
     }
 
-    return {
+    if (message.experimental_attachments?.length && !content.parts.some(part => part.type === 'file')) {
+      content.parts.push(
+        ...message.experimental_attachments.map(attachment => ({
+          type: 'file' as const,
+          data: attachment.url,
+          mimeType: attachment.contentType || 'application/octet-stream',
+        })),
+      );
+    }
+
+    return addLegacyGettersToMessage({
       id: message.id || ctx.newMessageId(),
       role: TypeDetector.getRole(message),
       createdAt: ctx.generateCreatedAt(messageSource, message.createdAt),
       threadId: ctx.memoryInfo?.threadId,
       resourceId: ctx.memoryInfo?.resourceId,
       content,
-    } satisfies MastraDBMessage;
+    } satisfies MastraDBMessage);
   }
 
   /**
@@ -281,8 +285,6 @@ export class AIV4Adapter {
   ): MastraDBMessage {
     const id = `id` in coreMessage ? (coreMessage.id as string) : ctx.newMessageId();
     const parts: UIMessageV4['parts'] = [];
-    const experimentalAttachments: UIMessageV4['experimental_attachments'] = [];
-    const toolInvocations: ToolInvocationV4[] = [];
 
     const isSingleTextContent =
       messageSource === `response` &&
@@ -377,7 +379,6 @@ export class AIV4Adapter {
               }
 
               parts.push(part);
-              toolInvocations.push(invocation);
             }
             break;
 
@@ -499,11 +500,6 @@ export class AIV4Adapter {
       parts: filteredParts,
     };
 
-    if (toolInvocations.length) content.toolInvocations = toolInvocations;
-    if (typeof coreMessage.content === `string`) content.content = coreMessage.content;
-
-    if (experimentalAttachments.length) content.experimental_attachments = experimentalAttachments;
-
     // V4 uses experimental_providerMetadata, V5 uses providerOptions
     if (coreMessage.providerOptions) {
       content.providerMetadata = coreMessage.providerOptions;
@@ -523,13 +519,13 @@ export class AIV4Adapter {
         ? coreMessage.metadata.createdAt
         : undefined;
 
-    return {
+    return addLegacyGettersToMessage({
       id,
       role: TypeDetector.getRole(coreMessage),
       createdAt: ctx.generateCreatedAt(messageSource, rawCreatedAt),
       threadId: ctx.memoryInfo?.threadId,
       resourceId: ctx.memoryInfo?.resourceId,
       content,
-    } satisfies MastraDBMessage;
+    } satisfies MastraDBMessage);
   }
 }

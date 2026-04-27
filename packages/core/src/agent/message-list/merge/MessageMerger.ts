@@ -130,20 +130,6 @@ export class MessageMerger {
                 ...part.providerMetadata,
               };
             }
-            if (!latestMessage.content.toolInvocations) {
-              latestMessage.content.toolInvocations = [];
-            }
-            const toolInvocationIndex = latestMessage.content.toolInvocations.findIndex(
-              t => t.toolCallId === existingCallPart.toolInvocation.toolCallId,
-            );
-            if (toolInvocationIndex === -1) {
-              latestMessage.content.toolInvocations.push(
-                existingCallPart.toolInvocation as NonNullable<MastraDBMessage['content']['toolInvocations']>[number],
-              );
-            } else {
-              latestMessage.content.toolInvocations[toolInvocationIndex] =
-                existingCallPart.toolInvocation as NonNullable<MastraDBMessage['content']['toolInvocations']>[number];
-            }
           } else if (
             part.toolInvocation.state === 'approval-requested' ||
             part.toolInvocation.state === 'approval-responded' ||
@@ -202,17 +188,6 @@ export class MessageMerger {
 
     if (latestMessage.createdAt.getTime() < incomingMessage.createdAt.getTime()) {
       latestMessage.createdAt = incomingMessage.createdAt;
-    }
-    if (!latestMessage.content.content && incomingMessage.content.content) {
-      latestMessage.content.content = incomingMessage.content.content;
-    }
-    if (
-      latestMessage.content.content &&
-      incomingMessage.content.content &&
-      latestMessage.content.content !== incomingMessage.content.content
-    ) {
-      // Match what AI SDK does - content string is always the latest text part.
-      latestMessage.content.content = incomingMessage.content.content;
     }
   }
 

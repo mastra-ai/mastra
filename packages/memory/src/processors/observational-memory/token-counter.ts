@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
+import { getLegacyContent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import imageSize from 'image-size';
 import { estimateTokenCount } from 'tokenx';
@@ -1511,8 +1512,9 @@ export class TokenCounter {
     if (typeof message.content === 'string') {
       payloadTokens += this.readOrPersistMessageEstimate(message, 'message-content', message.content);
     } else if (message.content && typeof message.content === 'object') {
-      if (message.content.content && !Array.isArray(message.content.parts)) {
-        payloadTokens += this.readOrPersistMessageEstimate(message, 'content-content', message.content.content);
+      const content = getLegacyContent(message.content);
+      if (content && !Array.isArray(message.content.parts)) {
+        payloadTokens += this.readOrPersistMessageEstimate(message, 'content-content', content);
       } else if (Array.isArray(message.content.parts)) {
         for (const part of message.content.parts as CacheablePart[]) {
           const attachmentTokens = this.countAttachmentPartSync(part);
@@ -1544,8 +1546,9 @@ export class TokenCounter {
     if (typeof message.content === 'string') {
       payloadTokens += this.readOrPersistMessageEstimate(message, 'message-content', message.content);
     } else if (message.content && typeof message.content === 'object') {
-      if (message.content.content && !Array.isArray(message.content.parts)) {
-        payloadTokens += this.readOrPersistMessageEstimate(message, 'content-content', message.content.content);
+      const content = getLegacyContent(message.content);
+      if (content && !Array.isArray(message.content.parts)) {
+        payloadTokens += this.readOrPersistMessageEstimate(message, 'content-content', content);
       } else if (Array.isArray(message.content.parts)) {
         for (const part of message.content.parts as CacheablePart[]) {
           const attachmentTokens = await this.countAttachmentPartAsync(part);

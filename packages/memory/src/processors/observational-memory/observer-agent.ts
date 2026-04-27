@@ -1,3 +1,4 @@
+import { getLegacyContent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 
@@ -858,8 +859,11 @@ function formatObserverMessage(
         );
       }
     });
-  } else if (msg.content?.content) {
-    pushLine(role, maybeTruncate(msg.content.content, maxLen), messageCreatedAt);
+  } else {
+    const content = getLegacyContent(msg.content);
+    if (content) {
+      pushLine(role, maybeTruncate(content, maxLen), messageCreatedAt);
+    }
   }
 
   if (lines.length === 0 && attachments.length === 0) {

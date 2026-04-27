@@ -36,6 +36,13 @@ import type {
   SerializedMessageListState,
 } from './state';
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
+import {
+  addLegacyGettersToMessage,
+  addLegacyGettersToMessages,
+  stripLegacyMessageFields,
+  stripLegacyMessageFieldsInPlace,
+  stripLegacyMessageFieldsPreservingInstance,
+} from './utils/legacy-fields';
 import { ensureGeminiCompatibleMessages } from './utils/provider-compat';
 import { stampPart } from './utils/stamp-part';
 
@@ -233,7 +240,7 @@ export class MessageList {
 
   public deserialize(state: SerializedMessageListState) {
     const data = this.stateManager.deserializeAll(state);
-    this.messages = data.messages;
+    this.messages = data.messages.map(addLegacyGettersToMessage);
     this.systemMessages = data.systemMessages;
     this.taggedSystemMessages = data.taggedSystemMessages;
     this.memoryInfo = data.memoryInfo;
@@ -351,7 +358,8 @@ export class MessageList {
   }
 
   private all = {
-    db: (): MastraDBMessage[] => this.messages,
+    db: (): MastraDBMessage[] => addLegacyGettersToMessages(this.messages),
+    storage: (): MastraDBMessage[] => this.messages.map(stripLegacyMessageFields),
     v1: (): MastraMessageV1[] => convertToV1Messages(this.all.db()),
 
     aiV5: {
@@ -690,7 +698,7 @@ export class MessageList {
     const messages = this.messages.filter(m => this.newUserMessages.has(m) || this.newResponseMessages.has(m));
     this.newUserMessages.clear();
     this.newResponseMessages.clear();
-    return messages;
+    return messages.map(stripLegacyMessageFields);
   }
 
   public getEarliestUnsavedMessageTimestamp(): number | undefined {
@@ -740,7 +748,9 @@ export class MessageList {
             ...inputPart,
             toolInvocation: {
               ...inputPart.toolInvocation,
-              args: part.toolInvocation.args,
+              args: Object.keys(inputPart.toolInvocation.args ?? {}).length
+                ? inputPart.toolInvocation.args
+                : part.toolInvocation.args,
             },
             // Preserve providerExecuted from original call if not in result
             ...(originalPart.providerExecuted !== undefined && inputPartWithMeta.providerExecuted === undefined
@@ -1032,7 +1042,11 @@ export class MessageList {
       });
     }
 
-    const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
+    const messageV2 = addLegacyGettersToMessage(
+      stripLegacyMessageFieldsPreservingInstance(
+        convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext()),
+      ),
+    );
 
     const { exists, shouldReplace, id } = this.shouldReplaceMessage(messageV2);
 
@@ -1065,6 +1079,8 @@ export class MessageList {
     if (shouldMerge && latestMessage) {
       // Delegate merge logic to MessageMerger
       MessageMerger.merge(latestMessage, messageV2);
+      stripLegacyMessageFieldsInPlace(latestMessage);
+      addLegacyGettersToMessage(latestMessage);
 
       // If latest message gets appended to, it should be added to the proper source
       this.pushMessageToSource(latestMessage, messageSource);
@@ -1152,6 +1168,8 @@ export class MessageList {
           );
           if (shouldMergeIntoExisting) {
             MessageMerger.merge(existingMessage, messageV2);
+            stripLegacyMessageFieldsInPlace(existingMessage);
+            addLegacyGettersToMessage(existingMessage);
             this.pushMessageToSource(existingMessage, messageSource);
             // Sort messages and return early — existingMessage stays in messages[] and its Sets
             this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());

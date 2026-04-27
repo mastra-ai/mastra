@@ -1,7 +1,7 @@
 import type { SystemModelMessage } from '@internal/ai-sdk-v5';
 import xxhash from 'xxhash-wasm';
 import type { Processor } from '..';
-import { MessageList } from '../../agent';
+import { getLegacyContent, MessageList } from '../../agent';
 import type { IMastraLogger } from '../../logger';
 import { parseMemoryRequestContext } from '../../memory';
 import type { MastraDBMessage } from '../../memory';
@@ -310,12 +310,9 @@ export class SemanticRecall implements Processor {
           continue;
         }
 
-        // First check if there's a content string
-        if (typeof msg.content.content === 'string' && msg.content.content !== '') {
-          return msg.content.content;
-        }
+        const content = getLegacyContent(msg.content);
+        if (content) return content;
 
-        // Otherwise extract from parts - combine all text parts
         const textParts: string[] = [];
         msg.content.parts?.forEach((part: any) => {
           if (part.type === 'text' && part.text) {

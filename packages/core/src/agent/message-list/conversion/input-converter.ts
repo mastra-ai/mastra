@@ -178,7 +178,6 @@ export function mastraMessageV1ToMastraDBMessage(
 
 /**
  * Hydrate a MastraDBMessage with missing fields (id, createdAt, threadId, resourceId).
- * Also fixes toolInvocations with empty args by looking in the parts array.
  */
 export function hydrateMastraDBMessageFields(
   message: MastraDBMessage,
@@ -191,28 +190,6 @@ export function hydrateMastraDBMessageFields(
 
   if (!(message.createdAt instanceof Date)) {
     message.createdAt = new Date(message.createdAt);
-  }
-
-  // Fix toolInvocations with empty args by looking in the parts array
-  // This handles messages restored from database where toolInvocations might have lost their args
-  if (message.content.toolInvocations && message.content.parts) {
-    message.content.toolInvocations = message.content.toolInvocations.map(ti => {
-      if (!ti.args || Object.keys(ti.args).length === 0) {
-        // Find the corresponding tool-invocation part with args
-        const partWithArgs = message.content.parts.find(
-          part =>
-            part.type === 'tool-invocation' &&
-            part.toolInvocation &&
-            part.toolInvocation.toolCallId === ti.toolCallId &&
-            part.toolInvocation.args &&
-            Object.keys(part.toolInvocation.args).length > 0,
-        );
-        if (partWithArgs && partWithArgs.type === 'tool-invocation') {
-          return { ...ti, args: partWithArgs.toolInvocation.args };
-        }
-      }
-      return ti;
-    });
   }
 
   if (!message.threadId && context.memoryInfo?.threadId) {

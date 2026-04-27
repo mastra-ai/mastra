@@ -1,6 +1,7 @@
 import { APICallError } from '@internal/ai-sdk-v5';
 
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
+import { getLegacyToolInvocations } from '../agent/message-list';
 import type { Processor, ProcessAPIErrorArgs, ProcessAPIErrorResult } from './index';
 
 // ---------------------------------------------------------------------------
@@ -77,8 +78,9 @@ function buildToolIdMap(messages: MastraDBMessage[]): Map<string, string> {
       }
     }
 
-    if (msg.content.toolInvocations) {
-      for (const inv of msg.content.toolInvocations) {
+    const toolInvocations = getLegacyToolInvocations(msg.content);
+    if (toolInvocations) {
+      for (const inv of toolInvocations) {
         const id = inv.toolCallId;
         if (id && !VALID_TOOL_ID_PATTERN.test(id) && !idMap.has(id)) {
           idMap.set(id, sanitizeToolId(id));
@@ -104,15 +106,6 @@ function rewriteToolIds(messages: MastraDBMessage[], idMap: Map<string, string>)
               toolCallId: newId,
             };
           }
-        }
-      }
-    }
-
-    if (msg.content?.toolInvocations) {
-      for (const inv of msg.content.toolInvocations) {
-        const newId = idMap.get(inv.toolCallId);
-        if (newId) {
-          inv.toolCallId = newId;
         }
       }
     }

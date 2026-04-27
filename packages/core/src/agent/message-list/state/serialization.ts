@@ -1,3 +1,4 @@
+import { addLegacyGettersToMessage, stripLegacyMessageFields } from '../utils/legacy-fields';
 import type { MastraDBMessage } from './types';
 
 /**
@@ -11,9 +12,10 @@ export type SerializedMessage = Omit<MastraDBMessage, 'createdAt'> & {
  * Serialize a message by converting Date to string
  */
 export function serializeMessage(message: MastraDBMessage): SerializedMessage {
+  const strippedMessage = stripLegacyMessageFields(message);
   return {
-    ...message,
-    createdAt: message.createdAt.toISOString(),
+    ...strippedMessage,
+    createdAt: strippedMessage.createdAt.toISOString(),
   };
 }
 
@@ -21,10 +23,10 @@ export function serializeMessage(message: MastraDBMessage): SerializedMessage {
  * Deserialize a message by converting string back to Date
  */
 export function deserializeMessage(message: SerializedMessage): MastraDBMessage {
-  return {
+  return addLegacyGettersToMessage({
     ...message,
     createdAt: new Date(message.createdAt),
-  } as MastraDBMessage;
+  } as MastraDBMessage);
 }
 
 /**
