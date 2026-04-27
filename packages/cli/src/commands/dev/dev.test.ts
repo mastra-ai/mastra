@@ -57,6 +57,7 @@ vi.mock('../../utils/dev-logger.js', () => ({
     bundleComplete: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
+    deprecated: vi.fn(),
     error: vi.fn(),
     debug: vi.fn(),
     serverError: vi.fn(),
@@ -96,12 +97,8 @@ class MockChildProcess extends EventEmitter {
   pid = 12345;
   exitCode: number | null = null;
   signalCode: NodeJS.Signals | null = null;
-  stdout = {
-    on: vi.fn(),
-  } as any;
-  stderr = {
-    on: vi.fn(),
-  } as any;
+  stdout = new EventEmitter() as any;
+  stderr = new EventEmitter() as any;
   kill = vi.fn((signal?: NodeJS.Signals | number) => {
     if (signal === 'SIGKILL') {
       return true;
@@ -357,6 +354,34 @@ describe('dev command - inspect flag behavior', () => {
 
       expect(commands).toContain('--inspect-brk');
       expect(commands.some(cmd => cmd.startsWith('--inspect-brk='))).toBe(false);
+    });
+  });
+
+  describe('working memory vnext deprecation output', () => {
+    it('formats the warning exactly once per process', async () => {
+      const { dev } = await import('./dev');
+      const { devLogger } = await import('../../utils/dev-logger.js');
+
+      await dev({
+        dir: undefined,
+        root: process.cwd(),
+        tools: undefined,
+        env: undefined,
+        inspect: false,
+        inspectBrk: false,
+        customArgs: undefined,
+        https: false,
+        debug: false,
+      });
+
+      const warning =
+        "Working memory `version: 'vnext'` is deprecated and will be removed in a future major release. Use the default stable working memory mode or build a custom processor for incremental updates.";
+
+      mockChildProcess.stderr.emit('data', Buffer.from(`${warning}\n`));
+      mockChildProcess.stderr.emit('data', Buffer.from(`${warning}\n`));
+
+      expect(devLogger.deprecated).toHaveBeenCalledTimes(1);
+      expect(devLogger.deprecated).toHaveBeenCalledWith(warning);
     });
   });
 });

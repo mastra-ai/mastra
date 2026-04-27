@@ -87,6 +87,19 @@ type RuntimeMemoryConfig = Omit<MemoryConfig, 'observationalMemory'> & {
   observationalMemory?: boolean | MemoryObservationalMemoryOptions;
 };
 
+globalThis.__mastraWarnedWorkingMemoryVNextDeprecation ??= false;
+
+function warnWorkingMemoryVNextDeprecationOnce(): void {
+  if (globalThis.__mastraWarnedWorkingMemoryVNextDeprecation || process.env.MASTRA_DEV !== 'true') {
+    return;
+  }
+
+  globalThis.__mastraWarnedWorkingMemoryVNextDeprecation = true;
+  console.warn(
+    "Working memory `version: 'vnext'` is deprecated and will be removed in a future major release. Use the default stable working memory mode or build a custom processor for incremental updates.",
+  );
+}
+
 type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions & {
   retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
 };
@@ -1603,7 +1616,13 @@ Notes:
       (typeof config.workingMemory.template === `string` || config.workingMemory.template) &&
       config.workingMemory;
 
-    return Boolean(isMDWorkingMemory && isMDWorkingMemory.version === `vnext`);
+    const usesVNext = Boolean(isMDWorkingMemory && isMDWorkingMemory.version === `vnext`);
+
+    if (usesVNext) {
+      warnWorkingMemoryVNextDeprecationOnce();
+    }
+
+    return usesVNext;
   }
 
   private getObservationEmbeddingIndexName(dimensions?: number): string {

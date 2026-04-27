@@ -23,6 +23,7 @@ let currentServerProcess: ChildProcess | undefined;
 let isRestarting = false;
 let serverStartTime: number | undefined;
 let requestContextPresetsJson: string | undefined;
+let hasLoggedWorkingMemoryVNextDeprecation = false;
 const ON_ERROR_MAX_RESTARTS = 3;
 
 function waitForProcessExit(child: ChildProcess, timeoutMs = 2000): Promise<void> {
@@ -161,22 +162,40 @@ const startServer = async (
       );
     }
 
+    const writeServerOutput = (output: string, stream: NodeJS.WriteStream) => {
+      if (output.includes('Studio available') || output.includes('👨‍💻') || output.includes('Mastra API running')) {
+        return;
+      }
+
+      const deprecationMessage = "Working memory `version: 'vnext'` is deprecated";
+      if (output.includes(deprecationMessage)) {
+        const lines = output.split(/(?<=\n)/);
+        for (const line of lines) {
+          if (line.includes(deprecationMessage)) {
+            if (!hasLoggedWorkingMemoryVNextDeprecation) {
+              hasLoggedWorkingMemoryVNextDeprecation = true;
+              devLogger.deprecated(line.trim());
+            }
+          } else if (line) {
+            stream.write(line);
+          }
+        }
+        return;
+      }
+
+      stream.write(output);
+    };
+
     // Filter server output to remove Studio message
     if (currentServerProcess.stdout) {
       currentServerProcess.stdout.on('data', (data: Buffer) => {
-        const output = data.toString();
-        if (!output.includes('Studio available') && !output.includes('👨‍💻') && !output.includes('Mastra API running')) {
-          process.stdout.write(output);
-        }
+        writeServerOutput(data.toString(), process.stdout);
       });
     }
 
     if (currentServerProcess.stderr) {
       currentServerProcess.stderr.on('data', (data: Buffer) => {
-        const output = data.toString();
-        if (!output.includes('Studio available') && !output.includes('👨‍💻') && !output.includes('Mastra API running')) {
-          process.stderr.write(output);
-        }
+        writeServerOutput(data.toString(), process.stderr);
       });
     }
 
