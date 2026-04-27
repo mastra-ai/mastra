@@ -22,17 +22,20 @@ describe('workspace_edit_file', () => {
   it('should replace unique string in file', async () => {
     await fs.writeFile(path.join(tempDir, 'test.txt'), 'Hello World');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute({
-      path: '/test.txt',
-      old_string: 'World',
-      new_string: 'Universe',
-    });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute(
+      {
+        path: 'test.txt',
+        old_string: 'World',
+        new_string: 'Universe',
+      },
+      { workspace },
+    );
 
     expect(typeof result).toBe('string');
     expect(result).toContain('Replaced 1 occurrence');
-    expect(result).toContain('/test.txt');
+    expect(result).toContain('test.txt');
 
     const content = await fs.readFile(path.join(tempDir, 'test.txt'), 'utf-8');
     expect(content).toBe('Hello Universe');
@@ -41,13 +44,16 @@ describe('workspace_edit_file', () => {
   it('should fail when old_string not found', async () => {
     await fs.writeFile(path.join(tempDir, 'test.txt'), 'Hello World');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute({
-      path: '/test.txt',
-      old_string: 'foo',
-      new_string: 'bar',
-    });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute(
+      {
+        path: 'test.txt',
+        old_string: 'foo',
+        new_string: 'bar',
+      },
+      { workspace },
+    );
 
     expect(typeof result).toBe('string');
     expect(result).toContain('not found');
@@ -56,13 +62,16 @@ describe('workspace_edit_file', () => {
   it('should fail when old_string not unique without replace_all', async () => {
     await fs.writeFile(path.join(tempDir, 'test.txt'), 'hello hello hello');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute({
-      path: '/test.txt',
-      old_string: 'hello',
-      new_string: 'hi',
-    });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute(
+      {
+        path: 'test.txt',
+        old_string: 'hello',
+        new_string: 'hi',
+      },
+      { workspace },
+    );
 
     expect(typeof result).toBe('string');
     expect(result).toContain('3 times');
@@ -71,14 +80,17 @@ describe('workspace_edit_file', () => {
   it('should replace all occurrences with replace_all', async () => {
     await fs.writeFile(path.join(tempDir, 'test.txt'), 'hello hello hello');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute({
-      path: '/test.txt',
-      old_string: 'hello',
-      new_string: 'hi',
-      replace_all: true,
-    });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE].execute(
+      {
+        path: 'test.txt',
+        old_string: 'hello',
+        new_string: 'hi',
+        replace_all: true,
+      },
+      { workspace },
+    );
 
     expect(typeof result).toBe('string');
     expect(result).toContain('Replaced 3 occurrence');

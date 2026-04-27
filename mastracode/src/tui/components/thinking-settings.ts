@@ -1,13 +1,13 @@
 /**
  * Thinking level settings component.
- * Simple selector for extended thinking budget levels (Anthropic models).
+ * Simple selector for reasoning depth levels.
  *
  * Changes apply immediately — Esc closes the panel.
  */
 
 import { Box, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
 import type { SelectItem, Focusable } from '@mariozechner/pi-tui';
-import { fg, bg, bold, getSelectListTheme } from '../theme.js';
+import { theme, getSelectListTheme } from '../theme.js';
 
 // =============================================================================
 // Types
@@ -22,13 +22,45 @@ export interface ThinkingSettingsCallbacks {
 // Thinking Levels
 // =============================================================================
 
-export const THINKING_LEVELS = [
-  { id: 'off', label: 'Off', description: 'No extended thinking' },
-  { id: 'minimal', label: 'Minimal', description: '~1k budget tokens' },
-  { id: 'low', label: 'Low', description: '~4k budget tokens' },
-  { id: 'medium', label: 'Medium', description: '~10k budget tokens' },
-  { id: 'high', label: 'High', description: '~32k budget tokens' },
-] as const;
+export type ThinkingLevelId = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+
+export interface ThinkingLevelOption {
+  id: ThinkingLevelId;
+  label: string;
+  providerValue: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
+  description: string;
+}
+
+const BASE_THINKING_LEVELS: ThinkingLevelOption[] = [
+  { id: 'off', label: 'Off', providerValue: 'none', description: 'Reasoning disabled' },
+  { id: 'low', label: 'Low', providerValue: 'low', description: 'Light reasoning' },
+  { id: 'medium', label: 'Medium', providerValue: 'medium', description: 'Balanced reasoning' },
+  { id: 'high', label: 'High', providerValue: 'high', description: 'Deep reasoning' },
+  { id: 'xhigh', label: 'Very High', providerValue: 'xhigh', description: 'Maximum reasoning depth' },
+];
+
+function isOpenAIModel(modelId: string): boolean {
+  return modelId.startsWith('openai/');
+}
+
+export function getThinkingLevelsForModel(modelId: string): ThinkingLevelOption[] {
+  if (!isOpenAIModel(modelId)) {
+    return [...BASE_THINKING_LEVELS];
+  }
+
+  return BASE_THINKING_LEVELS.map(level => ({
+    ...level,
+    label: level.providerValue,
+  }));
+}
+
+export const THINKING_LEVELS = getThinkingLevelsForModel('');
+
+export function getThinkingLevelForModel(modelId: string, levelId: string): ThinkingLevelOption {
+  return (
+    getThinkingLevelsForModel(modelId).find(level => level.id === levelId) ?? getThinkingLevelsForModel(modelId)[0]!
+  );
+}
 
 // =============================================================================
 // Thinking Settings Component
@@ -47,18 +79,18 @@ export class ThinkingSettingsComponent extends Box implements Focusable {
   }
 
   constructor(currentLevel: string, callbacks: ThinkingSettingsCallbacks) {
-    super(2, 1, (text: string) => bg('overlayBg', text));
+    super(2, 1, (text: string) => theme.bg('overlayBg', text));
 
     // Title
-    this.addChild(new Text(bold(fg('accent', 'Thinking Level')), 0, 0));
+    this.addChild(new Text(theme.bold(theme.fg('accent', 'Thinking Level')), 0, 0));
     this.addChild(new Spacer(1));
-    this.addChild(new Text(fg('muted', 'Extended thinking for Anthropic models'), 0, 0));
+    this.addChild(new Text(theme.fg('muted', 'Extended thinking for Anthropic models'), 0, 0));
     this.addChild(new Spacer(1));
 
     // Build items
     const items: SelectItem[] = THINKING_LEVELS.map(level => ({
       value: level.id,
-      label: `  ${level.label}  ${fg('dim', level.description)}`,
+      label: `  ${level.label}  ${theme.fg('dim', level.description)}`,
     }));
 
     this.selectList = new SelectList(items, items.length, getSelectListTheme());
@@ -77,7 +109,7 @@ export class ThinkingSettingsComponent extends Box implements Focusable {
 
     this.addChild(this.selectList);
     this.addChild(new Spacer(1));
-    this.addChild(new Text(fg('dim', '  Enter to select · Esc to close'), 0, 0));
+    this.addChild(new Text(theme.fg('dim', '  Enter to select · Esc to close'), 0, 0));
   }
 
   handleInput(data: string): void {

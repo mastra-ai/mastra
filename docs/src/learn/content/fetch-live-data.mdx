@@ -1,0 +1,34 @@
+You've already got park lookup working—now you'll take the next step and make the theme park agent genuinely helpful. In this lesson, you'll add a new capability that pulls a live snapshot of what's happening in a park right now.
+
+You'll create a tool that accepts a park ID and returns a curated list of attractions with key fields like location/land, open status, and current posted wait time. You'll also ensure the results are sorted so the shortest waits rise to the top, making the output immediately usable for recommendations.
+
+This matters because live park conditions change quickly, and the agent needs fresh, structured data to plan a realistic route through the day. You'll also wire the tool into the agent and test the full "lookup → live snapshot" chain inside Mastra Studio, so the agent consistently calls the right tool at the right time.
+
+> "Wait times change fast—so always return when you fetched the data. That timestamp makes the snapshot trustworthy."
+>
+> — Guil Hernandez
+
+## Mentioned in the lesson
+
+Code:
+
+- [Course GitHub repo](https://github.com/mastra-ai/mastra-agent-course)
+
+Relevant Mastra docs:
+
+- [Using Tools](/docs/agents/using-tools)
+- [createTool()](/reference/tools/create-tool)
+- [Structured Output](/docs/agents/structured-output)
+
+## Join the community
+
+Ask questions:
+
+- [Discord](https://discord.gg/mastra) — chat with other learners and the Mastra team
+- [Guil on LinkedIn](https://www.linkedin.com/in/guiljh/) — ask him questions directly
+
+Follow Mastra:
+
+- [X](https://x.com/mastra) — follow Mastra for updates
+- [YouTube](https://www.youtube.com/@mastra-ai) — watch more tutorials
+- [LinkedIn](https://www.linkedin.com/company/mastra-ai) — follow for updates

@@ -30,6 +30,22 @@ export const MASTRA_RESOURCE_ID_KEY = 'mastra__resourceId';
  */
 export const MASTRA_THREAD_ID_KEY = 'mastra__threadId';
 
+/**
+ * Reserved key for storing version overrides on RequestContext.
+ * When set, sub-agent delegation resolves versioned agents from these overrides.
+ *
+ * @example
+ * ```typescript
+ * requestContext.set(MASTRA_VERSIONS_KEY, {
+ *   agents: { 'researcher-agent': { versionId: '123' } },
+ * });
+ * ```
+ */
+export const MASTRA_VERSIONS_KEY = 'mastra__versions';
+
+export type { VersionOverrides, VersionSelector } from '../mastra/types';
+export { mergeVersionOverrides } from '../mastra/types';
+
 export class RequestContext<Values extends Record<string, any> | unknown = unknown> {
   private registry = new Map<string, unknown>();
 
@@ -38,7 +54,11 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
       ? RecordToTuple<Partial<Values>>
       : Iterable<readonly [string, unknown]>,
   ) {
-    this.registry = new Map(iterable);
+    if (iterable && typeof iterable === 'object' && typeof (iterable as any)[Symbol.iterator] !== 'function') {
+      this.registry = new Map(Object.entries(iterable));
+    } else {
+      this.registry = new Map(iterable);
+    }
   }
 
   /**

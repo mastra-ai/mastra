@@ -1,11 +1,11 @@
 ---
-title: "Reference: DuckDBVector Store | Vectors"
+title: "Reference: DuckDB vector store | Vectors"
 description: Documentation for the DuckDBVector class in Mastra, which provides embedded high-performance vector search using DuckDB with HNSW indexing.
 packages:
   - "@mastra/duckdb"
 ---
 
-# DuckDBVector Store
+# DuckDB vector store
 
 The DuckDB storage implementation provides an embedded high-performance vector search solution using [DuckDB](https://duckdb.org/), an in-process analytical database. It uses the VSS extension for vector similarity search with HNSW indexing, offering a lightweight and efficient vector database that requires no external server.
 
@@ -60,149 +60,149 @@ const results = await store.query({
 await store.close();
 ```
 
-## Constructor Options
+## Constructor options
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-description: "Unique identifier for the vector store instance",
-},
-{
-name: "path",
-type: "string",
-isOptional: true,
-defaultValue: "':memory:'",
-description:
-"Database file path. Use ':memory:' for in-memory database, or a file path like './vectors.duckdb' for persistence.",
-},
-{
-name: "dimensions",
-type: "number",
-isOptional: true,
-defaultValue: "1536",
-description: "Default dimension for vector embeddings",
-},
-{
-name: "metric",
-type: "'cosine' | 'euclidean' | 'dotproduct'",
-isOptional: true,
-defaultValue: "cosine",
-description: "Default distance metric for similarity search",
-},
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for the vector store instance',
+  },
+  {
+    name: 'path',
+    type: 'string',
+    isOptional: true,
+    defaultValue: "':memory:'",
+    description:
+      "Database file path. Use ':memory:' for in-memory database, or a file path like './vectors.duckdb' for persistence.",
+  },
+  {
+    name: 'dimensions',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1536',
+    description: 'Default dimension for vector embeddings',
+  },
+  {
+    name: 'metric',
+    type: "'cosine' | 'euclidean' | 'dotproduct'",
+    isOptional: true,
+    defaultValue: 'cosine',
+    description: 'Default distance metric for similarity search',
+  },
 ]}
 />
 
 ## Methods
 
-### createIndex()
+### `createIndex()`
 
 Creates a new vector collection with optional HNSW index for fast approximate nearest neighbor search.
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to create",
-},
-{
-name: "dimension",
-type: "number",
-description: "Vector dimension size (must match your embedding model)",
-},
-{
-name: "metric",
-type: "'cosine' | 'euclidean' | 'dotproduct'",
-isOptional: true,
-defaultValue: "cosine",
-description: "Distance metric for similarity search",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to create',
+  },
+  {
+    name: 'dimension',
+    type: 'number',
+    description: 'Vector dimension size (must match your embedding model)',
+  },
+  {
+    name: 'metric',
+    type: "'cosine' | 'euclidean' | 'dotproduct'",
+    isOptional: true,
+    defaultValue: 'cosine',
+    description: 'Distance metric for similarity search',
+  },
 ]}
 />
 
-### upsert()
+### `upsert()`
 
 Adds or updates vectors and their metadata in the index.
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to insert into",
-},
-{
-name: "vectors",
-type: "number[][]",
-description: "Array of embedding vectors",
-},
-{
-name: "metadata",
-type: "Record<string, any>[]",
-isOptional: true,
-description: "Metadata for each vector",
-},
-{
-name: "ids",
-type: "string[]",
-isOptional: true,
-description: "Optional vector IDs (auto-generated UUIDs if not provided)",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to insert into',
+  },
+  {
+    name: 'vectors',
+    type: 'number[][]',
+    description: 'Array of embedding vectors',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, any>[]',
+    isOptional: true,
+    description: 'Metadata for each vector',
+  },
+  {
+    name: 'ids',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Optional vector IDs (auto-generated UUIDs if not provided)',
+  },
 ]}
 />
 
-### query()
+### `query()`
 
 Searches for similar vectors with optional metadata filtering.
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to search in",
-},
-{
-name: "queryVector",
-type: "number[]",
-description: "Query vector to find similar vectors for",
-},
-{
-name: "topK",
-type: "number",
-isOptional: true,
-defaultValue: "10",
-description: "Number of results to return",
-},
-{
-name: "filter",
-type: "Filter",
-isOptional: true,
-description: "Metadata filters using MongoDB-like query syntax",
-},
-{
-name: "includeVector",
-type: "boolean",
-isOptional: true,
-defaultValue: "false",
-description: "Whether to include vector data in results",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to search in',
+  },
+  {
+    name: 'queryVector',
+    type: 'number[]',
+    description: 'Query vector to find similar vectors for',
+  },
+  {
+    name: 'topK',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '10',
+    description: 'Number of results to return',
+  },
+  {
+    name: 'filter',
+    type: 'Filter',
+    isOptional: true,
+    description: 'Metadata filters using MongoDB-like query syntax',
+  },
+  {
+    name: 'includeVector',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description: 'Whether to include vector data in results',
+  },
 ]}
 />
 
-### describeIndex()
+### `describeIndex()`
 
 Gets information about an index.
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to describe",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to describe',
+  },
 ]}
 />
 
@@ -216,119 +216,115 @@ interface IndexStats {
 }
 ```
 
-### deleteIndex()
+### `deleteIndex()`
 
 Deletes an index and all its data.
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to delete",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to delete',
+  },
 ]}
 />
 
-### listIndexes()
+### `listIndexes()`
 
 Lists all vector indexes in the database.
 
 Returns: `Promise<string[]>`
 
-### updateVector()
+### `updateVector()`
 
 Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index containing the vector",
-},
-{
-name: "id",
-type: "string",
-isOptional: true,
-description:
-"ID of the vector entry to update (mutually exclusive with filter)",
-},
-{
-name: "filter",
-type: "Record<string, any>",
-isOptional: true,
-description:
-"Metadata filter to identify vector(s) to update (mutually exclusive with id)",
-},
-{
-name: "update",
-type: "object",
-description: "Update data containing vector and/or metadata",
-},
-{
-name: "update.vector",
-type: "number[]",
-isOptional: true,
-description: "New vector data to update",
-},
-{
-name: "update.metadata",
-type: "Record<string, any>",
-isOptional: true,
-description: "New metadata to update",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index containing the vector',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    isOptional: true,
+    description: 'ID of the vector entry to update (mutually exclusive with filter)',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filter to identify vector(s) to update (mutually exclusive with id)',
+  },
+  {
+    name: 'update',
+    type: 'object',
+    description: 'Update data containing vector and/or metadata',
+  },
+  {
+    name: 'update.vector',
+    type: 'number[]',
+    isOptional: true,
+    description: 'New vector data to update',
+  },
+  {
+    name: 'update.metadata',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'New metadata to update',
+  },
 ]}
 />
 
-### deleteVector()
+### `deleteVector()`
 
 Deletes a specific vector entry from an index by its ID.
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index containing the vector",
-},
-{
-name: "id",
-type: "string",
-description: "ID of the vector entry to delete",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index containing the vector',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'ID of the vector entry to delete',
+  },
 ]}
 />
 
-### deleteVectors()
+### `deleteVectors()`
 
 Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index containing the vectors to delete",
-},
-{
-name: "ids",
-type: "string[]",
-isOptional: true,
-description:
-"Array of vector IDs to delete (mutually exclusive with filter)",
-},
-{
-name: "filter",
-type: "Record<string, any>",
-isOptional: true,
-description:
-"Metadata filter to identify vectors to delete (mutually exclusive with ids)",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index containing the vectors to delete',
+  },
+  {
+    name: 'ids',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Array of vector IDs to delete (mutually exclusive with filter)',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filter to identify vectors to delete (mutually exclusive with ids)',
+  },
 ]}
 />
 
-### close()
+### `close()`
 
 Closes the database connection and releases resources.
 
@@ -336,7 +332,7 @@ Closes the database connection and releases resources.
 await store.close()
 ```
 
-## Response Types
+## Response types
 
 Query results are returned in this format:
 
@@ -349,7 +345,7 @@ interface QueryResult {
 }
 ```
 
-## Filter Operators
+## Filter operators
 
 DuckDB vector store supports MongoDB-like filter operators:
 
@@ -384,7 +380,7 @@ const results = await store.query({
 });
 ```
 
-## Distance Metrics
+## Distance metrics
 
 | Metric | Description | Score Interpretation | Best For |
 | - | - | - | - |
@@ -392,7 +388,7 @@ const results = await store.query({
 | `euclidean` | L2 distance | 0-∞ (0 = most similar) | Image embeddings, spatial data |
 | `dotproduct` | Inner product | Higher = more similar | When vector magnitude matters |
 
-## Error Handling
+## Error handling
 
 The store throws specific errors for different failure cases:
 
@@ -421,7 +417,7 @@ Common error cases include:
 - Empty filter or ids array in delete/update operations
 - Mutual exclusivity violations (providing both `id` and `filter`)
 
-## Use Cases
+## Use cases
 
 ### Embedded Semantic Search
 

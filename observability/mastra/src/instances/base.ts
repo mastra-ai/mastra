@@ -6,9 +6,9 @@ import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { RegisteredLogger } from '@mastra/core/logger';
+import { TracingEventType, noOpLoggerContext } from '@mastra/core/observability';
 import type {
   Span,
-  SpanType,
   ObservabilityExporter,
   ObservabilityBridge,
   SpanOutputProcessor,
@@ -24,11 +24,19 @@ import type {
   AnyExportedSpan,
   TraceState,
   TracingOptions,
+  LoggerContext,
+  MetricsContext,
+  ObservabilityEvent,
+  SpanType,
 } from '@mastra/core/observability';
-import { TracingEventType } from '@mastra/core/observability';
 import { getNestedValue, setNestedValue } from '@mastra/core/utils';
+import { ObservabilityBus } from '../bus';
 import type { ObservabilityInstanceConfig } from '../config';
 import { SamplingStrategyType } from '../config';
+import { LoggerContextImpl } from '../context/logger';
+import { MetricsContextImpl } from '../context/metrics';
+import { emitAutoExtractedMetrics } from '../metrics/auto-extract';
+import { CardinalityFilter } from '../metrics/cardinality';
 import { NoOpSpan } from '../spans';
 
 // ============================================================================
@@ -40,6 +48,17 @@ import { NoOpSpan } from '../spans';
  */
 export abstract class BaseObservabilityInstance extends MastraBase implements ObservabilityInstance {
   protected config: ObservabilityInstanceConfig;
+
+  /**
+   * Unified event bus for all observability signals.
+   * Routes events to registered exporters based on event type.
+   */
+  protected observabilityBus: ObservabilityBus;
+
+  /**
+   * Cardinality filter for metrics label protection.
+   */
+  protected cardinalityFilter: CardinalityFilter;
 
   constructor(config: ObservabilityInstanceConfig) {
     super({ component: RegisteredLogger.OBSERVABILITY, name: config.serviceName });
@@ -53,9 +72,29 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       spanOutputProcessors: config.spanOutputProcessors ?? [],
       bridge: config.bridge ?? undefined,
       includeInternalSpans: config.includeInternalSpans ?? false,
+      excludeSpanTypes: config.excludeSpanTypes,
+      spanFilter: config.spanFilter,
       requestContextKeys: config.requestContextKeys ?? [],
       serializationOptions: config.serializationOptions,
+      logging: config.logging,
     };
+
+    // Initialize cardinality filter for metrics (uses user config or defaults)
+    this.cardinalityFilter = new CardinalityFilter(config.cardinality);
+
+    // Initialize the unified ObservabilityBus
+    this.observabilityBus = new ObservabilityBus({
+      serializationOptions: this.config.serializationOptions,
+    });
+
+    for (const exporter of this.exporters) {
+      this.observabilityBus.registerExporter(exporter);
+    }
+
+    // Register bridge on the bus so it receives all signals (tracing + non-tracing)
+    if (this.config.bridge) {
+      this.observabilityBus.registerBridge(this.config.bridge);
+    }
 
     // Initialize bridge if present
     if (this.config.bridge?.init) {
@@ -169,6 +208,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       metadata: enrichedMetadata,
       traceState,
       tags,
+      requestContext,
     });
 
     if (span.isEvent) {
@@ -261,6 +301,23 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   }
 
   /**
+   * Register an additional exporter at runtime.
+   * Adds to both the bus (for event routing) and the config (for getExporters).
+   */
+  registerExporter(exporter: ObservabilityExporter): void {
+    this.observabilityBus.registerExporter(exporter);
+    this.config.exporters ??= [];
+    if (this.config.exporters.includes(exporter)) {
+      return;
+    }
+    this.config.exporters.push(exporter);
+
+    if (typeof exporter.__setLogger === 'function') {
+      exporter.__setLogger(this.logger);
+    }
+  }
+
+  /**
    * Get all span output processors
    */
   getSpanOutputProcessors(): readonly SpanOutputProcessor[] {
@@ -279,6 +336,78 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   getLogger() {
     return this.logger;
+  }
+
+  /**
+   * Get the ObservabilityBus for this instance.
+   * The bus routes all observability events (tracing, logs, metrics, scores, feedback)
+   * to registered exporters based on event type.
+   */
+  getObservabilityBus(): ObservabilityBus {
+    return this.observabilityBus;
+  }
+
+  // ============================================================================
+  // Context-factory bridge methods
+  // ============================================================================
+
+  /**
+   * Get a LoggerContext correlated to a span.
+   * Called by the context-factory in core (deriveLoggerContext) so that
+   * `observabilityContext.loggerVNext` is a real logger instead of no-op.
+   */
+  getLoggerContext(span?: AnySpan): LoggerContext {
+    if (this.config.logging?.enabled === false) {
+      return noOpLoggerContext;
+    }
+
+    const correlationContext = span?.getCorrelationContext?.();
+    const metadata: Record<string, unknown> | undefined = span?.metadata ? structuredClone(span.metadata) : undefined;
+
+    return new LoggerContextImpl({
+      traceId: span?.traceId,
+      spanId: span?.id,
+      correlationContext,
+      metadata,
+      observabilityBus: this.observabilityBus,
+      minLevel: this.config.logging?.level,
+    });
+  }
+
+  /**
+   * Get a MetricsContext correlated to a span.
+   * Called by the context-factory in core (deriveMetricsContext) so that
+   * `observabilityContext.metrics` is a real metrics context instead of no-op.
+   */
+  getMetricsContext(span?: AnySpan): MetricsContext {
+    const correlationContext = span?.getCorrelationContext?.();
+    const metadata: Record<string, unknown> | undefined = span?.metadata ? structuredClone(span.metadata) : undefined;
+
+    return new MetricsContextImpl({
+      traceId: span?.traceId,
+      spanId: span?.id,
+      correlationContext,
+      metadata,
+      cardinalityFilter: this.cardinalityFilter,
+      observabilityBus: this.observabilityBus,
+    });
+  }
+
+  /**
+   * Emit any observability event through the bus.
+   * The bus routes the event to the appropriate handler on each registered exporter,
+   * and for tracing events triggers auto-extracted metrics.
+   */
+  protected emitObservabilityEvent(event: ObservabilityEvent): void {
+    this.observabilityBus.emit(event);
+  }
+
+  /**
+   * Internal hook used by RecordedTrace/RecordedSpan hydration to route
+   * non-tracing annotation events back through the normal exporter pipeline.
+   */
+  __emitRecordedEvent(event: ObservabilityEvent): void {
+    this.emitObservabilityEvent(event);
   }
 
   // ============================================================================
@@ -456,52 +585,98 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   // Event-driven Export Methods
   // ============================================================================
 
+  /** Process a span through output processors and export it, returning undefined if filtered out. */
   getSpanForExport(span: AnySpan): AnyExportedSpan | undefined {
     if (!span.isValid) return undefined;
     if (span.isInternal && !this.config.includeInternalSpans) return undefined;
 
+    // Check excludeSpanTypes before processing
+    if (this.config.excludeSpanTypes?.includes(span.type)) return undefined;
+
     const processedSpan = this.processSpan(span);
-    return processedSpan?.exportSpan(this.config.includeInternalSpans);
+    const exportedSpan = processedSpan?.exportSpan(this.config.includeInternalSpans);
+    if (!exportedSpan) return undefined;
+
+    // Apply spanFilter on the exported span data
+    if (this.config.spanFilter) {
+      try {
+        if (!this.config.spanFilter(exportedSpan)) return undefined;
+      } catch (error) {
+        this.logger.error(`[Observability] spanFilter error`, error);
+        // On filter error, keep the span to avoid silent data loss
+      }
+    }
+
+    return exportedSpan;
   }
 
   /**
-   * Emit a span started event
+   * Emit a span started event.
+   * Routes through the ObservabilityBus so exporters receive it via onTracingEvent.
    */
   protected emitSpanStarted(span: AnySpan): void {
     const exportedSpan = this.getSpanForExport(span);
     if (exportedSpan) {
-      this.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan }).catch(error => {
-        this.logger.error('[Observability] Failed to export span_started event', error);
-      });
+      const event: TracingEvent = { type: TracingEventType.SPAN_STARTED, exportedSpan };
+      this.emitTracingEvent(event);
     }
   }
 
   /**
-   * Emit a span ended event (called automatically when spans end)
+   * Emit a span ended event (called automatically when spans end).
+   * Emits any auto-extracted metrics while the live span tree is still available,
+   * then routes the exported tracing event through the ObservabilityBus.
    */
   protected emitSpanEnded(span: AnySpan): void {
     const exportedSpan = this.getSpanForExport(span);
+
     if (exportedSpan) {
-      this.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan }).catch(error => {
-        this.logger.error('[Observability] Failed to export span_ended event', error);
-      });
+      try {
+        // TODO: We intentionally export first so auto-extracted metrics are skipped
+        // when the span is filtered out by processors. Metrics still use the live
+        // span for correlation and parent traversal, but current span processors
+        // mutate spans in place during export, so those mutations can still affect
+        // the live span before metrics run. Future options to explore:
+        // 1. Make span processors pure/non-mutating.
+        // 2. Split trace processors from metric-specific processors/enrichers.
+        // 3. Revisit whether auto-extracted metrics should run before export.
+        emitAutoExtractedMetrics(span, this.getMetricsContext(span));
+      } catch (err) {
+        this.logger.error('[Observability] Auto-extraction error:', err);
+      }
+
+      const event: TracingEvent = { type: TracingEventType.SPAN_ENDED, exportedSpan };
+      this.emitTracingEvent(event);
     }
   }
 
   /**
-   * Emit a span updated event
+   * Emit a span updated event.
+   * Routes through the ObservabilityBus so exporters receive it via onTracingEvent.
    */
   protected emitSpanUpdated(span: AnySpan): void {
     const exportedSpan = this.getSpanForExport(span);
     if (exportedSpan) {
-      this.exportTracingEvent({ type: TracingEventType.SPAN_UPDATED, exportedSpan }).catch(error => {
-        this.logger.error('[Observability] Failed to export span_updated event', error);
-      });
+      const event: TracingEvent = { type: TracingEventType.SPAN_UPDATED, exportedSpan };
+      this.emitTracingEvent(event);
     }
   }
 
   /**
-   * Export tracing event through all exporters and bridge (realtime mode)
+   * Emit a tracing event through the bus.
+   *
+   * The bus routes the event to each registered exporter's and bridge's
+   * onTracingEvent handler.
+   */
+  private emitTracingEvent(event: TracingEvent): void {
+    this.observabilityBus.emit(event);
+  }
+
+  /**
+   * Export tracing event through all exporters and bridge.
+   *
+   * @deprecated Prefer emitTracingEvent() which routes through the bus.
+   * Kept for backward compatibility with subclasses that may override it.
    */
   protected async exportTracingEvent(event: TracingEvent): Promise<void> {
     // Collect all export targets
@@ -545,34 +720,18 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   }
 
   /**
-   * Force flush any buffered/queued spans from all exporters and the bridge
-   * without shutting down the observability instance.
+   * Flush all observability data: awaits in-flight handler promises, then
+   * drains exporter and bridge SDK-internal buffers.
    *
-   * This is useful in serverless environments (like Vercel's fluid compute) where
-   * you need to ensure all spans are exported before the runtime instance is
-   * terminated, while keeping the observability system active for future requests.
+   * Delegates to ObservabilityBus.flush() which owns the two-phase logic.
+   *
+   * This is critical for durable execution engines (e.g., Inngest) where
+   * the process may be interrupted after a step completes. Calling flush()
+   * outside the durable step ensures all span data reaches external systems.
    */
   async flush(): Promise<void> {
     this.logger.debug(`[Observability] Flush started [name=${this.name}]`);
-
-    // Flush all exporters and bridge
-    const flushPromises = [...this.exporters.map(e => e.flush())];
-
-    // Add bridge flush if present
-    if (this.config.bridge) {
-      flushPromises.push(this.config.bridge.flush());
-    }
-
-    const results = await Promise.allSettled(flushPromises);
-
-    // Log any errors but don't throw
-    results.forEach((result, index) => {
-      if (result.status === 'rejected') {
-        const targetName = index < this.exporters.length ? this.exporters[index]?.name : 'bridge';
-        this.logger.error(`[Observability] Flush error [target=${targetName}]`, result.reason);
-      }
-    });
-
+    await this.observabilityBus.flush();
     this.logger.debug(`[Observability] Flush completed [name=${this.name}]`);
   }
 
@@ -582,18 +741,25 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   async shutdown(): Promise<void> {
     this.logger.debug(`[Observability] Shutdown started [name=${this.name}]`);
 
-    // Shutdown all components including bridge
-    const shutdownPromises = [
+    // Phase 1: Shutdown the ObservabilityBus first (flushes remaining events, clears subscribers)
+    await this.observabilityBus.shutdown();
+
+    // Phase 2: Shutdown exporters, processors, and bridge after bus has flushed
+    const shutdownPromises: Promise<void>[] = [
       ...this.exporters.map(e => e.shutdown()),
       ...this.spanOutputProcessors.map(p => p.shutdown()),
     ];
-
-    // Add bridge shutdown if present
     if (this.config.bridge) {
       shutdownPromises.push(this.config.bridge.shutdown());
     }
-
-    await Promise.allSettled(shutdownPromises);
+    if (shutdownPromises.length > 0) {
+      const results = await Promise.allSettled(shutdownPromises);
+      for (const result of results) {
+        if (result.status === 'rejected') {
+          this.logger.error(`[Observability] Component shutdown failed [name=${this.name}]:`, result.reason);
+        }
+      }
+    }
 
     this.logger.info(`[Observability] Shutdown completed [name=${this.name}]`);
   }

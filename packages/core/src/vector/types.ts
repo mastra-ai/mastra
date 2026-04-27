@@ -64,7 +64,15 @@ export interface CreateIndexParams {
 
 export interface QueryVectorParams<Filter = VectorFilter> {
   indexName: string;
-  queryVector: number[];
+  /**
+   * The query vector for similarity search.
+   * Optional — when omitted, a metadata-only query is performed using `filter`.
+   * At least one of `queryVector` or `filter` must be provided.
+   *
+   * Note: Not all vector store backends support metadata-only queries.
+   * Check your store's documentation for support details.
+   */
+  queryVector?: number[];
   topK?: number;
   filter?: Filter;
   includeVector?: boolean;

@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from '@lukeed/uuid';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector, validateUpsertInput, validateVectorValues } from '@mastra/core/vector';
@@ -15,7 +16,6 @@ import type {
 } from '@mastra/core/vector';
 import { MongoClient } from 'mongodb';
 import type { MongoClientOptions, Document, Db, Collection } from 'mongodb';
-import { v4 as uuidv4 } from 'uuid';
 import packageJson from '../../package.json';
 
 import { MongoDBFilterTranslator } from './filter';
@@ -331,6 +331,16 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     includeVector = false,
     documentFilter,
   }: MongoDBQueryVectorParams): Promise<QueryResult[]> {
+    if (!queryVector) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'QUERY', 'MISSING_VECTOR'),
+        text: 'queryVector is required for MongoDB queries. Metadata-only queries are not supported by this vector store.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
     try {
       const collection = await this.getCollection(indexName, true);
       const indexNameInternal = `${indexName}_vector_index`;

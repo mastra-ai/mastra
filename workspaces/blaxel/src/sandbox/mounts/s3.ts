@@ -3,7 +3,14 @@ import crypto from 'node:crypto';
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
 import { shellQuote } from '../../utils/shell-quote';
-import { LOG_PREFIX, validateBucketName, validateEndpoint, runCommand } from './types';
+import {
+  LOG_PREFIX,
+  validateBucketName,
+  validateEndpoint,
+  validatePrefix,
+  runCommand,
+  detectPackageManager,
+} from './types';
 import type { MountContext } from './types';
 
 /**
@@ -26,6 +33,11 @@ export interface BlaxelS3MountConfig extends FilesystemMountConfig {
   accessKeyId?: string;
   /** AWS secret access key (optional - omit for public buckets) */
   secretAccessKey?: string;
+  /**
+   * Optional prefix (subdirectory) to mount instead of the entire bucket.
+   * Uses s3fs `bucket:/prefix` syntax. Leading/trailing slashes are normalized.
+   */
+  prefix?: string;
   /** Mount as read-only (even if credentials have write access) */
   readOnly?: boolean;
 }
@@ -48,26 +60,49 @@ export async function mountS3(mountPath: string, config: BlaxelS3MountConfig, ct
     logger.warn(`${LOG_PREFIX} s3fs not found, attempting runtime installation...`);
     logger.info(`${LOG_PREFIX} Tip: For faster startup, pre-install s3fs in your sandbox image`);
 
-    const updateResult = await runCommand(sandbox, 'apt-get update 2>&1', { timeout: 60000 });
-    if (updateResult.exitCode !== 0) {
-      throw new Error(
-        `Failed to update package lists for s3fs installation.\n` +
-          `Error details: ${updateResult.stderr || updateResult.stdout}`,
+    const pm = await detectPackageManager(sandbox);
+    logger.debug(`${LOG_PREFIX} Detected package manager: ${pm}`);
+
+    if (pm === 'apt') {
+      const updateResult = await runCommand(sandbox, 'apt-get update 2>&1', { timeout: 60000 });
+      if (updateResult.exitCode !== 0) {
+        throw new Error(
+          `Failed to update package lists for s3fs installation.\n` +
+            `Error details: ${updateResult.stderr || updateResult.stdout}`,
+        );
+      }
+
+      const installResult = await runCommand(
+        sandbox,
+        'apt-get install -y s3fs fuse 2>&1 || apt-get install -y s3fs-fuse fuse 2>&1',
+        { timeout: 120000 },
       );
-    }
 
-    const installResult = await runCommand(
-      sandbox,
-      'apt-get install -y s3fs fuse 2>&1 || apt-get install -y s3fs-fuse fuse 2>&1',
-      { timeout: 120000 },
-    );
+      if (installResult.exitCode !== 0) {
+        throw new Error(
+          `Failed to install s3fs. ` +
+            `For S3 mounting, your sandbox image needs s3fs and fuse packages.\n\n` +
+            `Pre-install in your image: apt-get install -y s3fs fuse\n\n` +
+            `Error details: ${installResult.stderr || installResult.stdout}`,
+        );
+      }
+    } else if (pm === 'apk') {
+      // Alpine Linux — s3fs-fuse is in the community repo
+      const installResult = await runCommand(sandbox, 'apk add --no-cache s3fs-fuse fuse 2>&1', { timeout: 120000 });
 
-    if (installResult.exitCode !== 0) {
+      if (installResult.exitCode !== 0) {
+        throw new Error(
+          `Failed to install s3fs on Alpine Linux. ` +
+            `Ensure the Alpine community repository is enabled.\n\n` +
+            `Pre-install in your image: apk add --no-cache s3fs-fuse fuse\n\n` +
+            `Error details: ${installResult.stderr || installResult.stdout}`,
+        );
+      }
+    } else {
       throw new Error(
-        `Failed to install s3fs. ` +
-          `For S3 mounting, your sandbox image needs s3fs and fuse packages.\n\n` +
-          `Pre-install in your image: apt-get install -y s3fs fuse\n\n` +
-          `Error details: ${installResult.stderr || installResult.stdout}`,
+        `Cannot install s3fs: no supported package manager found (need apt-get or apk).\n` +
+          `Use a Debian-based image (e.g. blaxel/ts-app:latest) or Alpine-based image (e.g. blaxel/node:latest), ` +
+          `or pre-install s3fs in your custom image.`,
       );
     }
   }
@@ -134,8 +169,15 @@ export async function mountS3(mountPath: string, config: BlaxelS3MountConfig, ct
     logger.debug(`${LOG_PREFIX} Mounting as read-only`);
   }
 
+  // Build the s3fs bucket argument — supports optional prefix via `bucket:/path` syntax
+  let bucketArg = config.bucket;
+  if (config.prefix) {
+    const normalizedPrefix = validatePrefix(config.prefix);
+    bucketArg = `${config.bucket}:/${normalizedPrefix}`;
+  }
+
   const quotedMountPath = shellQuote(mountPath);
-  const mountCmd = `s3fs ${config.bucket} ${quotedMountPath} -o ${mountOptions.join(' -o ')}`;
+  const mountCmd = `s3fs ${shellQuote(bucketArg)} ${quotedMountPath} -o ${mountOptions.join(' -o ')}`;
   logger.debug(`${LOG_PREFIX} Mounting S3:`, hasCredentials ? mountCmd.replace(credentialsPath, '***') : mountCmd);
 
   const result = await runCommand(sandbox, mountCmd, { timeout: 60_000 });

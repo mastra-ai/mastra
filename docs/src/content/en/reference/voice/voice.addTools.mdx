@@ -10,7 +10,7 @@ packages:
 
 The `addTools()` method equips a voice provider with tools (functions) that can be called by the model during real-time interactions. This enables voice assistants to perform actions like searching for information, making calculations, or interacting with external systems.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
@@ -62,19 +62,18 @@ await voice.connect()
 
 <PropertiesTable
   content={[
-{
-name: "tools",
-type: "ToolsInput",
-description:
-"Object containing tool definitions that can be called by the voice model",
-isOptional: false,
-},
+  {
+    name: 'tools',
+    type: 'ToolsInput',
+    description: 'Object containing tool definitions that can be called by the voice model',
+    isOptional: false,
+  },
 ]}
 />
 
-## Return Value
+## Return value
 
-This method does not return a value.
+This method doesn't return a value.
 
 ## Notes
 

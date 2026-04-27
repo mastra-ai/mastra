@@ -9,7 +9,7 @@ packages:
 
 **Added in:** `@mastra/core@1.4.0`
 
-Creates a new dataset. Zod schemas passed as `inputSchema` or `groundTruthSchema` are automatically converted to JSON Schema.
+Creates a new dataset. Use Standard JSON Schema (Zod, Valibot, ArkType, etc.) for defining schemas.
 
 ## Usage example
 
@@ -28,7 +28,7 @@ const dataset = await mastra.datasets.create({
   metadata: { team: 'ml' },
 })
 
-// Create with Zod schemas
+// Create with Zod schema (library that supports Standard JSON Schema)
 const typedDataset = await mastra.datasets.create({
   name: 'Typed QA set',
   inputSchema: z.object({
@@ -45,35 +45,35 @@ const typedDataset = await mastra.datasets.create({
 
 <PropertiesTable
   content={[
-{
-name: "name",
-type: "string",
-description: "Display name for the dataset.",
-},
-{
-name: "description",
-type: "string",
-isOptional: true,
-description: "Description of the dataset.",
-},
-{
-name: "inputSchema",
-type: "unknown",
-isOptional: true,
-description: "JSON Schema or Zod schema for item inputs. Zod schemas are auto-converted.",
-},
-{
-name: "groundTruthSchema",
-type: "unknown",
-isOptional: true,
-description: "JSON Schema or Zod schema for item ground truths. Zod schemas are auto-converted.",
-},
-{
-name: "metadata",
-type: "Record<string, unknown>",
-isOptional: true,
-description: "Arbitrary metadata.",
-},
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Display name for the dataset.',
+  },
+  {
+    name: 'description',
+    type: 'string',
+    isOptional: true,
+    description: 'Description of the dataset.',
+  },
+  {
+    name: 'inputSchema',
+    type: 'StandardJSONSchemaV1',
+    isOptional: true,
+    description: 'Standard JSON Schema for item inputs.',
+  },
+  {
+    name: 'groundTruthSchema',
+    type: 'StandardJSONSchemaV1',
+    isOptional: true,
+    description: 'Standard JSON Schema for item ground truths.',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    isOptional: true,
+    description: 'Arbitrary metadata.',
+  },
 ]}
 />
 
@@ -81,10 +81,10 @@ description: "Arbitrary metadata.",
 
 <PropertiesTable
   content={[
-{
-name: "result",
-type: "Promise<Dataset>",
-description: "A Dataset instance for the newly created dataset.",
-},
+  {
+    name: 'result',
+    type: 'Promise<Dataset>',
+    description: 'A Dataset instance for the newly created dataset.',
+  },
 ]}
 />

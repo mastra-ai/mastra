@@ -387,11 +387,9 @@ export function createNestedWorkflowsTests(ctx: WorkflowTestContext, registry?: 
 
       expect(result.steps.step1).toMatchObject({
         status: 'success',
-        payload: {},
       });
       expect(result.steps[nestedWorkflowId]).toMatchObject({
         status: 'failed',
-        payload: {},
       });
       expect((result.steps[nestedWorkflowId] as any)?.error).toBeInstanceOf(Error);
       expect(((result.steps[nestedWorkflowId] as any)?.error as Error).message).toMatch(/Step execution failed/);

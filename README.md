@@ -68,6 +68,15 @@ We have an [open community Discord](https://discord.gg/BTYqqHKUrf). Come and say
 
 It's also super helpful if you leave the project a star here at the [top of the page](https://github.com/mastra-ai/mastra)
 
+## Licensing
+
+This repository uses a dual-license model:
+
+- **Apache License 2.0** — The core framework and the vast majority of this codebase is open source under Apache-2.0.
+- **Mastra Enterprise License** — Code in any directory named `ee/` (e.g., `packages/core/src/auth/ee/`) is source-available under the Mastra Enterprise License. These features require a valid enterprise license for production use but can be freely used for development and testing.
+
+See [LICENSE.md](./LICENSE.md) for the full license mapping and [ee/LICENSE](./ee/LICENSE) for the enterprise license terms.
+
 ## Security
 
 We are committed to maintaining the security of this repo and of Mastra as a whole. If you discover a security finding we ask you to please responsibly disclose this to us at [security@mastra.ai](mailto:security@mastra.ai) and we will get back to you.

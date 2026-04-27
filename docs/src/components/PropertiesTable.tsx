@@ -30,7 +30,7 @@ const PropertiesTable: React.FC<PropertiesTableProps> = ({ content = [] }) => {
   const renderType = ({ properties = [] }: { properties: Property[] | undefined }) => {
     if (properties && properties.length > 0) {
       return (
-        <div className="flex flex-col">
+        <div className="flex flex-col" data-testid="property-nested">
           {properties.map((prop, idx) => (
             <div
               key={idx}
@@ -47,17 +47,29 @@ const PropertiesTable: React.FC<PropertiesTableProps> = ({ content = [] }) => {
                     <div
                       key={paramIdx}
                       className="flex flex-col gap-1 border-b border-(--ifm-color-emphasis-300) p-3 last:border-none"
+                      data-testid="property-row"
                     >
                       <div className="group relative flex flex-row items-start gap-2">
-                        <h3 className="m-0 cursor-pointer font-(family-name:--ifm-font-family-monospace)! text-sm! font-medium!">
+                        <h3
+                          className="m-0 cursor-pointer font-(family-name:--ifm-font-family-monospace)! text-sm! font-medium!"
+                          data-testid="property-name"
+                        >
                           {param.name}
                           <span>{param.isOptional ? '?:' : ':'}</span>
                         </h3>
-                        <div className="w-full font-(family-name:--ifm-font-family-monospace) text-sm text-(--ifm-color-emphasis-700)">
+                        <div
+                          className="w-full font-(family-name:--ifm-font-family-monospace) text-sm text-(--ifm-color-emphasis-700)"
+                          data-testid="property-type"
+                        >
                           {param.type}
                         </div>
                       </div>
-                      <div className="text-sm leading-5 text-(--ifm-color-emphasis-700)">{param.description}</div>
+                      <div
+                        className="text-sm leading-5 text-(--ifm-color-emphasis-700)"
+                        data-testid="property-description"
+                      >
+                        {param.description}
+                      </div>
                       {renderType({ properties: param.properties })}
                     </div>
                   ))}
@@ -70,27 +82,38 @@ const PropertiesTable: React.FC<PropertiesTableProps> = ({ content = [] }) => {
   }
 
   return (
-    <div className="mb-(--ifm-leading) flex flex-col">
+    <div className="mb-(--ifm-leading) flex flex-col" data-testid="properties-table">
       {content.map((item, index) => {
         return (
           <div
             key={index}
             id={item.name}
             className="flex flex-col gap-1 border-b border-(--ifm-color-emphasis-300) py-3"
+            data-testid="property-row"
           >
             <div className="group flex flex-row items-start gap-2">
-              <h3 className="m-0 cursor-pointer border-b-0! pb-0! font-(family-name:--ifm-font-family-monospace)! text-sm! font-medium!">
+              <h3
+                className="m-0 cursor-pointer border-b-0! pb-0! font-(family-name:--ifm-font-family-monospace)! text-sm! font-medium!"
+                data-testid="property-name"
+              >
                 {item.name}
                 <span>{item.isOptional ? '?:' : ':'}</span>
               </h3>
-              <div className="font-(family-name:--ifm-font-family-monospace) text-sm leading-5 text-(--ifm-color-emphasis-700)">
+              <div
+                className="font-(family-name:--ifm-font-family-monospace) text-sm leading-5 text-(--ifm-color-emphasis-700)"
+                data-testid="property-type"
+              >
                 {item.type}
               </div>
               {item.defaultValue && (
-                <div className="text-sm leading-5 text-(--ifm-color-emphasis-700)">= {item.defaultValue}</div>
+                <div className="text-sm leading-5 text-(--ifm-color-emphasis-700)" data-testid="property-default">
+                  = {item.defaultValue}
+                </div>
               )}
             </div>
-            <div className="text-sm leading-5 text-(--ifm-color-emphasis-700)">{item.description}</div>
+            <div className="text-sm leading-5 text-(--ifm-color-emphasis-700)" data-testid="property-description">
+              {item.description}
+            </div>
             {renderType({ properties: item.properties })}
           </div>
         )

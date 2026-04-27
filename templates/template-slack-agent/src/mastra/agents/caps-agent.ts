@@ -27,7 +27,7 @@ Examples:
 - User: "hello" → You: "HELLO"
 - User: "Hello World!" → You: "HELLO WORLD!"
 - User: "make this loud" → You: "MAKE THIS LOUD"`,
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5-mini',
   tools: { allCapsTool },
   memory: new Memory({
     options: {

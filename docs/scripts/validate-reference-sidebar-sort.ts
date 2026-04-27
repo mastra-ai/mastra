@@ -24,12 +24,14 @@ interface SidebarDoc {
   type: 'doc'
   id: string
   label: string
+  customProps?: Record<string, unknown>
 }
 
 interface SidebarCategory {
   type: 'category'
   label: string
   collapsed?: boolean
+  customProps?: Record<string, unknown>
   items: SidebarItem[]
 }
 
@@ -157,6 +159,10 @@ function sortItemsRecursive(items: SidebarItem[]): SidebarItem[] {
   return buildExpectedOrder(itemsWithSortedChildren)
 }
 
+function serializeCustomProps(props: Record<string, unknown>, indent: number): string {
+  return `${' '.repeat(indent)}customProps: ${JSON.stringify(props)},`
+}
+
 function serializeItem(item: SidebarItem, indent: number): string {
   const pad = ' '.repeat(indent)
   const innerPad = ' '.repeat(indent + 2)
@@ -164,13 +170,17 @@ function serializeItem(item: SidebarItem, indent: number): string {
   if (isDoc(item)) {
     const idStr = `id: '${escapeJsString(item.id)}'`
     const labelStr = `label: '${escapeJsString(item.label)}'`
-    const oneLine = `${pad}{ type: 'doc', ${idStr}, ${labelStr} },`
+    const customPropsStr = item.customProps ? `, customProps: ${JSON.stringify(item.customProps)}` : ''
+    const oneLine = `${pad}{ type: 'doc', ${idStr}, ${labelStr}${customPropsStr} },`
     if (oneLine.length <= 100) {
       return oneLine
     }
-    return [`${pad}{`, `${innerPad}type: 'doc',`, `${innerPad}${idStr},`, `${innerPad}${labelStr},`, `${pad}},`].join(
-      '\n',
-    )
+    const parts = [`${pad}{`, `${innerPad}type: 'doc',`, `${innerPad}${idStr},`, `${innerPad}${labelStr},`]
+    if (item.customProps) {
+      parts.push(serializeCustomProps(item.customProps, indent + 2))
+    }
+    parts.push(`${pad}},`)
+    return parts.join('\n')
   }
 
   // Category
@@ -181,6 +191,9 @@ function serializeItem(item: SidebarItem, indent: number): string {
   lines.push(`${innerPad}label: '${escapeJsString(cat.label)}',`)
   if (cat.collapsed !== undefined) {
     lines.push(`${innerPad}collapsed: ${cat.collapsed},`)
+  }
+  if (cat.customProps) {
+    lines.push(serializeCustomProps(cat.customProps, indent + 2))
   }
   lines.push(`${innerPad}items: [`)
   for (const child of cat.items) {
@@ -220,8 +233,8 @@ function formatLabels(labels: string[]): string {
   return labels.slice(0, 4).join(', ') + ', ..., ' + labels.slice(-2).join(', ')
 }
 
-const KNOWN_DOC_KEYS = new Set(['type', 'id', 'label'])
-const KNOWN_CATEGORY_KEYS = new Set(['type', 'label', 'collapsed', 'items'])
+const KNOWN_DOC_KEYS = new Set(['type', 'id', 'label', 'customProps'])
+const KNOWN_CATEGORY_KEYS = new Set(['type', 'label', 'collapsed', 'customProps', 'items'])
 
 /** Warn about item types that the script doesn't know how to sort/serialize. */
 function validateItemTypes(items: SidebarItem[], contextPath: string): SortError[] {

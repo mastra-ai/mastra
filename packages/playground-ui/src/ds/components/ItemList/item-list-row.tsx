@@ -1,7 +1,7 @@
-import { cn } from '@/lib/utils';
-import { transitions } from '@/ds/primitives/transitions';
-import { ItemListColumn } from './types';
 import { getItemListColumnTemplate } from './shared';
+import type { ItemListColumn } from './types';
+import { transitions } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export type ItemListRowProps = {
   isSelected?: boolean;
@@ -21,7 +21,7 @@ export function ItemListRow({ isSelected, children, columns }: ItemListRowProps)
         transitions.colors,
         {
           'selected-row': isSelected,
-          grid: columns,
+          'grid px-4 gap-4 ': columns,
         },
       )}
       style={{ gridTemplateColumns: getItemListColumnTemplate(columns) }}

@@ -50,6 +50,8 @@ describe('CachingPubSub', () => {
           type: 'test',
           runId: 'run-1',
         }),
+        expect.any(Function),
+        expect.any(Function),
       );
     });
 
@@ -162,7 +164,11 @@ describe('CachingPubSub', () => {
 
       // Should only receive the live event, not the cached one
       expect(callback).toHaveBeenCalledTimes(1);
-      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ type: 'live' }));
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'live' }),
+        expect.any(Function),
+        expect.any(Function),
+      );
     });
   });
 

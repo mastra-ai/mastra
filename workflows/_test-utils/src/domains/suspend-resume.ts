@@ -4453,5 +4453,33 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
         }
       },
     );
+
+    it.skipIf(ctx.skipTests.resumeStepExecutionPath || !ctx.resume)(
+      'should not duplicate step IDs in stepExecutionPath after suspend/resume',
+      async () => {
+        const { workflow, mocks, resetMocks } = registry!['basic-resume-workflow']!;
+        resetMocks?.();
+
+        const runId = `step-exec-path-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        // First execution - step1 runs, step2 suspends
+        const suspendResult = await execute(workflow, {}, { runId });
+        expect(suspendResult.status).toBe('suspended');
+
+        // Resume step2 - it should complete without duplicating in the path
+        const resumeResult = await ctx.resume!(workflow, {
+          runId,
+          step: 'step2',
+          resumeData: { userInput: 'test' },
+        });
+
+        expect(resumeResult.status).toBe('success');
+
+        // stepExecutionPath should list each step exactly once, in order
+        if ('stepExecutionPath' in resumeResult) {
+          expect(resumeResult.stepExecutionPath).toEqual(['step1', 'step2']);
+        }
+      },
+    );
   });
 }

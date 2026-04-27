@@ -4,55 +4,54 @@
 
 import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
-import { fg, bold, mastra } from '../theme.js';
-
-// const removedColor = chalk.hex("#dc6868") // soft red
-const addedColor = chalk.hex('#5cb85c'); // soft green
-const hunkHeaderColor = chalk.hex('#61afef'); // cyan-blue
-const fileHeaderColor = chalk.bold.hex('#c678dd'); // bold purple
-const removedColor = chalk.hex(mastra.red);
-// const addedColor = chalk.hex(mastra.green)
-// const hunkHeaderColor = chalk.hex(mastra.blue)
-// const fileHeaderColor = chalk.bold.hex(mastra.purple)
-const metaColor = chalk.hex(mastra.mainGray);
+import { BOX_INDENT, theme, mastra } from '../theme.js';
 
 function colorizeDiffLine(line: string): string {
+  const t = theme.getTheme();
+  const addedColor = chalk.hex(t.success);
+  const hunkHeaderColor = chalk.hex(t.toolBorderPending);
+  const fileHeaderColor = chalk.bold.hex(t.accent);
+  const removedColor = chalk.hex(mastra.red);
+  const metaColor = chalk.hex(mastra.mainGray);
+
   // Unified diff headers
   if (line.startsWith('+++') || line.startsWith('---')) {
     return fileHeaderColor(line);
   }
-  if (line.startsWith('diff ')) {
-    return fileHeaderColor(line);
-  }
-  if (line.startsWith('@@')) {
-    return hunkHeaderColor(line);
-  }
+
+  // Added lines
   if (line.startsWith('+')) {
     return addedColor(line);
   }
+
+  // Removed lines
   if (line.startsWith('-')) {
     return removedColor(line);
   }
+
+  // Hunk headers
+  if (line.startsWith('@@')) {
+    // Parse the @@ -start,count +start,count @@ format
+    const match = line.match(/^(@@ .+? @@)(.*)/);
+    if (match) {
+      return hunkHeaderColor(match[1]) + metaColor(match[2] || '');
+    }
+    return hunkHeaderColor(line);
+  }
+
+  // Binary files, rename markers, etc.
   if (
+    line.startsWith('diff ') ||
     line.startsWith('index ') ||
     line.startsWith('new file') ||
     line.startsWith('deleted file') ||
-    line.startsWith('similarity') ||
-    line.startsWith('rename')
+    line.startsWith('similarity index') ||
+    line.startsWith('rename ')
   ) {
     return metaColor(line);
   }
-  // --stat lines: " file | 5 +++--" or summary "2 files changed, ..."
-  const statMatch = line.match(/^(.+\|.+?)(\++)([-]*)$/);
-  if (statMatch) {
-    return statMatch[1] + addedColor(statMatch[2]) + removedColor(statMatch[3]);
-  }
-  if (/^\s*\d+ files? changed/.test(line)) {
-    return line
-      .replace(/(\d+ insertions?\(\+\))/, addedColor('$1'))
-      .replace(/(\d+ deletions?\(-\))/, removedColor('$1'));
-  }
-  return line;
+
+  return metaColor(line);
 }
 
 export class DiffOutputComponent extends Container {
@@ -61,13 +60,19 @@ export class DiffOutputComponent extends Container {
     this.addChild(new Spacer(1));
 
     // Command header
-    this.addChild(new Text(`${fg('success', '✓')} ${bold(fg('muted', '$'))} ${fg('text', command)}`, 1, 0));
+    this.addChild(
+      new Text(
+        `${theme.fg('success', '✓')} ${theme.bold(theme.fg('muted', '$'))} ${theme.fg('text', command)}`,
+        BOX_INDENT,
+        0,
+      ),
+    );
 
     const output = diffOutput.trimEnd();
     if (output) {
       const lines = output.split('\n');
       for (const line of lines) {
-        this.addChild(new Text(`  ${colorizeDiffLine(line)}`, 0, 0));
+        this.addChild(new Text(`  ${colorizeDiffLine(line)}`, BOX_INDENT, 0));
       }
     }
   }

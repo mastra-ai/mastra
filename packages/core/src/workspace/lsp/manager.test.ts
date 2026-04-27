@@ -43,6 +43,16 @@ vi.mock('./client', () => ({
 }));
 
 vi.mock('./servers', () => ({
+  buildCustomExtensions: vi.fn().mockReturnValue({}),
+  buildServerDefs: vi.fn().mockReturnValue({
+    typescript: {
+      id: 'typescript',
+      name: 'TypeScript Language Server',
+      languageIds: ['typescript', 'typescriptreact'],
+      markers: ['tsconfig.json', 'package.json'],
+      command: () => 'typescript-language-server --stdio',
+    },
+  }),
   walkUp: vi.fn().mockImplementation((startDir: string, _markers: string[]) => {
     // Simulate finding project roots at specific directories
     if (startDir.startsWith('/project') || startDir === '/project') return '/project';
@@ -111,6 +121,16 @@ describe('LSPManager', () => {
 
     // Re-establish server mocks (resetAllMocks clears vi.mock factory implementations)
     const servers = await import('./servers');
+    (servers.buildCustomExtensions as ReturnType<typeof vi.fn>).mockReturnValue({});
+    (servers.buildServerDefs as ReturnType<typeof vi.fn>).mockReturnValue({
+      typescript: {
+        id: 'typescript',
+        name: 'TypeScript Language Server',
+        languageIds: ['typescript', 'typescriptreact'],
+        markers: ['tsconfig.json', 'package.json'],
+        command: () => 'typescript-language-server --stdio',
+      },
+    });
     (servers.walkUp as ReturnType<typeof vi.fn>).mockImplementation((startDir: string, _markers: string[]) => {
       if (startDir.startsWith('/project') || startDir === '/project') return '/project';
       if (startDir.startsWith('/other-project') || startDir === '/other-project') return '/other-project';
@@ -212,9 +232,9 @@ describe('LSPManager', () => {
       });
     });
 
-    it('returns empty array for unsupported files', async () => {
+    it('returns null for unsupported files (no LSP client available)', async () => {
       const diagnostics = await manager.getDiagnostics('/project/data.json', '{}');
-      expect(diagnostics).toEqual([]);
+      expect(diagnostics).toBeNull();
     });
   });
 
@@ -237,7 +257,12 @@ describe('LSPManager', () => {
 
       await restrictedManager.getClient('/project/src/app.ts');
 
-      expect(getServersForFile).toHaveBeenCalledWith('/project/src/app.ts', ['eslint']);
+      expect(getServersForFile).toHaveBeenCalledWith(
+        '/project/src/app.ts',
+        ['eslint'],
+        expect.any(Object),
+        expect.any(Object),
+      );
       await restrictedManager.shutdownAll();
     });
   });
@@ -716,6 +741,108 @@ describe('LSPManager', () => {
       ]);
       const result2 = await manager.getDiagnostics('/project/src/app.ts', 'content2');
       expect(result2.length).toBeGreaterThan(0);
+    });
+  });
+
+  // ==========================================================================
+  // Custom server registration
+  // ==========================================================================
+
+  describe('custom server registration', () => {
+    const phpConfig = {
+      servers: {
+        phpactor: {
+          id: 'phpactor',
+          name: 'Phpactor Language Server',
+          languageIds: ['php'],
+          extensions: ['.php'],
+          markers: ['composer.json'],
+          command: 'phpactor language-server',
+        },
+      },
+    };
+
+    const phpServerDef = {
+      id: 'phpactor',
+      name: 'Phpactor Language Server',
+      languageIds: ['php'],
+      markers: ['composer.json'],
+      command: () => 'phpactor language-server',
+    };
+
+    async function setupPhpMocks() {
+      const servers = await import('./servers');
+
+      (servers.buildCustomExtensions as ReturnType<typeof vi.fn>).mockReturnValue({ '.php': 'php' });
+      (servers.buildServerDefs as ReturnType<typeof vi.fn>).mockReturnValue({
+        typescript: {
+          id: 'typescript',
+          name: 'TypeScript Language Server',
+          languageIds: ['typescript', 'typescriptreact'],
+          markers: ['tsconfig.json', 'package.json'],
+          command: () => 'typescript-language-server --stdio',
+        },
+        phpactor: phpServerDef,
+      });
+      (servers.getServersForFile as ReturnType<typeof vi.fn>).mockImplementation((filePath: string) => {
+        if (filePath.endsWith('.php')) return [phpServerDef];
+        if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
+          return [
+            {
+              id: 'typescript',
+              name: 'TypeScript Language Server',
+              languageIds: ['typescript', 'typescriptreact'],
+              markers: ['tsconfig.json', 'package.json'],
+              command: () => 'typescript-language-server --stdio',
+            },
+          ];
+        }
+        return [];
+      });
+      (servers.walkUp as ReturnType<typeof vi.fn>).mockReturnValue('/project');
+    }
+
+    it('supports custom servers for new file extensions', async () => {
+      await setupPhpMocks();
+
+      const customManager = new LSPManager(mockProcessManager, '/project', phpConfig);
+
+      const client = await customManager.getClient('/project/src/App.php');
+      expect(client).not.toBeNull();
+
+      await customManager.shutdownAll();
+    });
+
+    it('returns diagnostics for custom server file types', async () => {
+      await setupPhpMocks();
+
+      mockWaitForDiagnostics.mockResolvedValueOnce([
+        { severity: 1, message: 'Undefined variable $foo', range: { start: { line: 5, character: 10 } } },
+      ]);
+
+      const customManager = new LSPManager(mockProcessManager, '/project', phpConfig);
+
+      const diagnostics = await customManager.getDiagnostics('/project/src/App.php', '<?php echo $foo;');
+      expect(diagnostics).not.toBeNull();
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics![0]!.message).toBe('Undefined variable $foo');
+      expect(diagnostics![0]!.severity).toBe('error');
+
+      await customManager.shutdownAll();
+    });
+
+    it('custom servers coexist with built-in servers', async () => {
+      await setupPhpMocks();
+
+      const customManager = new LSPManager(mockProcessManager, '/project', phpConfig);
+
+      const phpClient = await customManager.getClient('/project/src/App.php');
+      const tsClient = await customManager.getClient('/project/src/app.ts');
+
+      expect(phpClient).not.toBeNull();
+      expect(tsClient).not.toBeNull();
+
+      await customManager.shutdownAll();
     });
   });
 

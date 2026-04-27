@@ -1,4 +1,4 @@
-import { spanRecordSchema } from './domains/observability/types';
+import { spanRecordSchema } from './domains/observability';
 import { buildStorageSchema } from './types';
 import type { StorageColumn, StorageTableConfig } from './types';
 
@@ -34,7 +34,9 @@ export const TABLE_DATASET_VERSIONS = 'mastra_dataset_versions';
 // Experiment tables
 export const TABLE_EXPERIMENTS = 'mastra_experiments';
 export const TABLE_EXPERIMENT_RESULTS = 'mastra_experiment_results';
+export const TABLE_BACKGROUND_TASKS = 'mastra_background_tasks';
 
+/** Union of all core table name constants. */
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
   | typeof TABLE_MESSAGES
@@ -62,7 +64,8 @@ export type TABLE_NAMES =
   | typeof TABLE_DATASET_ITEMS
   | typeof TABLE_DATASET_VERSIONS
   | typeof TABLE_EXPERIMENTS
-  | typeof TABLE_EXPERIMENT_RESULTS;
+  | typeof TABLE_EXPERIMENT_RESULTS
+  | typeof TABLE_BACKGROUND_TASKS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -370,6 +373,7 @@ export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
   isBufferingReflection: { type: 'boolean', nullable: false },
   lastBufferedAtTokens: { type: 'integer', nullable: false },
   lastBufferedAtTime: { type: 'timestamp', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -382,6 +386,11 @@ export const DATASETS_SCHEMA: Record<string, StorageColumn> = {
   metadata: { type: 'jsonb', nullable: true },
   inputSchema: { type: 'jsonb', nullable: true },
   groundTruthSchema: { type: 'jsonb', nullable: true },
+  requestContextSchema: { type: 'jsonb', nullable: true },
+  tags: { type: 'jsonb', nullable: true },
+  targetType: { type: 'text', nullable: true },
+  targetIds: { type: 'jsonb', nullable: true },
+  scorerIds: { type: 'jsonb', nullable: true },
   version: { type: 'integer', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
@@ -395,7 +404,10 @@ export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
   isDeleted: { type: 'boolean', nullable: false },
   input: { type: 'jsonb', nullable: false },
   groundTruth: { type: 'jsonb', nullable: true },
+  requestContext: { type: 'jsonb', nullable: true },
   metadata: { type: 'jsonb', nullable: true },
+  source: { type: 'jsonb', nullable: true },
+  expectedTrajectory: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -424,6 +436,7 @@ export const EXPERIMENTS_SCHEMA: Record<string, StorageColumn> = {
   skippedCount: { type: 'integer', nullable: false },
   startedAt: { type: 'timestamp', nullable: true },
   completedAt: { type: 'timestamp', nullable: true },
+  agentVersion: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -441,6 +454,8 @@ export const EXPERIMENT_RESULTS_SCHEMA: Record<string, StorageColumn> = {
   completedAt: { type: 'timestamp', nullable: false },
   retryCount: { type: 'integer', nullable: false },
   traceId: { type: 'text', nullable: true },
+  status: { type: 'text', nullable: true },
+  tags: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
 };
 
@@ -528,6 +543,25 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_DATASET_VERSIONS]: DATASET_VERSIONS_SCHEMA,
   [TABLE_EXPERIMENTS]: EXPERIMENTS_SCHEMA,
   [TABLE_EXPERIMENT_RESULTS]: EXPERIMENT_RESULTS_SCHEMA,
+  [TABLE_BACKGROUND_TASKS]: {
+    id: { type: 'text', nullable: false, primaryKey: true },
+    tool_call_id: { type: 'text', nullable: false },
+    tool_name: { type: 'text', nullable: false },
+    agent_id: { type: 'text', nullable: false },
+    run_id: { type: 'text', nullable: false },
+    thread_id: { type: 'text', nullable: true },
+    resource_id: { type: 'text', nullable: true },
+    status: { type: 'text', nullable: false },
+    args: { type: 'jsonb', nullable: false },
+    result: { type: 'jsonb', nullable: true },
+    error: { type: 'jsonb', nullable: true },
+    retry_count: { type: 'integer', nullable: false },
+    max_retries: { type: 'integer', nullable: false },
+    timeout_ms: { type: 'integer', nullable: false },
+    createdAt: { type: 'timestamp', nullable: false },
+    startedAt: { type: 'timestamp', nullable: true },
+    completedAt: { type: 'timestamp', nullable: true },
+  },
 };
 
 /**

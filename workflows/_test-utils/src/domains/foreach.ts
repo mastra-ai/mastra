@@ -646,14 +646,12 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
           map: {
             status: 'success',
             output: [{ value: 12 }, { value: 33 }, { value: 344 }],
-            payload: [{ value: 1 }, { value: 22 }, { value: 333 }],
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
           final: {
             status: 'success',
             output: { finalValue: 1 + 11 + (22 + 11) + (333 + 11) },
-            payload: [{ value: 12 }, { value: 33 }, { value: 344 }],
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },

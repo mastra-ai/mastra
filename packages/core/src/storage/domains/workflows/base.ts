@@ -10,6 +10,8 @@ export abstract class WorkflowsStorage extends StorageDomain {
     });
   }
 
+  abstract supportsConcurrentUpdates(): boolean;
+
   abstract updateWorkflowResults({
     workflowName,
     runId,

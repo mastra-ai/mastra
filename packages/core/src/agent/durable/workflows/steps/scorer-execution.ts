@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { MastraScorer, MastraScorerEntry } from '../../../../evals/base';
 import { runScorer } from '../../../../evals/hooks';
 import type { Mastra } from '../../../../mastra';
+import { createObservabilityContext } from '../../../../observability';
 import { RequestContext } from '../../../../request-context';
 import { createStep } from '../../../../workflows';
 import { DurableStepIds } from '../../constants';
@@ -13,6 +14,7 @@ import type { SerializableScorersConfig, SerializableDurableState } from '../../
 const durableScorerInputSchema = z.object({
   /** Scorers configuration (serialized scorer names and sampling) */
   scorers: z.record(
+    z.string(),
     z.object({
       scorerName: z.string(),
       sampling: z
@@ -145,7 +147,7 @@ export function createDurableScorerStep() {
             entityType: 'AGENT',
             threadId,
             resourceId,
-            tracingContext,
+            ...createObservabilityContext(tracingContext),
           });
 
           executedScorerNames.push(scorerName);

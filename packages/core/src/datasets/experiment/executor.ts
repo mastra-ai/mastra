@@ -4,6 +4,8 @@ import type { MessageListInput } from '../../agent/message-list';
 import type { MastraScorer } from '../../evals/base';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals/types';
 import type { ScoringData } from '../../llm/model/base.types';
+import type { VersionOverrides } from '../../mastra/types';
+import { RequestContext } from '../../request-context';
 import type { TargetType } from '../../storage/types';
 import type { Workflow } from '../../workflows';
 
@@ -96,7 +98,12 @@ export async function executeTarget(
   target: Target,
   targetType: TargetType,
   item: { input: unknown; groundTruth?: unknown },
-  options?: { signal?: AbortSignal },
+  options?: {
+    signal?: AbortSignal;
+    requestContext?: Record<string, unknown>;
+    experimentId?: string;
+    versions?: VersionOverrides;
+  },
 ): Promise<ExecutionResult> {
   try {
     const signal = options?.signal;
@@ -109,7 +116,14 @@ export async function executeTarget(
     let executionPromise: Promise<ExecutionResult>;
     switch (targetType) {
       case 'agent':
-        executionPromise = executeAgent(target as Agent, item, signal);
+        executionPromise = executeAgent(
+          target as Agent,
+          item,
+          signal,
+          options?.requestContext,
+          options?.experimentId,
+          options?.versions,
+        );
         break;
       case 'workflow':
         executionPromise = executeWorkflow(target as Workflow, item);
@@ -178,6 +192,9 @@ async function executeAgent(
   agent: Agent,
   item: { input: unknown; groundTruth?: unknown },
   signal?: AbortSignal,
+  requestContext?: Record<string, unknown>,
+  experimentId?: string,
+  versions?: VersionOverrides,
 ): Promise<ExecutionResult> {
   const model = await agent.getModel();
 
@@ -185,15 +202,27 @@ async function executeAgent(
   // but share the fields we extract. Cast input to MessageListInput at the boundary.
   const input = item.input as MessageListInput;
 
+  const reqCtx: RequestContext | undefined = requestContext
+    ? new RequestContext(Object.entries(requestContext))
+    : undefined;
+
+  // Pass experimentId as tracing metadata so it appears on the AGENT_RUN span
+  const tracingOptions = experimentId ? { metadata: { experimentId } } : undefined;
+
   const rawResult = isSupportedLanguageModel(model)
     ? await agent.generate(input, {
         scorers: {},
         returnScorerData: true,
         abortSignal: signal,
+        ...(reqCtx ? { requestContext: reqCtx } : {}),
+        ...(tracingOptions ? { tracingOptions } : {}),
+        ...(versions ? { versions } : {}),
       })
     : await agent.generateLegacy(input, {
         scorers: {},
         returnScorerData: true,
+        ...(reqCtx ? { requestContext: reqCtx } : {}),
+        ...(tracingOptions ? { tracingOptions } : {}),
       });
 
   // Narrow to the common fields we need — both v1 and v2 results share these

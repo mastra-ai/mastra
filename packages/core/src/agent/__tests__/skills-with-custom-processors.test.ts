@@ -58,9 +58,6 @@ function createMockWorkspaceSkills(): WorkspaceSkills {
     refresh: vi.fn().mockResolvedValue(undefined),
     maybeRefresh: vi.fn().mockResolvedValue(undefined),
     search: vi.fn().mockResolvedValue([]),
-    create: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
     getReference: vi.fn().mockResolvedValue(null),
     getScript: vi.fn().mockResolvedValue(null),
     getAsset: vi.fn().mockResolvedValue(null),
@@ -158,8 +155,8 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
 
       // Verify that skill tools are available
       const toolNames = getToolNames(capturedTools);
-      expect(toolNames).toContain('skill-activate');
-      expect(toolNames).toContain('skill-search');
+      expect(toolNames).toContain('skill');
+      expect(toolNames).toContain('skill_search');
     });
 
     it('should include skill tools when using stream() with custom processor on Agent constructor', async () => {
@@ -180,8 +177,8 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
 
       // Verify that skill tools are available
       const toolNames = getToolNames(capturedTools);
-      expect(toolNames).toContain('skill-activate');
-      expect(toolNames).toContain('skill-search');
+      expect(toolNames).toContain('skill');
+      expect(toolNames).toContain('skill_search');
     });
   });
 
@@ -201,8 +198,8 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
 
       // Verify that skill tools are available
       const toolNames = getToolNames(capturedTools);
-      expect(toolNames).toContain('skill-activate');
-      expect(toolNames).toContain('skill-search');
+      expect(toolNames).toContain('skill');
+      expect(toolNames).toContain('skill_search');
     });
 
     it('should include skill tools when custom processor is passed to stream() options', async () => {
@@ -224,8 +221,8 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
 
       // Verify that skill tools are available
       const toolNames = getToolNames(capturedTools);
-      expect(toolNames).toContain('skill-activate');
-      expect(toolNames).toContain('skill-search');
+      expect(toolNames).toContain('skill');
+      expect(toolNames).toContain('skill_search');
     });
   });
 
@@ -243,8 +240,8 @@ describe('Skills with Custom Processors (Issue #12612)', () => {
 
       // Verify that skill tools are available
       const toolNames = getToolNames(capturedTools);
-      expect(toolNames).toContain('skill-activate');
-      expect(toolNames).toContain('skill-search');
+      expect(toolNames).toContain('skill');
+      expect(toolNames).toContain('skill_search');
     });
   });
 });

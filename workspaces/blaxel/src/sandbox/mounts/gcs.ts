@@ -4,7 +4,7 @@ import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
 import { shellQuote } from '../../utils/shell-quote';
 
-import { LOG_PREFIX, validateBucketName, runCommand } from './types';
+import { LOG_PREFIX, validateBucketName, runCommand, detectPackageManager } from './types';
 import type { MountContext } from './types';
 
 /**
@@ -36,6 +36,29 @@ export async function mountGCS(mountPath: string, config: BlaxelGCSMountConfig, 
   const checkResult = await runCommand(sandbox, 'which gcsfuse || echo "not found"');
   if (checkResult.stdout.includes('not found')) {
     logger.warn(`${LOG_PREFIX} gcsfuse not found, attempting runtime installation...`);
+
+    const pm = await detectPackageManager(sandbox);
+    logger.debug(`${LOG_PREFIX} Detected package manager: ${pm}`);
+
+    if (pm === 'apk') {
+      throw new Error(
+        `gcsfuse is not available on Alpine Linux. ` +
+          `Google only provides gcsfuse packages for Debian/Ubuntu.\n\n` +
+          `Use a Debian-based Blaxel image for GCS mounts:\n` +
+          `  new BlaxelSandbox({ image: 'blaxel/ts-app:latest' })\n` +
+          `  new BlaxelSandbox({ image: 'blaxel/py-app:latest' })`,
+      );
+    }
+
+    if (pm !== 'apt') {
+      throw new Error(
+        `Cannot install gcsfuse: no supported package manager found (need apt-get).\n` +
+          `gcsfuse is only available on Debian/Ubuntu-based images.\n\n` +
+          `Use a Debian-based Blaxel image:\n` +
+          `  new BlaxelSandbox({ image: 'blaxel/ts-app:latest' })`,
+      );
+    }
+
     logger.info(`${LOG_PREFIX} Tip: For faster startup, pre-install gcsfuse in your sandbox image`);
 
     // Detect distro codename for the gcsfuse repo (default to bookworm for Debian)

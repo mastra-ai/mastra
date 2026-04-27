@@ -21,9 +21,8 @@ import {
   TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE,
   DELETE_WORKFLOW_RUN_BY_ID_ROUTE,
 } from '../../handlers/workflows';
-import type { ServerRoute } from '.';
 
-export const WORKFLOWS_ROUTES: ServerRoute<any, any, any>[] = [
+export const WORKFLOWS_ROUTES = [
   LIST_WORKFLOWS_ROUTE,
   GET_WORKFLOW_BY_ID_ROUTE,
   LIST_WORKFLOW_RUNS_ROUTE,
@@ -45,4 +44,4 @@ export const WORKFLOWS_ROUTES: ServerRoute<any, any, any>[] = [
   RESTART_ASYNC_WORKFLOW_ROUTE,
   RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ROUTE,
   RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ASYNC_ROUTE,
-];
+] as const;

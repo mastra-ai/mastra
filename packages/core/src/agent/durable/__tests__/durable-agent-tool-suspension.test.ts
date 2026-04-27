@@ -426,7 +426,7 @@ describe('DurableAgent tool suspension', () => {
         }),
         resumeSchema: z.object({
           action: z.enum(['continue', 'retry', 'abort']),
-          overrides: z.record(z.string()).optional(),
+          overrides: z.record(z.string(), z.string()).optional(),
         }),
         execute: async () => ({ done: true }),
       });

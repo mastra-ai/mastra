@@ -1,10 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { z } from 'zod';
 import type { MastraScorer } from '../../../evals/base';
 import type { Mastra } from '../../../mastra';
+import { RequestContext } from '../../../request-context';
 import type { MastraCompositeStore, StorageDomains } from '../../../storage/base';
 import { DatasetsInMemory } from '../../../storage/domains/datasets/inmemory';
 import { ExperimentsInMemory } from '../../../storage/domains/experiments/inmemory';
 import { InMemoryDB } from '../../../storage/domains/inmemory-db';
+import { createStep, createWorkflow } from '../../../workflows';
 import { runExperiment } from '../index';
 
 // Mock agent that returns predictable output
@@ -120,6 +123,32 @@ describe('runExperiment', () => {
       expect(itemResult.error).toBeNull();
       expect(itemResult.startedAt).toBeInstanceOf(Date);
       expect(itemResult.completedAt).toBeInstanceOf(Date);
+    });
+
+    it('passes requestContext through to agent.generate()', async () => {
+      const mockAgent = createMockAgent('Response');
+      const localMastra = {
+        ...mastra,
+        getAgent: vi.fn().mockReturnValue(mockAgent),
+        getAgentById: vi.fn().mockReturnValue(mockAgent),
+      } as unknown as Mastra;
+
+      const requestContext = { userId: 'dev-user-123', environment: 'development' };
+
+      await runExperiment(localMastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        requestContext,
+      });
+
+      // agent.generate should have been called for each item
+      expect(mockAgent.generate).toHaveBeenCalled();
+
+      // Each call should include requestContext as a RequestContext instance
+      const firstCallOptions = (mockAgent.generate as ReturnType<typeof vi.fn>).mock.calls[0][1];
+      expect(firstCallOptions.requestContext).toBeInstanceOf(RequestContext);
+      expect(firstCallOptions.requestContext.all).toEqual(requestContext);
     });
   });
 
@@ -376,6 +405,46 @@ describe('runExperiment', () => {
       expect(result.succeededCount).toBe(2);
       expect(mockWorkflow.createRun).toHaveBeenCalledTimes(2);
     });
+
+    // Regression test for issue #15453: a real Workflow is thenable (has a `.then`
+    // builder method). Returning one from an async resolver caused Promise
+    // unwrapping to hang forever. Uses a real createWorkflow instance rather than
+    // a plain mock so the thenable behaviour is exercised.
+    it('runs against a real workflow instance without hanging', async () => {
+      const inputSchema = z.object({ prompt: z.string() });
+      const outputSchema = z.object({ text: z.string() });
+
+      const echoStep = createStep({
+        id: 'echo',
+        inputSchema,
+        outputSchema,
+        execute: async ({ inputData }) => ({ text: `echo:${inputData.prompt}` }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'real-echo-wf',
+        inputSchema,
+        outputSchema,
+      })
+        .then(echoStep)
+        .commit();
+
+      (mastra.getWorkflowById as ReturnType<typeof vi.fn>).mockReturnValue(workflow);
+      (mastra.getWorkflow as ReturnType<typeof vi.fn>).mockReturnValue(workflow);
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'workflow',
+        targetId: 'real-echo-wf',
+        itemTimeout: 5_000,
+      });
+
+      expect(result.status).toBe('completed');
+      expect(result.succeededCount).toBe(2);
+      expect(result.failedCount).toBe(0);
+      const outputs = result.results.map(r => r.output);
+      expect(outputs).toEqual(expect.arrayContaining([{ text: 'echo:Hello' }, { text: 'echo:Goodbye' }]));
+    }, 10_000);
   });
 
   describe('scorer target', () => {
@@ -671,6 +740,56 @@ describe('runExperiment', () => {
           groundTruth: 'expected-answer',
         }),
       );
+    });
+  });
+
+  describe('empty dataset handling', () => {
+    it('marks pre-created experiment as failed when dataset has no items', async () => {
+      // Create an empty dataset
+      const emptyDs = await datasetsStorage.createDataset({ name: 'Empty DS' });
+
+      // Pre-create experiment record (simulates async trigger path)
+      const experiment = await experimentsStorage.createExperiment({
+        datasetId: emptyDs.id,
+        datasetVersion: emptyDs.version,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        totalItems: 0,
+      });
+
+      // Run experiment with pre-created ID — should throw and mark as failed
+      await expect(
+        runExperiment(mastra, {
+          datasetId: emptyDs.id,
+          experimentId: experiment.id,
+          targetType: 'agent',
+          targetId: 'test-agent',
+        }),
+      ).rejects.toThrow('No items in dataset');
+
+      // Verify experiment was marked as failed (not stuck in pending)
+      const updated = await experimentsStorage.getExperimentById({ id: experiment.id });
+      expect(updated?.status).toBe('failed');
+      expect(updated?.completedAt).toBeDefined();
+    });
+
+    it('throws without creating experiment record when no pre-created ID', async () => {
+      const emptyDs = await datasetsStorage.createDataset({ name: 'Empty DS 2' });
+
+      await expect(
+        runExperiment(mastra, {
+          datasetId: emptyDs.id,
+          targetType: 'agent',
+          targetId: 'test-agent',
+        }),
+      ).rejects.toThrow('No items in dataset');
+
+      // No experiment record should exist for this dataset
+      const result = await experimentsStorage.listExperiments({
+        datasetId: emptyDs.id,
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(result.experiments.length).toBe(0);
     });
   });
 });

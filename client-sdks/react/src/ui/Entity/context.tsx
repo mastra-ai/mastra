@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import { EntityVariant } from './types';
+import type { EntityVariant } from './types';
 
 export type EntityContextType = {
   expanded: boolean;

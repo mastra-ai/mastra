@@ -235,36 +235,35 @@ Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
 
 <PropertiesTable
   content={[
-{
-name: "domain",
-type: "string",
-description:
-"Your Auth0 domain (e.g., your-tenant.auth0.com). This is used to verify JWT tokens issued by your Auth0 tenant.",
-isOptional: true,
-defaultValue: "process.env.AUTH0_DOMAIN",
-},
-{
-name: "audience",
-type: "string",
-description:
-"Your Auth0 API identifier/audience. This ensures tokens are intended for your specific API.",
-isOptional: true,
-defaultValue: "process.env.AUTH0_AUDIENCE",
-},
-{
-name: "name",
-type: "string",
-description: "Custom name for the auth provider instance.",
-isOptional: true,
-defaultValue: '"auth0"',
-},
-{
-name: "authorizeUser",
-type: "(user: Auth0User) => Promise<boolean> | boolean",
-description:
-"Custom authorization function to determine if a user should be granted access. Called after token verification. By default, allows all authenticated users with valid tokens.",
-isOptional: true,
-},
+  {
+    name: 'domain',
+    type: 'string',
+    description:
+      'Your Auth0 domain (e.g., your-tenant.auth0.com). This is used to verify JWT tokens issued by your Auth0 tenant.',
+    isOptional: true,
+    defaultValue: 'process.env.AUTH0_DOMAIN',
+  },
+  {
+    name: 'audience',
+    type: 'string',
+    description: 'Your Auth0 API identifier/audience. This ensures tokens are intended for your specific API.',
+    isOptional: true,
+    defaultValue: 'process.env.AUTH0_AUDIENCE',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Custom name for the auth provider instance.',
+    isOptional: true,
+    defaultValue: '"auth0"',
+  },
+  {
+    name: 'authorizeUser',
+    type: '(user: Auth0User) => Promise<boolean> | boolean',
+    description:
+      'Custom authorization function to determine if a user should be granted access. Called after token verification. By default, allows all authenticated users with valid tokens.',
+    isOptional: true,
+  },
 ]}
 />
 

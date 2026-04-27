@@ -355,7 +355,9 @@ function modelListTests(version: 'v1' | 'v2') {
 
         const fullText = await streamResult.text;
         expect(fullText).toBe('Hello, Premium Title');
-        expect(streamErrorFn).toHaveBeenCalledTimes(4);
+        // Stream-read errors are not retried on the same model - the fallback loop
+        // tries each model once and moves on to the next on error.
+        expect(streamErrorFn).toHaveBeenCalledTimes(1);
         expect(usedModelName).toBe('premium');
       });
 
@@ -477,8 +479,9 @@ function modelListTests(version: 'v1' | 'v2') {
 
         const fullText = await streamResult.text;
         expect(fullText).toBe('Hello, Premium Title');
-        expect(streamErrorFn).toHaveBeenCalledTimes(4);
-        expect(streamErrorFn2).toHaveBeenCalledTimes(3);
+        // Stream-read errors are not retried on the same model - each model is tried once
+        expect(streamErrorFn).toHaveBeenCalledTimes(1);
+        expect(streamErrorFn2).toHaveBeenCalledTimes(1);
         expect(usedModelName).toBe('premium');
       });
 
@@ -601,7 +604,8 @@ function modelListTests(version: 'v1' | 'v2') {
 
         const fullText = await streamResult.text;
         expect(fullText).toBe('Hello, Premium Title');
-        expect(streamErrorFn).toHaveBeenCalledTimes(4);
+        // Stream-read errors are not retried on the same model - each model is tried once
+        expect(streamErrorFn).toHaveBeenCalledTimes(1);
         expect(streamErrorFn2).toHaveBeenCalledTimes(0);
         expect(usedModelName).toBe('premium');
       });
@@ -758,7 +762,8 @@ function modelListTests(version: 'v1' | 'v2') {
 
         const fullText = await streamResult.text;
         expect(fullText).toBe('Hello, Premium Title');
-        expect(streamErrorFn).toHaveBeenCalledTimes(4);
+        // Stream-read errors are not retried on the same model - each model is tried once
+        expect(streamErrorFn).toHaveBeenCalledTimes(1);
         expect(premiumModel2Fn).toHaveBeenCalledTimes(0);
         expect(usedModelName).toBe('premium');
       });

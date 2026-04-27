@@ -1,5 +1,10 @@
-import { describe, it, expect, beforeAll, vi, beforeEach, afterEach } from 'vitest';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
+import { afterAll, describe, it, expect, beforeAll, vi, beforeEach, afterEach } from 'vitest';
 import { ModelRouterEmbeddingModel } from './embedding-router.js';
+
+const MODE = getLLMTestMode();
+setupDummyApiKeys(MODE, ['openai', 'google']);
 
 // Mock the @ai-sdk/openai-compatible-v5 module for custom URL tests
 vi.mock('@ai-sdk/openai-compatible-v5', async () => {
@@ -11,6 +16,10 @@ vi.mock('@ai-sdk/openai-compatible-v5', async () => {
 });
 
 const { createOpenAICompatible } = await import('@ai-sdk/openai-compatible-v5');
+
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 describe('ModelRouterEmbeddingModel Integration', () => {
   beforeAll(() => {

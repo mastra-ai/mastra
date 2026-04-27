@@ -1,5 +1,9 @@
+import { readFileSync } from 'node:fs';
+
 import { generateTypes } from '@internal/types-builder';
 import { defineConfig } from 'tsup';
+
+const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'));
 
 export default defineConfig({
   entry: {
@@ -13,6 +17,9 @@ export default defineConfig({
   splitting: true,
   treeshake: {
     preset: 'smallest',
+  },
+  define: {
+    MASTRACODE_VERSION: JSON.stringify(pkg.version),
   },
   sourcemap: true,
   onSuccess: async () => {

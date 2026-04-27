@@ -14,7 +14,9 @@ export function handleSubagentStart(
   modelId?: string,
 ): void {
   const { state } = ctx;
-  const component = new SubagentExecutionComponent(agentType, task, state.ui, modelId);
+  const component = new SubagentExecutionComponent(agentType, task, state.ui, modelId, {
+    collapseOnComplete: state.quietMode,
+  });
   state.pendingSubagents.set(toolCallId, component);
   state.allToolComponents.push(component as any);
 

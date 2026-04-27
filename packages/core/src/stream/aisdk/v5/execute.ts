@@ -2,6 +2,7 @@ import { injectJsonInstructionIntoMessages } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
 import type { IdGenerator, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
+import { prepareJsonSchemaForOpenAIStrictMode } from '@mastra/schema-compat';
 import type { StructuredOutputOptions } from '../../../agent/types';
 import type { ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
@@ -98,9 +99,14 @@ export function execute<OUTPUT = undefined>({
     });
   }
 
-  // For processor mode (model provided for structuring agent), inject a custom prompt to inform the main agent about the structured output schema that the structuring agent will use
-  if (structuredOutputMode === 'processor' && responseFormat?.type === 'json' && responseFormat?.schema) {
-    // Add a system message to inform the main agent about what data it needs to generate
+  // For processor mode without agent reuse, inject a custom prompt to inform the main agent
+  // about the structured output schema that the structuring agent will use.
+  if (
+    structuredOutputMode === 'processor' &&
+    responseFormat?.type === 'json' &&
+    responseFormat?.schema &&
+    !structuredOutput?.useAgent
+  ) {
     prompt = injectJsonInstructionIntoMessages({
       messages: inputMessages,
       schema: responseFormat.schema,
@@ -115,16 +121,23 @@ export function execute<OUTPUT = undefined>({
    * @see https://platform.openai.com/docs/guides/structured-outputs#structured-outputs-vs-json-mode
    * @see https://ai-sdk.dev/docs/ai-sdk-core/generating-structured-data#accessing-reasoning
    */
-  const providerOptionsToUse: SharedProviderOptions | undefined =
-    model.provider.startsWith('openai') && responseFormat?.type === 'json' && !structuredOutput?.jsonPromptInjection
-      ? {
-          ...(providerOptions ?? {}),
-          openai: {
-            strictJsonSchema: true,
-            ...(providerOptions?.openai ?? {}),
-          },
-        }
-      : providerOptions;
+  const isOpenAIStrictMode =
+    model.provider.startsWith('openai') && responseFormat?.type === 'json' && !structuredOutput?.jsonPromptInjection;
+
+  // For OpenAI strict mode, ensure all properties are required and additionalProperties: false
+  if (isOpenAIStrictMode && responseFormat?.schema) {
+    responseFormat.schema = prepareJsonSchemaForOpenAIStrictMode(responseFormat.schema);
+  }
+
+  const providerOptionsToUse: SharedProviderOptions | undefined = isOpenAIStrictMode
+    ? {
+        ...(providerOptions ?? {}),
+        openai: {
+          strictJsonSchema: true,
+          ...(providerOptions?.openai ?? {}),
+        },
+      }
+    : providerOptions;
 
   const stream = v5.initialize({
     runId,

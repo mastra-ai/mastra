@@ -29,11 +29,22 @@ describe('MastraAuthBetterAuth', () => {
 
   const mockRequest = {
     header: vi.fn(),
+    headers: new Headers(),
   } as any;
+
+  /**
+   * Mock a standard Web Request (what c.req.raw returns in Hono).
+   * Does NOT have a .header() method — only .headers (Headers object).
+   */
+  const mockRawRequest = (headers: Record<string, string> = {}) =>
+    ({
+      headers: new Headers(headers),
+    }) as unknown as any;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockRequest.header.mockReset();
+    mockRequest.headers = new Headers();
   });
 
   describe('initialization', () => {
@@ -62,6 +73,21 @@ describe('MastraAuthBetterAuth', () => {
       });
       expect(auth.name).toBe('custom-auth');
     });
+
+    it('should set default sessionCookieName to "better-auth.session_token"', () => {
+      const auth = new MastraAuthBetterAuth({
+        auth: mockAuth as any,
+      });
+      expect(auth.sessionCookieName).toBe('better-auth.session_token');
+    });
+
+    it('should use custom cookiePrefix from auth options', () => {
+      const customAuth = { ...mockAuth, options: { advanced: { cookiePrefix: 'myapp' } } };
+      const auth = new MastraAuthBetterAuth({
+        auth: customAuth as any,
+      });
+      expect(auth.sessionCookieName).toBe('myapp.session_token');
+    });
   });
 
   describe('authenticateToken', () => {
@@ -70,15 +96,12 @@ describe('MastraAuthBetterAuth', () => {
         session: mockSession,
         user: mockUser,
       });
-      mockRequest.header.mockImplementation((name: string) => {
-        if (name === 'Authorization') return 'Bearer test-token';
-        return undefined;
-      });
+      const rawReq = mockRawRequest({ Cookie: 'better-auth.session_token=test-token' });
 
       const auth = new MastraAuthBetterAuth({
         auth: mockAuth as any,
       });
-      const result = await auth.authenticateToken('test-token', mockRequest);
+      const result = await auth.authenticateToken('test-token', rawReq);
 
       expect(mockAuth.api.getSession).toHaveBeenCalled();
       expect(result).toEqual({
@@ -89,24 +112,22 @@ describe('MastraAuthBetterAuth', () => {
 
     it('should return null when session is not found', async () => {
       mockAuth.api.getSession.mockResolvedValue(null);
-      mockRequest.header.mockReturnValue(undefined);
 
       const auth = new MastraAuthBetterAuth({
         auth: mockAuth as any,
       });
-      const result = await auth.authenticateToken('invalid-token', mockRequest);
+      const result = await auth.authenticateToken('invalid-token', mockRawRequest());
 
       expect(result).toBeNull();
     });
 
     it('should return null when getSession throws an error', async () => {
       mockAuth.api.getSession.mockRejectedValue(new Error('Session expired'));
-      mockRequest.header.mockReturnValue(undefined);
 
       const auth = new MastraAuthBetterAuth({
         auth: mockAuth as any,
       });
-      const result = await auth.authenticateToken('expired-token', mockRequest);
+      const result = await auth.authenticateToken('expired-token', mockRawRequest());
 
       expect(result).toBeNull();
     });
@@ -116,12 +137,11 @@ describe('MastraAuthBetterAuth', () => {
         session: mockSession,
         user: null,
       });
-      mockRequest.header.mockReturnValue(undefined);
 
       const auth = new MastraAuthBetterAuth({
         auth: mockAuth as any,
       });
-      const result = await auth.authenticateToken('test-token', mockRequest);
+      const result = await auth.authenticateToken('test-token', mockRawRequest());
 
       expect(result).toBeNull();
     });
@@ -131,40 +151,13 @@ describe('MastraAuthBetterAuth', () => {
         session: null,
         user: mockUser,
       });
-      mockRequest.header.mockReturnValue(undefined);
 
       const auth = new MastraAuthBetterAuth({
         auth: mockAuth as any,
       });
-      const result = await auth.authenticateToken('test-token', mockRequest);
+      const result = await auth.authenticateToken('test-token', mockRawRequest());
 
       expect(result).toBeNull();
-    });
-
-    it('should pass Authorization header when present', async () => {
-      mockAuth.api.getSession.mockResolvedValue({
-        session: mockSession,
-        user: mockUser,
-      });
-      mockRequest.header.mockImplementation((name: string) => {
-        if (name === 'Authorization') return 'Bearer existing-token';
-        return undefined;
-      });
-
-      const auth = new MastraAuthBetterAuth({
-        auth: mockAuth as any,
-      });
-      await auth.authenticateToken('test-token', mockRequest);
-
-      expect(mockAuth.api.getSession).toHaveBeenCalledWith(
-        expect.objectContaining({
-          headers: expect.any(Headers),
-        }),
-      );
-
-      // Verify the headers contain the Authorization
-      const call = mockAuth.api.getSession.mock.calls[0][0];
-      expect(call.headers.get('Authorization')).toBe('Bearer existing-token');
     });
 
     it('should pass Cookie header when present for cookie-based sessions', async () => {
@@ -172,34 +165,152 @@ describe('MastraAuthBetterAuth', () => {
         session: mockSession,
         user: mockUser,
       });
-      mockRequest.header.mockImplementation((name: string) => {
-        if (name === 'Cookie') return 'better-auth.session_token=abc123';
-        return undefined;
-      });
+      const rawReq = mockRawRequest({ Cookie: 'better-auth.session_token=abc123' });
 
       const auth = new MastraAuthBetterAuth({
         auth: mockAuth as any,
       });
-      await auth.authenticateToken('test-token', mockRequest);
+      await auth.authenticateToken('test-token', rawReq);
 
       const call = mockAuth.api.getSession.mock.calls[0][0];
       expect(call.headers.get('Cookie')).toBe('better-auth.session_token=abc123');
     });
 
-    it('should set Authorization header from token when no existing header', async () => {
+    it('should convert Bearer token to cookie header when no session cookie exists', async () => {
       mockAuth.api.getSession.mockResolvedValue({
         session: mockSession,
         user: mockUser,
       });
-      mockRequest.header.mockReturnValue(undefined);
 
       const auth = new MastraAuthBetterAuth({
         auth: mockAuth as any,
       });
-      await auth.authenticateToken('my-bearer-token', mockRequest);
+      await auth.authenticateToken('my-bearer-token', mockRawRequest());
 
       const call = mockAuth.api.getSession.mock.calls[0][0];
-      expect(call.headers.get('Authorization')).toBe('Bearer my-bearer-token');
+      expect(call.headers.get('Cookie')).toBe('better-auth.session_token=my-bearer-token');
+    });
+
+    it('should not overwrite existing session cookie when Bearer token is also present', async () => {
+      mockAuth.api.getSession.mockResolvedValue({
+        session: mockSession,
+        user: mockUser,
+      });
+      const rawReq = mockRawRequest({ Cookie: 'better-auth.session_token=cookie-token' });
+
+      const auth = new MastraAuthBetterAuth({
+        auth: mockAuth as any,
+      });
+      await auth.authenticateToken('some-token', rawReq);
+
+      const call = mockAuth.api.getSession.mock.calls[0][0];
+      // Should use the existing cookie, not create a new one from the Bearer token
+      expect(call.headers.get('Cookie')).toBe('better-auth.session_token=cookie-token');
+    });
+
+    it('should use custom cookiePrefix when converting Bearer token to cookie', async () => {
+      const customAuth = { ...mockAuth, options: { advanced: { cookiePrefix: 'myapp' } } };
+      customAuth.api.getSession.mockResolvedValue({
+        session: mockSession,
+        user: mockUser,
+      });
+
+      const auth = new MastraAuthBetterAuth({
+        auth: customAuth as any,
+      });
+      await auth.authenticateToken('my-bearer-token', mockRawRequest());
+
+      const call = customAuth.api.getSession.mock.calls[0][0];
+      expect(call.headers.get('Cookie')).toBe('myapp.session_token=my-bearer-token');
+    });
+
+    it('should add session cookie alongside other cookies when Bearer token provided', async () => {
+      mockAuth.api.getSession.mockResolvedValue({
+        session: mockSession,
+        user: mockUser,
+      });
+      const rawReq = mockRawRequest({ Cookie: 'other_cookie=value' });
+
+      const auth = new MastraAuthBetterAuth({
+        auth: mockAuth as any,
+      });
+      await auth.authenticateToken('my-bearer-token', rawReq);
+
+      const call = mockAuth.api.getSession.mock.calls[0][0];
+      expect(call.headers.get('Cookie')).toBe('other_cookie=value; better-auth.session_token=my-bearer-token');
+    });
+
+    it('should work with raw Request (no .header() method)', async () => {
+      mockAuth.api.getSession.mockResolvedValue({
+        session: mockSession,
+        user: mockUser,
+      });
+      const rawReq = mockRawRequest({ Cookie: 'better-auth.session_token=raw-token' });
+
+      const auth = new MastraAuthBetterAuth({
+        auth: mockAuth as any,
+      });
+      const result = await auth.authenticateToken('raw-token', rawReq);
+
+      expect(result).toEqual({ session: mockSession, user: mockUser });
+      const call = mockAuth.api.getSession.mock.calls[0][0];
+      expect(call.headers.get('Cookie')).toBe('better-auth.session_token=raw-token');
+    });
+
+    it('should read Cookie from raw Request', async () => {
+      mockAuth.api.getSession.mockResolvedValue({
+        session: mockSession,
+        user: mockUser,
+      });
+      const rawReq = mockRawRequest({ Cookie: 'better-auth.session_token=raw123' });
+
+      const auth = new MastraAuthBetterAuth({
+        auth: mockAuth as any,
+      });
+      await auth.authenticateToken('test-token', rawReq);
+
+      const call = mockAuth.api.getSession.mock.calls[0][0];
+      expect(call.headers.get('Cookie')).toBe('better-auth.session_token=raw123');
+    });
+
+    it('should handle HonoRequest with .raw property', async () => {
+      mockAuth.api.getSession.mockResolvedValue({
+        session: mockSession,
+        user: mockUser,
+      });
+      const honoReq = {
+        raw: new Request('http://localhost/test', {
+          headers: { Cookie: 'better-auth.session_token=hono-token' },
+        }),
+      } as any;
+
+      const auth = new MastraAuthBetterAuth({
+        auth: mockAuth as any,
+      });
+      const result = await auth.authenticateToken('hono-token', honoReq);
+
+      expect(result).toEqual({ session: mockSession, user: mockUser });
+      const call = mockAuth.api.getSession.mock.calls[0][0];
+      expect(call.headers.get('Cookie')).toBe('better-auth.session_token=hono-token');
+    });
+
+    it('should inject session cookie when session name appears only inside a cookie value', async () => {
+      mockAuth.api.getSession.mockResolvedValue({
+        session: mockSession,
+        user: mockUser,
+      });
+      // The session cookie name appears as part of another cookie's VALUE, not as a key
+      const rawReq = mockRawRequest({ Cookie: 'other_cookie=contains_better-auth.session_token=xyz' });
+
+      const auth = new MastraAuthBetterAuth({
+        auth: mockAuth as any,
+      });
+      await auth.authenticateToken('my-bearer-token', rawReq);
+
+      const call = mockAuth.api.getSession.mock.calls[0][0];
+      expect(call.headers.get('Cookie')).toBe(
+        'other_cookie=contains_better-auth.session_token=xyz; better-auth.session_token=my-bearer-token',
+      );
     });
   });
 

@@ -8,39 +8,29 @@ export const pageExtractTool = createTool({
   inputSchema: z.object({
     url: z.string().optional().describe('URL to navigate to (optional if already on a page)'),
     instruction: z.string().describe('What to extract (e.g., "extract all product prices")'),
-    schema: z.record(z.any()).optional().describe('Zod schema definition for data extraction'),
-    useTextExtract: z
-      .boolean()
-      .optional()
-      .describe('Set true for larger-scale extractions, false for small extractions'),
+    schema: z.unknown().optional().describe('Zod schema definition for data extraction'),
   }),
-  outputSchema: z.any().describe('Extracted data according to schema'),
+  outputSchema: z.unknown().describe('Extracted data according to schema'),
   execute: async input => {
     // Create a default schema if none is provided
     const defaultSchema = {
       content: z.string(),
     };
 
-    return await performWebExtraction(
-      input.url,
-      input.instruction,
-      input.schema || defaultSchema,
-      input.useTextExtract,
-    );
+    return await performWebExtraction(input.url, input.instruction, input.schema || defaultSchema);
   },
 });
 
-const performWebExtraction = async (
-  url?: string,
-  instruction?: string,
-  schemaObj?: Record<string, any>,
-  useTextExtract?: boolean,
-) => {
+const performWebExtraction = async (url?: string, instruction?: string, schemaObj?: unknown) => {
   console.log(`Starting extraction${url ? ` for ${url}` : ''} with instruction: ${instruction}`);
 
   try {
     const stagehand = await sessionManager.ensureStagehand();
-    const page = stagehand.page;
+    const page = stagehand.context.pages()[0]; // Use the first page in the context
+
+    if (!page) {
+      throw new Error('Page not available');
+    }
 
     try {
       // Navigate to the URL if provided
@@ -60,26 +50,22 @@ const performWebExtraction = async (
         try {
           const schema = z.object(finalSchemaObj);
 
-          const result = await page.extract({
-            instruction,
-            schema,
-            useTextExtract,
-          });
+          const result = await stagehand.extract(instruction, schema);
 
           console.log(`Extraction successful:`, result);
           return result;
-        } catch (extractError) {
+        } catch (extractError: unknown) {
           console.error('Error during extraction:', extractError);
           throw extractError;
         }
       }
 
       return null;
-    } catch (pageError) {
+    } catch (pageError: unknown) {
       console.error('Error in page operation:', pageError);
       throw pageError;
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(`Full stack trace for extraction error:`, error);
     throw new Error(`Stagehand extraction failed: ${errorMessage}`);

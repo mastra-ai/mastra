@@ -1,8 +1,6 @@
 import type { TimeTravelParams } from '@mastra/client-js';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { WorkflowStreamResult as CoreWorkflowStreamResult } from '@mastra/core/workflows';
-import type { MutationState } from '../lib/use-mutation';
-
 /**
  * Workflow stream result type alias.
  */

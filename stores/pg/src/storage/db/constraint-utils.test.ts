@@ -1,6 +1,8 @@
+import { TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS } from '@mastra/core/storage';
 import { describe, it, expect } from 'vitest';
 
 import { POSTGRES_IDENTIFIER_MAX_LENGTH, truncateIdentifier, buildConstraintName } from './constraint-utils';
+import { generateTableSQL } from './index';
 
 // ---------------------------------------------------------------------------
 // truncateIdentifier
@@ -216,5 +218,28 @@ describe('backward compatibility', () => {
       schemaName: 'MyApp',
     });
     expect(mixedCase.toLowerCase()).toBe(mixedCase);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// generateTableSQL — REPLICA IDENTITY for workflow snapshot table
+// ---------------------------------------------------------------------------
+describe('generateTableSQL REPLICA IDENTITY', () => {
+  it('includes REPLICA IDENTITY USING INDEX for workflow snapshot table', () => {
+    const sql = generateTableSQL({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+    });
+    expect(sql).toContain('REPLICA IDENTITY USING INDEX');
+  });
+
+  it('includes REPLICA IDENTITY USING INDEX with a custom schema name', () => {
+    const sql = generateTableSQL({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+      schemaName: 'custom_schema',
+    });
+    expect(sql).toContain('REPLICA IDENTITY USING INDEX');
+    expect(sql).toContain('custom_schema');
   });
 });

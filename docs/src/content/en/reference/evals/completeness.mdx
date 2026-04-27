@@ -1,42 +1,41 @@
 ---
-title: "Reference: Completeness Scorer | Evals"
+title: "Reference: Completeness scorer | Evals"
 description: Documentation for the Completeness Scorer in Mastra, which evaluates how thoroughly LLM outputs cover key elements present in the input.
 packages:
   - "@mastra/core"
   - "@mastra/evals"
 ---
 
-# Completeness Scorer
+# Completeness scorer
 
 The `createCompletenessScorer()` function evaluates how thoroughly an LLM's output covers the key elements present in the input. It analyzes nouns, verbs, topics, and terms to determine coverage and provides a detailed completeness score.
 
 ## Parameters
 
-The `createCompletenessScorer()` function does not take any options.
+The `createCompletenessScorer()` function doesn't take any options.
 
 This function returns an instance of the MastraScorer class. See the [MastraScorer reference](./mastra-scorer) for details on the `.run()` method and its input/output.
 
-## .run() Returns
+## `.run()` returns
 
 <PropertiesTable
   content={[
-{
-name: "runId",
-type: "string",
-description: "The id of the run (optional).",
-},
-{
-name: "preprocessStepResult",
-type: "object",
-description:
-"Object with extracted elements and coverage details: { inputElements: string[], outputElements: string[], missingElements: string[], elementCounts: { input: number, output: number } }",
-},
-{
-name: "score",
-type: "number",
-description:
-"Completeness score (0-1) representing the proportion of input elements covered in the output.",
-},
+  {
+    name: 'runId',
+    type: 'string',
+    description: 'The id of the run (optional).',
+  },
+  {
+    name: 'preprocessStepResult',
+    type: 'object',
+    description:
+      'Object with extracted elements and coverage details: { inputElements: string[], outputElements: string[], missingElements: string[], elementCounts: { input: number, output: number } }',
+  },
+  {
+    name: 'score',
+    type: 'number',
+    description: 'Completeness score (0-1) representing the proportion of input elements covered in the output.',
+  },
 ]}
 />
 
@@ -55,7 +54,7 @@ The `.run()` method returns a result in the following shape:
 }
 ```
 
-## Element Extraction Details
+## Element extraction details
 
 The scorer extracts and analyzes several types of elements:
 
@@ -72,7 +71,7 @@ The extraction process includes:
 - Special handling of short words (3 characters or less)
 - Deduplication of elements
 
-### extractStepResult
+### `extractStepResult`
 
 From the `.run()` method, you can get the `extractStepResult` object with the following properties:
 
@@ -81,7 +80,7 @@ From the `.run()` method, you can get the `extractStepResult` object with the fo
 - **missingElements**: Input elements not found in the output.
 - **elementCounts**: The number of elements in the input and output.
 
-## Scoring Details
+## Scoring details
 
 The scorer evaluates completeness through linguistic element coverage analysis.
 

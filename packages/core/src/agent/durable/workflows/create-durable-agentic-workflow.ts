@@ -3,6 +3,7 @@ import type { MastraScorer, MastraScorerEntry } from '../../../evals/base';
 import { runScorer } from '../../../evals/hooks';
 import type { PubSub } from '../../../events/pubsub';
 import type { Mastra } from '../../../mastra';
+import { createObservabilityContext } from '../../../observability';
 import { RequestContext } from '../../../request-context';
 import { createWorkflow } from '../../../workflows';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
@@ -335,7 +336,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
                 entityType: 'AGENT',
                 threadId: initData.state?.threadId,
                 resourceId: initData.state?.resourceId,
-                tracingContext,
+                ...createObservabilityContext(tracingContext),
               });
             } catch (error) {
               // Log but don't fail - scorer errors shouldn't affect main execution

@@ -1,4 +1,4 @@
-import type { UsageStats } from '../../../observability/types/tracing';
+import type { UsageStats } from '../../../observability';
 
 /**
  * AI SDK v4 LanguageModelUsage type definition

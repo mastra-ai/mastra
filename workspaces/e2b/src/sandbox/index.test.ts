@@ -420,7 +420,6 @@ describe('E2BSandbox', () => {
       const instructions = sandbox.getInstructions();
 
       expect(instructions).toContain('sandbox');
-      expect(instructions).toContain('/home/user');
     });
   });
 
@@ -764,6 +763,39 @@ describe('E2BSandbox Mount Configuration', () => {
     expect(s3fsMountCall).toBeDefined();
     if (s3fsMountCall) {
       expect(s3fsMountCall[0]).toMatch(/\bro\b/);
+    }
+  });
+
+  it('S3 prefix mount uses bucket:/prefix syntax in mount command', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-prefix',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+        prefix: 'workspace/data/',
+      }),
+    } as any;
+
+    await sandbox.mount(mockFilesystem, '/data/s3-prefix');
+
+    const calls = mockSandbox.commands.run.mock.calls;
+    const s3fsMountCall = calls.find(
+      (call: any[]) => call[0].includes('s3fs') && call[0].includes('/data/s3-prefix') && !call[0].includes('which'),
+    );
+
+    expect(s3fsMountCall).toBeDefined();
+    if (s3fsMountCall) {
+      expect(s3fsMountCall[0]).toContain('test-bucket:/workspace/data');
+      expect(s3fsMountCall[0]).not.toContain('test-bucket:/workspace/data/');
     }
   });
 });

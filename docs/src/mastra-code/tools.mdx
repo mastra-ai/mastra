@@ -1,0 +1,249 @@
+---
+title: 'Tools'
+description: "Learn about Mastra Code's built-in tools for file viewing, editing, search, shell execution, web search, and task management."
+packages:
+  - 'mastracode'
+---
+
+# Tools
+
+Mastra Code provides built-in tools that the agent uses to interact with your codebase. Each tool is designed for a specific task, and the agent selects the right one based on what it needs to do.
+
+## File tools
+
+### `view`
+
+Read file contents with line numbers or list directory contents. The agent uses this tool before editing a file.
+
+- Displays line-numbered output (like `cat -n`) for easy reference.
+- For directories, lists files up to 2 levels deep, excluding hidden items.
+- Supports `offset` and `limit` to read specific line ranges in large files.
+- Output is truncated if the file exceeds the token limit. Use `offset` and `limit` to read specific sections.
+
+| Parameter | Type | Required | Description |
+| - | - | - | - |
+| `path` | `string` | Yes | Path to the file or directory |
+| `encoding` | `string` | No | Encoding to use (default: `utf-8`). Options: `utf-8`, `utf8`, `base64`, `hex`, `binary` |
+| `offset` | `number` | No | Line number to start reading from (1-indexed) |
+| `limit` | `number` | No | Maximum number of lines to read |
+| `showLineNumbers` | `boolean` | No | Whether to prefix each line with its line number (default: `true`) |
+
+### `string_replace_lsp`
+
+Edit a file by replacing an exact text match with new content. Returns Language Server Protocol (LSP) diagnostics showing any errors or warnings introduced by the edit.
+
+- The agent reads the file first with `view` before editing.
+- `old_string` must be an exact substring of the current file content.
+- Include enough surrounding context to uniquely identify the replacement location.
+- Use `replace_all` only when intentionally replacing all occurrences.
+- After editing, TypeScript errors, linting warnings, and other diagnostics are returned automatically.
+
+| Parameter | Type | Required | Description |
+| - | - | - | - |
+| `path` | `string` | Yes | Path to the file |
+| `old_string` | `string` | Yes | Exact text to find and replace. Must be unique in the file |
+| `new_string` | `string` | Yes | Text to replace `old_string` with |
+| `replace_all` | `boolean` | No | If true, replace all occurrences. If false (default), `old_string` must be unique |
+
+### `ast_smart_edit`
+
+Edit code using abstract syntax tree (AST) analysis for intelligent, structure-aware transformations. Powered by [ast-grep](https://ast-grep.github.io/), this tool understands code structure rather than treating files as raw text.
+
+Supported transformations:
+
+- **Pattern-based search and replace**: Find and replace code using AST patterns with `$VARIABLE` placeholders (e.g., replace `console.log($ARG)` with `logger.debug($ARG)`).
+- **Add/remove imports**: Intelligently insert or remove import statements.
+- **Rename**: Rename all occurrences of an identifier (not scope-aware).
+
+| Parameter | Type | Required | Description |
+| - | - | - | - |
+| `path` | `string` | Yes | File path to edit |
+| `pattern` | `string` | No | AST pattern to search for (supports `$VARIABLE` placeholders) |
+| `replacement` | `string` | No | Replacement pattern (can use captured `$VARIABLES`) |
+| `transform` | `string` | No | Transformation type: `add-import`, `remove-import`, `rename` |
+| `targetName` | `string` | No | Required for `remove-import` and `rename`. The current name to target |
+| `newName` | `string` | No | Required for `rename`. The new name to replace `targetName` with |
+| `importSpec` | `object` | No | Required for `add-import`. Specifies the module and names to import: `{ module, names, isDefault? }` |
+
+### `write_file`
+
+Create a new file or overwrite an existing file entirely.
+
+- Use for creating new files. For editing existing files, prefer `string_replace_lsp`.
+- Parent directories are created automatically if they don't exist.
+- If overwriting an existing file, the agent reads it first with `view`.
+
+| Parameter | Type | Required | Description |
+| - | - | - | - |
+| `path` | `string` | Yes | File path to write to (relative to project root) |
+| `content` | `string` | Yes | Full content to write to the file |
+
+## Search tools
+
+### `search_content`
+
+Search file contents using regular expressions. Walks the filesystem and returns matching lines with file paths and line numbers.
+
+- Supports full regex syntax (e.g., `"function\\s+\\w+"`, `"import.*from"`).
+- The `path` parameter accepts a plain path (file or directory) or a glob pattern (e.g., `"**/*.ts"`).
+- Respects `.gitignore` automatically in Git repositories.
+- Always preferred over running `grep` or `rg` via `execute_command`.
+
+| Parameter | Type | Required | Description |
+| - | - | - | - |
+| `pattern` | `string` | Yes | Regex pattern to search for |
+| `path` | `string` | No | File, directory, or glob pattern to search within (default: `"."`) |
+| `contextLines` | `number` | No | Number of lines to show before and after each match (default: 0) |
+| `maxCount` | `number` | No | Maximum matches per file (similar to `grep -m`) |
+| `caseSensitive` | `boolean` | No | Whether the search is case-sensitive (default: `true`) |
+| `includeHidden` | `boolean` | No | Include hidden files and directories (default: `false`) |
+
+### `find_files`
+
+List files and directories in the workspace filesystem. Returns a tree-style output that respects `.gitignore`.
+
+- Supports standard glob syntax: `*` (any characters), `**` (any path segments), `?` (single character), `{a,b}` (alternatives).
+- Respects `.gitignore` automatically in Git repositories.
+- Always preferred over running `find` or `ls` via `execute_command`.
+- Omit the `pattern` parameter to list all files — do not pass `pattern: "*"`.
+
+| Parameter | Type | Required | Description |
+| - | - | - | - |
+| `path` | `string` | No | Directory path to list (default: `"."`) |
+| `maxDepth` | `number` | No | Maximum depth to descend (default: 2). Similar to `tree -L` |
+| `showHidden` | `boolean` | No | Show hidden files starting with `.` (default: `false`). Similar to `tree -a` |
+| `dirsOnly` | `boolean` | No | List directories only (default: `false`). Similar to `tree -d` |
+| `exclude` | `string` | No | Pattern to exclude (e.g., `"node_modules"`). Similar to `tree -I` |
+| `extension` | `string` | No | Filter by file extension (e.g., `".ts"`). Similar to `tree -P` |
+| `pattern` | `string` or `string[]` | No | Glob pattern(s) to filter files (e.g., `"**/*.ts"`) |
+| `respectGitignore` | `boolean` | No | Respect `.gitignore` in the listed directory (default: `true`) |
+
+## Shell execution
+
+### `execute_command`
+
+Execute a shell command in the project directory.
+
+- Use for Git commands, package managers (`npm`, `pnpm`), build tools, test runners, Docker, and other terminal operations.
+- Commands run with a 30-second default timeout. Use the `timeout` parameter for longer operations.
+- Output is stripped of ANSI codes and streamed to the TUI in real time.
+- Pipe to `| tail -N` for commands with long output — full output streams to the user, but only the last N lines are returned to the agent.
+- The `CI=true` environment variable is set automatically to prevent interactive prompts.
+
+| Parameter | Type | Required | Description |
+| - | - | - | - |
+| `command` | `string` | Yes | Shell command to execute |
+| `cwd` | `string` | No | Working directory (defaults to project root) |
+| `timeout` | `number` | No | Timeout in seconds (default: 30) |
+
+### `request_sandbox_access`
+
+Request access to directories outside the project root. The user is prompted to approve or deny the request.
+
+| Parameter | Type | Required | Description |
+| - | - | - | - |
+| `path` | `string` | Yes | Absolute path to the directory needing access |
+| `reason` | `string` | Yes | Explanation of why access is needed |
+
+## Web tools
+
+### `web_search`
+
+Search the web for documentation, error messages, package APIs, and other information.
+
+This tool is available through three providers:
+
+- **Tavily**: When the `TAVILY_API_KEY` environment variable is set (takes priority).
+- **Anthropic web search**: Built into Anthropic models, used when no Tavily key is configured.
+- **OpenAI web search**: Built into OpenAI models, used when no Tavily key is configured.
+
+| Parameter | Type | Required | Description |
+| - | - | - | - |
+| `query` | `string` | Yes | The search query |
+| `searchDepth` | `"basic" \| "advanced"` | No | Search depth (default: `"basic"`) |
+| `maxResults` | `number` | No | Maximum number of results (default: 10) |
+| `includeImages` | `boolean` | No | Include related images (default: false) |
+
+### `web_extract`
+
+Extract the full content of one or more web pages. Requires a Tavily API key (`TAVILY_API_KEY`).
+
+| Parameter | Type | Required | Description |
+| - | - | - | - |
+| `urls` | `string[]` | Yes | URLs to extract content from (max 20) |
+| `extractDepth` | `"basic" \| "advanced"` | No | Extraction depth (default: `"basic"`) |
+| `includeImages` | `boolean` | No | Include extracted image URLs (default: false) |
+
+## Task management
+
+### `task_write`
+
+Create or update a structured task list for tracking progress on complex, multi-step work.
+
+- Each task has a `content` (imperative form), `status` (`pending`, `in_progress`, `completed`), and `activeForm` (present continuous form shown during execution).
+- Pass the full task list each time — it replaces the previous list.
+- Only one task should be `in_progress` at a time.
+
+### `task_check`
+
+Check the completion status of the current task list. The agent uses this before finishing to verify all tasks are complete.
+
+## Interactive tools
+
+### `ask_user`
+
+Ask the user a structured question. The agent uses this when it needs clarification, wants to validate assumptions, or needs the user to make a decision. Questions render inline in the conversation flow and support optional multiple-choice options.
+
+### `submit_plan`
+
+Submit a structured implementation plan for user review and approval (Plan mode only). The plan renders inline, and the user can approve, reject, or request changes.
+
+## MCP tools
+
+When [MCP servers](/configuration#mcp-servers) are configured, their tools are automatically available to the agent. MCP tools are namespaced as `serverName_toolName` to avoid collisions with built-in tools.
+
+MCP tools fall under the `mcp` permission category. When YOLO mode is disabled, they require approval before execution.
+
+## Tool availability by mode
+
+Not all tools are available in every mode:
+
+| Tool | Build | Plan | Fast |
+| - | - | - | - |
+| `view` | Yes | Yes | Yes |
+| `search_content` | Yes | Yes | Yes |
+| `find_files` | Yes | Yes | Yes |
+| `execute_command` | Yes | Read-only | Yes |
+| `string_replace_lsp` | Yes | No | Yes |
+| `ast_smart_edit` | Yes | No | Yes |
+| `write_file` | Yes | No | Yes |
+| `web_search` | Yes | Yes | Yes |
+| `web_extract` | Yes | Yes | Yes |
+| `task_write` | Yes | Yes | Yes |
+| `task_check` | Yes | Yes | Yes |
+| `ask_user` | Yes | Yes | Yes |
+| `submit_plan` | No | Yes | No |
+| `request_sandbox_access` | Yes | Yes | Yes |
+
+In Plan mode, `execute_command` is available but restricted to read-only commands (`git status`, `git log`, `git diff`, etc.).
+
+## Permission system
+
+Tools are grouped into four categories, each with a configurable approval policy:
+
+| Category | Tools | Default policy |
+| - | - | - |
+| **Read** | `view`, `search_content`, `find_files`, `web_search`, `web_extract` | `allow` |
+| **Edit** | `string_replace_lsp`, `ast_smart_edit`, `write_file`, `subagent` | `ask` |
+| **Execute** | `execute_command` | `ask` |
+| **MCP** | All MCP server tools | `ask` |
+
+When YOLO mode is enabled (the default), all categories are set to `allow`. When disabled, the agent prompts for approval based on the category policy.
+
+You can configure per-category or per-tool overrides through `/settings`, and session-level grants let you approve a category once for the rest of the session.
+
+:::note
+
+Visit [Modes](/modes) for details on how modes affect tool access and approval behavior.
+
+:::

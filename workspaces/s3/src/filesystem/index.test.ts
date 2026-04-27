@@ -225,6 +225,33 @@ describe('S3Filesystem', () => {
       expect(config.secretAccessKey).toBe('wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY');
     });
 
+    it('includes sessionToken if set with credentials', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+        secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+        sessionToken: 'FwoGZXIvYXdzEBYaDH7EXAMPLE',
+      });
+
+      const config = fs.getMountConfig();
+
+      expect(config.sessionToken).toBe('FwoGZXIvYXdzEBYaDH7EXAMPLE');
+    });
+
+    it('does not include sessionToken if not set', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+        secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+      });
+
+      const config = fs.getMountConfig();
+
+      expect(config.sessionToken).toBeUndefined();
+    });
+
     it('does not include credentials if not set', () => {
       const fs = new S3Filesystem({ bucket: 'test', region: 'us-east-1' });
 
@@ -251,6 +278,62 @@ describe('S3Filesystem', () => {
 
       expect(config1.readOnly).toBeUndefined();
       expect(config2.readOnly).toBeUndefined();
+    });
+
+    it('includes prefix if set', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        prefix: 'workspace/data',
+      });
+
+      const config = fs.getMountConfig();
+
+      expect(config.prefix).toBe('workspace/data/');
+    });
+
+    it('excludes prefix if not set', () => {
+      const fs = new S3Filesystem({ bucket: 'test', region: 'us-east-1' });
+
+      const config = fs.getMountConfig();
+
+      expect(config.prefix).toBeUndefined();
+    });
+
+    it('normalizes prefix with leading/trailing slashes', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        prefix: '/foo/bar/',
+      });
+
+      const config = fs.getMountConfig();
+
+      expect(config.prefix).toBe('foo/bar/');
+    });
+
+    it('treats prefix "/" as no prefix (root-equivalent)', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        prefix: '/',
+      });
+
+      const config = fs.getMountConfig();
+
+      expect(config.prefix).toBeUndefined();
+    });
+
+    it('treats empty string prefix as no prefix', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        prefix: '',
+      });
+
+      const config = fs.getMountConfig();
+
+      expect(config.prefix).toBeUndefined();
     });
   });
 
@@ -404,19 +487,69 @@ describe('S3Filesystem', () => {
         secretAccessKey: 'test',
       });
 
-      const fsAny = fs as any;
+      // Subsequent .client accesses should return the cached instance
+      const client1 = fs.client;
+      const client2 = fs.client;
 
-      // Simulate first operation creating the client
-      const fakeClient = { send: vi.fn() };
-      fsAny._client = fakeClient;
-
-      // Subsequent getClient() calls should return the cached instance
-      const client1 = fsAny.getClient();
-      const client2 = fsAny.getClient();
-
-      expect(client1).toBe(fakeClient);
-      expect(client2).toBe(fakeClient);
       expect(client1).toBe(client2);
+    });
+
+    it('passes sessionToken in credentials when provided', async () => {
+      const { S3Client } = await import('@aws-sdk/client-s3');
+      const MockS3Client = vi.mocked(S3Client);
+      MockS3Client.mockClear();
+
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+        secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+        sessionToken: 'FwoGZXIvYXdzEBYaDH7EXAMPLE',
+      });
+
+      try {
+        await fs.readFile('test.txt');
+      } catch {
+        // Expected to fail (mock), but client should be created
+      }
+
+      expect(MockS3Client).toHaveBeenCalledWith(
+        expect.objectContaining({
+          credentials: {
+            accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+            secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+            sessionToken: 'FwoGZXIvYXdzEBYaDH7EXAMPLE',
+          },
+        }),
+      );
+    });
+
+    it('omits sessionToken from credentials when not provided', async () => {
+      const { S3Client } = await import('@aws-sdk/client-s3');
+      const MockS3Client = vi.mocked(S3Client);
+      MockS3Client.mockClear();
+
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+      });
+
+      try {
+        await fs.readFile('test.txt');
+      } catch {
+        // Expected to fail (mock), but client should be created
+      }
+
+      expect(MockS3Client).toHaveBeenCalledWith(
+        expect.objectContaining({
+          credentials: {
+            accessKeyId: 'key',
+            secretAccessKey: 'secret',
+          },
+        }),
+      );
     });
 
     it('uses anonymous credentials for public buckets', async () => {
@@ -504,6 +637,40 @@ describe('S3Filesystem', () => {
       // Multiple leading slashes
       const key2 = (fs as any).toKey('///multi-slash.txt');
       expect(key2).toBe('multi-slash.txt');
+    });
+
+    it('toKey resolves "." to empty string (root)', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+      });
+
+      expect((fs as any).toKey('.')).toBe('');
+      expect((fs as any).toKey('./')).toBe('');
+      expect((fs as any).toKey('./subdir')).toBe('subdir');
+    });
+
+    it('toKey resolves "." with prefix to prefix root', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        prefix: 'workspace',
+      });
+
+      expect((fs as any).toKey('.')).toBe('workspace/');
+      expect((fs as any).toKey('./')).toBe('workspace/');
+      expect((fs as any).toKey('./file.txt')).toBe('workspace/file.txt');
+    });
+
+    it('toKey does not alter dotfiles', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+      });
+
+      expect((fs as any).toKey('.hidden')).toBe('.hidden');
+      expect((fs as any).toKey('.env')).toBe('.env');
+      expect((fs as any).toKey('/.gitignore')).toBe('.gitignore');
     });
   });
 
@@ -998,6 +1165,35 @@ describe('S3Filesystem SDK Operations', () => {
     it('isDirectory("/") returns true', async () => {
       const result = await fs.isDirectory('/');
       expect(result).toBe(true);
+    });
+
+    it('exists(".") resolves to root and returns true', async () => {
+      mockSend.mockClear();
+      const result = await fs.exists('.');
+      expect(result).toBe(true);
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it('stat(".") returns directory stat', async () => {
+      const stat = await fs.stat('.');
+      expect(stat.type).toBe('directory');
+    });
+
+    it('isDirectory(".") returns true', async () => {
+      const result = await fs.isDirectory('.');
+      expect(result).toBe(true);
+    });
+
+    it('isFile(".") returns false', async () => {
+      const result = await fs.isFile('.');
+      expect(result).toBe(false);
+    });
+
+    it('exists("./") resolves to root and returns true', async () => {
+      mockSend.mockClear();
+      const result = await fs.exists('./');
+      expect(result).toBe(true);
+      expect(mockSend).not.toHaveBeenCalled();
     });
   });
 

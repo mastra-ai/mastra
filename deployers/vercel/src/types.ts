@@ -10,4 +10,6 @@ export type VcConfig = {
 
 export type VcConfigOverrides = Pick<VcConfig, 'maxDuration' | 'memory' | 'regions'>;
 
-export interface VercelDeployerOptions extends VcConfigOverrides {}
+export interface VercelDeployerOptions extends VcConfigOverrides {
+  studio?: boolean;
+}

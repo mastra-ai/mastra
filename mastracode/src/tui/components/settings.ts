@@ -6,11 +6,13 @@
  * Changes apply immediately — Esc closes the panel.
  */
 
-import { Box, Container, Input, SelectList, SettingsList, Spacer, Text } from '@mariozechner/pi-tui';
+import { Box, Container, SelectList, SettingsList, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, SettingItem } from '@mariozechner/pi-tui';
 import type { StorageBackend } from '../../onboarding/settings.js';
 import type { NotificationMode } from '../notify.js';
-import { fg, bg, bold, getSettingsListTheme, getSelectListTheme } from '../theme.js';
+import { theme, getSettingsListTheme, getSelectListTheme } from '../theme.js';
+import { MaskedInput } from './masked-input.js';
+import { getThinkingLevelsForModel } from './thinking-settings.js';
 
 // =============================================================================
 // Types
@@ -19,7 +21,9 @@ export interface SettingsConfig {
   notifications: NotificationMode;
   yolo: boolean;
   thinkingLevel: string;
+  currentModelId: string;
   escapeAsCancel: boolean;
+  quietMode: boolean;
   storageBackend: StorageBackend;
   pgConnectionString: string;
   libsqlUrl: string;
@@ -30,7 +34,9 @@ export interface SettingsCallbacks {
   onYoloChange: (enabled: boolean) => void;
   onThinkingLevelChange: (level: string) => void;
   onEscapeAsCancelChange: (enabled: boolean) => void;
+  onQuietModeChange: (enabled: boolean) => void;
   onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => void;
+  onApiKeys?: () => void;
   onClose: () => void;
 }
 
@@ -62,7 +68,7 @@ class StorageBackendSubmenu extends Container {
   private phase: 'select' | 'connection' = 'select';
   private pendingBackend: StorageBackend = 'libsql';
   private selectList: SelectList;
-  private input!: Input;
+  private input!: MaskedInput;
   private onDone: (backend: StorageBackend, connectionUrl?: string) => void;
   private onBack: () => void;
   private currentPgConnectionString: string;
@@ -113,19 +119,19 @@ class StorageBackendSubmenu extends Container {
     this.clear();
 
     if (this.pendingBackend === 'pg') {
-      this.addChild(new Text(bold(fg('accent', 'PostgreSQL Connection')), 0, 0));
+      this.addChild(new Text(theme.bold(theme.fg('accent', 'PostgreSQL Connection')), 0, 0));
       this.addChild(new Spacer(1));
-      this.addChild(new Text(fg('muted', 'Enter a connection string:'), 0, 0));
-      this.addChild(new Text(fg('dim', 'e.g. postgresql://user:pass@localhost:5432/mydb'), 0, 0));
+      this.addChild(new Text(theme.fg('muted', 'Enter a connection string:'), 0, 0));
+      this.addChild(new Text(theme.fg('dim', 'e.g. postgresql://user:pass@localhost:5432/mydb'), 0, 0));
     } else {
-      this.addChild(new Text(bold(fg('accent', 'LibSQL Connection')), 0, 0));
+      this.addChild(new Text(theme.bold(theme.fg('accent', 'LibSQL Connection')), 0, 0));
       this.addChild(new Spacer(1));
-      this.addChild(new Text(fg('muted', 'Enter a URL or leave empty for default local file:'), 0, 0));
-      this.addChild(new Text(fg('dim', 'e.g. libsql://your-db.turso.io'), 0, 0));
+      this.addChild(new Text(theme.fg('muted', 'Enter a URL or leave empty for default local file:'), 0, 0));
+      this.addChild(new Text(theme.fg('dim', 'e.g. libsql://your-db.turso.io'), 0, 0));
     }
     this.addChild(new Spacer(1));
 
-    this.input = new Input();
+    this.input = new MaskedInput();
     const currentValue = this.pendingBackend === 'pg' ? this.currentPgConnectionString : this.currentLibsqlUrl;
     if (currentValue) {
       this.input.setValue(currentValue);
@@ -133,7 +139,7 @@ class StorageBackendSubmenu extends Container {
     this.addChild(this.input);
 
     this.addChild(new Spacer(1));
-    this.addChild(new Text(fg('dim', 'Enter to save · Esc to go back'), 0, 0));
+    this.addChild(new Text(theme.fg('dim', 'Enter to save · Esc to go back'), 0, 0));
   }
 
   handleInput(data: string): void {
@@ -192,10 +198,10 @@ export class SettingsComponent extends Box implements Focusable {
   }
 
   constructor(config: SettingsConfig, callbacks: SettingsCallbacks) {
-    super(2, 1, (text: string) => bg('overlayBg', text));
+    super(2, 1, (text: string) => theme.bg('overlayBg', text));
 
     // Title
-    this.addChild(new Text(bold(fg('accent', 'Settings')), 0, 0));
+    this.addChild(new Text(theme.bold(theme.fg('accent', 'Settings')), 0, 0));
     this.addChild(new Spacer(1));
 
     // Build settings items
@@ -210,13 +216,11 @@ export class SettingsComponent extends Box implements Focusable {
       { value: 'both', label: 'Both', desc: 'Bell + system notification' },
     ];
 
-    const thinkingLevels: { value: string; label: string; desc: string }[] = [
-      { value: 'off', label: 'Off', desc: 'No extended thinking' },
-      { value: 'minimal', label: 'Minimal', desc: '~1k budget tokens' },
-      { value: 'low', label: 'Low', desc: '~4k budget tokens' },
-      { value: 'medium', label: 'Medium', desc: '~10k budget tokens' },
-      { value: 'high', label: 'High', desc: '~32k budget tokens' },
-    ];
+    const thinkingLevels = getThinkingLevelsForModel(config.currentModelId).map(level => ({
+      value: level.id,
+      label: level.label,
+      desc: level.description,
+    }));
 
     const getNotifLabel = (mode: NotificationMode) => notificationModes.find(m => m.value === mode)?.label ?? mode;
 
@@ -275,7 +279,7 @@ export class SettingsComponent extends Box implements Focusable {
       {
         id: 'thinking',
         label: 'Thinking level',
-        description: 'Extended thinking budget for Anthropic models (currently disabled)',
+        description: 'Reasoning depth level',
         currentValue: getThinkingLabel(config.thinkingLevel),
         submenu: (_currentValue, done) =>
           new SelectSubmenu(
@@ -296,7 +300,7 @@ export class SettingsComponent extends Box implements Focusable {
       {
         id: 'escapeAsCancel',
         label: 'Escape cancels',
-        description: 'Use Escape to cancel/clear (Ctrl+C always works). Ctrl+Z undoes a clear.',
+        description: 'Use Escape to cancel/clear (Ctrl+C always works).',
         currentValue: config.escapeAsCancel ? 'On' : 'Off',
         submenu: (_currentValue, done) =>
           new SelectSubmenu(
@@ -317,6 +321,34 @@ export class SettingsComponent extends Box implements Focusable {
               config.escapeAsCancel = value === 'on';
               callbacks.onEscapeAsCancelChange(config.escapeAsCancel);
               done(config.escapeAsCancel ? 'On' : 'Off');
+            },
+            () => done(),
+          ),
+      },
+      {
+        id: 'quietMode',
+        label: 'Quiet mode',
+        description: 'Collapse subagent output to a single line after completion.',
+        currentValue: config.quietMode ? 'On' : 'Off',
+        submenu: (_currentValue, done) =>
+          new SelectSubmenu(
+            [
+              {
+                value: 'on',
+                label: '  On',
+                description: 'Auto-collapse subagent output when done',
+              },
+              {
+                value: 'off',
+                label: '  Off',
+                description: 'Keep subagent output visible when done',
+              },
+            ],
+            config.quietMode ? 'on' : 'off',
+            value => {
+              config.quietMode = value === 'on';
+              callbacks.onQuietModeChange(config.quietMode);
+              done(config.quietMode ? 'On' : 'Off');
             },
             () => done(),
           ),
@@ -345,6 +377,20 @@ export class SettingsComponent extends Box implements Focusable {
           ),
       },
     ];
+
+    if (callbacks.onApiKeys) {
+      items.push({
+        id: 'apiKeys',
+        label: 'API Keys',
+        description: 'Add, update, or remove API keys for model providers',
+        currentValue: 'Manage →',
+        submenu: (_currentValue, done) => {
+          done();
+          callbacks.onApiKeys!();
+          return new Text('', 0, 0);
+        },
+      });
+    }
 
     this.settingsList = new SettingsList(
       items,

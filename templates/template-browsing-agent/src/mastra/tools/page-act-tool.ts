@@ -20,7 +20,10 @@ export const pageActTool = createTool({
 
 const performWebAction = async (url?: string, action?: string) => {
   const stagehand = await sessionManager.ensureStagehand();
-  const page = stagehand.page;
+  const page = stagehand.context.pages()[0]; // Use the first page in the context
+  if (!page) {
+    throw new Error('Page not available');
+  }
 
   try {
     // Navigate to the URL if provided
@@ -30,7 +33,7 @@ const performWebAction = async (url?: string, action?: string) => {
 
     // Perform the action
     if (action) {
-      await page.act(action);
+      await stagehand.act(action);
     }
 
     return {

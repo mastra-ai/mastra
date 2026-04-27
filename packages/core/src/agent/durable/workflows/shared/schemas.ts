@@ -16,7 +16,7 @@ export const modelConfigSchema = z.object({
   provider: z.string(),
   modelId: z.string(),
   specificationVersion: z.string().optional(),
-  settings: z.record(z.any()).optional(),
+  settings: z.record(z.string(), z.any()).optional(),
 });
 
 /**
@@ -28,7 +28,7 @@ export const modelListEntrySchema = z.object({
     provider: z.string(),
     modelId: z.string(),
     specificationVersion: z.string().optional(),
-    originalConfig: z.union([z.string(), z.record(z.any())]).optional(),
+    originalConfig: z.union([z.string(), z.record(z.string(), z.any())]).optional(),
   }),
   maxRetries: z.number(),
   enabled: z.boolean(),

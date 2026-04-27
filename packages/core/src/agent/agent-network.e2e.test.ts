@@ -1,6 +1,7 @@
 import { openai } from '@ai-sdk/openai-v5';
-import { afterEach, describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import { createGatewayMock } from '@internal/test-utils';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { z } from 'zod/v4';
 import { MastraError } from '../error';
 import { Mastra } from '../mastra';
 import { MockMemory } from '../memory/mock';
@@ -9,6 +10,10 @@ import { InMemoryStore } from '../storage';
 import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
 import { Agent } from './index';
+
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 /**
  * Validates that iteration counter works correctly in agent network loops.

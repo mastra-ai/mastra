@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   BUILTIN_SERVERS,
+  buildCustomExtensions,
+  buildServerDefs,
   findProjectRoot,
   findProjectRootAsync,
   getServersForFile,
@@ -409,6 +411,372 @@ describe('BUILTIN_SERVERS command()', () => {
       } else {
         expect(result).toBeUndefined();
       }
+    });
+  });
+});
+
+describe('buildServerDefs', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'lsp-build-'));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  describe('binaryOverrides', () => {
+    it('returns the override path for typescript without checking node_modules', () => {
+      const defs = buildServerDefs({
+        binaryOverrides: { typescript: '/usr/local/bin/typescript-language-server --stdio' },
+      });
+      // Even with no binary in tempDir, override wins
+      expect(defs.typescript!.command(tempDir)).toBe('/usr/local/bin/typescript-language-server --stdio');
+    });
+
+    it('returns the override path for eslint', () => {
+      const defs = buildServerDefs({ binaryOverrides: { eslint: '/opt/bin/vscode-eslint-language-server --stdio' } });
+      expect(defs.eslint!.command(tempDir)).toBe('/opt/bin/vscode-eslint-language-server --stdio');
+    });
+
+    it('returns the override path for go', () => {
+      const defs = buildServerDefs({ binaryOverrides: { go: '/usr/local/bin/gopls serve' } });
+      expect(defs.go!.command()).toBe('/usr/local/bin/gopls serve');
+    });
+
+    it('returns the override path for rust', () => {
+      const defs = buildServerDefs({ binaryOverrides: { rust: '/usr/local/bin/rust-analyzer --stdio' } });
+      expect(defs.rust!.command()).toBe('/usr/local/bin/rust-analyzer --stdio');
+    });
+
+    it('override takes priority over a local binary', () => {
+      const bin = join(tempDir, 'node_modules', '.bin', 'vscode-eslint-language-server');
+      mkdirSync(join(tempDir, 'node_modules', '.bin'), { recursive: true });
+      writeFileSync(bin, '');
+
+      const defs = buildServerDefs({ binaryOverrides: { eslint: '/custom/path/eslint-server --stdio' } });
+      expect(defs.eslint!.command(tempDir)).toBe('/custom/path/eslint-server --stdio');
+    });
+  });
+
+  describe('packageRunner fallback', () => {
+    it('uses the provided runner for eslint when binary not found', () => {
+      const defs = buildServerDefs({ packageRunner: 'npx --yes' });
+      const result = defs.eslint!.command(tempDir);
+      // If vscode-eslint-language-server is on PATH, runner is not needed
+      if (result === 'vscode-eslint-language-server --stdio') return;
+      expect(result).toBe('npx --yes vscode-eslint-language-server --stdio');
+    });
+
+    it('works with pnpm dlx runner', () => {
+      const defs = buildServerDefs({ packageRunner: 'pnpm dlx' });
+      const result = defs.eslint!.command(tempDir);
+      if (result === 'vscode-eslint-language-server --stdio') return;
+      expect(result).toBe('pnpm dlx vscode-eslint-language-server --stdio');
+    });
+
+    it('works with bunx runner', () => {
+      const defs = buildServerDefs({ packageRunner: 'bunx' });
+      const result = defs.eslint!.command(tempDir);
+      if (result === 'vscode-eslint-language-server --stdio') return;
+      expect(result).toBe('bunx vscode-eslint-language-server --stdio');
+    });
+
+    it('uses the provided runner for python after PATH check when no binary found', () => {
+      const defs = buildServerDefs({ packageRunner: 'npx --yes' });
+      const result = defs.python!.command(tempDir);
+      // Either pyright-langserver is on PATH (returns PATH command) or not (returns runner)
+      if (result === 'pyright-langserver --stdio') return; // on PATH, runner not needed
+      expect(result).toBe('npx --yes pyright-langserver --stdio');
+    });
+
+    it('returns undefined when no packageRunner set (default)', () => {
+      const defs = buildServerDefs();
+      const result = defs.eslint!.command(tempDir);
+      // If vscode-eslint-language-server is on PATH, it returns the PATH command
+      if (result === 'vscode-eslint-language-server --stdio') return;
+      expect(result).toBeUndefined();
+    });
+
+    it('local binary takes priority over packageRunner', () => {
+      const bin = join(tempDir, 'node_modules', '.bin', 'vscode-eslint-language-server');
+      mkdirSync(join(tempDir, 'node_modules', '.bin'), { recursive: true });
+      writeFileSync(bin, '');
+
+      const defs = buildServerDefs({ packageRunner: 'npx --yes' });
+      expect(defs.eslint!.command(tempDir)).toBe(`${bin} --stdio`);
+    });
+  });
+
+  describe('searchPaths', () => {
+    it('finds typescript/lib/tsserver.js from searchPaths for module resolution', () => {
+      // Use a root dir that does NOT contain typescript so resolution can only succeed via searchPaths.
+      const emptyRoot = join(tempDir, 'empty-root');
+      mkdirSync(emptyRoot, { recursive: true });
+
+      // searchPaths points to cwd (monorepo root) which has typescript installed.
+      const defs = buildServerDefs({ searchPaths: [process.cwd()] });
+      const init = defs.typescript!.initialization!(emptyRoot);
+      expect(init).toBeDefined();
+      expect((init as { tsserver: { path: string } }).tsserver.path).toContain('tsserver.js');
+    });
+
+    it('finds binary in searchPaths node_modules/.bin', () => {
+      // Create a fake binary inside a searchPath directory
+      const searchDir = join(tempDir, 'search');
+      const bin = join(searchDir, 'node_modules', '.bin', 'vscode-eslint-language-server');
+      mkdirSync(join(searchDir, 'node_modules', '.bin'), { recursive: true });
+      writeFileSync(bin, '');
+
+      const defs = buildServerDefs({ searchPaths: [searchDir] });
+      expect(defs.eslint!.command(tempDir)).toBe(`${bin} --stdio`);
+    });
+
+    it('project node_modules takes priority over searchPaths', () => {
+      const projectBin = join(tempDir, 'node_modules', '.bin', 'vscode-eslint-language-server');
+      mkdirSync(join(tempDir, 'node_modules', '.bin'), { recursive: true });
+      writeFileSync(projectBin, '');
+
+      const searchDir = join(tempDir, 'search');
+      const searchBin = join(searchDir, 'node_modules', '.bin', 'vscode-eslint-language-server');
+      mkdirSync(join(searchDir, 'node_modules', '.bin'), { recursive: true });
+      writeFileSync(searchBin, '');
+
+      const defs = buildServerDefs({ searchPaths: [searchDir] });
+      expect(defs.eslint!.command(tempDir)).toBe(`${projectBin} --stdio`);
+    });
+  });
+
+  describe('getServersForFile with custom defs', () => {
+    it('uses provided defs instead of BUILTIN_SERVERS', () => {
+      const customDefs = buildServerDefs({ binaryOverrides: { typescript: '/custom/tls --stdio' } });
+      const servers = getServersForFile('/project/app.ts', undefined, customDefs);
+      const ts = servers.find(s => s.id === 'typescript');
+      expect(ts).toBeDefined();
+      expect(ts!.command('/any/root')).toBe('/custom/tls --stdio');
+    });
+
+    it('falls back to BUILTIN_SERVERS when no defs provided', () => {
+      const servers = getServersForFile('/project/app.ts');
+      expect(servers.some(s => s.id === 'typescript')).toBe(true);
+    });
+  });
+
+  describe('custom servers via config.servers', () => {
+    const phpServer = {
+      id: 'phpactor',
+      name: 'Phpactor Language Server',
+      languageIds: ['php'],
+      extensions: ['.php'],
+      markers: ['composer.json'],
+      command: 'phpactor language-server',
+    };
+
+    it('merges custom server into buildServerDefs result', () => {
+      const defs = buildServerDefs({ servers: { phpactor: phpServer } });
+      expect(defs.phpactor).toBeDefined();
+      expect(defs.phpactor!.id).toBe('phpactor');
+      expect(defs.phpactor!.name).toBe('Phpactor Language Server');
+      expect(defs.phpactor!.languageIds).toEqual(['php']);
+      expect(defs.phpactor!.markers).toEqual(['composer.json']);
+    });
+
+    it('custom server command is a constant string wrapped as a function', () => {
+      const defs = buildServerDefs({ servers: { phpactor: phpServer } });
+      expect(defs.phpactor!.command('/any/root')).toBe('phpactor language-server');
+    });
+
+    it('preserves built-in servers alongside custom servers', () => {
+      const defs = buildServerDefs({ servers: { phpactor: phpServer } });
+      expect(defs.typescript).toBeDefined();
+      expect(defs.python).toBeDefined();
+      expect(defs.go).toBeDefined();
+      expect(defs.rust).toBeDefined();
+      expect(defs.phpactor).toBeDefined();
+    });
+
+    it('custom server overrides built-in with same ID', () => {
+      const customGo = {
+        id: 'go',
+        name: 'Custom Go Server',
+        languageIds: ['go'],
+        extensions: ['.go'],
+        markers: ['go.mod'],
+        command: '/custom/gopls serve',
+      };
+      const defs = buildServerDefs({ servers: { go: customGo } });
+      expect(defs.go!.name).toBe('Custom Go Server');
+      expect(defs.go!.command('/any')).toBe('/custom/gopls serve');
+    });
+
+    it('custom server with initializationOptions exposes initialization()', () => {
+      const serverWithInit = {
+        ...phpServer,
+        initializationOptions: { storagePath: '/tmp/phpactor' },
+      };
+      const defs = buildServerDefs({ servers: { phpactor: serverWithInit } });
+      expect(defs.phpactor!.initialization).toBeDefined();
+      expect(defs.phpactor!.initialization!('/any')).toEqual({ storagePath: '/tmp/phpactor' });
+    });
+
+    it('custom server without initializationOptions has no initialization()', () => {
+      const defs = buildServerDefs({ servers: { phpactor: phpServer } });
+      expect(defs.phpactor!.initialization).toBeUndefined();
+    });
+
+    it('multiple custom servers can be registered', () => {
+      const rubyServer = {
+        id: 'solargraph',
+        name: 'Solargraph',
+        languageIds: ['ruby'],
+        extensions: ['.rb'],
+        markers: ['Gemfile'],
+        command: 'solargraph stdio',
+      };
+      const defs = buildServerDefs({ servers: { phpactor: phpServer, solargraph: rubyServer } });
+      expect(defs.phpactor).toBeDefined();
+      expect(defs.solargraph).toBeDefined();
+    });
+  });
+
+  describe('buildCustomExtensions', () => {
+    it('builds extension map from custom servers', () => {
+      const servers = {
+        phpactor: {
+          id: 'phpactor',
+          name: 'Phpactor',
+          languageIds: ['php'],
+          extensions: ['.php', '.phtml'],
+          markers: ['composer.json'],
+          command: 'phpactor language-server',
+        },
+      };
+      const extensions = buildCustomExtensions(servers);
+      expect(extensions['.php']).toBe('php');
+      expect(extensions['.phtml']).toBe('php');
+    });
+
+    it('returns empty object when no servers provided', () => {
+      expect(buildCustomExtensions(undefined)).toEqual({});
+      expect(buildCustomExtensions({})).toEqual({});
+    });
+
+    it('maps extensions from multiple servers', () => {
+      const servers = {
+        phpactor: {
+          id: 'phpactor',
+          name: 'Phpactor',
+          languageIds: ['php'],
+          extensions: ['.php'],
+          markers: ['composer.json'],
+          command: 'phpactor language-server',
+        },
+        solargraph: {
+          id: 'solargraph',
+          name: 'Solargraph',
+          languageIds: ['ruby'],
+          extensions: ['.rb', '.erb'],
+          markers: ['Gemfile'],
+          command: 'solargraph stdio',
+        },
+      };
+      const extensions = buildCustomExtensions(servers);
+      expect(extensions['.php']).toBe('php');
+      expect(extensions['.rb']).toBe('ruby');
+      expect(extensions['.erb']).toBe('ruby');
+    });
+
+    it('skips servers with empty languageIds', () => {
+      const servers = {
+        broken: {
+          id: 'broken',
+          name: 'Broken',
+          languageIds: [],
+          extensions: ['.brk'],
+          markers: [],
+          command: 'broken-server',
+        },
+      };
+      const extensions = buildCustomExtensions(servers);
+      expect(extensions['.brk']).toBeUndefined();
+    });
+  });
+
+  describe('getServersForFile with customExtensions', () => {
+    it('finds custom server for custom extension', () => {
+      const defs = buildServerDefs({
+        servers: {
+          phpactor: {
+            id: 'phpactor',
+            name: 'Phpactor',
+            languageIds: ['php'],
+            extensions: ['.php'],
+            markers: ['composer.json'],
+            command: 'phpactor language-server',
+          },
+        },
+      });
+      const customExtensions = { '.php': 'php' };
+      const servers = getServersForFile('/project/src/App.php', undefined, defs, customExtensions);
+      expect(servers).toHaveLength(1);
+      expect(servers[0]!.id).toBe('phpactor');
+    });
+
+    it('returns empty for unknown extension even with custom defs', () => {
+      const defs = buildServerDefs({
+        servers: {
+          phpactor: {
+            id: 'phpactor',
+            name: 'Phpactor',
+            languageIds: ['php'],
+            extensions: ['.php'],
+            markers: ['composer.json'],
+            command: 'phpactor language-server',
+          },
+        },
+      });
+      const servers = getServersForFile('/project/data.xyz', undefined, defs, { '.php': 'php' });
+      expect(servers).toEqual([]);
+    });
+
+    it('custom extensions work alongside built-in extensions', () => {
+      const defs = buildServerDefs({
+        servers: {
+          phpactor: {
+            id: 'phpactor',
+            name: 'Phpactor',
+            languageIds: ['php'],
+            extensions: ['.php'],
+            markers: ['composer.json'],
+            command: 'phpactor language-server',
+          },
+        },
+      });
+      const customExtensions = { '.php': 'php' };
+
+      const phpServers = getServersForFile('/project/App.php', undefined, defs, customExtensions);
+      expect(phpServers.some(s => s.id === 'phpactor')).toBe(true);
+
+      const tsServers = getServersForFile('/project/app.ts', undefined, defs, customExtensions);
+      expect(tsServers.some(s => s.id === 'typescript')).toBe(true);
+    });
+
+    it('disabled servers are filtered from custom servers too', () => {
+      const defs = buildServerDefs({
+        servers: {
+          phpactor: {
+            id: 'phpactor',
+            name: 'Phpactor',
+            languageIds: ['php'],
+            extensions: ['.php'],
+            markers: ['composer.json'],
+            command: 'phpactor language-server',
+          },
+        },
+      });
+      const servers = getServersForFile('/project/App.php', ['phpactor'], defs, { '.php': 'php' });
+      expect(servers).toEqual([]);
     });
   });
 });

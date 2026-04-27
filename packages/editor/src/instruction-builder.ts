@@ -19,6 +19,8 @@ import { evaluateRuleGroup } from './rule-evaluator';
 
 export interface InstructionBuilderDeps {
   promptBlocksStorage: PromptBlocksStorage;
+  /** When true, include draft (unpublished) prompt block refs. Used for preview mode. */
+  includeDrafts?: boolean;
 }
 
 /**
@@ -45,8 +47,12 @@ export async function resolveInstructionBlocks(
 
   const resolvedBlocksMap = new Map<string, StorageResolvedPromptBlockType>();
   if (blockIds.length > 0) {
+    // When includeDrafts is set, resolve the latest version (draft) instead of the published one
+    const resolveOptions = deps.includeDrafts ? { status: 'draft' as const } : undefined;
     // Fetch all blocks in parallel
-    const fetchResults = await Promise.all(blockIds.map(id => deps.promptBlocksStorage.getByIdResolved(id)));
+    const fetchResults = await Promise.all(
+      blockIds.map(id => deps.promptBlocksStorage.getByIdResolved(id, resolveOptions)),
+    );
     for (let i = 0; i < blockIds.length; i++) {
       const result = fetchResults[i];
       if (result) {
@@ -88,8 +94,8 @@ export async function resolveInstructionBlocks(
       continue;
     }
 
-    // Only include published blocks
-    if (resolved.status !== 'published') {
+    // Only include published blocks (unless in preview/draft mode)
+    if (!deps.includeDrafts && resolved.status !== 'published') {
       continue;
     }
 

@@ -1,17 +1,20 @@
 ---
-title: "Reference: Cloudflare D1 Storage | Storage"
+title: "Reference: Cloudflare D1 storage | Storage"
 description: Documentation for the Cloudflare D1 SQL storage implementation in Mastra.
 packages:
   - "@mastra/cloudflare-d1"
   - "@mastra/core"
+  - "@mastra/deployer-cloudflare"
 ---
 
-# Cloudflare D1 Storage
+# Cloudflare D1 storage
 
 The Cloudflare D1 storage implementation provides a serverless SQL database solution using Cloudflare D1, supporting relational operations and transactional consistency.
 
 :::warning[Observability Not Supported]
-Cloudflare D1 storage **does not support the observability domain**. Traces from the `DefaultExporter` cannot be persisted to D1, and Mastra Studio's observability features won't work with D1 as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
+
+Cloudflare D1 storage **doesn't support the observability domain**. Traces from the `DefaultExporter` can't be persisted to D1, and [Studio's](/docs/studio/overview) observability features won't work with D1 as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
+
 :::
 
 :::warning[Row Size Limit]
@@ -26,60 +29,60 @@ npm install @mastra/cloudflare-d1@latest
 
 ## Usage
 
-### Using with Cloudflare Workers
+### Using with Mastra CloudflareDeployer
 
-When using D1Store in a Cloudflare Worker, you need to access the D1 binding from the worker's `env` parameter at runtime. The `D1Database` in your type definition is only for TypeScript type checking—the actual binding is provided by the Workers runtime.
+The standard way to use D1Store with Mastra on Cloudflare is with `CloudflareDeployer`. Import `env` from `cloudflare:workers` and initialize `D1Store` inline inside `new Mastra({...})`.
 
-```typescript
+```typescript title="src/mastra/index.ts"
+import { env } from 'cloudflare:workers'
 import { D1Store } from '@mastra/cloudflare-d1'
 import { Mastra } from '@mastra/core'
 import { CloudflareDeployer } from '@mastra/deployer-cloudflare'
 
+export const mastra = new Mastra({
+  storage: new D1Store({ binding: env.DB }),
+  deployer: new CloudflareDeployer({
+    name: 'my-worker',
+    d1_databases: [
+      {
+        binding: 'DB',
+        database_name: 'your-database-name',
+        database_id: 'your-database-id',
+      },
+    ],
+  }),
+})
+```
+
+:::note
+When using `import { env } from 'cloudflare:workers'`, `D1Store` must be initialized inline inside `new Mastra({...})` — not extracted to a module-level variable. Alternatively, initialize `D1Store` inside the `fetch` handler after `env` is available. See [CloudflareDeployer reference](/reference/deployer/cloudflare#cloudflare-bindings) for details.
+:::
+
+### Using in a Cloudflare Worker without HTTP routes
+
+If you want to call Mastra directly in a Worker — for example, to run an agent or trigger a workflow — without serving HTTP routes, you don't need `CloudflareDeployer`. Access the D1 binding from the worker's `env` parameter and call Mastra programmatically.
+
+```typescript
+import { D1Store } from '@mastra/cloudflare-d1'
+import { Mastra } from '@mastra/core'
+
 type Env = {
-  D1Database: D1Database // TypeScript type definition
+  DB: D1Database
 }
 
-// Factory function to create Mastra with D1 binding
-function createMastra(env: Env) {
-  const storage = new D1Store({
-    binding: env.D1Database, // ✅ Access the actual binding from env
-    tablePrefix: 'dev_', // Optional: isolate tables per environment
-  })
-
-  return new Mastra({
-    storage,
-    deployer: new CloudflareDeployer({
-      name: 'my-worker',
-      d1_databases: [
-        {
-          binding: 'D1Database', // Must match the property name in Env type
-          database_name: 'your-database-name',
-          database_id: 'your-database-id',
-        },
-      ],
-    }),
-  })
-}
-
-// Cloudflare Worker export
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
-    const mastra = createMastra(env)
+    const mastra = new Mastra({
+      storage: new D1Store({ binding: env.DB }),
+    })
 
-    // Your handler logic here
-    return new Response('Hello from Mastra with D1!')
+    const agent = mastra.getAgent('my-agent')
+    const result = await agent.generate('Hello')
+
+    return Response.json({ text: result.text })
   },
 }
 ```
-
-:::tip[Important: Understanding D1 Bindings]
-In the `Env` type definition, `D1Database: D1Database` serves two purposes:
-
-- The **property name** (`D1Database`) must match the `binding` name in your `wrangler.toml`
-- The **type** (`: D1Database`) is from `@cloudflare/workers-types` for TypeScript type checking
-
-At runtime, Cloudflare Workers provides the actual D1 database instance via `env.D1Database`. You cannot use `D1Database` directly outside of the worker's context.
-:::
 
 ### Using with REST API
 
@@ -102,7 +105,7 @@ Add the D1 database binding to your `wrangler.toml`:
 
 ```toml
 [[d1_databases]]
-binding = "D1Database"  # Must match the property name in your Env type
+binding = "DB"
 database_name = "your-database-name"
 database_id = "your-database-id"
 ```
@@ -113,7 +116,7 @@ Or in `wrangler.jsonc`:
 {
   "d1_databases": [
     {
-      "binding": "D1Database",
+      "binding": "DB",
       "database_name": "your-database-name",
       "database_id": "your-database-id",
     },
@@ -125,41 +128,40 @@ Or in `wrangler.jsonc`:
 
 <PropertiesTable
   content={[
-{
-name: "binding",
-type: "D1Database",
-description: "Cloudflare D1 Workers binding (for Workers runtime)",
-isOptional: true,
-},
-{
-name: "accountId",
-type: "string",
-description: "Cloudflare Account ID (for REST API)",
-isOptional: true,
-},
-{
-name: "databaseId",
-type: "string",
-description: "Cloudflare D1 Database ID (for REST API)",
-isOptional: true,
-},
-{
-name: "apiToken",
-type: "string",
-description: "Cloudflare API Token (for REST API)",
-isOptional: true,
-},
-{
-name: "tablePrefix",
-type: "string",
-description:
-"Optional prefix for all table names (useful for environment isolation)",
-isOptional: true,
-},
+  {
+    name: 'binding',
+    type: 'D1Database',
+    description: 'Cloudflare D1 Workers binding (for Workers runtime)',
+    isOptional: true,
+  },
+  {
+    name: 'accountId',
+    type: 'string',
+    description: 'Cloudflare Account ID (for REST API)',
+    isOptional: true,
+  },
+  {
+    name: 'databaseId',
+    type: 'string',
+    description: 'Cloudflare D1 Database ID (for REST API)',
+    isOptional: true,
+  },
+  {
+    name: 'apiToken',
+    type: 'string',
+    description: 'Cloudflare API Token (for REST API)',
+    isOptional: true,
+  },
+  {
+    name: 'tablePrefix',
+    type: 'string',
+    description: 'Optional prefix for all table names (useful for environment isolation)',
+    isOptional: true,
+  },
 ]}
 />
 
-## Additional Notes
+## Additional notes
 
 ### Schema Management
 
@@ -178,14 +180,14 @@ import { Mastra } from '@mastra/core'
 import { D1Store } from '@mastra/cloudflare-d1'
 
 type Env = {
-  D1Database: D1Database
+  DB: D1Database
 }
 
 // In a Cloudflare Worker
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const storage = new D1Store({
-      binding: env.D1Database, // ✅ Use env.D1Database
+      binding: env.DB,
     })
 
     const mastra = new Mastra({
@@ -204,7 +206,7 @@ If you're using storage directly without Mastra, you must call `init()` explicit
 import { D1Store } from '@mastra/cloudflare-d1'
 
 type Env = {
-  D1Database: D1Database
+  DB: D1Database
 }
 
 // In a Cloudflare Worker
@@ -212,7 +214,7 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const storage = new D1Store({
       id: 'd1-storage',
-      binding: env.D1Database, // ✅ Use env.D1Database
+      binding: env.DB,
     })
 
     // Required when using storage directly
@@ -228,7 +230,7 @@ export default {
 ```
 
 :::warning
-If `init()` is not called, tables won't be created and storage operations will fail silently or throw errors.
+If `init()` isn't called, tables won't be created and storage operations will fail silently or throw errors.
 :::
 
 ### Transactions & Consistency

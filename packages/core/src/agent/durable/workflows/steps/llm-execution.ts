@@ -29,8 +29,8 @@ const durableLLMInputSchema = z.object({
     provider: z.string(),
     modelId: z.string(),
     specificationVersion: z.string().optional(),
-    originalConfig: z.union([z.string(), z.record(z.any())]).optional(),
-    settings: z.record(z.any()).optional(),
+    originalConfig: z.union([z.string(), z.record(z.string(), z.any())]).optional(),
+    settings: z.record(z.string(), z.any()).optional(),
   }),
   // Model list for fallback support (when agent configured with array of models)
   modelList: z
@@ -41,7 +41,7 @@ const durableLLMInputSchema = z.object({
           provider: z.string(),
           modelId: z.string(),
           specificationVersion: z.string().optional(),
-          originalConfig: z.union([z.string(), z.record(z.any())]).optional(),
+          originalConfig: z.union([z.string(), z.record(z.string(), z.any())]).optional(),
         }),
         maxRetries: z.number(),
         enabled: z.boolean(),
@@ -68,8 +68,8 @@ const durableLLMOutputSchema = z.object({
     z.object({
       toolCallId: z.string(),
       toolName: z.string(),
-      args: z.record(z.any()),
-      providerMetadata: z.record(z.any()).optional(),
+      args: z.record(z.string(), z.any()),
+      providerMetadata: z.record(z.string(), z.any()).optional(),
     }),
   ),
   stepResult: z.object({

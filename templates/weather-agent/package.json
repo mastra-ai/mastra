@@ -1,28 +1,32 @@
 {
   "name": "weather-agent",
   "version": "1.0.0",
+  "description": "",
   "main": "index.js",
-  "private": true,
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "mastra dev"
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
   },
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
-  "description": "One Agent, one Workflow, one Tool, and some Scorers to bring you the weather in your city.",
+  "packageManager": "pnpm@10.29.3",
   "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "dependencies": {
     "@mastra/core": "latest",
     "@mastra/evals": "latest",
-    "@mastra/loggers": "latest",
     "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
     "@mastra/memory": "latest",
     "@mastra/observability": "latest",
-    "zod": "^3.25.76"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/node": "^22.19.7",
+    "@types/node": "22.19.7",
     "mastra": "latest",
     "typescript": "^5.9.3"
   }

@@ -9,7 +9,7 @@ packages:
 
 **Added in:** `@mastra/core@1.4.0`
 
-Updates dataset metadata, name, description, and/or schemas. Zod schemas are automatically converted to JSON Schema.
+Updates dataset metadata, name, description, and/or schemas. Use Standard JSON Schema (Zod, Valibot, ArkType, etc.) for defining schemas.
 
 ## Usage example
 
@@ -29,7 +29,7 @@ const updated = await dataset.update({
   description: 'Revised evaluation set',
 })
 
-// Update with Zod schema (auto-converted to JSON Schema)
+// Update with Zod schema (library that supports Standard JSON Schema)
 const updated2 = await dataset.update({
   inputSchema: z.object({
     question: z.string(),
@@ -42,36 +42,36 @@ const updated2 = await dataset.update({
 
 <PropertiesTable
   content={[
-{
-name: "name",
-type: "string",
-isOptional: true,
-description: "New display name.",
-},
-{
-name: "description",
-type: "string",
-isOptional: true,
-description: "New description.",
-},
-{
-name: "metadata",
-type: "Record<string, unknown>",
-isOptional: true,
-description: "Updated metadata.",
-},
-{
-name: "inputSchema",
-type: "unknown",
-isOptional: true,
-description: "JSON Schema or Zod schema for item inputs.",
-},
-{
-name: "groundTruthSchema",
-type: "unknown",
-isOptional: true,
-description: "JSON Schema or Zod schema for item ground truths.",
-},
+  {
+    name: 'name',
+    type: 'string',
+    isOptional: true,
+    description: 'New display name.',
+  },
+  {
+    name: 'description',
+    type: 'string',
+    isOptional: true,
+    description: 'New description.',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    isOptional: true,
+    description: 'Updated metadata.',
+  },
+  {
+    name: 'inputSchema',
+    type: 'StandardJSONSchemaV1',
+    isOptional: true,
+    description: 'Standard JSON Schema for item inputs.',
+  },
+  {
+    name: 'groundTruthSchema',
+    type: 'StandardJSONSchemaV1',
+    isOptional: true,
+    description: 'Standard JSON Schema for item ground truths.',
+  },
 ]}
 />
 
@@ -79,10 +79,10 @@ description: "JSON Schema or Zod schema for item ground truths.",
 
 <PropertiesTable
   content={[
-{
-name: "result",
-type: "Promise<DatasetRecord>",
-description: "The updated dataset record. See dataset.getDetails() for the full shape.",
-},
+  {
+    name: 'result',
+    type: 'Promise<DatasetRecord>',
+    description: 'The updated dataset record. See dataset.getDetails() for the full shape.',
+  },
 ]}
 />

@@ -6,7 +6,7 @@ import fs from 'node:fs';
 
 import { CombinedAutocompleteProvider, Spacer, Text } from '@mariozechner/pi-tui';
 import type { SlashCommand } from '@mariozechner/pi-tui';
-import type { HarnessEventListener, TaskItem } from '@mastra/core/harness';
+import type { HarnessEventListener } from '@mastra/core/harness';
 
 import { getUserId } from '../utils/project.js';
 import { loadCustomCommands } from '../utils/slash-command-loader.js';
@@ -14,10 +14,9 @@ import { ThreadLockError } from '../utils/thread-lock.js';
 import { renderBanner } from './components/banner.js';
 import { TaskProgressComponent } from './components/task-progress.js';
 import { showError, showInfo } from './display.js';
-import { addUserMessage } from './render-messages.js';
 import type { TUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
-import { fg } from './theme.js';
+import { theme } from './theme.js';
 
 // =============================================================================
 // Keyboard Shortcuts
@@ -28,6 +27,7 @@ export function setupKeyboardShortcuts(
   callbacks: {
     stop: () => void;
     doubleCtrlCMs: number;
+    queueFollowUpMessage: (text: string) => void;
   },
 ): void {
   // Ctrl+C / Escape - abort if running, clear input if idle, double-tap always exits
@@ -45,12 +45,14 @@ export function setupKeyboardShortcuts(
       state.pendingApprovalDismiss();
       state.activeInlinePlanApproval = undefined;
       state.activeInlineQuestion = undefined;
+      state.pendingInlineQuestions.length = 0;
       state.userInitiatedAbort = true;
       state.harness.abort();
     } else if (state.harness.isRunning()) {
       // Clean up active inline components on abort
       state.activeInlinePlanApproval = undefined;
       state.activeInlineQuestion = undefined;
+      state.pendingInlineQuestions.length = 0;
       state.userInitiatedAbort = true;
       state.harness.abort();
     } else {
@@ -63,7 +65,30 @@ export function setupKeyboardShortcuts(
     }
   });
 
-  // Ctrl+Z - undo last clear (restore editor text)
+  // Ctrl+Z - suspend process (SIGTSTP)
+  state.editor.onAction('suspend', () => {
+    if (process.platform === 'win32') {
+      showInfo(state, 'Suspend is not supported on Windows');
+      return;
+    }
+
+    state.ui.stop();
+    const onContinue = () => {
+      state.ui.start();
+      state.ui.requestRender();
+    };
+    process.once('SIGCONT', onContinue);
+    try {
+      process.kill(process.pid, 'SIGTSTP');
+    } catch {
+      process.off('SIGCONT', onContinue);
+      state.ui.start();
+      state.ui.requestRender();
+      showError(state, 'Unable to suspend in the current terminal');
+    }
+  });
+
+  // Alt+Z - undo last clear (restore editor text)
   state.editor.onAction('undo', () => {
     if (state.lastClearedText && state.editor.getText().length === 0) {
       state.editor.setText(state.lastClearedText);
@@ -93,6 +118,12 @@ export function setupKeyboardShortcuts(
     for (const sc of state.allSlashCommandComponents) {
       sc.setExpanded(state.toolOutputExpanded);
     }
+    for (const reminder of state.allSystemReminderComponents) {
+      reminder.setExpanded(state.toolOutputExpanded);
+    }
+    for (const shell of state.allShellComponents) {
+      shell.setExpanded(state.toolOutputExpanded);
+    }
     state.ui.requestRender();
   });
 
@@ -120,34 +151,23 @@ export function setupKeyboardShortcuts(
     showInfo(state, current ? 'YOLO mode off' : 'YOLO mode on');
   });
 
-  // Ctrl+F - queue follow-up message while streaming
+  // Enter - submit immediately when idle, queue follow-up input while streaming
   state.editor.onAction('followUp', () => {
-    const text = state.editor.getText().trim();
-    if (!text) return;
-    if (!state.harness.isRunning()) return; // Only relevant while streaming
-
-    // Clear editor
-    state.editor.setText('');
-    state.ui.requestRender();
-
-    if (text.startsWith('/')) {
-      // Queue slash command for processing after the agent completes
-      state.pendingSlashCommands.push(text);
-      showInfo(state, `Slash command queued: ${text}`);
-    } else {
-      // Queue as a regular follow-up message
-      addUserMessage(state, {
-        id: `user-${Date.now()}`,
-        role: 'user',
-        content: [{ type: 'text', text }],
-        createdAt: new Date(),
-      });
-      state.ui.requestRender();
-
-      state.harness.followUp({ content: text }).catch(error => {
-        showError(state, error instanceof Error ? error.message : 'Follow-up failed');
-      });
+    if (!state.harness.isRunning()) {
+      state.editor.onSubmit?.(state.editor.getExpandedText());
+      return true;
     }
+
+    const text = state.editor.getExpandedText().trim();
+    if (!text) {
+      return true;
+    }
+
+    state.editor.addToHistory(text);
+    state.editor.setText('');
+    callbacks.queueFollowUpMessage(text);
+    state.ui.requestRender();
+    return true;
   });
 }
 
@@ -171,15 +191,15 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
     `User: ${getUserId(state.projectInfo.rootPath)}`,
   ]
     .filter(Boolean)
-    .map(line => fg('muted', line as string))
+    .map(line => theme.fg('muted', line as string))
     .join('\n');
 
-  const sep = fg('dim', ' · ');
+  const sep = theme.fg('dim', ' · ');
   const hintParts: string[] = [];
   if (state.harness.listModes().length > 1) {
-    hintParts.push(`${fg('accent', '⇧+Tab')} ${fg('muted', 'cycle modes')}`);
+    hintParts.push(`${theme.fg('accent', '⇧+Tab')} ${theme.fg('muted', 'cycle modes')}`);
   }
-  hintParts.push(`${fg('accent', '/help')} ${fg('muted', 'info & shortcuts')}`);
+  hintParts.push(`${theme.fg('accent', '/help')} ${theme.fg('muted', 'info & shortcuts')}`);
   const instructions = `  ${hintParts.join(sep)}`;
 
   state.ui.addChild(new Spacer(1));
@@ -233,12 +253,14 @@ function detectFdPath(): string | null {
 export function setupAutocomplete(state: TUIState): void {
   const slashCommands: SlashCommand[] = [
     { name: 'new', description: 'Start a new thread' },
+    { name: 'clone', description: 'Clone the current thread' },
+    { name: 'thread', description: 'Show current thread info' },
     { name: 'threads', description: 'Switch between threads' },
-    { name: 'models', description: 'Configure model (global/thread/mode)' },
-    { name: 'models:pack', description: 'Switch model pack' },
+    { name: 'models', description: 'Switch model pack' },
+    { name: 'custom-providers', description: 'Manage custom providers and models' },
     { name: 'subagents', description: 'Configure subagent model defaults' },
     { name: 'om', description: 'Configure Observational Memory models' },
-    { name: 'think', description: 'Set thinking level (Anthropic)' },
+    { name: 'think', description: 'Set thinking (off|low|medium|high|xhigh|status)' },
     { name: 'login', description: 'Login with OAuth provider' },
     { name: 'skills', description: 'List available skills' },
     { name: 'cost', description: 'Show token usage and estimated costs' },
@@ -272,7 +294,12 @@ export function setupAutocomplete(state: TUIState): void {
       description: 'Toggle YOLO mode (auto-approve all tools)',
     },
     { name: 'review', description: 'Review a GitHub pull request' },
+    { name: 'report-issue', description: 'Open or browse mastracode issues' },
     { name: 'setup', description: 'Re-run the setup wizard' },
+    { name: 'browser', description: 'Configure browser automation' },
+    { name: 'theme', description: 'Switch color theme (auto/dark/light)' },
+    { name: 'update', description: 'Check for and install updates' },
+    { name: 'api-keys', description: 'Manage API keys for model providers' },
     { name: 'exit', description: 'Exit the TUI' },
     { name: 'help', description: 'Show available commands' },
   ];
@@ -283,9 +310,9 @@ export function setupAutocomplete(state: TUIState): void {
     slashCommands.push({ name: 'mode', description: 'Switch agent mode' });
   }
 
-  // Add custom slash commands to the list
+  // Add custom slash commands to the list with // prefixes so they remain
+  // visually distinct from built-in slash commands in autocomplete.
   for (const customCmd of state.customSlashCommands) {
-    // Prefix with extra / to distinguish from built-in commands (//command-name)
     slashCommands.push({
       name: `/${customCmd.name}`,
       description: customCmd.description || `Custom: ${customCmd.name}`,
@@ -348,6 +375,9 @@ export function setupKeyHandlers(
     if (state.pendingApprovalDismiss) {
       state.pendingApprovalDismiss();
     }
+    state.activeInlinePlanApproval = undefined;
+    state.activeInlineQuestion = undefined;
+    state.pendingInlineQuestions.length = 0;
     state.userInitiatedAbort = true;
     state.harness.abort();
   });
@@ -365,7 +395,15 @@ export function setupKeyHandlers(
 
 export function subscribeToHarness(state: TUIState, handleEvent: (event: any) => Promise<void>): void {
   const listener: HarnessEventListener = async event => {
-    await handleEvent(event);
+    try {
+      await handleEvent(event);
+    } catch (err) {
+      // Log but don't crash — individual event errors shouldn't kill the process
+      const msg = err instanceof Error ? err.message : String(err);
+      const stack = err instanceof Error ? err.stack : undefined;
+      process.stderr.write(`[event error] ${event.type}: ${msg}\n`);
+      if (stack) process.stderr.write(stack + '\n');
+    }
   };
   state.unsubscribe = state.harness.subscribe(listener);
 }
@@ -411,26 +449,46 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
 
   // Sort by most recent
   const sortedThreads = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-  const mostRecent = sortedThreads[0]!;
-  // Auto-resume the most recent thread for this directory
-  try {
-    await state.harness.switchThread({ threadId: mostRecent.id });
-    // Retroactively tag untagged legacy threads
-    if (!mostRecent.metadata?.projectPath) {
-      await state.harness.setThreadSetting({ key: 'projectPath', value: currentPath });
-    }
-  } catch (error) {
-    if (error instanceof ThreadLockError) {
-      // Defer the lock conflict prompt until after the TUI is started
-      state.pendingNewThread = true;
-      state.pendingLockConflict = {
-        threadTitle: mostRecent.title || mostRecent.id,
-        ownerPid: error.ownerPid,
-      };
+
+  // If there's only one thread, auto-resume it directly
+  if (sortedThreads.length === 1) {
+    const thread = sortedThreads[0]!;
+    try {
+      await state.harness.switchThread({ threadId: thread.id });
+      if (!thread.metadata?.projectPath) {
+        await state.harness.setThreadSetting({ key: 'projectPath', value: currentPath });
+      }
       return;
+    } catch (error) {
+      if (error instanceof ThreadLockError) {
+        // Thread is locked by another process — silently start a new thread.
+        // The lock prompt only appears when the user intentionally picks a
+        // locked thread from the /threads selector.
+        state.pendingNewThread = true;
+        return;
+      }
+      throw error;
     }
-    throw error;
   }
+
+  // Multiple threads — try each in order until one is unlocked
+  for (const thread of sortedThreads) {
+    try {
+      await state.harness.switchThread({ threadId: thread.id });
+      if (!thread.metadata?.projectPath) {
+        await state.harness.setThreadSetting({ key: 'projectPath', value: currentPath });
+      }
+      return;
+    } catch (error) {
+      if (error instanceof ThreadLockError) {
+        continue; // Try the next one
+      }
+      throw error;
+    }
+  }
+
+  // All directory threads are locked — silently start a new thread
+  state.pendingNewThread = true;
 }
 
 // =============================================================================
@@ -439,8 +497,7 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
 
 export async function renderExistingTasks(state: TUIState): Promise<void> {
   try {
-    const harnessState = state.harness.getState() as { tasks?: TaskItem[] };
-    const tasks = harnessState.tasks || [];
+    const tasks = state.harness.getDisplayState().tasks;
 
     if (tasks.length > 0 && state.taskProgress) {
       state.taskProgress.updateTasks(tasks);

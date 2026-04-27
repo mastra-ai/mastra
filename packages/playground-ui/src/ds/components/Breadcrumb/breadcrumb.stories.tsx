@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Breadcrumb, Crumb } from './Breadcrumb';
 import { ChevronDown } from 'lucide-react';
+import { Breadcrumb, Crumb } from './Breadcrumb';
 
 const meta: Meta<typeof Breadcrumb> = {
   title: 'Navigation/Breadcrumb',

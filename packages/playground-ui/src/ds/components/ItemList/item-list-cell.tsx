@@ -6,5 +6,5 @@ export type ItemListTextCellProps = {
 };
 
 export function ItemListCell({ children, className }: ItemListTextCellProps) {
-  return <div className={cn('flex justify-center items-center', className)}>{children}</div>;
+  return <div className={cn('', className)}>{children}</div>;
 }

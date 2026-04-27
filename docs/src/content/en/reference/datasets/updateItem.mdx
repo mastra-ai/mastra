@@ -34,29 +34,29 @@ const updated = await dataset.updateItem({
 
 <PropertiesTable
   content={[
-{
-name: "itemId",
-type: "string",
-description: "ID of the item to update.",
-},
-{
-name: "input",
-type: "unknown",
-isOptional: true,
-description: "Updated input data.",
-},
-{
-name: "groundTruth",
-type: "unknown",
-isOptional: true,
-description: "Updated ground truth.",
-},
-{
-name: "metadata",
-type: "Record<string, unknown>",
-isOptional: true,
-description: "Updated metadata.",
-},
+  {
+    name: 'itemId',
+    type: 'string',
+    description: 'ID of the item to update.',
+  },
+  {
+    name: 'input',
+    type: 'unknown',
+    isOptional: true,
+    description: 'Updated input data.',
+  },
+  {
+    name: 'groundTruth',
+    type: 'unknown',
+    isOptional: true,
+    description: 'Updated ground truth.',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    isOptional: true,
+    description: 'Updated metadata.',
+  },
 ]}
 />
 
@@ -64,10 +64,10 @@ description: "Updated metadata.",
 
 <PropertiesTable
   content={[
-{
-name: "result",
-type: "Promise<DatasetItem>",
-description: "The updated dataset item. See dataset.addItem() for the item shape.",
-},
+  {
+    name: 'result',
+    type: 'Promise<DatasetItem>',
+    description: 'The updated dataset item. See dataset.addItem() for the item shape.',
+  },
 ]}
 />

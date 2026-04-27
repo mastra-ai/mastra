@@ -10,6 +10,7 @@ import {
   ZodDefault,
   ZodNull,
   ZodNullable,
+  ZodIntersection,
 } from 'zod/v4';
 import type { ZodAny, ZodType } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
@@ -254,6 +255,13 @@ export class SchemaCompatLayer {
    */
   isDefault(v: ZodAny | ZodDefault<any>): v is ZodDefault<any> {
     return v instanceof ZodDefault;
+  }
+
+  /**
+   * Type guard for intersection Zod types
+   */
+  isIntersection(v: ZodAny | ZodIntersection<any, any>): v is ZodIntersection<any, any> {
+    return v instanceof ZodIntersection;
   }
 
   /**
@@ -665,6 +673,48 @@ export class SchemaCompatLayer {
     } else {
       return value;
     }
+  }
+
+  /**
+   * Recursively collects leaf types from a ZodIntersection tree.
+   */
+  private collectIntersectionLeaves(value: ZodType): ZodType[] {
+    if (value instanceof ZodIntersection) {
+      return [
+        ...this.collectIntersectionLeaves(value._zod.def.left as ZodType),
+        ...this.collectIntersectionLeaves(value._zod.def.right as ZodType),
+      ];
+    }
+    return [value];
+  }
+
+  /**
+   * Default handler for Zod intersection types.
+   * Flattens the intersection tree and merges object shapes into a single z.object().
+   * Falls back to z.any() for non-object intersections.
+   */
+  public defaultZodIntersectionHandler(value: ZodIntersection<any, any>): ZodType {
+    const leaves = this.collectIntersectionLeaves(value);
+    const processed = leaves.map(leaf => this.processZodType(leaf));
+
+    if (processed.every(p => p instanceof ZodObject)) {
+      const mergedShape: Record<string, ZodType> = {};
+      for (const obj of processed as ZodObject<any, any>[]) {
+        for (const [key, field] of Object.entries(obj.shape)) {
+          if (key in mergedShape) {
+            throw new Error('Cannot flatten intersections with overlapping keys');
+          }
+          mergedShape[key] = field as ZodType;
+        }
+      }
+      let result: ZodType = z.object(mergedShape);
+      if (value.description) {
+        result = result.describe(value.description);
+      }
+      return result;
+    }
+
+    return z.any().describe(value.description || 'intersection type');
   }
 
   /**

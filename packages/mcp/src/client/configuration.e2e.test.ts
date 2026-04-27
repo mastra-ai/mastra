@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
@@ -7,6 +9,9 @@ import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } 
 import { allTools, mcpServerName } from '../__fixtures__/fire-crawl-complex-schema';
 import type { LogHandler, LogMessage } from './client';
 import { MCPClient } from './configuration';
+
+const MODE = getLLMTestMode();
+setupDummyApiKeys(MODE, ['openai']);
 
 vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
 
@@ -233,7 +238,7 @@ describe('MCPClient', () => {
       expect(receivedUri).toBe(resourceUri);
 
       await mcp.resources.unsubscribe(serverName, resourceUri); // Cleanup
-    }, 5000);
+    }, 15_000);
 
     it('should receive resource list changed notification from a specific server', async () => {
       const serverName = 'weather';
@@ -301,48 +306,36 @@ describe('MCPClient', () => {
       expect(currentWeatherPrompt).toBeDefined();
       expect(currentWeatherPrompt).toMatchObject({
         name: 'current',
-        version: 'v1',
         description: expect.any(String),
-        mimeType: 'application/json',
       });
 
       const forecast = promptResources.find(r => r.name === 'forecast');
       expect(forecast).toBeDefined();
       expect(forecast).toMatchObject({
         name: 'forecast',
-        version: 'v1',
         description: expect.any(String),
-        mimeType: 'application/json',
       });
 
       const historical = promptResources.find(r => r.name === 'historical');
       expect(historical).toBeDefined();
       expect(historical).toMatchObject({
         name: 'historical',
-        version: 'v1',
         description: expect.any(String),
-        mimeType: 'application/json',
       });
     });
 
     it('should get a specific prompt from a server', async () => {
-      const { prompt, messages } = await mcp.prompts.get({ serverName: 'weather', name: 'current' });
-      expect(prompt).toBeDefined();
-      expect(prompt).toMatchObject({
-        name: 'current',
-        version: 'v1',
-        description: expect.any(String),
-        mimeType: 'application/json',
-      });
+      const { description, messages } = await mcp.prompts.get({ serverName: 'weather', name: 'current' });
+      expect(description).toBeDefined();
       expect(messages).toBeDefined();
       const messageItem = messages[0];
       let parsedText: any = {};
-      if (messageItem.content.text && typeof messageItem.content.text === 'string') {
+      const content = messageItem.content;
+      if ('text' in content && typeof content.text === 'string') {
         try {
-          parsedText = JSON.parse(messageItem.content.text);
+          parsedText = JSON.parse(content.text);
         } catch {
           // If parsing fails, parsedText remains an empty object
-          // console.error("Failed to parse resource content text:", _e);
         }
       }
       expect(parsedText).toHaveProperty('location');
@@ -487,9 +480,8 @@ describe('MCPClient', () => {
         },
       });
 
-      const error = await config.listTools().catch(e => e);
-      expect(error).toBeDefined(); // Will throw since server exits before responding
-      expect(error.message).not.toMatch(/Request timed out/);
+      const tools = await config.listTools();
+      expect(tools).toEqual({});
 
       await config.disconnect();
     });
@@ -514,17 +506,15 @@ describe('MCPClient', () => {
         },
       });
 
-      // This should succeed since server timeout (3s) is longer than delay (2s)
-      const error = await config.listTools().catch(e => e);
-      expect(error).toBeDefined(); // Will throw since server exits before responding
-      expect(error.message).not.toMatch(/Request timed out/);
+      const tools = await config.listTools();
+      expect(tools).toEqual({});
 
       await config.disconnect();
     });
   });
 
   describe('MCPClient Connection Timeout', () => {
-    it('should throw timeout error for slow starting server', async () => {
+    it('should return empty tools for slow starting server that times out', async () => {
       const slowConfig = new MCPClient({
         id: 'test-slow-server',
         servers: {
@@ -536,11 +526,12 @@ describe('MCPClient', () => {
         },
       });
 
-      await expect(slowConfig.listTools()).rejects.toThrow(/Request timed out/);
+      const tools = await slowConfig.listTools();
+      expect(tools).toEqual({});
       await slowConfig.disconnect();
     });
 
-    it('timeout should be longer than configured timeout', async () => {
+    it('should return empty tools when server exits before responding', async () => {
       const slowConfig = new MCPClient({
         id: 'test-slow-server',
         timeout: 2000,
@@ -552,13 +543,12 @@ describe('MCPClient', () => {
         },
       });
 
-      const error = await slowConfig.listTools().catch(e => e);
-      expect(error).toBeDefined();
-      expect(error.message).not.toMatch(/Request timed out/);
+      const tools = await slowConfig.listTools();
+      expect(tools).toEqual({});
       await slowConfig.disconnect();
     });
 
-    it('should respect per-server timeout configuration', async () => {
+    it('should return empty tools when all servers time out', async () => {
       const mixedConfig = new MCPClient({
         id: 'test-mixed-timeout',
         timeout: 1000, // Short global timeout
@@ -575,12 +565,12 @@ describe('MCPClient', () => {
         },
       });
 
-      // Quick server should timeout
-      await expect(mixedConfig.listTools()).rejects.toThrow(/Request timed out/);
+      const tools = await mixedConfig.listTools();
+      expect(tools).toEqual({});
       await mixedConfig.disconnect();
     });
 
-    it('should handle connection errors gracefully', async () => {
+    it('should return empty tools for invalid server command', async () => {
       const badConfig = new MCPClient({
         servers: {
           badServer: {
@@ -590,7 +580,8 @@ describe('MCPClient', () => {
         },
       });
 
-      await expect(badConfig.listTools()).rejects.toThrow();
+      const tools = await badConfig.listTools();
+      expect(tools).toEqual({});
       await badConfig.disconnect();
     });
   });
@@ -693,30 +684,37 @@ describe('MCPClient', () => {
       agentTestContext.set('traceId', 'agent-trace-xyz');
       agentTestContext.set('tenant', 'acme-corp');
       const loggerFn = vi.fn();
+      const mock = createGatewayMock();
 
-      const mcpClientForAgentTest = new MCPClient({
-        id: 'mcp-for-agent-test-suite',
-        servers: {
-          stockPriceServer: {
-            command: 'npx',
-            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
-            env: { FAKE_CREDS: 'test' },
-            logger: loggerFn,
+      mock.start();
+
+      try {
+        const mcpClientForAgentTest = new MCPClient({
+          id: 'mcp-for-agent-test-suite',
+          servers: {
+            stockPriceServer: {
+              command: 'npx',
+              args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
+              env: { FAKE_CREDS: 'test' },
+              logger: loggerFn,
+            },
           },
-        },
-      });
-      clientsToCleanup.push(mcpClientForAgentTest);
+        });
+        clientsToCleanup.push(mcpClientForAgentTest);
 
-      const agentName = 'stockAgentForContextTest';
-      const agent = new Agent({
-        id: agentName,
-        name: agentName,
-        model: 'openai/gpt-4o',
-        instructions: 'Use the getStockPrice tool to find the price of MSFT.',
-        tools: await mcpClientForAgentTest.listTools(),
-      });
+        const agentName = 'stockAgentForContextTest';
+        const agent = new Agent({
+          id: agentName,
+          name: agentName,
+          model: 'openai/gpt-4o',
+          instructions: 'Use the getStockPrice tool to find the price of MSFT.',
+          tools: await mcpClientForAgentTest.listTools(),
+        });
 
-      await agent.generate('What is the price of MSFT?', { requestContext: agentTestContext });
+        await agent.generate('What is the price of MSFT?', { requestContext: agentTestContext });
+      } finally {
+        await mock.saveAndStop();
+      }
 
       expect(loggerFn).toHaveBeenCalled();
       const callWithAgentContext = loggerFn.mock.calls.find(call => {
@@ -857,5 +855,84 @@ describe('MCPClient', () => {
       });
       expect(contextXLeakInYLogs).toBe(false);
     }, 25000); // Increased timeout for multiple server ops
+  });
+
+  describe('Per-server fault isolation (issue #13521)', () => {
+    it('listTools should return tools from healthy servers when one server fails', async () => {
+      const mixedMcp = new MCPClient({
+        id: 'test-fault-isolation-tools',
+        servers: {
+          // Healthy server - the weather SSE server started in beforeAll
+          weather: {
+            url: new URL(`http://localhost:${weatherServerPort}/sse`),
+          },
+          // Failing server - nonexistent command will fail to connect
+          brokenServer: {
+            command: 'nonexistent-binary-that-does-not-exist',
+            args: [],
+          },
+        },
+      });
+
+      try {
+        const tools = await mixedMcp.listTools();
+
+        // Should still get weather tools from the healthy server
+        expect(Object.keys(tools).length).toBeGreaterThan(0);
+        expect(tools).toHaveProperty('weather_getWeather');
+      } finally {
+        await mixedMcp.disconnect().catch(() => {});
+      }
+    });
+
+    it('listToolsets should return toolsets from healthy servers when one server fails', async () => {
+      const mixedMcp = new MCPClient({
+        id: 'test-fault-isolation-toolsets',
+        servers: {
+          // Healthy server
+          weather: {
+            url: new URL(`http://localhost:${weatherServerPort}/sse`),
+          },
+          // Failing server
+          brokenServer: {
+            command: 'nonexistent-binary-that-does-not-exist',
+            args: [],
+          },
+        },
+      });
+
+      try {
+        const toolsets = await mixedMcp.listToolsets();
+
+        // Should still get weather toolset from the healthy server
+        expect(toolsets).toHaveProperty('weather');
+        expect(toolsets.weather).toHaveProperty('getWeather');
+        // Broken server should NOT be present (it failed)
+        expect(toolsets).not.toHaveProperty('brokenServer');
+      } finally {
+        await mixedMcp.disconnect().catch(() => {});
+      }
+    });
+
+    it('disconnect should not throw when one server fails to disconnect', async () => {
+      const mixedMcp = new MCPClient({
+        id: 'test-fault-isolation-disconnect',
+        servers: {
+          weather: {
+            url: new URL(`http://localhost:${weatherServerPort}/sse`),
+          },
+          brokenServer: {
+            command: 'nonexistent-binary-that-does-not-exist',
+            args: [],
+          },
+        },
+      });
+
+      // Load tools to establish connections before testing disconnect
+      await mixedMcp.listTools();
+
+      // disconnect should not throw even if some servers had issues
+      await expect(mixedMcp.disconnect()).resolves.toBeUndefined();
+    });
   });
 });

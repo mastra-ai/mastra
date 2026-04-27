@@ -24,18 +24,21 @@ describe('workspace_index', () => {
       filesystem: new LocalFilesystem({ basePath: tempDir }),
       bm25: true,
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.SEARCH.INDEX].execute({
-      path: '/doc.txt',
-      content: 'Document content',
-    });
+    const result = await tools[WORKSPACE_TOOLS.SEARCH.INDEX].execute(
+      {
+        path: 'doc.txt',
+        content: 'Document content',
+      },
+      { workspace },
+    );
 
     expect(typeof result).toBe('string');
-    expect(result).toBe('Indexed /doc.txt');
+    expect(result).toBe('Indexed doc.txt');
 
     // Verify it's searchable
-    const searchResult = await tools[WORKSPACE_TOOLS.SEARCH.SEARCH].execute({ query: 'Document' });
+    const searchResult = await tools[WORKSPACE_TOOLS.SEARCH.SEARCH].execute({ query: 'Document' }, { workspace });
     expect(typeof searchResult).toBe('string');
     expect(searchResult).not.toContain('0 results');
   });

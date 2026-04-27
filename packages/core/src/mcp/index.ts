@@ -5,7 +5,7 @@ import { MastraBase } from '../base';
 import { MastraError } from '../error';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { InternalCoreTool, MCPToolType, ToolAction, ToolExecutionContext } from '../tools';
+import type { InternalCoreTool, MCPToolType } from '../tools';
 import type {
   MCPServerConfig,
   MCPServerHonoSSEOptions,
@@ -124,10 +124,7 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
           if (tool && typeof tool === 'object' && 'id' in tool) {
             // Use tool's intrinsic ID to avoid collisions across MCP servers
             const toolKey = typeof (tool as any).id === 'string' ? (tool as any).id : key;
-            mastra.addTool(
-              tool as ToolAction<any, any, any, any, ToolExecutionContext<any, any, any>, string, unknown>,
-              toolKey,
-            );
+            mastra.addTool(tool as any, toolKey);
           }
         } catch (error) {
           // Tool might already be registered, that's okay
@@ -249,7 +246,14 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
    * @returns An object containing an array of tool information.
    */
   public abstract getToolListInfo(): {
-    tools: Array<{ name: string; description?: string; inputSchema: any; outputSchema?: any; toolType?: MCPToolType }>;
+    tools: Array<{
+      name: string;
+      description?: string;
+      inputSchema: any;
+      outputSchema?: any;
+      toolType?: MCPToolType;
+      _meta?: Record<string, unknown>;
+    }>;
   };
 
   /**
@@ -257,9 +261,16 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
    * @param toolId The ID/name of the tool to retrieve.
    * @returns Tool information (name, description, inputSchema) or undefined if not found.
    */
-  public abstract getToolInfo(
-    toolId: string,
-  ): { name: string; description?: string; inputSchema: any; outputSchema?: any; toolType?: MCPToolType } | undefined;
+  public abstract getToolInfo(toolId: string):
+    | {
+        name: string;
+        description?: string;
+        inputSchema: any;
+        outputSchema?: any;
+        toolType?: MCPToolType;
+        _meta?: Record<string, unknown>;
+      }
+    | undefined;
 
   /**
    * Executes a specific tool provided by this MCP server.

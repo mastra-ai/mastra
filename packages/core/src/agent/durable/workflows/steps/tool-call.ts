@@ -23,8 +23,8 @@ import { serializeError } from '../../utils/serialize-state';
 const durableToolCallInputSchema = z.object({
   toolCallId: z.string(),
   toolName: z.string(),
-  args: z.record(z.any()),
-  providerMetadata: z.record(z.any()).optional(),
+  args: z.record(z.string(), z.any()),
+  providerMetadata: z.record(z.string(), z.any()).optional(),
   providerExecuted: z.boolean().optional(),
   output: z.any().optional(),
 });

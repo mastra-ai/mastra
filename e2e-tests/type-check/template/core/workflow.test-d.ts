@@ -1,5 +1,5 @@
 import { expectTypeOf, describe, it } from 'vitest';
-import { z } from 'zod';
+import { z as zv3 } from 'zod-v3';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Step, DefaultEngineType } from '@mastra/core/workflows';
 import { Agent, MastraDBMessage } from '@mastra/core/agent';
@@ -12,8 +12,8 @@ describe('workflow', () => {
       it('should infer input and output types from schemas', () => {
         const step = createStep({
           id: 'my-step',
-          inputSchema: z.object({ name: z.string(), age: z.number() }),
-          outputSchema: z.object({ greeting: z.string(), isAdult: z.boolean() }),
+          inputSchema: zv3.object({ name: zv3.string(), age: zv3.number() }),
+          outputSchema: zv3.object({ greeting: zv3.string(), isAdult: zv3.boolean() }),
           execute: async ({ inputData }) => {
             expectTypeOf(inputData).toEqualTypeOf<{ name: string; age: number }>();
             return { greeting: `Hello, ${inputData.name}!`, isAdult: inputData.age >= 18 };
@@ -21,16 +21,16 @@ describe('workflow', () => {
         });
 
         expectTypeOf(step.id).toEqualTypeOf<'my-step'>();
-        expectTypeOf<z.infer<typeof step.inputSchema>>().toEqualTypeOf<{ name: string; age: number }>();
-        expectTypeOf<z.infer<typeof step.outputSchema>>().toEqualTypeOf<{ greeting: string; isAdult: boolean }>();
+        expectTypeOf<zv3.infer<typeof step.inputSchema>>().toEqualTypeOf<{ name: string; age: number }>();
+        expectTypeOf<zv3.infer<typeof step.outputSchema>>().toEqualTypeOf<{ greeting: string; isAdult: boolean }>();
       });
 
       it('should infer state type from stateSchema', () => {
         const step = createStep({
           id: 'stateful-step',
-          inputSchema: z.object({ value: z.number() }),
-          outputSchema: z.object({ result: z.number() }),
-          stateSchema: z.object({ counter: z.number() }),
+          inputSchema: zv3.object({ value: zv3.number() }),
+          outputSchema: zv3.object({ result: zv3.number() }),
+          stateSchema: zv3.object({ counter: zv3.number() }),
           execute: async ({ inputData, state, setState }) => {
             expectTypeOf(state).toEqualTypeOf<{ counter: number }>();
             expectTypeOf(setState).toBeFunction();
@@ -43,10 +43,10 @@ describe('workflow', () => {
       it('should infer suspend and resume types from schemas', () => {
         const step = createStep({
           id: 'suspendable-step',
-          inputSchema: z.object({ taskId: z.string() }),
-          outputSchema: z.object({ completed: z.boolean() }),
-          suspendSchema: z.object({ reason: z.string() }),
-          resumeSchema: z.object({ approval: z.boolean() }),
+          inputSchema: zv3.object({ taskId: zv3.string() }),
+          outputSchema: zv3.object({ completed: zv3.boolean() }),
+          suspendSchema: zv3.object({ reason: zv3.string() }),
+          resumeSchema: zv3.object({ approval: zv3.boolean() }),
           execute: async ({ inputData, suspend, resumeData }) => {
             expectTypeOf(resumeData).toEqualTypeOf<{ approval: boolean } | undefined>();
             if (!resumeData) {
@@ -61,8 +61,8 @@ describe('workflow', () => {
       it('should allow bail() to accept any type, not just the step output type', () => {
         const step = createStep({
           id: 'bail-step',
-          inputSchema: z.object({ value: z.string() }),
-          outputSchema: z.object({ result: z.string() }),
+          inputSchema: zv3.object({ value: zv3.string() }),
+          outputSchema: zv3.object({ result: zv3.string() }),
           execute: async ({ bail, inputData }) => {
             if (inputData.value === 'stop') {
               // bail() should accept any type since it bails the workflow, not the step
@@ -79,8 +79,8 @@ describe('workflow', () => {
       it('should error when execute returns wrong type', () => {
         const step = createStep({
           id: 'bad-step',
-          inputSchema: z.object({ name: z.string() }),
-          outputSchema: z.object({ greeting: z.string(), name: z.string() }),
+          inputSchema: zv3.object({ name: zv3.string() }),
+          outputSchema: zv3.object({ greeting: zv3.string(), name: zv3.string() }),
           // @ts-expect-error - Return type is missing required 'name' property
           execute: async () => {
             return { greeting: `Hello!` }; // Missing 'name' property
@@ -100,13 +100,13 @@ describe('workflow', () => {
 
         const step = createStep(agent, {
           structuredOutput: {
-            schema: z.object({ sentiment: z.enum(['positive', 'negative', 'neutral']) }),
+            schema: zv3.object({ sentiment: zv3.enum(['positive', 'negative', 'neutral']) }),
           },
         });
 
         expectTypeOf(step.id).toEqualTypeOf<'my-agent'>();
-        expectTypeOf<z.infer<typeof step.inputSchema>>().toEqualTypeOf<{ prompt: string }>();
-        expectTypeOf<z.infer<typeof step.outputSchema>>().toEqualTypeOf<{
+        expectTypeOf<zv3.infer<typeof step.inputSchema>>().toEqualTypeOf<{ prompt: string }>();
+        expectTypeOf<zv3.infer<typeof step.outputSchema>>().toEqualTypeOf<{
           sentiment: 'positive' | 'negative' | 'neutral';
         }>();
         expectTypeOf(step).toEqualTypeOf<
@@ -133,7 +133,7 @@ describe('workflow', () => {
         const step = createStep(agent, {
           retries: 3,
           structuredOutput: {
-            schema: z.object({ answer: z.string() }),
+            schema: zv3.object({ answer: zv3.string() }),
           },
         });
 
@@ -172,9 +172,9 @@ describe('workflow', () => {
 
         const step = createStep(agent);
 
-        expectTypeOf<z.infer<typeof step.inputSchema>>().toEqualTypeOf<{ prompt: string }>();
+        expectTypeOf<zv3.infer<typeof step.inputSchema>>().toEqualTypeOf<{ prompt: string }>();
         // Default output is { text: string }
-        expectTypeOf<z.infer<typeof step.outputSchema>>().toEqualTypeOf<{ text: string }>();
+        expectTypeOf<zv3.infer<typeof step.outputSchema>>().toEqualTypeOf<{ text: string }>();
         expectTypeOf(step).toEqualTypeOf<
           Step<'text-agent', unknown, { prompt: string }, { text: string }, unknown, unknown, DefaultEngineType>
         >();
@@ -186,8 +186,8 @@ describe('workflow', () => {
         const tool = createTool({
           id: 'calculator',
           description: 'Performs calculations',
-          inputSchema: z.object({ a: z.number(), b: z.number(), op: z.enum(['+', '-', '*', '/']) }),
-          outputSchema: z.object({ result: z.number() }),
+          inputSchema: zv3.object({ a: zv3.number(), b: zv3.number(), op: zv3.enum(['+', '-', '*', '/']) }),
+          outputSchema: zv3.object({ result: zv3.number() }),
           execute: async inputData => {
             return { result: 42 };
           },
@@ -196,12 +196,12 @@ describe('workflow', () => {
         const step = createStep(tool);
 
         expectTypeOf(step.id).toEqualTypeOf<'calculator'>();
-        expectTypeOf<z.infer<typeof step.inputSchema>>().toEqualTypeOf<{
+        expectTypeOf<zv3.infer<typeof step.inputSchema>>().toEqualTypeOf<{
           a: number;
           b: number;
           op: '+' | '-' | '*' | '/';
         }>();
-        expectTypeOf<z.infer<typeof step.outputSchema>>().toEqualTypeOf<{ result: number }>();
+        expectTypeOf<zv3.infer<typeof step.outputSchema>>().toEqualTypeOf<{ result: number }>();
         expectTypeOf(step).toEqualTypeOf<
           Step<
             'calculator',
@@ -219,8 +219,8 @@ describe('workflow', () => {
         const tool = createTool({
           id: 'fetch-data',
           description: 'Fetches data from API',
-          inputSchema: z.object({ url: z.string() }),
-          outputSchema: z.object({ data: z.unknown() }),
+          inputSchema: zv3.object({ url: zv3.string() }),
+          outputSchema: zv3.object({ data: zv3.unknown() }),
           execute: async () => ({ data: {} }),
         });
 
@@ -266,8 +266,8 @@ describe('workflow', () => {
           Step<
             'processor:test',
             unknown,
-            z.infer<typeof ProcessorStepInputSchema>,
-            z.infer<typeof ProcessorStepOutputSchema>,
+            zv3.infer<typeof ProcessorStepInputSchema>,
+            zv3.infer<typeof ProcessorStepOutputSchema>,
             unknown,
             unknown,
             DefaultEngineType
@@ -286,8 +286,8 @@ describe('workflow', () => {
           Step<
             'processor:stream-processor',
             unknown,
-            z.infer<typeof ProcessorStepInputSchema>,
-            z.infer<typeof ProcessorStepOutputSchema>,
+            zv3.infer<typeof ProcessorStepInputSchema>,
+            zv3.infer<typeof ProcessorStepOutputSchema>,
             unknown,
             unknown,
             DefaultEngineType
@@ -302,15 +302,15 @@ describe('workflow', () => {
       it('should allow step when input matches workflow input', () => {
         const step = createStep({
           id: 'first-step',
-          inputSchema: z.object({ userId: z.string() }),
-          outputSchema: z.object({ userName: z.string() }),
+          inputSchema: zv3.object({ userId: zv3.string() }),
+          outputSchema: zv3.object({ userName: zv3.string() }),
           execute: async ({ inputData }) => ({ userName: `User ${inputData.userId}` }),
         });
 
         const workflow = createWorkflow({
           id: 'user-workflow',
-          inputSchema: z.object({ userId: z.string() }),
-          outputSchema: z.object({ userName: z.string() }),
+          inputSchema: zv3.object({ userId: zv3.string() }),
+          outputSchema: zv3.object({ userName: zv3.string() }),
         })
           .then(step)
           .commit();
@@ -319,23 +319,23 @@ describe('workflow', () => {
       it('should allow step when input is subset of previous output', () => {
         const step1 = createStep({
           id: 'step1',
-          inputSchema: z.object({ id: z.string() }),
-          outputSchema: z.object({ name: z.string(), email: z.string(), age: z.number() }),
+          inputSchema: zv3.object({ id: zv3.string() }),
+          outputSchema: zv3.object({ name: zv3.string(), email: zv3.string(), age: zv3.number() }),
           execute: async () => ({ name: 'John', email: 'john@example.com', age: 30 }),
         });
 
         // step2 only needs { name, email } which is a subset of step1's output
         const step2 = createStep({
           id: 'step2',
-          inputSchema: z.object({ name: z.string(), email: z.string() }),
-          outputSchema: z.object({ sent: z.boolean() }),
+          inputSchema: zv3.object({ name: zv3.string(), email: zv3.string() }),
+          outputSchema: zv3.object({ sent: zv3.boolean() }),
           execute: async () => ({ sent: true }),
         });
 
         const workflow = createWorkflow({
           id: 'chain-workflow',
-          inputSchema: z.object({ id: z.string() }),
-          outputSchema: z.object({ sent: z.boolean() }),
+          inputSchema: zv3.object({ id: zv3.string() }),
+          outputSchema: zv3.object({ sent: zv3.boolean() }),
         })
           .then(step1)
           .then(step2)
@@ -345,23 +345,23 @@ describe('workflow', () => {
       it('should error when step input requires properties not in previous output', () => {
         const step1 = createStep({
           id: 'step1',
-          inputSchema: z.object({ name: z.string() }),
-          outputSchema: z.object({ greeting: z.string() }),
+          inputSchema: zv3.object({ name: zv3.string() }),
+          outputSchema: zv3.object({ greeting: zv3.string() }),
           execute: async ({ inputData }) => ({ greeting: `Hello, ${inputData.name}!` }),
         });
 
         // step2 requires { greeting, timestamp } but step1 only outputs { greeting }
         const step2 = createStep({
           id: 'step2',
-          inputSchema: z.object({ greeting: z.string(), timestamp: z.number() }),
-          outputSchema: z.object({ logged: z.boolean() }),
+          inputSchema: zv3.object({ greeting: zv3.string(), timestamp: zv3.number() }),
+          outputSchema: zv3.object({ logged: zv3.boolean() }),
           execute: async () => ({ logged: true }),
         });
 
         const workflow = createWorkflow({
           id: 'error-workflow',
-          inputSchema: z.object({ name: z.string() }),
-          outputSchema: z.object({ logged: z.boolean() }),
+          inputSchema: zv3.object({ name: zv3.string() }),
+          outputSchema: zv3.object({ logged: zv3.boolean() }),
         })
           .then(step1)
           // @ts-expect-error - step2 requires 'timestamp' which is not in step1's output
@@ -372,15 +372,15 @@ describe('workflow', () => {
       it('should error when first step input does not match workflow input', () => {
         const step = createStep({
           id: 'needs-age',
-          inputSchema: z.object({ name: z.string(), age: z.number() }),
-          outputSchema: z.object({ canVote: z.boolean() }),
+          inputSchema: zv3.object({ name: zv3.string(), age: zv3.number() }),
+          outputSchema: zv3.object({ canVote: zv3.boolean() }),
           execute: async ({ inputData }) => ({ canVote: inputData.age >= 18 }),
         });
 
         const workflow = createWorkflow({
           id: 'mismatch-workflow',
-          inputSchema: z.object({ name: z.string() }), // Missing 'age'
-          outputSchema: z.object({ canVote: z.boolean() }),
+          inputSchema: zv3.object({ name: zv3.string() }), // Missing 'age'
+          outputSchema: zv3.object({ canVote: zv3.boolean() }),
         })
           // @ts-expect-error - step input requires 'age' which is not in workflow input
           .then(step)
@@ -399,14 +399,14 @@ describe('workflow', () => {
 
         const agentStep = createStep(agent, {
           structuredOutput: {
-            schema: z.object({ response: z.string(), sentiment: z.string() }),
+            schema: zv3.object({ response: zv3.string(), sentiment: zv3.string() }),
           },
         });
 
         const workflow = createWorkflow({
           id: 'agent-workflow',
-          inputSchema: z.object({ prompt: z.string() }),
-          outputSchema: z.object({ response: z.string(), sentiment: z.string() }),
+          inputSchema: zv3.object({ prompt: zv3.string() }),
+          outputSchema: zv3.object({ response: zv3.string(), sentiment: zv3.string() }),
         })
           .then(agentStep)
           .commit();
@@ -416,8 +416,8 @@ describe('workflow', () => {
         const tool = createTool({
           id: 'lookup',
           description: 'Look up user',
-          inputSchema: z.object({ userId: z.string() }),
-          outputSchema: z.object({ name: z.string(), email: z.string() }),
+          inputSchema: zv3.object({ userId: zv3.string() }),
+          outputSchema: zv3.object({ name: zv3.string(), email: zv3.string() }),
           execute: async () => ({ name: 'John', email: 'john@example.com' }),
         });
 
@@ -425,8 +425,8 @@ describe('workflow', () => {
 
         const workflow = createWorkflow({
           id: 'tool-workflow',
-          inputSchema: z.object({ userId: z.string() }),
-          outputSchema: z.object({ name: z.string(), email: z.string() }),
+          inputSchema: zv3.object({ userId: zv3.string() }),
+          outputSchema: zv3.object({ name: zv3.string(), email: zv3.string() }),
         })
           .then(toolStep)
           .commit();
@@ -436,8 +436,8 @@ describe('workflow', () => {
         const tool = createTool({
           id: 'fetch-user',
           description: 'Fetch user data',
-          inputSchema: z.object({ userId: z.string() }),
-          outputSchema: z.object({ name: z.string(), prompt: z.string() }),
+          inputSchema: zv3.object({ userId: zv3.string() }),
+          outputSchema: zv3.object({ name: zv3.string(), prompt: zv3.string() }),
           execute: async inputData => ({
             name: 'John',
             prompt: `Generate greeting for John ${inputData.userId}`,
@@ -456,8 +456,8 @@ describe('workflow', () => {
 
         const workflow = createWorkflow({
           id: 'mixed-workflow',
-          inputSchema: z.object({ userId: z.string() }),
-          outputSchema: z.object({ text: z.string() }),
+          inputSchema: zv3.object({ userId: zv3.string() }),
+          outputSchema: zv3.object({ text: zv3.string() }),
         })
           .then(toolStep)
           .then(agentStep)

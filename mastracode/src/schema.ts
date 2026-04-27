@@ -15,8 +15,10 @@ export const stateSchema = z.object({
   // Observational Memory threshold settings
   observationThreshold: z.number().default(30_000),
   reflectionThreshold: z.number().default(40_000),
-  // Thinking level for extended thinking (Anthropic models)
-  thinkingLevel: z.string().default('off'),
+  // Observational Memory scope — 'thread' (per-conversation) or 'resource' (shared across threads)
+  omScope: z.enum(['thread', 'resource']).optional(),
+  // Thinking level for model reasoning effort
+  thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh']).default('off'),
   // YOLO mode — auto-approve all tool calls
   yolo: z.boolean().default(false),
   // Permission rules — per-category and per-tool approval policies
@@ -30,7 +32,7 @@ export const stateSchema = z.object({
   smartEditing: z.boolean().default(true),
   // Notification mode — alert when TUI needs user attention
   notifications: z.enum(['bell', 'system', 'both', 'off']).default('off'),
-  // Task list (persisted per-thread)
+  // Task list (ephemeral per-thread, cleared on thread switch/creation)
   tasks: z
     .array(
       z.object({
@@ -51,4 +53,26 @@ export const stateSchema = z.object({
     })
     .nullable()
     .default(null),
+  // Active browser settings (tracks what's actually running vs. what's in the settings file)
+  activeBrowserSettings: z
+    .object({
+      enabled: z.boolean(),
+      provider: z.enum(['stagehand', 'agent-browser']),
+      headless: z.boolean().optional(),
+      viewport: z
+        .object({
+          width: z.number(),
+          height: z.number(),
+        })
+        .optional(),
+      cdpUrl: z.string().optional(),
+      stagehand: z
+        .object({
+          env: z.enum(['LOCAL', 'BROWSERBASE']),
+          apiKey: z.string().optional(),
+          projectId: z.string().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
 });

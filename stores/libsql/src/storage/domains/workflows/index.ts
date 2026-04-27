@@ -44,6 +44,10 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     );
   }
 
+  supportsConcurrentUpdates(): boolean {
+    return true;
+  }
+
   private parseWorkflowRun(row: Record<string, any>): WorkflowRun {
     let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
     if (typeof parsedSnapshot === 'string') {

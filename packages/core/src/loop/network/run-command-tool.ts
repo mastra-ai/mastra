@@ -15,7 +15,7 @@ import { exec } from 'node:child_process';
 import { resolve, normalize } from 'node:path';
 import { promisify } from 'node:util';
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import { createTool } from '../../tools';
 

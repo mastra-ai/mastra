@@ -21,9 +21,10 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@internal-temp/*": ["./src/vendor/@mastra/*"]
     },
     "types": ["node", "vite/client"]
   },
-  "include": ["src/**/*", "tailwind.config.ts", "postcss.config.js"]
+  "include": ["src/**/*"]
 }

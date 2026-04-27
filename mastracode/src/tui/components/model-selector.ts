@@ -6,7 +6,7 @@
 import { Box, Container, fuzzyFilter, getEditorKeybindings, Input, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable, TUI } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
-import { bg, fg, bold } from '../theme.js';
+import { theme } from '../theme.js';
 
 // =============================================================================
 // Types
@@ -45,6 +45,33 @@ export interface ModelSelectorOptions {
 }
 
 // =============================================================================
+// Helpers
+// =============================================================================
+
+/**
+ * Build a synthetic "Use: <id>" ModelItem for an arbitrary model id typed by
+ * the user. The provider prefix is parsed from the id; key metadata is
+ * derived from any sibling model that already lives under the same provider
+ * so the API-key prompt still fires for known providers without a key.
+ *
+ * If no sibling is found (truly novel provider), we default `hasApiKey: false`
+ * so the user is still prompted for a key by provider name.
+ */
+export function makeCustomModelItem(id: string, models: ModelItem[]): ModelItem {
+  const parts = id.split('/');
+  const provider = parts.length > 1 ? parts[0]! : 'custom';
+  const modelName = parts.length > 1 ? parts.slice(1).join('/') : id;
+  const sibling = models.find(m => m.provider === provider);
+  return {
+    id,
+    provider,
+    modelName,
+    hasApiKey: sibling?.hasApiKey ?? false,
+    apiKeyEnvVar: sibling?.apiKeyEnvVar,
+  };
+}
+
+// =============================================================================
 // ModelSelectorComponent
 // =============================================================================
 
@@ -73,7 +100,7 @@ export class ModelSelectorComponent extends Box implements Focusable {
 
   constructor(options: ModelSelectorOptions) {
     // Box with padding and background
-    super(2, 1, text => bg('overlayBg', text));
+    super(2, 1, text => theme.bg('overlayBg', text));
 
     this.tui = options.tui;
     this.title = options.title ?? 'Select Model';
@@ -92,12 +119,12 @@ export class ModelSelectorComponent extends Box implements Focusable {
     // Title — optionally with a mode-colored background
     const titleText = this.titleColor
       ? chalk.bgHex(this.titleColor).white.bold(` ${this.title} `)
-      : bold(fg('accent', this.title));
+      : theme.bold(theme.fg('accent', this.title));
     this.addChild(new Text(titleText, 0, 0));
     this.addChild(new Spacer(1));
 
     // Hint
-    this.addChild(new Text(fg('muted', 'Type to search • ↑↓ navigate • Enter select • Esc cancel'), 0, 0));
+    this.addChild(new Text(theme.fg('muted', 'Type to search • ↑↓ navigate • Enter select • Esc cancel'), 0, 0));
     this.addChild(new Spacer(1));
 
     // Search input (Input has built-in "> " prompt)
@@ -175,10 +202,7 @@ export class ModelSelectorComponent extends Box implements Focusable {
   }
 
   private makeCustomModelItem(id: string): ModelItem {
-    const parts = id.split('/');
-    const provider = parts.length > 1 ? parts[0]! : 'custom';
-    const modelName = parts.length > 1 ? parts.slice(1).join('/') : id;
-    return { id, provider, modelName, hasApiKey: true };
+    return makeCustomModelItem(id, this.allModels);
   }
 
   private updateList(): void {
@@ -195,8 +219,8 @@ export class ModelSelectorComponent extends Box implements Focusable {
         const query = this.searchInput.getValue().trim();
         const isSelected = this.selectedIndex === 0;
         const line = isSelected
-          ? fg('accent', '→ ') + bold(fg('accent', `Use: ${query}`))
-          : '  ' + fg('muted', `Use: ${query}`);
+          ? theme.fg('accent', '→ ') + theme.bold(theme.fg('accent', `Use: ${query}`))
+          : '  ' + theme.fg('muted', `Use: ${query}`);
         this.listContainer.addChild(new Text(line, 0, 0));
         continue;
       }
@@ -208,16 +232,16 @@ export class ModelSelectorComponent extends Box implements Focusable {
 
       const isSelected = i === this.selectedIndex;
       const isCurrent = item.id === this.currentModelId;
-      const checkmark = isCurrent ? fg('success', ' ✓') : '';
+      const checkmark = isCurrent ? theme.fg('success', ' ✓') : '';
       const noKeyIndicator = !item.hasApiKey
-        ? fg('error', ' ✗') + fg('muted', item.apiKeyEnvVar ? ` (${item.apiKeyEnvVar})` : ' (no key)')
+        ? theme.fg('error', ' ✗') + theme.fg('muted', item.apiKeyEnvVar ? ` (${item.apiKeyEnvVar})` : ' (no key)')
         : '';
 
       let line = '';
       if (isSelected) {
-        line = fg('accent', '→ ' + item.id) + checkmark + noKeyIndicator;
+        line = theme.fg('accent', '→ ' + item.id) + checkmark + noKeyIndicator;
       } else {
-        const modelText = item.hasApiKey ? item.id : fg('muted', item.id);
+        const modelText = item.hasApiKey ? item.id : theme.fg('muted', item.id);
         line = '  ' + modelText + checkmark + noKeyIndicator;
       }
 
@@ -226,13 +250,13 @@ export class ModelSelectorComponent extends Box implements Focusable {
 
     // Scroll indicator
     if (startIndex > 0 || endIndex < totalItems) {
-      const scrollInfo = fg('muted', `(${this.selectedIndex + 1}/${totalItems})`);
+      const scrollInfo = theme.fg('muted', `(${this.selectedIndex + 1}/${totalItems})`);
       this.listContainer.addChild(new Text(scrollInfo, 0, 0));
     }
 
     // Empty state
     if (totalItems === 0) {
-      this.listContainer.addChild(new Text(fg('muted', 'No matching models'), 0, 0));
+      this.listContainer.addChild(new Text(theme.fg('muted', 'No matching models'), 0, 0));
     }
   }
 

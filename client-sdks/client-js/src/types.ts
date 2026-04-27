@@ -44,9 +44,13 @@ import type {
   WorkflowRunStatus,
   WorkflowState,
 } from '@mastra/core/workflows';
+import type { PublicSchema } from '@mastra/schema-compat/schema';
 
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
+import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
+import type { ZodType as ZodTypeV4 } from 'zod/v4';
+
+export type ZodSchema = ZodSchemaV3 | ZodTypeV4;
 
 export interface ClientOptions {
   /** Base URL for API requests */
@@ -69,6 +73,8 @@ export interface ClientOptions {
   fetch?: typeof fetch;
 }
 
+export type AgentVersionIdentifier = { versionId: string } | { status: 'draft' | 'published' };
+
 export interface RequestOptions {
   method?: string;
   headers?: Record<string, string>;
@@ -77,6 +83,264 @@ export interface RequestOptions {
   /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
   credentials?: 'omit' | 'same-origin' | 'include';
 }
+
+export type ResponseInputTextPart = {
+  type: 'input_text' | 'text' | 'output_text';
+  text: string;
+};
+
+export type ResponseInputMessage = {
+  role: 'system' | 'developer' | 'user' | 'assistant';
+  content: string | ResponseInputTextPart[];
+};
+
+export type ResponseTextFormat =
+  | {
+      type: 'json_object';
+    }
+  | {
+      type: 'json_schema';
+      name: string;
+      description?: string;
+      schema: Record<string, unknown>;
+      strict?: boolean;
+    };
+
+export type ResponseTextConfig = {
+  format: ResponseTextFormat;
+};
+
+export type ResponseOutputText = {
+  type: 'output_text';
+  text: string;
+  annotations?: unknown[];
+  logprobs?: unknown[];
+};
+
+export type ResponseOutputMessage = {
+  id: string;
+  type: 'message';
+  role: 'assistant';
+  status: 'in_progress' | 'completed' | 'incomplete';
+  content: ResponseOutputText[];
+};
+
+export type ResponseOutputFunctionCall = {
+  id: string;
+  type: 'function_call';
+  call_id: string;
+  name: string;
+  arguments: string;
+  status?: 'in_progress' | 'completed' | 'incomplete';
+};
+
+export type ResponseOutputFunctionCallOutput = {
+  id: string;
+  type: 'function_call_output';
+  call_id: string;
+  output: string;
+};
+
+export type ResponseUsage = {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  input_tokens_details?: {
+    cached_tokens: number;
+  };
+  output_tokens_details?: {
+    reasoning_tokens: number;
+  };
+};
+
+export type ResponseTool = {
+  type: 'function';
+  name: string;
+  description?: string;
+  parameters?: unknown;
+};
+
+export type ResponseOutputItem = ResponseOutputMessage | ResponseOutputFunctionCall | ResponseOutputFunctionCallOutput;
+
+export type ConversationItemInputText = {
+  type: 'input_text';
+  text: string;
+};
+
+export type ConversationItemMessage = {
+  id: string;
+  type: 'message';
+  role: 'system' | 'user' | 'assistant';
+  status: 'completed';
+  content: Array<ConversationItemInputText | ResponseOutputText>;
+};
+
+export type ConversationItem = ConversationItemMessage | ResponseOutputFunctionCall | ResponseOutputFunctionCallOutput;
+
+export type ConversationItemsPage = {
+  object: 'list';
+  data: ConversationItem[];
+  first_id: string | null;
+  last_id: string | null;
+  has_more: boolean;
+};
+
+export type ResponsesResponse = {
+  id: string;
+  object: 'response';
+  created_at: number;
+  completed_at?: number | null;
+  model: string;
+  status: 'in_progress' | 'completed' | 'incomplete';
+  output: ResponseOutputItem[];
+  usage: ResponseUsage | null;
+  error?: {
+    code?: string;
+    message?: string;
+  } | null;
+  incomplete_details?: {
+    reason?: string;
+  } | null;
+  instructions?: string | null;
+  text?: ResponseTextConfig | null;
+  previous_response_id?: string | null;
+  conversation_id?: string | null;
+  /** Provider-returned response state, such as `openai.responseId`, for provider-native continuation. */
+  providerOptions?: Record<string, Record<string, unknown> | undefined>;
+  tools?: ResponseTool[];
+  store?: boolean;
+  output_text: string;
+};
+
+export type ResponsesDeleteResponse = {
+  id: string;
+  object: 'response';
+  deleted: true;
+};
+
+export type CreateResponseParams = {
+  /** Optional model override, such as `openai/gpt-5`. When omitted, the agent default model is used. */
+  model?: string;
+  /** Mastra agent ID for the request. Required on initial requests; stored follow-ups can omit it when using `previous_response_id`. */
+  agent_id?: string;
+  /** Input text or message history for the current turn. */
+  input: string | ResponseInputMessage[];
+  /** Request-scoped instructions for the current response. */
+  instructions?: string;
+  /** Optional text output format. Supports `json_object` and `json_schema`. */
+  text?: ResponseTextConfig;
+  /** Optional conversation ID. In Mastra this is the raw threadId. */
+  conversation_id?: string;
+  /** Optional provider-specific options passed through to the underlying model call. */
+  providerOptions?: Record<string, Record<string, unknown> | undefined>;
+  /** When true, returns a streaming Responses API event stream. */
+  stream?: boolean;
+  /** Persists the response through the selected agent's memory. Requires a memory-backed agent. */
+  store?: boolean;
+  /** Continues a previously stored response chain. */
+  previous_response_id?: string;
+  requestContext?: RequestContext | Record<string, any>;
+};
+
+export type Conversation = {
+  id: string;
+  object: 'conversation';
+  thread: StorageThreadType;
+};
+
+export type ConversationDeleted = {
+  id: string;
+  object: 'conversation.deleted';
+  deleted: true;
+};
+
+export type CreateConversationParams = {
+  agent_id: string;
+  conversation_id?: string;
+  resource_id?: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+  requestContext?: RequestContext | Record<string, any>;
+};
+
+export type ResponsesCreatedEvent = {
+  type: 'response.created';
+  response: ResponsesResponse;
+  sequence_number?: number;
+};
+
+export type ResponsesInProgressEvent = {
+  type: 'response.in_progress';
+  response: ResponsesResponse;
+  sequence_number?: number;
+};
+
+export type ResponsesOutputItemAddedEvent = {
+  type: 'response.output_item.added';
+  output_index: number;
+  item: ResponseOutputItem;
+  sequence_number?: number;
+};
+
+export type ResponsesContentPartAddedEvent = {
+  type: 'response.content_part.added';
+  output_index: number;
+  content_index: number;
+  item_id: string;
+  part: ResponseOutputText;
+  sequence_number?: number;
+};
+
+export type ResponsesOutputTextDeltaEvent = {
+  type: 'response.output_text.delta';
+  output_index: number;
+  content_index: number;
+  item_id: string;
+  delta: string;
+  sequence_number?: number;
+};
+
+export type ResponsesOutputTextDoneEvent = {
+  type: 'response.output_text.done';
+  output_index: number;
+  content_index: number;
+  item_id: string;
+  text: string;
+  sequence_number?: number;
+};
+
+export type ResponsesContentPartDoneEvent = {
+  type: 'response.content_part.done';
+  output_index: number;
+  content_index: number;
+  item_id: string;
+  part: ResponseOutputText;
+  sequence_number?: number;
+};
+
+export type ResponsesOutputItemDoneEvent = {
+  type: 'response.output_item.done';
+  output_index: number;
+  item: ResponseOutputItem;
+  sequence_number?: number;
+};
+
+export type ResponsesCompletedEvent = {
+  type: 'response.completed';
+  response: ResponsesResponse;
+  sequence_number?: number;
+};
+
+export type ResponsesStreamEvent =
+  | ResponsesCreatedEvent
+  | ResponsesInProgressEvent
+  | ResponsesOutputItemAddedEvent
+  | ResponsesContentPartAddedEvent
+  | ResponsesOutputTextDeltaEvent
+  | ResponsesOutputTextDoneEvent
+  | ResponsesContentPartDoneEvent
+  | ResponsesOutputItemDoneEvent
+  | ResponsesCompletedEvent;
 
 type WithoutMethods<T> = {
   [K in keyof T as T[K] extends (...args: any[]) => any
@@ -103,6 +367,8 @@ export interface GetAgentResponse {
   agents: Record<string, { id: string; name: string }>;
   skills?: SkillMetadata[];
   workspaceTools?: string[];
+  /** Browser tool names available to this agent (if browser is configured) */
+  browserTools?: string[];
   /** ID of the agent's workspace (if configured) */
   workspaceId?: string;
   provider: string;
@@ -140,7 +406,8 @@ export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined =
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
-  Omit<AgentGenerateOptions<T>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
+  // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
+  Omit<AgentGenerateOptions<any>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
 >;
 
 export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
@@ -150,9 +417,16 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
-  Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
+  // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
+  Omit<AgentStreamOptions<any>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
 >;
 
+export type StructuredOutputOptions<OUTPUT = undefined> = Omit<
+  SerializableStructuredOutputOptions<OUTPUT>,
+  'schema'
+> & {
+  schema: PublicSchema<OUTPUT>;
+};
 export type StreamParamsBase<OUTPUT = undefined> = {
   tracingOptions?: TracingOptions;
   requestContext?: RequestContext;
@@ -163,9 +437,7 @@ export type StreamParamsBase<OUTPUT = undefined> = {
 export type StreamParamsBaseWithoutMessages<OUTPUT = undefined> = StreamParamsBase<OUTPUT>;
 export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> & {
   messages: MessageListInput;
-} & (OUTPUT extends undefined
-    ? { structuredOutput?: never }
-    : { structuredOutput: SerializableStructuredOutputOptions<OUTPUT> });
+} & (OUTPUT extends undefined ? { structuredOutput?: never } : { structuredOutput: StructuredOutputOptions<OUTPUT> });
 
 export type UpdateModelParams = {
   modelId: string;
@@ -336,19 +608,7 @@ export interface GetMemoryConfigParams {
   requestContext?: RequestContext | Record<string, any>;
 }
 
-export type GetMemoryConfigResponse = {
-  config: MemoryConfig & {
-    observationalMemory?: {
-      enabled: boolean;
-      scope?: 'thread' | 'resource';
-      shareTokenBudget?: boolean;
-      messageTokens?: number | { min: number; max: number };
-      observationTokens?: number | { min: number; max: number };
-      observationModel?: string;
-      reflectionModel?: string;
-    };
-  };
-};
+export type GetMemoryConfigResponse = { config: MemoryConfig };
 
 export interface UpdateMemoryThreadParams {
   title: string;
@@ -357,7 +617,9 @@ export interface UpdateMemoryThreadParams {
   requestContext?: RequestContext | Record<string, any>;
 }
 
-export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'threadId'>;
+export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'threadId'> & {
+  includeSystemReminders?: boolean;
+};
 
 export type ListMemoryThreadMessagesResponse = {
   messages: MastraDBMessage[];
@@ -548,6 +810,7 @@ export type GetScorerResponse = MastraScorerEntry & {
   agentNames: string[];
   workflowIds: string[];
   isRegistered: boolean;
+  source: 'code' | 'stored';
 };
 
 export interface GetScorersResponse {
@@ -940,6 +1203,8 @@ export interface UpdateStoredAgentParams {
   skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
   workspace?: ConditionalField<StoredWorkspaceRef>;
   requestContextSchema?: Record<string, unknown>;
+  /** Optional message describing the changes for the auto-created version */
+  changeMessage?: string;
 }
 
 /**
@@ -1223,6 +1488,12 @@ export interface CreateAgentVersionParams {
   changeMessage?: string;
 }
 
+export interface CreateCodeAgentVersionParams {
+  instructions?: AgentVersionResponse['instructions'];
+  tools?: AgentVersionResponse['tools'];
+  changeMessage?: string;
+}
+
 export interface CreateAgentVersionResponse {
   version: AgentVersionResponse;
 }
@@ -1347,6 +1618,11 @@ export interface MastraPackage {
 
 export interface GetSystemPackagesResponse {
   packages: MastraPackage[];
+  isDev: boolean;
+  cmsEnabled: boolean;
+  storageType?: string;
+  observabilityStorageType?: string;
+  observabilityRuntimeStrategy?: 'realtime' | 'batch-with-updates' | 'insert-only' | 'event-sourced';
 }
 
 // ============================================================================
@@ -1544,13 +1820,13 @@ export interface SkillMetadata {
   license?: string;
   compatibility?: string;
   metadata?: Record<string, string>;
+  path: string;
 }
 
 /**
  * Full skill data including instructions and file paths
  */
 export interface Skill extends SkillMetadata {
-  path: string;
   instructions: string;
   source: SkillSource;
   references: string[];
@@ -1798,6 +2074,10 @@ export interface GetObservationalMemoryParams {
   agentId: string;
   resourceId?: string;
   threadId?: string;
+  from?: Date | string;
+  to?: Date | string;
+  offset?: number;
+  limit?: number;
   requestContext?: RequestContext | Record<string, any>;
 }
 
@@ -1831,6 +2111,7 @@ export interface AwaitBufferStatusResponse {
  */
 export interface GetMemoryStatusResponse {
   result: boolean;
+  memoryType?: 'local' | 'gateway';
   observationalMemory?: {
     enabled: boolean;
     hasRecord?: boolean;
@@ -1847,6 +2128,7 @@ export interface GetMemoryStatusResponse {
  * Extended memory config response with OM config
  */
 export interface GetMemoryConfigResponseExtended {
+  memoryType?: 'local' | 'gateway';
   config: MemoryConfig & {
     observationalMemory?: {
       enabled: boolean;
@@ -2021,13 +2303,21 @@ export class MastraClientError extends Error {
 // Dataset Types
 // ============================================
 
+export interface DatasetItemSource {
+  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+  referenceId?: string;
+}
+
 export interface DatasetItem {
   id: string;
   datasetId: string;
   datasetVersion: number;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: unknown;
+  source?: DatasetItemSource;
   createdAt: string | Date;
   updatedAt: string | Date;
 }
@@ -2039,6 +2329,11 @@ export interface DatasetRecord {
   metadata?: Record<string, unknown> | null;
   inputSchema?: Record<string, unknown>;
   groundTruthSchema?: Record<string, unknown>;
+  requestContextSchema?: Record<string, unknown>;
+  tags?: string[] | null;
+  targetType?: string | null;
+  targetIds?: string[] | null;
+  scorerIds?: string[] | null;
   version: number;
   createdAt: string | Date;
   updatedAt: string | Date;
@@ -2048,6 +2343,7 @@ export interface DatasetExperiment {
   id: string;
   datasetId: string | null;
   datasetVersion: number | null;
+  agentVersion: string | null;
   targetType: 'agent' | 'workflow' | 'scorer' | 'processor';
   targetId: string;
   status: 'pending' | 'running' | 'completed' | 'failed';
@@ -2073,6 +2369,8 @@ export interface DatasetExperimentResult {
   completedAt: string | Date;
   retryCount: number;
   traceId: string | null;
+  status: 'needs-review' | 'reviewed' | 'complete' | null;
+  tags: string[] | null;
   scores: Array<{
     scorerId: string;
     scorerName: string;
@@ -2083,12 +2381,24 @@ export interface DatasetExperimentResult {
   createdAt: string | Date;
 }
 
+export interface UpdateExperimentResultParams {
+  datasetId: string;
+  experimentId: string;
+  resultId: string;
+  status?: 'needs-review' | 'reviewed' | 'complete' | null;
+  tags?: string[];
+}
+
 export interface CreateDatasetParams {
   name: string;
   description?: string;
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
+  requestContextSchema?: Record<string, unknown> | null;
+  targetType?: string;
+  targetIds?: string[];
+  scorerIds?: string[];
 }
 
 export interface UpdateDatasetParams {
@@ -2098,13 +2408,21 @@ export interface UpdateDatasetParams {
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
+  requestContextSchema?: Record<string, unknown> | null;
+  tags?: string[];
+  targetType?: string;
+  targetIds?: string[];
+  scorerIds?: string[] | null;
 }
 
 export interface AddDatasetItemParams {
   datasetId: string;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  source?: DatasetItemSource;
 }
 
 export interface UpdateDatasetItemParams {
@@ -2112,7 +2430,10 @@ export interface UpdateDatasetItemParams {
   itemId: string;
   input?: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  source?: DatasetItemSource;
 }
 
 export interface BatchInsertDatasetItemsParams {
@@ -2120,7 +2441,10 @@ export interface BatchInsertDatasetItemsParams {
   items: Array<{
     input: unknown;
     groundTruth?: unknown;
+    expectedTrajectory?: unknown;
+    requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
+    source?: DatasetItemSource;
   }>;
 }
 
@@ -2129,13 +2453,32 @@ export interface BatchDeleteDatasetItemsParams {
   itemIds: string[];
 }
 
+export interface GenerateDatasetItemsParams {
+  datasetId: string;
+  modelId: string;
+  prompt: string;
+  count?: number;
+  agentContext?: {
+    description?: string;
+    instructions?: string;
+    tools?: string[];
+  };
+}
+
+export interface GeneratedItem {
+  input: unknown;
+  groundTruth?: unknown;
+}
+
 export interface TriggerDatasetExperimentParams {
   datasetId: string;
   targetType: 'agent' | 'workflow' | 'scorer';
   targetId: string;
   scorerIds?: string[];
   version?: number;
+  agentVersion?: string;
   maxConcurrency?: number;
+  requestContext?: Record<string, unknown>;
 }
 
 export interface CompareExperimentsParams {
@@ -2318,4 +2661,63 @@ export interface ActivatePromptBlockVersionResponse {
 export interface DeletePromptBlockVersionResponse {
   success: boolean;
   message: string;
+}
+
+export type BackgroundTaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
+
+export type BackgroundTaskDateColumn = 'createdAt' | 'startedAt' | 'completedAt';
+
+export interface BackgroundTaskResponse {
+  id: string;
+  status: BackgroundTaskStatus;
+  toolName: string;
+  toolCallId: string;
+  args: Record<string, unknown>;
+  agentId: string;
+  threadId?: string;
+  resourceId?: string;
+  runId: string;
+  result?: unknown;
+  error?: { message: string; stack?: string };
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  retryCount: number;
+  maxRetries: number;
+  timeoutMs: number;
+}
+
+export interface ListBackgroundTasksParams {
+  agentId?: string;
+  status?: BackgroundTaskStatus;
+  runId?: string;
+  threadId?: string;
+  resourceId?: string;
+  fromDate?: Date;
+  toDate?: Date;
+  dateFilterBy?: BackgroundTaskDateColumn;
+  orderBy?: BackgroundTaskDateColumn;
+  orderDirection?: 'asc' | 'desc';
+  page?: number;
+  perPage?: number;
+}
+
+export interface ListBackgroundTasksResponse {
+  tasks: BackgroundTaskResponse[];
+  total: number;
+}
+
+export interface StreamBackgroundTasksParams {
+  agentId?: string;
+  runId?: string;
+  threadId?: string;
+  resourceId?: string;
+}
+
+export interface ExperimentReviewCounts {
+  experimentId: string;
+  total: number;
+  needsReview: number;
+  reviewed: number;
+  complete: number;
 }

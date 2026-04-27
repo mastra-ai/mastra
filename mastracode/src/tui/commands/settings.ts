@@ -1,7 +1,8 @@
-import type { StorageBackend } from '../../onboarding/settings.js';
+import type { StorageBackend, ThinkingLevelSetting } from '../../onboarding/settings.js';
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { SettingsComponent } from '../components/settings.js';
 import type { NotificationMode } from '../notify.js';
+import { handleApiKeysCommand } from './api-keys.js';
 import type { SlashCommandContext } from './types.js';
 
 export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<void> {
@@ -11,7 +12,9 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     notifications: (state?.notifications ?? 'off') as NotificationMode,
     yolo: state?.yolo === true,
     thinkingLevel: (state?.thinkingLevel ?? 'off') as string,
+    currentModelId: ctx.state.harness.getCurrentModelId() ?? '',
     escapeAsCancel: ctx.state.editor.escapeEnabled,
+    quietMode: globalSettings.preferences.quietMode,
     storageBackend: globalSettings.storage.backend,
     pgConnectionString: globalSettings.storage.pg?.connectionString ?? '',
     libsqlUrl: globalSettings.storage.libsql?.url ?? '',
@@ -28,11 +31,20 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
       },
       onThinkingLevelChange: async level => {
         await ctx.state.harness.setState({ thinkingLevel: level } as any);
+        const current = loadSettings();
+        current.preferences.thinkingLevel = level as ThinkingLevelSetting;
+        saveSettings(current);
       },
       onEscapeAsCancelChange: async enabled => {
         ctx.state.editor.escapeEnabled = enabled;
         await ctx.state.harness.setState({ escapeAsCancel: enabled });
         await ctx.state.harness.setThreadSetting({ key: 'escapeAsCancel', value: enabled });
+      },
+      onQuietModeChange: enabled => {
+        const current = loadSettings();
+        current.preferences.quietMode = enabled;
+        saveSettings(current);
+        ctx.state.quietMode = enabled;
       },
       onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => {
         const current = loadSettings();
@@ -48,6 +60,11 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         const label = backend === 'pg' ? 'PostgreSQL' : 'LibSQL';
         console.info(`\nStorage backend changed to ${label}. Restarting is required.\n`);
         process.exit(0);
+      },
+      onApiKeys: () => {
+        ctx.state.ui.hideOverlay();
+        resolve();
+        handleApiKeysCommand(ctx);
       },
       onClose: () => {
         ctx.state.ui.hideOverlay();

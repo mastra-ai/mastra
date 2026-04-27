@@ -1,68 +1,67 @@
 ---
-title: "Reference: Qdrant Vector Store | Vectors"
+title: "Reference: Qdrant vector store | Vectors"
 description: Documentation for integrating Qdrant with Mastra, a vector similarity search engine for managing vectors and payloads.
 packages:
   - "@mastra/qdrant"
 ---
 
-# Qdrant Vector Store
+# Qdrant vector store
 
 The QdrantVector class provides vector search using [Qdrant](https://qdrant.tech/), a vector similarity search engine.
 It provides a production-ready service with a convenient API to store, search, and manage vectors with additional payload and extended filtering support.
 
-## Constructor Options
+## Constructor options
 
 <PropertiesTable
   content={[
-{
-name: "url",
-type: "string",
-description:
-"REST URL of the Qdrant instance. Eg. https://xyz-example.eu-central.aws.cloud.qdrant.io:6333",
-},
-{
-name: "apiKey",
-type: "string",
-description: "Optional Qdrant API key",
-},
-{
-name: "https",
-type: "boolean",
-description:
-"Whether to use TLS when setting up the connection. Recommended.",
-},
+  {
+    name: 'url',
+    type: 'string',
+    description: 'REST URL of the Qdrant instance. Eg. https://xyz-example.eu-central.aws.cloud.qdrant.io:6333',
+  },
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'Optional Qdrant API key',
+  },
+  {
+    name: 'https',
+    type: 'boolean',
+    description: 'Whether to use TLS when setting up the connection. Recommended.',
+  },
 ]}
 />
 
 ## Methods
 
-### createIndex()
+### `createIndex()`
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to create",
-},
-{
-name: "dimension",
-type: "number",
-description: "Vector dimension (must match your embedding model). Required for single-vector collections.",
-},
-{
-name: "metric",
-type: "'cosine' | 'euclidean' | 'dotproduct'",
-isOptional: true,
-defaultValue: "cosine",
-description: "Distance metric for similarity search",
-},
-{
-name: "namedVectors",
-type: "Record<string, { size: number; distance: 'cosine' | 'euclidean' | 'dotproduct' }>",
-isOptional: true,
-description: "Configuration for named vector spaces. When provided, creates a collection with multiple named vector fields.",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to create',
+  },
+  {
+    name: 'dimension',
+    type: 'number',
+    description: 'Vector dimension (must match your embedding model). Required for single-vector collections.',
+  },
+  {
+    name: 'metric',
+    type: "'cosine' | 'euclidean' | 'dotproduct'",
+    isOptional: true,
+    defaultValue: 'cosine',
+    description: 'Distance metric for similarity search',
+  },
+  {
+    name: 'namedVectors',
+    type: "Record<string, { size: number; distance: 'cosine' | 'euclidean' | 'dotproduct' }>",
+    isOptional: true,
+    description:
+      'Configuration for named vector spaces. When provided, creates a collection with multiple named vector fields.',
+  },
 ]}
 />
 
@@ -80,38 +79,38 @@ await store.createIndex({
 })
 ```
 
-### upsert()
+### `upsert()`
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to upsert into",
-},
-{
-name: "vectors",
-type: "number[][]",
-description: "Array of embedding vectors",
-},
-{
-name: "metadata",
-type: "Record<string, any>[]",
-isOptional: true,
-description: "Metadata for each vector",
-},
-{
-name: "ids",
-type: "string[]",
-isOptional: true,
-description: "Optional vector IDs (auto-generated if not provided)",
-},
-{
-name: "vectorName",
-type: "string",
-isOptional: true,
-description: "Name of the vector space to upsert into when using named vectors.",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to upsert into',
+  },
+  {
+    name: 'vectors',
+    type: 'number[][]',
+    description: 'Array of embedding vectors',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, any>[]',
+    isOptional: true,
+    description: 'Metadata for each vector',
+  },
+  {
+    name: 'ids',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Optional vector IDs (auto-generated if not provided)',
+  },
+  {
+    name: 'vectorName',
+    type: 'string',
+    isOptional: true,
+    description: 'Name of the vector space to upsert into when using named vectors.',
+  },
 ]}
 />
 
@@ -135,46 +134,47 @@ await store.upsert({
 })
 ```
 
-### query()
+### `query()`
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to query",
-},
-{
-name: "queryVector",
-type: "number[]",
-description: "Query vector to find similar vectors",
-},
-{
-name: "topK",
-type: "number",
-isOptional: true,
-defaultValue: "10",
-description: "Number of results to return",
-},
-{
-name: "filter",
-type: "Record<string, any>",
-isOptional: true,
-description: "Metadata filters for the query",
-},
-{
-name: "includeVector",
-type: "boolean",
-isOptional: true,
-defaultValue: "false",
-description: "Whether to include vectors in the results",
-},
-{
-name: "using",
-type: "string",
-isOptional: true,
-description: "Name of the vector field to query when using named vectors. Use this when your collection has multiple named vector fields.",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to query',
+  },
+  {
+    name: 'queryVector',
+    type: 'number[]',
+    description: 'Query vector to find similar vectors',
+  },
+  {
+    name: 'topK',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '10',
+    description: 'Number of results to return',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filters for the query',
+  },
+  {
+    name: 'includeVector',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description: 'Whether to include vectors in the results',
+  },
+  {
+    name: 'using',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Name of the vector field to query when using named vectors. Use this when your collection has multiple named vector fields.',
+  },
 ]}
 />
 
@@ -191,19 +191,19 @@ const results = await store.query({
 })
 ```
 
-### listIndexes()
+### `listIndexes()`
 
 Returns an array of index names as strings.
 
-### describeIndex()
+### `describeIndex()`
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to describe",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to describe',
+  },
 ]}
 />
 
@@ -217,124 +217,124 @@ interface IndexStats {
 }
 ```
 
-### deleteIndex()
+### `deleteIndex()`
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to delete",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to delete',
+  },
 ]}
 />
 
-### updateVector()
+### `updateVector()`
 
 Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to update",
-},
-{
-name: "id",
-type: "string",
-isOptional: true,
-description: "ID of the vector to update (mutually exclusive with filter)",
-},
-{
-name: "filter",
-type: "Record<string, any>",
-isOptional: true,
-description: "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
-},
-{
-name: "update",
-type: "{ vector?: number[]; metadata?: Record<string, any>; }",
-description: "Object containing the vector and/or metadata to update",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to update',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    isOptional: true,
+    description: 'ID of the vector to update (mutually exclusive with filter)',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filter to identify vector(s) to update (mutually exclusive with id)',
+  },
+  {
+    name: 'update',
+    type: '{ vector?: number[]; metadata?: Record<string, any>; }',
+    description: 'Object containing the vector and/or metadata to update',
+  },
 ]}
 />
 
 Updates a vector and/or its metadata in the specified index. If both vector and metadata are provided, both will be updated. If only one is provided, only that will be updated.
 
-### deleteVector()
+### `deleteVector()`
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index from which to delete the vector",
-},
-{
-name: "id",
-type: "string",
-description: "ID of the vector to delete",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index from which to delete the vector',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'ID of the vector to delete',
+  },
 ]}
 />
 
 Deletes a vector from the specified index by its ID.
 
-### deleteVectors()
+### `deleteVectors()`
 
 Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index containing the vectors to delete",
-},
-{
-name: "ids",
-type: "string[]",
-isOptional: true,
-description: "Array of vector IDs to delete (mutually exclusive with filter)",
-},
-{
-name: "filter",
-type: "Record<string, any>",
-isOptional: true,
-description: "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index containing the vectors to delete',
+  },
+  {
+    name: 'ids',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Array of vector IDs to delete (mutually exclusive with filter)',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filter to identify vectors to delete (mutually exclusive with ids)',
+  },
 ]}
 />
 
-### createPayloadIndex()
+### `createPayloadIndex()`
 
 Creates a payload (metadata) index on a collection field to enable efficient filtering. This is **required** for Qdrant Cloud and any Qdrant instance with `strict_mode_config = true`.
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the collection to create the payload index on",
-},
-{
-name: "fieldName",
-type: "string",
-description: "Name of the payload field to index",
-},
-{
-name: "fieldSchema",
-type: "'keyword' | 'integer' | 'float' | 'geo' | 'text' | 'bool' | 'datetime' | 'uuid'",
-description: "The schema type for the payload field",
-},
-{
-name: "wait",
-type: "boolean",
-isOptional: true,
-defaultValue: "true",
-description: "Whether to wait for the operation to complete",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the collection to create the payload index on',
+  },
+  {
+    name: 'fieldName',
+    type: 'string',
+    description: 'Name of the payload field to index',
+  },
+  {
+    name: 'fieldSchema',
+    type: "'keyword' | 'integer' | 'float' | 'geo' | 'text' | 'bool' | 'datetime' | 'uuid'",
+    description: 'The schema type for the payload field',
+  },
+  {
+    name: 'wait',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description: 'Whether to wait for the operation to complete',
+  },
 ]}
 />
 
@@ -353,33 +353,33 @@ const results = await store.query({
 })
 ```
 
-### deletePayloadIndex()
+### `deletePayloadIndex()`
 
 Removes a payload index from a collection field.
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the collection to delete the payload index from",
-},
-{
-name: "fieldName",
-type: "string",
-description: "Name of the payload field index to delete",
-},
-{
-name: "wait",
-type: "boolean",
-isOptional: true,
-defaultValue: "true",
-description: "Whether to wait for the operation to complete",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the collection to delete the payload index from',
+  },
+  {
+    name: 'fieldName',
+    type: 'string',
+    description: 'Name of the payload field index to delete',
+  },
+  {
+    name: 'wait',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description: 'Whether to wait for the operation to complete',
+  },
 ]}
 />
 
-## Response Types
+## Response types
 
 Query results are returned in this format:
 
@@ -392,7 +392,7 @@ interface QueryResult {
 }
 ```
 
-## Error Handling
+## Error handling
 
 The store throws typed errors that can be caught:
 

@@ -9,6 +9,7 @@
     },
     "build": {
       "dependsOn": ["^build", "build:lib", "@internal/playground#build"],
+      "inputs": ["package.json"],
       "outputs": ["dist/**", "!dist/docs/**"]
     }
   }

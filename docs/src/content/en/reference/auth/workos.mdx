@@ -1,12 +1,12 @@
 ---
-title: "Reference: MastraAuthWorkos Class | Auth"
+title: "Reference: MastraAuthWorkos class | Auth"
 description: "API reference for the MastraAuthWorkos class, which authenticates Mastra applications using WorkOS authentication."
 packages:
   - "@mastra/auth-workos"
   - "@mastra/core"
 ---
 
-# MastraAuthWorkos Class
+# MastraAuthWorkos class
 
 The `MastraAuthWorkos` class provides authentication for Mastra using WorkOS. It verifies incoming requests using WorkOS access tokens and integrates with the Mastra server using the `auth` option.
 
@@ -28,7 +28,7 @@ export const mastra = new Mastra({
 
 :::note
 
-You can omit the constructor parameters if you have the appropriately named environment variables (`WORKOS_API_KEY` and `WORKOS_CLIENT_ID`) set. In that case, simply use `new MastraAuthWorkos()` without any arguments.
+You can omit the constructor parameters if you have the appropriately named environment variables (`WORKOS_API_KEY` and `WORKOS_CLIENT_ID`) set. In that case, use `new MastraAuthWorkos()` without any arguments.
 
 :::
 
@@ -36,63 +36,61 @@ You can omit the constructor parameters if you have the appropriately named envi
 
 <PropertiesTable
   content={[
-{
-name: "apiKey",
-type: "string",
-description:
-"Your WorkOS API key. This is used to authenticate with the WorkOS API for user verification and organization management.",
-isOptional: true,
-defaultValue: "process.env.WORKOS_API_KEY",
-},
-{
-name: "clientId",
-type: "string",
-description:
-"Your WorkOS Client ID. This identifies your application when exchanging authorization codes for access tokens.",
-isOptional: true,
-defaultValue: "process.env.WORKOS_CLIENT_ID",
-},
-{
-name: "name",
-type: "string",
-description: "Custom name for the auth provider instance.",
-isOptional: true,
-defaultValue: '"workos"',
-},
-{
-name: "authorizeUser",
-type: "(user: WorkosUser) => Promise<boolean> | boolean",
-description:
-"Custom authorization function to determine if a user should be granted access. Called after token verification. By default, checks if the user has an 'admin' role in any organization membership.",
-isOptional: true,
-},
+  {
+    name: 'apiKey',
+    type: 'string',
+    description:
+      'Your WorkOS API key. This is used to authenticate with the WorkOS API for user verification and organization management.',
+    isOptional: true,
+    defaultValue: 'process.env.WORKOS_API_KEY',
+  },
+  {
+    name: 'clientId',
+    type: 'string',
+    description:
+      'Your WorkOS Client ID. This identifies your application when exchanging authorization codes for access tokens.',
+    isOptional: true,
+    defaultValue: 'process.env.WORKOS_CLIENT_ID',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Custom name for the auth provider instance.',
+    isOptional: true,
+    defaultValue: '"workos"',
+  },
+  {
+    name: 'authorizeUser',
+    type: '(user: WorkosUser) => Promise<boolean> | boolean',
+    description:
+      "Custom authorization function to determine if a user should be granted access. Called after token verification. By default, checks if the user has an 'admin' role in any organization membership.",
+    isOptional: true,
+  },
 ]}
 />
 
-## Environment Variables
+## Environment variables
 
-The following environment variables are automatically used when constructor options are not provided:
+The following environment variables are automatically used when constructor options aren't provided:
 
 <PropertiesTable
   content={[
-{
-name: "WORKOS_API_KEY",
-type: "string",
-description:
-"Your WorkOS API key. Can be found in your WorkOS Dashboard under API Keys.",
-isOptional: true,
-},
-{
-name: "WORKOS_CLIENT_ID",
-type: "string",
-description:
-"Your WorkOS Client ID. Can be found in your WorkOS Dashboard under Applications.",
-isOptional: true,
-},
+  {
+    name: 'WORKOS_API_KEY',
+    type: 'string',
+    description: 'Your WorkOS API key. Can be found in your WorkOS Dashboard under API Keys.',
+    isOptional: true,
+  },
+  {
+    name: 'WORKOS_CLIENT_ID',
+    type: 'string',
+    description: 'Your WorkOS Client ID. Can be found in your WorkOS Dashboard under Applications.',
+    isOptional: true,
+  },
 ]}
 />
 
-## Default Authorization Behavior
+## Default authorization behavior
 
 By default, `MastraAuthWorkos` implements role-based authorization that checks for admin access:
 
@@ -107,7 +105,7 @@ This means that by default, only users with admin privileges in at least one org
 
 To implement custom authorization logic (e.g., allow all authenticated users, check for specific roles, or implement custom business logic), provide a custom `authorizeUser` function.
 
-## WorkOS User Type
+## WorkOS user type
 
 The `WorkosUser` type used in the `authorizeUser` function corresponds to the JWT token payload returned by WorkOS. WorkOS allows administrators to set up custom JWT templates, so the exact structure may vary based on your configuration. Here's an example of what the user object might look like:
 

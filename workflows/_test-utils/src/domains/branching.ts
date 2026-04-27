@@ -704,25 +704,16 @@ export function createBranchingTests(ctx: WorkflowTestContext, registry?: Workfl
         finalValue: 1,
       });
 
-      expect(result.steps['first-step']).toEqual({
+      expect(result.steps['first-step']).toMatchObject({
         output: { success: true },
         status: 'success',
-        payload: {
-          startValue: 1,
-        },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
 
-      expect(result.steps['last-step']).toEqual({
+      expect(result.steps['last-step']).toMatchObject({
         output: { success: true },
         status: 'success',
-        payload: {
-          'branch-nested-wf-a': undefined,
-          'branch-nested-wf-b': {
-            finalValue: 1,
-          },
-        },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });

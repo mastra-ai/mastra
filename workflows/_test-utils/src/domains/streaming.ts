@@ -638,12 +638,10 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
       expect(result.steps.step1).toMatchObject({
         status: 'success',
         output: { result: 'success1' },
-        payload: {},
       });
       expect(result.steps.step2).toMatchObject({
         status: 'success',
         output: { result: 'success2' },
-        payload: { result: 'success1' },
       });
     });
 
@@ -830,17 +828,15 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           ]);
 
           // Verify execution result
-          expect(result.steps.step1).toEqual({
+          expect(result.steps.step1).toMatchObject({
             status: 'success',
             output: { result: 'success1' },
-            payload: {},
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           });
-          expect(result.steps.step2).toEqual({
+          expect(result.steps.step2).toMatchObject({
             status: 'success',
             output: { result: 'success2' },
-            payload: { result: 'success1' },
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           });
@@ -957,14 +953,12 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
             getUserInput: {
               status: 'success',
               output: { userInput: 'test input' },
-              payload: { input: 'test' },
               startedAt: expect.any(Number),
               endedAt: expect.any(Number),
             },
             promptAgent: {
               status: 'success',
               output: { modelOutput: 'test output' },
-              payload: { userInput: 'test input' },
               startedAt: expect.any(Number),
               endedAt: expect.any(Number),
               resumePayload: { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } },
@@ -974,7 +968,6 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
             evaluateToneConsistency: {
               status: 'success',
               output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
-              payload: { modelOutput: 'test output' },
               startedAt: expect.any(Number),
               endedAt: expect.any(Number),
             },

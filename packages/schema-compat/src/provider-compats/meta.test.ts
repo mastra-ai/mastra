@@ -2,8 +2,18 @@ import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import type { ModelInformation } from '../types';
 import { MetaSchemaCompatLayer } from './meta';
+import { createSuite } from './test-suite';
 
 describe('MetaSchemaCompatLayer', () => {
+  const modelInfo: ModelInformation = {
+    provider: 'meta',
+    modelId: 'meta-llama-3.1-70b-instruct',
+    supportsStructuredOutputs: false,
+  };
+
+  const layer = new MetaSchemaCompatLayer(modelInfo);
+  createSuite(layer);
+
   describe('shouldApply', () => {
     it('should apply for meta models', () => {
       const modelInfo: ModelInformation = {
@@ -809,6 +819,226 @@ describe('MetaSchemaCompatLayer', () => {
       const jsonSchema = layer.toJSONSchema(schema);
 
       expect(jsonSchema).toMatchSnapshot();
+    });
+  });
+
+  describe('processZodType - ZodIntersection', () => {
+    const modelInfo: ModelInformation = {
+      provider: 'meta',
+      modelId: 'meta-llama-3.1-70b-instruct',
+      supportsStructuredOutputs: false,
+    };
+
+    it('should handle simple two-object intersection without throwing', () => {
+      const schemaA = z.object({ name: z.string() });
+      const schemaB = z.object({ age: z.number() });
+      const schema = z.object({ person: schemaA.and(schemaB) });
+
+      const layer = new MetaSchemaCompatLayer(modelInfo);
+      expect(() => layer.toJSONSchema(schema)).not.toThrow();
+
+      const jsonSchema = layer.toJSONSchema(schema);
+      expect(jsonSchema.properties?.person).toBeDefined();
+    });
+
+    it('should handle chained .and().and() (three-way merge)', () => {
+      const schemaA = z.object({ name: z.string() });
+      const schemaB = z.object({ age: z.number() });
+      const schemaC = z.object({ email: z.string() });
+      const schema = z.object({ person: schemaA.and(schemaB).and(schemaC) });
+
+      const layer = new MetaSchemaCompatLayer(modelInfo);
+      expect(layer.toJSONSchema(schema)).toMatchInlineSnapshot(`
+        {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "additionalProperties": false,
+          "properties": {
+            "person": {
+              "additionalProperties": false,
+              "properties": {
+                "age": {
+                  "type": "number",
+                },
+                "email": {
+                  "type": "string",
+                },
+                "name": {
+                  "type": "string",
+                },
+              },
+              "required": [
+                "name",
+                "age",
+                "email",
+              ],
+              "type": "object",
+            },
+          },
+          "required": [
+            "person",
+          ],
+          "type": "object",
+        }
+      `);
+    });
+
+    it('should handle intersection inside a parent object', () => {
+      const schema = z.object({
+        metadata: z.object({ key: z.string() }).and(z.object({ value: z.number() })),
+        label: z.string(),
+      });
+
+      const layer = new MetaSchemaCompatLayer(modelInfo);
+      expect(layer.toJSONSchema(schema)).toMatchInlineSnapshot(`
+        {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "additionalProperties": false,
+          "properties": {
+            "label": {
+              "type": "string",
+            },
+            "metadata": {
+              "additionalProperties": false,
+              "properties": {
+                "key": {
+                  "type": "string",
+                },
+                "value": {
+                  "type": "number",
+                },
+              },
+              "required": [
+                "key",
+                "value",
+              ],
+              "type": "object",
+            },
+          },
+          "required": [
+            "metadata",
+            "label",
+          ],
+          "type": "object",
+        }
+      `);
+    });
+
+    it('should handle optional intersection wrapper', () => {
+      const schema = z.object({
+        data: z
+          .object({ a: z.string() })
+          .and(z.object({ b: z.number() }))
+          .optional(),
+      });
+
+      const layer = new MetaSchemaCompatLayer(modelInfo);
+      expect(layer.toJSONSchema(schema)).toMatchInlineSnapshot(`
+        {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "additionalProperties": false,
+          "properties": {
+            "data": {
+              "additionalProperties": false,
+              "properties": {
+                "a": {
+                  "type": "string",
+                },
+                "b": {
+                  "type": "number",
+                },
+              },
+              "required": [
+                "a",
+                "b",
+              ],
+              "type": "object",
+            },
+          },
+          "type": "object",
+        }
+      `);
+    });
+
+    it('should handle intersection nested inside a union (allOf inside anyOf)', () => {
+      const schema = z.object({
+        locate: z.object({
+          prompt: z.union([
+            z.string(),
+            z.object({ prompt: z.string() }).and(
+              z.object({
+                images: z.array(z.object({ name: z.string(), url: z.string() })),
+                convertHttpImage2Base64: z.boolean(),
+              }),
+            ),
+          ]),
+        }),
+      });
+
+      const layer = new MetaSchemaCompatLayer(modelInfo);
+      expect(layer.toJSONSchema(schema)).toMatchInlineSnapshot(`
+        {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "additionalProperties": false,
+          "properties": {
+            "locate": {
+              "additionalProperties": false,
+              "properties": {
+                "prompt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "convertHttpImage2Base64": {
+                          "type": "boolean",
+                        },
+                        "images": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                              },
+                              "url": {
+                                "type": "string",
+                              },
+                            },
+                            "required": [
+                              "name",
+                              "url",
+                            ],
+                            "type": "object",
+                          },
+                          "type": "array",
+                        },
+                        "prompt": {
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "prompt",
+                        "images",
+                        "convertHttpImage2Base64",
+                      ],
+                      "type": "object",
+                    },
+                  ],
+                },
+              },
+              "required": [
+                "prompt",
+              ],
+              "type": "object",
+            },
+          },
+          "required": [
+            "locate",
+          ],
+          "type": "object",
+        }
+      `);
     });
   });
 });

@@ -272,7 +272,8 @@ describe('CloudDeployer', () => {
       expect(entry).toContain('mastra.setLogger');
 
       // Check for storage initialization
-      expect(entry).toContain('mastra.storage.init()');
+      expect(entry).toContain('!userStorage.disableInit');
+      expect(entry).toContain('userStorage.init()');
       expect(entry).toContain('new LibSQLStore');
       expect(entry).toContain('new LibSQLVector');
       // Check for server creation (default: studio disabled)

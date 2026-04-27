@@ -1,9 +1,10 @@
-import type { z } from 'zod';
-
 import type { Agent } from '../agent';
-import type { ToolsInput } from '../agent/types';
+import type { AgentInstructions, ToolsInput } from '../agent/types';
+import type { MastraBrowser } from '../browser/browser';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
+import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage/base';
 import type { DynamicArgument } from '../types';
 import type { Workspace, WorkspaceConfig, WorkspaceStatus } from '../workspace';
@@ -31,13 +32,13 @@ export interface HeartbeatHandler {
 
 // =============================================================================
 // Harness Configuration
-// =============================================================================
+// ===================
 
 /**
  * Configuration for a single agent mode within the harness.
  * Each mode represents a different "personality" or capability set.
  */
-export interface HarnessMode<TState extends HarnessStateSchema = HarnessStateSchema> {
+export interface HarnessMode<TState> {
   /** Unique identifier for this mode (e.g., "plan", "build", "review") */
   id: string;
 
@@ -60,7 +61,7 @@ export interface HarnessMode<TState extends HarnessStateSchema = HarnessStateSch
    * The agent for this mode.
    * Can be a static Agent or a function that receives harness state.
    */
-  agent: Agent | ((state: z.infer<TState>) => Agent);
+  agent: Agent | ((state: TState) => Agent);
 }
 
 // =============================================================================
@@ -81,8 +82,11 @@ export interface HarnessSubagent {
   /** Description of what this subagent does (used in auto-generated tool description) */
   description: string;
 
-  /** System prompt for this subagent */
-  instructions: string;
+  /**
+   * Instructions that guide the agent's behavior. Can be a string, array of strings, system message object,
+   * array of system messages, or a function that returns any of these types dynamically.
+   */
+  instructions: DynamicArgument<AgentInstructions>;
 
   /** Tools this subagent has direct access to */
   tools?: ToolsInput;
@@ -95,17 +99,36 @@ export interface HarnessSubagent {
 
   /** Default model ID for this subagent type (e.g., "anthropic/claude-sonnet-4-20250514") */
   defaultModelId?: string;
+
+  /** Optional maximum number of steps for this subagent's execution loop */
+  maxSteps?: number;
+
+  /** Optional stop condition for this subagent's execution loop */
+  stopWhen?: LoopOptions['stopWhen'];
+
+  /**
+   * Workspace tool keys (after any renames) the model is allowed to call.
+   * When set, workspace tools not in this list are hidden via `prepareStep`.
+   * Non-workspace tools are never affected. When omitted, all workspace
+   * tools are visible.
+   */
+  allowedWorkspaceTools?: string[];
 }
 
 /**
- * Schema type for harness state - must be a Zod object schema.
+ * State data type for the Harness generic parameter.
  */
-export type HarnessStateSchema = z.ZodObject<z.ZodRawShape>;
+export type HarnessStateSchema<T> = T;
 
 /**
  * Configuration for creating a Harness instance.
  */
-export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateSchema> {
+/**
+ * Identifiers for the built-in harness tools that can be selectively disabled.
+ */
+export type BuiltinToolId = 'ask_user' | 'submit_plan' | 'task_write' | 'task_check' | 'subagent';
+
+export interface HarnessConfig<TState = {}> {
   /** Unique identifier for this harness instance */
   id: string;
 
@@ -118,14 +141,14 @@ export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateS
   /** Storage backend for persistence (threads, messages, state) */
   storage?: MastraCompositeStore;
 
-  /** Zod schema defining the shape of harness state */
-  stateSchema?: TState;
+  /** Schema defining the shape of harness state (Zod, JSON Schema, Standard Schema, etc.) */
+  stateSchema?: PublicSchema<TState, any>;
 
   /** Initial state values (must conform to schema) */
-  initialState?: Partial<z.infer<TState>>;
+  initialState?: Partial<TState>;
 
   /** Memory configuration (shared across all modes) */
-  memory?: MastraMemory;
+  memory?: DynamicArgument<MastraMemory>;
 
   /** Available agent modes */
   modes: HarnessMode<TState>[];
@@ -146,13 +169,21 @@ export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateS
   workspace?: DynamicArgument<Workspace | undefined> | WorkspaceConfig;
 
   /**
+   * Browser automation configuration.
+   * Accepts a pre-constructed MastraBrowser instance or a dynamic factory
+   * function that receives the request context and returns a browser per-request.
+   * Propagated to mode agents that don't have their own browser configured.
+   */
+  browser?: DynamicArgument<MastraBrowser | undefined>;
+
+  /**
    * Periodic heartbeat handlers started during `init()`.
    * Use for background tasks like gateway sync, cache refresh, etc.
    */
   heartbeatHandlers?: HeartbeatHandler[];
 
   /**
-   * Custom ID generator for threads, messages, and other entities.
+   * Custom ID generator for Harness-managed IDs such as threads and mode-run identifiers.
    * Defaults to a timestamp + random string generator.
    */
   idGenerator?: () => string;
@@ -169,6 +200,18 @@ export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateS
    * Lets the app layer track and report how often each model has been used.
    */
   modelUseCountProvider?: ModelUseCountProvider;
+
+  /**
+   * Callback invoked when a model is selected via switchModel().
+   * Lets the app layer track and persist model usage for ranking.
+   */
+  modelUseCountTracker?: ModelUseCountTracker;
+
+  /**
+   * Optional catalog hook for additional models (e.g., user-defined custom providers).
+   * Returned entries are merged into `listAvailableModels()`.
+   */
+  customModelCatalogProvider?: CustomModelCatalogProvider;
 
   /**
    * Subagent definitions. The Harness auto-creates a `subagent` built-in tool
@@ -190,6 +233,13 @@ export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateS
   omConfig?: HarnessOMConfig;
 
   /**
+   * Built-in tool IDs to disable.
+   * Any tool listed here will be excluded from the `harnessBuiltIn` toolset.
+   * Valid values: 'ask_user', 'submit_plan', 'task_write', 'task_check', 'subagent'.
+   */
+  disableBuiltinTools?: BuiltinToolId[];
+
+  /**
    * Maps tool names to permission categories.
    * Used by the permission system to resolve category-level policies.
    * If not provided, all tools default to the "other" category.
@@ -203,8 +253,8 @@ export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateS
    * `acquire` should throw if the lock is held by another process.
    */
   threadLock?: {
-    acquire: (threadId: string) => void;
-    release: (threadId: string) => void;
+    acquire: (threadId: string) => void | Promise<void>;
+    release: (threadId: string) => void | Promise<void>;
   };
 }
 
@@ -279,6 +329,16 @@ export interface AvailableModel {
 }
 
 /**
+ * Additional model entries supplied by the app layer.
+ */
+export type CustomAvailableModel = Omit<AvailableModel, 'useCount'>;
+
+/**
+ * Provides additional model catalog entries for `listAvailableModels()`.
+ */
+export type CustomModelCatalogProvider = () => CustomAvailableModel[] | Promise<CustomAvailableModel[]>;
+
+/**
  * Custom auth checker for model providers.
  * Called by `getCurrentModelAuthStatus()` and `listAvailableModels()` to determine
  * whether a provider has valid authentication beyond just env var checks
@@ -294,6 +354,12 @@ export type ModelAuthChecker = (provider: string) => boolean | undefined;
  * Return a map of model ID → use count.
  */
 export type ModelUseCountProvider = () => Record<string, number>;
+
+/**
+ * Callback invoked when a model is selected via switchModel().
+ * Lets the app layer track and persist model usage for ranking.
+ */
+export type ModelUseCountTracker = (modelId: string) => void;
 
 // =============================================================================
 // Harness State
@@ -416,6 +482,34 @@ export interface ActiveSubagentState {
 }
 
 /**
+ * Controls whether an `ask_user` prompt accepts one choice or multiple choices.
+ *
+ * `single_select` is the default for prompts that provide options, preserving the
+ * original one-answer behavior. `multi_select` tells the UI that the user may choose
+ * more than one option and return those selections as an array.
+ */
+export type HarnessQuestionSelectionMode = 'single_select' | 'multi_select';
+
+/**
+ * A structured choice rendered by the UI for an `ask_user` prompt.
+ *
+ * The label is the value returned to the model when the option is selected. The
+ * optional description gives the UI more context without changing the answer value.
+ */
+export interface HarnessQuestionOption {
+  label: string;
+  description?: string;
+}
+
+/**
+ * Answer shape accepted by `respondToQuestion()` for pending `ask_user` prompts.
+ *
+ * Free-text and single-select prompts resolve with a string. Multi-select prompts
+ * resolve with a string array containing each selected option label.
+ */
+export type HarnessQuestionAnswer = string | string[];
+
+/**
  * Canonical display state maintained by the Harness.
  *
  * This is the single source of truth for *what to display*.
@@ -454,12 +548,23 @@ export interface HarnessDisplayState {
     args: unknown;
   } | null;
 
+  // ── Tool suspension ─────────────────────────────────────────────────
+  /** A tool awaiting resume data after calling suspend() (null when none) */
+  pendingSuspension: {
+    toolCallId: string;
+    toolName: string;
+    args: unknown;
+    suspendPayload: unknown;
+    resumeSchema?: string;
+  } | null;
+
   // ── Interactive prompts ──────────────────────────────────────────────
   /** A question from the agent awaiting user answer (null when none) */
   pendingQuestion: {
     questionId: string;
     question: string;
-    options?: Array<{ label: string; description?: string }>;
+    options?: HarnessQuestionOption[];
+    selectionMode?: HarnessQuestionSelectionMode;
   } | null;
 
   /** A plan awaiting user approval (null when none) */
@@ -514,6 +619,7 @@ export function defaultDisplayState(): HarnessDisplayState {
     activeTools: new Map(),
     toolInputBuffers: new Map(),
     pendingApproval: null,
+    pendingSuspension: null,
     pendingQuestion: null,
     pendingPlanApproval: null,
     activeSubagents: new Map(),
@@ -570,14 +676,23 @@ export type HarnessEvent =
   | { type: 'model_changed'; modelId: string; scope?: 'global' | 'thread' | 'mode'; modeId?: string }
   | { type: 'thread_changed'; threadId: string; previousThreadId: string | null }
   | { type: 'thread_created'; thread: HarnessThread }
+  | { type: 'thread_deleted'; threadId: string }
   | { type: 'state_changed'; state: Record<string, unknown>; changedKeys: string[] }
   | { type: 'agent_start' }
-  | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' }
+  | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }
   | { type: 'message_start'; message: HarnessMessage }
   | { type: 'message_update'; message: HarnessMessage }
   | { type: 'message_end'; message: HarnessMessage }
   | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }
   | { type: 'tool_approval_required'; toolCallId: string; toolName: string; args: unknown }
+  | {
+      type: 'tool_suspended';
+      toolCallId: string;
+      toolName: string;
+      args: unknown;
+      suspendPayload: unknown;
+      resumeSchema?: string;
+    }
   | { type: 'tool_update'; toolCallId: string; partialResult: unknown }
   | { type: 'tool_end'; toolCallId: string; result: unknown; isError: boolean }
   | { type: 'tool_input_start'; toolCallId: string; toolName: string }
@@ -674,12 +789,21 @@ export type HarnessEvent =
       observationTokens: number;
       messagesActivated: number;
       generationCount: number;
+      triggeredBy?: 'threshold' | 'ttl' | 'provider_change';
+      lastActivityAt?: number;
+      ttlExpiredMs?: number;
+      activateAfterIdle?: number;
+      previousModel?: string;
+      currentModel?: string;
     }
+  | { type: 'om_thread_title_updated'; cycleId: string; threadId: string; oldTitle?: string; newTitle: string }
+  | { type: 'sandbox_access_request'; questionId: string; path: string; reason: string }
   | {
       type: 'ask_question';
       questionId: string;
       question: string;
-      options?: Array<{ label: string; description?: string }>;
+      options?: HarnessQuestionOption[];
+      selectionMode?: HarnessQuestionSelectionMode;
     }
   | {
       type: 'plan_approval_required';
@@ -751,7 +875,18 @@ export type HarnessMessageContent =
   | { type: 'thinking'; thinking: string }
   | { type: 'tool_call'; id: string; name: string; args: unknown }
   | { type: 'tool_result'; id: string; name: string; result: unknown; isError: boolean }
+  | {
+      type: 'system_reminder';
+      message: string;
+      reminderType?: string;
+      path?: string;
+      precedesMessageId?: string;
+      gapText?: string;
+      gapMs?: number;
+      timestamp?: string;
+    }
   | { type: 'image'; data: string; mimeType: string }
+  | { type: 'file'; data: string; mediaType: string; filename?: string }
   | {
       type: 'om_observation_start';
       tokensToObserve: number;
@@ -772,7 +907,8 @@ export type HarnessMessageContent =
       error: string;
       tokensAttempted?: number;
       operationType?: 'observation' | 'reflection';
-    };
+    }
+  | { type: 'om_thread_title_updated'; threadId: string; oldTitle?: string; newTitle: string };
 
 // =============================================================================
 // Request Context
@@ -782,18 +918,18 @@ export type HarnessMessageContent =
  * Harness-specific context set on the RequestContext under the 'harness' key.
  * Tools can access harness state and methods through requestContext.get('harness').
  */
-export interface HarnessRequestContext<TState extends HarnessStateSchema = HarnessStateSchema> {
+export interface HarnessRequestContext<TState = unknown> {
   /** The harness instance ID */
   harnessId: string;
 
   /** Current harness state (read-only snapshot) */
-  state: z.infer<TState>;
+  state: TState;
 
   /** Get the current harness state (live, not snapshot) */
-  getState: () => z.infer<TState>;
+  getState: () => TState;
 
   /** Update harness state */
-  setState: (updates: Partial<z.infer<TState>>) => Promise<void>;
+  setState: (updates: Partial<TState>) => Promise<void>;
 
   /** Current thread ID */
   threadId: string | null;
@@ -814,7 +950,7 @@ export interface HarnessRequestContext<TState extends HarnessStateSchema = Harne
   emitEvent?: (event: HarnessEvent) => void;
 
   /** Register a pending question resolver (used by ask_user tools) */
-  registerQuestion?: (params: { questionId: string; resolve: (answer: string) => void }) => void;
+  registerQuestion?: (params: { questionId: string; resolve: (answer: HarnessQuestionAnswer) => void }) => void;
 
   /** Register a pending plan approval resolver (used by submit_plan tools) */
   registerPlanApproval?: (params: {

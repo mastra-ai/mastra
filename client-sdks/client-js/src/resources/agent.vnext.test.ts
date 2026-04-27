@@ -2,7 +2,7 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import { createTool } from '@mastra/core/tools';
 import { describe, it, beforeEach, expect, vi } from 'vitest';
-import z from 'zod';
+import { z } from 'zod/v4';
 import { MastraClient } from '../client';
 
 // Mock fetch globally
@@ -126,6 +126,74 @@ describe('Agent vNext', () => {
     expect((global.fetch as any).mock.calls.filter((c: any[]) => (c?.[0] as string).includes('/stream')).length).toBe(
       2,
     );
+  });
+
+  it('resumeStream: omits local seed messages from initial request and preserves them for stateless client-tool recursion', async () => {
+    const toolCallId = 'call_1';
+    const seedMessages = [{ role: 'user', content: 'Original prompt before suspension' }];
+
+    const firstCycle = [
+      { type: 'step-start', payload: { messageId: 'm1' } },
+      {
+        type: 'tool-call',
+        payload: { toolCallId, toolName: 'weatherTool', args: { location: 'NYC' } },
+      },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } },
+    ];
+
+    const secondCycle = [
+      { type: 'step-start', payload: { messageId: 'm2' } },
+      { type: 'text-delta', payload: { text: 'Tool handled' } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 3 } } },
+    ];
+
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse(firstCycle))
+      .mockResolvedValueOnce(sseResponse(secondCycle));
+
+    const executeSpy = vi.fn(async () => ({ ok: true }));
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Weather',
+      inputSchema: z.object({ location: z.string() }),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: executeSpy,
+    });
+
+    const resp = await agent.resumeStream({ approved: true }, {
+      runId: 'run-1',
+      messages: seedMessages,
+      clientTools: { weatherTool },
+    } as any);
+
+    await resp.processDataStream({
+      onChunk: async () => {},
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+
+    const initialRequestBody = JSON.parse((global.fetch as any).mock.calls[0][1].body);
+    expect((global.fetch as any).mock.calls[0][0]).toBe('http://localhost:4111/api/agents/agent-1/resume-stream');
+    expect(initialRequestBody).toMatchObject({
+      runId: 'run-1',
+      resumeData: { approved: true },
+    });
+    expect(initialRequestBody).not.toHaveProperty('messages');
+
+    const recursiveRequestBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
+    expect((global.fetch as any).mock.calls[1][0]).toBe('http://localhost:4111/api/agents/agent-1/stream');
+    expect(recursiveRequestBody.messages[0]).toEqual(seedMessages[0]);
+    expect(recursiveRequestBody.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'user',
+          content: 'Original prompt before suspension',
+        }),
+      ]),
+    );
+    expect(executeSpy).toHaveBeenCalledTimes(1);
   });
 
   it('stream: receives chunks from both initial and recursive requests', async () => {
@@ -727,6 +795,400 @@ describe('Agent vNext', () => {
     expect(result.toolCalls).toBeDefined();
     expect(result.toolCalls).toHaveLength(1);
     expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  // Bug reproduction for https://github.com/mastra-ai/mastra/issues/11386 (generate version)
+  // When client-side tools are executed and a recursive generate call is made,
+  // the messages sent to the server should include the FULL conversation history,
+  // not just the assistant response from the current cycle.
+  it('generate: recursive call after client tool execution should include original conversation history (issue #11386)', async () => {
+    const toolCallId = 'call_1';
+
+    // First call returns tool-calls
+    const firstResponse = {
+      finishReason: 'tool-calls',
+      toolCalls: [
+        {
+          payload: {
+            toolCallId,
+            toolName: 'weatherTool',
+            args: { location: 'NYC' },
+          },
+        },
+      ],
+      response: {
+        messages: [
+          {
+            role: 'assistant',
+            content: [
+              {
+                type: 'tool-call',
+                toolCallId,
+                toolName: 'weatherTool',
+                args: { location: 'NYC' },
+              },
+            ],
+          },
+        ],
+      },
+      usage: { totalTokens: 2 },
+    };
+
+    // Second call (after tool execution) returns final response
+    const secondResponse = {
+      finishReason: 'stop',
+      response: {
+        messages: [
+          {
+            role: 'assistant',
+            content: 'The weather in NYC is sunny with 72°F',
+          },
+        ],
+      },
+      usage: { totalTokens: 5 },
+    };
+
+    (global.fetch as any)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(firstResponse), { status: 200, headers: { 'content-type': 'application/json' } }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(secondResponse), { status: 200, headers: { 'content-type': 'application/json' } }),
+      );
+
+    const executeSpy = vi.fn(async () => ({ temperature: 72, condition: 'sunny' }));
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Get weather',
+      inputSchema: z.object({ location: z.string() }),
+      outputSchema: z.object({ temperature: z.number(), condition: z.string() }),
+      execute: executeSpy,
+    });
+
+    // Multi-turn conversation - the context we need to preserve
+    const originalMessages = [
+      { role: 'user' as const, content: 'Hi! I need help with weather.' },
+      { role: 'assistant' as const, content: 'Sure, I can help you with weather. Which city?' },
+      { role: 'user' as const, content: 'What is the weather in NYC?' },
+    ];
+
+    const result = await agent.generate(originalMessages, {
+      clientTools: { weatherTool },
+    });
+
+    expect(result.finishReason).toBe('stop');
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+
+    // Verify two requests were made
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+
+    // Parse the request body of the SECOND (recursive) call
+    const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
+
+    // BUG CHECK: The recursive call should include the original conversation history
+    // Currently it only includes the assistant's tool-call message and the tool result
+    const hasOriginalUserMessage = secondCallBody.messages.some(
+      (msg: any) =>
+        (msg.role === 'user' && msg.content === 'What is the weather in NYC?') ||
+        (msg.role === 'user' && typeof msg.content === 'string' && msg.content.includes('What is the weather in NYC?')),
+    );
+
+    // This assertion should FAIL before the fix is applied
+    expect(hasOriginalUserMessage).toBe(true);
+
+    // Verify the tool result is still present
+    const hasToolResult = secondCallBody.messages.some(
+      (msg: any) =>
+        msg.role === 'tool' || (Array.isArray(msg.content) && msg.content.some((c: any) => c.type === 'tool-result')),
+    );
+    expect(hasToolResult).toBe(true);
+  });
+
+  // Companion test for issue #11386 (generate version) - verify server-side memory case doesn't include duplicate messages
+  it('generate: recursive call with threadId should NOT duplicate original messages (server-side memory)', async () => {
+    const toolCallId = 'call_1';
+
+    // First call returns tool-calls
+    const firstResponse = {
+      finishReason: 'tool-calls',
+      toolCalls: [
+        {
+          payload: {
+            toolCallId,
+            toolName: 'weatherTool',
+            args: { location: 'NYC' },
+          },
+        },
+      ],
+      response: {
+        messages: [
+          {
+            role: 'assistant',
+            content: [
+              {
+                type: 'tool-call',
+                toolCallId,
+                toolName: 'weatherTool',
+                args: { location: 'NYC' },
+              },
+            ],
+          },
+        ],
+      },
+      usage: { totalTokens: 2 },
+    };
+
+    // Second call (after tool execution) returns final response
+    const secondResponse = {
+      finishReason: 'stop',
+      response: {
+        messages: [
+          {
+            role: 'assistant',
+            content: 'The weather in NYC is sunny with 72°F',
+          },
+        ],
+      },
+      usage: { totalTokens: 5 },
+    };
+
+    (global.fetch as any)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(firstResponse), { status: 200, headers: { 'content-type': 'application/json' } }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(secondResponse), { status: 200, headers: { 'content-type': 'application/json' } }),
+      );
+
+    const executeSpy = vi.fn(async () => ({ temperature: 72, condition: 'sunny' }));
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Get weather',
+      inputSchema: z.object({ location: z.string() }),
+      outputSchema: z.object({ temperature: z.number(), condition: z.string() }),
+      execute: executeSpy,
+    });
+
+    // Multi-turn conversation
+    const originalMessages = [
+      { role: 'user' as const, content: 'Hi! I need help with weather.' },
+      { role: 'assistant' as const, content: 'Sure, I can help you with weather. Which city?' },
+      { role: 'user' as const, content: 'What is the weather in NYC?' },
+    ];
+
+    const result = await agent.generate(originalMessages, {
+      clientTools: { weatherTool },
+      memory: { thread: 'test-thread-123', resource: 'test-resource' }, // Server has memory
+    });
+
+    expect(result.finishReason).toBe('stop');
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+
+    // Verify two requests were made
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+
+    // Parse the request body of the SECOND (recursive) call
+    const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
+
+    // When threadId is present, server has memory - should NOT include original user messages
+    // to avoid storage duplicates. Only the new assistant + tool result should be sent.
+    const hasOriginalUserMessage = secondCallBody.messages.some(
+      (msg: any) =>
+        (msg.role === 'user' && msg.content === 'What is the weather in NYC?') ||
+        (msg.role === 'user' && typeof msg.content === 'string' && msg.content.includes('What is the weather in NYC?')),
+    );
+
+    // Original messages should NOT be present in the recursive call
+    expect(hasOriginalUserMessage).toBe(false);
+
+    // But tool result should still be present
+    const hasToolResult = secondCallBody.messages.some(
+      (msg: any) =>
+        msg.role === 'tool' || (Array.isArray(msg.content) && msg.content.some((c: any) => c.type === 'tool-result')),
+    );
+    expect(hasToolResult).toBe(true);
+  });
+
+  // Bug reproduction for https://github.com/mastra-ai/mastra/issues/11386
+  // When client-side tools are executed and a recursive stream call is made,
+  // the messages sent to the server should include the FULL conversation history,
+  // not just the assistant response from the current cycle.
+  it('stream: recursive call after client tool execution should include original conversation history (issue #11386)', async () => {
+    const toolCallId = 'call_1';
+
+    // First cycle: emit tool-call that triggers client-side execution
+    const firstCycle = [
+      { type: 'step-start', payload: { messageId: 'm1' } },
+      {
+        type: 'tool-call',
+        payload: { toolCallId, toolName: 'weatherTool', args: { location: 'NYC' } },
+      },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } },
+    ];
+
+    // Second cycle: completion after tool result
+    const secondCycle = [
+      { type: 'step-start', payload: { messageId: 'm2' } },
+      { type: 'text-delta', payload: { text: 'The weather in NYC is sunny.' } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 5 } } },
+    ];
+
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse(firstCycle))
+      .mockResolvedValueOnce(sseResponse(secondCycle));
+
+    const executeSpy = vi.fn(async () => ({ temperature: 72, condition: 'sunny' }));
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Get weather',
+      inputSchema: z.object({ location: z.string() }),
+      outputSchema: z.object({ temperature: z.number(), condition: z.string() }),
+      execute: executeSpy,
+    });
+
+    // User sends a conversation with history
+    const originalMessages = [
+      { role: 'user' as const, content: 'Hi! I need help with weather.' },
+      { role: 'assistant' as const, content: 'Sure, I can help you with weather. Which city?' },
+      { role: 'user' as const, content: 'What is the weather in NYC?' },
+    ];
+
+    const resp = await agent.stream(originalMessages, {
+      clientTools: { weatherTool },
+    });
+
+    await resp.processDataStream({
+      onChunk: async () => {},
+    });
+
+    // Verify two requests were made
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+
+    // Parse the request body of the SECOND (recursive) call
+    const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
+
+    // BUG: The second request's messages should include the original conversation history.
+    // Currently, it only includes the assistant message with tool invocation,
+    // causing "amnesia" where the agent forgets the original user query.
+
+    // The messages in the recursive call should contain:
+    // 1. Original user messages (the conversation history)
+    // 2. The assistant's tool call response
+    // 3. The tool result
+
+    // Check that original user message is present in the recursive call
+    const hasOriginalUserMessage = secondCallBody.messages.some(
+      (msg: any) =>
+        (msg.role === 'user' && msg.content === 'What is the weather in NYC?') ||
+        (msg.role === 'user' &&
+          typeof msg.content === 'string' &&
+          msg.content.includes('What is the weather in NYC?')) ||
+        (msg.role === 'user' &&
+          Array.isArray(msg.content) &&
+          msg.content.some((c: any) => c.text?.includes('What is the weather in NYC?'))),
+    );
+
+    expect(hasOriginalUserMessage).toBe(true);
+
+    // Check that tool result is also present (in UIMessage format with toolInvocations)
+    const hasToolResult = secondCallBody.messages.some(
+      (msg: any) =>
+        // UIMessage format: tool result is in toolInvocations array or parts array
+        msg.role === 'tool' ||
+        (Array.isArray(msg.content) && msg.content.some((c: any) => c.type === 'tool-result')) ||
+        (Array.isArray(msg.toolInvocations) &&
+          msg.toolInvocations.some((inv: any) => inv.state === 'result' && inv.result !== undefined)) ||
+        (Array.isArray(msg.parts) &&
+          msg.parts.some(
+            (p: any) =>
+              p.type === 'tool-invocation' && p.toolInvocation?.state === 'result' && p.toolInvocation?.result,
+          )),
+    );
+    expect(hasToolResult).toBe(true);
+  });
+
+  // Companion test for issue #11386 - verify server-side memory case doesn't include duplicate messages
+  it('stream: recursive call with threadId should NOT duplicate original messages (server-side memory)', async () => {
+    const toolCallId = 'call_1';
+
+    // First cycle: emit tool-call that triggers client-side execution
+    const firstCycle = [
+      { type: 'step-start', payload: { messageId: 'm1' } },
+      {
+        type: 'tool-call',
+        payload: { toolCallId, toolName: 'weatherTool', args: { location: 'NYC' } },
+      },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } },
+    ];
+
+    // Second cycle: completion after tool result
+    const secondCycle = [
+      { type: 'step-start', payload: { messageId: 'm2' } },
+      { type: 'text-delta', payload: { text: 'The weather in NYC is sunny.' } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 5 } } },
+    ];
+
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse(firstCycle))
+      .mockResolvedValueOnce(sseResponse(secondCycle));
+
+    const executeSpy = vi.fn(async () => ({ temperature: 72, condition: 'sunny' }));
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Get weather',
+      inputSchema: z.object({ location: z.string() }),
+      outputSchema: z.object({ temperature: z.number(), condition: z.string() }),
+      execute: executeSpy,
+    });
+
+    // User sends with threadId - server has memory configured
+    const originalMessages = [
+      { role: 'user' as const, content: 'Hi! I need help with weather.' },
+      { role: 'assistant' as const, content: 'Sure, I can help you with weather. Which city?' },
+      { role: 'user' as const, content: 'What is the weather in NYC?' },
+    ];
+
+    const resp = await agent.stream(originalMessages, {
+      clientTools: { weatherTool },
+      memory: { thread: 'test-thread-123', resource: 'test-resource' }, // Server has memory
+    });
+
+    await resp.processDataStream({
+      onChunk: async () => {},
+    });
+
+    // Verify two requests were made
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+
+    // Parse the request body of the SECOND (recursive) call
+    const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
+
+    // When threadId is present, server has memory - should NOT include original user messages
+    // to avoid storage duplicates. Only the new assistant + tool result should be sent.
+    const hasOriginalUserMessage = secondCallBody.messages.some(
+      (msg: any) =>
+        msg.role === 'user' && typeof msg.content === 'string' && msg.content.includes('What is the weather in NYC?'),
+    );
+
+    // Original messages should NOT be present in the recursive call
+    expect(hasOriginalUserMessage).toBe(false);
+
+    // But tool result should still be present
+    const hasToolResult = secondCallBody.messages.some(
+      (msg: any) =>
+        (Array.isArray(msg.toolInvocations) &&
+          msg.toolInvocations.some((inv: any) => inv.state === 'result' && inv.result !== undefined)) ||
+        (Array.isArray(msg.parts) &&
+          msg.parts.some(
+            (p: any) =>
+              p.type === 'tool-invocation' && p.toolInvocation?.state === 'result' && p.toolInvocation?.result,
+          )),
+    );
+    expect(hasToolResult).toBe(true);
   });
 
   it('stream: should receive error chunks with serialized error properties', async () => {

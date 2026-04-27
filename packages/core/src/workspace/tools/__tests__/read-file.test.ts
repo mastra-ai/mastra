@@ -22,12 +22,12 @@ describe('workspace_read_file', () => {
   it('should read file content with line numbers by default', async () => {
     await fs.writeFile(path.join(tempDir, 'test.txt'), 'Hello World');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: '/test.txt' });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: 'test.txt' }, { workspace });
 
     expect(typeof result).toBe('string');
-    expect(result).toContain('/test.txt');
+    expect(result).toContain('test.txt');
     expect(result).toContain('11 bytes');
     expect(result).toContain('1→Hello World');
   });
@@ -35,12 +35,15 @@ describe('workspace_read_file', () => {
   it('should read file content without line numbers when showLineNumbers is false', async () => {
     await fs.writeFile(path.join(tempDir, 'test.txt'), 'Hello World');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({
-      path: '/test.txt',
-      showLineNumbers: false,
-    });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
+      {
+        path: 'test.txt',
+        showLineNumbers: false,
+      },
+      { workspace },
+    );
 
     expect(typeof result).toBe('string');
     expect(result).toContain('Hello World');
@@ -51,14 +54,17 @@ describe('workspace_read_file', () => {
     const content = 'Line 1\nLine 2\nLine 3\nLine 4\nLine 5';
     await fs.writeFile(path.join(tempDir, 'test.txt'), content);
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({
-      path: '/test.txt',
-      offset: 2,
-      limit: 2,
-      showLineNumbers: false,
-    });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
+      {
+        path: 'test.txt',
+        offset: 2,
+        limit: 2,
+        showLineNumbers: false,
+      },
+      { workspace },
+    );
 
     expect(typeof result).toBe('string');
     expect(result).toContain('lines 2-3 of 5');
@@ -69,12 +75,28 @@ describe('workspace_read_file', () => {
     const buffer = Buffer.from([0x89, 0x50, 0x4e, 0x47]); // PNG header bytes
     await fs.writeFile(path.join(tempDir, 'binary.bin'), buffer);
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: '/binary.bin' });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: 'binary.bin' }, { workspace });
 
     expect(typeof result).toBe('string');
-    expect(result).toContain('/binary.bin');
+    expect(result).toContain('binary.bin');
     expect(result).toContain('4 bytes');
+  });
+
+  it('should apply token limit to large files', async () => {
+    // Create a file with many words that will exceed default token limit (~3k tokens)
+    const lines = Array.from({ length: 2000 }, (_, i) => `line ${i + 1} with some words here`);
+    const content = lines.join('\n');
+    await fs.writeFile(path.join(tempDir, 'huge.txt'), content);
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = (await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
+      { path: 'huge.txt' },
+      { workspace },
+    )) as string;
+
+    expect(result).toContain('[output truncated');
   });
 });

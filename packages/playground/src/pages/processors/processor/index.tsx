@@ -1,23 +1,74 @@
-import { Link, useParams, Navigate } from 'react-router';
-
 import {
-  Header,
   Breadcrumb,
-  Crumb,
-  Icon,
-  HeaderAction,
   Button,
+  Crumb,
   DocsIcon,
-  ProcessorPanel,
-  ProcessorCombobox,
+  Header,
+  HeaderAction,
+  Icon,
+  PermissionDenied,
   ProcessorIcon,
-  useProcessor,
+  SessionExpired,
   Skeleton,
+  is401UnauthorizedError,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
+import { Link, useParams, Navigate } from 'react-router';
+import { ProcessorCombobox } from '@/domains/processors/components/processor-combobox';
+import { ProcessorPanel } from '@/domains/processors/components/processor-panel';
+import { useProcessor } from '@/domains/processors/hooks/use-processors';
 
 export function Processor() {
   const { processorId } = useParams();
-  const { data: processor, isLoading } = useProcessor(processorId!);
+  const { data: processor, isLoading, error } = useProcessor(processorId!);
+
+  // 401 check - session expired
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <div className="h-full w-full overflow-y-hidden">
+        <Header>
+          <Breadcrumb>
+            <Crumb as={Link} to={`/processors`}>
+              <Icon>
+                <ProcessorIcon />
+              </Icon>
+              Processors
+            </Crumb>
+            <Crumb as="span" to="" isCurrent>
+              {processorId}
+            </Crumb>
+          </Breadcrumb>
+        </Header>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </div>
+    );
+  }
+
+  // 403 check - permission denied for processors
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <div className="h-full w-full overflow-y-hidden">
+        <Header>
+          <Breadcrumb>
+            <Crumb as={Link} to={`/processors`}>
+              <Icon>
+                <ProcessorIcon />
+              </Icon>
+              Processors
+            </Crumb>
+            <Crumb as="span" to="" isCurrent>
+              {processorId}
+            </Crumb>
+          </Breadcrumb>
+        </Header>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="processors" />
+        </div>
+      </div>
+    );
+  }
 
   // If this is a workflow processor, redirect to the workflow graph UI
   if (!isLoading && processor?.isWorkflow) {
@@ -64,10 +115,15 @@ export function Processor() {
         </Breadcrumb>
 
         <HeaderAction>
-          <Button as={Link} to="https://mastra.ai/docs/agents/processors" target="_blank" rel="noopener noreferrer">
-            <Icon>
-              <DocsIcon />
-            </Icon>
+          <Button
+            as={Link}
+            to="https://mastra.ai/docs/agents/processors"
+            target="_blank"
+            rel="noopener noreferrer"
+            variant="ghost"
+            size="md"
+          >
+            <DocsIcon />
             Processors documentation
           </Button>
         </HeaderAction>

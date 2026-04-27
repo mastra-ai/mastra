@@ -1,12 +1,12 @@
 ---
-title: "Reference: MSSQL Storage | Storage"
+title: "Reference: MSSQL storage | Storage"
 description: Documentation for the MSSQL storage implementation in Mastra.
 packages:
   - "@mastra/core"
   - "@mastra/mssql"
 ---
 
-# MSSQL Storage
+# MSSQL storage
 
 The MSSQL storage implementation provides a production-ready storage solution using Microsoft SQL Server databases.
 
@@ -31,24 +31,23 @@ const storage = new MSSQLStore({
 
 <PropertiesTable
   content={[
-{
-name: "connectionString",
-type: "string",
-description:
-"MSSQL connection string (e.g., Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true)",
-isOptional: false,
-},
-{
-name: "schemaName",
-type: "string",
-description:
-"The name of the schema you want the storage to use. Will use the default schema if not provided.",
-isOptional: true,
-},
+  {
+    name: 'connectionString',
+    type: 'string',
+    description:
+      'MSSQL connection string (e.g., Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true)',
+    isOptional: false,
+  },
+  {
+    name: 'schemaName',
+    type: 'string',
+    description: 'The name of the schema you want the storage to use. Will use the default schema if not provided.',
+    isOptional: true,
+  },
 ]}
 />
 
-## Constructor Examples
+## Constructor examples
 
 You can instantiate `MSSQLStore` in the following ways:
 
@@ -92,7 +91,7 @@ const store5 = new MSSQLStore({
 })
 ```
 
-## Additional Notes
+## Additional notes
 
 ### Schema Management
 
@@ -142,7 +141,7 @@ const thread = await memoryStore?.getThreadById({ threadId: '...' })
 ```
 
 :::warning
-If `init()` is not called, tables won't be created and storage operations will fail silently or throw errors.
+If `init()` isn't called, tables won't be created and storage operations will fail silently or throw errors.
 :::
 
 ### Direct Database and Pool Access

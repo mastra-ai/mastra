@@ -11,16 +11,19 @@ export async function processSlashCommand(
   args: string[],
   workingDir: string,
 ): Promise<string> {
-  let result = command.template;
-
-  // Replace arguments
-  result = replaceArguments(result, args);
+  const { result: withArgs, shouldAppendRawArgs } = replaceArguments(command.template, args);
+  let result = withArgs;
 
   // Replace shell commands
   result = await replaceShellOutput(result, workingDir);
 
   // Replace file references
   result = await replaceFileReferences(result, workingDir);
+
+  // Append raw args after shell/file processing to avoid executing user input
+  if (shouldAppendRawArgs) {
+    result = result.trimEnd() + `\n\nARGUMENTS: ${args.join(' ')}`;
+  }
 
   return result;
 }
@@ -30,8 +33,12 @@ export async function processSlashCommand(
  * $ARGUMENTS - all arguments joined
  * $1, $2, etc. - positional arguments
  */
-function replaceArguments(template: string, args: string[]): string {
+function replaceArguments(template: string, args: string[]): { result: string; shouldAppendRawArgs: boolean } {
   let result = template;
+
+  // Check if template references any argument variables
+  const hasArgumentsVar = /\$ARGUMENTS/.test(template);
+  const hasPositionalVar = /\$[1-9]\d*/.test(template);
 
   // Replace $ARGUMENTS with all args joined
   result = result.replace(/\$ARGUMENTS/g, args.join(' '));
@@ -43,9 +50,12 @@ function replaceArguments(template: string, args: string[]): string {
   });
 
   // Clear unused positional arguments
-  result = result.replace(/\$\d+/g, '');
+  result = result.replace(/\$[1-9]\d*/g, '');
 
-  return result;
+  return {
+    result,
+    shouldAppendRawArgs: !hasArgumentsVar && !hasPositionalVar && args.length > 0,
+  };
 }
 
 /**

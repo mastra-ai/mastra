@@ -25,7 +25,7 @@ const performWebObservation = async (url?: string, instruction?: string) => {
       throw new Error('Failed to get Stagehand instance');
     }
 
-    const page = stagehand.page;
+    const page = stagehand.context.pages()[0]; // Use the first page in the context
     if (!page) {
       console.error('Page not available');
       throw new Error('Page not available');
@@ -43,7 +43,7 @@ const performWebObservation = async (url?: string, instruction?: string) => {
       if (instruction) {
         console.log(`Observing with instruction: ${instruction}`);
         try {
-          const actions = await page.observe(instruction);
+          const actions = await stagehand.observe(instruction);
           console.log(`Observation successful, found ${actions.length} actions`);
           return actions;
         } catch (observeError) {

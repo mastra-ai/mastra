@@ -28,17 +28,17 @@ mastra.addGateway(new MyCustomGateway())
 
 <PropertiesTable
   content={[
-{
-name: 'gateway',
-type: 'MastraModelGateway',
-description: 'The gateway instance to add',
-},
-{
-name: 'key',
-type: 'string',
-isOptional: true,
-description: 'Optional registration key. If not provided, uses gateway.getId()',
-},
+  {
+    name: 'gateway',
+    type: 'MastraModelGateway',
+    description: 'The gateway instance to add',
+  },
+  {
+    name: 'key',
+    type: 'string',
+    isOptional: true,
+    description: 'Optional registration key. If not provided, uses gateway.getId()',
+  },
 ]}
 />
 
@@ -54,8 +54,8 @@ Void. The gateway is added to the internal registry.
 
 ## Related
 
-- [Mastra.getGateway()](/reference/core/getGateway) - Get gateway by registration key
-- [Mastra.getGatewayById()](/reference/core/getGatewayById) - Get gateway by ID
-- [Mastra.listGateways()](/reference/core/listGateways) - List all gateways
-- [MastraModelGateway](/reference/core/mastra-model-gateway) - Gateway base class
-- [Custom Gateways Guide](/models/gateways/custom-gateways) - Creating custom gateways
+- [Mastra.getGateway()](/reference/core/getGateway): Get gateway by registration key
+- [Mastra.getGatewayById()](/reference/core/getGatewayById): Get gateway by ID
+- [Mastra.listGateways()](/reference/core/listGateways): List all gateways
+- [MastraModelGateway](/reference/core/mastra-model-gateway): Gateway base class
+- [Custom Gateways Guide](/models/gateways/custom-gateways): Creating custom gateways

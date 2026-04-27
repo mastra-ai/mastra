@@ -33,11 +33,11 @@ for (const row of history) {
 
 <PropertiesTable
   content={[
-{
-name: "itemId",
-type: "string",
-description: "ID of the item to retrieve history for.",
-},
+  {
+    name: 'itemId',
+    type: 'string',
+    description: 'ID of the item to retrieve history for.',
+  },
 ]}
 />
 
@@ -45,67 +45,69 @@ description: "ID of the item to retrieve history for.",
 
 <PropertiesTable
   content={[
-{
-name: "result",
-type: "Promise<DatasetItemRow[]>",
-description: "Array of versioned item rows, ordered by version.",
-properties: [{
-type: "DatasetItemRow",
-parameters: [
-{
-name: "id",
-type: "string",
-description: "Unique row identifier.",
-},
-{
-name: "datasetId",
-type: "string",
-description: "ID of the parent dataset.",
-},
-{
-name: "datasetVersion",
-type: "number",
-description: "Dataset version for this row.",
-},
-{
-name: "validTo",
-type: "number | null",
-description: "Version at which this row was superseded, or `null` if still current.",
-},
-{
-name: "isDeleted",
-type: "boolean",
-description: "Whether this row represents a deletion.",
-},
-{
-name: "input",
-type: "unknown",
-description: "Input data at this version.",
-},
-{
-name: "groundTruth",
-type: "unknown",
-isOptional: true,
-description: "Ground truth at this version.",
-},
-{
-name: "metadata",
-type: "Record<string, unknown>",
-isOptional: true,
-description: "Metadata at this version.",
-},
-{
-name: "createdAt",
-type: "Date",
-description: "When this row was created.",
-},
-{
-name: "updatedAt",
-type: "Date",
-description: "When this row was last updated.",
-},
-],
-}],
-},
+  {
+    name: 'result',
+    type: 'Promise<DatasetItemRow[]>',
+    description: 'Array of versioned item rows, ordered by version.',
+    properties: [
+      {
+        type: 'DatasetItemRow',
+        parameters: [
+          {
+            name: 'id',
+            type: 'string',
+            description: 'Unique row identifier.',
+          },
+          {
+            name: 'datasetId',
+            type: 'string',
+            description: 'ID of the parent dataset.',
+          },
+          {
+            name: 'datasetVersion',
+            type: 'number',
+            description: 'Dataset version for this row.',
+          },
+          {
+            name: 'validTo',
+            type: 'number | null',
+            description: 'Version at which this row was superseded, or `null` if still current.',
+          },
+          {
+            name: 'isDeleted',
+            type: 'boolean',
+            description: 'Whether this row represents a deletion.',
+          },
+          {
+            name: 'input',
+            type: 'unknown',
+            description: 'Input data at this version.',
+          },
+          {
+            name: 'groundTruth',
+            type: 'unknown',
+            isOptional: true,
+            description: 'Ground truth at this version.',
+          },
+          {
+            name: 'metadata',
+            type: 'Record<string, unknown>',
+            isOptional: true,
+            description: 'Metadata at this version.',
+          },
+          {
+            name: 'createdAt',
+            type: 'Date',
+            description: 'When this row was created.',
+          },
+          {
+            name: 'updatedAt',
+            type: 'Date',
+            description: 'When this row was last updated.',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />

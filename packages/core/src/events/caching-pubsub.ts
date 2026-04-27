@@ -1,8 +1,7 @@
 import type { MastraServerCache } from '../cache/base';
 import type { IMastraLogger } from '../logger';
 import { PubSub } from './pubsub';
-import type { EventCallback } from './pubsub';
-import type { Event } from './types';
+import type { Event, EventCallback, SubscribeOptions } from './types';
 
 /**
  * Options for CachingPubSub
@@ -120,8 +119,8 @@ export class CachingPubSub extends PubSub {
   /**
    * Subscribe to live events on a topic (no replay).
    */
-  async subscribe(topic: string, cb: EventCallback): Promise<void> {
-    await this.inner.subscribe(topic, cb);
+  async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
+    await this.inner.subscribe(topic, cb, options);
   }
 
   /**

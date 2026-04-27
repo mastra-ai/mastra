@@ -24,11 +24,11 @@ describe('workspace_search', () => {
       filesystem: new LocalFilesystem({ basePath: tempDir }),
       bm25: true,
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     await workspace.index('/doc.txt', 'The quick brown fox');
 
-    const result = await tools[WORKSPACE_TOOLS.SEARCH.SEARCH].execute({ query: 'quick' });
+    const result = await tools[WORKSPACE_TOOLS.SEARCH.SEARCH].execute({ query: 'quick' }, { workspace });
 
     expect(typeof result).toBe('string');
     expect(result).toContain('bm25 search');
@@ -40,11 +40,11 @@ describe('workspace_search', () => {
       filesystem: new LocalFilesystem({ basePath: tempDir }),
       bm25: true,
     });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     await workspace.index('/doc.txt', 'The quick brown fox');
 
-    const result = await tools[WORKSPACE_TOOLS.SEARCH.SEARCH].execute({ query: 'elephant' });
+    const result = await tools[WORKSPACE_TOOLS.SEARCH.SEARCH].execute({ query: 'elephant' }, { workspace });
 
     expect(typeof result).toBe('string');
     expect(result).toContain('0 results');

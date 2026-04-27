@@ -1,5 +1,5 @@
 import { describe, expectTypeOf, it } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { RequestContext } from '../request-context';
 import { createTool } from './tool';
 

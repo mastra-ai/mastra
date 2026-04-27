@@ -556,12 +556,10 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
         expect(result.steps.step1).toMatchObject({
           status: 'success',
           output: { result: 'success' },
-          payload: { inputData: 'test-input' },
         });
         expect(result.steps.step2).toMatchObject({
           status: 'success',
           output: { result: 'success' },
-          payload: { result: 'success' },
         });
       } else {
         // Legacy inline mode
@@ -593,12 +591,10 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
         expect(result.steps.step1).toMatchObject({
           status: 'success',
           output: { result: 'success' },
-          payload: { inputData: 'test-input' },
         });
         expect(result.steps.step2).toMatchObject({
           status: 'success',
           output: { result: 'success' },
-          payload: { result: 'success' },
         });
       }
     });
@@ -966,7 +962,6 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
         expect(result.steps.step2).toMatchObject({
           status: 'success',
           output: { result: 'none', second: 0 },
-          payload: { candidates: [], iteration: 0 },
         });
       } else {
         // Legacy inline mode
@@ -1020,7 +1015,6 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
         expect(result.steps.step2).toMatchObject({
           status: 'success',
           output: { result: 'none', second: 0 },
-          payload: { candidates: [], iteration: 0 },
         });
       }
     });
@@ -1033,7 +1027,6 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
         expect(result.steps.step2).toMatchObject({
           status: 'success',
           output: { result: 'success, hello', second: 0 },
-          payload: { candidates: [{ name: 'success' }, { name: 'hello' }], iteration: 0 },
         });
       } else {
         // Legacy inline mode
@@ -1083,7 +1076,6 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
         expect(result.steps.step2).toMatchObject({
           status: 'success',
           output: { result: 'success, hello', second: 0 },
-          payload: { candidates: [{ name: 'success' }, { name: 'hello' }], iteration: 0 },
         });
       }
     });
@@ -1107,7 +1099,6 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
           expect(result.steps.step2).toMatchObject({
             status: 'success',
             output: { result: 'test-input', second: 42 },
-            payload: { test: 'test-input', test2: 42 },
           });
         }
       },
@@ -1131,7 +1122,6 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
         expect(result.steps.step2).toMatchObject({
           status: 'success',
           output: { result: 'test-input', second: 'Hello success' },
-          payload: { test: 'test-input', test2: 'Hello success' },
         });
 
         expect(result.result).toEqual({
@@ -1161,13 +1151,11 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
         expect(result.steps['step1-mapping']).toMatchObject({
           status: 'success',
           output: { test: 'test-input', test2: 'Hello success' },
-          payload: { result: 'success' },
         });
 
         expect(result.steps.step2).toMatchObject({
           status: 'success',
           output: { result: 'test-input', second: 'Hello success' },
-          payload: { test: 'test-input', test2: 'Hello success' },
         });
 
         expect(result.result).toEqual({

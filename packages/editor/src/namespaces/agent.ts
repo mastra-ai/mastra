@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
+import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core';
 import { Workspace, CompositeVersionedSkillSource } from '@mastra/core/workspace';
 import type { SkillSource, VersionedSkillEntry } from '@mastra/core/workspace';
@@ -81,6 +82,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
             : await store.getVersionByNumber(id, options.versionNumber!);
 
           if (!version) return null;
+          if (version.agentId !== id) {
+            throw new Error(`Version "${version.id}" does not belong to agent "${id}"`);
+          }
 
           const {
             id: versionId,
@@ -110,7 +114,17 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
   }
 
   protected override onCacheEvict(id: string): void {
-    this.mastra?.removeAgent(id);
+    // Only remove stored agents from the Mastra registry.
+    // Code-defined agents must survive cache eviction because they live
+    // in code and may only have a stored config overlay.
+    try {
+      const existing = this.mastra?.getAgentById(id);
+      if (existing?.source === 'stored') {
+        this.mastra?.removeAgent(id);
+      }
+    } catch {
+      // Agent not found in registry — nothing to remove
+    }
   }
 
   /**
@@ -144,6 +158,138 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         this.onCacheEvict(agentId);
       }
     }
+  }
+
+  /**
+   * Apply stored configuration overrides to a code-defined agent.
+   *
+   * When a stored config exists for the given agent's ID, the following fields
+   * from the stored config override the code agent's values (if explicitly set):
+   * - `instructions` — system prompt
+   * - `tools` — tool selection with description overrides (merged on top of code tools)
+   *
+   * Fields that are absent or undefined in the stored config are left untouched.
+   * Model, workspace, memory, and other code-defined fields are never overridden —
+   * they may contain SDK instances or dynamic functions that cannot be safely serialized.
+   * Returns the (possibly mutated) agent.
+   */
+  async applyStoredOverrides(
+    agent: Agent,
+    options?: { status?: 'draft' | 'published' } | { versionId: string },
+  ): Promise<Agent> {
+    let storedConfig: StorageResolvedAgentType | null = null;
+    try {
+      this.ensureRegistered();
+      const adapter = await this.getStorageAdapter();
+      const resolvedOptions: { versionId: string } | { status: 'draft' | 'published' | 'archived' } =
+        options && 'versionId' in options
+          ? { versionId: options.versionId }
+          : { status: (options as { status?: 'draft' | 'published' } | undefined)?.status ?? 'draft' };
+      storedConfig = await adapter.getByIdResolved(agent.id, resolvedOptions);
+    } catch (error) {
+      // If a specific versionId was requested, don't fail open — propagate the error
+      if (options && 'versionId' in options) {
+        throw error;
+      }
+      // Editor not registered, storage not available, or agent not found — return unchanged
+      return agent;
+    }
+
+    if (!storedConfig) {
+      return agent;
+    }
+
+    // If requesting published status but no version has been published, don't override the code-defined agent
+    const requestedPublished = options && !('versionId' in options) && options.status === 'published';
+    if (requestedPublished && !storedConfig.activeVersionId) {
+      return agent;
+    }
+
+    // Fork the agent so overrides don't mutate the singleton instance
+    const fork = agent.__fork();
+
+    this.logger?.debug(`[applyStoredOverrides] Applying stored overrides to code agent "${agent.id}"`);
+
+    // --- Instructions ---
+    if (storedConfig.instructions !== undefined && storedConfig.instructions !== null) {
+      const resolved = this.resolveStoredInstructions(storedConfig.instructions);
+      if (resolved !== undefined) {
+        fork.__updateInstructions(resolved);
+      }
+    }
+
+    // --- Tools (merge: stored tools override code tools, code tools not in stored config are preserved) ---
+    const hasStoredTools = storedConfig.tools != null;
+    const hasStoredMCPClients = storedConfig.mcpClients != null;
+    const hasStoredIntegrationTools = storedConfig.integrationTools != null;
+
+    if (hasStoredTools || hasStoredMCPClients || hasStoredIntegrationTools) {
+      const hasConditionalTools = this.isConditionalVariants(storedConfig.tools);
+      const hasConditionalMCPClients =
+        storedConfig.mcpClients != null && this.isConditionalVariants(storedConfig.mcpClients);
+      const hasConditionalIntegrationTools =
+        storedConfig.integrationTools != null && this.isConditionalVariants(storedConfig.integrationTools);
+      const isDynamicTools = hasConditionalTools || hasConditionalMCPClients || hasConditionalIntegrationTools;
+
+      if (isDynamicTools) {
+        // Wrap in a dynamic function that merges at request time
+        const originalTools = fork.listTools.bind(fork);
+        const toolsFn = async ({ requestContext }: { requestContext: RequestContext }): Promise<ToolsInput> => {
+          const codeTools = await originalTools({ requestContext });
+          const ctx = requestContext.toJSON();
+
+          const resolvedToolsConfig = hasConditionalTools
+            ? this.accumulateObjectVariants(
+                storedConfig!.tools as StorageConditionalVariant<Record<string, StorageToolConfig>>[],
+                ctx,
+              )
+            : (storedConfig!.tools as Record<string, StorageToolConfig> | undefined);
+          const registryTools = this.resolveStoredTools(resolvedToolsConfig);
+
+          const resolvedMCPClientsConfig = hasConditionalMCPClients
+            ? this.accumulateObjectVariants(
+                storedConfig!.mcpClients as StorageConditionalVariant<Record<string, StorageMCPClientToolsConfig>>[],
+                ctx,
+              )
+            : (storedConfig!.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined);
+          const mcpTools = await this.resolveStoredMCPTools(resolvedMCPClientsConfig);
+
+          const resolvedIntegrationToolsConfig = hasConditionalIntegrationTools
+            ? this.accumulateObjectVariants(
+                storedConfig!.integrationTools as StorageConditionalVariant<
+                  Record<string, StorageMCPClientToolsConfig>
+                >[],
+                ctx,
+              )
+            : (storedConfig!.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined);
+          const integrationTools = await this.resolveStoredIntegrationTools(resolvedIntegrationToolsConfig, ctx);
+
+          return { ...codeTools, ...registryTools, ...mcpTools, ...integrationTools };
+        };
+        fork.__setTools(toolsFn);
+      } else {
+        // Static tools — resolve once and merge
+        const codeTools = await fork.listTools();
+        const registryTools = this.resolveStoredTools(
+          storedConfig.tools as Record<string, StorageToolConfig> | undefined,
+        );
+        const mcpTools = await this.resolveStoredMCPTools(
+          storedConfig.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined,
+        );
+        const integrationTools = await this.resolveStoredIntegrationTools(
+          storedConfig.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined,
+        );
+        fork.__setTools({ ...codeTools, ...registryTools, ...mcpTools, ...integrationTools });
+      }
+    }
+
+    // Persist the resolved version ID so it can be read by span attributes / handlers
+    if (storedConfig.resolvedVersionId) {
+      const existing = fork.toRawConfig() ?? {};
+      fork.__setRawConfig({ ...existing, resolvedVersionId: storedConfig.resolvedVersionId });
+    }
+
+    return fork;
   }
 
   // ============================================================================
@@ -514,7 +660,20 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       ...(skillsFormat && { skillsFormat }),
     } as any);
 
-    this.mastra?.addAgent(agent, storedAgent.id, { source: 'stored' });
+    // Only register in Mastra if no code-defined agent with this ID already exists.
+    // When a stored config is an override for a code agent, adding it would create a
+    // duplicate entry under a different key (agent.id vs config key), causing the list
+    // endpoint to show the agent as "stored" instead of "code".
+    const existingCodeAgent = (() => {
+      try {
+        return this.mastra?.getAgentById(storedAgent.id);
+      } catch {
+        return undefined;
+      }
+    })();
+    if (!existingCodeAgent || existingCodeAgent.source !== 'code') {
+      this.mastra?.addAgent(agent, storedAgent.id, { source: 'stored' });
+    }
     this.logger?.debug(`[createAgentFromStoredConfig] Successfully created agent "${storedAgent.id}"`);
 
     return agent;

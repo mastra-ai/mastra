@@ -1,6 +1,6 @@
 import { openai } from '@ai-sdk/openai';
-import { createTool } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import { createTool } from '@mastra/core/tools';
 import { MCPClient } from '@mastra/mcp';
 import { z } from 'zod';
 import { weatherTool } from '../tools/weather';

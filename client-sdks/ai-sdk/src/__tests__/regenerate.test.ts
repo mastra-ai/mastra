@@ -7,9 +7,9 @@
  * Issue #11557: chatRoute() with AI SDK useChat regenerate() only returned
  * step-start chunks without text content.
  */
+import type { UIMessage } from '@internal/ai-sdk-v5';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
-import type { UIMessage } from 'ai';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai/test';
 import { describe, expect, it } from 'vitest';
 

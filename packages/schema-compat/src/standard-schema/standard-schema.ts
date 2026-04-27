@@ -7,6 +7,7 @@ import type { PublicSchema } from '../schema.types';
 import { toStandardSchema as toStandardSchemaAiSdk } from './adapters/ai-sdk';
 import { toStandardSchema as toStandardSchemaJsonSchema } from './adapters/json-schema';
 import { toStandardSchema as toStandardSchemaZodV3 } from './adapters/zod-v3';
+import { toStandardSchema as toStandardSchemaZodV4 } from './adapters/zod-v4';
 import type { StandardSchemaWithJSON } from './standard-schema.types';
 
 /**
@@ -15,14 +16,42 @@ import type { StandardSchemaWithJSON } from './standard-schema.types';
  * - z.date() -> { type: 'string', format: 'date-time' }
  */
 function jsonSchemaOverride(ctx: { zodSchema: unknown; jsonSchema: Record<string, unknown> }): undefined {
-  const zodSchema = ctx.zodSchema as { type?: string; _zod?: { def?: { type?: string } }; optional?: () => unknown };
+  const zodSchema = ctx.zodSchema as {
+    type?: string;
+    _def?: { typeName?: string };
+    _zod?: { def?: { type?: string; coerce?: boolean } };
+    optional?: () => unknown;
+  };
+
+  if (
+    ctx.jsonSchema.type === 'object' &&
+    ctx.jsonSchema.properties !== undefined &&
+    !ctx.jsonSchema.additionalProperties
+  ) {
+    ctx.jsonSchema.additionalProperties = false;
+  }
+
   if (zodSchema) {
-    // Convert z.date() to JSON Schema string with date-time format
-    if (zodSchema?.type === 'date') {
-      ctx.jsonSchema.type = 'string';
-      ctx.jsonSchema.format = 'date-time';
+    // Zod v4: zodSchema.type === 'date'
+    // Zod v3: zodSchema._def.typeName === 'ZodDate'
+    const isDateType = zodSchema?.type === 'date' || zodSchema?._def?.typeName === 'ZodDate';
+
+    if (isDateType) {
+      // Zod v4 dates need explicit JSON schema conversion (zod-to-json-schema doesn't handle them)
+      if (zodSchema?.type === 'date') {
+        ctx.jsonSchema.type = 'string';
+        ctx.jsonSchema.format = 'date-time';
+      }
+      // Mark dates for #traverse: x-date=true means string→Date conversion needed.
+      // z.coerce.date() handles its own coercion, so mark as false to prevent conversion.
+      // Zod v3 has no coerce, so all v3 dates are strict (handled by preProcessJSONNode fallback).
+      ctx.jsonSchema['x-date'] = !zodSchema._zod?.def?.coerce;
+      // @ts-expect-error - catchall is a valid property for zod
+    } else if (zodSchema?.type === 'object' && zodSchema._zod?.def?.catchall?.type === 'unknown') {
+      ctx.jsonSchema.additionalProperties = true;
     }
   }
+
   return undefined;
 }
 /**
@@ -103,6 +132,16 @@ export function toStandardSchema<T = unknown>(schema: PublicSchema<T>): Standard
   // This handles ArkType, Zod v4 (when it has jsonSchema), and pre-wrapped schemas
   if (isStandardSchemaWithJSON(schema)) {
     return schema;
+  }
+
+  // Check for Zod v4 schemas without ~standard.jsonSchema
+  // This handles both real Zod v4 and Zod 3.25's v4 compat layer where
+  // ~standard.jsonSchema is not present on the schema object
+  if (isZodV4(schema)) {
+    return toStandardSchemaZodV4(schema as any, {
+      unrepresentable: JSON_SCHEMA_LIBRARY_OPTIONS.unrepresentable,
+      override: JSON_SCHEMA_LIBRARY_OPTIONS.override,
+    });
   }
 
   // Check for Zod v3 schemas (need wrapping to add JSON Schema support)
@@ -259,11 +298,16 @@ export function standardSchemaToJSONSchema(
 ): JSONSchema7 {
   const { target = 'draft-07', io = 'output', override = JSON_SCHEMA_LIBRARY_OPTIONS.override } = options;
   const jsonSchemaFn = schema['~standard'].jsonSchema[io];
-  return jsonSchemaFn({
+  let jsonSchema = jsonSchemaFn({
     target,
     libraryOptions: {
       ...JSON_SCHEMA_LIBRARY_OPTIONS,
       override,
     },
   }) as JSONSchema7;
+
+  // make sure only jsonSchema is left, no standard schema metadata
+  jsonSchema = JSON.parse(JSON.stringify(jsonSchema));
+
+  return jsonSchema;
 }

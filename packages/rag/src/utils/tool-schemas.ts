@@ -30,6 +30,6 @@ export const filterSchema = z.object({
   filter: z.coerce.string().describe(filterDescription),
 });
 
-export type RagTool<TInput, TOutput> = Tool<TInput, TOutput, never, never> & {
-  execute: NonNullable<Tool<TInput, TOutput, never, never>['execute']>;
+export type RagTool<TInput, TOutput> = Tool<TInput, TOutput, unknown, unknown> & {
+  execute: NonNullable<Tool<TInput, TOutput, unknown, unknown>['execute']>;
 };

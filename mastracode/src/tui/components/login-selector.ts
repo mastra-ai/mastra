@@ -4,7 +4,7 @@
 
 import { Box, Container, getEditorKeybindings, Spacer, Text } from '@mariozechner/pi-tui';
 import type { OAuthProviderInterface } from '../../auth/types.js';
-import { bg, fg } from '../theme.js';
+import { theme } from '../theme.js';
 
 /**
  * Interface for auth provider that the selector needs.
@@ -31,7 +31,7 @@ export class LoginSelectorComponent extends Box {
     onCancel: () => void,
   ) {
     // Box with padding and background
-    super(2, 1, text => bg('overlayBg', text));
+    super(2, 1, text => theme.bg('overlayBg', text));
 
     this.mode = mode;
     this.authSource = authSource;
@@ -43,7 +43,7 @@ export class LoginSelectorComponent extends Box {
 
     // Add title
     const title = mode === 'login' ? 'Select provider to login:' : 'Select provider to logout:';
-    this.addChild(new Text(fg('text', title)));
+    this.addChild(new Text(theme.fg('text', title)));
     this.addChild(new Spacer(1));
 
     // Create list container
@@ -51,7 +51,7 @@ export class LoginSelectorComponent extends Box {
     this.addChild(this.listContainer);
 
     this.addChild(new Spacer(1));
-    this.addChild(new Text(fg('muted', 'Press Enter to select, Escape to cancel')));
+    this.addChild(new Text(theme.fg('muted', 'Press Enter to select, Escape to cancel')));
 
     // Initial render
     this.updateList();
@@ -72,11 +72,11 @@ export class LoginSelectorComponent extends Box {
 
       // Check if user is logged in for this provider
       const isLoggedIn = this.authSource.isLoggedIn(provider.id);
-      const statusIndicator = isLoggedIn ? fg('success', ' ✓ logged in') : '';
+      const statusIndicator = isLoggedIn ? theme.fg('success', ' ✓ logged in') : '';
 
       let line = '';
       if (isSelected) {
-        line = fg('accent', '→ ' + provider.name) + statusIndicator;
+        line = theme.fg('accent', '→ ' + provider.name) + statusIndicator;
       } else {
         line = '  ' + provider.name + statusIndicator;
       }
@@ -88,7 +88,7 @@ export class LoginSelectorComponent extends Box {
     if (this.allProviders.length === 0) {
       const message =
         this.mode === 'login' ? 'No OAuth providers available' : 'No OAuth providers logged in. Use /login first.';
-      this.listContainer.addChild(new Text(fg('muted', message)));
+      this.listContainer.addChild(new Text(theme.fg('muted', message)));
     }
   }
 

@@ -4,12 +4,12 @@ import * as React from 'react';
 import type { DayPickerSingleProps } from 'react-day-picker';
 import { useDebouncedCallback } from 'use-debounce';
 
-import { Button } from '@/ds/components/Button';
+import { TextFieldBlock } from '../FormFieldBlocks/fields/text-field-block';
 import { DatePicker } from './date-picker';
+import { TimePicker } from './time-picker';
+import { Button } from '@/ds/components/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { cn } from '@/lib/utils';
-import { TimePicker } from './time-picker';
-import { InputField } from '@/ds/components/FormFields';
 
 type CommonProps = Omit<DayPickerSingleProps, 'mode' | 'selected' | 'onSelect'> & {
   value: Date | undefined | null;
@@ -51,7 +51,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
         )}
       </PopoverTrigger>
       <PopoverContent
-        className="backdrop-blur-4xl w-auto !p-0 bg-surface4 max-w-[16.5rem]"
+        className="backdrop-blur-4xl w-auto p-0! bg-surface4 max-w-[16.5rem]"
         align="start"
         data-testid="datepicker-calendar"
       >
@@ -202,12 +202,13 @@ export const DateTimePickerContent = ({
         }
       }}
     >
-      <InputField
+      <TextFieldBlock
+        name="date-range"
         type="text"
         value={dateInputValue}
         onChange={handleInputChange}
         placeholder={placeholder}
-        className="m-4 mb-0 !w-auto"
+        className="m-4 mb-0 w-auto!"
       />
 
       {localErrorMsg && (
@@ -236,22 +237,23 @@ export const DateTimePickerContent = ({
         defaultValue={value ? formatDate(new Date(value), 'hh:mm a') : defaultTimeStrValue}
       />
 
-      <div className="grid grid-cols-[1fr_auto] gap-2 m-4 mt-0">
+      <div className="grid grid-cols-[1fr_2fr] gap-2 m-4 mt-0">
+        {newValueDefined && (
+          <Button tabIndex={0} size="md" onClick={handleClear} type="button">
+            Clear
+          </Button>
+        )}
         <Button
-          variant="light"
-          size="lg"
           tabIndex={0}
+          type="button"
+          size="md"
+          variant={newValueDefined ? 'primary' : 'default'}
           onClick={() => {
             dateInputValueIsValid ? handleApply() : handleCancel();
           }}
         >
           {newValueDefined ? `Apply` : `Cancel`}
         </Button>
-        {newValueDefined && (
-          <Button tabIndex={0} onClick={handleClear}>
-            Clear
-          </Button>
-        )}
       </div>
     </div>
   );
@@ -266,7 +268,7 @@ type DefaultButtonProps = {
 export const DefaultTrigger = React.forwardRef<HTMLButtonElement, DefaultButtonProps>(
   ({ value, placeholder, className, ...props }, ref) => {
     return (
-      <Button ref={ref} className={cn('justify-start', className)} variant="light" size="lg" {...props}>
+      <Button ref={ref} className={cn('justify-start', className)} variant="inputLike" {...props}>
         <CalendarIcon className="h-4 w-4" />
         {value ? (
           <span className="text-white">{format(value, 'PP p')}</span>

@@ -3,9 +3,9 @@
  * syntax highlighting, and smart summarization.
  */
 
-import { Container, Text, Spacer } from '@mariozechner/pi-tui';
+import { Box, Container, Text, Spacer } from '@mariozechner/pi-tui';
 import type { TUI } from '@mariozechner/pi-tui';
-import { fg, bold, bg } from '../theme.js';
+import { BOX_INDENT, theme } from '../theme.js';
 import { CollapsibleComponent } from './collapsible.js';
 
 export interface ErrorInfo {
@@ -99,13 +99,13 @@ function formatStackTrace(stack: string): string[] {
       return line.replace(
         /(\s+at\s+)([^(]+)(\s*\()([^)]+)(\))/,
         (match, at, fn, open, loc, close) =>
-          `${fg('muted', at)}${fg('function', fn)}${fg('muted', open)}${fg('path', loc)}${fg('muted', close)}`,
+          `${theme.fg('muted', at)}${theme.fg('function', fn)}${theme.fg('muted', open)}${theme.fg('path', loc)}${theme.fg('muted', close)}`,
       );
     }
 
     // Mute empty lines and framework traces
     if (!line.trim() || line.includes('node_modules')) {
-      return fg('muted', line);
+      return theme.fg('muted', line);
     }
 
     return line;
@@ -154,53 +154,59 @@ export class ErrorDisplayComponent extends Container {
   private build(): void {
     const info = parseErrorInfo(this.error);
 
+    // Wrap everything in a box (borders provide structure, no extra padding)
+    const box = new Box(BOX_INDENT, 0, (text: string) => text);
+    this.addChild(box);
+
     // Add a visible border around the entire error display
-    const borderTop = new Text(fg('error', '┌─ Error ─' + '─'.repeat(50) + '┐'), 0, 0);
-    this.addChild(borderTop);
+    const borderTop = new Text(theme.fg('error', '╭─ Error ─' + '─'.repeat(50) + '╮'), 0, 0);
+    box.addChild(borderTop);
 
     // Error header container with background
     const errorContainer = new Container();
 
     // Add a colored background to the error message
-    const errorBg = (text: string) => bg('errorBg', text);
+    const errorBg = (text: string) => theme.bg('errorBg', text);
 
     // Error type and message with proper formatting
     if (info.name && info.name !== 'Error') {
       const typeLine = new Container();
       typeLine.addChild(new Text('│ ', 0, 0));
-      typeLine.addChild(new Text(errorBg(` ${bold(fg('error', info.name))} `), 0, 0));
+      typeLine.addChild(new Text(errorBg(` ${theme.bold(theme.fg('error', info.name))} `), 0, 0));
       errorContainer.addChild(typeLine);
     }
 
     // Error message
     const msgLine = new Container();
     msgLine.addChild(new Text('│ ', 0, 0));
-    msgLine.addChild(new Text(bold(info.message), 0, 0));
+    msgLine.addChild(new Text(theme.bold(info.message), 0, 0));
     errorContainer.addChild(msgLine);
 
     // File location if available
     if (info.file && info.line) {
       const location = `${info.file}:${info.line}${info.column ? `:${info.column}` : ''}`;
-      errorContainer.addChild(new Text(fg('muted', `  at ${location}`), 0, 0));
+      errorContainer.addChild(new Text(theme.fg('muted', `  at ${location}`), 0, 0));
     }
 
-    this.addChild(errorContainer);
+    box.addChild(errorContainer);
 
     // Code context if available
     if (this.options.showContext && info.context) {
-      this.addChild(new Spacer(1));
-      this.addChild(this.createCodeContext(info.context, info.line));
+      box.addChild(new Spacer(1));
+      box.addChild(this.createCodeContext(info.context, info.line));
     }
 
     // Stack trace (collapsible)
     if (this.options.showStack && info.stack) {
-      this.addChild(new Spacer(1));
-      this.addChild(new CollapsibleStackTrace(info.stack, { expanded: this.options.expanded }, this.ui));
+      box.addChild(new Spacer(1));
+      box.addChild(new CollapsibleStackTrace(info.stack, { expanded: this.options.expanded }, this.ui));
     }
 
     // Add bottom border
-    const borderBottom = new Text(fg('error', '└' + '─'.repeat(60) + '┘'), 0, 0);
-    this.addChild(borderBottom);
+    const borderBottom = new Text(theme.fg('error', '╰' + '─'.repeat(59) + '╯'), 0, 0);
+    box.addChild(borderBottom);
+
+    this.addChild(new Spacer(1));
   }
 
   private createCodeContext(context: NonNullable<ErrorInfo['context']>, errorLine?: number): Container {
@@ -208,26 +214,26 @@ export class ErrorDisplayComponent extends Container {
     const codeBlock = new Container();
 
     // Add a header
-    codeBlock.addChild(new Text(fg('muted', 'Code context:'), 0, 0));
+    codeBlock.addChild(new Text(theme.fg('muted', 'Code context:'), 0, 0));
 
     // Before lines
     if (context.before) {
       context.before.forEach((line, i) => {
         const lineNum = errorLine ? errorLine - context.before!.length + i : i + 1;
-        codeBlock.addChild(new Text(fg('muted', `${lineNum.toString().padStart(4)} │ ${line}`), 0, 0));
+        codeBlock.addChild(new Text(theme.fg('muted', `${lineNum.toString().padStart(4)} │ ${line}`), 0, 0));
       });
     }
 
     // Error line (highlighted)
     if (context.line && errorLine) {
-      codeBlock.addChild(new Text(fg('error', `${errorLine.toString().padStart(4)} │ ${context.line}`), 0, 0));
+      codeBlock.addChild(new Text(theme.fg('error', `${errorLine.toString().padStart(4)} │ ${context.line}`), 0, 0));
     }
 
     // After lines
     if (context.after) {
       context.after.forEach((line, i) => {
         const lineNum = errorLine ? errorLine + i + 1 : i + 1;
-        codeBlock.addChild(new Text(fg('muted', `${lineNum.toString().padStart(4)} │ ${line}`), 0, 0));
+        codeBlock.addChild(new Text(theme.fg('muted', `${lineNum.toString().padStart(4)} │ ${line}`), 0, 0));
       });
     }
 

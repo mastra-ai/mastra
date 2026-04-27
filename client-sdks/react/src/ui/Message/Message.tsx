@@ -1,6 +1,5 @@
-import { Dot } from 'lucide-react';
-import { Icon } from '../Icon/Icon';
-import { HTMLAttributes, useEffect, useRef } from 'react';
+import type { HTMLAttributes } from 'react';
+import { useEffect, useRef } from 'react';
 import { twMerge } from 'tailwind-merge';
 
 export interface MessageProps extends HTMLAttributes<HTMLDivElement> {

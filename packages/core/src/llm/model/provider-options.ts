@@ -5,14 +5,14 @@
  * to provide type-safe provider options based on the selected provider.
  */
 
-// Import types from AI SDK v5 packages
-import type { AnthropicProviderOptions } from '@ai-sdk/anthropic-v5';
+// Import types from AI SDK packages
+import type { AnthropicProviderOptions } from '@ai-sdk/anthropic-v6';
 import type { DeepSeekChatOptions } from '@ai-sdk/deepseek-v5';
-import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google-v5';
-import type { OpenAIResponsesProviderOptions } from '@ai-sdk/openai-v5';
+import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google-v6';
+import type { OpenAIResponsesProviderOptions } from '@ai-sdk/openai-v6';
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { SharedV3ProviderOptions } from '@ai-sdk/provider-v6';
-import type { XaiProviderOptions } from '@ai-sdk/xai-v5';
+import type { XaiProviderOptions } from '@ai-sdk/xai-v6';
 
 // Re-export the types
 export type {
@@ -25,7 +25,37 @@ export type {
 
 // Alias for consistency
 export type GoogleProviderOptions = GoogleGenerativeAIProviderOptions;
-export type OpenAIProviderOptions = OpenAIResponsesProviderOptions;
+export type OpenAITransport = 'auto' | 'websocket' | 'fetch';
+export type OpenAIWebSocketOptions = {
+  /**
+   * WebSocket endpoint URL.
+   * @default 'wss://api.openai.com/v1/responses'
+   */
+  url?: string;
+  /**
+   * Additional headers sent when establishing the WebSocket connection.
+   * Authorization and OpenAI-Beta are managed internally.
+   */
+  headers?: Record<string, string>;
+  /**
+   * Whether to close the WebSocket connection when the stream finishes.
+   * @default true
+   */
+  closeOnFinish?: boolean;
+};
+export type OpenAIProviderOptions = OpenAIResponsesProviderOptions & {
+  /**
+   * Select the transport used for streaming responses.
+   * - `fetch` uses HTTP streaming.
+   * - `websocket` uses the OpenAI Responses WebSocket API when supported.
+   * - `auto` chooses WebSocket when supported, otherwise falls back to fetch.
+   */
+  transport?: OpenAITransport;
+  /**
+   * WebSocket-specific configuration for OpenAI streaming.
+   */
+  websocket?: OpenAIWebSocketOptions;
+};
 export type DeepSeekProviderOptions = DeepSeekChatOptions;
 
 /**
@@ -56,3 +86,37 @@ export type ProviderOptions = (SharedV2ProviderOptions | SharedV3ProviderOptions
   openai?: OpenAIProviderOptions & Record<string, any>;
   xai?: XaiProviderOptions & Record<string, any>;
 };
+
+/**
+ * Recursively deep-merges provider-options. When both sides have plain objects
+ * at the same key, their keys are merged. Arrays and class instances (Date,
+ * Map, etc.) are replaced wholesale. Within colliding leaf keys, `override`
+ * wins.
+ */
+export function mergeProviderOptions<T extends ProviderOptions | SharedV2ProviderOptions | SharedV3ProviderOptions>(
+  base: T | undefined,
+  override: T | undefined,
+): T | undefined {
+  if (!base) return override;
+  if (!override) return base;
+  return deepMerge(base, override) as T;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === null || proto === Object.prototype;
+}
+
+function deepMerge(base: unknown, override: unknown): unknown {
+  if (override === undefined) return base;
+  if (base === undefined) return override;
+  if (isPlainObject(base) && isPlainObject(override)) {
+    const out: Record<string, unknown> = { ...base };
+    for (const key of Object.keys(override)) {
+      out[key] = deepMerge(base[key], override[key]);
+    }
+    return out;
+  }
+  return override;
+}

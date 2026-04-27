@@ -181,6 +181,7 @@ export class Run extends BaseResource {
     resumeData,
     tracingOptions,
     perStep,
+    forEachIndex,
     ...rest
   }: {
     step?: string | string[];
@@ -188,6 +189,7 @@ export class Run extends BaseResource {
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
     perStep?: boolean;
+    forEachIndex?: number;
   }): Promise<{ message: string }> {
     const requestContext = parseClientRequestContext(rest.requestContext);
     return this.request(`/workflows/${this.workflowId}/resume?runId=${this.runId}`, {
@@ -198,6 +200,7 @@ export class Run extends BaseResource {
         requestContext,
         tracingOptions,
         perStep,
+        forEachIndex,
       },
     });
   }
@@ -247,7 +250,7 @@ export class Run extends BaseResource {
     resourceId?: string;
     perStep?: boolean;
     closeOnSuspend?: boolean;
-  }) {
+  }): Promise<globalThis.ReadableStream<StreamVNextChunkType>> {
     const searchParams = new URLSearchParams();
 
     searchParams.set('runId', this.runId);
@@ -340,6 +343,7 @@ export class Run extends BaseResource {
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
     perStep?: boolean;
+    forEachIndex?: number;
   }): Promise<WorkflowRunResult> {
     const requestContext = parseClientRequestContext(params.requestContext);
     return this.request<WorkflowRunResult>(`/workflows/${this.workflowId}/resume-async?runId=${this.runId}`, {
@@ -350,6 +354,7 @@ export class Run extends BaseResource {
         requestContext,
         tracingOptions: params.tracingOptions,
         perStep: params.perStep,
+        forEachIndex: params.forEachIndex,
       },
     }).then(deserializeWorkflowError);
   }
@@ -365,7 +370,8 @@ export class Run extends BaseResource {
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
     perStep?: boolean;
-  }) {
+    forEachIndex?: number;
+  }): Promise<globalThis.ReadableStream<StreamVNextChunkType>> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', this.runId);
     const requestContext = parseClientRequestContext(params.requestContext);
@@ -379,6 +385,7 @@ export class Run extends BaseResource {
           requestContext,
           tracingOptions: params.tracingOptions,
           perStep: params.perStep,
+          forEachIndex: params.forEachIndex,
         },
         stream: true,
       },
@@ -471,7 +478,10 @@ export class Run extends BaseResource {
    * @param params - Object containing the step, inputData, resumeData, initialState, context, nestedStepsContext, requestContext and tracingOptions
    * @returns Promise containing the workflow execution results
    */
-  async timeTravelStream({ requestContext: paramsRequestContext, ...params }: TimeTravelParams) {
+  async timeTravelStream({
+    requestContext: paramsRequestContext,
+    ...params
+  }: TimeTravelParams): Promise<globalThis.ReadableStream<StreamVNextChunkType>> {
     const requestContext = parseClientRequestContext(paramsRequestContext);
     const response: Response = await this.request(
       `/workflows/${this.workflowId}/time-travel-stream?runId=${this.runId}`,

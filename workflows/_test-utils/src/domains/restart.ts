@@ -713,21 +713,18 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
             step1: {
               status: 'success',
               output: { step1Result: 2 },
-              payload: { value: 0 },
               startedAt: expect.any(Number),
               endedAt: expect.any(Number),
             },
             'restart-nestedWorkflow': {
               status: 'success',
               output: { nestedFinal: 4 },
-              payload: { step1Result: 2 },
               startedAt: expect.any(Number),
               endedAt: expect.any(Number),
             },
             step4: {
               status: 'success',
               output: { final: 5 },
-              payload: { nestedFinal: 4 },
               startedAt: expect.any(Number),
               endedAt: expect.any(Number),
             },
@@ -803,13 +800,11 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
           getUserInput: {
             status: 'success',
             output: { userInput: 'test input' },
-            payload: { input: 'test' },
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
           promptAgent: {
             status: 'suspended',
-            payload: { userInput: 'test input' },
             suspendPayload: { testPayload: 'hello' },
             startedAt: expect.any(Number),
             suspendedAt: expect.any(Number),

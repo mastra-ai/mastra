@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { MastraUIMessage } from '../types';
 import { resolveInitialMessages, resolveToChildMessages } from './resolveInitialMessages';
-import { MastraUIMessage } from '../types';
 
 describe('resolveInitialMessages', () => {
   let consoleLogSpy: ReturnType<typeof vi.spyOn>;
@@ -1356,6 +1356,86 @@ describe('resolveToChildMessages', () => {
       expect(result[0]).toMatchObject({ toolName: 'search' });
       expect(result[1]).toMatchObject({ toolName: 'calculator' });
       expect(result[2]).toMatchObject({ toolName: 'database' });
+    });
+
+    it('should exclude completed pending approvals when restoring stream metadata', () => {
+      const messages: MastraUIMessage[] = [
+        {
+          id: 'msg-13a',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'weather',
+              toolCallId: 'tool-1',
+              state: 'output-available',
+              input: { city: 'SF' },
+              output: { temp: 70 },
+            } as any,
+            {
+              type: 'dynamic-tool',
+              toolName: 'search',
+              toolCallId: 'tool-2',
+              state: 'input-available',
+              input: { query: 'latest forecast' },
+            } as any,
+          ],
+          metadata: {
+            pendingToolApprovals: {
+              weather: { toolCallId: 'tool-1', toolName: 'weather' },
+              search: { toolCallId: 'tool-2', toolName: 'search' },
+            },
+          } as any,
+        },
+      ];
+
+      const result = resolveInitialMessages(messages);
+
+      expect(result[0].metadata).toMatchObject({
+        mode: 'stream',
+        requireApprovalMetadata: {
+          search: { toolCallId: 'tool-2', toolName: 'search' },
+        },
+      });
+      expect((result[0].metadata as any).requireApprovalMetadata.weather).toBeUndefined();
+    });
+
+    it('should ignore malformed pending approvals when restoring stream metadata', () => {
+      const messages: MastraUIMessage[] = [
+        {
+          id: 'msg-13b',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'search',
+              toolCallId: 'tool-2',
+              state: 'input-available',
+              input: { query: 'latest forecast' },
+            } as any,
+          ],
+          metadata: {
+            pendingToolApprovals: {
+              malformedNull: null,
+              malformedString: 'invalid',
+              malformedObject: { toolName: 'weather' },
+              search: { toolCallId: 'tool-2', toolName: 'search' },
+            },
+          } as any,
+        },
+      ];
+
+      const result = resolveInitialMessages(messages);
+
+      expect(result[0].metadata).toMatchObject({
+        mode: 'stream',
+        requireApprovalMetadata: {
+          search: { toolCallId: 'tool-2', toolName: 'search' },
+        },
+      });
+      expect((result[0].metadata as any).requireApprovalMetadata.malformedNull).toBeUndefined();
+      expect((result[0].metadata as any).requireApprovalMetadata.malformedString).toBeUndefined();
+      expect((result[0].metadata as any).requireApprovalMetadata.malformedObject).toBeUndefined();
     });
 
     it('should handle empty text content', () => {

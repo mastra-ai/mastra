@@ -6,6 +6,8 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import type { MastraBrowser } from '@mastra/core/browser';
+import type { LSPConfig } from '@mastra/core/workspace';
 import { getAppDataDir } from '../utils/project.js';
 
 /** A saved custom pack — user-defined model selections for each mode. */
@@ -13,6 +15,14 @@ export interface CustomPack {
   name: string;
   models: Record<string, string>;
   createdAt: string;
+}
+
+/** A saved custom provider for OpenAI-compatible endpoints. */
+export interface CustomProviderSetting {
+  name: string;
+  url: string;
+  apiKey?: string;
+  models: string[];
 }
 
 /** Storage backend type. */
@@ -47,6 +57,60 @@ export interface StorageSettings {
   pg: PgStorageSettings;
 }
 
+/** Memory gateway provider key used in AuthStorage. */
+export const MEMORY_GATEWAY_PROVIDER = 'mastra-gateway';
+
+/** Default gateway URL. */
+export const MEMORY_GATEWAY_DEFAULT_URL = 'https://gateway-api.mastra.ai';
+
+/** Valid persisted thinking level values. */
+export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+
+/** Browser provider type. */
+export type BrowserProvider = 'stagehand' | 'agent-browser';
+
+/** Stagehand environment type. */
+export type StagehandEnv = 'LOCAL' | 'BROWSERBASE';
+
+/** Stagehand-specific browser settings. */
+export interface StagehandSettings {
+  env: StagehandEnv;
+  apiKey?: string;
+  projectId?: string;
+  /** Whether to preserve the user data directory after the browser closes. */
+  preserveUserDataDir?: boolean;
+}
+
+/** AgentBrowser-specific browser settings. */
+export interface AgentBrowserSettings {
+  /** Path to a Playwright storage state file (JSON) containing cookies and localStorage. */
+  storageState?: string;
+}
+
+/** Browser configuration persisted in global settings. */
+export interface BrowserSettings {
+  /** Whether browser automation is enabled. */
+  enabled: boolean;
+  /** Which browser provider to use. */
+  provider: BrowserProvider;
+  /** Whether to run headless (no visible browser window). */
+  headless: boolean;
+  /** Browser viewport dimensions. */
+  viewport?: { width: number; height: number };
+  /** CDP URL for connecting to an existing browser. */
+  cdpUrl?: string;
+  /** Path to a Chrome/Chromium user data directory (profile). */
+  profile?: string;
+  /** Path to the browser executable to use. */
+  executablePath?: string;
+  /** Browser scope — 'shared' (all threads share one browser) or 'thread' (each thread gets its own). */
+  scope?: 'shared' | 'thread';
+  /** Stagehand-specific settings. */
+  stagehand?: StagehandSettings;
+  /** AgentBrowser-specific settings. */
+  agentBrowser?: AgentBrowserSettings;
+}
+
 export interface GlobalSettings {
   // Onboarding tracking
   onboarding: {
@@ -59,8 +123,8 @@ export interface GlobalSettings {
   // Global model preferences (applied to new threads)
   models: {
     /**
-     * Active model pack ID. Built-in packs use their id directly ("varied",
-     * "anthropic", "openai"). Custom packs use "custom:<name>".
+     * Active model pack ID. Built-in packs use their id directly ("anthropic",
+     * "openai"). Custom packs use "custom:<name>".
      * When set, models are resolved from the pack at startup so pack updates
      * (e.g. new model versions) apply automatically.
      * Cleared when the user manually overrides via /models (falls back to modeDefaults).
@@ -75,21 +139,54 @@ export interface GlobalSettings {
      * Cleared when the user manually overrides via /om (falls back to omModelOverride).
      */
     activeOmPackId: string | null;
-    /** Explicit OM model override — used for custom OM pack or /om manual changes. */
+    /**
+     * Shared OM model override — used for both observer and reflector when a
+     * role-specific override is not set. Kept for back-compat with older settings
+     * files and set by onboarding when the user picks a custom OM pack.
+     */
     omModelOverride: string | null;
+    /**
+     * Explicit Observer model override — takes precedence over `omModelOverride`
+     * when set. Written by `/om` when the observer model is changed independently.
+     */
+    observerModelOverride: string | null;
+    /**
+     * Explicit Reflector model override — takes precedence over `omModelOverride`
+     * when set. Written by `/om` when the reflector model is changed independently.
+     */
+    reflectorModelOverride: string | null;
+    /** Default OM observation threshold used for new threads unless overridden per-thread. */
+    omObservationThreshold: number | null;
+    /** Default OM reflection threshold used for new threads unless overridden per-thread. */
+    omReflectionThreshold: number | null;
     /** Per-agent-type subagent model overrides (e.g. { explore: "openai/gpt-5.1-codex-mini" }) */
     subagentModels: Record<string, string>;
   };
   // Global behavior preferences
   preferences: {
     yolo: boolean | null;
+    theme: 'auto' | 'dark' | 'light';
+    /** Default reasoning effort level used for all threads/models unless overridden in-session. */
+    thinkingLevel: ThinkingLevelSetting;
+    /** When true, components like subagent output collapse to compact summaries on completion. */
+    quietMode: boolean;
   };
   // Storage backend configuration
   storage: StorageSettings;
   // User-created custom model packs
   customModelPacks: CustomPack[];
+  // User-created custom providers with custom models
+  customProviders: CustomProviderSetting[];
   // Model usage counts for ranking in the selector
   modelUseCounts: Record<string, number>;
+  // Version the user dismissed the update prompt for (skip until they manually update past this)
+  updateDismissedVersion: string | null;
+  // Memory gateway configuration
+  memoryGateway: { baseUrl?: string };
+  // LSP configuration forwarded to the workspace
+  lsp?: LSPConfig;
+  // Browser automation configuration
+  browser: BrowserSettings;
 }
 
 export const STORAGE_DEFAULTS: StorageSettings = {
@@ -111,18 +208,170 @@ const DEFAULTS: GlobalSettings = {
     modeDefaults: {},
     activeOmPackId: null,
     omModelOverride: null,
+    observerModelOverride: null,
+    reflectorModelOverride: null,
+    omObservationThreshold: null,
+    omReflectionThreshold: null,
     subagentModels: {},
   },
   preferences: {
     yolo: null,
+    theme: 'auto',
+    thinkingLevel: 'off',
+    quietMode: false,
   },
   storage: { ...STORAGE_DEFAULTS },
   customModelPacks: [],
+  customProviders: [],
   modelUseCounts: {},
+  updateDismissedVersion: null,
+  memoryGateway: {},
+  lsp: {},
+  browser: {
+    enabled: false,
+    provider: 'stagehand',
+    headless: false,
+    viewport: { width: 1280, height: 720 },
+    stagehand: { env: 'LOCAL' },
+  },
 };
+
+const THINKING_LEVEL_VALUES: ThinkingLevelSetting[] = ['off', 'low', 'medium', 'high', 'xhigh'];
+
+function parseThinkingLevel(value: unknown): ThinkingLevelSetting {
+  return typeof value === 'string' && THINKING_LEVEL_VALUES.includes(value as ThinkingLevelSetting)
+    ? (value as ThinkingLevelSetting)
+    : DEFAULTS.preferences.thinkingLevel;
+}
+
+function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'] {
+  const raw = rawPreferences && typeof rawPreferences === 'object' ? (rawPreferences as Record<string, unknown>) : {};
+
+  return {
+    ...DEFAULTS.preferences,
+    ...raw,
+    thinkingLevel: parseThinkingLevel(raw.thinkingLevel),
+  };
+}
 
 export function getSettingsPath(): string {
   return join(getAppDataDir(), 'settings.json');
+}
+
+export function getCustomProviderId(name: string): string {
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || 'provider';
+}
+
+export function toCustomProviderModelId(providerName: string, modelName: string): string {
+  const providerId = getCustomProviderId(providerName);
+  const trimmedModelName = modelName.trim();
+  const providerPrefix = `${providerId}/`;
+  if (trimmedModelName.startsWith(providerPrefix)) {
+    return trimmedModelName;
+  }
+  return `${providerId}/${trimmedModelName}`;
+}
+
+export function parseCustomProviders(rawProviders: unknown): CustomProviderSetting[] {
+  if (!Array.isArray(rawProviders)) return [];
+
+  const parsedProviders: CustomProviderSetting[] = [];
+  for (const rawProvider of rawProviders) {
+    if (!rawProvider || typeof rawProvider !== 'object') continue;
+
+    const candidate = rawProvider as Record<string, unknown>;
+    const name = typeof candidate.name === 'string' ? candidate.name.trim() : '';
+    const url = typeof candidate.url === 'string' ? candidate.url.trim() : '';
+    if (!name || !url) continue;
+
+    const providerId = getCustomProviderId(name);
+    const models = Array.isArray(candidate.models)
+      ? [
+          ...new Set(
+            candidate.models
+              .filter((model): model is string => typeof model === 'string')
+              .map(model => model.trim())
+              .map(model => {
+                const providerPrefix = `${providerId}/`;
+                if (model.startsWith(providerPrefix)) {
+                  return model.slice(providerPrefix.length);
+                }
+                return model;
+              }),
+          ),
+        ].filter(model => model.length > 0)
+      : [];
+
+    const apiKey =
+      typeof candidate.apiKey === 'string' && candidate.apiKey.trim().length > 0 ? candidate.apiKey.trim() : undefined;
+
+    parsedProviders.push({
+      name,
+      url,
+      ...(apiKey ? { apiKey } : {}),
+      models,
+    });
+  }
+
+  return parsedProviders;
+}
+
+const BROWSER_PROVIDERS = new Set<BrowserProvider>(['stagehand', 'agent-browser']);
+const STAGEHAND_ENVS = new Set<StagehandEnv>(['LOCAL', 'BROWSERBASE']);
+
+/**
+ * Deep-merge and validate browser settings from JSON.
+ * Explicitly validates types to handle malformed settings.json gracefully.
+ */
+function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
+  const raw = rawBrowser && typeof rawBrowser === 'object' ? (rawBrowser as Record<string, unknown>) : {};
+  const rawViewport = raw.viewport && typeof raw.viewport === 'object' ? (raw.viewport as Record<string, unknown>) : {};
+  const rawStagehand =
+    raw.stagehand && typeof raw.stagehand === 'object' ? (raw.stagehand as Record<string, unknown>) : {};
+  const rawAgentBrowser =
+    raw.agentBrowser && typeof raw.agentBrowser === 'object' ? (raw.agentBrowser as Record<string, unknown>) : {};
+
+  return {
+    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULTS.browser.enabled,
+    provider:
+      typeof raw.provider === 'string' && BROWSER_PROVIDERS.has(raw.provider as BrowserProvider)
+        ? (raw.provider as BrowserProvider)
+        : DEFAULTS.browser.provider,
+    headless: typeof raw.headless === 'boolean' ? raw.headless : DEFAULTS.browser.headless,
+    cdpUrl: typeof raw.cdpUrl === 'string' && raw.cdpUrl.trim() ? raw.cdpUrl.trim() : undefined,
+    profile: typeof raw.profile === 'string' && raw.profile.trim() ? raw.profile.trim() : undefined,
+    executablePath:
+      typeof raw.executablePath === 'string' && raw.executablePath.trim() ? raw.executablePath.trim() : undefined,
+    viewport: {
+      width: typeof rawViewport.width === 'number' ? rawViewport.width : DEFAULTS.browser.viewport!.width,
+      height: typeof rawViewport.height === 'number' ? rawViewport.height : DEFAULTS.browser.viewport!.height,
+    },
+    scope: typeof raw.scope === 'string' && (raw.scope === 'shared' || raw.scope === 'thread') ? raw.scope : undefined,
+    stagehand: {
+      env:
+        typeof rawStagehand.env === 'string' && STAGEHAND_ENVS.has(rawStagehand.env as StagehandEnv)
+          ? (rawStagehand.env as StagehandEnv)
+          : DEFAULTS.browser.stagehand!.env,
+      ...(typeof rawStagehand.apiKey === 'string' && rawStagehand.apiKey.trim()
+        ? { apiKey: rawStagehand.apiKey.trim() }
+        : {}),
+      ...(typeof rawStagehand.projectId === 'string' && rawStagehand.projectId.trim()
+        ? { projectId: rawStagehand.projectId.trim() }
+        : {}),
+      ...(typeof rawStagehand.preserveUserDataDir === 'boolean'
+        ? { preserveUserDataDir: rawStagehand.preserveUserDataDir }
+        : {}),
+    },
+    agentBrowser:
+      typeof rawAgentBrowser.storageState === 'string' && rawAgentBrowser.storageState.trim()
+        ? { storageState: rawAgentBrowser.storageState.trim() }
+        : undefined,
+  };
 }
 
 /**
@@ -153,7 +402,7 @@ function migrateFromAuth(settingsPath: string): boolean {
       settings = {
         onboarding: { ...DEFAULTS.onboarding, ...raw.onboarding },
         models: { ...DEFAULTS.models, ...raw.models },
-        preferences: { ...DEFAULTS.preferences, ...raw.preferences },
+        preferences: parsePreferences(raw.preferences),
         storage: {
           ...STORAGE_DEFAULTS,
           ...raw.storage,
@@ -161,7 +410,12 @@ function migrateFromAuth(settingsPath: string): boolean {
           pg: { ...STORAGE_DEFAULTS.pg, ...raw.storage?.pg },
         },
         customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
+        customProviders: parseCustomProviders(raw.customProviders),
         modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
+        updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
+        memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
+        lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
+        browser: parseBrowserSettings(raw.browser),
       };
     } catch {
       settings = structuredClone(DEFAULTS);
@@ -210,6 +464,49 @@ function migrateFromAuth(settingsPath: string): boolean {
   return true;
 }
 
+const LEGACY_VARIED_MODELS: Record<string, string> = {
+  plan: 'openai/gpt-5.4',
+  build: 'anthropic/claude-sonnet-4-5',
+  fast: 'anthropic/claude-haiku-4-5',
+};
+
+export function migrateLegacyVariedPack(settings: GlobalSettings): boolean {
+  const legacyPackId = 'varied';
+  const customPackId = 'custom:varied';
+  const hasLegacyReference =
+    settings.models.activeModelPackId === legacyPackId || settings.onboarding.modePackId === legacyPackId;
+
+  if (!hasLegacyReference) return false;
+
+  const existingIdx = settings.customModelPacks.findIndex(p => p.name === 'varied');
+  if (existingIdx >= 0) {
+    const existing = settings.customModelPacks[existingIdx]!;
+    const modelsMatch = Object.entries(LEGACY_VARIED_MODELS).every(([k, v]) => existing.models[k] === v);
+    if (!modelsMatch) {
+      existing.models = { ...LEGACY_VARIED_MODELS };
+    }
+  } else {
+    settings.customModelPacks.push({
+      name: 'varied',
+      models: { ...LEGACY_VARIED_MODELS },
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  if (settings.models.activeModelPackId === legacyPackId) {
+    settings.models.activeModelPackId = customPackId;
+    if (Object.keys(settings.models.modeDefaults).length === 0) {
+      settings.models.modeDefaults = { ...LEGACY_VARIED_MODELS };
+    }
+  }
+
+  if (settings.onboarding.modePackId === legacyPackId) {
+    settings.onboarding.modePackId = customPackId;
+  }
+
+  return true;
+}
+
 export function loadSettings(filePath: string = getSettingsPath()): GlobalSettings {
   // One-time migration: move model data from auth.json into settings.json
   migrateFromAuth(filePath);
@@ -217,10 +514,13 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
   if (!existsSync(filePath)) return structuredClone(DEFAULTS);
   try {
     const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
+    // Spread raw first to preserve unknown top-level keys (forward-compatibility),
+    // then overlay with parsed/typed fields so known keys are always correct.
     const settings: GlobalSettings = {
+      ...raw,
       onboarding: { ...DEFAULTS.onboarding, ...raw.onboarding },
       models: { ...DEFAULTS.models, ...raw.models },
-      preferences: { ...DEFAULTS.preferences, ...raw.preferences },
+      preferences: parsePreferences(raw.preferences),
       storage: {
         ...STORAGE_DEFAULTS,
         ...raw.storage,
@@ -228,12 +528,26 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
         pg: { ...STORAGE_DEFAULTS.pg, ...raw.storage?.pg },
       },
       customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
+      customProviders: parseCustomProviders(raw.customProviders),
       modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
+      updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
+      memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
+      lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
+      browser: parseBrowserSettings(raw.browser),
     };
 
     // Migrate legacy omModelId → omModelOverride
+    let settingsChanged = false;
     if (raw.models?.omModelId && !settings.models.omModelOverride) {
       settings.models.omModelOverride = raw.models.omModelId;
+      settingsChanged = true;
+    }
+
+    if (migrateLegacyVariedPack(settings)) {
+      settingsChanged = true;
+    }
+
+    if (settingsChanged) {
       saveSettings(settings, filePath);
     }
 
@@ -241,6 +555,79 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
   } catch {
     return structuredClone(DEFAULTS);
   }
+}
+
+export const THREAD_ACTIVE_MODEL_PACK_ID_KEY = 'activeModelPackId';
+
+export interface ThreadSettings {
+  activeModelPackId: string | null;
+  modeModelIds: Record<string, string>;
+}
+
+export function parseThreadSettings(metadata: Record<string, unknown> | undefined): ThreadSettings {
+  const modeModelIds: Record<string, string> = {};
+  for (const [key, value] of Object.entries(metadata ?? {})) {
+    const modeMatch = key.match(/^modeModelId_(.+)$/);
+    if (modeMatch?.[1] && typeof value === 'string' && value.length > 0) {
+      modeModelIds[modeMatch[1]] = value;
+    }
+  }
+
+  const rawPackId = metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY];
+  const activeModelPackId = typeof rawPackId === 'string' && rawPackId.length > 0 ? rawPackId : null;
+
+  return {
+    activeModelPackId,
+    modeModelIds,
+  };
+}
+
+/**
+ * Resolve active model pack id for the current thread.
+ *
+ * Priority:
+ * 1) explicit thread metadata activeModelPackId
+ * 2) inferred from thread modeModelId_* values
+ * 3) global settings.models.activeModelPackId
+ */
+export function resolveThreadActiveModelPackId(
+  settings: GlobalSettings,
+  builtinPacks: Array<{ id: string; models: Record<string, string> }>,
+  metadata: Record<string, unknown> | undefined,
+): string | null {
+  const threadSettings = parseThreadSettings(metadata);
+
+  const isKnownPack = (packId: string): boolean => {
+    if (packId.startsWith('custom:')) {
+      const name = packId.slice('custom:'.length);
+      return settings.customModelPacks.some(p => p.name === name);
+    }
+    return builtinPacks.some(p => p.id === packId);
+  };
+
+  if (threadSettings.activeModelPackId && isKnownPack(threadSettings.activeModelPackId)) {
+    return threadSettings.activeModelPackId;
+  }
+
+  const allPacks: Array<{ id: string; models: Record<string, string> }> = [
+    ...builtinPacks,
+    ...settings.customModelPacks.map(p => ({ id: `custom:${p.name}`, models: p.models })),
+  ];
+
+  for (const pack of allPacks) {
+    const packEntries = Object.entries(pack.models);
+    const threadEntries = Object.keys(threadSettings.modeModelIds);
+    const matches =
+      packEntries.length === threadEntries.length &&
+      packEntries.every(([modeId, modelId]) => threadSettings.modeModelIds[modeId] === modelId);
+    if (matches) return pack.id;
+  }
+
+  if (settings.models.activeModelPackId && isKnownPack(settings.models.activeModelPackId)) {
+    return settings.models.activeModelPackId;
+  }
+
+  return null;
 }
 
 /**
@@ -278,29 +665,47 @@ export function resolveModelDefaults(
 }
 
 /**
- * Resolve the effective OM model ID.
+ * Resolve the effective model ID for one of the two OM roles.
  *
- * If `activeOmPackId` is set, looks up the matching OM pack and returns its
- * model. Falls back to the explicit `omModelOverride`.
+ * Lookup order:
+ *   1. The role-specific override (`observerModelOverride` /
+ *      `reflectorModelOverride`) if set.
+ *   2. If `activeOmPackId` points at a built-in pack, that pack's model.
+ *   3. The shared `omModelOverride` fallback.
  *
  * @param settings  The loaded global settings.
+ * @param role      Which OM role to resolve (`'observer'` or `'reflector'`).
  * @param builtinOmPacks  Built-in OM packs for the current provider access
  *                        (from `getAvailableOmPacks`). Pass `[]` if unavailable.
  */
-export function resolveOmModel(
+export function resolveOmRoleModel(
   settings: GlobalSettings,
+  role: 'observer' | 'reflector',
   builtinOmPacks: Array<{ id: string; modelId: string }>,
 ): string | null {
-  const { activeOmPackId, omModelOverride } = settings.models;
-  if (!activeOmPackId) return omModelOverride;
+  const { activeOmPackId, omModelOverride, observerModelOverride, reflectorModelOverride } = settings.models;
+  const roleOverride = role === 'observer' ? observerModelOverride : reflectorModelOverride;
+  if (roleOverride) return roleOverride;
 
+  if (!activeOmPackId) return omModelOverride;
   if (activeOmPackId === 'custom') return omModelOverride;
 
   const pack = builtinOmPacks.find(p => p.id === activeOmPackId);
   if (pack) return pack.modelId;
 
-  // Unknown pack — fall back to override
   return omModelOverride;
+}
+
+/**
+ * @deprecated Use `resolveOmRoleModel(settings, 'observer' | 'reflector', ...)`.
+ * Equivalent to resolving the observer role (existing callers set both observer
+ * and reflector to the same value).
+ */
+export function resolveOmModel(
+  settings: GlobalSettings,
+  builtinOmPacks: Array<{ id: string; modelId: string }>,
+): string | null {
+  return resolveOmRoleModel(settings, 'observer', builtinOmPacks);
 }
 
 export function saveSettings(settings: GlobalSettings, filePath: string = getSettingsPath()): void {
@@ -309,4 +714,97 @@ export function saveSettings(settings: GlobalSettings, filePath: string = getSet
     mkdirSync(dir, { recursive: true });
   }
   writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf-8');
+}
+
+/** Marker file name to track which provider last used a profile. */
+const PROFILE_PROVIDER_MARKER = '.mastra-provider';
+
+/**
+ * Check which provider last used a profile directory.
+ * Returns the provider name if the marker exists, undefined otherwise.
+ */
+export function getProfileProvider(profilePath: string): BrowserProvider | undefined {
+  const markerPath = join(profilePath, PROFILE_PROVIDER_MARKER);
+  if (!existsSync(markerPath)) {
+    return undefined;
+  }
+  try {
+    const content = readFileSync(markerPath, 'utf-8').trim();
+    if (content === 'stagehand' || content === 'agent-browser') {
+      return content;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Write the provider marker to a profile directory.
+ * Creates the directory if it doesn't exist.
+ */
+export function setProfileProvider(profilePath: string, provider: BrowserProvider): void {
+  const markerPath = join(profilePath, PROFILE_PROVIDER_MARKER);
+  if (!existsSync(profilePath)) {
+    mkdirSync(profilePath, { recursive: true });
+  }
+  writeFileSync(markerPath, provider, 'utf-8');
+}
+
+/**
+ * Check if a profile has a provider mismatch.
+ * Returns the existing provider if there's a mismatch, undefined otherwise.
+ */
+export function checkProfileProviderMismatch(
+  profilePath: string | undefined,
+  targetProvider: BrowserProvider,
+): BrowserProvider | undefined {
+  if (!profilePath) {
+    return undefined;
+  }
+  const existingProvider = getProfileProvider(profilePath);
+  if (existingProvider && existingProvider !== targetProvider) {
+    return existingProvider;
+  }
+  return undefined;
+}
+
+/**
+ * Create a browser instance from settings.
+ * Shared by startup (main.ts) and live reconfiguration (/browser command).
+ * Returns undefined if browser is disabled.
+ */
+export async function createBrowserFromSettings(settings: BrowserSettings): Promise<MastraBrowser | undefined> {
+  if (!settings.enabled) {
+    return undefined;
+  }
+
+  const { provider, headless, viewport, cdpUrl, profile, executablePath, stagehand, agentBrowser } = settings;
+
+  // Chrome only allows one process per profile directory, so force 'shared' scope
+  // when a profile is set. Otherwise use the user's setting (or provider default).
+  const scope = profile ? ('shared' as const) : settings.scope;
+
+  // Common launch options (no CDP)
+  const launchConfig = { headless, viewport, profile, executablePath, scope } as const;
+
+  if (provider === 'stagehand') {
+    const { StagehandBrowser } = await import('@mastra/stagehand');
+    const stagehandOpts = {
+      env: stagehand?.env ?? 'LOCAL',
+      apiKey: stagehand?.apiKey ?? process.env.BROWSERBASE_API_KEY,
+      projectId: stagehand?.projectId ?? process.env.BROWSERBASE_PROJECT_ID,
+      preserveUserDataDir: stagehand?.preserveUserDataDir,
+    };
+    return cdpUrl
+      ? new StagehandBrowser({ ...launchConfig, cdpUrl, scope: 'shared', ...stagehandOpts })
+      : new StagehandBrowser({ ...launchConfig, ...stagehandOpts });
+  } else if (provider === 'agent-browser') {
+    const { AgentBrowser } = await import('@mastra/agent-browser');
+    return cdpUrl
+      ? new AgentBrowser({ ...launchConfig, cdpUrl, scope: 'shared', storageState: agentBrowser?.storageState })
+      : new AgentBrowser({ ...launchConfig, storageState: agentBrowser?.storageState, scope });
+  }
+
+  throw new Error(`Unsupported browser provider: ${provider}`);
 }

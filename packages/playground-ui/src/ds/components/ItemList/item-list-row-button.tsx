@@ -1,8 +1,7 @@
-import { cn } from '@/lib/utils';
 import { getItemListColumnTemplate } from './shared';
-import { type ItemListColumn } from './types';
-import { transitions } from '@/ds/primitives/transitions';
-import { focusRing } from '@/ds/primitives/transitions';
+import type { ItemListColumn } from './types';
+import { transitions, focusRing } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
 export type ItemListRowButtonProps = {
   item?: any;
@@ -31,7 +30,7 @@ export function ItemListRowButton({
     <button
       onClick={handleClick}
       className={cn(
-        'grid w-full px-2 gap-6 text-left items-center rounded-lg',
+        'grid w-full px-4 gap-4 text-left items-center rounded-lg',
         transitions.colors,
         focusRing.visible,
         {

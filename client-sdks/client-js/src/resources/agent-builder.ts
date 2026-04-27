@@ -287,7 +287,10 @@ export class AgentBuilder extends BaseResource {
    * Streams agent builder action progress in real-time.
    * This calls `/agent-builder/:actionId/stream`.
    */
-  async stream(params: AgentBuilderActionRequest, runId?: string) {
+  async stream(
+    params: AgentBuilderActionRequest,
+    runId?: string,
+  ): Promise<globalThis.ReadableStream<{ type: string; payload: any }>> {
     const searchParams = new URLSearchParams();
     if (runId) {
       searchParams.set('runId', runId);
@@ -320,7 +323,7 @@ export class AgentBuilder extends BaseResource {
    * This is the recommended method for recovery after page refresh/hot reload.
    * This calls `/agent-builder/:actionId/observe`
    */
-  async observeStream(params: { runId: string }) {
+  async observeStream(params: { runId: string }): Promise<globalThis.ReadableStream<{ type: string; payload: any }>> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', params.runId);
 
@@ -346,7 +349,9 @@ export class AgentBuilder extends BaseResource {
    * Replays cached execution from the beginning, then continues with live stream.
    * This calls `/agent-builder/:actionId/observe-stream-legacy`.
    */
-  async observeStreamLegacy(params: { runId: string }) {
+  async observeStreamLegacy(params: {
+    runId: string;
+  }): Promise<globalThis.ReadableStream<{ type: string; payload: any }>> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', params.runId);
 
@@ -376,7 +381,7 @@ export class AgentBuilder extends BaseResource {
     step: string | string[];
     resumeData?: unknown;
     requestContext?: RequestContext;
-  }): Promise<ReadableStream> {
+  }): Promise<globalThis.ReadableStream<{ type: string; payload: any }>> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', params.runId);
 

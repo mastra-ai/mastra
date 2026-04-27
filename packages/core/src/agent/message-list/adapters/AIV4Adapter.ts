@@ -19,11 +19,12 @@ import type {
 import { findToolCallArgs } from '../utils/provider-compat';
 
 /**
- * Filter out data-* parts from MastraMessagePart[] to get V4-compatible parts.
- * Data parts are a Mastra extension for custom streaming data and aren't supported by AI SDK V4.
+ * Cast Mastra parts (including data-* extensions) to the V4 UI parts type.
+ * Data-* parts (e.g. data-tool-call-suspended) are not natively typed in AI SDK V4,
+ * but must be preserved so features like HITL workflow resumption work after a page refresh.
  */
-function filterDataParts(parts: MastraMessagePart[]): UIMessageV4Part[] {
-  return parts.filter((part): part is UIMessageV4Part => !part.type.startsWith('data-'));
+function preserveExtendedParts(parts: MastraMessagePart[]): UIMessageV4Part[] {
+  return parts as UIMessageV4Part[];
 }
 
 /**
@@ -156,8 +157,7 @@ export class AIV4Adapter {
       parts.push({ type: 'text', text: '' });
     }
 
-    // Filter out data-* parts when converting to UIMessageV4 (V4 doesn't support them)
-    const v4Parts = filterDataParts(parts);
+    const v4Parts = preserveExtendedParts(parts);
 
     if (m.role === `user`) {
       const uiMessage: UIMessageWithMetadata = {
@@ -312,7 +312,7 @@ export class AIV4Adapter {
               parts.push({ type: 'step-start' });
             }
 
-            const part: MastraDBMessage['content']['parts'][number] = {
+            const part: UIMessageV4Part = {
               type: 'text' as const,
               text: aiV4Part.text,
             };
@@ -324,7 +324,7 @@ export class AIV4Adapter {
           }
 
           case 'tool-call': {
-            const part: MastraDBMessage['content']['parts'][number] = {
+            const part: UIMessageV4Part = {
               type: 'tool-invocation' as const,
               toolInvocation: {
                 state: 'call',
@@ -367,7 +367,7 @@ export class AIV4Adapter {
                 args: toolArgs,
               };
 
-              const part: MastraDBMessage['content']['parts'][number] = {
+              const part: UIMessageV4Part = {
                 type: 'tool-invocation',
                 toolInvocation: invocation,
               };
@@ -429,6 +429,9 @@ export class AIV4Adapter {
               if (aiV4Part.providerOptions) {
                 part.providerMetadata = aiV4Part.providerOptions;
               }
+              if (aiV4Part.filename) {
+                (part as Record<string, unknown>).filename = aiV4Part.filename;
+              }
               parts.push(part);
             } else if (typeof aiV4Part.data === 'string') {
               const categorized = categorizeFileData(aiV4Part.data, aiV4Part.mimeType);
@@ -442,6 +445,9 @@ export class AIV4Adapter {
                 if (aiV4Part.providerOptions) {
                   part.providerMetadata = aiV4Part.providerOptions;
                 }
+                if (aiV4Part.filename) {
+                  (part as Record<string, unknown>).filename = aiV4Part.filename;
+                }
                 parts.push(part);
               } else {
                 try {
@@ -452,6 +458,9 @@ export class AIV4Adapter {
                   };
                   if (aiV4Part.providerOptions) {
                     part.providerMetadata = aiV4Part.providerOptions;
+                  }
+                  if (aiV4Part.filename) {
+                    (part as Record<string, unknown>).filename = aiV4Part.filename;
                   }
                   parts.push(part);
                 } catch (error) {
@@ -467,6 +476,9 @@ export class AIV4Adapter {
                 };
                 if (aiV4Part.providerOptions) {
                   part.providerMetadata = aiV4Part.providerOptions;
+                }
+                if (aiV4Part.filename) {
+                  (part as Record<string, unknown>).filename = aiV4Part.filename;
                 }
                 parts.push(part);
               } catch (error) {

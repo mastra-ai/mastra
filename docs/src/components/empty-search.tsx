@@ -5,7 +5,12 @@ export const searches = [
   {
     label: 'Quickstart',
     description: 'Get up and running with Mastra',
-    link: '/docs/getting-started/start',
+    link: '/guides/getting-started/quickstart',
+  },
+  {
+    label: 'Studio',
+    description: 'Test your agents, workflows, and tools',
+    link: '/docs/studio/overview',
   },
   {
     label: 'Agents',
@@ -13,14 +18,14 @@ export const searches = [
     link: '/docs/agents/overview',
   },
   {
+    label: 'Memory',
+    description: 'Manage agent context across conversations',
+    link: '/docs/memory/overview',
+  },
+  {
     label: 'Workflows',
     description: 'Define and manage complex sequences of tasks',
     link: '/docs/workflows/overview',
-  },
-  {
-    label: 'Studio',
-    description: 'Test your agents, workflows, and tools during development',
-    link: '/docs/getting-started/studio',
   },
   {
     label: 'Streaming',
@@ -33,19 +38,9 @@ export const searches = [
     link: '/docs/mcp/overview',
   },
   {
-    label: 'Memory',
-    description: 'Manage agent context across conversations',
-    link: '/docs/memory/overview',
-  },
-  {
     label: 'Evals',
     description: 'Evaluate agent performance',
     link: '/docs/evals/overview',
-  },
-  {
-    label: 'RAG',
-    description: 'Incorporate relevant context from your own data sources',
-    link: '/docs/rag/overview',
   },
   {
     label: 'Observability',

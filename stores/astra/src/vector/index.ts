@@ -139,6 +139,16 @@ export class AstraVector extends MastraVector<AstraVectorFilter> {
     filter,
     includeVector = false,
   }: AstraQueryVectorParams): Promise<QueryResult[]> {
+    if (!queryVector) {
+      throw new MastraError({
+        id: createVectorErrorId('ASTRA', 'QUERY', 'MISSING_VECTOR'),
+        text: 'queryVector is required for Astra queries. Metadata-only queries are not supported by this vector store.',
+        domain: ErrorDomain.MASTRA_VECTOR,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
     const collection = this.#db.collection(indexName);
 
     const translatedFilter = this.transformFilter(filter);

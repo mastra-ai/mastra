@@ -38,14 +38,12 @@ export class InMemoryMCPClientsStorage extends MCPClientsStorage {
   // ==========================================================================
 
   async getById(id: string): Promise<StorageMCPClientType | null> {
-    this.logger.debug(`InMemoryMCPClientsStorage: getById called for ${id}`);
     const config = this.db.mcpClients.get(id);
     return config ? this.deepCopyConfig(config) : null;
   }
 
   async create(input: { mcpClient: StorageCreateMCPClientInput }): Promise<StorageMCPClientType> {
     const { mcpClient } = input;
-    this.logger.debug(`InMemoryMCPClientsStorage: create called for ${mcpClient.id}`);
 
     if (this.db.mcpClients.has(mcpClient.id)) {
       throw new Error(`MCP client with id ${mcpClient.id} already exists`);
@@ -84,7 +82,6 @@ export class InMemoryMCPClientsStorage extends MCPClientsStorage {
 
   async update(input: StorageUpdateMCPClientInput): Promise<StorageMCPClientType> {
     const { id, ...updates } = input;
-    this.logger.debug(`InMemoryMCPClientsStorage: update called for ${id}`);
 
     const existingConfig = this.db.mcpClients.get(id);
     if (!existingConfig) {
@@ -112,7 +109,6 @@ export class InMemoryMCPClientsStorage extends MCPClientsStorage {
   }
 
   async delete(id: string): Promise<void> {
-    this.logger.debug(`InMemoryMCPClientsStorage: delete called for ${id}`);
     // Idempotent delete
     this.db.mcpClients.delete(id);
     // Also delete all versions for this client
@@ -122,8 +118,6 @@ export class InMemoryMCPClientsStorage extends MCPClientsStorage {
   async list(args?: StorageListMCPClientsInput): Promise<StorageListMCPClientsOutput> {
     const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
-
-    this.logger.debug(`InMemoryMCPClientsStorage: list called`);
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 100)
     const perPage = normalizePerPage(perPageInput, 100);
@@ -181,8 +175,6 @@ export class InMemoryMCPClientsStorage extends MCPClientsStorage {
   // ==========================================================================
 
   async createVersion(input: CreateMCPClientVersionInput): Promise<MCPClientVersion> {
-    this.logger.debug(`InMemoryMCPClientsStorage: createVersion called for MCP client ${input.mcpClientId}`);
-
     // Check if version with this ID already exists
     if (this.db.mcpClientVersions.has(input.id)) {
       throw new Error(`Version with id ${input.id} already exists`);
@@ -206,16 +198,11 @@ export class InMemoryMCPClientsStorage extends MCPClientsStorage {
   }
 
   async getVersion(id: string): Promise<MCPClientVersion | null> {
-    this.logger.debug(`InMemoryMCPClientsStorage: getVersion called for ${id}`);
     const version = this.db.mcpClientVersions.get(id);
     return version ? this.deepCopyVersion(version) : null;
   }
 
   async getVersionByNumber(mcpClientId: string, versionNumber: number): Promise<MCPClientVersion | null> {
-    this.logger.debug(
-      `InMemoryMCPClientsStorage: getVersionByNumber called for MCP client ${mcpClientId}, v${versionNumber}`,
-    );
-
     for (const version of this.db.mcpClientVersions.values()) {
       if (version.mcpClientId === mcpClientId && version.versionNumber === versionNumber) {
         return this.deepCopyVersion(version);
@@ -225,8 +212,6 @@ export class InMemoryMCPClientsStorage extends MCPClientsStorage {
   }
 
   async getLatestVersion(mcpClientId: string): Promise<MCPClientVersion | null> {
-    this.logger.debug(`InMemoryMCPClientsStorage: getLatestVersion called for MCP client ${mcpClientId}`);
-
     let latest: MCPClientVersion | null = null;
     for (const version of this.db.mcpClientVersions.values()) {
       if (version.mcpClientId === mcpClientId) {
@@ -241,8 +226,6 @@ export class InMemoryMCPClientsStorage extends MCPClientsStorage {
   async listVersions(input: ListMCPClientVersionsInput): Promise<ListMCPClientVersionsOutput> {
     const { mcpClientId, page = 0, perPage: perPageInput, orderBy } = input;
     const { field, direction } = this.parseVersionOrderBy(orderBy);
-
-    this.logger.debug(`InMemoryMCPClientsStorage: listVersions called for MCP client ${mcpClientId}`);
 
     // Normalize perPage (false -> MAX_SAFE_INTEGER, 0 -> 0, undefined -> 20)
     const perPage = normalizePerPage(perPageInput, 20);
@@ -279,13 +262,10 @@ export class InMemoryMCPClientsStorage extends MCPClientsStorage {
   }
 
   async deleteVersion(id: string): Promise<void> {
-    this.logger.debug(`InMemoryMCPClientsStorage: deleteVersion called for ${id}`);
     this.db.mcpClientVersions.delete(id);
   }
 
   async deleteVersionsByParentId(entityId: string): Promise<void> {
-    this.logger.debug(`InMemoryMCPClientsStorage: deleteVersionsByParentId called for MCP client ${entityId}`);
-
     const idsToDelete: string[] = [];
     for (const [id, version] of this.db.mcpClientVersions.entries()) {
       if (version.mcpClientId === entityId) {
@@ -299,8 +279,6 @@ export class InMemoryMCPClientsStorage extends MCPClientsStorage {
   }
 
   async countVersions(mcpClientId: string): Promise<number> {
-    this.logger.debug(`InMemoryMCPClientsStorage: countVersions called for MCP client ${mcpClientId}`);
-
     let count = 0;
     for (const version of this.db.mcpClientVersions.values()) {
       if (version.mcpClientId === mcpClientId) {

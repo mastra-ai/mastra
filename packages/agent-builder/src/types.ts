@@ -106,7 +106,7 @@ export const AgentBuilderInputSchema = z.object({
   ref: z.string().optional().describe('Tag/branch/commit to checkout (defaults to main/master)'),
   slug: z.string().optional().describe('Slug for branch/scripts; defaults to inferred from repo'),
   targetPath: z.string().optional().describe('Project path to merge into; defaults to current directory'),
-  variables: z.record(z.string()).optional().describe('Environment variables to set in .env file'),
+  variables: z.record(z.string(), z.string()).optional().describe('Environment variables to set in .env file'),
 });
 
 export const MergePlanSchema = z.object({
@@ -142,7 +142,7 @@ export const FileCopyInputSchema = z.object({
   commitSha: z.string(),
   slug: z.string(),
   targetPath: z.string().optional(),
-  variables: z.record(z.string()).optional(),
+  variables: z.record(z.string(), z.string()).optional(),
 });
 
 export const FileCopyResultSchema = z.object({
@@ -250,10 +250,10 @@ export const PackageAnalysisSchema = z.object({
   name: z.string().optional(),
   version: z.string().optional(),
   description: z.string().optional(),
-  dependencies: z.record(z.string()).optional(),
-  devDependencies: z.record(z.string()).optional(),
-  peerDependencies: z.record(z.string()).optional(),
-  scripts: z.record(z.string()).optional(),
+  dependencies: z.record(z.string(), z.string()).optional(),
+  devDependencies: z.record(z.string(), z.string()).optional(),
+  peerDependencies: z.record(z.string(), z.string()).optional(),
+  scripts: z.record(z.string(), z.string()).optional(),
   success: z.boolean().optional(),
   error: z.string().optional(),
 });

@@ -1,4 +1,4 @@
-import { ElementType } from 'react';
+import type { ElementType } from 'react';
 
 export const EntryClass = 'mastra:space-y-2';
 export const Entry = ({ className, ...props }: React.ComponentPropsWithoutRef<'div'>) => {

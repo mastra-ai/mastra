@@ -24,6 +24,8 @@ import type {
   GetRootSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
+  GetTraceLightResponse,
+  LightSpanRecord,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { LibSQLDB, resolveClient } from '../../db';
@@ -41,6 +43,12 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
 
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_SPANS, schema: SPAN_SCHEMA });
+    // Add requestContext column for backwards compatibility with existing databases
+    await this.#db.alterTable({
+      tableName: TABLE_SPANS,
+      schema: SPAN_SCHEMA,
+      ifNotExists: ['requestContext'],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -209,6 +217,42 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     }
   }
 
+  async getTraceLight(args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
+    const { traceId } = args;
+    try {
+      const spans = await this.#db.selectMany<SpanRecord>({
+        tableName: TABLE_SPANS,
+        whereClause: { sql: ' WHERE traceId = ?', args: [traceId] },
+        orderBy: 'startedAt ASC',
+      });
+
+      if (!spans || spans.length === 0) {
+        return null;
+      }
+
+      return {
+        traceId,
+        spans: spans.map(span => {
+          const transformed = transformFromSqlRow<SpanRecord>({ tableName: TABLE_SPANS, sqlRow: span });
+          const { input, output, attributes, metadata, tags, links, ...light } = transformed;
+          return light as LightSpanRecord;
+        }),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'GET_TRACE_LIGHT', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: {
+            traceId,
+          },
+        },
+        error,
+      );
+    }
+  }
+
   async updateSpan(args: UpdateSpanArgs): Promise<void> {
     const { traceId, spanId, updates } = args;
     try {
@@ -245,7 +289,8 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     // Parse args through schema to apply defaults
     const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
-    const { page, perPage } = pagination;
+    const page = pagination?.page ?? 0;
+    const perPage = pagination?.perPage ?? 10;
 
     const tableName = parseSqlIdentifier(TABLE_SPANS, 'table name');
 
@@ -424,8 +469,8 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
       //   - ASC: NULLs first (natural)
       //   - DESC: NULLs last (natural)
       // So we need CASE WHEN workarounds to invert the natural behavior for endedAt
-      const sortField = orderBy.field;
-      const sortDirection = orderBy.direction;
+      const sortField = orderBy?.field ?? 'startedAt';
+      const sortDirection = orderBy?.direction ?? 'DESC';
       let orderByClause: string;
       if (sortField === 'endedAt') {
         // endedAt DESC: want NULLs first (running spans on top) - need CASE WHEN

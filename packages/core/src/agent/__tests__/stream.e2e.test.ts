@@ -6,9 +6,11 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { config } from 'dotenv';
-import { describe, expect, it } from 'vitest';
-import z from 'zod';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { z } from 'zod/v4';
 import { noopLogger } from '../../logger';
 import type { StorageThreadType } from '../../memory';
 import { MockMemory } from '../../memory/mock';
@@ -20,6 +22,13 @@ import { MessageList } from '../message-list/index';
 import { assertNoDuplicateParts } from '../test-utils';
 
 config();
+
+const MODE = getLLMTestMode();
+setupDummyApiKeys(MODE, ['openai']);
+
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 function runStreamE2ETest(version: 'v1' | 'v2' | 'v3') {
   let openaiModel: LanguageModelV1 | LanguageModelV2 | LanguageModelV3;
@@ -693,6 +702,58 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3') {
     });
   });
 }
+
+describe('OpenAI WebSocket transport (router)', () => {
+  it('exposes transport handle and supports manual close', async () => {
+    const agent = new Agent({
+      id: 'openai-ws-stream',
+      name: 'OpenAI WS Stream Agent',
+      instructions: 'You are a helpful assistant.',
+      model: 'openai/gpt-4o-mini',
+    });
+
+    const stream = await agent.stream('Hello from websocket', {
+      providerOptions: {
+        openai: {
+          transport: 'websocket',
+          websocket: { closeOnFinish: false },
+        },
+      },
+    });
+
+    for await (const _chunk of stream.textStream) {
+      // drain the stream
+    }
+
+    expect(stream.transport?.type).toBe('openai-websocket');
+    stream.transport?.close();
+  }, 30_000);
+
+  it('auto-closes when closeOnFinish is true', async () => {
+    const agent = new Agent({
+      id: 'openai-ws-stream-auto-close',
+      name: 'OpenAI WS Stream Auto Close Agent',
+      instructions: 'You are a helpful assistant.',
+      model: 'openai/gpt-4o-mini',
+    });
+
+    const stream = await agent.stream('Hello from websocket', {
+      providerOptions: {
+        openai: {
+          transport: 'websocket',
+          websocket: { closeOnFinish: true },
+        },
+      },
+    });
+
+    for await (const _chunk of stream.textStream) {
+      // drain the stream
+    }
+
+    expect(stream.transport?.type).toBe('openai-websocket');
+    expect(() => stream.transport?.close()).not.toThrow();
+  }, 30_000);
+});
 
 runStreamE2ETest('v1');
 runStreamE2ETest('v2');

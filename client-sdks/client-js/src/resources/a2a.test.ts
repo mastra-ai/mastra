@@ -195,5 +195,39 @@ describe('A2A', () => {
       // Assert: Response should be parsed JSON
       expect(response).toEqual(mockResponse);
     });
+
+    it('should include JSON-RPC 2.0 fields in the request body', async () => {
+      let receivedBody: any;
+
+      server.on('request', (req, res) => {
+        let body = '';
+        req.on('data', chunk => {
+          body += chunk;
+        });
+        req.on('end', () => {
+          receivedBody = JSON.parse(body);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ jsonrpc: '2.0', id: receivedBody.id, result: {} }));
+        });
+      });
+
+      const a2a = new A2A({ baseUrl: serverUrl }, 'test-agent');
+      const params: MessageSendParams = {
+        message: {
+          messageId: 'msg-1',
+          kind: 'message',
+          role: 'user',
+          parts: [{ kind: 'text', text: 'Hello' }],
+        },
+      };
+
+      await a2a.sendMessage(params);
+
+      expect(receivedBody.jsonrpc).toBe('2.0');
+      expect(receivedBody.id).toBeDefined();
+      expect(typeof receivedBody.id).toBe('string');
+      expect(receivedBody.method).toBe('message/send');
+      expect(receivedBody.params).toEqual(params);
+    });
   });
 });

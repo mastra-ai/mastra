@@ -1,11 +1,11 @@
 ---
-title: "Reference: MastraAuthBetterAuth Class | Auth"
+title: "Reference: MastraAuthBetterAuth class | Auth"
 description: "API reference for the MastraAuthBetterAuth class, which authenticates Mastra applications using Better Auth."
 packages:
   - "@mastra/auth-better-auth"
 ---
 
-# MastraAuthBetterAuth Class
+# MastraAuthBetterAuth class
 
 The `MastraAuthBetterAuth` class provides authentication for Mastra applications using Better Auth. It verifies incoming requests with Better Auth sessions and integrates with the Mastra server using the `auth` option.
 
@@ -42,45 +42,43 @@ export const mastra = new Mastra({
 
 <PropertiesTable
   content={[
-{
-name: "auth",
-type: "Auth",
-description:
-"Your Better Auth instance created via betterAuth({ ... }). This is required and must be properly configured with a supported database provider.",
-isOptional: false,
-},
-{
-name: "name",
-type: "string",
-description: "Custom name for the auth provider instance.",
-isOptional: true,
-defaultValue: "'better-auth'",
-},
-{
-name: "authorizeUser",
-type: "(user: BetterAuthUser, request: HonoRequest) => Promise<boolean> | boolean",
-description:
-"Custom authorization function to determine if a user should be granted access. Called after session verification. By default, allows all authenticated users with valid sessions.",
-isOptional: true,
-},
-{
-name: "public",
-type: "Array<string | RegExp | [string, Methods | Methods[]]>",
-description:
-"Public routes that do not require authentication. Supports exact paths, wildcards, and path params.",
-isOptional: true,
-},
-{
-name: "protected",
-type: "Array<string | RegExp | [string, Methods | Methods[]]>",
-description:
-"Protected routes that require authentication. Supports exact paths, wildcards, and path params.",
-isOptional: true,
-},
+  {
+    name: 'auth',
+    type: 'Auth',
+    description:
+      'Your Better Auth instance created via betterAuth({ ... }). This is required and must be properly configured with a supported database provider.',
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Custom name for the auth provider instance.',
+    isOptional: true,
+    defaultValue: "'better-auth'",
+  },
+  {
+    name: 'authorizeUser',
+    type: '(user: BetterAuthUser, request: HonoRequest) => Promise<boolean> | boolean',
+    description:
+      'Custom authorization function to determine if a user should be granted access. Called after session verification. By default, allows all authenticated users with valid sessions.',
+    isOptional: true,
+  },
+  {
+    name: 'public',
+    type: 'Array<string | RegExp | [string, Methods | Methods[]]>',
+    description: 'Public routes that do not require authentication. Supports exact paths, wildcards, and path params.',
+    isOptional: true,
+  },
+  {
+    name: 'protected',
+    type: 'Array<string | RegExp | [string, Methods | Methods[]]>',
+    description: 'Protected routes that require authentication. Supports exact paths, wildcards, and path params.',
+    isOptional: true,
+  },
 ]}
 />
 
-## BetterAuthUser Type
+## `BetterAuthUser` type
 
 The `BetterAuthUser` type contains the session and user information returned by Better Auth:
 

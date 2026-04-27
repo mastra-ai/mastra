@@ -184,6 +184,20 @@ export abstract class BaseExporter implements ObservabilityExporter {
   }
 
   /**
+   * Default onTracingEvent handler that delegates to exportTracingEvent.
+   *
+   * This provides backward compatibility: existing exporters that only implement
+   * _exportTracingEvent will automatically receive tracing events routed through
+   * the ObservabilityBus. Subclasses can override this if they need different
+   * routing behavior for bus-delivered events.
+   *
+   * Handler presence on ObservabilityExporter = signal support.
+   */
+  onTracingEvent(event: TracingEvent): void | Promise<void> {
+    return this.exportTracingEvent(event);
+  }
+
+  /**
    * Export a tracing event
    *
    * This method checks if the exporter is disabled, applies the customSpanFormatter,

@@ -60,7 +60,7 @@ export function requireSandbox(context: ToolExecutionContext): {
  */
 export async function emitWorkspaceMetadata(context: ToolExecutionContext, toolName: string) {
   const workspace = requireWorkspace(context);
-  const info = await workspace.getInfo();
+  const info = await workspace.getInfo({ requestContext: context?.requestContext });
   const toolCallId = context?.agent?.toolCallId;
   await context?.writer?.custom({
     type: 'data-workspace-metadata',
@@ -94,12 +94,14 @@ export async function getEditDiagnosticsText(workspace: Workspace, filePath: str
 
     const DIAG_TIMEOUT_MS = 10_000;
     let diagTimer: ReturnType<typeof setTimeout>;
-    const diagnostics: LSPDiagnostic[] = await Promise.race([
+    const diagnostics = await Promise.race([
       lspManager.getDiagnostics(absolutePath, content),
-      new Promise<LSPDiagnostic[]>((_, reject) => {
+      new Promise<LSPDiagnostic[] | null>((_, reject) => {
         diagTimer = setTimeout(() => reject(new Error('LSP diagnostics timeout')), DIAG_TIMEOUT_MS);
       }),
     ]).finally(() => clearTimeout(diagTimer!));
+    // null means no LSP client was available — don't show anything
+    if (diagnostics === null) return '';
     if (diagnostics.length === 0) return '';
 
     // Deduplicate by severity + location + message

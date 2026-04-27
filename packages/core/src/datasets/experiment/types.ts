@@ -1,5 +1,6 @@
 import type { MastraScorer } from '../../evals/base';
 import type { Mastra } from '../../mastra';
+import type { VersionOverrides } from '../../mastra/types';
 import type { TargetType, ExperimentStatus } from '../../storage/types';
 
 /**
@@ -70,6 +71,12 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   description?: string;
   /** Arbitrary metadata for the experiment */
   metadata?: Record<string, unknown>;
+  /** Global request context passed to agent.generate() for all items */
+  requestContext?: Record<string, unknown>;
+  /** Agent version ID to record against the experiment */
+  agentVersion?: string;
+  /** Version overrides for sub-agent delegation during experiment execution */
+  versions?: VersionOverrides;
 }
 
 /**

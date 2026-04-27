@@ -1,12 +1,17 @@
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import z from 'zod';
+import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
-import type { TracingContext } from '../../observability';
+import { resolveObservabilityContext } from '../../observability';
+import type { ObservabilityContext } from '../../observability';
+import type { PublicSchema } from '../../schema';
+import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { Processor } from '../index';
+import { selectMessagesToCheck } from './message-selection';
+import type { LastMessageOnlyOption } from './message-selection';
 
 /**
  * Individual detection category score
@@ -29,7 +34,7 @@ export interface PromptInjectionResult {
 /**
  * Configuration options for PromptInjectionDetector
  */
-export interface PromptInjectionOptions {
+export interface PromptInjectionOptions extends LastMessageOnlyOption {
   /** Model configuration for the detection agent */
   model: MastraModelConfig;
 
@@ -106,6 +111,7 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
   private threshold: number;
   private strategy: 'block' | 'warn' | 'filter' | 'rewrite';
   private includeScores: boolean;
+  private lastMessageOnly: boolean;
   private structuredOutputOptions?: PromptInjectionOptions['structuredOutputOptions'];
   private providerOptions?: ProviderOptions;
 
@@ -124,6 +130,7 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
     this.threshold = options.threshold ?? 0.7; // Higher default threshold for security
     this.strategy = options.strategy || 'block';
     this.includeScores = options.includeScores ?? false;
+    this.lastMessageOnly = options.lastMessageOnly ?? false;
     this.structuredOutputOptions = options.structuredOutputOptions;
     this.providerOptions = options.providerOptions;
 
@@ -135,13 +142,15 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
     });
   }
 
-  async processInput(args: {
-    messages: MastraDBMessage[];
-    abort: (reason?: string) => never;
-    tracingContext?: TracingContext;
-  }): Promise<MastraDBMessage[]> {
+  async processInput(
+    args: {
+      messages: MastraDBMessage[];
+      abort: (reason?: string) => never;
+    } & Partial<ObservabilityContext>,
+  ): Promise<MastraDBMessage[]> {
     try {
-      const { messages, abort, tracingContext } = args;
+      const { messages, abort, ...rest } = args;
+      const observabilityContext = resolveObservabilityContext(rest);
 
       if (messages.length === 0) {
         return messages;
@@ -149,9 +158,15 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
 
       const results: PromptInjectionResult[] = [];
       const processedMessages: MastraDBMessage[] = [];
+      const messagesToCheck = selectMessagesToCheck(messages, this.lastMessageOnly);
+      const checkedMessageIds = new Set(messagesToCheck.map(message => message.id));
 
       // Evaluate each message
       for (const message of messages) {
+        if (!checkedMessageIds.has(message.id)) {
+          processedMessages.push(message);
+          continue;
+        }
         const textContent = this.extractTextContent(message);
         if (!textContent.trim()) {
           // No text content to analyze
@@ -159,7 +174,7 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
           continue;
         }
 
-        const detectionResult = await this.detectPromptInjection(textContent, tracingContext);
+        const detectionResult = await this.detectPromptInjection(textContent, observabilityContext);
         results.push(detectionResult);
 
         if (this.isInjectionFlagged(detectionResult)) {
@@ -194,12 +209,11 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
    */
   private async detectPromptInjection(
     content: string,
-    tracingContext?: TracingContext,
+    observabilityContext?: ObservabilityContext,
   ): Promise<PromptInjectionResult> {
     const prompt = this.createDetectionPrompt(content);
     try {
       const model = await this.detectionAgent.getModel();
-      let response;
 
       const baseSchema = z.object({
         categories: z
@@ -229,28 +243,38 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
         });
       }
 
+      let result: PromptInjectionResult;
       if (isSupportedLanguageModel(model)) {
-        response = await this.detectionAgent.generate(prompt, {
+        const response = await this.detectionAgent.generate(prompt, {
           structuredOutput: {
-            schema,
             ...(this.structuredOutputOptions ?? {}),
+            schema,
           },
           modelSettings: {
             temperature: 0,
           },
           providerOptions: this.providerOptions,
-          tracingContext,
+          ...observabilityContext,
         });
+
+        if (!response.object) {
+          throw new Error('Structured output returned no object');
+        }
+        result = response.object;
       } else {
-        response = await this.detectionAgent.generateLegacy(prompt, {
-          output: schema,
+        const standardSchema = toStandardSchema(schema as PublicSchema);
+        const response = await this.detectionAgent.generateLegacy(prompt, {
+          output: standardSchemaToJSONSchema(standardSchema),
           temperature: 0,
           providerOptions: this.providerOptions as SharedV2ProviderOptions,
-          tracingContext,
+          ...observabilityContext,
         });
-      }
 
-      const result = response.object satisfies PromptInjectionResult;
+        if (!response.object) {
+          throw new Error('Legacy output returned no object');
+        }
+        result = response.object as PromptInjectionResult;
+      }
 
       return result;
     } catch (error) {

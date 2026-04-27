@@ -160,7 +160,7 @@ export class QdrantVector extends MastraVector {
   async upsert({ indexName, vectors, metadata, ids, vectorName }: QdrantUpsertVectorParams): Promise<string[]> {
     // Validate input parameters
     validateUpsertInput('QDRANT', vectors, metadata, ids);
-    const pointIds = ids || vectors.map(() => crypto.randomUUID());
+    const pointIds = ids ? ids.map(id => this.parsePointId(id)) : vectors.map(() => crypto.randomUUID());
 
     // Validate vector name if provided
     if (vectorName) {
@@ -194,7 +194,7 @@ export class QdrantVector extends MastraVector {
         });
       }
 
-      return pointIds;
+      return pointIds.map(String);
     } catch (error) {
       throw new MastraError(
         {
@@ -352,6 +352,16 @@ export class QdrantVector extends MastraVector {
     includeVector = false,
     using,
   }: QdrantQueryVectorParams): Promise<QueryResult[]> {
+    if (!queryVector) {
+      throw new MastraError({
+        id: createVectorErrorId('QDRANT', 'QUERY', 'MISSING_VECTOR'),
+        text: 'queryVector is required for Qdrant queries. Metadata-only queries are not supported by this vector store.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
     const translatedFilter = this.transformFilter(filter) ?? {};
 
     try {

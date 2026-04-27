@@ -82,6 +82,18 @@ export class LangSmithExporter extends TrackingExporter<
     this.#client = config.client ?? new Client(this.config);
   }
 
+  /**
+   * Flush pending trace batches to LangSmith.
+   * The LangSmith Client internally batches API calls; this ensures
+   * all queued runs are sent before the process exits or the flush
+   * caller continues.
+   */
+  protected override async _flush(): Promise<void> {
+    if (this.#client) {
+      await this.#client.awaitPendingTraceBatches();
+    }
+  }
+
   protected override skipBuildRootTask = true;
   protected override async _buildRoot(_args: {
     span: AnyExportedSpan;

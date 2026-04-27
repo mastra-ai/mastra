@@ -64,12 +64,6 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
   readonly provider: string;
 
   /**
-   * Working directory for command execution (if applicable).
-   * Not all sandbox implementations have a fixed working directory.
-   */
-  readonly workingDirectory?: string;
-
-  /**
    * Get instructions describing how this sandbox works.
    * Used in tool descriptions to help agents understand execution context.
    *
