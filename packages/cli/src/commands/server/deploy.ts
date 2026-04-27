@@ -361,13 +361,12 @@ export async function serverDeployAction(
   const sizeLabel = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)}MB` : `${sizeKB.toFixed(1)}KB`;
   s.stop(`Created ${sizeLabel} archive`);
 
-  s.start('Reading environment variables...');
   const envVars = await readEnvVars(targetDir, { autoAccept, envFile: opts.envFile });
   const envCount = Object.keys(envVars).length;
   if (envCount > 0) {
-    s.stop(`Found ${envCount} env var(s)`);
+    p.log.step(`Found ${envCount} env var(s)`);
   } else {
-    s.stop('No .env file found');
+    p.log.step('No .env file found');
   }
 
   s.start('Uploading...');
